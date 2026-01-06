@@ -1,0 +1,11 @@
+App.xbf
+ExtendedSplashPage.xbf
+MainPage.xbf
+UI\Controls\LinkPhoneText.xbf
+UI\Controls\LoginInstructionHeader.xbf
+UI\Controls\ModernProgressRing.xbf
+UI\Views\ChatDetailView.xbf
+UI\Views\ChatListView.xbf
+UI\Views\DebugView.xbf
+UI\Views\LoginView.xbf
+UI\Views\NewChatDialog.xbf

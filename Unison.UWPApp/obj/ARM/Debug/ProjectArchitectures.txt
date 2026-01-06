@@ -1,0 +1,1 @@
+M:\Codex\UnisonUWP\Unison App\Unison.UWPApp\Unison.UWPApp.csproj;arm

@@ -1,0 +1,94 @@
+<UserControl
+    x:Class="Unison.UWPApp.UI.Views.DebugView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Unison.UWPApp.UI.Views"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    d:DesignHeight="800"
+    d:DesignWidth="1000">
+
+    <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Grid Padding="16" Background="{ThemeResource SystemControlBackgroundBaseLowBrush}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Button x:Name="BackButton" Click="BackButton_Click" Background="Transparent" Width="48" Height="48" Margin="0,0,12,0">
+                <TextBlock Text="&#xE72B;" FontFamily="{StaticResource IconFont}" FontSize="18"/>
+            </Button>
+            <TextBlock Grid.Column="1" Text="Debug &amp; Protocol Logs" FontSize="20" FontFamily="{StaticResource MainFontSemibold}" VerticalAlignment="Center"/>
+        </Grid>
+
+        <ScrollViewer Grid.Row="1" Padding="32">
+             <StackPanel MaxWidth="900" HorizontalAlignment="Left">
+                <!-- Session Logging Row -->
+                <Border Background="{ThemeResource SystemControlBackgroundAltHighBrush}" Padding="20" CornerRadius="8" Margin="0,0,0,24">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="Capture Protocol Traffic" FontSize="18" FontFamily="{StaticResource MainFontSemibold}"/>
+                                <TextBlock Text="Record all incoming and outgoing binary nodes." FontSize="14" Opacity="0.6"/>
+                            </StackPanel>
+                            <ToggleSwitch x:Name="SessionLoggingToggle" Grid.Column="1" OnContent="Active" OffContent="Inactive" 
+                                          Toggled="SessionLoggingToggle_Toggled" VerticalAlignment="Center"/>
+                        </Grid>
+                        
+                        <Grid Margin="0,0,0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Live Stream" VerticalAlignment="Center" Opacity="0.8"/>
+                            <StackPanel Grid.Column="2" Orientation="Horizontal">
+                                <Button x:Name="SaveSessionLogButton" Content="Save Dump" Click="SaveSessionLogButton_Click" Margin="0,0,8,0"/>
+                                <Button x:Name="ClearSessionLogButton" Content="Clear" Click="ClearSessionLogButton_Click"/>
+                            </StackPanel>
+                        </Grid>
+                        
+                        <Border Background="{ThemeResource SystemControlBackgroundBaseMediumLowBrush}" CornerRadius="4" Padding="12">
+                            <ScrollViewer x:Name="SessionLogScroller" Height="400">
+                                <TextBlock x:Name="SessionLogText" Text="Waiting for packets..." FontSize="12" FontFamily="Consolas" TextWrapping="Wrap" IsTextSelectionEnabled="True"/>
+                            </ScrollViewer>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <!-- Actions Row -->
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <Border Background="{ThemeResource SystemControlBackgroundAltHighBrush}" Padding="20" CornerRadius="8" Margin="0,0,12,0">
+                        <StackPanel>
+                            <TextBlock Text="Commands" FontSize="18" FontFamily="{StaticResource MainFontSemibold}" Margin="0,0,0,16"/>
+                            <Button x:Name="TestDHButton" Content="Test Crypto" HorizontalAlignment="Stretch" Margin="0,0,0,8" Click="TestDHButton_Click"/>
+                            <Button x:Name="DeleteSessionButton" Content="Wipe Local Session" Background="#E74C3C" Foreground="White" HorizontalAlignment="Stretch" Click="DeleteSessionButton_Click"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Column="1" Background="{ThemeResource SystemControlBackgroundAltHighBrush}" Padding="20" CornerRadius="8" Margin="12,0,0,0">
+                        <StackPanel>
+                            <TextBlock Text="Status" FontSize="18" FontFamily="{StaticResource MainFontSemibold}" Margin="0,0,0,16"/>
+                            <TextBlock x:Name="BuildInfoText" Text="Build: v1.0.0 Debug (x86)" Opacity="0.5"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+             </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

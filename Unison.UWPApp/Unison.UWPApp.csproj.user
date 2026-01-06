@@ -1,0 +1,21 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|ARM'">
+    <DeviceId>30F105C9-681E-420b-A277-7C086EAD8A4E</DeviceId>
+    <UseEmulator>true</UseEmulator>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x86'">
+    <DeviceId>362F2FFC-8775-4C87-A784-13CE2DCF05C4</DeviceId>
+    <UseEmulator>false</UseEmulator>
+  </PropertyGroup>
+  <PropertyGroup>
+    <Source>M:\Codex\UnisonUWP\UI\Icon.png</Source>
+    <SmallTileSource>M:\Codex\UnisonUWP\UI\Icon.png</SmallTileSource>
+    <MediumTileSource>M:\Codex\UnisonUWP\UI\Icon.png</MediumTileSource>
+    <WideTileSource>M:\Codex\UnisonUWP\UI\Icon.png</WideTileSource>
+    <LargeTileSource>M:\Codex\UnisonUWP\UI\Icon.png</LargeTileSource>
+    <AppIconSource>M:\Codex\UnisonUWP\UI\Icon.png</AppIconSource>
+    <BadgeLogoSource>M:\Codex\UnisonUWP\UI\Icon.png</BadgeLogoSource>
+    <PackageLogoSource>M:\Codex\UnisonUWP\UI\Icon.png</PackageLogoSource>
+  </PropertyGroup>
+</Project>

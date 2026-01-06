@@ -1,0 +1,40 @@
+﻿<Application
+    x:Class="Unison.UWPApp.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Unison.UWPApp"
+    xmlns:converters="using:Unison.UWPApp.UI.Converters"
+    RequestedTheme="Dark">
+
+    <Application.Resources>
+        <ResourceDictionary>
+            <!-- Converters -->
+            <converters:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
+            <converters:StringToImageSourceConverter x:Key="StringToImageSourceConverter"/>
+            <converters:InvertedStringToVisibilityConverter x:Key="InvertedStringToVisibilityConverter"/>
+            
+            <!-- Custom Fonts -->
+            <FontFamily x:Key="MainFont">ms-appx:///Assets/Fonts/SegUIVar-Regular_Display.ttf#Segoe UI Variable Display</FontFamily>
+            <FontFamily x:Key="MainFontRegularDisplay">ms-appx:///Assets/Fonts/SegUIVar-Regular_Display.ttf#Segoe UI Variable Display</FontFamily>
+            <FontFamily x:Key="MainFontBold">ms-appx:///Assets/Fonts/SegUIVar-Bold_Display.ttf#Segoe UI Variable Display Bold</FontFamily>
+            <FontFamily x:Key="MainFontSemibold">ms-appx:///Assets/Fonts/SegUIVar-Semibold_Display.ttf#Segoe UI Variable Display Semibold</FontFamily>
+            <FontFamily x:Key="IconFont">ms-appx:///Assets/Fonts/SegoeIcons.ttf#Segoe Fluent Icons</FontFamily>
+
+            <!-- Branding Colors -->
+            <SolidColorBrush x:Key="UnisonGreenBrush" Color="#FF5ED268"/>
+            <SolidColorBrush x:Key="UnisonGreenBrightBrush" Color="#FF60D56A"/>
+
+            <!-- Global Styles -->
+            <Style TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="{StaticResource MainFont}"/>
+            </Style>
+            <Style TargetType="Button">
+                <Setter Property="FontFamily" Value="{StaticResource MainFont}"/>
+            </Style>
+            <Style TargetType="TextBox">
+                <Setter Property="FontFamily" Value="{StaticResource MainFont}"/>
+            </Style>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>
+
