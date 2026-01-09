@@ -1,5 +1,6 @@
 # Unison
-UWP WhatsApp client aimed primarily for Windows 10 Mobile
+UWP WhatsApp client aimed primarily for Windows 10 Mobile from porting Baileys
+(secondary WhatsApp MD device client)
 
 What works:
 
