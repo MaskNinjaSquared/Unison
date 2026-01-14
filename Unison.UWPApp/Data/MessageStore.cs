@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Windows.Storage;
 using Newtonsoft.Json;
 using Unison.UWPApp.Models;
+using Unison.UWPApp.Services;
 
 namespace Unison.UWPApp.Data
 {
@@ -77,7 +78,7 @@ namespace Unison.UWPApp.Data
                     }
                     
                     await SaveMessagesInternalAsync(fileName, messages);
-                    Debug.WriteLine($"[MessageStore] Saved {messages.Count} total messages for {chatJid}");
+                    WhatsAppService.Log($"[MessageStore] Saved {messages.Count} total messages for {chatJid}");
                 }
             }
             catch (Exception ex)
@@ -147,7 +148,7 @@ namespace Unison.UWPApp.Data
             {
                 var fileName = SanitizeFileName(chatJid) + ".json";
                 var messages = await LoadMessagesInternalAsync(fileName);
-                Debug.WriteLine($"[MessageStore] Loaded {messages.Count} messages for {chatJid}");
+                WhatsAppService.Log($"[MessageStore] Loaded {messages.Count} messages for {chatJid}");
                 return messages;
             }
             catch (Exception ex)
@@ -167,10 +168,10 @@ namespace Unison.UWPApp.Data
             await _writeLock.WaitAsync();
             try
             {
-                Debug.WriteLine($"[MessageStore] Saving chats to: {_localFolder.Path}\\{CHATS_FILE}");
+                WhatsAppService.Log($"[MessageStore] Saving chats to: {_localFolder.Path}\\{CHATS_FILE}");
                 var file = await _localFolder.CreateFileAsync(CHATS_FILE, CreationCollisionOption.ReplaceExisting);
                 var json = JsonConvert.SerializeObject(chats.ToList(), Formatting.Indented);
-                Debug.WriteLine($"[MessageStore] Serialized {chats.Count()} chats to {json.Length} characters");
+                WhatsAppService.Log($"[MessageStore] Persisting {chats.Count()} chats to disk...");
                 
                 // Use stream-based write to bypass WinRT encoding issues
                 var bytes = System.Text.Encoding.UTF8.GetBytes(json);
@@ -178,7 +179,7 @@ namespace Unison.UWPApp.Data
                 
                 // Verify the write
                 var props = await file.GetBasicPropertiesAsync();
-                Debug.WriteLine($"[MessageStore] Saved {chats.Count()} chats successfully ({props.Size} bytes written to {file.Path})");
+                WhatsAppService.Log($"[MessageStore] Saved {chats.Count()} chats successfully ({props.Size} bytes written to {file.Path})");
             }
             catch (Exception ex)
             {
@@ -199,28 +200,28 @@ namespace Unison.UWPApp.Data
 
             try
             {
-                Debug.WriteLine($"[MessageStore] Looking for chats file in: {_localFolder.Path}");
+                WhatsAppService.Log($"[MessageStore] Looking for chats file in: {_localFolder.Path}");
                 var file = await _localFolder.TryGetItemAsync(CHATS_FILE) as StorageFile;
                 if (file == null)
                 {
-                    Debug.WriteLine($"[MessageStore] No chats file found (file does not exist: {CHATS_FILE})");
+                    WhatsAppService.Log($"[MessageStore] No chats file found (file does not exist: {CHATS_FILE})");
                     return new List<ChatItem>();
                 }
 
                 var props = await file.GetBasicPropertiesAsync();
-                Debug.WriteLine($"[MessageStore] Found chats file: {file.Path}, size: {props.Size} bytes");
+                WhatsAppService.Log($"[MessageStore] Found chats file: {file.Path}, size: {props.Size} bytes");
 
                 var json = await FileIO.ReadTextAsync(file);
-                Debug.WriteLine($"[MessageStore] Read {json.Length} characters from chats file");
+                WhatsAppService.Log($"[MessageStore] Read {json.Length} characters from chats file");
                 
                 if (string.IsNullOrWhiteSpace(json))
                 {
-                    Debug.WriteLine("[MessageStore] Chats file is empty");
+                    WhatsAppService.Log("[MessageStore] Chats file is empty");
                     return new List<ChatItem>();
                 }
 
                 var chats = JsonConvert.DeserializeObject<List<ChatItem>>(json) ?? new List<ChatItem>();
-                Debug.WriteLine($"[MessageStore] Loaded {chats.Count} chats successfully");
+                WhatsAppService.Log($"[MessageStore] Loaded {chats.Count} chats from disk");
                 return chats;
             }
             catch (Exception ex)

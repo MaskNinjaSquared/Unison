@@ -8,6 +8,10 @@
 
     <Application.Resources>
         <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Themes/Styles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
             <!-- Avatar Fallback Colors (theme-aware) - must be first -->
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Dark">
@@ -24,12 +28,14 @@
             <converters:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
             <converters:StringToImageSourceConverter x:Key="StringToImageSourceConverter"/>
             <converters:InvertedStringToVisibilityConverter x:Key="InvertedStringToVisibilityConverter"/>
+            <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+            <converters:InvertedBooleanToVisibilityConverter x:Key="InvertedBooleanToVisibilityConverter"/>
             
             <!-- Custom Fonts -->
-            <FontFamily x:Key="MainFont">ms-appx:///Assets/Fonts/SegUIVar-Regular_Display.ttf#Segoe UI Variable Display</FontFamily>
-            <FontFamily x:Key="MainFontRegularDisplay">ms-appx:///Assets/Fonts/SegUIVar-Regular_Display.ttf#Segoe UI Variable Display</FontFamily>
-            <FontFamily x:Key="MainFontBold">ms-appx:///Assets/Fonts/SegUIVar-Bold_Display.ttf#Segoe UI Variable Display Bold</FontFamily>
-            <FontFamily x:Key="MainFontSemibold">ms-appx:///Assets/Fonts/SegUIVar-Semibold_Display.ttf#Segoe UI Variable Display Semibold</FontFamily>
+            <FontFamily x:Key="MainFont">ms-appx:///Assets/Fonts/SegUIVar-Regular.ttf#Segoe UI Variable</FontFamily>
+            <FontFamily x:Key="MainFontRegularDisplay">ms-appx:///Assets/Fonts/SegUIVar-Regular.ttf#Segoe UI Variable</FontFamily>
+            <FontFamily x:Key="MainFontBold">ms-appx:///Assets/Fonts/SegUIVar-Bold_Text.ttf#Segoe UI Variable Bold</FontFamily>
+            <FontFamily x:Key="MainFontSemibold">ms-appx:///Assets/Fonts/SegUIVar-Semibold_Text.ttf#Segoe UI Variable Semibold</FontFamily>
             <FontFamily x:Key="IconFont">ms-appx:///Assets/Fonts/SegoeIcons.ttf#Segoe Fluent Icons</FontFamily>
 
             <!-- Branding Colors -->

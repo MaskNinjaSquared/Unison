@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using Unison.UWPApp.Services;
 
 namespace Unison.UWPApp.Protocol
 {
@@ -41,7 +42,7 @@ namespace Unison.UWPApp.Protocol
             {
                 // Skip flags byte and decompress
                 payload = DecompressZlib(data, 1);
-                System.Diagnostics.Debug.WriteLine($"[BinaryDecoder] Decompressed {data.Length - 1} -> {payload.Length} bytes");
+                WhatsAppService.Log($"[BinaryDecoder] Decompressed {data.Length - 1} -> {payload.Length} bytes");
             }
             else
             {
@@ -72,7 +73,7 @@ namespace Unison.UWPApp.Protocol
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[BinaryDecoder] Zlib decompression failed: {ex.Message}");
+                WhatsAppService.Log($"[BinaryDecoder] Zlib decompression failed: {ex.Message}");
                 // Fallback: try standard deflate (skip 2-byte zlib header)
                 try
                 {

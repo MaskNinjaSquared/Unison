@@ -97,6 +97,9 @@ namespace Unison.UWPApp.UI.Views
                     else
                         chat.Timestamp = lastMsg.Timestamp.ToString("dd/MM/yyyy");
                     Debug.WriteLine($"[ChatDetailView] Updated preview to: {preview}");
+                    
+                    // Persist the updated chat metadata to disk
+                    WhatsAppService.Instance.SchedulePersistPublic();
                 }
             }
 

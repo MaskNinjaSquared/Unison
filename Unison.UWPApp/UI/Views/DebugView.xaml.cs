@@ -15,6 +15,7 @@ namespace Unison.UWPApp.UI.Views
         {
             this.InitializeComponent();
             SessionLoggingToggle.IsOn = SessionLogger.Instance.Enabled;
+            VerboseLoggingToggle.IsOn = WhatsAppService.VerboseLogging;
             SessionLogText.Text = SessionLogger.Instance.GetLogText();
             SessionLogger.Instance.OnLogUpdated += Instance_OnLogUpdated;
         }
@@ -32,6 +33,12 @@ namespace Unison.UWPApp.UI.Views
         private void BackButton_Click(object sender, RoutedEventArgs e)
         {
             BackRequested?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void VerboseLoggingToggle_Toggled(object sender, RoutedEventArgs e)
+        {
+            WhatsAppService.VerboseLogging = VerboseLoggingToggle.IsOn;
+            System.Diagnostics.Debug.WriteLine($"[DebugView] Verbose Logging: {WhatsAppService.VerboseLogging}");
         }
 
         private void SessionLoggingToggle_Toggled(object sender, RoutedEventArgs e)

@@ -40,8 +40,8 @@
             </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
 
-        <!-- Overlay (Visible when not logged in or during pairing) -->
-        <Grid x:Name="MainOverlay" Visibility="Visible">
+        <!-- Overlay (Visible when not logged in or during pairing) - Hidden by default to prevent flash -->
+        <Grid x:Name="MainOverlay" Visibility="Collapsed">
             <views:LoginView x:Name="LoginPart"/>
             
             <!-- Shims for legacy code references if any remain during transition -->
@@ -60,22 +60,27 @@
                    CompactPaneLength="0"
                    IsPaneOpen="False" 
                    OpenPaneLength="260"
-                   PaneBackground="{ThemeResource SystemControlBackgroundAltHighBrush}"
+                   PaneBackground="{StaticResource WhatsAppSidebarBrush}"
                    Visibility="Collapsed">
             <SplitView.Pane>
-                <Grid Background="{ThemeResource SystemControlBackgroundAltHighBrush}">
+                <Grid Background="{StaticResource WhatsAppSidebarBrush}">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
                     
-                    <TextBlock Text="Menu" Margin="20" FontSize="20" FontFamily="{StaticResource MainFontSemibold}"/>
+                    <TextBlock Text="Menu" Margin="20" FontSize="20" Foreground="{StaticResource WhatsAppTextHighBrush}" FontFamily="{StaticResource MainFontSemibold}"/>
                     
                     <ListView x:Name="NavListView" Grid.Row="1" SelectionMode="Single" SelectionChanged="NavListView_SelectionChanged">
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem" BasedOn="{StaticResource WhatsAppChatListItemStyle}">
+                                <Setter Property="Margin" Value="4,2"/>
+                            </Style>
+                        </ListView.ItemContainerStyle>
                         <ListViewItem Tag="chats">
                             <StackPanel Orientation="Horizontal" Padding="12">
-                                <TextBlock Text="&#xE8BD;" FontFamily="{StaticResource IconFont}" FontSize="18" VerticalAlignment="Center" Width="24"/>
-                                <TextBlock Text="Chats" Margin="12,0,0,0" FontSize="14" FontFamily="{StaticResource MainFont}"/>
+                                <TextBlock Text="&#xE8BD;" FontFamily="{StaticResource IconFont}" FontSize="18" Foreground="{StaticResource WhatsAppTextHighBrush}" VerticalAlignment="Center" Width="24"/>
+                                <TextBlock Text="Chats" Margin="12,0,0,0" FontSize="14" Foreground="{StaticResource WhatsAppTextHighBrush}" FontFamily="{StaticResource MainFont}"/>
                             </StackPanel>
                         </ListViewItem>
                         <ListViewItem Tag="debug">
@@ -89,7 +94,7 @@
             </SplitView.Pane>
             
             <SplitView.Content>
-                <Grid x:Name="RootContentGrid">
+                <Grid x:Name="RootContentGrid" Background="{StaticResource WhatsAppBackgroundBrush}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition x:Name="Column0" Width="320" MaxWidth="400"/>
                         <ColumnDefinition x:Name="Column1" Width="*"/>

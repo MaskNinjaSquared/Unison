@@ -150,5 +150,15 @@ namespace Unison.UWPApp.UI.Views
             Debug.WriteLine("[ChatListView] MenuButton_Click");
             MenuClicked?.Invoke(this, EventArgs.Empty);
         }
+
+        public static Visibility GetContactFallbackVisibility(string avatarUrl, bool isGroup)
+        {
+            return (string.IsNullOrEmpty(avatarUrl) && !isGroup) ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        public static Visibility GetGroupFallbackVisibility(string avatarUrl, bool isGroup)
+        {
+            return (string.IsNullOrEmpty(avatarUrl) && isGroup) ? Visibility.Visible : Visibility.Collapsed;
+        }
     }
 }

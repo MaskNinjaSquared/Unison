@@ -16,8 +16,22 @@ namespace Unison.UWPApp.Services
 {
     public class WhatsAppService
     {
+        // Controls verbose debug output - can be toggled from Debug menu
+        public static bool VerboseLogging { get; set; } = false;
+        
         private static WhatsAppService _instance;
         public static WhatsAppService Instance => _instance ?? (_instance = new WhatsAppService());
+
+        /// <summary>
+        /// Logs a message to the debug output if VerboseLogging is enabled.
+        /// </summary>
+        public static void Log(string message)
+        {
+            if (VerboseLogging)
+            {
+                Debug.WriteLine(message);
+            }
+        }
 
         private SocketClient _socket;
         private AuthStore _authStore = new AuthStore();
@@ -226,6 +240,12 @@ namespace Unison.UWPApp.Services
                 OnHistorySyncReceived?.Invoke(this, sync);
             };
 
+            // Handle real-time decrypted messages (not history sync)
+            _socket.OnDecryptedMessageReceived += async (s, e) =>
+            {
+                await HandleDecryptedMessageAsync(e);
+            };
+
             _socket.OnLinkCodeCompanionReg += (s, node) => OnLinkCodeCompanionReg?.Invoke(this, node);
 
             // Handle offline completion signal - this is "you're good to go" from WhatsApp
@@ -273,7 +293,7 @@ namespace Unison.UWPApp.Services
         {
             try
             {
-                Debug.WriteLine("[WhatsAppService] Reconnecting for pairing stage 2...");
+                Log($"[WhatsAppService] Resetting session and deleting local data...");
                 await Task.Delay(1000); // Wait for the stage 1 socket to fully close
                 await ConnectAsync();
                 Debug.WriteLine("[WhatsAppService] Pairing stage 2 connection established");
@@ -289,9 +309,170 @@ namespace Unison.UWPApp.Services
             }
         }
 
+        /// <summary>
+        /// Extracts text content from a Proto.Message object
+        /// </summary>
+        private string ExtractMessageContent(Proto.Message msg)
+        {
+            if (msg == null) return null;
+            
+            // Simple text message (Conversation)
+            if (!string.IsNullOrEmpty(msg.Conversation))
+            {
+                Debug.WriteLine($"[WhatsAppService] Extracted Conversation: {msg.Conversation.Substring(0, Math.Min(30, msg.Conversation.Length))}...");
+                return msg.Conversation;
+            }
+            
+            // Extended text message (with link preview, etc.)
+            if (msg.ExtendedTextMessage != null && !string.IsNullOrEmpty(msg.ExtendedTextMessage.Text))
+            {
+                Debug.WriteLine($"[WhatsAppService] Extracted ExtendedTextMessage: {msg.ExtendedTextMessage.Text.Substring(0, Math.Min(30, msg.ExtendedTextMessage.Text.Length))}...");
+                return msg.ExtendedTextMessage.Text;
+            }
+            
+            // Image message with caption
+            if (msg.ImageMessage != null)
+            {
+                return !string.IsNullOrEmpty(msg.ImageMessage.Caption) 
+                    ? $"[Image] {msg.ImageMessage.Caption}" 
+                    : "[Image]";
+            }
+            
+            // Video message with caption
+            if (msg.VideoMessage != null)
+            {
+                return !string.IsNullOrEmpty(msg.VideoMessage.Caption) 
+                    ? $"[Video] {msg.VideoMessage.Caption}" 
+                    : "[Video]";
+            }
+            
+            // Document message
+            if (msg.DocumentMessage != null)
+            {
+                return !string.IsNullOrEmpty(msg.DocumentMessage.FileName)
+                    ? $"[Document] {msg.DocumentMessage.FileName}"
+                    : "[Document]";
+            }
+            
+            // Audio/Voice message
+            if (msg.AudioMessage != null)
+            {
+                return msg.AudioMessage.Ptt == true ? "[Voice Message]" : "[Audio]";
+            }
+            
+            // Sticker message
+            if (msg.StickerMessage != null)
+            {
+                return "[Sticker]";
+            }
+            
+            // Contact message
+            if (msg.ContactMessage != null)
+            {
+                return $"[Contact] {msg.ContactMessage.DisplayName}";
+            }
+            
+            // Location message
+            if (msg.LocationMessage != null)
+            {
+                return "[Location]";
+            }
+            
+            Debug.WriteLine("[WhatsAppService] Unknown message type, no content extracted");
+            return null;
+        }
+
+        /// <summary>
+        /// Handles real-time decrypted messages from SocketClient
+        /// </summary>
+        private async Task HandleDecryptedMessageAsync(Client.DecryptedMessageEventArgs e)
+        {
+            try
+            {
+                Log($"[WhatsAppService] HandleDecryptedMessageAsync from {e.FromJid}, id={e.MessageId}");
+                
+                // Extract message content
+                string content = ExtractMessageContent(e.Message);
+                if (string.IsNullOrEmpty(content))
+                {
+                    Log("[WhatsAppService] No text content in message, skipping");
+                    return;
+                }
+
+                string jid = NormalizeJid(e.FromJid);
+                
+                // Create ChatMessage
+                var chatMessage = new Models.ChatMessage
+                {
+                    Id = e.MessageId,
+                    Content = content,
+                    Timestamp = e.Timestamp,
+                    IsFromMe = e.IsFromMe,
+                    SenderName = e.IsFromMe ? (_authState?.Me?.Name ?? "You") : GetResolvedName(jid)
+                };
+
+                // Add to MessagesByChat
+                if (!MessagesByChat.ContainsKey(jid))
+                {
+                    MessagesByChat[jid] = new List<Models.ChatMessage>();
+                }
+
+                // Check for duplicate
+                if (MessagesByChat[jid].Any(m => m.Id == chatMessage.Id))
+                {
+                    Log($"[WhatsAppService] Duplicate message {e.MessageId}, skipping");
+                    return;
+                }
+
+                MessagesByChat[jid].Add(chatMessage);
+                Log($"[WhatsAppService] Added message to chat {jid}. Total messages in memory: {MessagesByChat[jid].Count}");
+
+                // Update chat preview on UI thread
+                await Windows.ApplicationModel.Core.CoreApplication.MainView.CoreWindow.Dispatcher.RunAsync(
+                    CoreDispatcherPriority.Normal, () =>
+                    {
+                        var chat = Chats.FirstOrDefault(c => NormalizeJid(c.JID) == jid);
+                        if (chat != null)
+                        {
+                            // Update preview
+                            var preview = content.Length > 50 ? content.Substring(0, 50) + "..." : content;
+                            preview = preview.Replace("\r\n", " ").Replace("\n", " ").Replace("\r", " ");
+                            chat.LastMessage = preview;
+                            
+                            // Format timestamp
+                            var msgDate = e.Timestamp.Date;
+                            var today = DateTime.Today;
+                            if (msgDate == today)
+                                chat.Timestamp = e.Timestamp.ToString("HH:mm");
+                            else if (msgDate == today.AddDays(-1))
+                                chat.Timestamp = "Yesterday";
+                            else if (msgDate > today.AddDays(-7))
+                                chat.Timestamp = e.Timestamp.ToString("dddd");
+                            else
+                                chat.Timestamp = e.Timestamp.ToString("dd/MM/yyyy");
+                            
+                            // Move chat to top
+                            int index = Chats.IndexOf(chat);
+                            if (index > 0)
+                            {
+                                Chats.Move(index, 0);
+                            }
+                        }
+                    });
+
+                // Save message to disk
+                await SaveMessageAsync(jid, chatMessage);
+                SchedulePersist();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[WhatsAppService] HandleDecryptedMessageAsync error: {ex.Message}");
+            }
+        }
+
         private void ProcessHistorySync(HistorySync sync)
         {
-            Debug.WriteLine($"[WhatsAppService] ProcessHistorySync started. Type: {sync.SyncType}, Conversations: {sync.Conversations.Count}, Pushnames: {sync.Pushnames.Count}");
+            Log($"[WhatsAppService] ProcessHistorySync starting (type {sync.SyncType}, {sync.Conversations.Count} conversations)...");
             
             // Use dispatcher because Chats is an ObservableCollection bound to the UI
             _ = Windows.ApplicationModel.Core.CoreApplication.MainView.CoreWindow.Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
@@ -557,6 +738,11 @@ namespace Unison.UWPApp.Services
                 }, null, 3000, Timeout.Infinite);
             }
         }
+
+        /// <summary>
+        /// Public accessor for SchedulePersist - allows UI to trigger debounced save
+        /// </summary>
+        public void SchedulePersistPublic() => SchedulePersist();
 
         /// <summary>
         /// Loads persisted chats from disk on startup.
@@ -966,19 +1152,6 @@ namespace Unison.UWPApp.Services
             
             // For older dates, show full date
             return msgTime.ToString("dd/MM/yyyy");
-        }
-
-        private string ExtractMessageContent(Proto.Message msg)
-        {
-            if (msg == null) return "";
-            if (!string.IsNullOrEmpty(msg.Conversation)) return msg.Conversation;
-            if (msg.ExtendedTextMessage != null) return msg.ExtendedTextMessage.Text;
-            if (msg.ImageMessage != null) return "[Image]";
-            if (msg.VideoMessage != null) return "[Video]";
-            if (msg.AudioMessage != null) return "[Audio]";
-            if (msg.DocumentMessage != null) return "[Document]";
-            if (msg.StickerMessage != null) return "[Sticker]";
-            return "";
         }
 
         private async Task ResolveMissingNamesAsync()

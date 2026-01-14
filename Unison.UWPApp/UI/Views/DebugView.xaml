@@ -29,6 +29,22 @@
 
         <ScrollViewer Grid.Row="1" Padding="32">
              <StackPanel MaxWidth="900" HorizontalAlignment="Left">
+                <!-- Verbose Debug Logging Row -->
+                <Border Background="{ThemeResource SystemControlBackgroundAltHighBrush}" Padding="20" CornerRadius="8" Margin="0,0,0,24">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Verbose Debug Logging" FontSize="18" FontFamily="{StaticResource MainFontSemibold}"/>
+                            <TextBlock Text="Enable detailed debug output. May slow down the app." FontSize="14" Opacity="0.6"/>
+                        </StackPanel>
+                        <ToggleSwitch x:Name="VerboseLoggingToggle" Grid.Column="1" OnContent="On" OffContent="Off" 
+                                      Toggled="VerboseLoggingToggle_Toggled" VerticalAlignment="Center"/>
+                    </Grid>
+                </Border>
+                
                 <!-- Session Logging Row -->
                 <Border Background="{ThemeResource SystemControlBackgroundAltHighBrush}" Padding="20" CornerRadius="8" Margin="0,0,0,24">
                     <StackPanel>

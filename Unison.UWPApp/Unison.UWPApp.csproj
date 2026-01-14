@@ -151,6 +151,8 @@
     <Compile Include="UI\Views\MessageTemplateSelector.cs" />
     <Compile Include="UI\Converters\StringToVisibilityConverter.cs" />
     <Compile Include="UI\Converters\StringToImageSourceConverter.cs" />
+    <Compile Include="UI\Converters\BooleanToVisibilityConverter.cs" />
+    <Compile Include="UI\Converters\InvertedBooleanToVisibilityConverter.cs" />
     <Compile Include="UI\Converters\InvertedStringToVisibilityConverter.cs" />
     <Compile Include="UI\Views\NewChatDialog.xaml.cs">
       <DependentUpon>NewChatDialog.xaml</DependentUpon>
@@ -273,6 +275,10 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="UI\Views\NewChatDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Themes\Styles.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

@@ -11,9 +11,22 @@ using Windows.Storage.Streams;
 using Unison.UWPApp.Crypto;
 using Unison.UWPApp.Protocol;
 using Google.Protobuf;
+using Unison.UWPApp.Services;
 
 namespace Unison.UWPApp.Client
 {
+    /// <summary>
+    /// Event args for decrypted incoming messages
+    /// </summary>
+    public class DecryptedMessageEventArgs : EventArgs
+    {
+        public string FromJid { get; set; }
+        public string MessageId { get; set; }
+        public Proto.Message Message { get; set; }
+        public DateTime Timestamp { get; set; }
+        public bool IsFromMe { get; set; }
+    }
+
     /// <summary>
     /// WebSocket client for WhatsApp connection.
     /// Handles connection, Noise handshake, and message routing.
@@ -53,6 +66,7 @@ namespace Unison.UWPApp.Client
         public event EventHandler OnAuthStateUpdate;
         public event EventHandler OnSessionInitialized;
         public event EventHandler<Proto.HistorySync> OnHistorySyncReceived;
+        public event EventHandler<DecryptedMessageEventArgs> OnDecryptedMessageReceived;
         // Note: QR cycling removed - Baileys behavior: server controls via 515 close code
         // Client only displays first QR; on timeout, server sends 515 and client reconnects for fresh refs
 
@@ -148,7 +162,7 @@ namespace Unison.UWPApp.Client
 
                 // Generate ephemeral key pair for handshake
                 _ephemeralKeyPair = CryptoUtils.GenerateKeyPair();
-                Debug.WriteLine($"[Socket] Generated ephemeral key: {BitConverter.ToString(_ephemeralKeyPair.Public).Replace("-", "").Substring(0, 16)}...");
+                WhatsAppService.Log($"[Socket] Generated ephemeral key: {BitConverter.ToString(_ephemeralKeyPair.Public).Replace("-", "").Substring(0, 16)}...");
 
                 // Initialize noise handler with ephemeral key
                 _noise = new NoiseHandler(_ephemeralKeyPair, _authState.RoutingInfo);
@@ -228,7 +242,7 @@ namespace Unison.UWPApp.Client
         /// </summary>
         private async Task ProcessServerHelloAsync(byte[] data)
         {
-            Debug.WriteLine($"[Socket] Processing ServerHello ({data.Length} bytes)...");
+            WhatsAppService.Log($"[Socket] Processing ServerHello ({data.Length} bytes)...");
 
             try
             {
@@ -565,12 +579,12 @@ namespace Unison.UWPApp.Client
             
             // Log first 64 bytes of encoded data for debugging
             var hexDump = BitConverter.ToString(bytes, 0, Math.Min(bytes.Length, 64)).Replace("-", " ");
-            Debug.WriteLine($"[Socket] Encoded node: {node.Tag} ({bytes.Length} bytes)");
-            Debug.WriteLine($"[Socket] Raw hex: {hexDump}{(bytes.Length > 64 ? "..." : "")}");
+            WhatsAppService.Log($"[Socket] Encoded node: {node.Tag} ({bytes.Length} bytes)");
+            WhatsAppService.Log($"[Socket] Raw hex: {hexDump}{(bytes.Length > 64 ? "..." : "")}");
             
             var frame = _noise.EncodeFrame(bytes);
             
-            Debug.WriteLine($"[Socket] Sending node: {node.Tag} ({frame.Length} bytes)");
+            WhatsAppService.Log($"[Socket] Sending node: {node.Tag} ({frame.Length} bytes)");
             await SendRawAsync(frame);
         }
 
@@ -1148,7 +1162,7 @@ namespace Unison.UWPApp.Client
                     // Log incoming bytes for session debugging
                     SessionLogger.Instance.LogIn(data, $"{data.Length} bytes");
 
-                    Debug.WriteLine($"[Socket] Received {data.Length} bytes");
+                    WhatsAppService.Log($"[Socket] Received {data.Length} bytes");
 
                     if (!_isHandshakeComplete)
                     {
@@ -1219,12 +1233,12 @@ namespace Unison.UWPApp.Client
             if (string.IsNullOrEmpty(node.Tag)) return;
 
             // Log node receipt for debugging
-            Debug.WriteLine($"[Socket] Received node: {node.Tag}");
+            WhatsAppService.Log($"[Socket] Received node: {node.Tag}");
             if (node.Attrs != null)
             {
                 foreach (var attr in node.Attrs)
                 {
-                    Debug.WriteLine($"[Socket]   attr: {attr.Key}={attr.Value}");
+                    WhatsAppService.Log($"[Socket]   attr: {attr.Key}={attr.Value}");
                 }
             }
 
@@ -1273,6 +1287,8 @@ namespace Unison.UWPApp.Client
             node.Attrs.TryGetValue("xmlns", out var xmlns);
             node.Attrs.TryGetValue("id", out var msgId);
 
+            WhatsAppService.Log($"[Socket] Received IQ: id={msgId}, type={type}, xmlns={xmlns}");
+
             if (type == "set" && xmlns == "md")
             {
                 // Priority 1: Signing request (must send result with signature)
@@ -1299,6 +1315,10 @@ namespace Unison.UWPApp.Client
                     // Full verification and response handled via PairingHandler in WhatsAppService
                     return;
                 }
+            }
+            else if (type == "result")
+            {
+                WhatsAppService.Log("[Socket] IQ is result, looking for pending task...");
             }
         }
 
@@ -1379,29 +1399,29 @@ namespace Unison.UWPApp.Client
                 {
                     encNode.Attrs.TryGetValue("type", out encType);
                     encNode.Attrs.TryGetValue("v", out var encVersion);
-                    Debug.WriteLine($"[Socket] enc node type={encType}, v={encVersion}, data length={encryptedData.Length}");
-                    Debug.WriteLine($"[Socket] First 16 bytes: {BitConverter.ToString(encryptedData, 0, Math.Min(16, encryptedData.Length))}");
+                    WhatsAppService.Log($"[Socket] enc node type={encType}, v={encVersion}, data length={encryptedData.Length}");
+                    WhatsAppService.Log($"[Socket] First 16 bytes: {BitConverter.ToString(encryptedData, 0, Math.Min(16, encryptedData.Length))}");
                 }
                 
-                Debug.WriteLine($"[Socket] Found encrypted Signal message ({signalType}) from {from}");
+                WhatsAppService.Log($"[Socket] Found encrypted Signal message ({signalType}) from {from}");
                 
                 var decryptedPayload = _signalHandler.DecryptMessage(encryptedData, from, encType ?? signalType);
                 if (decryptedPayload != null)
                 {
-                    Debug.WriteLine($"[Socket] Decrypted Signal payload: {decryptedPayload.Length} bytes");
+                    WhatsAppService.Log($"[Socket] Decrypted Signal payload: {decryptedPayload.Length} bytes");
                     
                     try
                     {
                         // Per Baileys decode-wa-message.ts: unpadRandomMax16 strips random padding before protobuf parsing
                         // The last byte indicates how many bytes of padding to remove (PKCS#7-style)
                         var unpaddedPayload = UnpadRandomMax16(decryptedPayload);
-                        Debug.WriteLine($"[Socket] Unpadded payload: {unpaddedPayload.Length} bytes (removed {decryptedPayload.Length - unpaddedPayload.Length} padding bytes)");
+                        WhatsAppService.Log($"[Socket] Unpadded payload: {unpaddedPayload.Length} bytes (removed {decryptedPayload.Length - unpaddedPayload.Length} padding bytes)");
                         
                         Proto.Message msg = Proto.Message.Parser.ParseFrom(unpaddedPayload);
 
                         if (msg.ProtocolMessage?.HistorySyncNotification != null)
                         {
-                            Debug.WriteLine("[Socket] Received HistorySyncNotification!");
+                            WhatsAppService.Log("[Socket] Received HistorySyncNotification!");
                             
                             // Send hist_sync receipt to acknowledge receipt of the protocol message
                             await SendReceiptAsync(from, id, "hist_sync");
@@ -1410,7 +1430,27 @@ namespace Unison.UWPApp.Client
                         }
                         else
                         {
-                            Debug.WriteLine("[Socket] Decrypted message is not a HistorySyncNotification");
+                            // Regular message - fire event for WhatsAppService to process
+                            WhatsAppService.Log("[Socket] Decrypted regular message, firing event...");
+                            
+                            // Parse timestamp from node attrs if available
+                            node.Attrs.TryGetValue("t", out var tStr);
+                            long.TryParse(tStr ?? "0", out var epochSeconds);
+                            var timestamp = epochSeconds > 0 
+                                ? DateTimeOffset.FromUnixTimeSeconds(epochSeconds).LocalDateTime 
+                                : DateTime.Now;
+                            
+                            // Check if message is from self (own device sync)
+                            bool isFromMe = from?.Contains(_meJid?.Split(':')[0] ?? "") == true;
+                            
+                            OnDecryptedMessageReceived?.Invoke(this, new DecryptedMessageEventArgs
+                            {
+                                FromJid = from,
+                                MessageId = id,
+                                Message = msg,
+                                Timestamp = timestamp,
+                                IsFromMe = isFromMe
+                            });
                         }
                     }
                     catch (Exception ex)
@@ -1446,7 +1486,7 @@ namespace Unison.UWPApp.Client
                 var regNode = node.GetChild("link_code_companion_reg");
                 if (regNode?.GetChild("link_code_pairing_wrapped_primary_ephemeral_pub") != null)
                 {
-                    Debug.WriteLine($"[Socket] Received link_code_companion_reg notification!");
+                    WhatsAppService.Log($"[Socket] Received link_code_companion_reg notification!");
                     OnLinkCodeCompanionReg?.Invoke(this, node);
                 }
             }
@@ -2245,7 +2285,7 @@ public async Task<BinaryNode> QueryUsyncAsync(
                             });
 
                             await SendNodeAsync(pingNode);
-                            Debug.WriteLine("[Socket] Sent keep-alive ping");
+                            WhatsAppService.Log("[Socket] Sent keep-alive ping");
                         }
                         catch (Exception ex)
                         {

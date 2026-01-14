@@ -22,15 +22,24 @@
                 
                 <!-- Avatar with initial fallback + profile picture overlay -->
                 <Grid Width="48" Height="48" HorizontalAlignment="Left" VerticalAlignment="Center">
-                <!-- Fallback: Gray circle with contact icon (hidden when picture is loaded) -->
+                    <!-- Fallback Background -->
                     <Ellipse Width="48" Height="48" 
                              Fill="{ThemeResource AvatarFallbackBackgroundBrush}"
                              Visibility="{x:Bind AvatarUrl, Mode=OneWay, Converter={StaticResource InvertedStringToVisibilityConverter}}"/>
+                    
+                    <!-- Contact fallback (ea8c) -->
                     <FontIcon Glyph="&#xEA8C;" FontFamily="{StaticResource IconFont}" FontSize="24"
                               Foreground="{ThemeResource AvatarFallbackIconBrush}"
                               HorizontalAlignment="Center" VerticalAlignment="Center"
-                              Visibility="{x:Bind AvatarUrl, Mode=OneWay, Converter={StaticResource InvertedStringToVisibilityConverter}}"/>
+                              Visibility="{x:Bind local:ChatListView.GetContactFallbackVisibility(AvatarUrl, IsGroup), Mode=OneWay}"/>
                     
+                    <!-- Group fallback (custom icon) -->
+                    <PathIcon Style="{StaticResource GroupsIconStyle}" 
+                              Foreground="{ThemeResource AvatarFallbackIconBrush}"
+                              HorizontalAlignment="Center" VerticalAlignment="Center"
+                              Width="24" Height="24"
+                              Visibility="{x:Bind local:ChatListView.GetGroupFallbackVisibility(AvatarUrl, IsGroup), Mode=OneWay}"/>
+
                     <!-- Profile picture (circular clip) -->
                     <Ellipse Width="48" Height="48" Visibility="{x:Bind AvatarUrl, Mode=OneWay, Converter={StaticResource StringToVisibilityConverter}}">
                         <Ellipse.Fill>
@@ -42,71 +51,157 @@
                 
                 <!-- Name and message -->
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0,12,0">
-                    <TextBlock Text="{x:Bind Name, Mode=OneWay}" FontSize="16" FontFamily="{StaticResource MainFontSemibold}" TextTrimming="CharacterEllipsis"/>
-                    <TextBlock Text="{x:Bind LastMessage, Mode=OneWay}" FontSize="14" Foreground="#888" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" FontFamily="{StaticResource MainFont}"/>
+                    <TextBlock Text="{x:Bind Name, Mode=OneWay}" 
+                               FontSize="16" 
+                               Foreground="{StaticResource WhatsAppTextHighBrush}"
+                               FontFamily="{StaticResource MainFontSemibold}" 
+                               FontWeight="SemiBold"
+                               TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Text="{x:Bind LastMessage, Mode=OneWay}" 
+                               FontSize="14" 
+                               Foreground="{StaticResource WhatsAppTextMediumBrush}" 
+                               TextTrimming="CharacterEllipsis" 
+                               Margin="0,2,0,0" 
+                               FontFamily="{StaticResource MainFont}"/>
                 </StackPanel>
                 
                 <!-- Timestamp at far right, aligned to top -->
-                <TextBlock Grid.Column="2" Text="{x:Bind Timestamp, Mode=OneWay}" FontSize="12" Foreground="#888" 
-                           VerticalAlignment="Top" Margin="0,16,0,0" FontFamily="{StaticResource MainFont}"/>
+                <TextBlock Grid.Column="2" 
+                           Text="{x:Bind Timestamp, Mode=OneWay}" 
+                           FontSize="12" 
+                           Foreground="{StaticResource WhatsAppTextMediumBrush}" 
+                           VerticalAlignment="Top" 
+                           Margin="0,16,0,0" 
+                           FontFamily="{StaticResource MainFont}"/>
             </Grid>
         </DataTemplate>
     </UserControl.Resources>
 
-    <Grid x:Name="ChatListGrid" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+    <Grid x:Name="ChatListGrid" Background="{StaticResource WhatsAppBackgroundBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
-        
-        <!-- Mobile-style Header -->
-        <Grid Padding="12,8" Background="Transparent" Canvas.ZIndex="10">
+
+        <!-- WhatsApp-style Header -->
+        <Grid Grid.Row="1" Padding="16,12,16,12" Background="Transparent">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <Button x:Name="MenuButton" Click="MenuButton_Click" Background="Transparent" Width="48" Height="48" HorizontalAlignment="Left" VerticalAlignment="Center">
-                <FontIcon Glyph="&#xE700;" FontFamily="{StaticResource IconFont}" FontSize="20"/>
+            
+            <TextBlock x:Name="HeaderTitle" 
+                       Text="Chats" 
+                       FontSize="22" 
+                       Foreground="{StaticResource WhatsAppTextHighBrush}"
+                       FontFamily="{StaticResource MainFontSemibold}" 
+                       FontWeight="SemiBold"
+                       VerticalAlignment="Center"/>
+
+            <Button x:Name="NewChatButton" 
+                    Grid.Column="1" 
+                    Click="NewChatButton_Click" 
+                    Style="{StaticResource ModernIconButtonStyle}" 
+                    Margin="0,0,8,0">
+                <PathIcon Style="{StaticResource NewChatIconStyle}" Foreground="{StaticResource WhatsAppTextHighBrush}"/>
             </Button>
-            <Button x:Name="NewChatButton" Grid.Column="2" Click="NewChatButton_Click" Background="Transparent" Width="48" Height="48" HorizontalAlignment="Right" VerticalAlignment="Center">
-                <FontIcon Glyph="&#xE710;" FontFamily="{StaticResource IconFont}" FontSize="20"/>
+            
+            <Button x:Name="FilterButton" 
+                    Grid.Column="2" 
+                    Style="{StaticResource ModernIconButtonStyle}"
+                    Margin="0,0,8,0">
+                <PathIcon Style="{StaticResource FilterIconStyle}" Foreground="{StaticResource WhatsAppTextHighBrush}"/>
+                <Button.Flyout>
+                    <MenuFlyout MenuFlyoutPresenterStyle="{StaticResource ModernMenuFlyoutStyle}">
+                        <MenuFlyoutItem Text="Filter chats by" Style="{StaticResource ModernMenuFlyoutHeaderStyle}"/>
+                        <MenuFlyoutItem Text="Unread" Style="{StaticResource ModernMenuFlyoutItemStyle}">
+                            <MenuFlyoutItem.Icon>
+                                <PathIcon Style="{StaticResource UnreadIconStyle}" Foreground="White"/>
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutItem Text="Favorites" Style="{StaticResource ModernMenuFlyoutItemStyle}">
+                            <MenuFlyoutItem.Icon>
+                                <FontIcon Glyph="&#xEB51;" FontFamily="{StaticResource IconFont}" Foreground="White"/>
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutItem Text="Contacts" Style="{StaticResource ModernMenuFlyoutItemStyle}">
+                            <MenuFlyoutItem.Icon>
+                                <FontIcon Glyph="&#xE77B;" FontFamily="{StaticResource IconFont}" Foreground="White"/>
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutItem Text="Non-contacts" Style="{StaticResource ModernMenuFlyoutItemStyle}">
+                            <MenuFlyoutItem.Icon>
+                                <FontIcon Glyph="&#xE8F8;" FontFamily="{StaticResource IconFont}" Foreground="White"/>
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutItem Text="Groups" Style="{StaticResource ModernMenuFlyoutItemStyle}">
+                            <MenuFlyoutItem.Icon>
+                                <FontIcon Glyph="&#xE716;" FontFamily="{StaticResource IconFont}" Foreground="White"/>
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutItem Text="Drafts" Style="{StaticResource ModernMenuFlyoutItemStyle}">
+                            <MenuFlyoutItem.Icon>
+                                <FontIcon Glyph="&#xE70F;" FontFamily="{StaticResource IconFont}" Foreground="White"/>
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                    </MenuFlyout>
+                </Button.Flyout>
+            </Button>
+
+            <Button x:Name="MenuButton" 
+                    Grid.Column="3" 
+                    Click="MenuButton_Click" 
+                    Style="{StaticResource ModernIconButtonStyle}">
+                <FontIcon Glyph="&#xE712;" FontFamily="{StaticResource IconFont}" FontSize="18"/>
             </Button>
         </Grid>
-        
-        <AutoSuggestBox Grid.Row="1" PlaceholderText="Search" Margin="16,4,16,12" QueryIcon="Find" FontFamily="{StaticResource MainFont}"/>
+
+        <!-- Search Bar -->
+        <Border Grid.Row="2" Background="#202020" CornerRadius="8" Margin="16,4,16,12" Height="36">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="40"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <FontIcon Glyph="&#xE71E;" FontFamily="{StaticResource IconFont}" FontSize="14" Foreground="{StaticResource WhatsAppTextMediumBrush}"/>
+                <TextBox Grid.Column="1" 
+                         PlaceholderText="Search or start a new chat" 
+                         Background="Transparent" 
+                         BorderThickness="0"
+                         FontSize="14"
+                         VerticalAlignment="Center"
+                         FontFamily="{StaticResource MainFont}"
+                         Foreground="{StaticResource WhatsAppTextHighBrush}"/>
+            </Grid>
+        </Border>
 
         <!-- Sticky Sync Status Bar -->
         <Border x:Name="SyncStatusBar" Grid.Row="0" Background="{StaticResource UnisonGreenBrush}" Padding="12,6" Visibility="Collapsed">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
                 <controls:ModernProgressRing IsActive="True" Width="16" Height="16" Foreground="White"/>
                 <TextBlock x:Name="SyncStatusText" Text="Updating..." Foreground="White" FontSize="13" 
-                           FontFamily="Segoe UI Variable" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                           FontFamily="{StaticResource MainFont}" VerticalAlignment="Center" Margin="10,0,0,0"/>
             </StackPanel>
         </Border>
         
         <ListView Grid.Row="3" x:Name="ChatList" 
                   ItemsSource="{x:Bind Chats}"
                   ItemTemplate="{StaticResource ChatItemTemplate}"
+                  ItemContainerStyle="{StaticResource WhatsAppChatListItemStyle}"
                   SelectionMode="Single"
                   SelectionChanged="ChatList_SelectionChanged"
-                  Margin="0,8,0,0">
-            <ListView.ItemContainerStyle>
-                <Style TargetType="ListViewItem">
-                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                    <Setter Property="Padding" Value="0"/>
-                    <Setter Property="Margin" Value="0"/>
-                </Style>
-            </ListView.ItemContainerStyle>
+                  Margin="0,0,0,0">
         </ListView>
         
-        <!-- Loading overlay (only for absolute first load/empty list) -->
-        <Grid x:Name="ChatLoadingOverlay" Grid.Row="3" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}" Visibility="Visible">
+        <!-- Loading overlay -->
+        <Grid x:Name="ChatLoadingOverlay" Grid.Row="3" Background="{StaticResource WhatsAppBackgroundBrush}" Visibility="Visible">
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                 <controls:ModernProgressRing IsActive="True" Width="36" Height="36"/>
-                <TextBlock Text="Initial Sync..." FontSize="14" Foreground="#888" Margin="0,16,0,0" HorizontalAlignment="Center" FontFamily="{StaticResource MainFont}"/>
+                <TextBlock Text="Initial Sync..." FontSize="14" Foreground="{StaticResource WhatsAppTextMediumBrush}" Margin="0,16,0,0" HorizontalAlignment="Center" FontFamily="{StaticResource MainFont}"/>
             </StackPanel>
         </Grid>
     </Grid>

@@ -1,0 +1,270 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" 
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Design Tokens -->
+    <SolidColorBrush x:Key="WhatsAppBackgroundBrush" Color="#FF2C2C2C"/>
+    <SolidColorBrush x:Key="WhatsAppHeaderBrush" Color="#FF2C2C2C"/>
+    <SolidColorBrush x:Key="WhatsAppSidebarBrush" Color="#FF202020"/>
+    <SolidColorBrush x:Key="WhatsAppItemHoverBrush" Color="#FF3A3A3A"/>
+    <SolidColorBrush x:Key="WhatsAppItemSelectedBrush" Color="#FF414141"/>
+    <SolidColorBrush x:Key="WhatsAppMenuOutlineBrush" Color="#FF222222"/>
+    <SolidColorBrush x:Key="WhatsAppFilterHeaderBrush" Color="#FF7A7A7A"/>
+    <SolidColorBrush x:Key="WhatsAppTextHighBrush" Color="#FFE9EDEF"/>
+    <SolidColorBrush x:Key="WhatsAppTextMediumBrush" Color="#FF8696A0"/>
+    <SolidColorBrush x:Key="WhatsAppTextLowBrush" Color="#FF667781"/>
+
+    <!-- Icon Styles (Removed Width/Height to prevent clipping, Viewbox will handle scaling) -->
+    <Style x:Key="NewChatIconStyle" TargetType="PathIcon">
+        <Setter Property="Data" Value="F1 M2.83,1.17C4.02,1.14,5.37,1.17,6.57,1.17L11.91,1.16C12.21,1.16 12.51,1.16 12.74,1.4 13.11,1.72 12.93,2.47 12.47,2.58 12.00,2.69 11.25,2.63 10.75,2.63L5.29,2.63C4.44,2.63 3.54,2.60 2.69,2.67 1.94,2.73 1.46,3.43 1.47,4.15 1.47,5.17 1.47,6.20 1.47,7.23L1.47,13.53 1.47,16.88C1.47,17.47 1.45,18.05 1.49,18.64 1.55,19.49 2.24,20.00 3.06,20.01 4.18,20.01 5.30,20.01 6.41,20.01L12.76,20.01 15.87,20.01C16.70,20.01 17.89,20.17 18.51,19.56 18.72,19.35 18.87,19.08 18.93,18.78 19.00,18.43 18.97,17.22 18.97,16.77L18.97,12.85 18.96,9.31C18.96,8.75 18.95,8.17 18.98,7.61 19.00,7.47 19.06,7.36 19.13,7.26 19.44,6.80 20.38,6.97 20.41,7.54 20.45,8.33 20.43,9.16 20.43,9.94L20.43,14.19 20.43,17.32C20.43,17.81 20.46,18.49 20.40,18.95 20.22,20.27 19.01,21.33 17.69,21.41 17.35,21.43 17.00,21.42 16.66,21.42L14.89,21.42 9.18,21.42 4.83,21.42C4.27,21.42 3.03,21.46 2.54,21.39 1.97,21.32 1.44,21.08 1.01,20.71 0.45,20.23 0.04,19.45 0.02,18.72 0.00,17.71 0.01,16.67 0.01,15.67L0.01,9.87 0.01,5.70C0.01,4.93 -0.07,3.75 0.18,3.05 0.60,1.91 1.63,1.25 2.83,1.17z M17.89,0.01C18.35,-0.05 18.96,0.09 19.37,0.32 20.84,1.12 21.54,3.05 20.28,4.37 19.62,5.05 18.94,5.72 18.27,6.40L14.69,9.98 12.95,11.71C12.57,12.10 12.12,12.65 11.59,12.81 10.90,13.02 10.21,13.23 9.52,13.43 8.97,13.60 8.39,13.80 7.83,13.92 7.55,13.99 7.23,13.83 7.09,13.58 6.86,13.17 7.22,12.26 7.34,11.82 7.60,10.88 7.84,9.94 8.08,9.00 8.71,8.34 9.43,7.65 10.09,7.00L13.76,3.35 15.61,1.50C16.39,0.72 16.73,0.19 17.89,0.01z M18.54,1.55C18.30,1.45 18.12,1.45 17.87,1.48 17.46,1.65 16.85,2.34 16.51,2.68L14.64,4.55 9.38,9.76C9.20,10.54 8.94,11.38 8.77,12.13L10.06,11.75C11.36,11.37 11.09,11.50 12.03,10.55L13.57,9.01 17.56,5.02C17.94,4.64 18.32,4.27 18.69,3.89 18.85,3.70 19.29,3.34 19.39,3.13 19.70,2.50 19.09,1.79 18.54,1.55z" />
+    </Style>
+    <Style x:Key="FilterIconStyle" TargetType="PathIcon">
+        <Setter Property="Data" Value="F1 M24.68,14.65z M0,0z M1.39,0.01L16.24,0.01 20.96,0.00C21.77,0.00 22.58,-0.01 23.40,0.01 24.01,0.00 24.57,0.20 24.67,0.88 24.77,1.59 24.22,1.94 23.63,2.04 22.13,2.08 20.45,2.04 18.95,2.05L9.69,2.05 4.01,2.05C3.03,2.05 2.04,2.06 1.06,2.03 0.50,2.01 0.01,1.65 0,1.06 -0.00,0.79 0.10,0.53 0.29,0.33 0.63,0.00 0.96,0.00 1.39,0.01z M6,6.42L14.95,6.43 17.80,6.42C18.35,6.43 18.95,6.41 19.47,6.46 20.24,6.53 20.66,7.57 20.07,8.12 19.70,8.46 19.43,8.44 18.96,8.45L9.73,8.45 6.97,8.46C6.37,8.46 5.09,8.58 4.65,8.16 4.44,7.97 4.33,7.71 4.33,7.44 4.34,7.18 4.45,6.93 4.64,6.75 5.03,6.37 5.50,6.42 6,6.43z M8.99,12.62L13.76,12.62C14.31,12.62 15.74,12.57 16.21,12.66 17.38,12.86 17.49,14.59 15.84,14.65 13.65,14.62 11.45,14.66 9.26,14.65 8.81,14.65 8.31,14.70 7.95,14.38 7.75,14.19 7.63,13.94 7.62,13.67 7.61,13.40 7.71,13.13 7.90,12.93 8.20,12.63 8.60,12.63 8.99,12.62z" />
+    </Style>
+    <Style x:Key="UnreadIconStyle" TargetType="PathIcon">
+        <Setter Property="Data" Value="F1 M3.5,0A3.5,3.5 0,0 0,0 3.5V13.5C0,15.4329 1.5671,17 3.5,17H4V18.5C4,19.9818 5.7601,20.7629 6.8536,19.7621L10.088,16.8052C10.51,16.4194 11.066,16.2052 11.6436,16.2052H13.6706C15.6035,16.2052 17.1706,14.6381 17.1706,12.7052V3.5C17.1706,1.5671 15.6035,0 13.6706,0H3.5z M3.5,1.5H13.6706C14.7751,1.5 15.6706,2.3954 15.6706,3.5V12.7052C15.6706,13.8098 14.7751,14.7052 13.6706,14.7052H11.6436C10.6387,14.7052 9.6713,15.078 8.9372,15.7486L5.5,18.889V17C5.5,16.1716 4.8284,15.5 4,15.5H3.5C2.3954,15.5 1.5,14.6046 1.5,13.5V3.5C1.5,2.3954 2.3954,1.5 3.5,1.5z M12,4.5C13.1046,4.5 14,5.3954 14,6.5C14,7.6046 13.1046,8.5 12,8.5C10.8954,8.5 10,7.6046 10,6.5C10,5.3954 10.8954,4.5 12,4.5z" />
+    </Style>
+    <Style x:Key="GroupsIconStyle" TargetType="PathIcon">
+        <Setter Property="Data" Value="F1 M20,19z M0,0z M1.5,11L11.5,11.001C12.27262,11.00104,12.91883,11.58795,12.993,12.357L13,12.5 13,14.5C12.999,18 9.284,19 6.5,19 3.778,19 0.165,18.044 0.005,14.73L0,14.5 0,12.5C0.00004,11.72738,0.58695,11.08117,1.356,11.007z M13.488,11L18.5,11C19.27227,10.99999,19.91835,11.58634,19.993,12.355L20,12.5 20,14C19.999,17.062 17.142,18 15,18 14.27447,18.00171 13.5529,17.89314 12.86,17.678 13.513,16.928 13.936,15.975 13.993,14.78L14,14.5 14,12.5C14,12.006,13.85,11.549,13.601,11.162L13.488,11 18.5,11z M6.5,0C8.98528,0 11,2.01472 11,4.5 11,6.98528 8.98528,9 6.5,9 4.01472,9 2,6.98528 2,4.5 2,2.01472 4.01472,0 6.5,0z M15.5,2C17.433,2 19,3.567 19,5.5 19,7.433 17.433,9 15.5,9 13.567,9 12,7.433 12,5.5 12,3.567 13.567,2 15.5,2z" />
+    </Style>
+
+    <!-- Modern Menu Style (Gradescope/WhatsApp/Win11) -->
+    <Style TargetType="MenuFlyoutPresenter" x:Key="ModernMenuFlyoutStyle">
+        <Setter Property="Background" Value="#FF232323" />
+        <Setter Property="BorderBrush" Value="{StaticResource WhatsAppMenuOutlineBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="4,8" />
+        <Setter Property="MinWidth" Value="200" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="MenuFlyoutPresenter">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="8">
+                        <ScrollViewer x:Name="MenuFlyoutPresenterScrollViewer">
+                            <ItemsPresenter Margin="0,4" />
+                        </ScrollViewer>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Specific Style for Menu Headers (e.g., "Filter chats by") -->
+    <Style TargetType="MenuFlyoutItem" x:Key="ModernMenuFlyoutHeaderStyle">
+        <Setter Property="Padding" Value="12,12,12,8" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontFamily" Value="{StaticResource MainFont}" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Foreground" Value="{StaticResource WhatsAppFilterHeaderBrush}" />
+        <Setter Property="IsEnabled" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="MenuFlyoutItem">
+                    <Grid x:Name="LayoutRoot" Background="Transparent" Margin="0,4,0,8">
+                        <TextBlock x:Name="TextBlock" 
+                                   Text="{TemplateBinding Text}" 
+                                   Foreground="{TemplateBinding Foreground}"
+                                   FontWeight="{TemplateBinding FontWeight}"
+                                   VerticalAlignment="Center"
+                                   HorizontalAlignment="Left"
+                                   Margin="12,0,0,0"/>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="MenuFlyoutItem" x:Key="ModernMenuFlyoutItemStyle">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="MinHeight" Value="38" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontFamily" Value="{StaticResource MainFont}" />
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="MenuFlyoutItem">
+                    <Grid x:Name="LayoutRoot" 
+                          Background="{TemplateBinding Background}"
+                          CornerRadius="4"
+                          Margin="4,2">
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="PointerOver">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="LayoutRoot" Storyboard.TargetProperty="Background">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="#33FFFFFF" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="LayoutRoot" Storyboard.TargetProperty="Background">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="#44FFFFFF" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Disabled">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="LayoutRoot" Storyboard.TargetProperty="Opacity" To="0.5" Duration="0" />
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="34" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <!-- Container for Icon with Viewbox to prevent cropping and ensure scale -->
+                        <Viewbox Grid.Column="0" 
+                                 Width="15" Height="15" 
+                                 HorizontalAlignment="Center" 
+                                 VerticalAlignment="Center">
+                            <ContentPresenter x:Name="IconContent" 
+                                              Content="{TemplateBinding Icon}" 
+                                              Foreground="{TemplateBinding Foreground}"/>
+                        </Viewbox>
+                        <TextBlock x:Name="TextBlock" 
+                                   Grid.Column="1" 
+                                   Text="{TemplateBinding Text}" 
+                                   Foreground="{TemplateBinding Foreground}"
+                                   VerticalAlignment="Center"
+                                   Margin="8,0,0,0"/>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Rounded Square Button Style (Gradescope style) -->
+    <Style TargetType="Button" x:Key="ModernIconButtonStyle">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{StaticResource WhatsAppTextHighBrush}" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Width" Value="40"/>
+        <Setter Property="Height" Value="40"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="RootBorder"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="4">
+                        <Viewbox Width="16" Height="16">
+                            <ContentPresenter x:Name="ContentPresenter"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Content="{TemplateBinding Content}"
+                                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                                              Foreground="{TemplateBinding Foreground}"
+                                              AutomationProperties.AccessibilityView="Raw"/>
+                        </Viewbox>
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="PointerOver">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="RootBorder"
+                                                                       Storyboard.TargetProperty="Background">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{StaticResource WhatsAppItemHoverBrush}" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="RootBorder"
+                                                                       Storyboard.TargetProperty="Background">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{StaticResource WhatsAppItemSelectedBrush}" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Disabled">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="ContentPresenter"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         To="0.5"
+                                                         Duration="0" />
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Chat List Item Style (No scaling, rounded highlight) -->
+    <Style TargetType="ListViewItem" x:Key="WhatsAppChatListItemStyle">
+        <Setter Property="FontFamily" Value="{StaticResource MainFont}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{StaticResource WhatsAppTextHighBrush}" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Margin" Value="8,2" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ListViewItem">
+                    <Grid x:Name="RootGrid" Background="Transparent" CornerRadius="8">
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="PointerOver">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="RootGrid" Storyboard.TargetProperty="Background">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{StaticResource WhatsAppItemHoverBrush}" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="RootGrid" Storyboard.TargetProperty="Background">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{StaticResource WhatsAppItemSelectedBrush}" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Selected">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="RootGrid" Storyboard.TargetProperty="Background">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{StaticResource WhatsAppItemSelectedBrush}" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="SelectedPointerOver">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="RootGrid" Storyboard.TargetProperty="Background">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{StaticResource WhatsAppItemHoverBrush}" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="SelectedPressed">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="RootGrid" Storyboard.TargetProperty="Background">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{StaticResource WhatsAppItemSelectedBrush}" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                        <ContentPresenter x:Name="ContentPresenter"
+                                          Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          ContentTransitions="{TemplateBinding ContentTransitions}"
+                                          Padding="{TemplateBinding Padding}"
+                                          HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>
