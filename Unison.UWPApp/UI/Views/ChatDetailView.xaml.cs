@@ -57,10 +57,13 @@ namespace Unison.UWPApp.UI.Views
         {
             if (_scrollViewer == null || _isLoadingMore || _hasReachedStart || _activeChat == null) return;
 
-            // When user scrolls to top (offset close to 200)
-            if (_scrollViewer.VerticalOffset < 200)
+            // Debug log every 500ms or so to avoid spamming too much, but for now let's see more
+            // Debug.WriteLine($"[ChatDetailView] Scroll: Offset={_scrollViewer.VerticalOffset}, Extent={_scrollViewer.ExtentHeight}, Viewport={_scrollViewer.ViewportHeight}");
+
+            // When user scrolls near top
+            if (_scrollViewer.VerticalOffset < 300)
             {
-                Debug.WriteLine($"[ChatDetailView] Scroll trigger hit. Offset: {_scrollViewer.VerticalOffset}, Extent: {_scrollViewer.ExtentHeight}, Viewport: {_scrollViewer.ViewportHeight}");
+                Debug.WriteLine($"[ChatDetailView] TRIGGER HIT: Offset={_scrollViewer.VerticalOffset} < 300. Loading more...");
                 await LoadMoreMessagesAsync();
             }
         }
@@ -81,6 +84,7 @@ namespace Unison.UWPApp.UI.Views
                 
                 if (moreMessages != null && moreMessages.Count > 0)
                 {
+                    Debug.WriteLine($"[ChatDetailView] Received {moreMessages.Count} messages to prepend.");
                     // Insert at top in chronological order
                     for (int i = 0; i < moreMessages.Count; i++)
                     {
@@ -94,7 +98,7 @@ namespace Unison.UWPApp.UI.Views
                     double newExtentHeight = _scrollViewer.ExtentHeight;
                     double heightDiff = newExtentHeight - oldExtentHeight;
                     
-                    Debug.WriteLine($"[ChatDetailView] Loaded {moreMessages.Count} messages. Height: {oldExtentHeight}->{newExtentHeight}, Diff: {heightDiff}. Updating offset: {oldOffset}->{oldOffset + heightDiff}");
+                    Debug.WriteLine($"[ChatDetailView] Scroll stabilization: OldOffset={oldOffset}, HeightDiff={heightDiff}, NewTarget={oldOffset + heightDiff}");
                     
                     _scrollViewer.ChangeView(null, oldOffset + heightDiff, null, true);
                 }
@@ -113,15 +117,13 @@ namespace Unison.UWPApp.UI.Views
                 _isLoadingMore = false;
             }
 
-            // If we are STILL near the top after loading more, and haven't reached start, try again
-            // This handles cases where the prepended messages don't push the scroll offset far enough
-            if (!_hasReachedStart && _scrollViewer != null && _scrollViewer.VerticalOffset < 200)
+            if (!_hasReachedStart && _scrollViewer != null && _scrollViewer.VerticalOffset < 300)
             {
                 _ = Dispatcher.RunAsync(CoreDispatcherPriority.Low, async () => {
-                    await Task.Delay(500); // Give layout a moment
-                    if (!_isLoadingMore && !_hasReachedStart && _scrollViewer.VerticalOffset < 200)
+                    await Task.Delay(800); // Give layout more time
+                    if (!_isLoadingMore && !_hasReachedStart && _scrollViewer.VerticalOffset < 300)
                     {
-                        Debug.WriteLine("[ChatDetailView] Auto-triggering another load (still near top)");
+                        Debug.WriteLine($"[ChatDetailView] AUTO-RETRIGGER: Still near top (Offset={_scrollViewer.VerticalOffset}). Loading another batch.");
                         await LoadMoreMessagesAsync();
                     }
                 });
@@ -147,6 +149,17 @@ namespace Unison.UWPApp.UI.Views
             ActiveChatGrid.Visibility = Visibility.Visible;
             EmptyStateGrid.Visibility = Visibility.Collapsed;
             ChatTitleText.Text = chat.Name;
+
+            // Ensure we have the scrollviewer
+            if (_scrollViewer == null)
+            {
+                _scrollViewer = FindScrollViewer(MessageListView);
+                if (_scrollViewer != null)
+                {
+                    _scrollViewer.ViewChanged += ScrollViewer_ViewChanged;
+                    Debug.WriteLine("[ChatDetailView] Found ScrollViewer during SetActiveChat");
+                }
+            }
 
             // Set avatar
             if (!string.IsNullOrEmpty(chat.AvatarUrl))
@@ -210,13 +223,17 @@ namespace Unison.UWPApp.UI.Views
 
             ScrollToBottom();
 
-            // After initial load, if the list is still short/at top, load more until we have a scrollable area
+            // After initial load...
             _ = Dispatcher.RunAsync(CoreDispatcherPriority.Low, async () => {
-                await Task.Delay(1000); // Wait for virtualization/layout
-                if (_scrollViewer != null && _scrollViewer.VerticalOffset < 200 && !_hasReachedStart && !_isLoadingMore)
+                await Task.Delay(1500); // Wait longer for full layout
+                if (_scrollViewer != null)
                 {
-                    Debug.WriteLine("[ChatDetailView] Auto-triggering more messages after initial load (top reached)");
-                    await LoadMoreMessagesAsync();
+                    Debug.WriteLine($"[ChatDetailView] Initial state: Offset={_scrollViewer.VerticalOffset}, Extent={_scrollViewer.ExtentHeight}, Viewport={_scrollViewer.ViewportHeight}");
+                    if (_scrollViewer.VerticalOffset < 300 && !_hasReachedStart && !_isLoadingMore)
+                    {
+                        Debug.WriteLine("[ChatDetailView] AUTO-TRIGGER: Loading older messages because we're at the top after initial load.");
+                        await LoadMoreMessagesAsync();
+                    }
                 }
             });
         }
