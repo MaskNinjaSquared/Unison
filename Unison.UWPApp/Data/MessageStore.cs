@@ -138,6 +138,32 @@ namespace Unison.UWPApp.Data
         }
 
         /// <summary>
+        /// Loads only a specific page of messages for a chat.
+        /// </summary>
+        public async Task<List<ChatMessage>> LoadMessagesPagedAsync(string chatJid, int skip, int take)
+        {
+            if (!_initialized) await InitializeAsync();
+
+            try
+            {
+                var fileName = SanitizeFileName(chatJid) + ".json";
+                var allMessages = await LoadMessagesInternalAsync(fileName);
+                
+                // Sort by timestamp and ID for stability
+                var sorted = allMessages.OrderBy(m => m.Timestamp).ThenBy(m => m.Id).ToList();
+                
+                var segment = sorted.Skip(skip).Take(take).ToList();
+                Debug.WriteLine($"[MessageStore] Loaded page of {segment.Count} messages (skip={skip}, take={take}, total={allMessages.Count}) for {chatJid}");
+                return segment;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[MessageStore] Failed to load paged messages: {ex.Message}");
+                return new List<ChatMessage>();
+            }
+        }
+
+        /// <summary>
         /// Loads all messages for a chat.
         /// </summary>
         public async Task<List<ChatMessage>> LoadMessagesAsync(string chatJid)

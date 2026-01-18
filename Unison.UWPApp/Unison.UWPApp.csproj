@@ -136,6 +136,9 @@
     <Compile Include="UI\Controls\ModernProgressRing.xaml.cs">
       <DependentUpon>ModernProgressRing.xaml</DependentUpon>
     </Compile>
+    <Compile Include="UI\Controls\TiledBackground.xaml.cs">
+      <DependentUpon>TiledBackground.xaml</DependentUpon>
+    </Compile>
     <Compile Include="UI\Views\LoginView.xaml.cs">
       <DependentUpon>LoginView.xaml</DependentUpon>
     </Compile>
@@ -227,6 +230,8 @@
     <Content Include="Assets\StoreLogo.scale-150.png" />
     <Content Include="Assets\StoreLogo.scale-200.png" />
     <Content Include="Assets\StoreLogo.scale-400.png" />
+    <Content Include="Assets\Backgrounds\WhatsAppBackground.png" />
+    <Content Include="Assets\Backgrounds\WhatsAppBackground_Colored.png" />
     <Content Include="Assets\Wide310x150Logo.scale-100.png" />
     <Content Include="Assets\Wide310x150Logo.scale-125.png" />
     <Content Include="Assets\Wide310x150Logo.scale-150.png" />
@@ -255,6 +260,10 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="UI\Controls\ModernProgressRing.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Controls\TiledBackground.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

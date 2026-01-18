@@ -108,10 +108,8 @@ namespace Unison.UWPApp.UI.Views
 
         private void ChatList_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (ChatList.SelectedItem is ChatItem chat)
-            {
-                ChatSelected?.Invoke(this, new ChatSelectedEventArgs(chat));
-            }
+            var chat = ChatList.SelectedItem as ChatItem;
+            ChatSelected?.Invoke(this, new ChatSelectedEventArgs(chat));
         }
 
         public void ClearSelection()

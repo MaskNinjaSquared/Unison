@@ -9,6 +9,7 @@ using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Input;
 using System.Diagnostics;
+using System.Threading.Tasks;
 
 namespace Unison.UWPApp.UI.Views
 {
@@ -18,10 +19,113 @@ namespace Unison.UWPApp.UI.Views
         private ObservableCollection<ChatMessage> _messages = new ObservableCollection<ChatMessage>();
         public event EventHandler BackRequested;
 
+        public bool HasActiveChat => ActiveChatGrid.Visibility == Visibility.Visible;
+
+        private ScrollViewer _scrollViewer;
+        private bool _isLoadingMore = false;
+        private bool _hasReachedStart = false;
+
         public ChatDetailView()
         {
             this.InitializeComponent();
             MessageListView.ItemsSource = _messages;
+            MessageListView.Loaded += MessageListView_Loaded;
+        }
+
+        private void MessageListView_Loaded(object sender, RoutedEventArgs e)
+        {
+            _scrollViewer = FindScrollViewer(MessageListView);
+            if (_scrollViewer != null)
+            {
+                _scrollViewer.ViewChanged += ScrollViewer_ViewChanged;
+            }
+        }
+
+        private ScrollViewer FindScrollViewer(DependencyObject element)
+        {
+            if (element is ScrollViewer sv) return sv;
+            for (int i = 0; i < Windows.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(element); i++)
+            {
+                var child = Windows.UI.Xaml.Media.VisualTreeHelper.GetChild(element, i);
+                var result = FindScrollViewer(child);
+                if (result != null) return result;
+            }
+            return null;
+        }
+
+        private async void ScrollViewer_ViewChanged(object sender, ScrollViewerViewChangedEventArgs e)
+        {
+            if (_scrollViewer == null || _isLoadingMore || _hasReachedStart || _activeChat == null) return;
+
+            // When user scrolls to top (offset close to 200)
+            if (_scrollViewer.VerticalOffset < 200)
+            {
+                Debug.WriteLine($"[ChatDetailView] Scroll trigger hit. Offset: {_scrollViewer.VerticalOffset}, Extent: {_scrollViewer.ExtentHeight}, Viewport: {_scrollViewer.ViewportHeight}");
+                await LoadMoreMessagesAsync();
+            }
+        }
+
+        private async Task LoadMoreMessagesAsync()
+        {
+            if (_isLoadingMore || _activeChat == null) return;
+            _isLoadingMore = true;
+
+            try
+            {
+                Debug.WriteLine($"[ChatDetailView] Loading more messages for {_activeChat.JID}. Current: {_messages.Count}");
+                
+                double oldExtentHeight = _scrollViewer.ExtentHeight;
+                double oldOffset = _scrollViewer.VerticalOffset;
+
+                var moreMessages = await WhatsAppService.Instance.LoadMoreMessagesAsync(_activeChat.JID);
+                
+                if (moreMessages != null && moreMessages.Count > 0)
+                {
+                    // Insert at top in chronological order
+                    for (int i = 0; i < moreMessages.Count; i++)
+                    {
+                        _messages.Insert(i, moreMessages[i]);
+                    }
+
+                    // Force layout update to get new extent height
+                    MessageListView.UpdateLayout();
+
+                    // Adjust scroll position so it doesn't jump
+                    double newExtentHeight = _scrollViewer.ExtentHeight;
+                    double heightDiff = newExtentHeight - oldExtentHeight;
+                    
+                    Debug.WriteLine($"[ChatDetailView] Loaded {moreMessages.Count} messages. Height: {oldExtentHeight}->{newExtentHeight}, Diff: {heightDiff}. Updating offset: {oldOffset}->{oldOffset + heightDiff}");
+                    
+                    _scrollViewer.ChangeView(null, oldOffset + heightDiff, null, true);
+                }
+                else
+                {
+                    Debug.WriteLine($"[ChatDetailView] No more messages to load for {_activeChat.JID}");
+                    _hasReachedStart = true;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[ChatDetailView] Error loading more messages: {ex.Message}");
+            }
+            finally
+            {
+                _isLoadingMore = false;
+            }
+
+            // If we are STILL near the top after loading more, and haven't reached start, try again
+            // This handles cases where the prepended messages don't push the scroll offset far enough
+            if (!_hasReachedStart && _scrollViewer != null && _scrollViewer.VerticalOffset < 200)
+            {
+                _ = Dispatcher.RunAsync(CoreDispatcherPriority.Low, async () => {
+                    await Task.Delay(500); // Give layout a moment
+                    if (!_isLoadingMore && !_hasReachedStart && _scrollViewer.VerticalOffset < 200)
+                    {
+                        Debug.WriteLine("[ChatDetailView] Auto-triggering another load (still near top)");
+                        await LoadMoreMessagesAsync();
+                    }
+                });
+            }
         }
 
         private void BackButton_Click(object sender, RoutedEventArgs e)
@@ -32,6 +136,7 @@ namespace Unison.UWPApp.UI.Views
         public async void SetActiveChat(ChatItem chat)
         {
             _activeChat = chat;
+            _hasReachedStart = false; // Reset for new chat
             if (chat == null)
             {
                 ActiveChatGrid.Visibility = Visibility.Collapsed;
@@ -104,6 +209,16 @@ namespace Unison.UWPApp.UI.Views
             }
 
             ScrollToBottom();
+
+            // After initial load, if the list is still short/at top, load more until we have a scrollable area
+            _ = Dispatcher.RunAsync(CoreDispatcherPriority.Low, async () => {
+                await Task.Delay(1000); // Wait for virtualization/layout
+                if (_scrollViewer != null && _scrollViewer.VerticalOffset < 200 && !_hasReachedStart && !_isLoadingMore)
+                {
+                    Debug.WriteLine("[ChatDetailView] Auto-triggering more messages after initial load (top reached)");
+                    await LoadMoreMessagesAsync();
+                }
+            });
         }
 
         private void ScrollToBottom()

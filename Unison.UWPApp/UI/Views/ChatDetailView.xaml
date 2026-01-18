@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:Unison.UWPApp.UI.Views"
     xmlns:models="using:Unison.UWPApp.Models"
+    xmlns:controls="using:Unison.UWPApp.UI.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
@@ -15,7 +16,11 @@
             <local:MessageTemplateSelector.SentTemplate>
                 <DataTemplate x:DataType="models:ChatMessage">
                     <Grid HorizontalAlignment="Right" Margin="48,4,12,4">
-                        <Border Background="{StaticResource UnisonGreenBrush}" 
+                        <!-- Sender Shadow (Highlight top) -->
+                        <Border Background="#FF106656" 
+                                CornerRadius="16,16,4,16" 
+                                Margin="0,-1,0,1"/>
+                        <Border Background="#FF005C4B" 
                                 CornerRadius="16,16,4,16" Padding="12,8">
                             <StackPanel>
                                 <TextBlock Text="{x:Bind Content}" Foreground="White" TextWrapping="Wrap" FontSize="15" LineHeight="20"/>
@@ -28,7 +33,11 @@
             <local:MessageTemplateSelector.ReceivedTemplate>
                 <DataTemplate x:DataType="models:ChatMessage">
                     <Grid HorizontalAlignment="Left" Margin="12,4,48,4">
-                        <Border Background="{ThemeResource SystemControlBackgroundBaseMediumLowBrush}" 
+                        <!-- Receiver Shadow (Highlight top) -->
+                        <Border Background="#FF3E3E3E" 
+                                CornerRadius="16,16,16,4" 
+                                Margin="0,-1,0,1"/>
+                        <Border Background="#FF363636" 
                                 CornerRadius="16,16,16,4" Padding="12,8">
                             <StackPanel>
                                 <TextBlock Text="{x:Bind Content}" Foreground="{ThemeResource SystemControlForegroundBaseHighBrush}" TextWrapping="Wrap" FontSize="15" LineHeight="20" FontFamily="{StaticResource MainFont}"/>
@@ -41,7 +50,7 @@
         </local:MessageTemplateSelector>
     </UserControl.Resources>
 
-    <Grid x:Name="ChatDetailGrid" Background="{ThemeResource SystemControlBackgroundAltHighBrush}">
+    <Grid x:Name="ChatDetailGrid" Background="{StaticResource ChatDetailBackgroundBrush}">
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup x:Name="LayoutStates">
                 <VisualState x:Name="WideState">
@@ -49,7 +58,6 @@
                         <AdaptiveTrigger MinWindowWidth="720"/>
                     </VisualState.StateTriggers>
                     <VisualState.Setters>
-                        <Setter Target="BackButton.Visibility" Value="Collapsed"/>
                     </VisualState.Setters>
                 </VisualState>
                 <VisualState x:Name="NarrowState">
@@ -57,7 +65,6 @@
                         <AdaptiveTrigger MinWindowWidth="0"/>
                     </VisualState.StateTriggers>
                     <VisualState.Setters>
-                        <Setter Target="BackButton.Visibility" Value="Visible"/>
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
@@ -69,6 +76,9 @@
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
+            
+            <!-- Tiled Background Layer -->
+            <controls:TiledBackground Grid.RowSpan="3"/>
 
             <!-- Chat Header -->
             <Grid Height="64" Padding="12,0" Background="{ThemeResource SystemControlBackgroundBaseLowBrush}">

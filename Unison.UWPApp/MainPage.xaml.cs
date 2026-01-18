@@ -19,6 +19,30 @@ namespace Unison.UWPApp
             
             // Hook up events
             ChatDetailPart.BackRequested += ChatDetailPart_BackRequested;
+
+            // System Back Button support
+            SystemNavigationManager.GetForCurrentView().BackRequested += MainPage_BackRequested;
+        }
+
+        private void MainPage_BackRequested(object sender, BackRequestedEventArgs e)
+        {
+            if (e.Handled) return;
+
+            if (DebugPart.Visibility == Visibility.Visible)
+            {
+                DebugPart_BackRequested(this, EventArgs.Empty);
+                e.Handled = true;
+            }
+            else if (LayoutStates.CurrentState?.Name == "NarrowState" && ChatDetailPart.Visibility == Visibility.Visible)
+            {
+                ChatDetailPart_BackRequested(this, EventArgs.Empty);
+                e.Handled = true;
+            }
+            else if (LayoutStates.CurrentState?.Name == "WideState" && ChatDetailPart.HasActiveChat)
+            {
+                ChatDetailPart_BackRequested(this, EventArgs.Empty);
+                e.Handled = true;
+            }
         }
 
         private void ChatDetailPart_BackRequested(object sender, EventArgs e)
@@ -32,6 +56,8 @@ namespace Unison.UWPApp
                 ChatListPart.Visibility = Visibility.Visible;
                 ChatDetailPart.Visibility = Visibility.Collapsed;
             }
+            
+            UpdateBackButtonVisibility();
         }
 
         private async void MainPage_Loaded(object sender, RoutedEventArgs e)
@@ -68,11 +94,15 @@ namespace Unison.UWPApp
 
             if (LayoutStates.CurrentState?.Name == "NarrowState")
             {
-                Column0.Width = new GridLength(0);
-                Column1.Width = new GridLength(1, GridUnitType.Star);
-                ChatListPart.Visibility = Visibility.Collapsed;
-                ChatDetailPart.Visibility = Visibility.Visible;
+                if (e.SelectedChat != null)
+                {
+                    Column0.Width = new GridLength(0);
+                    Column1.Width = new GridLength(1, GridUnitType.Star);
+                    ChatListPart.Visibility = Visibility.Collapsed;
+                    ChatDetailPart.Visibility = Visibility.Visible;
+                }
             }
+            UpdateBackButtonVisibility();
         }
 
         private void ChatListPart_MenuClicked(object sender, EventArgs e)
@@ -98,6 +128,7 @@ namespace Unison.UWPApp
                     // RootContentGrid.Visibility = Visibility.Collapsed; // Don't collapse, DebugPart is on top
                 }
                 RootSplitView.IsPaneOpen = false;
+                UpdateBackButtonVisibility();
             }
         }
 
@@ -105,12 +136,36 @@ namespace Unison.UWPApp
         {
             DebugPart.Visibility = Visibility.Collapsed;
             NavListView.SelectedIndex = 0; // Back to chats
+            UpdateBackButtonVisibility();
+        }
+
+        private void UpdateBackButtonVisibility()
+        {
+            bool showBack = false;
+            if (DebugPart.Visibility == Visibility.Visible)
+            {
+                showBack = true;
+            }
+            else if (LayoutStates.CurrentState?.Name == "NarrowState")
+            {
+                showBack = ChatDetailPart.Visibility == Visibility.Visible;
+            }
+            else // Wide state
+            {
+                // In Wide state, we show the system back button if a chat is selected
+                // (which allows clicking it to deselect/return to empty state)
+                showBack = ChatDetailPart.HasActiveChat;
+            }
+
+            SystemNavigationManager.GetForCurrentView().AppViewBackButtonVisibility = 
+                showBack ? AppViewBackButtonVisibility.Visible : AppViewBackButtonVisibility.Collapsed;
         }
 
         public void ShowConnectedPanel()
         {
             MainOverlay.Visibility = Visibility.Collapsed;
             RootSplitView.Visibility = Visibility.Visible;
+            UpdateBackButtonVisibility();
         }
 
         public void ShowLoginPanel()

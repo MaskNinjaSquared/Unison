@@ -28,7 +28,7 @@
                              Visibility="{x:Bind AvatarUrl, Mode=OneWay, Converter={StaticResource InvertedStringToVisibilityConverter}}"/>
                     
                     <!-- Contact fallback (ea8c) -->
-                    <FontIcon Glyph="&#xEA8C;" FontFamily="{StaticResource IconFont}" FontSize="24"
+                    <FontIcon Glyph="&#xEA8C;" FontFamily="{StaticResource IconFont}" FontSize="20"
                               Foreground="{ThemeResource AvatarFallbackIconBrush}"
                               HorizontalAlignment="Center" VerticalAlignment="Center"
                               Visibility="{x:Bind local:ChatListView.GetContactFallbackVisibility(AvatarUrl, IsGroup), Mode=OneWay}"/>
