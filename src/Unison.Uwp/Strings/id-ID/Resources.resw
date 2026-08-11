@@ -1,0 +1,674 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!-- 
+    Microsoft ResX Schema 
+    
+    Version 2.0
+    
+    The primary goals of this format is to allow a simple XML format 
+    that is mostly human readable. The generation and parsing of the 
+    various data types are done through the TypeConverter classes 
+    associated with the data types.
+    
+    Example:
+    
+    ... ado.net/XML headers & schema ...
+    <resheader name="resmimetype">text/microsoft-resx</resheader>
+    <resheader name="version">2.0</resheader>
+    <resheader name="reader">System.Resources.ResXResourceReader, System.Windows.Forms, ...</resheader>
+    <resheader name="writer">System.Resources.ResXResourceWriter, System.Windows.Forms, ...</resheader>
+    <data name="Name1"><value>this is my long string</value><comment>this is a comment</comment></data>
+    <data name="Color1" type="System.Drawing.Color, System.Drawing">Blue</data>
+    <data name="Bitmap1" mimetype="application/x-microsoft.net.object.binary.base64">
+        <value>[base64 mime encoded serialized .NET Framework object]</value>
+    </data>
+    <data name="Icon1" type="System.Drawing.Icon, System.Drawing" mimetype="application/x-microsoft.net.object.bytearray.base64">
+        <value>[base64 mime encoded string representing a byte array form of the .NET Framework object]</value>
+        <comment>This is a comment</comment>
+    </data>
+                
+    There are any number of "resheader" rows that contain simple 
+    name/value pairs.
+    
+    Each data row contains a name, and value. The row also contains a 
+    type or mimetype. Type corresponds to a .NET class that support 
+    text/value conversion through the TypeConverter architecture. 
+    Classes that don't support this are serialized and stored with the 
+    mimetype set.
+    
+    The mimetype is used for serialized objects, and tells the 
+    ResXResourceReader how to depersist the object. This is currently not 
+    extensible. For a given mimetype the value must be set accordingly:
+    
+    Note - application/x-microsoft.net.object.binary.base64 is the format 
+    that the ResXResourceWriter will generate, however the reader can 
+    read any of the formats listed below.
+    
+    mimetype: application/x-microsoft.net.object.binary.base64
+    value   : The object must be serialized with 
+            : System.Runtime.Serialization.Formatters.Binary.BinaryFormatter
+            : and then encoded with base64 encoding.
+    
+    mimetype: application/x-microsoft.net.object.soap.base64
+    value   : The object must be serialized with 
+            : System.Runtime.Serialization.Formatters.Soap.SoapFormatter
+            : and then encoded with base64 encoding.
+
+    mimetype: application/x-microsoft.net.object.bytearray.base64
+    value   : The object must be serialized into a byte array 
+            : using a System.ComponentModel.TypeConverter
+            : and then encoded with base64 encoding.
+    -->
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="Login_ReloadQR.Text" xml:space="preserve">
+    <value>Muat ulang QR Code</value>
+  </data>
+  <data name="Login_QRStatus.Text" xml:space="preserve">
+    <value>Pindai kode ini dengan ponsel mu</value>
+  </data>
+  <data name="Login_ShowLog.Content" xml:space="preserve">
+    <value>Tampilkan diagnosa log</value>
+  </data>
+  <data name="Login_ShowLogHide.Content" xml:space="preserve">
+    <value>Sembunyikan log (ketuk lagi untuk segarkan)</value>
+  </data>
+  <data name="Login_LogTitle.Text" xml:space="preserve">
+    <value>Diagnosa log</value>
+  </data>
+  <data name="Login_ToggleLogOn.Content" xml:space="preserve">
+    <value>Nyalakan log</value>
+  </data>
+  <data name="Login_ToggleLogOff.Content" xml:space="preserve">
+    <value>Matikan log</value>
+  </data>
+  <data name="Login_CloseLog.Content" xml:space="preserve">
+    <value>Tutup</value>
+  </data>
+  <data name="Login_PairPhoneTitle" xml:space="preserve">
+    <value>Tautkan dengan nomor hape</value>
+  </data>
+  <data name="Login_PairPhonePrompt" xml:space="preserve">
+    <value>Masukan nomor dengan kode negara, hanya angka</value>
+  </data>
+  <data name="Login_PairPhoneContinue" xml:space="preserve">
+    <value>Lanjutkan</value>
+  </data>
+  <data name="Login_PairPhoneCancel" xml:space="preserve">
+    <value>Batalkan</value>
+  </data>
+  <data name="Login_PairPhoneInvalidTitle" xml:space="preserve">
+    <value>Nomor salah</value>
+  </data>
+  <data name="Login_PairPhoneInvalidBody" xml:space="preserve">
+    <value>Masukan nomor dengan kode negara (cth. 628123456789).</value>
+  </data>
+  <data name="Login_PairPhoneNoConnTitle" xml:space="preserve">
+    <value>Tidak ada koneksi</value>
+  </data>
+  <data name="Login_PairPhoneNoConnBody" xml:space="preserve">
+    <value>Tidak bisa terhubung dengan WhatsApp untuk meminta kode. Cek log Diagnosa.</value>
+  </data>
+  <data name="Login_PairPhoneCodeTitle" xml:space="preserve">
+    <value>Pasangkan kode</value>
+  </data>
+  <data name="Login_PairPhoneCodeBody" xml:space="preserve">
+    <value>Di Ponsel dengan WhatsApp:
+
+Tautkan perangkat &gt; Tautkan sebuah perangkat &gt; Tautkan dengan nomor ponsel
+
+Masukan kode ini:
+
+{0}</value>
+  </data>
+  <data name="Login_PairPhoneFailTitle" xml:space="preserve">
+    <value>Gagal menghubungkan nomor</value>
+  </data>
+  <data name="Login_LogEmpty" xml:space="preserve">
+    <value>(log kosong — pemasangan sudah menulis [Pairing] riwayat otomatis. Ketuk muat QR dan buka log kembali; nyalakan log sesi masuk penuh hanya jika kamu butuh trafik lengkap.)</value>
+  </data>
+  <data name="Login_LogReadFail" xml:space="preserve">
+    <value>Gagal membaca log: {0}</value>
+  </data>
+  <data name="Login_LogEnabledHint" xml:space="preserve">
+    <value>Log diaktifkan. Ketuk muat QR atau hubungkan ulang untuk menangkap upaya baru.
+
+Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
+  </data>
+  <data name="Login_LogDisabledHint" xml:space="preserve">
+    <value>Log dinonaktifkan (disarankan untuk pengguna biasa).</value>
+  </data>
+  <data name="Login_LogToggleFail" xml:space="preserve">
+    <value>Gagal beralih ke log: {0}</value>
+  </data>
+  <data name="ChatList_Header.Text" xml:space="preserve">
+    <value>Obrolan</value>
+  </data>
+  <data name="ChatList_SyncUpdating.Text" xml:space="preserve">
+    <value>Perbarui...</value>
+  </data>
+  <data name="ChatList_FilterHeader.Text" xml:space="preserve">
+    <value>Sortir obrolan</value>
+  </data>
+  <data name="ChatList_FilterUnread.Text" xml:space="preserve">
+    <value>Belum dibaca</value>
+  </data>
+  <data name="ChatList_FilterFavorites.Text" xml:space="preserve">
+    <value>Favorit</value>
+  </data>
+  <data name="ChatList_FilterContacts.Text" xml:space="preserve">
+    <value>Kontak</value>
+  </data>
+  <data name="ChatList_FilterNonContacts.Text" xml:space="preserve">
+    <value>Bukan Kontak</value>
+  </data>
+  <data name="ChatList_FilterGroups.Text" xml:space="preserve">
+    <value>Grup</value>
+  </data>
+  <data name="ChatList_FilterDrafts.Text" xml:space="preserve">
+    <value>Draf</value>
+  </data>
+  <data name="ChatList_RefreshNames.Text" xml:space="preserve">
+    <value>Segarkan nama kontak</value>
+  </data>
+  <data name="ChatList_SearchBox.PlaceholderText" xml:space="preserve">
+    <value>Cari atau mulai obrolan baru</value>
+  </data>
+  <data name="ChatList_PreviewPhoto" xml:space="preserve">
+    <value>Foto</value>
+  </data>
+  <data name="ChatList_PreviewVideo" xml:space="preserve">
+    <value>Video</value>
+  </data>
+  <data name="ChatList_PreviewSticker" xml:space="preserve">
+    <value>Stiker</value>
+  </data>
+  <data name="ChatList_PreviewVoice" xml:space="preserve">
+    <value>Pesan suara</value>
+  </data>
+  <data name="ChatDetail_Audio" xml:space="preserve">
+    <value>Audio</value>
+  </data>
+  <data name="ChatList_PreviewDocument" xml:space="preserve">
+    <value>Dokumen</value>
+  </data>
+  <data name="ChatList_PreviewReaction" xml:space="preserve">
+    <value>Reaksi</value>
+  </data>
+  <data name="ChatList_Loading.Text" xml:space="preserve">
+    <value>Menyiapkan percakapan…</value>
+  </data>
+  <data name="ChatList_RefreshingNames" xml:space="preserve">
+    <value>Menyegarkan nama kontak...</value>
+  </data>
+  <data name="ChatList_Connecting" xml:space="preserve">
+    <value>Menghubungkan...</value>
+  </data>
+  <data name="ChatList_Handshake" xml:space="preserve">
+    <value>Handshake...</value>
+  </data>
+  <data name="ChatList_Updating" xml:space="preserve">
+    <value>Perbarui...</value>
+  </data>
+  <data name="ChatList_SyncProgress" xml:space="preserve">
+    <value>Menyinkronkan percakapan… {0} of {1}</value>
+  </data>
+  <data name="ChatList_SyncProgressCount" xml:space="preserve">
+    <value>Menyinkronkan percakapan… {0} memuat</value>
+  </data>
+  <data name="ChatList_SyncDone" xml:space="preserve">
+    <value>Sinkronisasi komplit</value>
+  </data>
+  <data name="ChatList_Organizing" xml:space="preserve">
+    <value>Mengatur obrolan…</value>
+  </data>
+  <data name="ChatDetail_SelectChat.Text" xml:space="preserve">
+    <value>Pilih obrolan</value>
+  </data>
+  <data name="ChatDetail_Empty.Text" xml:space="preserve">
+    <value>Pilih obrolan untuk mulai berkirim pesan</value>
+  </data>
+  <data name="ChatDetail_MessageInput.PlaceholderText" xml:space="preserve">
+    <value>Ketik pesan</value>
+  </data>
+  <data name="ChatDetail_Pinned.Text" xml:space="preserve">
+    <value>Pesan yang disematkan</value>
+  </data>
+  <data name="ChatDetail_ReadMore" xml:space="preserve">
+    <value>Baca selengkapnya</value>
+  </data>
+  <data name="ChatDetail_ReadLess" xml:space="preserve">
+    <value>Tampilkan lebih sedikit</value>
+  </data>
+  <data name="ChatDetail_PinnedIndex" xml:space="preserve">
+    <value>Pesan yang disematkan {0} dari {1}</value>
+  </data>
+  <data name="Chat_SelfMarker" xml:space="preserve">
+    <value>(Anda)</value>
+  </data>
+  <data name="Chat_SelfFallbackName" xml:space="preserve">
+    <value>Anda</value>
+  </data>
+  <data name="ChatDetail_PersonalSubtitle.Text" xml:space="preserve">
+    <value>Pesan untuk saya</value>
+  </data>
+  <data name="ChatDetail_PresenceOnline" xml:space="preserve">
+    <value>online</value>
+  </data>
+  <data name="ChatDetail_PresenceTyping" xml:space="preserve">
+    <value>sedang mengetik...</value>
+  </data>
+  <data name="ChatDetail_PresenceLastSeenToday" xml:space="preserve">
+    <value>terakhir dilihat hari ini pukul {0}</value>
+  </data>
+  <data name="ChatDetail_PresenceLastSeenYesterday" xml:space="preserve">
+    <value>terakhir dilihat kemarin pukul {0}</value>
+  </data>
+  <data name="ChatDetail_PresenceLastSeenWeekday" xml:space="preserve">
+    <value>terakhir dilihat {0} pukul {1}</value>
+  </data>
+  <data name="ChatDetail_PresenceLastSeenDate" xml:space="preserve">
+    <value>terakhir dilihat {0} pukul {1}</value>
+  </data>
+  <data name="ChatDetail_PresenceLastSeenRecently" xml:space="preserve">
+    <value>terakhir dilihat baru-baru ini</value>
+  </data>
+  <data name="ChatDetail_SelectForContactInfo" xml:space="preserve">
+    <value>ketuk kontak untuk info lainnya</value>
+  </data>
+  <data name="ChatDetail_SelectForGroupInfo" xml:space="preserve">
+    <value>ketuk di sini untuk info grup</value>
+  </data>
+  <data name="ImageViewer_Download" xml:space="preserve">
+    <value>Unduh</value>
+  </data>
+  <data name="ImageViewer_Share" xml:space="preserve">
+    <value>Bagikan</value>
+  </data>
+  <data name="ImageViewer_UnknownSender" xml:space="preserve">
+    <value>Kontak</value>
+  </data>
+  <data name="ChatDetail_SendImage.Title" xml:space="preserve">
+    <value>Kirim gambar?</value>
+  </data>
+  <data name="ChatDetail_SendImage.PrimaryButtonText" xml:space="preserve">
+    <value>Kirim</value>
+  </data>
+  <data name="ChatDetail_SendImage.SecondaryButtonText" xml:space="preserve">
+    <value>Batal</value>
+  </data>
+  <data name="ChatDetail_AudioPlayFailed" xml:space="preserve">
+    <value>Tidak dapat memutar audio ini.</value>
+  </data>
+  <data name="ChatDetail_RecordFailed" xml:space="preserve">
+    <value>Tidak dapat merekam audio. Periksa izin mikrofon.</value>
+  </data>
+  <data name="ChatDetail_RecordingChatUnavailable" xml:space="preserve">
+    <value>Percakapan untuk rekaman ini tidak lagi tersedia.</value>
+  </data>
+  <data name="ChatDetail_AudioSendFailed" xml:space="preserve">
+    <value>Tidak dapat mengirim audio.</value>
+  </data>
+  <data name="ChatDetail_AttachSendFailed" xml:space="preserve">
+    <value>Tidak dapat mengirim berkas.</value>
+  </data>
+  <data name="ChatDetail_ImageDownloadFailed" xml:space="preserve">
+    <value>Tidak dapat mengunduh gambar ini.</value>
+  </data>
+  <data name="NewChatDialog.Title" xml:space="preserve">
+    <value>Obrolan baru</value>
+  </data>
+  <data name="NewChatDialog.PrimaryButtonText" xml:space="preserve">
+    <value>Mulai obrolan</value>
+  </data>
+  <data name="NewChatDialog.SecondaryButtonText" xml:space="preserve">
+    <value>Batal</value>
+  </data>
+  <data name="NewChat_Hint.Text" xml:space="preserve">
+    <value>Masukkan nomor telepon orang yang ingin Anda kirim pesan.</value>
+  </data>
+  <data name="NewChat_Phone.Header" xml:space="preserve">
+    <value>Nomor ponsel</value>
+  </data>
+  <data name="NewChat_Phone.PlaceholderText" xml:space="preserve">
+    <value>cth. +628123456789</value>
+  </data>
+  <data name="NewChat_EnterPhone" xml:space="preserve">
+    <value>Silakan masukkan nomor telepon.</value>
+  </data>
+  <data name="NewChat_Searching" xml:space="preserve">
+    <value>Mencari...</value>
+  </data>
+  <data name="NewChat_NotFound" xml:space="preserve">
+    <value>Akun WhatsApp untuk nomor ini tidak ditemukan.</value>
+  </data>
+  <data name="NewChat_Error" xml:space="preserve">
+    <value>Kesalahan: {0}</value>
+  </data>
+  <data name="Debug_Title.Text" xml:space="preserve">
+    <value>Debug &amp; Protocol Logs</value>
+  </data>
+  <data name="Debug_Logging.Text" xml:space="preserve">
+    <value>Pencatatan</value>
+  </data>
+  <data name="Debug_Verbose.Header" xml:space="preserve">
+    <value>Pencatatan Debug Terperinci</value>
+  </data>
+  <data name="Debug_Verbose.Text" xml:space="preserve">
+    <value>Aktifkan output debug terperinci. Dapat memperlambat aplikasi.</value>
+  </data>
+  <data name="Debug_Capture.Header" xml:space="preserve">
+    <value>Protokol Pengambilan trafik</value>
+  </data>
+  <data name="Debug_Capture.Text" xml:space="preserve">
+    <value>Catat semua node biner yang masuk dan keluar.</value>
+  </data>
+  <data name="Debug_VerboseTitle.Text" xml:space="preserve">
+    <value>Pencatatan Debug Terperinci</value>
+  </data>
+  <data name="Debug_VerboseDesc.Text" xml:space="preserve">
+    <value>Aktifkan output debug terperinci. Dapat memperlambat aplikasi.</value>
+  </data>
+  <data name="Debug_RuntimeTitle.Text" xml:space="preserve">
+    <value>Kesehatan Eksekusi</value>
+  </data>
+  <data name="Debug_RuntimeDesc.Text" xml:space="preserve">
+    <value>Penghitung selalu aktif untuk koneksi, antrian, pengiriman, penerimaan, dan memori. Tidak ada teks pesan yang direkam.</value>
+  </data>
+  <data name="Debug_Refresh.Content" xml:space="preserve">
+    <value>Menyegarkan</value>
+  </data>
+  <data name="Debug_SaveReport.Content" xml:space="preserve">
+    <value>Simpan Laporan Diagnostik</value>
+  </data>
+  <data name="Debug_ClearRuntime.Content" xml:space="preserve">
+    <value>Hapus Log Eksekusi</value>
+  </data>
+  <data name="Debug_Collecting.Text" xml:space="preserve">
+    <value>Mengumpulkan status runtime...</value>
+  </data>
+  <data name="Debug_CaptureTitle.Text" xml:space="preserve">
+    <value>Protokol Pengambilan Lalu Lintas</value>
+  </data>
+  <data name="Debug_CaptureDesc.Text" xml:space="preserve">
+    <value>Catat semua node biner yang masuk dan keluar.</value>
+  </data>
+  <data name="Debug_LiveStream.Text" xml:space="preserve">
+    <value>Siaran Langsung</value>
+  </data>
+  <data name="Debug_SaveLog.Content" xml:space="preserve">
+    <value>Simpan Log</value>
+  </data>
+  <data name="Debug_ClearLog.Content" xml:space="preserve">
+    <value>Bersihkan</value>
+  </data>
+  <data name="Debug_Actions.Text" xml:space="preserve">
+    <value>Tindakan</value>
+  </data>
+  <data name="Debug_Crypto.Header" xml:space="preserve">
+    <value>Perintah</value>
+  </data>
+  <data name="Debug_Crypto.Text" xml:space="preserve">
+    <value>Jalankan pemeriksaan mandiri kriptografi lokal.</value>
+  </data>
+  <data name="Debug_WipeBox.Header" xml:space="preserve">
+    <value>Sesi Penghapusan</value>
+  </data>
+  <data name="Debug_WipeBox.Text" xml:space="preserve">
+    <value>Hapus otentikasi lokal dan kembali ke proses pemasangan.</value>
+  </data>
+  <data name="Debug_StatusBox.Header" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="Debug_StatusBox.Text" xml:space="preserve">
+    <value>Pembuatan dan arsitektur paket.</value>
+  </data>
+  <data name="Debug_Wipe.Content" xml:space="preserve">
+    <value>Sesi Penghapusan</value>
+  </data>
+  <data name="Debug_WipeTitle" xml:space="preserve">
+    <value>Hapus Sesi?</value>
+  </data>
+  <data name="Debug_WipeBody" xml:space="preserve">
+    <value>Ini akan menghapus semua data otentikasi lokal dan menutup aplikasi. Anda perlu memasangkan ulang perangkat.</value>
+  </data>
+  <data name="Debug_WipeDelete" xml:space="preserve">
+    <value>Hapus</value>
+  </data>
+  <data name="Debug_WipeCancel" xml:space="preserve">
+    <value>Batal</value>
+  </data>
+  <data name="Debug_PreparingReport" xml:space="preserve">
+    <value>Menyiapkan laporan...</value>
+  </data>
+  <data name="Debug_RuntimeCleared" xml:space="preserve">
+    <value>Log runtime telah dihapus.</value>
+  </data>
+  <data name="Shell_Chats.Text" xml:space="preserve">
+    <value>Obrolan</value>
+  </data>
+  <data name="Shell_Calls.Text" xml:space="preserve">
+    <value>Panggilan</value>
+  </data>
+  <data name="Shell_Status.Text" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="Shell_Starred.Text" xml:space="preserve">
+    <value>Pesan berbintang</value>
+  </data>
+  <data name="Shell_Archived.Text" xml:space="preserve">
+    <value>Obrolan diarsipkan</value>
+  </data>
+  <data name="Shell_Settings.Text" xml:space="preserve">
+    <value>Pengaturan</value>
+  </data>
+  <data name="Shell_Debug.Text" xml:space="preserve">
+    <value>Debug</value>
+  </data>
+  <data name="Shell_Profile.Text" xml:space="preserve">
+    <value>Profil</value>
+  </data>
+  <data name="Common_Cancel" xml:space="preserve">
+    <value>Batal</value>
+  </data>
+  <data name="Common_OK" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="Common_Yesterday" xml:space="preserve">
+    <value>Kemarin</value>
+  </data>
+  <data name="Login_InstrTitle.Text" xml:space="preserve">
+    <value>Gunakan WhatsApp di komputer Anda</value>
+  </data>
+  <data name="Login_InstrStep1.Text" xml:space="preserve">
+    <value>1. Buka WhatsApp di ponsel Anda.</value>
+  </data>
+  <data name="Login_InstrStep2.Text" xml:space="preserve">
+    <value>2. Ketuk Menu atau Pengaturan dan pilih Perangkat yang terhubung</value>
+  </data>
+  <data name="Login_InstrStep3.Text" xml:space="preserve">
+    <value>3. Ketuk Hubungkan perangkat</value>
+  </data>
+  <data name="Login_InstrStep4.Text" xml:space="preserve">
+    <value>4. Arahkan ponsel Anda ke layar ini untuk memindai kode.</value>
+  </data>
+  <data name="Login_LinkPhone.Text" xml:space="preserve">
+    <value>Tautan dengan nomor telepon</value>
+  </data>
+  <data name="Login_DevResetTitle" xml:space="preserve">
+    <value>Pengaturan Ulang Pengembang</value>
+  </data>
+  <data name="Login_DevResetBody" xml:space="preserve">
+    <value>Data sesi dan data lokal telah dihapus. Aplikasi akan ditutup untuk memulai ulang secara bersih.</value>
+  </data>
+  <data name="Settings_Title.Text" xml:space="preserve">
+    <value>Pengaturan</value>
+  </data>
+  <data name="Settings_General.Text" xml:space="preserve">
+    <value>Umum</value>
+  </data>
+  <data name="Settings_Notifications.Header" xml:space="preserve">
+    <value>Notifikasi</value>
+  </data>
+  <data name="Settings_Notifications.Text" xml:space="preserve">
+    <value>Tampilkan notifikasi dan lencana untuk pesan masuk.</value>
+  </data>
+  <data name="Settings_LiveTiles.Header" xml:space="preserve">
+    <value>Ubin hidup</value>
+  </data>
+  <data name="Settings_LiveTiles.Text" xml:space="preserve">
+    <value>Perbarui ubin utama dengan pesan terbaru.</value>
+  </data>
+  <data name="Settings_KeepAlive.Header" xml:space="preserve">
+    <value>Mode latar belakang</value>
+  </data>
+  <data name="Settings_KeepAlive.Text" xml:space="preserve">
+    <value>Memakai lokasi hanya agar Windows 10 Mobile tidak membekukan aplikasi (trik Unogram). Posisi tidak dibaca atau dikirim. Lebih boros baterai.</value>
+  </data>
+  <data name="Settings_AutoUnlink.Header" xml:space="preserve">
+    <value>Lepas tautan otomatis</value>
+  </data>
+  <data name="Settings_AutoUnlink.Text" xml:space="preserve">
+    <value>Jika ponsel membatalkan sesi ini, hapus data lokal dan tampilkan QR. Matikan untuk menjaga aplikasi sebagai cadangan dan hanya mencoba menyambung ulang.</value>
+  </data>
+  <data name="Settings_Customization.Text" xml:space="preserve">
+    <value>Kustomisasi</value>
+  </data>
+  <data name="Settings_Shell.Header" xml:space="preserve">
+    <value>Shell</value>
+  </data>
+  <data name="Settings_Shell.Text" xml:space="preserve">
+    <value>Pilih tampilan aplikasi.</value>
+  </data>
+  <data name="Settings_ShellRestartTitle" xml:space="preserve">
+    <value>Shell diperbarui</value>
+  </data>
+  <data name="Settings_ShellRestartBody" xml:space="preserve">
+    <value>Unison akan dimulai ulang untuk menerapkan shell baru.</value>
+  </data>
+  <data name="Settings_ShellRestartClose" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="Settings_ShellAppliedTitle" xml:space="preserve">
+    <value>Shell diterapkan</value>
+  </data>
+  <data name="Settings_ShellAppliedBody" xml:space="preserve">
+    <value>Shell yang dipilih sekarang aktif.</value>
+  </data>
+  <data name="Boot_Loading.Text" xml:space="preserve">
+    <value>Memuat...</value>
+  </data>
+  <data name="Start_Title.Text" xml:space="preserve">
+    <value>Selamat datang di WhatsApp</value>
+  </data>
+  <data name="Start_Description.Text" xml:space="preserve">
+    <value>Cara sederhana, andal, dan pribadi untuk menggunakan WhatsApp di komputer Anda.</value>
+  </data>
+  <data name="Start_GetStarted.Content" xml:space="preserve">
+    <value>Mulai</value>
+  </data>
+  <data name="Settings_About.Text" xml:space="preserve">
+    <value>Tentang</value>
+  </data>
+  <data name="Settings_VersionLabel.Text" xml:space="preserve">
+    <value>Versi</value>
+  </data>
+  <data name="Settings_BranchLabel.Text" xml:space="preserve">
+    <value>Cabang</value>
+  </data>
+  <data name="Settings_Developers.Text" xml:space="preserve">
+    <value>Pengembang</value>
+  </data>
+  <data name="Settings_AppDescription.Text" xml:space="preserve">
+    <value>Klien WhatsApp berbasis Baileys untuk Windows Universal Platform.</value>
+  </data>
+  <data name="Settings_AppBranch.Text" xml:space="preserve">
+    <value>Release</value>
+  </data>
+  <data name="Toast_DisconnectedTitle" xml:space="preserve">
+    <value>Unison terputus</value>
+  </data>
+  <data name="Toast_DisconnectedBody" xml:space="preserve">
+    <value>Buka aplikasi untuk memulihkan koneksi WhatsApp.</value>
+  </data>
+  <data name="Toast_LoggedOutTitle" xml:space="preserve">
+    <value>Sesi diputus</value>
+  </data>
+  <data name="Toast_LoggedOutBody" xml:space="preserve">
+    <value>Sesi diputus di ponsel. Pindai QR untuk menautkan ulang.</value>
+  </data>
+  <data name="Toast_SessionReplacedBody" xml:space="preserve">
+    <value>Sesi WhatsApp Web lain mengambil koneksi. Pindai QR lagi.</value>
+  </data>
+  <data name="Toast_GenericFallbackTitle" xml:space="preserve">
+    <value>Aktivitas WhatsApp baru</value>
+  </data>
+  <data name="Toast_GenericFallbackBody" xml:space="preserve">
+    <value>Buka Unison untuk memuat pesan.</value>
+  </data>
+  <data name="Toast_NewMessageFallback" xml:space="preserve">
+    <value>Pesan baru</value>
+  </data>
+  <data name="Toast_MediaPlaceholder" xml:space="preserve">
+    <value>[Media]</value>
+  </data>
+  <data name="Toast_AppName" xml:space="preserve">
+    <value>Unison</value>
+  </data>
+</root>

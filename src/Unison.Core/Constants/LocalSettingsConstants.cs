@@ -1,0 +1,81 @@
+using System.Collections.Generic;
+using Unison.Core.Models;
+
+namespace Unison.Core.Constants
+{
+    /// <summary>
+    /// Keys and defaults for <see cref="Contracts.ILocalSettings"/> (Giuraffe/Imgur style).
+    /// </summary>
+    public static class LocalSettingsConstants
+    {
+        public const string VerboseLoggingEnabled = "VerboseLoggingEnabled";
+        public const string PersistentSessionLoggingEnabled = "PersistentSessionLoggingEnabled";
+        public const string PinnedChatSnapshotMigration = "Unison.PinnedChatSnapshotMigration.v5.13";
+        public const string LastHistoryBackfillUtc = "LastHistoryBackfillUtc";
+        public const string LastFullHistoryRepairCompletedUtc = "LastFullHistoryRepairCompletedUtc";
+        public const string LastFreshnessReconnectFallbackUtc = "LastFreshnessReconnectFallbackUtc";
+        public const string SocketBrokerTaskRegistrationMarker = "SocketBrokerTaskRegistrationMarker";
+        public const string ReconnectToastActive = "ReconnectToastActive";
+
+        /// <summary>Toast notifications for incoming messages (foreground).</summary>
+        public const string NotificationsEnabled = "NotificationsEnabled";
+
+        /// <summary>Primary Live Tile updates.</summary>
+        public const string LiveTilesEnabled = "LiveTilesEnabled";
+
+        /// <summary>
+        /// LocationTracking extended execution keep-alive (Unogram pattern).
+        /// Off by default — needs location capability / user consent.
+        /// </summary>
+        public const string LocationKeepAliveEnabled = "LocationKeepAliveEnabled";
+
+        /// <summary>
+        /// Selected UI shell (<see cref="AppShell"/> stored as int). Default Unison.
+        /// </summary>
+        public const string SelectedShell = "SelectedShell";
+
+        /// <summary>
+        /// After shell change + restart, show a one-shot toast on next launch.
+        /// </summary>
+        public const string PendingShellAppliedToast = "PendingShellAppliedToast";
+
+        /// <summary>
+        /// Local MessageStore epoch (UUID). Wipe session rotates this so resync
+        /// writes a fresh folder while the previous tree is deleted in background.
+        /// </summary>
+        public const string MessageStoreSyncId = "MessageStoreSyncId";
+
+        /// <summary>
+        /// One-shot: after abandoning legacy LocalFolder/Messages (no file migrate),
+        /// request FULL_HISTORY_SYNC_ON_DEMAND on next connected session.
+        /// </summary>
+        public const string MessageStoreForceHistoryRepair = "MessageStoreForceHistoryRepair";
+
+        /// <summary>
+        /// When true, invalid session (401/revoked) clears local auth and returns to QR.
+        /// Off by default — safer against false positives on flaky Mobile reconnects.
+        /// </summary>
+        public const string AutoUnlinkOnLogoutEnabled = "AutoUnlinkOnLogoutEnabled";
+
+        public static IReadOnlyDictionary<string, object> Defaults { get; } =
+            new Dictionary<string, object>
+            {
+                { VerboseLoggingEnabled, false },
+                { PersistentSessionLoggingEnabled, false },
+                { PinnedChatSnapshotMigration, false },
+                { LastHistoryBackfillUtc, "" },
+                { LastFullHistoryRepairCompletedUtc, "" },
+                { LastFreshnessReconnectFallbackUtc, "" },
+                { SocketBrokerTaskRegistrationMarker, "" },
+                { ReconnectToastActive, false },
+                { NotificationsEnabled, true },
+                { LiveTilesEnabled, true },
+                { LocationKeepAliveEnabled, false },
+                { AutoUnlinkOnLogoutEnabled, false },
+                { SelectedShell, (int)AppShell.Unison },
+                { PendingShellAppliedToast, false },
+                { MessageStoreSyncId, "" },
+                { MessageStoreForceHistoryRepair, false }
+            };
+    }
+}

@@ -1,0 +1,22 @@
+<ContentDialog
+    x:Class="Unison.Uwp.UI.Dialogs.ImageSendPreviewDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    x:Uid="ChatDetail_SendImage"
+    Title="Send Image?"
+    PrimaryButtonText="Send"
+    SecondaryButtonText="Cancel"
+    DefaultButton="Primary">
+
+    <StackPanel>
+        <Image x:Name="PreviewImage" MaxHeight="300" Stretch="Uniform"/>
+        <TextBlock x:Name="InfoText"
+                   Margin="0,8,0,0"
+                   Foreground="{StaticResource ChatDetailMutedTextBrush}"
+                   FontSize="12"
+                   FontFamily="{StaticResource MainFont}"/>
+    </StackPanel>
+</ContentDialog>

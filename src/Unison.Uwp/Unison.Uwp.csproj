@@ -1,0 +1,549 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+	<Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+	<PropertyGroup>
+		<Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+		<Platform Condition=" '$(Platform)' == '' ">x86</Platform>
+		<ProjectGuid>{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}</ProjectGuid>
+		<OutputType>AppContainerExe</OutputType>
+		<AppDesignerFolder>Properties</AppDesignerFolder>
+		<RootNamespace>Unison.Uwp</RootNamespace>
+		<AssemblyName>Unison.Uwp</AssemblyName>
+		<DefaultLanguage>en-US</DefaultLanguage>
+		<TargetPlatformIdentifier>UAP</TargetPlatformIdentifier>
+		<TargetPlatformVersion Condition=" '$(TargetPlatformVersion)' == '' ">10.0.22621.0</TargetPlatformVersion>
+		<TargetPlatformMinVersion>10.0.16299.0</TargetPlatformMinVersion>
+		<MinimumVisualStudioVersion>14</MinimumVisualStudioVersion>
+		<FileAlignment>512</FileAlignment>
+		<ProjectTypeGuids>{A5A43C5B-DE2A-4C0C-9213-0A381AF9435A};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
+		<!-- Use self-signed certificate for package signing -->
+		<PackageCertificateThumbprint>
+		</PackageCertificateThumbprint>
+		<!-- APPX4001: declare bundle platforms explicitly -->
+		<AppxBundlePlatforms>arm</AppxBundlePlatforms>
+		<!-- PRI257: avoid NuGet satellite assemblies overriding app default language -->
+		<AppxGeneratePrisForPortableLibrariesEnabled>false</AppxGeneratePrisForPortableLibrariesEnabled>
+		<!-- Prefer 64-bit ILC; can avoid some 1.7.6 Analysis NREs -->
+		<Use64BitCompiler>true</Use64BitCompiler>
+		<GenerateAppInstallerFile>False</GenerateAppInstallerFile>
+		<AppxAutoIncrementPackageRevision>False</AppxAutoIncrementPackageRevision>
+		<AppxSymbolPackageEnabled>False</AppxSymbolPackageEnabled>
+		<AppxBundle>Always</AppxBundle>
+		<PackageCertificateKeyFile>Unison.Uwp_TemporaryKey.pfx</PackageCertificateKeyFile>
+		<AppInstallerUpdateFrequency>0</AppInstallerUpdateFrequency>
+		<AppInstallerCheckForUpdateFrequency>OnApplicationRun</AppInstallerCheckForUpdateFrequency>
+		<AppxOSMinVersionReplaceManifestVersion>false</AppxOSMinVersionReplaceManifestVersion>
+		<AppxOSMaxVersionTestedReplaceManifestVersion>false</AppxOSMaxVersionTestedReplaceManifestVersion>
+		<LangVersion>preview</LangVersion>
+		<AppxPackageSigningTimestampDigestAlgorithm>SHA256</AppxPackageSigningTimestampDigestAlgorithm>
+		<GenerateTestArtifacts>False</GenerateTestArtifacts>
+		<HoursBetweenUpdateChecks>0</HoursBetweenUpdateChecks>
+	</PropertyGroup>
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x86'">
+		<DebugSymbols>true</DebugSymbols>
+		<OutputPath>bin\x86\Debug\</OutputPath>
+		<DefineConstants>DEBUG;TRACE;NETFX_CORE;WINDOWS_UWP;GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE</DefineConstants>
+		<NoWarn>;2008</NoWarn>
+		<DebugType>full</DebugType>
+		<PlatformTarget>x86</PlatformTarget>
+		<UseVSHostingProcess>false</UseVSHostingProcess>
+		<ErrorReport>prompt</ErrorReport>
+		<Prefer32Bit>true</Prefer32Bit>
+		<AppxPackageSigningEnabled>True</AppxPackageSigningEnabled>
+	</PropertyGroup>
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x86'">
+		<OutputPath>bin\x86\Release\</OutputPath>
+		<DefineConstants>TRACE;NETFX_CORE;WINDOWS_UWP;GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE</DefineConstants>
+		<Optimize>true</Optimize>
+		<NoWarn>;2008</NoWarn>
+		<DebugType>pdbonly</DebugType>
+		<PlatformTarget>x86</PlatformTarget>
+		<UseVSHostingProcess>false</UseVSHostingProcess>
+		<ErrorReport>prompt</ErrorReport>
+		<Prefer32Bit>true</Prefer32Bit>
+		<UseDotNetNativeToolchain>true</UseDotNetNativeToolchain>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+	</PropertyGroup>
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|ARM'">
+		<!-- The external builder invokes Debug/ARM. Keep optimized IL, but do not
+         force .NET Native here: the installed 1.7.6 compiler crashes internally
+         on this project. UWP Debug normally uses CoreCLR; Release/ARM remains
+         available for a compatible .NET Native toolchain. -->
+		<DebugSymbols>false</DebugSymbols>
+		<OutputPath>bin\ARM\Debug\</OutputPath>
+		<DefineConstants>TRACE;NETFX_CORE;WINDOWS_UWP;GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE</DefineConstants>
+		<Optimize>true</Optimize>
+		<NoWarn>;2008</NoWarn>
+		<DebugType>none</DebugType>
+		<PlatformTarget>ARM</PlatformTarget>
+		<UseVSHostingProcess>false</UseVSHostingProcess>
+		<ErrorReport>prompt</ErrorReport>
+		<Prefer32Bit>true</Prefer32Bit>
+		<AppxPackageSigningEnabled>false</AppxPackageSigningEnabled>
+	</PropertyGroup>
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|ARM'">
+		<OutputPath>bin\ARM\Release\</OutputPath>
+		<DefineConstants>TRACE;NETFX_CORE;WINDOWS_UWP;GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE</DefineConstants>
+		<Optimize>true</Optimize>
+		<NoWarn>;2008</NoWarn>
+		<DebugType>pdbonly</DebugType>
+		<PlatformTarget>ARM</PlatformTarget>
+		<UseVSHostingProcess>false</UseVSHostingProcess>
+		<ErrorReport>prompt</ErrorReport>
+		<Prefer32Bit>true</Prefer32Bit>
+		<UseDotNetNativeToolchain>true</UseDotNetNativeToolchain>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+	</PropertyGroup>
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
+		<DebugSymbols>true</DebugSymbols>
+		<OutputPath>bin\x64\Debug\</OutputPath>
+		<DefineConstants>DEBUG;TRACE;NETFX_CORE;WINDOWS_UWP;GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE</DefineConstants>
+		<NoWarn>;2008</NoWarn>
+		<DebugType>full</DebugType>
+		<PlatformTarget>x64</PlatformTarget>
+		<UseVSHostingProcess>false</UseVSHostingProcess>
+		<ErrorReport>prompt</ErrorReport>
+		<Prefer32Bit>true</Prefer32Bit>
+		<AppxPackageSigningEnabled>True</AppxPackageSigningEnabled>
+	</PropertyGroup>
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">
+		<OutputPath>bin\x64\Release\</OutputPath>
+		<DefineConstants>TRACE;NETFX_CORE;WINDOWS_UWP;GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE</DefineConstants>
+		<Optimize>true</Optimize>
+		<NoWarn>;2008</NoWarn>
+		<DebugType>pdbonly</DebugType>
+		<PlatformTarget>x64</PlatformTarget>
+		<UseVSHostingProcess>false</UseVSHostingProcess>
+		<ErrorReport>prompt</ErrorReport>
+		<Prefer32Bit>true</Prefer32Bit>
+		<UseDotNetNativeToolchain>true</UseDotNetNativeToolchain>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+	</PropertyGroup>
+	<ItemGroup>
+		<Compile Include="App.xaml.cs">
+			<DependentUpon>App.xaml</DependentUpon>
+		</Compile>
+		<Compile Include="Helpers\LocalizedStrings.cs" />
+		<Compile Include="Helpers\SelfChatDisplayHelper.cs" />
+		<Compile Include="Helpers\LocalSettingsAccess.cs" />
+		<Compile Include="Services\DispatcherService.cs" />
+		<Compile Include="Services\DialogService.cs" />
+		<Compile Include="Services\LocalSettingsService.cs" />
+		<Compile Include="Services\WhatsApp\ProfileService.cs" />
+		<Compile Include="Services\WhatsApp\MessageService.cs" />
+		<Compile Include="Services\WhatsApp\ContactService.cs" />
+		<Compile Include="Services\WhatsApp\ConnectionService.cs" />
+		<Compile Include="Services\NavigatorService.cs" />
+		<Compile Include="Services\SessionLoggerAdapter.cs" />
+		<Compile Include="Services\StringResourcesService.cs" />
+		<Compile Include="Services\SystemInfoProvider.cs" />
+		<Compile Include="Services\StatusBarService.cs" />
+		<Compile Include="Services\LocationKeepAliveService.cs" />
+		<Compile Include="Services\ShellThemeService.cs" />
+		<Compile Include="Services\Themes\ShellThemeStrategy.cs" />
+		<Compile Include="Services\Themes\UnisonThemeStrategy.cs" />
+		<Compile Include="Services\Themes\WhatsAppThemeStrategy.cs" />
+		<Compile Include="MainPage.xaml.cs">
+			<DependentUpon>MainPage.xaml</DependentUpon>
+		</Compile>
+		<Compile Include="Properties\AssemblyInfo.cs" />
+		<!-- Protocol/Crypto/Proto live in Unison.Baileys. -->
+		<!-- Client components -->
+		<Compile Include="Client\SocketClient.cs" />
+		<Compile Include="Client\AuthStore.cs" />
+		<Compile Include="Client\FileKeyStore.cs" />
+		<Compile Include="Client\PairingHandler.cs" />
+		<Compile Include="Client\SessionLogger.cs" />
+		<Compile Include="Client\ProtocolLoggerAdapter.cs" />
+		<Compile Include="Client\MediaProcessorAdapter.cs" />
+		<Compile Include="Transport\MessageWebSocketTransport.cs" />
+		<Compile Include="Transport\StreamSocketWebSocketTransport.cs" />
+		<Compile Include="Transport\NoiseSessionStore.cs" />
+		<Compile Include="Services\SocketBrokerCoordinator.cs" />
+		<Compile Include="Services\UriLauncherService.cs" />
+		<Compile Include="Services\FilePickerService.cs" />
+		<Compile Include="Services\ShareService.cs" />
+		<Compile Include="Services\AudioRecordingService.cs" />
+		<Compile Include="Services\WhatsApp\WhatsAppService.cs" />
+		<Compile Include="Services\WhatsApp\DebugSendService.cs" />
+		<Compile Include="Services\AppStateSyncService.cs" />
+		<Compile Include="Services\LocalContactsService.cs" />
+		<Compile Include="Services\NotificationService.cs" />
+		<Compile Include="Services\LiveTilesService.cs" />
+		<Compile Include="Services\RuntimeDiagnosticsService.cs" />
+		<Compile Include="Data\MessageStore.cs" />
+		<Compile Include="Data\PersonStore.cs" />
+		<Compile Include="Data\Entities\PersonRow.cs" />
+		<Compile Include="UI\Controls\LoginInstructionHeader.xaml.cs">
+			<DependentUpon>LoginInstructionHeader.xaml</DependentUpon>
+		</Compile>
+		<Compile Include="UI\Controls\LinkPhoneText.xaml.cs">
+			<DependentUpon>LinkPhoneText.xaml</DependentUpon>
+		</Compile>
+		<Compile Include="UI\Controls\ModernProgressRing.xaml.cs">
+			<DependentUpon>ModernProgressRing.xaml</DependentUpon>
+		</Compile>
+		<Compile Include="UI\Controls\TiledBackground.xaml.cs">
+			<DependentUpon>TiledBackground.xaml</DependentUpon>
+		</Compile>
+		<Compile Include="UI\Controls\MessageBubbleChrome.xaml.cs">
+			<DependentUpon>MessageBubbleChrome.xaml</DependentUpon>
+		</Compile>
+		<Compile Include="UI\Controls\SettingBox.xaml.cs">
+			<DependentUpon>SettingBox.xaml</DependentUpon>
+		</Compile>
+		<Compile Include="UI\Controls\AboutControl.xaml.cs">
+			<DependentUpon>AboutControl.xaml</DependentUpon>
+		</Compile>
+		<Compile Include="UI\Views\LoginView.xaml.cs">
+			<DependentUpon>LoginView.xaml</DependentUpon>
+		</Compile>
+		<Compile Include="UI\Views\BootPage.xaml.cs">
+			<DependentUpon>BootPage.xaml</DependentUpon>
+		</Compile>
+		<Compile Include="UI\Views\StartPage.xaml.cs">
+			<DependentUpon>StartPage.xaml</DependentUpon>
+		</Compile>
+		<Compile Include="UI\Views\LoginPage.xaml.cs">
+			<DependentUpon>LoginPage.xaml</DependentUpon>
+		</Compile>
+		<Compile Include="UI\Views\ChatsPage.xaml.cs">
+			<DependentUpon>ChatsPage.xaml</DependentUpon>
+		</Compile>
+		<Compile Include="UI\Views\SettingsPage.xaml.cs">
+			<DependentUpon>SettingsPage.xaml</DependentUpon>
+		</Compile>
+		<Compile Include="UI\Views\DebugPage.xaml.cs">
+			<DependentUpon>DebugPage.xaml</DependentUpon>
+		</Compile>
+		<Compile Include="UI\Views\ChatListView.xaml.cs">
+			<DependentUpon>ChatListView.xaml</DependentUpon>
+		</Compile>
+		<Compile Include="UI\Views\ChatDetailView.xaml.cs">
+			<DependentUpon>ChatDetailView.xaml</DependentUpon>
+		</Compile>
+		<Compile Include="UI\Views\ImageViewerView.xaml.cs">
+			<DependentUpon>ImageViewerView.xaml</DependentUpon>
+		</Compile>
+		<Compile Include="UI\Views\DebugView.xaml.cs">
+			<DependentUpon>DebugView.xaml</DependentUpon>
+		</Compile>
+		<Compile Include="UI\Views\SettingsView.xaml.cs">
+			<DependentUpon>SettingsView.xaml</DependentUpon>
+		</Compile>
+		<Compile Include="UI\TemplateSelectors\MessageTemplateSelector.cs" />
+		<Compile Include="UI\TemplateSelectors\ChatPreviewKindTemplateSelector.cs" />
+		<Compile Include="UI\Templates\ChatItemTemplates.xaml.cs">
+			<DependentUpon>ChatItemTemplates.xaml</DependentUpon>
+		</Compile>
+		<Compile Include="UI\Templates\MessageTemplates.xaml.cs">
+			<DependentUpon>MessageTemplates.xaml</DependentUpon>
+		</Compile>
+		<Compile Include="UI\Helpers\ChatPreviewKindPresentation.cs" />
+		<Compile Include="UI\Helpers\CommentRichService.cs" />
+		<Compile Include="UI\Converters\StringToVisibilityConverter.cs" />
+		<Compile Include="UI\Converters\StringToImageSourceConverter.cs" />
+		<Compile Include="UI\Converters\BooleanToVisibilityConverter.cs" />
+		<Compile Include="UI\Converters\InvertedBooleanToVisibilityConverter.cs" />
+		<Compile Include="UI\Converters\InvertedStringToVisibilityConverter.cs" />
+		<Compile Include="UI\Converters\ChatPreviewKindConverters.cs" />
+		<Compile Include="UI\Converters\RelativeTimestampConverter.cs" />
+		<Compile Include="UI\Controls\ChatListPreviewStrip.xaml.cs">
+			<DependentUpon>ChatListPreviewStrip.xaml</DependentUpon>
+		</Compile>
+		<Compile Include="UI\Controls\ChatAvatarControl.xaml.cs">
+			<DependentUpon>ChatAvatarControl.xaml</DependentUpon>
+		</Compile>
+		<Compile Include="UI\Dialogs\NewChatDialog.xaml.cs">
+			<DependentUpon>NewChatDialog.xaml</DependentUpon>
+		</Compile>
+		<Compile Include="UI\Dialogs\ImageSendPreviewDialog.xaml.cs">
+			<DependentUpon>ImageSendPreviewDialog.xaml</DependentUpon>
+		</Compile>
+		<Compile Include="Client\MediaUtils.cs" />
+		<Compile Include="Client\MediaUploader.cs" />
+	</ItemGroup>
+	<ItemGroup>
+		<AppxManifest Include="Package.appxmanifest">
+			<SubType>Designer</SubType>
+		</AppxManifest>
+	</ItemGroup>
+	<ItemGroup>
+		<Content Include="Assets\Checkmarks\delivered_message.png" />
+		<Content Include="Assets\Checkmarks\read_message.png" />
+		<Content Include="Assets\Checkmarks\sent_message.png" />
+		<Content Include="Assets\Toast\avatar_contact.png" />
+		<Content Include="Assets\Toast\avatar_group.png" />
+		<Content Include="Properties\Default.rd.xml" />
+	</ItemGroup>
+	<ItemGroup>
+		<Content Include="Assets\BadgeLogo.scale-100.png" />
+		<Content Include="Assets\BadgeLogo.scale-125.png" />
+		<Content Include="Assets\BadgeLogo.scale-150.png" />
+		<Content Include="Assets\BadgeLogo.scale-200.png" />
+		<Content Include="Assets\BadgeLogo.scale-400.png" />
+		<Content Include="Assets\Fonts\SegUIVar-Bold_Display.ttf" />
+		<Content Include="Assets\Fonts\SegUIVar-Bold_Small.ttf" />
+		<Content Include="Assets\Fonts\SegUIVar-Bold_Text.ttf" />
+		<Content Include="Assets\Fonts\SegUIVar-Light_Display.ttf" />
+		<Content Include="Assets\Fonts\SegUIVar-Light_Small.ttf" />
+		<Content Include="Assets\Fonts\SegUIVar-Light_Text.ttf" />
+		<Content Include="Assets\Fonts\SegUIVar-Regular.ttf" />
+		<Content Include="Assets\Fonts\SegUIVar-Regular_Display.ttf" />
+		<Content Include="Assets\Fonts\SegUIVar-Regular_Small.ttf" />
+		<Content Include="Assets\Fonts\SegUIVar-Semibold_Display.ttf" />
+		<Content Include="Assets\Fonts\SegUIVar-Semibold_Small.ttf" />
+		<Content Include="Assets\Fonts\SegUIVar-Semibold_Text.ttf" />
+		<Content Include="Assets\Fonts\SegUIVar-Semilight_Display.ttf" />
+		<Content Include="Assets\Fonts\SegUIVar-Semilight_Small.ttf" />
+		<Content Include="Assets\Fonts\SegUIVar-Semilight_Text.ttf" />
+		<Content Include="Assets\Fonts\SegUIVar.ttf" />
+		<Content Include="Assets\Fonts\SegoeIcons.ttf" />
+		<Content Include="Assets\LargeTile.scale-100.png" />
+		<Content Include="Assets\LargeTile.scale-125.png" />
+		<Content Include="Assets\LargeTile.scale-150.png" />
+		<Content Include="Assets\LargeTile.scale-200.png" />
+		<Content Include="Assets\LargeTile.scale-400.png" />
+		<Content Include="Assets\LockScreenLogo.scale-200.png" />
+		<Content Include="Assets\LockScreenLogo.targetsize-48.png" />
+		<Content Include="Assets\SmallTile.scale-100.png" />
+		<Content Include="Assets\SmallTile.scale-125.png" />
+		<Content Include="Assets\SmallTile.scale-150.png" />
+		<Content Include="Assets\SmallTile.scale-200.png" />
+		<Content Include="Assets\SmallTile.scale-400.png" />
+		<Content Include="Assets\SplashScreen.scale-200.png" />
+		<Content Include="Assets\Square150x150Logo.scale-100.png" />
+		<Content Include="Assets\Square150x150Logo.scale-125.png" />
+		<Content Include="Assets\Square150x150Logo.scale-150.png" />
+		<Content Include="Assets\Square150x150Logo.scale-200.png" />
+		<Content Include="Assets\Square150x150Logo.scale-400.png" />
+		<Content Include="Assets\Square44x44Logo.altform-unplated_targetsize-16.png" />
+		<Content Include="Assets\Square44x44Logo.altform-unplated_targetsize-24.png" />
+		<Content Include="Assets\Square44x44Logo.altform-unplated_targetsize-256.png" />
+		<Content Include="Assets\Square44x44Logo.altform-unplated_targetsize-32.png" />
+		<Content Include="Assets\Square44x44Logo.altform-unplated_targetsize-48.png" />
+		<Content Include="Assets\Square44x44Logo.scale-100.png" />
+		<Content Include="Assets\Square44x44Logo.scale-125.png" />
+		<Content Include="Assets\Square44x44Logo.scale-150.png" />
+		<Content Include="Assets\Square44x44Logo.scale-200.png" />
+		<Content Include="Assets\Square44x44Logo.scale-400.png" />
+		<Content Include="Assets\Square44x44Logo.targetsize-16.png" />
+		<Content Include="Assets\Square44x44Logo.targetsize-24.png" />
+		<Content Include="Assets\Square44x44Logo.targetsize-256.png" />
+		<Content Include="Assets\Square44x44Logo.targetsize-32.png" />
+		<Content Include="Assets\Square44x44Logo.targetsize-48.png" />
+		<Content Include="Assets\StoreLogo.scale-100.png" />
+		<Content Include="Assets\StoreLogo.scale-125.png" />
+		<Content Include="Assets\StoreLogo.scale-150.png" />
+		<Content Include="Assets\StoreLogo.scale-200.png" />
+		<Content Include="Assets\StoreLogo.scale-400.png" />
+		<Content Include="Assets\Backgrounds\WhatsAppBackground.png" />
+		<Content Include="Assets\Backgrounds\WhatsAppBackground_Colored.png" />
+		<Content Include="Assets\Bubbles\**\*.png" />
+		<Content Include="Assets\Wide310x150Logo.scale-100.png" />
+		<Content Include="Assets\Wide310x150Logo.scale-125.png" />
+		<Content Include="Assets\Wide310x150Logo.scale-150.png" />
+		<Content Include="Assets\Wide310x150Logo.scale-200.png" />
+		<Content Include="Assets\Wide310x150Logo.scale-400.png" />
+	</ItemGroup>
+	<ItemGroup>
+		<ApplicationDefinition Include="App.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</ApplicationDefinition>
+		<Page Include="MainPage.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+		<Page Include="UI\Controls\LoginInstructionHeader.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+		<Page Include="UI\Controls\LinkPhoneText.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+		<Page Include="UI\Controls\ModernProgressRing.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+		<Page Include="UI\Controls\TiledBackground.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+		<Page Include="UI\Controls\MessageBubbleChrome.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+		<Page Include="UI\Controls\ChatListPreviewStrip.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+		<Page Include="UI\Controls\ChatAvatarControl.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+		<Page Include="UI\Controls\SettingBox.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+		<Page Include="UI\Controls\AboutControl.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+		<Page Include="UI\Views\LoginView.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+		<Page Include="UI\Views\BootPage.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+		<Page Include="UI\Views\StartPage.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+		<Page Include="UI\Views\LoginPage.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+		<Page Include="UI\Views\ChatsPage.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+		<Page Include="UI\Views\SettingsPage.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+		<Page Include="UI\Views\DebugPage.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+		<Page Include="UI\Views\ChatListView.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+		<Page Include="UI\Views\ChatDetailView.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+		<Page Include="UI\Views\ImageViewerView.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+		<Page Include="UI\Views\DebugView.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+		<Page Include="UI\Views\SettingsView.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+		<Page Include="UI\Dialogs\NewChatDialog.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+		<Page Include="UI\Dialogs\ImageSendPreviewDialog.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+		<Page Include="UI\Templates\ChatPreviewKindTemplates.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+		<Page Include="UI\Templates\ChatItemTemplates.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+		<Page Include="UI\Templates\MessageTemplates.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+		<Page Include="Themes\Styles.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+		<Page Include="Themes\SystemAccentOverrides.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+		<Page Include="Themes\Unison\Theme.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+		<Page Include="Themes\Unison\Styles.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+		<Page Include="Themes\Unison\Controls.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+		<Page Include="Themes\Unison\SystemAccentOverrides.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+		<Page Include="Themes\WhatsApp\Theme.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+		<Page Include="Themes\WhatsApp\Styles.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+		<Page Include="Themes\WhatsApp\Controls.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+		<Page Include="Themes\WhatsApp\SystemAccentOverrides.xaml">
+			<Generator>MSBuild:Compile</Generator>
+			<SubType>Designer</SubType>
+		</Page>
+	</ItemGroup>
+	<ItemGroup>
+		<PRIResource Include="Strings\pt-BR\Resources.resw" />
+		<PRIResource Include="Strings\en-US\Resources.resw" />
+		<PRIResource Include="Strings\es-ES\Resources.resw" />
+		<PRIResource Include="Strings\nl-NL\Resources.resw" />
+		<PRIResource Include="Strings\id-ID\Resources.resw" />
+		<PRIResource Include="Strings\it-IT\Resources.resw" />
+		<PRIResource Include="Strings\pl-PL\Resources.resw" />
+	</ItemGroup>
+	<ItemGroup>
+		<ProjectReference Include="..\Unison.Background\Unison.Background.csproj">
+			<Project>{7810e354-6a96-48b9-95e6-a4048db6ec26}</Project>
+			<Name>Unison.Background</Name>
+		</ProjectReference>
+		<ProjectReference Include="..\Unison.Core\Unison.Core.csproj">
+			<Project>{0AA2854F-305B-4701-81D8-7757C510A4C2}</Project>
+			<Name>Unison.Core</Name>
+		</ProjectReference>
+		<ProjectReference Include="..\Unison.Baileys\Unison.Baileys.csproj">
+			<Project>{A65F1D27-E2C9-410F-A892-015A7A9699EE}</Project>
+			<Name>Unison.Baileys</Name>
+		</ProjectReference>
+	</ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+		<PackageReference Include="ZXing.Net" Version="0.16.11" />
+		<PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
+		<PackageReference Include="Microsoft.NETCore.UniversalWindowsPlatform" Version="6.2.14" />
+		<PackageReference Include="Microsoft.UI.Xaml" Version="2.7.3" />
+		<PackageReference Include="Microsoft.Toolkit.Uwp.UI.Controls" Version="5.0.0-preview.gb86cb1c4cb" />
+		<PackageReference Include="sqlite-net-pcl" Version="1.11.285" />
+		<PackageReference Include="SQLitePCLRaw.bundle_green" Version="2.1.11" />
+	</ItemGroup>
+	<ItemGroup>
+		<None Include="Unison.Uwp_TemporaryKey.pfx" />
+	</ItemGroup>
+	<!-- No certificate file needed with AppxPackageSigningEnabled=false -->
+	<ItemGroup>
+		<SDKReference Include="WindowsMobile, Version=10.0.22621.0">
+			<Name>Windows Mobile Extensions for the UWP</Name>
+		</SDKReference>
+	</ItemGroup>
+	<PropertyGroup Condition=" '$(VisualStudioVersion)' == '' or '$(VisualStudioVersion)' &lt; '14.0' ">
+		<VisualStudioVersion>14.0</VisualStudioVersion>
+	</PropertyGroup>
+	<Import Project="$(MSBuildExtensionsPath)\Microsoft\WindowsXaml\v$(VisualStudioVersion)\Microsoft.Windows.UI.Xaml.CSharp.targets" />
+</Project>

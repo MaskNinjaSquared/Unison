@@ -1,0 +1,46 @@
+<UserControl
+    x:Class="Unison.Uwp.UI.Controls.ChatListPreviewStrip"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    d:DesignHeight="24"
+    d:DesignWidth="280">
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///UI/Templates/ChatPreviewKindTemplates.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <!-- Chip Auto; preview text * so CharacterEllipsis can constrain width -->
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <ContentControl Grid.Column="0"
+                        VerticalAlignment="Center"
+                        HorizontalContentAlignment="Left"
+                        VerticalContentAlignment="Center"
+                        IsTabStop="False"
+                        Content="{x:Bind Kind, Mode=OneWay}"
+                        ContentTemplateSelector="{StaticResource ChatPreviewKindTemplateSelector}"/>
+
+        <TextBlock Grid.Column="1"
+                   FontSize="16"
+                   Margin="5,0,0,0"
+                   Foreground="{StaticResource ChatListSecondaryTextBrush}"
+                   TextWrapping="NoWrap"
+                   TextTrimming="CharacterEllipsis"
+                   MaxLines="1"
+                   VerticalAlignment="Center"
+                   HorizontalAlignment="Stretch"
+                   FontFamily="{StaticResource MainFont}"
+                   Text="{x:Bind Text, Mode=OneWay}"/>
+    </Grid>
+</UserControl>

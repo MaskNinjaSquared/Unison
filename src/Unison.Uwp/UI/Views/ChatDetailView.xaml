@@ -1,0 +1,243 @@
+<UserControl
+    x:Class="Unison.Uwp.UI.Views.ChatDetailView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Unison.Uwp.UI.Controls"
+    xmlns:views="using:Unison.Uwp.UI.Views"
+    xmlns:toolkit="using:Microsoft.Toolkit.Uwp.UI.Controls"
+    xmlns:templates="using:Unison.Uwp.UI.Templates"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    d:DesignHeight="800"
+    d:DesignWidth="800">
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <templates:MessageTemplates/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Grid x:Name="ChatDetailGrid"
+          Background="{StaticResource ChatDetailBackgroundBrush}"
+          BorderBrush="{StaticResource ChatDetailPaneSeparatorBrush}"
+          BorderThickness="1,0,0,0">
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="LayoutStates">
+                <VisualState x:Name="WideState">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="720"/>
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="ChatDetailGrid.BorderThickness" Value="1,0,0,0"/>
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="NarrowState">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="0"/>
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <!-- Full-screen detail: no list beside → no left separator -->
+                        <Setter Target="ChatDetailGrid.BorderThickness" Value="0"/>
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
+        <Grid x:Name="ActiveChatGrid" Visibility="Collapsed">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            
+            <!-- Tiled Background Layer -->
+            <controls:TiledBackground Grid.RowSpan="4"/>
+
+            <!-- Chat Header with DropShadowPanel (Imgur-style; black cast below) -->
+            <toolkit:DropShadowPanel Grid.Row="0"
+                                     Canvas.ZIndex="2"
+                                     BlurRadius="12"
+                                     OffsetX="0"
+                                     OffsetY="4"
+                                     ShadowOpacity="0.55"
+                                     Color="Black"
+                                     HorizontalContentAlignment="Stretch"
+                                     VerticalContentAlignment="Stretch">
+                <Grid Height="64" Padding="12,0" Background="{StaticResource ChatDetailHeaderBrush}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Button x:Name="BackButton" Grid.Column="0" Click="BackButton_Click"
+                            Style="{StaticResource WhatsAppIconButtonStyle}"
+                            Width="40" Height="40" VerticalAlignment="Center" Margin="0,0,4,0">
+                        <TextBlock Text="&#xE72B;" FontFamily="{StaticResource IconFont}" FontSize="18"/>
+                    </Button>
+
+                    <!-- Avatar with contact/group fallback under photo -->
+                    <controls:ChatAvatarControl x:Name="HeaderAvatar"
+                                                Grid.Column="1"
+                                                Size="40"
+                                                Width="40" Height="40"
+                                                VerticalAlignment="Center"
+                                                Margin="0,0,12,0"/>
+
+                    <!-- Name + Status stack (with TranslateTransform for slide-up animation) -->
+                    <StackPanel Grid.Column="2" x:Name="TitleStatusPanel" VerticalAlignment="Center">
+                        <StackPanel.RenderTransform>
+                            <TranslateTransform x:Name="TitleTranslateTransform" Y="0"/>
+                        </StackPanel.RenderTransform>
+                        <TextBlock x:Name="ChatTitleText" x:Uid="ChatDetail_SelectChat" Text="Select a chat" FontSize="18"
+                                   FontFamily="{StaticResource MainFontSemibold}" FontWeight="SemiBold"
+                                   Foreground="{StaticResource ChatDetailHeaderTitleBrush}"/>
+                        <TextBlock x:Name="ChatStatusText" Text="" FontSize="13"
+                                   FontFamily="{StaticResource MainFont}"
+                                   Foreground="{StaticResource ChatDetailHeaderStatusBrush}" Opacity="0"
+                                   Visibility="Collapsed"/>
+                    </StackPanel>
+                </Grid>
+            </toolkit:DropShadowPanel>
+
+            <Button Grid.Row="1" x:Name="PinnedMessageButton" Visibility="Collapsed"
+                    Click="PinnedMessageButton_Click"
+                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                    Background="{StaticResource ChatDetailPinnedBarBackgroundBrush}" BorderThickness="0" Padding="12,7">
+                <Grid HorizontalAlignment="Stretch">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="&#xE718;" FontFamily="{StaticResource IconFont}" FontSize="16"
+                               Foreground="{StaticResource ChatDetailAccentBrush}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <StackPanel Grid.Column="1" HorizontalAlignment="Stretch">
+                        <TextBlock x:Name="PinnedMessageTitleText" x:Uid="ChatDetail_Pinned" Text="Pinned message" FontSize="11" Foreground="{StaticResource ChatDetailAccentBrush}"/>
+                        <TextBlock x:Name="PinnedMessagePreviewText" Text="" FontSize="13" Foreground="{StaticResource ChatDetailPinnedPreviewBrush}"
+                                   TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
+                    </StackPanel>
+                </Grid>
+            </Button>
+
+            <!-- Messages List -->
+            <ListView Grid.Row="2" x:Name="MessageListView" 
+                      ItemTemplateSelector="{StaticResource MessageTemplateSelector}"
+                      SelectionMode="None"
+                      Padding="0,12">
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        <Setter Property="Padding" Value="0"/>
+                        <Setter Property="Margin" Value="0"/>
+                    </Style>
+                </ListView.ItemContainerStyle>
+            </ListView>
+
+            <!-- Non-visual native audio player used by message bubbles. -->
+            <MediaElement x:Name="AudioPlayer" Grid.Row="2" Width="1" Height="1" Opacity="0"
+                          IsHitTestVisible="False" AutoPlay="False"
+                          MediaEnded="AudioPlayer_MediaEnded" MediaFailed="AudioPlayer_MediaFailed"/>
+
+            <!-- Composer / recording overlay share row 3 -->
+            <Grid Grid.Row="3" Background="{StaticResource ChatDetailInputBarBackgroundBrush}">
+
+                <!-- Normal input bar (hidden while recording) -->
+                <Grid Padding="12"
+                      Visibility="{Binding IsRecording, Converter={StaticResource InvertedBooleanToVisibilityConverter}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Button Style="{StaticResource WhatsAppIconButtonStyle}"
+                            Width="40" Height="40"
+                            Command="{Binding AttachMediaCommand}">
+                        <TextBlock Text="&#xE710;" FontFamily="{StaticResource IconFont}" FontSize="20"/>
+                    </Button>
+
+                    <TextBox Grid.Column="1" x:Name="MessageInput" x:Uid="ChatDetail_MessageInput"
+                             PlaceholderText="Type a message"
+                             Text="{Binding MessageText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             Margin="8,0" VerticalAlignment="Center" BorderThickness="0"
+                             Style="{StaticResource TransparentTextBoxStyle}"
+                             Background="Transparent" KeyDown="MessageInput_KeyDown"/>
+
+                    <Button x:Name="MicButton" Grid.Column="2"
+                            Style="{StaticResource WhatsAppIconButtonStyle}"
+                            Width="40" Height="40"
+                            Command="{Binding StartRecordingCommand}">
+                        <TextBlock x:Name="MicIcon" Text="&#xE720;" FontFamily="{StaticResource IconFont}" FontSize="20"
+                                   Foreground="{StaticResource ChatDetailAccentBrush}"/>
+                    </Button>
+
+                    <Button x:Name="SendButton" Grid.Column="3"
+                            Style="{StaticResource WhatsAppIconButtonStyle}"
+                            Width="40" Height="40"
+                            Command="{Binding SendMessageCommand}">
+                        <TextBlock Text="&#xE724;" FontFamily="{StaticResource IconFont}" FontSize="20"
+                                   Foreground="{StaticResource ChatDetailAccentBrush}"/>
+                    </Button>
+                </Grid>
+
+                <!-- Recording overlay: red mic + elapsed | trash + send -->
+                <Grid Padding="12"
+                      Visibility="{Binding IsRecording, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Text="&#xE720;" FontFamily="{StaticResource IconFont}" FontSize="22"
+                               Foreground="Red" VerticalAlignment="Center" Margin="4,0,0,0"/>
+
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding RecordingElapsedText}"
+                               FontSize="16"
+                               FontFamily="{StaticResource MainFont}"
+                               Foreground="{StaticResource ChatDetailHeaderTitleBrush}"
+                               VerticalAlignment="Center"
+                               Margin="12,0,8,0"/>
+
+                    <Button Grid.Column="2"
+                            Style="{StaticResource WhatsAppIconButtonStyle}"
+                            Width="40" Height="40"
+                            Command="{Binding CancelRecordingCommand}"
+                            ToolTipService.ToolTip="Cancel">
+                        <TextBlock Text="&#xE74D;" FontFamily="{StaticResource IconFont}" FontSize="20"
+                                   Foreground="{StaticResource ChatDetailMutedTextBrush}"/>
+                    </Button>
+
+                    <Button Grid.Column="3"
+                            Style="{StaticResource WhatsAppIconButtonStyle}"
+                            Width="40" Height="40"
+                            Command="{Binding SendRecordingCommand}"
+                            ToolTipService.ToolTip="Send">
+                        <TextBlock Text="&#xE724;" FontFamily="{StaticResource IconFont}" FontSize="20"
+                                   Foreground="{StaticResource ChatDetailAccentBrush}"/>
+                    </Button>
+                </Grid>
+            </Grid>
+
+        </Grid>
+
+        <!-- Empty State -->
+        <Grid x:Name="EmptyStateGrid" VerticalAlignment="Center" HorizontalAlignment="Center">
+            <StackPanel>
+                <TextBlock x:Uid="ChatDetail_Empty" Text="Select a chat to start messaging" Foreground="{StaticResource ChatDetailMutedTextBrush}" FontSize="16" FontFamily="{StaticResource MainFont}"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- Full-screen image viewer (Imgur-style chrome) -->
+        <views:ImageViewerView x:Name="ImageViewerOverlay"
+                               Visibility="Collapsed"
+                               Canvas.ZIndex="100"/>
+    </Grid>
+</UserControl>

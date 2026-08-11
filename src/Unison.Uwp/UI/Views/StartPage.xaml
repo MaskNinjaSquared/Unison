@@ -1,0 +1,70 @@
+<Page
+    x:Class="Unison.Uwp.UI.Views.StartPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+    <!-- Welcome screen (logged-out only). Get started → Login/QR. -->
+    <Grid x:Name="WelcomeScreenContainer">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    MaxWidth="420"
+                    Padding="32,24">
+            <!-- Tile logo -->
+            <Image Source="ms-appx:///Assets/Square150x150Logo.png"
+                   Width="88"
+                   Height="88"
+                   Stretch="Uniform"
+                   HorizontalAlignment="Center"
+                   Margin="0,0,0,28"/>
+
+            <TextBlock x:Name="Title"
+                       x:Uid="Start_Title"
+                       Text="Welcome to WhatsApp"
+                       FontSize="28"
+                       FontWeight="SemiBold"
+                       TextAlignment="Center"
+                       TextWrapping="WrapWholeWords"
+                       HorizontalAlignment="Center"
+                       Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                       Margin="0,0,0,12"/>
+
+            <TextBlock x:Name="Description"
+                       x:Uid="Start_Description"
+                       Text="A simple, reliable, and private way to use WhatsApp on your computer."
+                       FontSize="15"
+                       TextAlignment="Center"
+                       TextWrapping="WrapWholeWords"
+                       Opacity="0.72"
+                       HorizontalAlignment="Center"
+                       Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                       Margin="0,0,0,32"/>
+
+            <Button x:Name="BtnStart"
+                    x:Uid="Start_GetStarted"
+                    Content="Get started"
+                    MinWidth="200"
+                    HorizontalAlignment="Center"
+                    Padding="28,12"
+                    FontSize="15"
+                    Background="{StaticResource WhatsAppGreenFocusBrush}"
+                    Foreground="White"
+                    Command="{Binding GetStartedCommand}"/>
+        </StackPanel>
+
+        <TextBlock x:Name="AppVersion"
+                   Grid.Row="1"
+                   Text="{Binding AppVersion}"
+                   FontSize="12"
+                   Opacity="0.55"
+                   HorizontalAlignment="Center"
+                   Margin="0,0,0,28"
+                   Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
+    </Grid>
+</Page>

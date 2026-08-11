@@ -1,0 +1,57 @@
+<UserControl
+    x:Class="Unison.Uwp.UI.Controls.LoginInstructionHeader"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <StackPanel Background="Transparent" Tapped="Root_Tapped">
+        <TextBlock x:Uid="Login_InstrTitle"
+                   Text="Use o WhatsApp no computador"
+                   FontSize="22"
+                   FontWeight="SemiBold"
+                   FontFamily="{StaticResource MainFontSemibold}"
+                   TextWrapping="Wrap"
+                   Foreground="{StaticResource LoginInstructionTitleBrush}"
+                   HorizontalAlignment="Center"
+                   TextAlignment="Center"
+                   Margin="0,0,0,12"/>
+
+        <TextBlock x:Uid="Login_InstrStep1"
+                   Text="1. Abra o WhatsApp no seu telefone"
+                   FontSize="14"
+                   FontFamily="{StaticResource MainFont}"
+                   TextWrapping="Wrap"
+                   Foreground="{StaticResource LoginInstructionTextBrush}"
+                   HorizontalAlignment="Center"
+                   TextAlignment="Center"
+                   Margin="0,0,0,6"/>
+        <TextBlock x:Uid="Login_InstrStep2"
+                   Text="2. Toque em Menu ou Configurações e selecione Aparelhos conectados"
+                   FontSize="14"
+                   FontFamily="{StaticResource MainFont}"
+                   TextWrapping="Wrap"
+                   Foreground="{StaticResource LoginInstructionTextBrush}"
+                   HorizontalAlignment="Center"
+                   TextAlignment="Center"
+                   Margin="0,0,0,6"/>
+        <TextBlock x:Uid="Login_InstrStep3"
+                   Text="3. Toque em Conectar um aparelho"
+                   FontSize="14"
+                   FontFamily="{StaticResource MainFont}"
+                   TextWrapping="Wrap"
+                   Foreground="{StaticResource LoginInstructionTextBrush}"
+                   HorizontalAlignment="Center"
+                   TextAlignment="Center"
+                   Margin="0,0,0,6"/>
+        <TextBlock x:Uid="Login_InstrStep4"
+                   Text="4. Aponte o telefone para esta tela para capturar o código"
+                   FontSize="14"
+                   FontFamily="{StaticResource MainFont}"
+                   TextWrapping="Wrap"
+                   Foreground="{StaticResource LoginInstructionTextBrush}"
+                   HorizontalAlignment="Center"
+                   TextAlignment="Center"/>
+    </StackPanel>
+</UserControl>

@@ -1,0 +1,29 @@
+using System.Threading.Tasks;
+using Unison.Core.Models;
+
+namespace Unison.Core.Contracts
+{
+    /// <summary>
+    /// Platform file pickers without WinRT types leaking into Core.
+    /// </summary>
+    public interface IFilePicker
+    {
+        /// <summary>Returns local file path, or null if cancelled.</summary>
+        Task<string> PickOpenImagePathAsync();
+
+        /// <summary>Returns local file path where text was saved, or null if cancelled.</summary>
+        Task<string> PickSaveTextFileAsync(string suggestedFileName, string content);
+
+        /// <summary>
+        /// Chat composer attach: image (optimized JPEG/PNG bytes) or audio file.
+        /// Returns null if the user cancels.
+        /// </summary>
+        Task<PickedChatMedia> PickChatAttachmentAsync();
+
+        /// <summary>
+        /// Saves a local cached image (<c>ms-appdata</c> / path) via FileSavePicker.
+        /// Returns the destination path, or null if cancelled.
+        /// </summary>
+        Task<string> PickSaveLocalImageAsync(string sourceUriOrPath, string suggestedFileName);
+    }
+}

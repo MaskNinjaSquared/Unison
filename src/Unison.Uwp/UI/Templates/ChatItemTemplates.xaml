@@ -1,0 +1,84 @@
+<ResourceDictionary
+    x:Class="Unison.Uwp.UI.Templates.ChatItemTemplates"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:views="using:Unison.Uwp.UI.Views"
+    xmlns:models="using:Unison.Core.Models"
+    xmlns:controls="using:Unison.Uwp.UI.Controls">
+
+    <DataTemplate x:Key="ChatItemTemplate" x:DataType="models:ChatItem">
+        <Grid Height="76" Padding="12,0" Background="Transparent">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="56"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Avatar with contact/group fallback under photo -->
+            <controls:ChatAvatarControl Width="48" Height="48"
+                                        Size="48"
+                                        HorizontalAlignment="Left"
+                                        VerticalAlignment="Center"
+                                        AvatarUrl="{x:Bind AvatarUrl, Mode=OneWay}"
+                                        IsGroup="{x:Bind IsGroup, Mode=OneWay}"/>
+
+            <Grid Grid.Column="1" VerticalAlignment="Center" Margin="12,0,12,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <TextBlock Grid.Row="0"
+                           Text="{x:Bind views:ChatListView.GetChatDisplayName(Name, Kind), Mode=OneWay}"
+                           FontSize="18"
+                           Foreground="{StaticResource WhatsAppTextHighBrush}"
+                           FontFamily="{StaticResource MainFontSemibold}"
+                           FontWeight="SemiBold"
+                           TextWrapping="NoWrap"
+                           TextTrimming="CharacterEllipsis"/>
+                <controls:ChatListPreviewStrip Grid.Row="1"
+                                               Margin="0,4,0,0"
+                                               Kind="{x:Bind LastMessageKind, Mode=OneWay}"
+                                               Text="{x:Bind LastMessage, Mode=OneWay}"/>
+            </Grid>
+
+            <StackPanel Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,14,0,0">
+                <TextBlock Text="{x:Bind LastMessageTimestampUtc, Mode=OneWay, Converter={StaticResource RelativeTimestampConverter}}"
+                           FontSize="12"
+                           Foreground="{StaticResource ChatListSecondaryTextBrush}"
+                           HorizontalAlignment="Right"
+                           FontFamily="{StaticResource MainFont}"
+                           Visibility="{x:Bind HasUnread, Mode=OneWay, Converter={StaticResource InvertedBooleanToVisibilityConverter}}"/>
+                <TextBlock Text="{x:Bind LastMessageTimestampUtc, Mode=OneWay, Converter={StaticResource RelativeTimestampConverter}}"
+                           FontSize="12"
+                           Foreground="{StaticResource ChatListUnreadBadgeBrush}"
+                           FontWeight="SemiBold"
+                           HorizontalAlignment="Right"
+                           FontFamily="{StaticResource MainFontSemibold}"
+                           Visibility="{x:Bind HasUnread, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                <FontIcon Glyph="&#xE718;"
+                          FontFamily="{StaticResource IconFont}"
+                          FontSize="14"
+                          Foreground="{StaticResource ChatListSecondaryTextBrush}"
+                          Margin="0,5,1,0"
+                          HorizontalAlignment="Right"
+                          Visibility="{x:Bind IsPinned, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                <Border Background="{StaticResource ChatListUnreadBadgeBrush}"
+                        CornerRadius="10"
+                        MinWidth="20"
+                        Height="20"
+                        Margin="0,6,0,0"
+                        HorizontalAlignment="Right"
+                        Visibility="{x:Bind HasUnread, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <TextBlock Text="{x:Bind UnreadText, Mode=OneWay}"
+                               Foreground="{StaticResource ChatListUnreadBadgeForegroundBrush}"
+                               FontSize="11"
+                               FontWeight="SemiBold"
+                               Margin="6,0,6,0"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               FontFamily="{StaticResource MainFont}"/>
+                </Border>
+            </StackPanel>
+        </Grid>
+    </DataTemplate>
+</ResourceDictionary>
