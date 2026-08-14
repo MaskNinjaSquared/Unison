@@ -3,7 +3,9 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:selectors="using:Unison.Uwp.UI.TemplateSelectors">
 
-    <!-- Preview chips for chat list last-message kind (used by ChatListPreviewStrip). -->
+    <!-- Preview chips for chat-list last-message kind (used by ChatListPreviewStrip).
+         Non-voice chips inherit Foreground (list hover/selection white in Unison Light).
+         Voice keeps the blue accent via ChatPreviewKindToBrushConverter. -->
     <selectors:ChatPreviewKindTemplateSelector x:Key="ChatPreviewKindTemplateSelector">
         <selectors:ChatPreviewKindTemplateSelector.TextTemplate>
             <DataTemplate>
@@ -13,115 +15,147 @@
 
         <selectors:ChatPreviewKindTemplateSelector.ImageTemplate>
             <DataTemplate>
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Grid VerticalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*" MinWidth="0"/>
+                    </Grid.ColumnDefinitions>
                     <FontIcon Glyph="&#xE91B;"
                               FontFamily="{StaticResource IconFont}"
                               FontSize="14"
-                              Foreground="{Binding Converter={StaticResource ChatPreviewKindToBrushConverter}, ConverterParameter=icon}"
                               VerticalAlignment="Center"
                               Margin="0,0,4,0"/>
-                    <TextBlock Text="{Binding Converter={StaticResource ChatPreviewKindToLabelConverter}}"
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding Converter={StaticResource ChatPreviewKindToLabelConverter}}"
                                FontSize="16"
-                               Foreground="{Binding Converter={StaticResource ChatPreviewKindToBrushConverter}}"
                                VerticalAlignment="Center"
-                               Margin="0,0,4,0"
-                               FontFamily="{StaticResource MainFont}"/>
-                </StackPanel>
+                               FontFamily="{StaticResource MainFont}"
+                               TextWrapping="NoWrap"
+                               TextTrimming="CharacterEllipsis"
+                               MaxLines="1"/>
+                </Grid>
             </DataTemplate>
         </selectors:ChatPreviewKindTemplateSelector.ImageTemplate>
 
         <selectors:ChatPreviewKindTemplateSelector.VideoTemplate>
             <DataTemplate>
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Grid VerticalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*" MinWidth="0"/>
+                    </Grid.ColumnDefinitions>
                     <FontIcon Glyph="&#xE979;"
                               FontFamily="{StaticResource IconFont}"
                               FontSize="14"
-                              Foreground="{Binding Converter={StaticResource ChatPreviewKindToBrushConverter}, ConverterParameter=icon}"
                               VerticalAlignment="Center"
                               Margin="0,0,4,0"/>
-                    <TextBlock Text="{Binding Converter={StaticResource ChatPreviewKindToLabelConverter}}"
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding Converter={StaticResource ChatPreviewKindToLabelConverter}}"
                                FontSize="16"
-                               Foreground="{Binding Converter={StaticResource ChatPreviewKindToBrushConverter}}"
                                VerticalAlignment="Center"
-                               Margin="0,0,4,0"
-                               FontFamily="{StaticResource MainFont}"/>
-                </StackPanel>
+                               FontFamily="{StaticResource MainFont}"
+                               TextWrapping="NoWrap"
+                               TextTrimming="CharacterEllipsis"
+                               MaxLines="1"/>
+                </Grid>
             </DataTemplate>
         </selectors:ChatPreviewKindTemplateSelector.VideoTemplate>
 
         <selectors:ChatPreviewKindTemplateSelector.StickerTemplate>
             <DataTemplate>
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Grid VerticalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*" MinWidth="0"/>
+                    </Grid.ColumnDefinitions>
                     <FontIcon Glyph="&#xF4AA;"
                               FontFamily="{StaticResource IconFont}"
                               FontSize="14"
-                              Foreground="{Binding Converter={StaticResource ChatPreviewKindToBrushConverter}, ConverterParameter=icon}"
                               VerticalAlignment="Center"
                               Margin="0,0,4,0"/>
-                    <TextBlock Text="{Binding Converter={StaticResource ChatPreviewKindToLabelConverter}}"
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding Converter={StaticResource ChatPreviewKindToLabelConverter}}"
                                FontSize="16"
-                               Foreground="{Binding Converter={StaticResource ChatPreviewKindToBrushConverter}}"
                                VerticalAlignment="Center"
-                               Margin="0,0,4,0"
-                               FontFamily="{StaticResource MainFont}"/>
-                </StackPanel>
+                               FontFamily="{StaticResource MainFont}"
+                               TextWrapping="NoWrap"
+                               TextTrimming="CharacterEllipsis"
+                               MaxLines="1"/>
+                </Grid>
             </DataTemplate>
         </selectors:ChatPreviewKindTemplateSelector.StickerTemplate>
 
         <selectors:ChatPreviewKindTemplateSelector.VoiceTemplate>
             <DataTemplate>
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Grid VerticalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*" MinWidth="0"/>
+                    </Grid.ColumnDefinitions>
                     <FontIcon Glyph="&#xEC71;"
                               FontFamily="{StaticResource IconFont}"
                               FontSize="14"
                               Foreground="{Binding Converter={StaticResource ChatPreviewKindToBrushConverter}, ConverterParameter=icon}"
                               VerticalAlignment="Center"
                               Margin="0,0,4,0"/>
-                    <TextBlock Text="{Binding Converter={StaticResource ChatPreviewKindToLabelConverter}}"
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding Converter={StaticResource ChatPreviewKindToLabelConverter}}"
                                FontSize="16"
                                Foreground="{Binding Converter={StaticResource ChatPreviewKindToBrushConverter}}"
                                VerticalAlignment="Center"
-                               Margin="0,0,4,0"
-                               FontFamily="{StaticResource MainFont}"/>
-                </StackPanel>
+                               FontFamily="{StaticResource MainFont}"
+                               TextWrapping="NoWrap"
+                               TextTrimming="CharacterEllipsis"
+                               MaxLines="1"/>
+                </Grid>
             </DataTemplate>
         </selectors:ChatPreviewKindTemplateSelector.VoiceTemplate>
 
         <selectors:ChatPreviewKindTemplateSelector.DocumentTemplate>
             <DataTemplate>
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Grid VerticalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*" MinWidth="0"/>
+                    </Grid.ColumnDefinitions>
                     <FontIcon Glyph="&#xE8A5;"
                               FontFamily="{StaticResource IconFont}"
                               FontSize="14"
-                              Foreground="{Binding Converter={StaticResource ChatPreviewKindToBrushConverter}, ConverterParameter=icon}"
                               VerticalAlignment="Center"
                               Margin="0,0,4,0"/>
-                    <TextBlock Text="{Binding Converter={StaticResource ChatPreviewKindToLabelConverter}}"
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding Converter={StaticResource ChatPreviewKindToLabelConverter}}"
                                FontSize="16"
-                               Foreground="{Binding Converter={StaticResource ChatPreviewKindToBrushConverter}}"
                                VerticalAlignment="Center"
-                               Margin="0,0,4,0"
-                               FontFamily="{StaticResource MainFont}"/>
-                </StackPanel>
+                               FontFamily="{StaticResource MainFont}"
+                               TextWrapping="NoWrap"
+                               TextTrimming="CharacterEllipsis"
+                               MaxLines="1"/>
+                </Grid>
             </DataTemplate>
         </selectors:ChatPreviewKindTemplateSelector.DocumentTemplate>
 
         <selectors:ChatPreviewKindTemplateSelector.ReactionTemplate>
             <DataTemplate>
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Grid VerticalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*" MinWidth="0"/>
+                    </Grid.ColumnDefinitions>
                     <FontIcon Glyph="&#xE76E;"
                               FontFamily="{StaticResource IconFont}"
                               FontSize="14"
-                              Foreground="{Binding Converter={StaticResource ChatPreviewKindToBrushConverter}, ConverterParameter=icon}"
                               VerticalAlignment="Center"
                               Margin="0,0,4,0"/>
-                    <TextBlock Text="{Binding Converter={StaticResource ChatPreviewKindToLabelConverter}}"
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding Converter={StaticResource ChatPreviewKindToLabelConverter}}"
                                FontSize="16"
-                               Foreground="{Binding Converter={StaticResource ChatPreviewKindToBrushConverter}}"
                                VerticalAlignment="Center"
-                               Margin="0,0,4,0"
-                               FontFamily="{StaticResource MainFont}"/>
-                </StackPanel>
+                               FontFamily="{StaticResource MainFont}"
+                               TextWrapping="NoWrap"
+                               TextTrimming="CharacterEllipsis"
+                               MaxLines="1"/>
+                </Grid>
             </DataTemplate>
         </selectors:ChatPreviewKindTemplateSelector.ReactionTemplate>
     </selectors:ChatPreviewKindTemplateSelector>

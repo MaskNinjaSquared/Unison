@@ -43,5 +43,14 @@
                             ImageFailed="PhotoBrush_ImageFailed"/>
             </Ellipse.Fill>
         </Ellipse>
+
+        <!-- 1px ring when ShowBorder=true: light gray in Light, transparent in Dark. -->
+        <Ellipse x:Name="BorderEllipse"
+                 Width="48" Height="48"
+                 Fill="Transparent"
+                 Stroke="{ThemeResource AvatarBorderBrush}"
+                 StrokeThickness="0.5"
+                 Visibility="Collapsed"
+                 IsHitTestVisible="False"/>
     </Grid>
 </UserControl>

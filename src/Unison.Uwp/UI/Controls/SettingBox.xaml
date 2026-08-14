@@ -11,9 +11,8 @@
     MaxWidth="800"
     HorizontalAlignment="Stretch">
 
-    <!-- Fill #1E1E1E, 1px translucent border, radius 5. -->
-    <Border Background="#1E1E1E"
-            BorderBrush="#40FFFFFF"
+    <Border Background="{ThemeResource SettingBoxBackgroundBrush}"
+            BorderBrush="{ThemeResource SettingBoxBorderBrush}"
             BorderThickness="1"
             CornerRadius="5">
         <Grid>
@@ -32,14 +31,14 @@
                        MaxLines="2"
                        TextWrapping="Wrap"
                        VerticalAlignment="Center"
-                       Foreground="{StaticResource WhatsAppTextHighBrush}"
+                       Foreground="{ThemeResource WhatsAppTextHighBrush}"
                        Text="{Binding Header, ElementName=SettingBoxControl}"/>
 
             <TextBlock Margin="12,4,8,12"
                        Grid.Row="1"
                        FontSize="12"
                        TextWrapping="Wrap"
-                       Foreground="{StaticResource WhatsAppTextMediumBrush}"
+                       Foreground="{ThemeResource WhatsAppTextMediumBrush}"
                        Opacity="0.9"
                        Text="{Binding Text, ElementName=SettingBoxControl}"/>
 

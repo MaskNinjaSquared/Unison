@@ -19,16 +19,13 @@ namespace Unison.Uwp.UI.Controls
     public sealed partial class MessageBubbleChrome : UserControl
     {
         private static readonly int[] SupportedScales = new[] { 100, 120, 125, 150, 160, 200, 225, 250, 300, 400, 500 };
-        private readonly bool _isWindowsMobile;
-        private static readonly SolidColorBrush OutgoingHighlightBrush =
-            new SolidColorBrush(Color.FromArgb(255, 16, 102, 86));
-        private static readonly SolidColorBrush IncomingHighlightBrush =
-            new SolidColorBrush(Color.FromArgb(255, 62, 62, 62));
-        private static readonly SolidColorBrush OutgoingFillBrush =
-            new SolidColorBrush(Color.FromArgb(255, 0, 92, 75));
-        private static readonly SolidColorBrush IncomingFillBrush =
-            new SolidColorBrush(Color.FromArgb(255, 54, 54, 54));
 
+        private static readonly Color FallbackOutgoingHighlight = Color.FromArgb(255, 16, 102, 86);
+        private static readonly Color FallbackIncomingHighlight = Color.FromArgb(255, 62, 62, 62);
+        private static readonly Color FallbackOutgoingFill = Color.FromArgb(255, 0, 92, 75);
+        private static readonly Color FallbackIncomingFill = Color.FromArgb(255, 54, 54, 54);
+
+        private readonly bool _isWindowsMobile;
         private SpriteVisual _bubbleVisual;
         private bool _compositionReady;
         private bool _compositionAttempted;
@@ -46,6 +43,13 @@ namespace Unison.Uwp.UI.Controls
             Loaded += MessageBubbleChrome_Loaded;
             Unloaded += MessageBubbleChrome_Unloaded;
             SizeChanged += MessageBubbleChrome_SizeChanged;
+            // ActualThemeChanged is Fall Creators (16299) only — absent on W10M Creators (15063).
+            // Fallback colors use ThemeResource (auto Light/Dark). Desktop composition still
+            // refreshes fill via this event when available.
+            if (ApiInformation.IsEventPresent("Windows.UI.Xaml.FrameworkElement", "ActualThemeChanged"))
+            {
+                ActualThemeChanged += MessageBubbleChrome_ActualThemeChanged;
+            }
             UpdateFallbackVisual();
         }
 
@@ -63,6 +67,12 @@ namespace Unison.Uwp.UI.Controls
 
         public static readonly DependencyProperty ForceFallbackProperty =
             DependencyProperty.Register(nameof(ForceFallback), typeof(bool), typeof(MessageBubbleChrome), new PropertyMetadata(false, OnBubblePropertyChanged));
+
+        public static readonly DependencyProperty ContactUriProperty =
+            DependencyProperty.Register(nameof(ContactUri), typeof(string), typeof(MessageBubbleChrome), new PropertyMetadata(null));
+
+        public static readonly DependencyProperty ShowContactProperty =
+            DependencyProperty.Register(nameof(ShowContact), typeof(bool), typeof(MessageBubbleChrome), new PropertyMetadata(false));
 
         public bool IsFromMe
         {
@@ -94,6 +104,20 @@ namespace Unison.Uwp.UI.Controls
             set { SetValue(ForceFallbackProperty, value); }
         }
 
+        /// <summary>Group author avatar URI (photo or empty for fallback glyph).</summary>
+        public string ContactUri
+        {
+            get { return (string)GetValue(ContactUriProperty); }
+            set { SetValue(ContactUriProperty, value); }
+        }
+
+        /// <summary>When true, the host should show the author avatar beside this bubble.</summary>
+        public bool ShowContact
+        {
+            get { return (bool)GetValue(ShowContactProperty); }
+            set { SetValue(ShowContactProperty, value); }
+        }
+
         private static void OnBubblePropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             var control = d as MessageBubbleChrome;
@@ -109,6 +133,7 @@ namespace Unison.Uwp.UI.Controls
         private void MessageBubbleChrome_Loaded(object sender, RoutedEventArgs e)
         {
             _isLoaded = true;
+            UpdateFallbackVisual();
             TryConfigureComposition();
             UpdateVisualSize();
         }
@@ -130,6 +155,13 @@ namespace Unison.Uwp.UI.Controls
         {
             BubbleSize = e.NewSize;
             UpdateVisualSize();
+        }
+
+        private void MessageBubbleChrome_ActualThemeChanged(FrameworkElement sender, object args)
+        {
+            // Fallback Borders/Paths already follow ThemeResource. Refresh composition fill only.
+            _lastKey = null;
+            TryConfigureComposition();
         }
 
         private void UpdateVisualSize()
@@ -186,23 +218,15 @@ namespace Unison.Uwp.UI.Controls
                 }
 
                 int scale = GetNearestScale();
-                string darkUri = BuildAssetUri("dark", variant, scale);
-                string maskUri = BuildAssetUri("mask", variant, scale);
-                string key = variant + "|" + scale;
+                Color fillColor = ResolveBubbleFillColor();
+                string key = variant + "|" + scale + "|" + fillColor;
                 if (!string.Equals(_lastKey, key, StringComparison.Ordinal))
                 {
                     _lastKey = key;
-                    Debug.WriteLine("[MessageBubbleChrome] variant=" + variant + " scale=" + scale);
+                    Debug.WriteLine("[MessageBubbleChrome] variant=" + variant + " scale=" + scale + " fill=" + fillColor);
                 }
 
-                var darkSurface = LoadedImageSurface.StartLoadFromUri(new Uri(darkUri));
-                var darkSurfaceBrush = compositor.CreateSurfaceBrush(darkSurface);
-                darkSurfaceBrush.Stretch = CompositionStretch.None;
-
-                var darkNineGrid = compositor.CreateNineGridBrush();
-                darkNineGrid.Source = darkSurfaceBrush;
-                ConfigureInsets(darkNineGrid, IsFromMe, IsRunStart, scale);
-
+                string maskUri = BuildAssetUri("mask", variant, scale);
                 var maskSurface = LoadedImageSurface.StartLoadFromUri(new Uri(maskUri));
                 var maskSurfaceBrush = compositor.CreateSurfaceBrush(maskSurface);
                 maskSurfaceBrush.Stretch = CompositionStretch.None;
@@ -211,8 +235,9 @@ namespace Unison.Uwp.UI.Controls
                 maskNineGrid.Source = maskSurfaceBrush;
                 ConfigureInsets(maskNineGrid, IsFromMe, IsRunStart, scale);
 
+                var colorBrush = compositor.CreateColorBrush(fillColor);
                 var maskBrush = compositor.CreateMaskBrush();
-                maskBrush.Source = darkNineGrid;
+                maskBrush.Source = colorBrush;
                 maskBrush.Mask = maskNineGrid;
 
                 _bubbleVisual.Brush = maskBrush;
@@ -308,6 +333,108 @@ namespace Unison.Uwp.UI.Controls
             return best;
         }
 
+        private Color ResolveBubbleFillColor()
+        {
+            string key = IsFromMe ? "ChatDetailSentBubbleBrush" : "ChatDetailReceivedBubbleBrush";
+            return ResolveThemeColor(key, IsFromMe ? FallbackOutgoingFill : FallbackIncomingFill);
+        }
+
+        /// <summary>
+        /// Desktop Composition only. Prefer Light/Dark ThemeDictionaries (RequestedTheme)
+        /// so Creators-era code paths don't need ActualTheme.
+        /// </summary>
+        private Color ResolveThemeColor(string key, Color fallback)
+        {
+            string themeName = Application.Current.RequestedTheme == ApplicationTheme.Light
+                ? "Light"
+                : "Dark";
+
+            Color color;
+            if (TryFindThemeBrushColor(Application.Current.Resources, themeName, key, out color) ||
+                TryFindThemeBrushColor(Application.Current.Resources, "Default", key, out color))
+            {
+                return color;
+            }
+
+            try
+            {
+                var brush = Application.Current.Resources[key] as SolidColorBrush;
+                if (brush != null)
+                {
+                    return brush.Color;
+                }
+            }
+            catch
+            {
+            }
+
+            return fallback;
+        }
+
+        private static bool TryFindThemeBrushColor(
+            ResourceDictionary root,
+            string themeName,
+            string brushKey,
+            out Color color)
+        {
+            color = default(Color);
+            if (root == null || string.IsNullOrEmpty(themeName) || string.IsNullOrEmpty(brushKey))
+            {
+                return false;
+            }
+
+            try
+            {
+                if (root.ThemeDictionaries != null &&
+                    root.ThemeDictionaries.ContainsKey(themeName))
+                {
+                    var themeDict = root.ThemeDictionaries[themeName] as ResourceDictionary;
+                    if (TryGetBrushColor(themeDict, brushKey, out color))
+                    {
+                        return true;
+                    }
+                }
+
+                if (root.MergedDictionaries != null)
+                {
+                    for (int i = 0; i < root.MergedDictionaries.Count; i++)
+                    {
+                        if (TryFindThemeBrushColor(root.MergedDictionaries[i], themeName, brushKey, out color))
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return false;
+        }
+
+        private static bool TryGetBrushColor(ResourceDictionary dict, string brushKey, out Color color)
+        {
+            color = default(Color);
+            if (dict == null || !dict.ContainsKey(brushKey))
+            {
+                return false;
+            }
+
+            var brush = dict[brushKey] as SolidColorBrush;
+            if (brush == null)
+            {
+                return false;
+            }
+
+            color = brush.Color;
+            return true;
+        }
+
+        /// <summary>
+        /// Layout only for the ThemeResource-backed fallback (sent/received host, corners, tail).
+        /// Colors stay on ThemeResource so OS Light/Dark updates without a code paint pass.
+        /// </summary>
         private void UpdateFallbackVisual()
         {
             if (!ForceFallback && _compositionReady)
@@ -318,55 +445,18 @@ namespace Unison.Uwp.UI.Controls
             bool isFromMe = IsFromMe;
             bool showTail = IsRunStart && !_isWindowsMobile;
 
-            var highlightBrush = isFromMe ? OutgoingHighlightBrush : IncomingHighlightBrush;
-            var fillBrush = isFromMe ? OutgoingFillBrush : IncomingFillBrush;
+            OutgoingHost.Visibility = isFromMe ? Visibility.Visible : Visibility.Collapsed;
+            IncomingHost.Visibility = isFromMe ? Visibility.Collapsed : Visibility.Visible;
 
-            BodyHighlightBorder.Background = highlightBrush;
-            BodyFillBorder.Background = fillBrush;
-            BodyHighlightBorder.CornerRadius = isFromMe
-                ? new CornerRadius(16, 16, showTail ? 4 : 16, 16)
-                : new CornerRadius(16, 16, 16, showTail ? 4 : 16);
-            BodyFillBorder.CornerRadius = BodyHighlightBorder.CornerRadius;
+            var outgoingRadius = new CornerRadius(16, 16, showTail ? 4 : 16, 16);
+            var incomingRadius = new CornerRadius(16, 16, 16, showTail ? 4 : 16);
+            OutgoingHighlightBorder.CornerRadius = outgoingRadius;
+            OutgoingFillBorder.CornerRadius = outgoingRadius;
+            IncomingHighlightBorder.CornerRadius = incomingRadius;
+            IncomingFillBorder.CornerRadius = incomingRadius;
 
-            TailContainer.Visibility = showTail ? Visibility.Visible : Visibility.Collapsed;
-            if (!showTail)
-            {
-                return;
-            }
-
-            TailHighlightPath.Fill = highlightBrush;
-            TailFillPath.Fill = fillBrush;
-            TailHighlightPath.Data = BuildTailGeometry();
-            TailFillPath.Data = BuildTailGeometry();
-
-            if (isFromMe)
-            {
-                TailContainer.HorizontalAlignment = HorizontalAlignment.Right;
-                TailContainer.RenderTransform = null;
-                TailContainer.RenderTransformOrigin = new Point(0.5, 0.5);
-            }
-            else
-            {
-                TailContainer.HorizontalAlignment = HorizontalAlignment.Left;
-                TailContainer.RenderTransform = new ScaleTransform { ScaleX = -1, ScaleY = 1 };
-                TailContainer.RenderTransformOrigin = new Point(0.5, 0.5);
-            }
-        }
-
-        private static Geometry BuildTailGeometry()
-        {
-            var figure = new PathFigure
-            {
-                StartPoint = new Point(0, 0),
-                IsClosed = true,
-                IsFilled = true
-            };
-            figure.Segments.Add(new LineSegment { Point = new Point(10, 0) });
-            figure.Segments.Add(new LineSegment { Point = new Point(0, 10) });
-
-            var geometry = new PathGeometry();
-            geometry.Figures.Add(figure);
-            return geometry;
+            OutgoingTailContainer.Visibility = (isFromMe && showTail) ? Visibility.Visible : Visibility.Collapsed;
+            IncomingTailContainer.Visibility = (!isFromMe && showTail) ? Visibility.Visible : Visibility.Collapsed;
         }
     }
 }

@@ -50,7 +50,8 @@ namespace Unison.Core.Mappers
                     snapshot.IsVideo,
                     snapshot.IsSticker,
                     snapshot.IsAudio,
-                    snapshot.IsVoice);
+                    snapshot.IsVoice,
+                    snapshot.IsDocument);
 
             return new ChatMessage
             {
@@ -69,7 +70,14 @@ namespace Unison.Core.Mappers
                 PinnedAtUtc = context.PinnedAtUtc,
                 PinExpiresAtUtc = context.PinExpiresAtUtc,
                 IsAudio = kind == ChatMessageKind.Audio || kind == ChatMessageKind.Voice,
-                IsVoiceMessage = kind == ChatMessageKind.Voice
+                IsVoiceMessage = kind == ChatMessageKind.Voice,
+                QuotedText = snapshot.QuotedText,
+                QuotedKind = snapshot.QuotedKind,
+                QuotedSenderName = snapshot.QuotedSenderName,
+                QuotedMessageId = snapshot.QuotedMessageId,
+                MentionedJids = snapshot.MentionedJids != null
+                    ? new System.Collections.Generic.List<string>(snapshot.MentionedJids)
+                    : null
             };
         }
 

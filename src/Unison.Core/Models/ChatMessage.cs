@@ -22,7 +22,12 @@ namespace Unison.Core.Models
         public string Content 
         { 
             get => _content; 
-            set { _content = value; OnPropertyChanged(); } 
+            set
+            {
+                _content = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(DocumentDisplayName));
+            }
         }
 
         private DateTime _timestamp;
@@ -41,11 +46,7 @@ namespace Unison.Core.Models
                 if (_isFromMe == value) return;
                 _isFromMe = value;
                 OnPropertyChanged();
-                OnPropertyChanged(nameof(StatusGlyph));
-                OnPropertyChanged(nameof(StatusCheckmarkUri));
-                OnPropertyChanged(nameof(HasStatusCheckmark));
-                OnPropertyChanged(nameof(IsReadStatus));
-                OnPropertyChanged(nameof(IsSendFailed));
+                RaiseStatusUiChanged();
             } 
         }
 
@@ -64,11 +65,7 @@ namespace Unison.Core.Models
                 if (string.Equals(_status, value, StringComparison.OrdinalIgnoreCase)) return;
                 _status = value;
                 OnPropertyChanged();
-                OnPropertyChanged(nameof(StatusGlyph));
-                OnPropertyChanged(nameof(StatusCheckmarkUri));
-                OnPropertyChanged(nameof(HasStatusCheckmark));
-                OnPropertyChanged(nameof(IsReadStatus));
-                OnPropertyChanged(nameof(IsSendFailed));
+                RaiseStatusUiChanged();
             }
         }
 
@@ -154,13 +151,7 @@ namespace Unison.Core.Models
                 _kind = value;
                 SyncLegacyFlagsFromKind();
                 OnPropertyChanged();
-                OnPropertyChanged(nameof(IsImage));
-                OnPropertyChanged(nameof(IsAudio));
-                OnPropertyChanged(nameof(IsVoiceMessage));
-                OnPropertyChanged(nameof(ShowTextContent));
-                OnPropertyChanged(nameof(NeedsImageDownload));
-                OnPropertyChanged(nameof(CanDownloadImage));
-                OnPropertyChanged(nameof(AudioButtonText));
+                RaiseKindDependentChanged();
             }
         }
 
@@ -182,10 +173,11 @@ namespace Unison.Core.Models
                 }
 
                 OnPropertyChanged();
-                OnPropertyChanged(nameof(Kind));
-                OnPropertyChanged(nameof(ShowTextContent));
-                OnPropertyChanged(nameof(NeedsImageDownload));
-                OnPropertyChanged(nameof(CanDownloadImage));
+                Raise(
+                    nameof(Kind),
+                    nameof(ShowTextContent),
+                    nameof(NeedsImageDownload),
+                    nameof(CanDownloadImage));
             }
         }
 
@@ -212,9 +204,10 @@ namespace Unison.Core.Models
                 }
 
                 OnPropertyChanged();
-                OnPropertyChanged(nameof(Kind));
-                OnPropertyChanged(nameof(ShowTextContent));
-                OnPropertyChanged(nameof(AudioButtonText));
+                Raise(
+                    nameof(Kind),
+                    nameof(ShowTextContent),
+                    nameof(AudioButtonText));
             }
         }
 
@@ -237,9 +230,10 @@ namespace Unison.Core.Models
                 }
 
                 OnPropertyChanged();
-                OnPropertyChanged(nameof(Kind));
-                OnPropertyChanged(nameof(IsAudio));
-                OnPropertyChanged(nameof(AudioButtonText));
+                Raise(
+                    nameof(Kind),
+                    nameof(IsAudio),
+                    nameof(AudioButtonText));
             }
         }
 
@@ -281,7 +275,13 @@ namespace Unison.Core.Models
         public string AudioUri
         {
             get => _audioUri;
-            set { _audioUri = value; OnPropertyChanged(); OnPropertyChanged(nameof(HasLocalAudio)); }
+            set
+            {
+                _audioUri = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasLocalAudio));
+                NotifyAudioDownloadStateChanged();
+            }
         }
 
         public string AudioUrl { get; set; }
@@ -300,11 +300,64 @@ namespace Unison.Core.Models
         [JsonIgnore]
         public bool HasLocalAudio => !string.IsNullOrWhiteSpace(AudioUri);
 
+        /// <summary>Voice/audio bubble without a local file yet — show download control.</summary>
+        [JsonIgnore]
+        public bool NeedsAudioDownload => IsAudio && !HasLocalAudio;
+
+        /// <summary>True when persisted media keys allow an on-demand download.</summary>
+        [JsonIgnore]
+        public bool CanDownloadAudio =>
+            NeedsAudioDownload &&
+            !string.IsNullOrWhiteSpace(AudioMediaKeyBase64) &&
+            (!string.IsNullOrWhiteSpace(AudioUrl) || !string.IsNullOrWhiteSpace(AudioDirectPath));
+
+        /// <summary>Raises audio download bindable props after keys / local URI change.</summary>
+        public void NotifyAudioDownloadStateChanged()
+        {
+            Raise(
+                nameof(NeedsAudioDownload),
+                nameof(CanDownloadAudio),
+                nameof(HasLocalAudio));
+        }
+
         /// <summary>
-        /// Body text is hidden for audio and for image kinds (downloaded or pending download).
+        /// Body text is hidden for audio, images, video, stickers, and documents.
         /// </summary>
         [JsonIgnore]
-        public bool ShowTextContent => !IsAudio && !IsImage;
+        public bool ShowTextContent => !IsAudio && !IsImage && !IsVideo && !IsSticker && !IsDocument;
+
+        /// <summary>Protocol video message (local file may still be pending download).</summary>
+        [JsonIgnore]
+        public bool IsVideo => _kind == ChatMessageKind.Video;
+
+        [JsonIgnore]
+        public bool IsSticker => _kind == ChatMessageKind.Sticker;
+
+        /// <summary>Protocol document / file message.</summary>
+        [JsonIgnore]
+        public bool IsDocument => _kind == ChatMessageKind.Document;
+
+        private bool _isStickerFailed;
+        /// <summary>Sticker media could not be loaded — bubble shows "!Sticker Error".</summary>
+        [JsonIgnore]
+        public bool IsStickerFailed
+        {
+            get => _isStickerFailed;
+            set
+            {
+                if (_isStickerFailed == value) return;
+                _isStickerFailed = value;
+                OnPropertyChanged();
+                Raise(nameof(ShowStickerError), nameof(ShowStickerLoading));
+            }
+        }
+
+        [JsonIgnore]
+        public bool ShowStickerError => IsSticker && IsStickerFailed && !HasImage;
+
+        /// <summary>Sticker row waiting for media (avoids an empty bubble).</summary>
+        [JsonIgnore]
+        public bool ShowStickerLoading => IsSticker && !HasImage && !IsStickerFailed;
 
         /// <summary>Image protocol message without a local file yet — show download placeholder.</summary>
         [JsonIgnore]
@@ -318,9 +371,12 @@ namespace Unison.Core.Models
         /// <summary>Raises download-related bindable props after media keys are assigned.</summary>
         public void NotifyImageDownloadStateChanged()
         {
-            OnPropertyChanged(nameof(NeedsImageDownload));
-            OnPropertyChanged(nameof(CanDownloadImage));
-            OnPropertyChanged(nameof(ShowTextContent));
+            Raise(
+                nameof(NeedsImageDownload),
+                nameof(CanDownloadImage),
+                nameof(ShowTextContent),
+                nameof(ShowStickerError),
+                nameof(ShowStickerLoading));
         }
 
         [JsonIgnore]
@@ -344,10 +400,13 @@ namespace Unison.Core.Models
             {
                 _imageUri = value;
                 OnPropertyChanged();
-                OnPropertyChanged(nameof(HasImage));
-                OnPropertyChanged(nameof(ShowTextContent));
-                OnPropertyChanged(nameof(NeedsImageDownload));
-                OnPropertyChanged(nameof(CanDownloadImage));
+                Raise(
+                    nameof(HasImage),
+                    nameof(ShowTextContent),
+                    nameof(ShowStickerError),
+                    nameof(ShowStickerLoading),
+                    nameof(NeedsImageDownload),
+                    nameof(CanDownloadImage));
             }
         }
 
@@ -357,6 +416,162 @@ namespace Unison.Core.Models
         public string ImageMediaKeyBase64 { get; set; }
         public string ImageFileEncSha256Base64 { get; set; }
         public string ImageMimeType { get; set; }
+
+        private string _videoUri;
+        /// <summary>Local cached video file (ms-appdata) after on-demand download.</summary>
+        public string VideoUri
+        {
+            get => _videoUri;
+            set
+            {
+                _videoUri = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasLocalVideo));
+                NotifyVideoDownloadStateChanged();
+            }
+        }
+
+        private string _videoPosterUri;
+        /// <summary>Local JPEG poster generated from the first frame after download.</summary>
+        public string VideoPosterUri
+        {
+            get => _videoPosterUri;
+            set
+            {
+                _videoPosterUri = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasVideoPoster));
+            }
+        }
+
+        public string VideoUrl { get; set; }
+        public string VideoDirectPath { get; set; }
+        public string VideoMediaKeyBase64 { get; set; }
+        public string VideoFileEncSha256Base64 { get; set; }
+        public string VideoMimeType { get; set; }
+
+        private uint _videoDurationSeconds;
+        public uint VideoDurationSeconds
+        {
+            get => _videoDurationSeconds;
+            set { _videoDurationSeconds = value; OnPropertyChanged(); }
+        }
+
+        [JsonIgnore]
+        public bool HasLocalVideo => !string.IsNullOrWhiteSpace(VideoUri);
+
+        [JsonIgnore]
+        public bool HasVideoPoster => !string.IsNullOrWhiteSpace(VideoPosterUri);
+
+        /// <summary>Video protocol message without a local file yet — show download placeholder.</summary>
+        [JsonIgnore]
+        public bool NeedsVideoDownload => IsVideo && !HasLocalVideo;
+
+        /// <summary>True when persisted media keys allow an on-demand video download.</summary>
+        [JsonIgnore]
+        public bool CanDownloadVideo =>
+            NeedsVideoDownload &&
+            !string.IsNullOrWhiteSpace(VideoMediaKeyBase64) &&
+            (!string.IsNullOrWhiteSpace(VideoUrl) || !string.IsNullOrWhiteSpace(VideoDirectPath));
+
+        /// <summary>Raises video download-related bindable props after keys / local URI change.</summary>
+        public void NotifyVideoDownloadStateChanged()
+        {
+            Raise(
+                nameof(NeedsVideoDownload),
+                nameof(CanDownloadVideo),
+                nameof(HasLocalVideo),
+                nameof(ShowTextContent),
+                nameof(IsVideo));
+        }
+
+        private string _documentFileName;
+        /// <summary>Original file name from the protocol DocumentMessage.</summary>
+        public string DocumentFileName
+        {
+            get => _documentFileName;
+            set
+            {
+                if (string.Equals(_documentFileName, value, StringComparison.Ordinal)) return;
+                _documentFileName = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(DocumentDisplayName));
+            }
+        }
+
+        /// <summary>UI label: file name (protocol or content), or a generic "Document" fallback.</summary>
+        [JsonIgnore]
+        public string DocumentDisplayName
+        {
+            get
+            {
+                string resolved = ChatPreviewNormalizer.ResolveDocumentDisplayName(DocumentFileName, Content);
+                return !string.IsNullOrWhiteSpace(resolved) ? resolved : "Document";
+            }
+        }
+
+        private string _documentUri;
+        /// <summary>Local cached document file (ms-appdata) after on-demand download.</summary>
+        public string DocumentUri
+        {
+            get => _documentUri;
+            set
+            {
+                _documentUri = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasLocalDocument));
+                NotifyDocumentDownloadStateChanged();
+            }
+        }
+
+        public string DocumentUrl { get; set; }
+        public string DocumentDirectPath { get; set; }
+        public string DocumentMediaKeyBase64 { get; set; }
+        public string DocumentFileEncSha256Base64 { get; set; }
+        public string DocumentMimeType { get; set; }
+
+        private long _documentFileLengthBytes;
+        /// <summary>Original file size in bytes from protocol (or filled after local download).</summary>
+        public long DocumentFileLengthBytes
+        {
+            get => _documentFileLengthBytes;
+            set
+            {
+                if (_documentFileLengthBytes == value) return;
+                _documentFileLengthBytes = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasDocumentFileSize));
+            }
+        }
+
+        [JsonIgnore]
+        public bool HasDocumentFileSize => DocumentFileLengthBytes > 0;
+
+        [JsonIgnore]
+        public bool HasLocalDocument => !string.IsNullOrWhiteSpace(DocumentUri);
+
+        /// <summary>Document protocol message without a local file yet.</summary>
+        [JsonIgnore]
+        public bool NeedsDocumentDownload => IsDocument && !HasLocalDocument;
+
+        /// <summary>True when persisted media keys allow an on-demand document download.</summary>
+        [JsonIgnore]
+        public bool CanDownloadDocument =>
+            NeedsDocumentDownload &&
+            !string.IsNullOrWhiteSpace(DocumentMediaKeyBase64) &&
+            (!string.IsNullOrWhiteSpace(DocumentUrl) || !string.IsNullOrWhiteSpace(DocumentDirectPath));
+
+        public void NotifyDocumentDownloadStateChanged()
+        {
+            Raise(
+                nameof(NeedsDocumentDownload),
+                nameof(CanDownloadDocument),
+                nameof(HasLocalDocument),
+                nameof(HasDocumentFileSize),
+                nameof(ShowTextContent),
+                nameof(IsDocument),
+                nameof(DocumentDisplayName));
+        }
 
         private string _caption;
         public string Caption
@@ -454,11 +669,12 @@ namespace Unison.Core.Models
         /// <summary>Call after in-place mutate of <see cref="Reactions"/> (upsert/remove).</summary>
         public void NotifyReactionsChanged()
         {
-            OnPropertyChanged(nameof(Reactions));
-            OnPropertyChanged(nameof(TotalReactions));
-            OnPropertyChanged(nameof(HasReactions));
-            OnPropertyChanged(nameof(ReactionsDisplayText));
-            OnPropertyChanged(nameof(ReactionChips));
+            Raise(
+                nameof(Reactions),
+                nameof(TotalReactions),
+                nameof(HasReactions),
+                nameof(ReactionsDisplayText),
+                nameof(ReactionChips));
         }
 
         private bool _isRunStart = true;
@@ -490,6 +706,74 @@ namespace Unison.Core.Models
         public bool HasCaption => !string.IsNullOrWhiteSpace(Caption);
         public bool ShowTail => IsRunStart;
 
+        private string _quotedText;
+        public string QuotedText
+        {
+            get => _quotedText;
+            set
+            {
+                if (_quotedText == value) return;
+                _quotedText = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasQuote));
+            }
+        }
+
+        private ChatPreviewKind _quotedKind;
+        /// <summary>Quoted media type for the reply strip (icon + label); Text = body-only quote.</summary>
+        public ChatPreviewKind QuotedKind
+        {
+            get => _quotedKind;
+            set
+            {
+                if (_quotedKind == value) return;
+                _quotedKind = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasQuote));
+            }
+        }
+
+        private string _quotedSenderName;
+        public string QuotedSenderName
+        {
+            get => _quotedSenderName;
+            set
+            {
+                if (_quotedSenderName == value) return;
+                _quotedSenderName = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private string _quotedMessageId;
+        /// <summary>Id of the quoted message (<c>ContextInfo.StanzaId</c>) when available.</summary>
+        public string QuotedMessageId
+        {
+            get => _quotedMessageId;
+            set
+            {
+                if (string.Equals(_quotedMessageId, value, StringComparison.Ordinal)) return;
+                _quotedMessageId = value;
+                OnPropertyChanged();
+            }
+        }
+
+        [JsonIgnore]
+        public bool HasQuote =>
+            _quotedKind != ChatPreviewKind.Text || !string.IsNullOrWhiteSpace(_quotedText);
+
+        private List<string> _mentionedJids;
+        /// <summary>JIDs from ContextInfo.MentionedJid (for @number → display name).</summary>
+        public List<string> MentionedJids
+        {
+            get => _mentionedJids ?? (_mentionedJids = new List<string>());
+            set
+            {
+                _mentionedJids = value;
+                OnPropertyChanged();
+            }
+        }
+
         private bool _showGroupSenderName;
         /// <summary>
         /// Group received bubbles: show the participant name only on the first bubble of a run.
@@ -507,11 +791,110 @@ namespace Unison.Core.Models
             }
         }
 
+        /// <summary>
+        /// Ephemeral bubble synthesized from chat-list preview when history is missing.
+        /// Never persist; remove when real messages arrive.
+        /// </summary>
+        [JsonIgnore]
+        public bool IsPreviewFallback { get; set; }
+
+        private string _contactUri;
+        /// <summary>
+        /// Group author avatar URI (resolved from the participant's ChatItem.AvatarUrl).
+        /// </summary>
+        [JsonIgnore]
+        public string ContactUri
+        {
+            get => _contactUri;
+            set
+            {
+                if (string.Equals(_contactUri, value, StringComparison.Ordinal)) return;
+                _contactUri = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private bool _showContact;
+        /// <summary>
+        /// When true, show the author avatar beside the bubble (first message of a participant run).
+        /// </summary>
+        [JsonIgnore]
+        public bool ShowContact
+        {
+            get => _showContact;
+            set
+            {
+                if (_showContact == value) return;
+                _showContact = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private bool _showContactSlot;
+        /// <summary>
+        /// Reserve left gutter for group-author avatars so consecutive bubbles stay aligned.
+        /// </summary>
+        [JsonIgnore]
+        public bool ShowContactSlot
+        {
+            get => _showContactSlot;
+            set
+            {
+                if (_showContactSlot == value) return;
+                _showContactSlot = value;
+                OnPropertyChanged();
+            }
+        }
+
         public string FormattedTime => Timestamp == DateTime.MinValue ? string.Empty : Timestamp.ToString("HH:mm");
 
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+
+        private void Raise(params string[] propertyNames)
+        {
+            if (propertyNames == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < propertyNames.Length; i++)
+            {
+                OnPropertyChanged(propertyNames[i]);
+            }
+        }
+
+        private void RaiseStatusUiChanged()
+        {
+            Raise(
+                nameof(StatusGlyph),
+                nameof(StatusCheckmarkUri),
+                nameof(HasStatusCheckmark),
+                nameof(IsReadStatus),
+                nameof(IsSendFailed));
+        }
+
+        private void RaiseKindDependentChanged()
+        {
+            Raise(
+                nameof(IsImage),
+                nameof(IsVideo),
+                nameof(IsAudio),
+                nameof(IsVoiceMessage),
+                nameof(IsSticker),
+                nameof(IsDocument),
+                nameof(ShowTextContent),
+                nameof(ShowStickerError),
+                nameof(ShowStickerLoading),
+                nameof(NeedsImageDownload),
+                nameof(CanDownloadImage),
+                nameof(NeedsVideoDownload),
+                nameof(CanDownloadVideo),
+                nameof(NeedsDocumentDownload),
+                nameof(CanDownloadDocument),
+                nameof(AudioButtonText));
         }
     }
 }

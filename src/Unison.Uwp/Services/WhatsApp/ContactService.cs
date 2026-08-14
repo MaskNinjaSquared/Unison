@@ -655,6 +655,7 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 Debug.WriteLine($"[ContactService] ResolveMissingNamesAsync found {jidsToResolve.Count} unique JIDs for usync.");
                 var missingList = jidsToResolve
+                    .Where(j => !string.IsNullOrWhiteSpace(j))
                     .OrderBy(j => j, StringComparer.OrdinalIgnoreCase)
                     .Take(10)
                     .ToList();
@@ -664,20 +665,38 @@ namespace Unison.Uwp.Services.WhatsApp
                 for (int i = 0; i < missingList.Count; i += 5)
                 {
                     var chunk = missingList.Skip(i).Take(5).ToArray();
-                    await _whatsAppService.ResolveContactsAsync(chunk);
+                    try
+                    {
+                        await _whatsAppService.ResolveContactsAsync(chunk);
+                    }
+                    catch (Exception exChunk)
+                    {
+                        Debug.WriteLine(
+                            $"[ContactService] ResolveContactsAsync chunk failed ({chunk.Length} JIDs): {exChunk.Message}");
+                    }
                 }
 
-                await RefreshPhoneContactOverlayAsync(force: false);
-                await _whatsAppService.ApplyResolvedDisplayNamesToChatsAsync();
-
-                // Save updated contact names
-                _whatsAppService.SchedulePersistPublic();
+                try
+                {
+                    await RefreshPhoneContactOverlayAsync(force: false);
+                    await _whatsAppService.ApplyResolvedDisplayNamesToChatsAsync();
+                    _whatsAppService.SchedulePersistPublic();
+                }
+                catch (Exception exPost)
+                {
+                    Debug.WriteLine($"[ContactService] ResolveMissingNamesAsync post-usync failed: {exPost.Message}");
+                }
             }
         }
 
         private static bool IsSelfMarkerLabel(string label)
         {
             return SelfChatDisplayHelper.IsSelfMarkerLabel(label);
+        }
+
+        public Task<string> SearchContactAsync(string phoneNumber)
+        {
+            return _whatsAppService.SearchContactAsync(phoneNumber);
         }
     }
 }

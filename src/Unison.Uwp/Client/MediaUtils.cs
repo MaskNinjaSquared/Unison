@@ -43,11 +43,29 @@ namespace Unison.Uwp.Client
             string infoStr = IMAGE_HKDF_INFO;
             switch (mediaType)
             {
-                case "video": infoStr = VIDEO_HKDF_INFO; break;
-                case "audio": infoStr = AUDIO_HKDF_INFO; break;
-                case "document": infoStr = DOCUMENT_HKDF_INFO; break;
-                case "md-app-state": infoStr = APP_STATE_HKDF_INFO; break;
-                case "md-msg-hist": infoStr = HISTORY_HKDF_INFO; break;
+                case "video":
+                case "gif":
+                    infoStr = VIDEO_HKDF_INFO;
+                    break;
+                case "audio":
+                case "ptt":
+                    infoStr = AUDIO_HKDF_INFO;
+                    break;
+                case "document":
+                    infoStr = DOCUMENT_HKDF_INFO;
+                    break;
+                case "md-app-state":
+                    infoStr = APP_STATE_HKDF_INFO;
+                    break;
+                case "md-msg-hist":
+                    infoStr = HISTORY_HKDF_INFO;
+                    break;
+                case "sticker":
+                case "image":
+                default:
+                    // Stickers use the same HKDF info as images (Baileys MEDIA_HKDF_KEY_MAPPING).
+                    infoStr = IMAGE_HKDF_INFO;
+                    break;
             }
 
             byte[] expanded = CryptoUtils.Hkdf(mediaKey, 112, null, infoStr);

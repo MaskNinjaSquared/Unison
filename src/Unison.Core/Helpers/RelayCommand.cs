@@ -36,10 +36,50 @@ namespace Unison.Core.Helpers
 
         public event EventHandler CanExecuteChanged;
 
-        public bool CanExecute(object parameter) => _canExecute == null || _canExecute((T)parameter);
+        public bool CanExecute(object parameter)
+        {
+            if (!TryConvert(parameter, out T value))
+            {
+                return false;
+            }
 
-        public void Execute(object parameter) => _execute((T)parameter);
+            return _canExecute == null || _canExecute(value);
+        }
+
+        public void Execute(object parameter)
+        {
+            if (TryConvert(parameter, out T value))
+            {
+                _execute(value);
+            }
+        }
 
         public void RaiseCanExecuteChanged() => CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+
+        private static bool TryConvert(object parameter, out T value)
+        {
+            if (parameter is T matched)
+            {
+                value = matched;
+                return true;
+            }
+
+            if (parameter == null)
+            {
+                value = default;
+                return !typeof(T).IsValueType || Nullable.GetUnderlyingType(typeof(T)) != null;
+            }
+
+            try
+            {
+                value = (T)Convert.ChangeType(parameter, typeof(T));
+                return true;
+            }
+            catch
+            {
+                value = default;
+                return false;
+            }
+        }
     }
 }

@@ -49,7 +49,8 @@ namespace Unison.Uwp.Services
             AppShell shell = ReadSelectedShell();
             _strategy = CreateStrategy(shell);
             ApplyTheme(shell);
-            ApplyChrome();
+            // Title bar chrome is applied from App window bootstrap (after Activate).
+            // Calling SetTitleBar here is often a no-op or gets overwritten on desktop.
             MaybeShowPendingRestartToast();
         }
 
@@ -108,13 +109,45 @@ namespace Unison.Uwp.Services
                 close = "OK";
             }
 
-            try
+            await PromptRestartAndExitAsync(title, body, close);
+        }
+
+        /// <summary>
+        /// Desktop: message dialog then restart. Mobile: toast (reopen hint) then exit immediately —
+        /// W10 Mobile often cannot auto-restart, so the toast asks the user to reopen.
+        /// </summary>
+        private async Task PromptRestartAndExitAsync(string title, string body, string close)
+        {
+            bool mobile = _systemInfo != null && _systemInfo.IsMobile();
+            if (mobile)
             {
-                await _dialogs.ShowMessageAsync(title, body, close);
+                string toastTitle = _strings.Get("Settings_ReopenAppTitle", "Reopen Unison?");
+                if (string.IsNullOrWhiteSpace(toastTitle) ||
+                    toastTitle.StartsWith("Settings_", StringComparison.Ordinal))
+                {
+                    toastTitle = "Reopen Unison?";
+                }
+
+                ShowImmediateToast(toastTitle, body);
+                try
+                {
+                    // Let the toast reach the notification center before the process dies.
+                    await Task.Delay(400);
+                }
+                catch
+                {
+                }
             }
-            catch (Exception ex)
+            else
             {
-                Debug.WriteLine("[ShellTheme] dialog failed: " + ex.Message);
+                try
+                {
+                    await _dialogs.ShowMessageAsync(title, body, close);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[ShellTheme] dialog failed: " + ex.Message);
+                }
             }
 
             try
@@ -135,6 +168,26 @@ namespace Unison.Uwp.Services
             catch (Exception ex)
             {
                 Debug.WriteLine("[ShellTheme] Exit failed: " + ex.Message);
+            }
+        }
+
+        private static void ShowImmediateToast(string title, string body)
+        {
+            try
+            {
+                string xml =
+                    "<toast><visual><binding template=\"ToastGeneric\">" +
+                    "<text>" + EscapeXml(title) + "</text>" +
+                    "<text>" + EscapeXml(body) + "</text>" +
+                    "</binding></visual></toast>";
+
+                var doc = new XmlDocument();
+                doc.LoadXml(xml);
+                ToastNotificationManager.CreateToastNotifier().Show(new ToastNotification(doc));
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ShellTheme] restart toast failed: " + ex.Message);
             }
         }
 

@@ -9,11 +9,11 @@ namespace Unison.Uwp.UI.Dialogs
 {
     /// <summary>
     /// ContentDialog for starting a chat by phone number.
-    /// Bound to <see cref="NewChatViewModel"/> supplied by DialogService.
+    /// Bound to <see cref="NewChatDialogViewModel"/> supplied by DialogService.
     /// </summary>
     public sealed partial class NewChatDialog : ContentDialog
     {
-        private NewChatViewModel ViewModel => DataContext as NewChatViewModel;
+        private NewChatDialogViewModel ViewModel => DataContext as NewChatDialogViewModel;
 
         public string ResolvedJid { get; private set; }
 
@@ -29,7 +29,7 @@ namespace Unison.Uwp.UI.Dialogs
             {
                 if (ViewModel == null && App.Services != null)
                 {
-                    DataContext = App.Services.GetRequiredService<NewChatViewModel>();
+                    DataContext = App.Services.GetRequiredService<NewChatDialogViewModel>();
                 }
 
                 if (ViewModel == null)

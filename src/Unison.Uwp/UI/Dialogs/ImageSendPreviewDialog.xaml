@@ -15,7 +15,7 @@
         <Image x:Name="PreviewImage" MaxHeight="300" Stretch="Uniform"/>
         <TextBlock x:Name="InfoText"
                    Margin="0,8,0,0"
-                   Foreground="{StaticResource ChatDetailMutedTextBrush}"
+                   Foreground="{ThemeResource ChatDetailMutedTextBrush}"
                    FontSize="12"
                    FontFamily="{StaticResource MainFont}"/>
     </StackPanel>

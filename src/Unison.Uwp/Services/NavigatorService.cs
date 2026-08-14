@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Unison.Core.Constants;
 using Unison.Core.Contracts;
 using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Navigation;
 
 namespace Unison.Uwp.Services
 {
@@ -14,19 +15,19 @@ namespace Unison.Uwp.Services
         private static readonly Dictionary<string, Type> RootRoutes =
             new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
             {
-                { NavigationRoutes.Boot, typeof(UI.Views.BootPage) },
-                { NavigationRoutes.Start, typeof(UI.Views.StartPage) },
-                { NavigationRoutes.Login, typeof(UI.Views.LoginPage) },
-                { NavigationRoutes.AppShell, typeof(MainPage) },
-                { NavigationRoutes.Main, typeof(MainPage) },
+                { NavigationRoutes.Boot, typeof(UI.Views.BootView) },
+                { NavigationRoutes.Start, typeof(UI.Views.StartView) },
+                { NavigationRoutes.Login, typeof(UI.Views.LoginView) },
+                { NavigationRoutes.AppShell, typeof(MainView) },
+                { NavigationRoutes.Main, typeof(MainView) },
             };
 
         private static readonly Dictionary<string, Type> ShellRoutes =
             new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
             {
-                { NavigationRoutes.Chats, typeof(UI.Views.ChatsPage) },
-                { NavigationRoutes.Settings, typeof(UI.Views.SettingsPage) },
-                { NavigationRoutes.Debug, typeof(UI.Views.DebugPage) },
+                { NavigationRoutes.Chats, typeof(UI.Views.ChatsView) },
+                { NavigationRoutes.Settings, typeof(UI.Views.SettingsView) },
+                { NavigationRoutes.Debug, typeof(UI.Views.DebugView) },
             };
 
         public NavigatorService(Frame frame)
@@ -38,9 +39,24 @@ namespace Unison.Uwp.Services
 
         public bool CanGoBackInShell => _shellFrame?.CanGoBack ?? false;
 
+        public string CurrentShellRoute => ResolveShellRoute(_shellFrame?.Content);
+
+        public event EventHandler<string> ShellNavigated;
+
         public void AttachShellFrame(object frame)
         {
+            if (_shellFrame != null)
+            {
+                _shellFrame.Navigated -= ShellFrame_Navigated;
+            }
+
             _shellFrame = frame as Frame;
+
+            if (_shellFrame != null)
+            {
+                _shellFrame.Navigated += ShellFrame_Navigated;
+                RaiseShellNavigated();
+            }
         }
 
         public void Navigate(string destination, object parameter = null)
@@ -84,6 +100,62 @@ namespace Unison.Uwp.Services
             }
         }
 
+        public void PurgeShellNavigation()
+        {
+            if (_shellFrame == null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (_shellFrame.Content is Page shellPage)
+                {
+                    shellPage.NavigationCacheMode = NavigationCacheMode.Disabled;
+                }
+            }
+            catch
+            {
+            }
+
+            ClearFrameBackStack(_shellFrame);
+        }
+
+        private void ShellFrame_Navigated(object sender, NavigationEventArgs e)
+        {
+            RaiseShellNavigated();
+        }
+
+        private void RaiseShellNavigated()
+        {
+            ShellNavigated?.Invoke(this, CurrentShellRoute);
+        }
+
+        private static string ResolveShellRoute(object content)
+        {
+            if (content == null)
+            {
+                return null;
+            }
+
+            if (content is UI.Views.SettingsView)
+            {
+                return NavigationRoutes.Settings;
+            }
+
+            if (content is UI.Views.DebugView)
+            {
+                return NavigationRoutes.Debug;
+            }
+
+            if (content is UI.Views.ChatsView)
+            {
+                return NavigationRoutes.Chats;
+            }
+
+            return null;
+        }
+
         private static void NavigateCore(
             Frame frame,
             Dictionary<string, Type> routes,
@@ -101,15 +173,40 @@ namespace Unison.Uwp.Services
                 throw new ArgumentException("Unknown route: '" + destination + "'");
             }
 
-            // Same page already showing — still clear stack / pass parameter via remount only if needed.
+            // Same page already showing — still remount when clearing so logout → login → shell
+            // never reuses a NavigationCacheMode.Required instance with stale ViewModels.
             if (frame.Content != null && frame.Content.GetType() == pageType)
             {
                 if (clearStack)
                 {
+                    try
+                    {
+                        if (frame.Content is Page current)
+                        {
+                            current.NavigationCacheMode = NavigationCacheMode.Disabled;
+                        }
+                    }
+                    catch
+                    {
+                    }
+
+                    ClearFrameBackStack(frame);
+                    frame.Navigate(pageType, parameter);
                     ClearFrameBackStack(frame);
                 }
 
                 return;
+            }
+
+            try
+            {
+                if (clearStack && frame.Content is Page leaving)
+                {
+                    leaving.NavigationCacheMode = NavigationCacheMode.Disabled;
+                }
+            }
+            catch
+            {
             }
 
             frame.Navigate(pageType, parameter);

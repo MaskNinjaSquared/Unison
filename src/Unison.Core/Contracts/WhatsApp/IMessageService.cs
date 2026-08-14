@@ -29,6 +29,12 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>Downloads + decrypts an image on demand, caching the local URI on the message.</summary>
         Task<string> EnsureImageAvailableAsync(ChatMessage message);
 
+        /// <summary>Downloads + decrypts a video on demand, caching the local URI (+ poster) on the message.</summary>
+        Task<string> EnsureVideoAvailableAsync(ChatMessage message);
+
+        /// <summary>Downloads + decrypts a document on demand, caching the local URI on the message.</summary>
+        Task<string> EnsureDocumentAvailableAsync(ChatMessage message);
+
         /// <summary>Pins/unpins a message for the given chat (WhatsApp pin duration, default 7 days).</summary>
         Task SetMessagePinnedAsync(string chatJid, ChatMessage message, bool pin, uint durationSeconds = 604800);
 
@@ -65,9 +71,22 @@ namespace Unison.Core.Contracts.WhatsApp
             IEnumerable<Reaction> reactions,
             ChatMessageMapContext parentContext);
 
-        /// <summary>Business: apply buffered reaction envelopes after a history batch.</summary>
+        /// <summary>
+        /// Business: apply buffered reaction envelopes after a history batch.
+        /// </summary>
         IList<ChatMessage> ApplyBufferedReactions(
             IList<ChatMessage> chatMessages,
             IEnumerable<PendingReaction> pending);
+
+        /// <summary>
+        /// User action: wipe local chats/messages (auth stays) and re-pull history
+        /// (FULL_HISTORY / reconnect). Prefer this over calling WhatsAppService from VMs.
+        /// </summary>
+        Task ResyncConversationsAsync(System.IProgress<ConversationResyncPhase> progress = null);
+
+        /// <summary>
+        /// User action: ensure a chat row exists for <paramref name="jid"/> (new-chat flow).
+        /// </summary>
+        void StartNewChat(string jid);
     }
 }

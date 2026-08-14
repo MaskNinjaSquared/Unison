@@ -1,104 +1,37 @@
 using System;
-using Microsoft.Extensions.DependencyInjection;
-using Unison.Core.ViewModels;
-using Windows.ApplicationModel;
-using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Navigation;
+using Microsoft.Extensions.DependencyInjection;
+using Unison.Core.Constants;
+using Unison.Core.ViewModels;
 
 namespace Unison.Uwp.UI.Views
 {
-    /// <summary>
-    /// Settings surface hosted in the shell (UserControl View).
-    /// </summary>
-    public sealed partial class SettingsView : UserControl
+    public sealed partial class SettingsView : Page
     {
-        public event EventHandler LeaveRequested;
-
-        private SettingsViewModel _viewModel;
-        private bool _shellComboReady;
-
         public SettingsView()
         {
-            this.InitializeComponent();
-            this.Loaded += SettingsView_Loaded;
+            InitializeComponent();
+            NavigationCacheMode = NavigationCacheMode.Disabled;
         }
 
-        private SettingsViewModel ViewModel
+        protected override void OnNavigatedTo(NavigationEventArgs e)
         {
-            get
-            {
-                if (_viewModel == null && App.Services != null)
-                {
-                    _viewModel = App.Services.GetRequiredService<SettingsViewModel>();
-                    DataContext = _viewModel;
-                    _viewModel.LeaveRequested += (s, e) => LeaveRequested?.Invoke(this, e);
-                }
-                return _viewModel;
-            }
+            base.OnNavigatedTo(e);
+            SettingsPart.LeaveRequested -= SettingsPart_LeaveRequested;
+            SettingsPart.LeaveRequested += SettingsPart_LeaveRequested;
+            SettingsPart.Activate();
         }
 
-        private void SettingsView_Loaded(object sender, RoutedEventArgs e)
+        protected override void OnNavigatedFrom(NavigationEventArgs e)
         {
-            Activate();
+            base.OnNavigatedFrom(e);
+            SettingsPart.LeaveRequested -= SettingsPart_LeaveRequested;
         }
 
-        public void Activate()
+        private void SettingsPart_LeaveRequested(object sender, EventArgs e)
         {
-            string version = "?";
-            try
-            {
-                var v = Package.Current.Id.Version;
-                version = $"{v.Major}.{v.Minor}.{v.Build}.{v.Revision}";
-            }
-            catch
-            {
-            }
-
-            ViewModel?.Initialize(version);
-            SyncShellComboFromViewModel();
-        }
-
-        private void SyncShellComboFromViewModel()
-        {
-            if (ViewModel == null || ShellComboBox == null)
-            {
-                return;
-            }
-
-            _shellComboReady = false;
-            int index = ViewModel.SelectedShellIndex;
-            if (index < 0 || index >= ShellComboBox.Items.Count)
-            {
-                index = 0;
-            }
-
-            ShellComboBox.SelectedIndex = index;
-            _shellComboReady = true;
-        }
-
-        private void ShellComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (!_shellComboReady || ViewModel == null)
-            {
-                return;
-            }
-
-            int index = ShellComboBox.SelectedIndex;
-            if (index < 0)
-            {
-                return;
-            }
-
-            if (index == ViewModel.SelectedShellIndex)
-            {
-                return;
-            }
-
-            if (ViewModel.ChangeShellCommand != null &&
-                ViewModel.ChangeShellCommand.CanExecute(index))
-            {
-                ViewModel.ChangeShellCommand.Execute(index);
-            }
+            App.Services?.GetService<ShellViewModel>()?.NavigateToSectionCommand.Execute(NavigationRoutes.Chats);
         }
     }
 }

@@ -5,6 +5,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
+    x:Name="Root"
     d:DesignHeight="24"
     d:DesignWidth="280">
 
@@ -16,31 +17,47 @@
         </ResourceDictionary>
     </UserControl.Resources>
 
-    <Grid>
+    <!-- Group: Author | chip | body — author preferred; remainder ellipsizes continuously. -->
+    <Grid x:Name="RootLayout" SizeChanged="RootLayout_SizeChanged">
         <Grid.ColumnDefinitions>
-            <!-- Chip Auto; preview text * so CharacterEllipsis can constrain width -->
+            <ColumnDefinition Width="Auto"/>
             <ColumnDefinition Width="Auto"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
-        <ContentControl Grid.Column="0"
+        <TextBlock x:Name="AuthorBlock"
+                   Grid.Column="0"
+                   FontSize="16"
+                   Margin="0,0,4,0"
+                   Foreground="{Binding Foreground, ElementName=Root}"
+                   TextWrapping="NoWrap"
+                   TextTrimming="CharacterEllipsis"
+                   MaxLines="1"
+                   VerticalAlignment="Center"
+                   FontFamily="{StaticResource MainFont}"
+                   Text="{x:Bind Author, Mode=OneWay}"
+                   Visibility="{x:Bind Author, Mode=OneWay, Converter={StaticResource StringToVisibilityConverter}}"/>
+
+        <ContentControl x:Name="KindHost"
+                        Grid.Column="1"
                         VerticalAlignment="Center"
                         HorizontalContentAlignment="Left"
                         VerticalContentAlignment="Center"
+                        Foreground="{Binding Foreground, ElementName=Root}"
                         IsTabStop="False"
                         Content="{x:Bind Kind, Mode=OneWay}"
                         ContentTemplateSelector="{StaticResource ChatPreviewKindTemplateSelector}"/>
 
-        <TextBlock Grid.Column="1"
+        <TextBlock x:Name="PreviewTextBlock"
+                   Grid.Column="2"
                    FontSize="16"
                    Margin="5,0,0,0"
-                   Foreground="{StaticResource ChatListSecondaryTextBrush}"
+                   Foreground="{Binding Foreground, ElementName=Root}"
                    TextWrapping="NoWrap"
                    TextTrimming="CharacterEllipsis"
                    MaxLines="1"
                    VerticalAlignment="Center"
                    HorizontalAlignment="Stretch"
-                   FontFamily="{StaticResource MainFont}"
-                   Text="{x:Bind Text, Mode=OneWay}"/>
+                   FontFamily="{StaticResource MainFont}"/>
     </Grid>
 </UserControl>

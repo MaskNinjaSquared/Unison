@@ -38,6 +38,34 @@ namespace Unison.Core.Models
             set { _lastMessage = value; OnPropertyChanged(); }
         }
 
+        private string _lastMessageAuthor;
+        /// <summary>Group strip prefix ("Alice: "), empty for DMs.</summary>
+        public string LastMessageAuthor
+        {
+            get => _lastMessageAuthor;
+            set
+            {
+                if (_lastMessageAuthor == value) return;
+                _lastMessageAuthor = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasLastMessageAuthor));
+            }
+        }
+
+        public bool HasLastMessageAuthor => !string.IsNullOrEmpty(_lastMessageAuthor);
+
+        private System.Collections.Generic.List<string> _lastMessageMentionedJids;
+        /// <summary>JIDs mentioned in <see cref="LastMessage"/> (for @alias resolution in the list strip).</summary>
+        public System.Collections.Generic.List<string> LastMessageMentionedJids
+        {
+            get => _lastMessageMentionedJids;
+            set
+            {
+                _lastMessageMentionedJids = value;
+                OnPropertyChanged();
+            }
+        }
+
         private ChatPreviewKind _lastMessageKind;
         /// <summary>Category for the chat-list preview (text / image / video / sticker / voice).</summary>
         public ChatPreviewKind LastMessageKind
@@ -48,11 +76,7 @@ namespace Unison.Core.Models
                 if (_lastMessageKind == value) return;
                 _lastMessageKind = value;
                 OnPropertyChanged();
-                OnPropertyChanged(nameof(IsLastMessageImage));
-                OnPropertyChanged(nameof(IsLastMessageVideo));
-                OnPropertyChanged(nameof(IsLastMessageSticker));
-                OnPropertyChanged(nameof(IsLastMessageVoice));
-                OnPropertyChanged(nameof(IsLastMessageText));
+                RaiseLastMessageKindFlagsChanged();
             }
         }
 
@@ -84,8 +108,7 @@ namespace Unison.Core.Models
             {
                 _unreadCount = value;
                 OnPropertyChanged();
-                OnPropertyChanged(nameof(UnreadText));
-                OnPropertyChanged(nameof(HasUnread));
+                RaiseUnreadUiChanged();
             }
         }
 
@@ -133,9 +156,7 @@ namespace Unison.Core.Models
                 if (_kind == value) return;
                 _kind = value;
                 OnPropertyChanged();
-                OnPropertyChanged(nameof(IsGroup));
-                OnPropertyChanged(nameof(IsPersonal));
-                OnPropertyChanged(nameof(IsDirect));
+                RaiseChatKindFlagsChanged();
             }
         }
 
@@ -215,11 +236,39 @@ namespace Unison.Core.Models
             set { _isArchived = value; OnPropertyChanged(); }
         }
 
-        private bool _isPinned;
-        public bool IsPinned
+        private bool _isChatPinned;
+        /// <summary>WhatsApp chat-list pin (from history / app-state). JSON key kept as IsPinned.</summary>
+        [Newtonsoft.Json.JsonProperty("IsPinned")]
+        public bool IsChatPinned
         {
-            get => _isPinned;
-            set { _isPinned = value; OnPropertyChanged(); }
+            get => _isChatPinned;
+            set { _isChatPinned = value; OnPropertyChanged(); }
+        }
+
+        private ChatLocalStatus _localStatus = ChatLocalStatus.Active;
+        /// <summary>SQLite local lifecycle (Active / Deleted / Ignored). Mute uses <see cref="MutedUntil"/>.</summary>
+        public ChatLocalStatus LocalStatus
+        {
+            get => _localStatus;
+            set
+            {
+                if (_localStatus == value) return;
+                _localStatus = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private bool _isWidgetPinned;
+        /// <summary>Start live-tile / secondary tile pin (SQLite).</summary>
+        public bool IsWidgetPinned
+        {
+            get => _isWidgetPinned;
+            set
+            {
+                if (_isWidgetPinned == value) return;
+                _isWidgetPinned = value;
+                OnPropertyChanged();
+            }
         }
 
         private long? _pinnedTimestamp;
@@ -229,18 +278,114 @@ namespace Unison.Core.Models
             set { _pinnedTimestamp = value; OnPropertyChanged(); }
         }
 
-        private long? _muteEndTimestamp;
-        public long? MuteEndTimestamp
+        private long? _mutedUntil;
+        /// <summary>
+        /// Unix seconds mute deadline (local + WhatsApp). Null = not muted; forever ≈ year 2999.
+        /// JSON key kept as MuteEndTimestamp.
+        /// </summary>
+        [Newtonsoft.Json.JsonProperty("MuteEndTimestamp")]
+        public long? MutedUntil
         {
-            get => _muteEndTimestamp;
-            set { _muteEndTimestamp = value; OnPropertyChanged(); }
+            get => _mutedUntil;
+            set
+            {
+                if (_mutedUntil == value) return;
+                _mutedUntil = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(IsMutedLocally));
+            }
         }
+
+        /// <summary>Business logic over <see cref="MutedUntil"/>.</summary>
+        [Newtonsoft.Json.JsonIgnore]
+        public bool IsMutedLocally => Helpers.ChatMuteHelper.IsMuted(_mutedUntil);
+
+        private bool _isAnnounceOnly;
+        /// <summary>
+        /// Group "announcement" mode: only admins may send messages (child node
+        /// <c>announcement</c> in w:g2 group metadata). Ignored for non-groups.
+        /// </summary>
+        public bool IsAnnounceOnly
+        {
+            get => _isAnnounceOnly;
+            set
+            {
+                if (_isAnnounceOnly == value) return;
+                _isAnnounceOnly = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(IsGroupLockedForMessages));
+            }
+        }
+
+        private GroupParticipantRole _myGroupRole = GroupParticipantRole.Member;
+        /// <summary>
+        /// Logged-in user's role in this group (from metadata <c>participant admin=...</c>).
+        /// </summary>
+        public GroupParticipantRole MyGroupRole
+        {
+            get => _myGroupRole;
+            set
+            {
+                if (_myGroupRole == value) return;
+                _myGroupRole = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(IsGroupAdmin));
+                OnPropertyChanged(nameof(IsGroupLockedForMessages));
+            }
+        }
+
+        /// <summary>True when <see cref="MyGroupRole"/> is Admin or SuperAdmin.</summary>
+        [Newtonsoft.Json.JsonIgnore]
+        public bool IsGroupAdmin =>
+            _myGroupRole == GroupParticipantRole.Admin ||
+            _myGroupRole == GroupParticipantRole.SuperAdmin;
+
+        /// <summary>
+        /// True when this is a group in announce-only mode and the current user is not an admin —
+        /// i.e. the composer should be locked for sending.
+        /// </summary>
+        [Newtonsoft.Json.JsonIgnore]
+        public bool IsGroupLockedForMessages =>
+            IsGroup && _isAnnounceOnly && !IsGroupAdmin;
 
         public string Initial => !string.IsNullOrEmpty(Name) ? Name.Substring(0, 1).ToUpper() : "?";
 
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+
+        private void Raise(params string[] propertyNames)
+        {
+            if (propertyNames == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < propertyNames.Length; i++)
+            {
+                OnPropertyChanged(propertyNames[i]);
+            }
+        }
+
+        private void RaiseLastMessageKindFlagsChanged()
+        {
+            Raise(
+                nameof(IsLastMessageImage),
+                nameof(IsLastMessageVideo),
+                nameof(IsLastMessageSticker),
+                nameof(IsLastMessageVoice),
+                nameof(IsLastMessageText));
+        }
+
+        private void RaiseUnreadUiChanged()
+        {
+            Raise(nameof(UnreadText), nameof(HasUnread));
+        }
+
+        private void RaiseChatKindFlagsChanged()
+        {
+            Raise(nameof(IsGroup), nameof(IsPersonal), nameof(IsDirect), nameof(IsGroupLockedForMessages));
         }
     }
 }

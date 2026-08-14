@@ -125,7 +125,7 @@ namespace Unison.Uwp.Services
                 LocalizedStrings.Get("Common_OK"));
         }
 
-        public async Task<string> ShowNewChatDialogAsync(NewChatViewModel newChatVm)
+        public async Task<string> ShowNewChatDialogAsync(NewChatDialogViewModel newChatVm)
         {
             if (newChatVm == null)
             {
@@ -165,6 +165,31 @@ namespace Unison.Uwp.Services
             {
                 System.Diagnostics.Debug.WriteLine("[DialogService] ShowImageSendPreviewAsync: " + ex.Message);
                 return false;
+            }
+        }
+
+        public async Task ShowQrFullscreenAsync(string qrData)
+        {
+            if (string.IsNullOrEmpty(qrData))
+            {
+                return;
+            }
+
+            try
+            {
+                var dialog = new QrCodeFullscreenDialog();
+                dialog.SetQrPayload(qrData);
+                await dialog.ShowAsync();
+            }
+            catch (System.Runtime.InteropServices.COMException ex)
+                when (ex.Message.Contains("single ContentDialog") ||
+                      ex.HResult == unchecked((int)0x80070057))
+            {
+                System.Diagnostics.Debug.WriteLine("[DialogService] Another dialog is already open (QR fullscreen).");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[DialogService] ShowQrFullscreenAsync: " + ex.Message);
             }
         }
     }

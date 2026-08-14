@@ -17,6 +17,12 @@ namespace Unison.Core.Constants
         public const string SocketBrokerTaskRegistrationMarker = "SocketBrokerTaskRegistrationMarker";
         public const string ReconnectToastActive = "ReconnectToastActive";
 
+        /// <summary>
+        /// Blocks the background “Unison desconectado” toast (no linked account / logout in progress).
+        /// Same key as Unison.Background BackgroundToastPresenter.
+        /// </summary>
+        public const string SuppressReconnectToast = "UnisonSuppressReconnectToast";
+
         /// <summary>Toast notifications for incoming messages (foreground).</summary>
         public const string NotificationsEnabled = "NotificationsEnabled";
 
@@ -52,10 +58,21 @@ namespace Unison.Core.Constants
         public const string MessageStoreForceHistoryRepair = "MessageStoreForceHistoryRepair";
 
         /// <summary>
+        /// Selected UI language (<see cref="AppLanguage"/> stored as int).
+        /// Default <see cref="AppLanguage.System"/> (follow OS, else English resources).
+        /// </summary>
+        public const string SelectedLanguage = "SelectedLanguage";
+
+        /// <summary>
         /// When true, invalid session (401/revoked) clears local auth and returns to QR.
         /// Off by default — safer against false positives on flaky Mobile reconnects.
         /// </summary>
         public const string AutoUnlinkOnLogoutEnabled = "AutoUnlinkOnLogoutEnabled";
+
+        /// <summary>
+        /// Chat list column width in side-by-side (WideBoth) layout, in effective pixels.
+        /// </summary>
+        public const string ChatListPaneWidth = "ChatListPaneWidth";
 
         public static IReadOnlyDictionary<string, object> Defaults { get; } =
             new Dictionary<string, object>
@@ -73,9 +90,11 @@ namespace Unison.Core.Constants
                 { LocationKeepAliveEnabled, false },
                 { AutoUnlinkOnLogoutEnabled, false },
                 { SelectedShell, (int)AppShell.Unison },
+                { SelectedLanguage, (int)AppLanguage.System },
                 { PendingShellAppliedToast, false },
                 { MessageStoreSyncId, "" },
-                { MessageStoreForceHistoryRepair, false }
+                { MessageStoreForceHistoryRepair, false },
+                { ChatListPaneWidth, ChatPaneLayoutConstants.DefaultListWidth }
             };
     }
 }

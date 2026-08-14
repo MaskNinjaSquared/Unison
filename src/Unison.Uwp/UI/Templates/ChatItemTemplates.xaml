@@ -7,16 +7,63 @@
     xmlns:controls="using:Unison.Uwp.UI.Controls">
 
     <DataTemplate x:Key="ChatItemTemplate" x:DataType="models:ChatItem">
+        <!-- ContextFlyout (Imgur): right-click + long-press on Mobile without FlyoutBase.ShowAt(element) [1809+]. -->
         <Grid Height="76" Padding="12,0" Background="Transparent">
+            <Grid.ContextFlyout>
+                <MenuFlyout MenuFlyoutPresenterStyle="{StaticResource ModernMenuFlyoutStyle}"
+                            Opening="ChatContextFlyout_Opening">
+                    <MenuFlyoutItem Tag="widgetPin"
+                                   x:Uid="ChatDetail_PinToStart"
+                                   Text="Pin to Start"
+                                   Style="{StaticResource ModernMenuFlyoutItemStyle}"
+                                   Click="PinToStart_Click">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE718;"/>
+                        </MenuFlyoutItem.Icon>
+                    </MenuFlyoutItem>
+                    <MenuFlyoutSubItem Tag="localMuteSub"
+                                      x:Uid="ChatDetail_MuteNotifications"
+                                      Text="Mute notifications">
+                        <MenuFlyoutSubItem.Icon>
+                            <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE74F;"/>
+                        </MenuFlyoutSubItem.Icon>
+                        <MenuFlyoutItem Tag="mute8h"
+                                       x:Uid="ChatDetail_MuteFor8Hours"
+                                       Text="8 hours"
+                                       Style="{StaticResource ModernMenuFlyoutItemStyle}"
+                                       Click="MuteDuration_Click"/>
+                        <MenuFlyoutItem Tag="mute1w"
+                                       x:Uid="ChatDetail_MuteFor1Week"
+                                       Text="1 week"
+                                       Style="{StaticResource ModernMenuFlyoutItemStyle}"
+                                       Click="MuteDuration_Click"/>
+                        <MenuFlyoutItem Tag="muteForever"
+                                       x:Uid="ChatDetail_MuteForever"
+                                       Text="Always"
+                                       Style="{StaticResource ModernMenuFlyoutItemStyle}"
+                                       Click="MuteDuration_Click"/>
+                    </MenuFlyoutSubItem>
+                    <MenuFlyoutItem Tag="unmute"
+                                   x:Uid="ChatDetail_UnmuteNotifications"
+                                   Text="Unmute notifications"
+                                   Style="{StaticResource ModernMenuFlyoutItemStyle}"
+                                   Visibility="Collapsed"
+                                   Click="Unmute_Click">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE74F;"/>
+                        </MenuFlyoutItem.Icon>
+                    </MenuFlyoutItem>
+                </MenuFlyout>
+            </Grid.ContextFlyout>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="56"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
-            <!-- Avatar with contact/group fallback under photo -->
             <controls:ChatAvatarControl Width="48" Height="48"
                                         Size="48"
+                                        ShowBorder="True"
                                         HorizontalAlignment="Left"
                                         VerticalAlignment="Center"
                                         AvatarUrl="{x:Bind AvatarUrl, Mode=OneWay}"
@@ -30,7 +77,6 @@
                 <TextBlock Grid.Row="0"
                            Text="{x:Bind views:ChatListView.GetChatDisplayName(Name, Kind), Mode=OneWay}"
                            FontSize="18"
-                           Foreground="{StaticResource WhatsAppTextHighBrush}"
                            FontFamily="{StaticResource MainFontSemibold}"
                            FontWeight="SemiBold"
                            TextWrapping="NoWrap"
@@ -38,31 +84,46 @@
                 <controls:ChatListPreviewStrip Grid.Row="1"
                                                Margin="0,4,0,0"
                                                Kind="{x:Bind LastMessageKind, Mode=OneWay}"
-                                               Text="{x:Bind LastMessage, Mode=OneWay}"/>
+                                               Author="{x:Bind LastMessageAuthor, Mode=OneWay}"
+                                               Text="{x:Bind LastMessage, Mode=OneWay}"
+                                               MentionedJids="{x:Bind LastMessageMentionedJids, Mode=OneWay}"/>
             </Grid>
 
             <StackPanel Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,14,0,0">
                 <TextBlock Text="{x:Bind LastMessageTimestampUtc, Mode=OneWay, Converter={StaticResource RelativeTimestampConverter}}"
                            FontSize="12"
-                           Foreground="{StaticResource ChatListSecondaryTextBrush}"
+                           Opacity="0.85"
                            HorizontalAlignment="Right"
                            FontFamily="{StaticResource MainFont}"
                            Visibility="{x:Bind HasUnread, Mode=OneWay, Converter={StaticResource InvertedBooleanToVisibilityConverter}}"/>
                 <TextBlock Text="{x:Bind LastMessageTimestampUtc, Mode=OneWay, Converter={StaticResource RelativeTimestampConverter}}"
                            FontSize="12"
-                           Foreground="{StaticResource ChatListUnreadBadgeBrush}"
+                           Foreground="{ThemeResource ChatListUnreadBadgeBrush}"
                            FontWeight="SemiBold"
                            HorizontalAlignment="Right"
                            FontFamily="{StaticResource MainFontSemibold}"
                            Visibility="{x:Bind HasUnread, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                <FontIcon Glyph="&#xE718;"
-                          FontFamily="{StaticResource IconFont}"
-                          FontSize="14"
-                          Foreground="{StaticResource ChatListSecondaryTextBrush}"
-                          Margin="0,5,1,0"
-                          HorizontalAlignment="Right"
-                          Visibility="{x:Bind IsPinned, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                <Border Background="{StaticResource ChatListUnreadBadgeBrush}"
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,5,1,0">
+                    <!-- Start live tile (widget) | mute | WhatsApp list pin -->
+                    <FontIcon Glyph="&#xECA5;"
+                              FontFamily="{StaticResource IconFont}"
+                              FontSize="14"
+                              Margin="0,0,6,0"
+                              Opacity="0.85"
+                              Visibility="{x:Bind IsWidgetPinned, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                    <FontIcon Glyph="&#xE74F;"
+                              FontFamily="{StaticResource IconFont}"
+                              FontSize="14"
+                              Margin="0,0,6,0"
+                              Opacity="0.85"
+                              Visibility="{x:Bind IsMutedLocally, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                    <FontIcon Glyph="&#xE718;"
+                              FontFamily="{StaticResource IconFont}"
+                              FontSize="14"
+                              Opacity="0.85"
+                              Visibility="{x:Bind IsChatPinned, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                </StackPanel>
+                <Border Background="{ThemeResource ChatListUnreadBadgeBrush}"
                         CornerRadius="10"
                         MinWidth="20"
                         Height="20"
@@ -70,7 +131,7 @@
                         HorizontalAlignment="Right"
                         Visibility="{x:Bind HasUnread, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <TextBlock Text="{x:Bind UnreadText, Mode=OneWay}"
-                               Foreground="{StaticResource ChatListUnreadBadgeForegroundBrush}"
+                               Foreground="{ThemeResource ChatListUnreadBadgeForegroundBrush}"
                                FontSize="11"
                                FontWeight="SemiBold"
                                Margin="6,0,6,0"

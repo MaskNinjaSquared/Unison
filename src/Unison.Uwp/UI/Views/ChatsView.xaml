@@ -1,0 +1,94 @@
+<Page
+    x:Class="Unison.Uwp.UI.Views.ChatsView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:views="using:Unison.Uwp.UI.Views"
+    Background="{ThemeResource WhatsAppBackgroundBrush}">
+
+    <Grid x:Name="RootContentGrid"
+          Background="{ThemeResource WhatsAppBackgroundBrush}"
+          SizeChanged="RootContentGrid_SizeChanged">
+        <!-- ChatPaneStates: pane modes (not LayoutStates Minimal/Extended/ExtendedWide). -->
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="ChatPaneStates">
+                <VisualState x:Name="WideBoth">
+                    <VisualState.Setters>
+                        <!-- Geometry: ChatPaneLayoutConstants (min/max/splitter). -->
+                        <Setter Target="Column0.MinWidth" Value="280"/>
+                        <Setter Target="Column0.MaxWidth" Value="720"/>
+                        <Setter Target="Column1.Width" Value="*"/>
+                        <Setter Target="Column1.MinWidth" Value="280"/>
+                        <Setter Target="ChatListPart.Visibility" Value="Visible"/>
+                        <Setter Target="ChatDetailPart.Visibility" Value="Visible"/>
+                        <Setter Target="PaneSplitter.Visibility" Value="Visible"/>
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="NarrowList">
+                    <VisualState.Setters>
+                        <Setter Target="Column0.Width" Value="*"/>
+                        <Setter Target="Column0.MinWidth" Value="0"/>
+                        <Setter Target="Column0.MaxWidth" Value="10000"/>
+                        <Setter Target="Column1.Width" Value="0"/>
+                        <Setter Target="Column1.MinWidth" Value="0"/>
+                        <Setter Target="ChatListPart.Visibility" Value="Visible"/>
+                        <Setter Target="ChatDetailPart.Visibility" Value="Collapsed"/>
+                        <Setter Target="PaneSplitter.Visibility" Value="Collapsed"/>
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="NarrowDetail">
+                    <VisualState.Setters>
+                        <Setter Target="Column0.Width" Value="0"/>
+                        <Setter Target="Column0.MinWidth" Value="0"/>
+                        <Setter Target="Column0.MaxWidth" Value="10000"/>
+                        <Setter Target="Column1.Width" Value="*"/>
+                        <Setter Target="Column1.MinWidth" Value="0"/>
+                        <Setter Target="ChatListPart.Visibility" Value="Collapsed"/>
+                        <Setter Target="ChatDetailPart.Visibility" Value="Visible"/>
+                        <Setter Target="PaneSplitter.Visibility" Value="Collapsed"/>
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition x:Name="Column0" Width="380" MinWidth="280" MaxWidth="720"/>
+            <ColumnDefinition x:Name="Column1" Width="*" MinWidth="280"/>
+        </Grid.ColumnDefinitions>
+
+        <views:ChatListView x:Name="ChatListPart"
+                            MenuClicked="ChatListPart_MenuClicked"
+                            ChatSelected="ChatListPart_ChatSelected"/>
+        <views:ChatDetailView x:Name="ChatDetailPart" Grid.Column="1"/>
+
+        <!-- Side-by-side resize grip (ChatPaneLayoutConstants.SplitterWidth / Overlap*). -->
+        <Border x:Name="PaneSplitter"
+                Grid.ColumnSpan="2"
+                Width="10"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Stretch"
+                Background="Transparent"
+                Visibility="Collapsed"
+                ManipulationMode="None"
+                PointerEntered="PaneSplitter_PointerEntered"
+                PointerExited="PaneSplitter_PointerExited"
+                PointerPressed="PaneSplitter_PointerPressed"
+                PointerMoved="PaneSplitter_PointerMoved"
+                PointerReleased="PaneSplitter_PointerReleased"
+                PointerCaptureLost="PaneSplitter_PointerCaptureLost">
+            <Border x:Name="SplitterChrome"
+                    Background="{ThemeResource ChatPaneSplitterBackgroundBrush}"
+                    Opacity="0"
+                    IsHitTestVisible="False">
+                <StackPanel VerticalAlignment="Center"
+                            HorizontalAlignment="Center">
+                    <Ellipse Width="3" Height="3" Margin="0,2"
+                             Fill="{ThemeResource ChatPaneSplitterGripBrush}"/>
+                    <Ellipse Width="3" Height="3" Margin="0,2"
+                             Fill="{ThemeResource ChatPaneSplitterGripBrush}"/>
+                    <Ellipse Width="3" Height="3" Margin="0,2"
+                             Fill="{ThemeResource ChatPaneSplitterGripBrush}"/>
+                </StackPanel>
+            </Border>
+        </Border>
+    </Grid>
+</Page>

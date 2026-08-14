@@ -39,6 +39,12 @@ namespace Unison.Core.Contracts
         Task<List<ChatItem>> RecoverChatsFromMessageFilesAsync();
         Task WipeAllDataAsync();
 
+        /// <summary>
+        /// Clears chats/messages on disk (epoch rotate) while preserving contact-name sidecars.
+        /// Does not touch WhatsApp auth.
+        /// </summary>
+        Task WipeChatsAndMessagesAsync();
+
         Task SaveContactNamesAsync(Dictionary<string, string> allContactNames, IEnumerable<string> chatJids);
         Task<Dictionary<string, string>> LoadContactNamesAsync();
         Task SavePhoneContactNamesAsync(Dictionary<string, string> allPhoneNames, IEnumerable<string> chatJids);

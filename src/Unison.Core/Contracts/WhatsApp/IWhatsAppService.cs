@@ -55,6 +55,14 @@ namespace Unison.Core.Contracts.WhatsApp
         Task ResumeAsync();
         Task<bool> IsRegisteredAsync();
         Task ClearSessionAsync();
+
+        /// <summary>
+        /// Deletes local chats + messages and requests history sync again.
+        /// Keeps WhatsApp auth/session linked.
+        /// Prefer <see cref="IMessageService.ResyncConversationsAsync"/> from ViewModels.
+        /// </summary>
+        Task ResyncConversationsAsync(System.IProgress<Models.ConversationResyncPhase> progress = null);
+
         void Disconnect();
 
         /// <summary>
@@ -82,6 +90,7 @@ namespace Unison.Core.Contracts.WhatsApp
 
         int GetTotalUnreadCount();
 
+        /// <summary>Prefer <see cref="IContactService.RefreshContactNamesAsync"/> from ViewModels.</summary>
         Task RefreshContactNamesAsync(bool includeGroups, bool force);
         string GetCanonicalJid(string jid);
         string ResolveDisplayName(string jid, string context);
@@ -94,6 +103,12 @@ namespace Unison.Core.Contracts.WhatsApp
 
         /// <summary>Queries metadata for group chats whose display name is still unresolved.</summary>
         Task QueryUnresolvedGroupMetadataAsync(int limit = 25);
+
+        /// <summary>
+        /// Refreshes group announce-only + current user's admin rank from w:g2 metadata
+        /// and applies it to the matching <see cref="ChatItem"/> (for composer lock UI).
+        /// </summary>
+        Task RefreshGroupSendPermissionsAsync(string groupJid);
 
         /// <summary>True while a reconnect/history replay drain is in progress; background refreshes should back off.</summary>
         bool IsReplayDrainActive { get; }
@@ -140,7 +155,10 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>Subscribes to presence for a 1:1 JID when the socket is connected; no-op otherwise.</summary>
         Task PresenceSubscribeAsync(string jid);
 
+        /// <summary>Prefer <see cref="IMessageService.StartNewChat"/> from ViewModels.</summary>
         void StartNewChat(string jid);
+
+        /// <summary>Prefer <see cref="IContactService.SearchContactAsync"/> from ViewModels.</summary>
         Task<string> SearchContactAsync(string phone);
 
         Task<List<ChatMessage>> LoadMessagesForChatAsync(string jid);
@@ -157,6 +175,12 @@ namespace Unison.Core.Contracts.WhatsApp
 
         /// <summary>Downloads + decrypts an image on demand, caching the local URI on the message.</summary>
         Task<string> EnsureImageAvailableAsync(ChatMessage message);
+
+        /// <summary>Downloads + decrypts a video on demand, caching the local URI (+ poster) on the message.</summary>
+        Task<string> EnsureVideoAvailableAsync(ChatMessage message);
+
+        /// <summary>Downloads + decrypts a document on demand, caching the local URI on the message.</summary>
+        Task<string> EnsureDocumentAvailableAsync(ChatMessage message);
 
         Task SetMessagePinnedAsync(string chatJid, ChatMessage message, bool pin, uint durationSeconds = 604800);
 

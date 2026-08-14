@@ -1,4 +1,5 @@
 using System;
+using Newtonsoft.Json;
 using Windows.Data.Xml.Dom;
 using Windows.Storage;
 using Windows.UI.Notifications;
@@ -29,6 +30,8 @@ namespace Unison.Background
             "ms-appx:///Assets/Toast/avatar_contact.png";
         public const string GroupAvatarPlaceholder =
             "ms-appx:///Assets/Toast/avatar_group.png";
+        // PNGs regenerated from ChatAvatarControl fallbacks via scripts/generate_toast_avatars.ps1
+        // (contact: Segoe Fluent Icons U+EA8C; group: Path Data; dark AvatarFallback* brushes).
 
         public static BackgroundNotificationContent ResolveRealMessage(
             string chatJid,
@@ -39,7 +42,7 @@ namespace Unison.Background
             string avatarUrl = null)
         {
             string safeChatName = string.IsNullOrWhiteSpace(chatName)
-                ? BackgroundStrings.Get("Toast_NewMessageFallback", "Nova mensagem")
+                ? BackgroundStrings.Get("Toast_NewMessageFallback", "New message")
                 : chatName.Trim();
             string safeSender = string.IsNullOrWhiteSpace(senderName)
                 ? string.Empty
@@ -137,7 +140,7 @@ namespace Unison.Background
 
             if (string.IsNullOrWhiteSpace(value))
             {
-                value = BackgroundStrings.Get("Toast_MediaPlaceholder", "[Mídia]");
+                value = BackgroundStrings.Get("Toast_MediaPlaceholder", "[Media]");
             }
 
             if (value.Length > 180)
@@ -150,7 +153,7 @@ namespace Unison.Background
 
         /// <summary>
         /// Recognizes FG English tags (<c>[Image]</c>) and BG localized tags
-        /// (<c>[Foto]</c> / <c>[Figurinha]</c>) from preview extractors.
+        /// (<c>[Image]</c> / <c>[Sticker]</c>, plus legacy PT tags) from preview extractors.
         /// Longer tags first so <c>[Voice Message]</c> wins over <c>[Voice]</c>.
         /// </summary>
         private static bool TryConsumeMediaTag(ref string value, out string label)
@@ -167,59 +170,59 @@ namespace Unison.Background
                 new MediaTagRule(
                     new[] { "[Voice Message]", "[Mensagem de voz]" },
                     "ChatList_PreviewVoice",
-                    "Mensagem de voz"),
+                    "Voice message"),
                 new MediaTagRule(
                     new[] { "[Scheduled Call]", "[Chamada agendada]" },
                     null,
-                    "Chamada agendada"),
+                    "Scheduled call"),
                 new MediaTagRule(
                     new[] { "[Image]", "[Foto]" },
                     "ChatList_PreviewPhoto",
-                    "Foto"),
+                    "Photo"),
                 new MediaTagRule(
                     new[] { "[Video]", "[Vídeo]" },
                     "ChatList_PreviewVideo",
-                    "Vídeo"),
+                    "Video"),
                 new MediaTagRule(
                     new[] { "[Sticker]", "[Figurinha]", "[Adesivo]" },
                     "ChatList_PreviewSticker",
-                    "Adesivo"),
+                    "Sticker"),
                 new MediaTagRule(
                     new[] { "[Audio]", "[Áudio]" },
                     "ChatList_PreviewVoice",
-                    "Áudio"),
+                    "Audio"),
                 new MediaTagRule(
                     new[] { "[Document]", "[Documento]" },
                     "ChatList_PreviewDocument",
-                    "Documento"),
+                    "Document"),
                 new MediaTagRule(
                     new[] { "[Reaction]", "[Reação]" },
                     "ChatList_PreviewReaction",
-                    "Reação"),
+                    "Reaction"),
                 new MediaTagRule(
                     new[] { "[Contact]", "[Contato]" },
                     null,
-                    "Contato"),
+                    "Contact"),
                 new MediaTagRule(
                     new[] { "[Contacts]", "[Contatos]" },
                     null,
-                    "Contatos"),
+                    "Contacts"),
                 new MediaTagRule(
                     new[] { "[Location]", "[Localização]" },
                     null,
-                    "Localização"),
+                    "Location"),
                 new MediaTagRule(
                     new[] { "[Poll]", "[Enquete]" },
                     null,
-                    "Enquete"),
+                    "Poll"),
                 new MediaTagRule(
                     new[] { "[Call]", "[Chamada]" },
                     null,
-                    "Chamada"),
+                    "Call"),
                 new MediaTagRule(
                     new[] { "[Message]", "[Nova mensagem]" },
                     "Toast_NewMessageFallback",
-                    "Nova mensagem"),
+                    "New message"),
             };
 
             for (int i = 0; i < rules.Length; i++)
@@ -314,6 +317,17 @@ namespace Unison.Background
         private const string ReconnectToastTag = "connection";
         private const string ReconnectToastActiveSetting =
             "UnisonReconnectToastActive";
+        /// <summary>
+        /// Set while wiping / pairing so socket-close from ClearSession cannot toast
+        /// “Unison desconectado” with no active linked account.
+        /// </summary>
+        private const string SuppressReconnectToastSetting =
+            "UnisonSuppressReconnectToast";
+        /// <summary>Same key as LocalSettingsConstants.NotificationsEnabled.</summary>
+        private const string NotificationsEnabledSetting = "NotificationsEnabled";
+        /// <summary>Same container/key as AuthStore (WhatsAppAuth / auth_state).</summary>
+        private const string AuthContainerName = "WhatsAppAuth";
+        private const string AuthStateKey = "auth_state";
 
         public static bool ShowGenericFallback(out string error)
         {
@@ -350,6 +364,27 @@ namespace Unison.Background
                 return false;
             }
 
+            // Socket broker can fire while on Start/QR (no session) or with toasts off —
+            // "Unison desconectado / Abra o app" is only useful for a linked account with
+            // notifications enabled.
+            if (IsReconnectToastSuppressed())
+            {
+                error = "Suppressed";
+                return false;
+            }
+
+            if (!AreNotificationsEnabled())
+            {
+                error = "NotificationsDisabled";
+                return false;
+            }
+
+            if (!HasRegisteredSession())
+            {
+                error = "NotRegistered";
+                return false;
+            }
+
             bool shown = ShowTemplateToast(
                 BackgroundStrings.Get(
                     "Toast_DisconnectedTitle",
@@ -364,6 +399,66 @@ namespace Unison.Background
                 SetReconnectToastActive(true);
             }
             return shown;
+        }
+
+        private static bool AreNotificationsEnabled()
+        {
+            try
+            {
+                object value =
+                    ApplicationData.Current.LocalSettings.Values[
+                        NotificationsEnabledSetting];
+                if (value is bool)
+                {
+                    return (bool)value;
+                }
+
+                // Default matches LocalSettingsConstants (on until the user turns them off).
+                return true;
+            }
+            catch
+            {
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Lightweight peek of AuthStore JSON — Registered + MeId means linked session.
+        /// </summary>
+        private static bool HasRegisteredSession()
+        {
+            try
+            {
+                ApplicationDataContainer root =
+                    ApplicationData.Current.LocalSettings;
+                if (!root.Containers.ContainsKey(AuthContainerName))
+                {
+                    return false;
+                }
+
+                object raw =
+                    root.Containers[AuthContainerName].Values[AuthStateKey];
+                string json = raw as string;
+                if (string.IsNullOrWhiteSpace(json))
+                {
+                    return false;
+                }
+
+                var probe = JsonConvert.DeserializeObject<AuthSessionProbe>(json);
+                return probe != null &&
+                       probe.Registered &&
+                       !string.IsNullOrWhiteSpace(probe.MeId);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private sealed class AuthSessionProbe
+        {
+            public bool Registered { get; set; }
+            public string MeId { get; set; }
         }
 
         public static bool ClearReconnectRequired(out string error)
@@ -385,6 +480,21 @@ namespace Unison.Background
             finally
             {
                 SetReconnectToastActive(false);
+            }
+        }
+
+        private static bool IsReconnectToastSuppressed()
+        {
+            try
+            {
+                object value =
+                    ApplicationData.Current.LocalSettings.Values[
+                        SuppressReconnectToastSetting];
+                return value is bool && (bool)value;
+            }
+            catch
+            {
+                return false;
             }
         }
 

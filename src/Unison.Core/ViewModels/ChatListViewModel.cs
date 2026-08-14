@@ -18,10 +18,15 @@ namespace Unison.Core.ViewModels
     public class ChatListViewModel : Observable
     {
         private readonly IWhatsAppService _whatsAppService;
+        private readonly IMessageService _messageService;
+        private readonly IContactService _contactService;
+        private readonly IShortcutService _shortcutService;
+        private readonly IChatStore _chatStore;
         private readonly IDispatcher _dispatcher;
         private readonly IChatItemVmFactory _factory;
         private readonly IStringResources _strings;
         private readonly IStatusBarService _statusBar;
+        private readonly IDialogService _dialogService;
 
         private CancellationTokenSource _refreshCts;
 
@@ -33,39 +38,87 @@ namespace Unison.Core.ViewModels
         private string _lastSelectedChatJid;
         private ChatItemViewModel _selectedChat;
         private bool _attached;
+        private bool _menuActionBusy;
+        private readonly RelayCommand _refreshContactNamesCommand;
+        private readonly RelayCommand _resyncConversationsCommand;
+
+        /// <summary>
+        /// Builds a fresh <see cref="NewChatDialogViewModel"/> per New Chat dialog
+        /// (clean phone/error state; same pattern as <see cref="IChatItemVmFactory"/>).
+        /// </summary>
+        private readonly INewChatDialogViewModelFactory _newChatFactory;
 
         public ChatListViewModel(
             IWhatsAppService whatsAppService,
+            IMessageService messageService,
+            IContactService contactService,
+            IShortcutService shortcutService,
+            IChatStore chatStore,
             IDispatcher dispatcher,
             IChatItemVmFactory factory,
             IStringResources strings,
             IShellThemeService theme,
-            IStatusBarService statusBar)
+            IStatusBarService statusBar,
+            IDialogService dialogService,
+            INewChatDialogViewModelFactory newChatFactory)
         {
             _whatsAppService = whatsAppService;
+            _messageService = messageService ?? throw new ArgumentNullException(nameof(messageService));
+            _contactService = contactService ?? throw new ArgumentNullException(nameof(contactService));
+            _shortcutService = shortcutService ?? throw new ArgumentNullException(nameof(shortcutService));
+            _chatStore = chatStore;
             _dispatcher = dispatcher;
             _factory = factory;
             _strings = strings;
             _statusBar = statusBar;
+            _dialogService = dialogService;
+            _newChatFactory = newChatFactory ?? throw new ArgumentNullException(nameof(newChatFactory));
 
             // Strategy-driven: WhatsApp always inline; Unison Mobile uses StatusBar.
             DisplaySync = theme == null || theme.DisplaySyncInChatList;
 
             VisibleChats = new ObservableCollection<ChatItemViewModel>();
 
-            RefreshContactNamesCommand = new RelayCommand(async () =>
-            {
-                await PresentSyncStatusAsync(_strings.Get("ChatList_RefreshingNames"), visible: true);
-                try
-                {
-                    await _whatsAppService.RefreshContactNamesAsync(includeGroups: false, force: true);
-                }
-                finally
-                {
-                    RefreshVisibleChats();
-                }
-            });
+            _refreshContactNamesCommand = new RelayCommand(
+                () => _ = RefreshContactNamesAsync(),
+                CanExecuteMenuAction);
+            _resyncConversationsCommand = new RelayCommand(
+                () => _ = ResyncConversationsAsync(),
+                CanExecuteMenuAction);
+
+            RefreshContactNamesCommand = _refreshContactNamesCommand;
+            ResyncConversationsCommand = _resyncConversationsCommand;
+            PinChatToStartCommand = new RelayCommand<ChatItem>(
+                chat => _ = ToggleWidgetPinAsync(chat),
+                chat => chat != null && !string.IsNullOrWhiteSpace(chat.JID));
+            SetLocalMuteCommand = new RelayCommand<ChatMuteRequest>(
+                request => _ = SetLocalMuteAsync(request),
+                request => request?.Chat != null &&
+                           !string.IsNullOrWhiteSpace(request.Chat.JID) &&
+                           _chatStore != null);
+            OpenMenuCommand = new RelayCommand(() => MenuRequested?.Invoke(this, EventArgs.Empty));
+            NewChatCommand = new RelayCommand(() => _ = StartNewChatAsync());
+
+            // Keep CanExecute in sync even when Attach() is not used (hybrid list UI).
+            _whatsAppService.OnInitialSyncProgress += (s, e) =>
+                _ = _dispatcher.RunAsync(RaiseMenuCommandsCanExecuteChanged);
         }
+
+        /// <summary>
+        /// Raised just before local chats are wiped (code-behind clears selection / visible list).
+        /// </summary>
+        public event EventHandler BeforeLocalConversationsCleared;
+
+        /// <summary>
+        /// Raised after a menu action that mutated chats (code-behind refreshes its ItemsSource).
+        /// </summary>
+        public event EventHandler AfterMenuActionCompleted;
+
+        /// <summary>Header "…" menu — shell listens via ChatListView.MenuClicked.</summary>
+        public event EventHandler MenuRequested;
+
+        /// <summary>New-chat flow resolved a JID; hybrid list should select that chat.</summary>
+        public event EventHandler<string> OpenChatRequested;
 
         /// <summary>
         /// Starts mirroring <see cref="IWhatsAppService.Chats"/> into <see cref="VisibleChats"/>.
@@ -107,8 +160,11 @@ namespace Unison.Core.ViewModels
             get => _searchQuery;
             set
             {
-                if (Set(ref _searchQuery, value))
+                // Hybrid ChatListView still owns filtering; only refresh VM list when Attach()d.
+                if (Set(ref _searchQuery, value) && _attached)
+                {
                     RefreshVisibleChats();
+                }
             }
         }
 
@@ -124,7 +180,9 @@ namespace Unison.Core.ViewModels
             set
             {
                 if (Set(ref _isSyncStatusVisible, value))
-                    OnPropertyChanged(nameof(ShowSyncStatusInUi));
+                {
+                    RaiseSyncStatusUiChanged();
+                }
             }
         }
 
@@ -134,7 +192,224 @@ namespace Unison.Core.ViewModels
             set => Set(ref _isLoadingOverlayVisible, value);
         }
 
+        /// <summary>Re-queries contact / LID display names from the server for the chat list.</summary>
         public ICommand RefreshContactNamesCommand { get; }
+
+        /// <summary>Wipes local chats/messages (keeps auth) and re-pulls conversation history.</summary>
+        public ICommand ResyncConversationsCommand { get; }
+
+        /// <summary>Pins/unpins the chat Start live tile (<see cref="ChatItem.IsWidgetPinned"/>).</summary>
+        public ICommand PinChatToStartCommand { get; }
+
+        /// <summary>Sets or clears local/unified <see cref="ChatItem.MutedUntil"/>.</summary>
+        public ICommand SetLocalMuteCommand { get; }
+
+        /// <summary>Raises <see cref="MenuRequested"/> so the shell opens settings / overflow.</summary>
+        public ICommand OpenMenuCommand { get; }
+
+        /// <summary>Opens the new-chat dialog, creates the chat if needed, then raises <see cref="OpenChatRequested"/>.</summary>
+        public ICommand NewChatCommand { get; }
+
+        private async Task StartNewChatAsync()
+        {
+            string jid = await _dialogService.ShowNewChatDialogAsync(_newChatFactory.Create());
+            if (string.IsNullOrEmpty(jid))
+            {
+                return;
+            }
+
+            bool exists = false;
+            foreach (ChatItem chat in _whatsAppService.Chats)
+            {
+                if (chat != null && string.Equals(chat.JID, jid, StringComparison.OrdinalIgnoreCase))
+                {
+                    exists = true;
+                    break;
+                }
+            }
+
+            if (!exists)
+            {
+                _messageService.StartNewChat(jid);
+                await Task.Delay(100);
+            }
+
+            OpenChatRequested?.Invoke(this, jid);
+        }
+
+        private async Task ToggleWidgetPinAsync(ChatItem chat)
+        {
+            if (chat == null || string.IsNullOrWhiteSpace(chat.JID) || _shortcutService == null || _chatStore == null)
+            {
+                return;
+            }
+
+            try
+            {
+                _chatStore.ApplyTo(chat);
+                bool nextPinned = !chat.IsWidgetPinned;
+                bool ok = nextPinned
+                    ? await _shortcutService.PinChatAsync(chat)
+                    : await _shortcutService.UnpinChatAsync(chat.JID);
+
+                if (!ok && nextPinned)
+                {
+                    return;
+                }
+
+                chat.IsWidgetPinned = nextPinned;
+                await _chatStore.UpsertAsync(
+                    chat.JID,
+                    chat.LocalStatus,
+                    chat.IsWidgetPinned,
+                    chat.IsChatPinned,
+                    chat.MutedUntil);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[ChatListViewModel] ToggleWidgetPin failed: " + ex.Message);
+            }
+        }
+
+        private async Task SetLocalMuteAsync(ChatMuteRequest request)
+        {
+            if (request?.Chat == null || string.IsNullOrWhiteSpace(request.Chat.JID) || _chatStore == null)
+            {
+                return;
+            }
+
+            ChatItem chat = request.Chat;
+            try
+            {
+                _chatStore.ApplyTo(chat);
+                chat.MutedUntil = request.MutedUntil;
+                await _chatStore.UpsertAsync(
+                    chat.JID,
+                    chat.LocalStatus,
+                    chat.IsWidgetPinned,
+                    chat.IsChatPinned,
+                    chat.MutedUntil);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[ChatListViewModel] SetLocalMute failed: " + ex.Message);
+            }
+        }
+
+        /// <summary>True while user resync owns the sync status ring (ignore transient OnSyncStatus clears).</summary>
+        public bool IsConversationResyncInProgress => _awaitingResyncHistory;
+
+        private bool CanExecuteMenuAction()
+        {
+            return !_menuActionBusy &&
+                   _whatsAppService != null &&
+                   !_whatsAppService.IsInitialSyncSafeMode;
+        }
+
+        private void RaiseMenuCommandsCanExecuteChanged()
+        {
+            _refreshContactNamesCommand?.RaiseCanExecuteChanged();
+            _resyncConversationsCommand?.RaiseCanExecuteChanged();
+        }
+
+        private void RaiseSyncStatusUiChanged() =>
+            OnPropertyChanged(nameof(ShowSyncStatusInUi));
+
+        private async Task RefreshContactNamesAsync()
+        {
+            if (!CanExecuteMenuAction())
+            {
+                return;
+            }
+
+            _menuActionBusy = true;
+            RaiseMenuCommandsCanExecuteChanged();
+            await PresentSyncStatusAsync(
+                _strings.Get("ChatList_RefreshingNames", "Refreshing contact names..."),
+                visible: true);
+            try
+            {
+                await _contactService.RefreshContactNamesAsync(includeGroups: false, force: true);
+            }
+            finally
+            {
+                RefreshVisibleChats();
+                AfterMenuActionCompleted?.Invoke(this, EventArgs.Empty);
+                await PresentSyncStatusAsync(null, visible: false);
+                _menuActionBusy = false;
+                RaiseMenuCommandsCanExecuteChanged();
+            }
+        }
+
+        private bool _awaitingResyncHistory;
+
+        private async Task ResyncConversationsAsync()
+        {
+            if (!CanExecuteMenuAction())
+            {
+                return;
+            }
+
+            bool confirmed = await _dialogService.ShowConfirmAsync(
+                title: _strings.Get("ChatList_ResyncConversationsTitle", "Re-sync conversations?"),
+                content: _strings.Get(
+                    "ChatList_ResyncConversationsBody",
+                    "This deletes all local chats and messages, then downloads history again. Your WhatsApp link stays active."),
+                primaryButtonText: _strings.Get("ChatList_ResyncConversationsConfirm", "Re-sync"),
+                closeButtonText: _strings.Get("ChatList_ResyncConversationsCancel", "Cancel"));
+
+            if (!confirmed)
+            {
+                return;
+            }
+
+            _menuActionBusy = true;
+            RaiseMenuCommandsCanExecuteChanged();
+            _awaitingResyncHistory = true;
+            try
+            {
+                BeforeLocalConversationsCleared?.Invoke(this, EventArgs.Empty);
+
+                var progress = new Progress<ConversationResyncPhase>(phase =>
+                {
+                    _ = _dispatcher.RunAsync(() =>
+                    {
+                        switch (phase)
+                        {
+                            case ConversationResyncPhase.CleaningHistory:
+                                _ = PresentSyncStatusAsync(
+                                    _strings.Get("ChatList_ResyncCleaningHistory", "Cleaning history..."),
+                                    visible: true);
+                                break;
+                            case ConversationResyncPhase.PreparingConversations:
+                                _ = PresentSyncStatusAsync(
+                                    _strings.Get("ChatList_ResyncingConversations", "Re-syncing conversations..."),
+                                    visible: true);
+                                IsLoadingOverlayVisible = true;
+                                RefreshVisibleChats();
+                                AfterMenuActionCompleted?.Invoke(this, EventArgs.Empty);
+                                break;
+                        }
+                    });
+                });
+
+                await PresentSyncStatusAsync(
+                    _strings.Get("ChatList_ResyncCleaningHistory", "Cleaning history..."),
+                    visible: true);
+
+                await _messageService.ResyncConversationsAsync(progress);
+            }
+            finally
+            {
+                _awaitingResyncHistory = false;
+                RefreshVisibleChats();
+                AfterMenuActionCompleted?.Invoke(this, EventArgs.Empty);
+                await PresentSyncStatusAsync(null, visible: false);
+                IsLoadingOverlayVisible = false;
+                _menuActionBusy = false;
+                RaiseMenuCommandsCanExecuteChanged();
+            }
+        }
 
         /// <summary>
         /// Shared presentation: header UI when <see cref="DisplaySync"/>;
@@ -184,11 +459,40 @@ namespace Unison.Core.ViewModels
         private void SubscribeToServiceEvents()
         {
             _whatsAppService.OnConnectionUpdate += async (s, status) =>
-                await _dispatcher.RunAsync(() => { _ = PresentFromConnectionStatusAsync(status); });
+                await _dispatcher.RunAsync(() =>
+                {
+                    if (_awaitingResyncHistory)
+                    {
+                        // Still show reconnecting / syncing states while waiting for history.
+                        if (string.Equals(status, "reconnecting", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(status, "connecting", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(status, "open", StringComparison.OrdinalIgnoreCase))
+                        {
+                            _ = PresentFromConnectionStatusAsync(status);
+                        }
+
+                        return;
+                    }
+
+                    _ = PresentFromConnectionStatusAsync(status);
+                });
 
             _whatsAppService.OnSyncStatus += async (s, message) =>
                 await _dispatcher.RunAsync(() =>
                 {
+                    if (_awaitingResyncHistory)
+                    {
+                        // Surface service progress ("Re-syncing...", "Preparing...") instead of
+                        // freezing on the wipe banner until the wait completes.
+                        if (!string.IsNullOrEmpty(message) &&
+                            !string.Equals(message, "Saving chats...", StringComparison.Ordinal))
+                        {
+                            _ = PresentSyncStatusAsync(message, visible: true);
+                        }
+
+                        return;
+                    }
+
                     if (!string.IsNullOrEmpty(message))
                         _ = PresentSyncStatusAsync(message, visible: true);
                     else
@@ -243,22 +547,39 @@ namespace Unison.Core.ViewModels
         private void ChatItem_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
             var chat = sender as ChatItem;
-            if (chat == null) return;
-
-            if (e.PropertyName == nameof(ChatItem.Name) ||
-                e.PropertyName == nameof(ChatItem.LastMessage) ||
-                e.PropertyName == nameof(ChatItem.Timestamp) ||
-                e.PropertyName == nameof(ChatItem.AvatarUrl) ||
-                e.PropertyName == nameof(ChatItem.UnreadCount) ||
-                e.PropertyName == nameof(ChatItem.IsPinned))
+            if (chat == null)
             {
-                if (!string.IsNullOrWhiteSpace(SearchQuery) ||
-                    e.PropertyName == nameof(ChatItem.Timestamp) ||
-                    e.PropertyName == nameof(ChatItem.IsPinned))
-                {
-                    _ = _dispatcher.RunAsync(ScheduleRefreshVisibleChats);
-                }
+                return;
             }
+
+            if (!ShouldRefreshVisibleChats(e.PropertyName))
+            {
+                return;
+            }
+
+            _ = _dispatcher.RunAsync(ScheduleRefreshVisibleChats);
+        }
+
+        /// <summary>
+        /// Name/preview tweaks only re-filter while searching; pin/time always re-sort the list.
+        /// </summary>
+        private bool ShouldRefreshVisibleChats(string propertyName)
+        {
+            if (propertyName == nameof(ChatItem.Timestamp) ||
+                propertyName == nameof(ChatItem.IsChatPinned))
+            {
+                return true;
+            }
+
+            if (string.IsNullOrWhiteSpace(SearchQuery))
+            {
+                return false;
+            }
+
+            return propertyName == nameof(ChatItem.Name) ||
+                   propertyName == nameof(ChatItem.LastMessage) ||
+                   propertyName == nameof(ChatItem.AvatarUrl) ||
+                   propertyName == nameof(ChatItem.UnreadCount);
         }
 
         public void RefreshVisibleChats()

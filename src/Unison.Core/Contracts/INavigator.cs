@@ -15,7 +15,7 @@ namespace Unison.Core.Contracts
         bool CanGoBack { get; }
         void ClearBackStack();
 
-        /// <summary>Wire the SplitView content Frame (called by AppShell / MainPage).</summary>
+        /// <summary>Wire the SplitView content Frame (called by AppShell / MainView).</summary>
         void AttachShellFrame(object frame);
 
         void NavigateInShell(string destination, object parameter = null);
@@ -25,5 +25,17 @@ namespace Unison.Core.Contracts
 
         void GoBackInShell();
         bool CanGoBackInShell { get; }
+
+        /// <summary>Current shell content route (<see cref="Constants.NavigationRoutes"/>), or null.</summary>
+        string CurrentShellRoute { get; }
+
+        /// <summary>Raised after shell frame navigation (forward or back). Arg is <see cref="CurrentShellRoute"/>.</summary>
+        event System.EventHandler<string> ShellNavigated;
+
+        /// <summary>
+        /// Drop shell back/forward stacks and disable cache on the current shell page
+        /// so logout/login does not revive a stale Chats/Settings instance.
+        /// </summary>
+        void PurgeShellNavigation();
     }
 }

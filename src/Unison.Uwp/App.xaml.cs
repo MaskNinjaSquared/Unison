@@ -72,6 +72,15 @@ namespace Unison.Uwp
             RuntimeDiagnosticsService.Instance.Write("lifecycle", "app-constructor");
             try
             {
+                // Must run before InitializeComponent so ResourceLoader / x:Uid resolve correctly.
+                ApplyLanguageOverrideEarly();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[App] Early language: " + ex.Message);
+            }
+            try
+            {
                 this.InitializeComponent();
             }
             catch (Exception ex)
@@ -178,15 +187,20 @@ namespace Unison.Uwp
             services.AddSingleton<IMessageService, MessageService>();
             services.AddSingleton<IChatItemVmFactory, ChatItemVmFactory>();
             services.AddSingleton<IChatMessageVmFactory, ChatMessageVmFactory>();
+            services.AddSingleton<IChatDetailInfoViewModelFactory, ChatDetailInfoViewModelFactory>();
+            services.AddSingleton<INewChatDialogViewModelFactory, NewChatDialogViewModelFactory>();
             services.AddSingleton<IMessageStore, MessageStore>();
             services.AddSingleton<IPersonStore, PersonStore>();
+            services.AddSingleton<IChatStore, ChatStore>();
             services.AddSingleton<ILocalContactsService, LocalContactsService>();
             services.AddSingleton<IContactService, ContactService>();
             services.AddSingleton<ILiveTilesService>(_ => LiveTilesService.Instance);
+            services.AddSingleton<IShortcutService, ShortcutService>();
             services.AddSingleton<INotificationService>(sp =>
             {
                 var notifications = NotificationService.Instance;
                 notifications.AttachLiveTiles(sp.GetRequiredService<ILiveTilesService>());
+                notifications.AttachShortcuts(sp.GetRequiredService<IShortcutService>());
                 return notifications;
             });
             services.AddSingleton<IRuntimeDiagnostics>(_ => RuntimeDiagnosticsService.Instance);
@@ -195,6 +209,7 @@ namespace Unison.Uwp
             services.AddSingleton<IFilePicker, FilePickerService>();
             services.AddSingleton<IShareService, ShareService>();
             services.AddSingleton<IAudioRecordingService, AudioRecordingService>();
+            services.AddSingleton<IVoicePlaybackRoutingService, VoicePlaybackRoutingService>();
             services.AddSingleton<IReactionMapper, ReactionMapper>();
             services.AddSingleton<IChatMessageMapper, ChatMessageMapper>();
             services.AddSingleton<IStringResources, StringResourcesService>();
@@ -203,6 +218,7 @@ namespace Unison.Uwp
             services.AddSingleton<IStatusBarService, StatusBarService>();
             services.AddSingleton<ILocationKeepAliveService, LocationKeepAliveService>();
             services.AddSingleton<IShellThemeService, ShellThemeService>();
+            services.AddSingleton<IAppLanguageService, AppLanguageService>();
 
             services.AddTransient<LoginViewModel>();
             services.AddTransient<StartViewModel>();
@@ -210,7 +226,7 @@ namespace Unison.Uwp
             services.AddTransient<ChatListViewModel>();
             services.AddTransient<ChatDetailViewModel>();
             services.AddTransient<DebugViewModel>();
-            services.AddTransient<NewChatViewModel>();
+            services.AddTransient<NewChatDialogViewModel>();
             services.AddTransient<SettingsViewModel>();
 
             Services = services.BuildServiceProvider(validateScopes: true);
@@ -222,6 +238,7 @@ namespace Unison.Uwp
             whatsAppImpl.AttachConnectionService(Services.GetRequiredService<IConnectionService>());
             Services.GetRequiredService<IConnectionService>().AttachWhatsAppService(whatsApp);
             whatsAppImpl.AttachPersonStore(Services.GetRequiredService<IPersonStore>());
+            whatsAppImpl.AttachChatStore(Services.GetRequiredService<IChatStore>());
 #if DEBUG
             whatsAppImpl.AttachDebugSendService(Services.GetRequiredService<IDebugSendService>());
 #endif
@@ -246,6 +263,9 @@ namespace Unison.Uwp
 
             Frame rootFrame = EnsureRootFrame();
 
+            // PrimaryLanguageOverride from LocalSettings (ctor also applies early for x:Uid).
+            ReloadLanguageFromSettings();
+
             try
             {
                 Services.GetRequiredService<IShellThemeService>().ApplyFromSettings();
@@ -262,13 +282,15 @@ namespace Unison.Uwp
                 return;
             }
 
-            // BootPage is the fast loading surface (ProgressRing). Delayed one
-            // dispatcher turn so 512 MB phones paint the window before XAML nav.
+            // Title bar colors require an activated view; apply at window bootstrap
+            // (and again on the next dispatcher turns — the OS can reset caption chrome).
+            Window.Current.Activate();
+            ApplyWindowChromeBootstrap();
+
+            // Classic: empty frame → Boot once. Warm process keeps current page (Login/Shell).
+            // Do not remount Boot/Login for language — Mobile Exit + cold start handles that.
             if (rootFrame.Content == null)
             {
-                Window.Current.Activate();
-                ConfigureAppChrome();
-
                 var launchArguments = e.Arguments;
                 _ = rootFrame.Dispatcher.RunAsync(CoreDispatcherPriority.Low, () =>
                 {
@@ -277,7 +299,7 @@ namespace Unison.Uwp
                 return;
             }
 
-            Window.Current.Activate();
+            HandleActivationArguments(e.Arguments);
         }
 
         protected override void OnActivated(IActivatedEventArgs args)
@@ -299,19 +321,46 @@ namespace Unison.Uwp
 
                 var toastArgs = args as ToastNotificationActivatedEventArgs;
                 Frame rootFrame = EnsureRootFrame();
+                string toastArgument = toastArgs?.Argument ?? string.Empty;
 
-                // Cold toast: boot → InitializeAsync decides shell vs start.
-                // Already on a known root page: just activate (VM already owns surface).
+                RuntimeDiagnosticsService.Instance.Write(
+                    "lifecycle",
+                    "toast-activated",
+                    "argLength=" + toastArgument.Length +
+                    "; hasChat=" + (toastArgument.IndexOf("chat=", StringComparison.OrdinalIgnoreCase) >= 0));
+
                 if (rootFrame.Content == null || !IsKnownRootContent(rootFrame.Content))
                 {
-                    NavigateRootToBoot(toastArgs?.Argument ?? string.Empty);
+                    NavigateRootToBoot(toastArgument);
                 }
 
+                HandleActivationArguments(toastArgument);
+
                 Window.Current.Activate();
+                ApplyWindowChromeBootstrap();
                 return;
             }
 
             base.OnActivated(args);
+        }
+
+        /// <summary>Secondary tile / toast <c>chat=</c> deep link into an existing session.</summary>
+        private void HandleActivationArguments(string arguments)
+        {
+            if (string.IsNullOrWhiteSpace(arguments) || Services == null)
+            {
+                return;
+            }
+
+            try
+            {
+                var shell = Services.GetService<ShellViewModel>();
+                shell?.QueueOpenChatFromActivation(arguments);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[App] HandleActivationArguments: " + ex.Message);
+            }
         }
 
         /// <summary>Creates the root Frame and DI if needed.</summary>
@@ -334,7 +383,7 @@ namespace Unison.Uwp
         }
 
         /// <summary>
-        /// Entry route only — does not inspect session. BootPage + ShellViewModel decide.
+        /// Entry route only — does not inspect session. BootView + ShellViewModel decide.
         /// </summary>
         private void NavigateRootToBoot(object parameter = null)
         {
@@ -354,7 +403,7 @@ namespace Unison.Uwp
                 try
                 {
                     var frame = Window.Current.Content as Frame;
-                    frame?.Navigate(typeof(UI.Views.BootPage), parameter);
+                    frame?.Navigate(typeof(UI.Views.BootView), parameter);
                 }
                 catch (Exception fallbackEx)
                 {
@@ -365,10 +414,10 @@ namespace Unison.Uwp
 
         private static bool IsKnownRootContent(object content)
         {
-            return content is MainPage
-                || content is UI.Views.BootPage
-                || content is UI.Views.StartPage
-                || content is UI.Views.LoginPage;
+            return content is MainView
+                || content is UI.Views.BootView
+                || content is UI.Views.StartView
+                || content is UI.Views.LoginView;
         }
 
         private void EnsureWindowVisibilityTracking()
@@ -559,6 +608,7 @@ namespace Unison.Uwp
         private void OnLeavingBackground(object sender, LeavingBackgroundEventArgs e)
         {
             RuntimeDiagnosticsService.Instance.Write("lifecycle", "leaving-background");
+            ApplyWindowChromeBootstrap();
             _ = ResumeConnectionWhenVisibleAsync();
         }
 
@@ -617,6 +667,7 @@ namespace Unison.Uwp
             RuntimeDiagnosticsService.Instance.Write("lifecycle", "resuming-start");
             try
             {
+                ApplyWindowChromeBootstrap();
                 // Suspension intentionally closes the WebSocket. On Windows 10 Mobile
                 // OnLaunched is not called again when the process is resumed, so the
                 // connection must be restored explicitly.
@@ -635,6 +686,41 @@ namespace Unison.Uwp
                     ex);
                 System.Diagnostics.Debug.WriteLine($"[App] Resume reconnect failed: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// Re-reads selected language and applies PrimaryLanguageOverride (no UI remount).
+        /// </summary>
+        private void ReloadLanguageFromSettings()
+        {
+            try
+            {
+                if (Services != null)
+                {
+                    Services.GetRequiredService<IAppLanguageService>().ApplyFromSettings();
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[App] Apply language (DI): " + ex.Message);
+            }
+
+            try
+            {
+                ApplyLanguageOverrideEarly();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[App] Apply language (early): " + ex.Message);
+            }
+        }
+
+        private static void ApplyLanguageOverrideEarly()
+        {
+            int raw = Helpers.LocalSettingsAccess.Current.Get<int>(LocalSettingsConstants.SelectedLanguage);
+            var language = Core.Helpers.AppLanguageInfo.FromStored(raw);
+            AppLanguageService.ApplyOverride(language);
         }
 
         private static async Task ApplyLocationKeepAliveConfigAsync()
@@ -666,6 +752,33 @@ namespace Unison.Uwp
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine("[App] ConfigureAppChrome: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Applies title-bar (and mobile status-bar) colors during window bootstrap.
+        /// Must run after <see cref="Window.Activate"/> — setting ApplicationView.TitleBar
+        /// too early is ignored or overwritten by the OS on desktop.
+        /// </summary>
+        private static void ApplyWindowChromeBootstrap()
+        {
+            ConfigureAppChrome();
+
+            try
+            {
+                var dispatcher = Window.Current?.Dispatcher;
+                if (dispatcher == null)
+                {
+                    return;
+                }
+
+                // Re-apply after the first layout/paint pass; caption colors can reset once.
+                _ = dispatcher.RunAsync(CoreDispatcherPriority.Normal, ConfigureAppChrome);
+                _ = dispatcher.RunAsync(CoreDispatcherPriority.Low, ConfigureAppChrome);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[App] ApplyWindowChromeBootstrap: " + ex.Message);
             }
         }
 

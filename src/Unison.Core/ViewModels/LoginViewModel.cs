@@ -16,19 +16,10 @@ namespace Unison.Core.ViewModels
         /// <summary>How long we wait for OnQRCodeReceived after ConnectAsync.</summary>
         private const int QrWaitTimeoutMs = 45000;
 
-        /// <summary>WhatsApp session / connect / pairing handler.</summary>
         private readonly IWhatsAppService _whatsAppService;
-
-        /// <summary>Marshals event handlers onto the UI thread.</summary>
         private readonly IDispatcher _dispatcher;
-
-        /// <summary>Persistent / pairing diagnostic log.</summary>
         private readonly ISessionLogger _sessionLogger;
-
-        /// <summary>Content dialogs (phone prompt, code display, errors).</summary>
         private readonly IDialogService _dialogService;
-
-        /// <summary>Localized strings for pairing dialogs.</summary>
         private readonly IStringResources _strings;
 
         private bool _isLoading;
@@ -37,6 +28,13 @@ namespace Unison.Core.ViewModels
         private string _qrData;
         private string _statusText;
         private TaskCompletionSource<string> _qrWaitTcs;
+        private readonly RelayCommand _showQrFullscreenCommand;
+        private bool _isLogPanelVisible;
+        private string _diagnosticLogText;
+        private string _versionText;
+        private string _showLogButtonLabel;
+        private string _toggleLogButtonLabel;
+        private bool _logLiveHooked;
 
         public LoginViewModel(
             IWhatsAppService whatsAppService,
@@ -51,11 +49,18 @@ namespace Unison.Core.ViewModels
             _dialogService = dialogService;
             _strings = strings;
 
-            // Start / retry QR pairing flow.
             StartPairingCommand = new RelayCommand(async () => await StartPairingFlowAsync());
-
-            // Link device using a phone number + pairing code (instead of QR).
             LinkWithPhoneCommand = new RelayCommand(async () => await LinkWithPhoneAsync());
+            _showQrFullscreenCommand = new RelayCommand(
+                async () => await ShowQrFullscreenAsync(),
+                () => !string.IsNullOrEmpty(QRData) && !HasError);
+            ShowQrFullscreenCommand = _showQrFullscreenCommand;
+            ToggleLogPanelCommand = new RelayCommand(ToggleLogPanel);
+            ToggleSessionLoggingCommand = new RelayCommand(ToggleSessionLogging);
+            DevResetSessionCommand = new RelayCommand(async () => await ResetSessionForDevAsync());
+
+            _versionText = "v?";
+            RefreshLogButtonLabels();
 
             _whatsAppService.OnQRCodeReceived += async (s, qrData) =>
             {
@@ -64,7 +69,7 @@ namespace Unison.Core.ViewModels
                 await _dispatcher.RunAsync(() =>
                 {
                     QRData = qrData;
-                    StatusText = "QR recebido â€” gerando imagemâ€¦";
+                    StatusText = Loc("Login_StatusQrReceived", "QR received — generating image…");
                     _qrWaitTcs?.TrySetResult(qrData);
                 });
             };
@@ -90,58 +95,119 @@ namespace Unison.Core.ViewModels
                     if (string.IsNullOrEmpty(QRData))
                     {
                         HasError = true;
-                        ErrorMessage = ex?.Message ?? "erro desconhecido";
-                        StatusText = "Erro: " + ErrorMessage;
+                        ErrorMessage = ex?.Message ?? Loc("Login_UnknownError", "unknown error");
+                        StatusText = Loc("Login_StatusErrorPrefix", "Error: ") + ErrorMessage;
                     }
                 });
             };
         }
 
-        /// <summary>True while connect / QR wait / phone pairing is in progress.</summary>
         public bool IsLoading
         {
             get => _isLoading;
             private set => Set(ref _isLoading, value);
         }
 
-        /// <summary>True when the last pairing attempt failed (shows reload).</summary>
         public bool HasError
         {
             get => _hasError;
-            private set => Set(ref _hasError, value);
+            private set
+            {
+                if (Set(ref _hasError, value))
+                {
+                    RaiseQrFullscreenCanExecuteChanged();
+                }
+            }
         }
 
-        /// <summary>Last error message for status / diagnostics.</summary>
         public string ErrorMessage
         {
             get => _errorMessage;
             private set => Set(ref _errorMessage, value);
         }
 
-        /// <summary>Raw QR payload from the server (view renders bitmap).</summary>
         public string QRData
         {
             get => _qrData;
-            private set => Set(ref _qrData, value);
+            private set
+            {
+                if (Set(ref _qrData, value))
+                {
+                    RaiseQrFullscreenCanExecuteChanged();
+                }
+            }
         }
 
-        /// <summary>Human-readable status under the QR area.</summary>
         public string StatusText
         {
             get => _statusText;
             private set => Set(ref _statusText, value);
         }
 
-        /// <summary>Connect and wait for a QR code (or reload after timeout/error).</summary>
+        public string VersionText
+        {
+            get => _versionText;
+            set => Set(ref _versionText, value);
+        }
+
+        public bool IsLogPanelVisible
+        {
+            get => _isLogPanelVisible;
+            private set
+            {
+                if (Set(ref _isLogPanelVisible, value))
+                {
+                    RefreshLogButtonLabels();
+                }
+            }
+        }
+
+        public string DiagnosticLogText
+        {
+            get => _diagnosticLogText;
+            private set => Set(ref _diagnosticLogText, value);
+        }
+
+        public string ShowLogButtonLabel
+        {
+            get => _showLogButtonLabel;
+            private set => Set(ref _showLogButtonLabel, value);
+        }
+
+        public string ToggleLogButtonLabel
+        {
+            get => _toggleLogButtonLabel;
+            private set => Set(ref _toggleLogButtonLabel, value);
+        }
+
+        /// <summary>Connects and waits for a QR payload (or times out).</summary>
         public ICommand StartPairingCommand { get; }
 
-        /// <summary>Prompt for phone number and show the pairing code dialog.</summary>
+        /// <summary>Prompts for phone number and shows the WhatsApp pairing code dialog.</summary>
         public ICommand LinkWithPhoneCommand { get; }
 
-        /// <summary>
-        /// Hidden 5-tap reset on the instruction header: wipe local session and
-        /// show a short confirmation (shell returns to pairing via OnSessionCleared).
-        /// </summary>
+        /// <summary>Opens the current QR payload in a fullscreen preview dialog.</summary>
+        public ICommand ShowQrFullscreenCommand { get; }
+
+        /// <summary>Shows or hides the full-screen diagnostic log overlay.</summary>
+        public ICommand ToggleLogPanelCommand { get; }
+
+        /// <summary>Enables or disables session log capture while the overlay is open.</summary>
+        public ICommand ToggleSessionLoggingCommand { get; }
+
+        /// <summary>Dev-only: wipe local session after the instruction header 5-tap gesture.</summary>
+        public ICommand DevResetSessionCommand { get; }
+
+        private async Task ShowQrFullscreenAsync()
+        {
+            if (string.IsNullOrEmpty(QRData) || HasError)
+            {
+                return;
+            }
+
+            await _dialogService.ShowQrFullscreenAsync(QRData);
+        }
+
         public async Task ResetSessionForDevAsync()
         {
             await _whatsAppService.ClearSessionAsync();
@@ -151,7 +217,113 @@ namespace Unison.Core.ViewModels
                 _strings.Get("Common_OK"));
         }
 
-        /// <summary>Connects, waits for QR (or times out). View still draws the bitmap.</summary>
+        public void DeactivateDiagnostics()
+        {
+            UnhookLiveLog();
+            IsLogPanelVisible = false;
+        }
+
+        private void ToggleLogPanel()
+        {
+            if (IsLogPanelVisible)
+            {
+                UnhookLiveLog();
+                IsLogPanelVisible = false;
+                return;
+            }
+
+            try
+            {
+                RefreshLogButtonLabels();
+                RefreshDiagnosticLogText();
+                HookLiveLog();
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLogText = string.Format(
+                    _strings.Get("Login_LogReadFail", "Failed to read log: {0}"),
+                    ex.Message);
+            }
+
+            IsLogPanelVisible = true;
+        }
+
+        private void ToggleSessionLogging()
+        {
+            try
+            {
+                bool enabled = !_sessionLogger.Enabled;
+                _sessionLogger.Enabled = enabled;
+                RefreshLogButtonLabels();
+                DiagnosticLogText = enabled
+                    ? _strings.Get("Login_LogEnabledHint", "Logging enabled.")
+                    : _strings.Get("Login_LogDisabledHint", "Logging disabled.");
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLogText = string.Format(
+                    _strings.Get("Login_LogToggleFail", "Failed to toggle log: {0}"),
+                    ex.Message);
+            }
+        }
+
+        private void HookLiveLog()
+        {
+            if (_logLiveHooked)
+            {
+                return;
+            }
+
+            _sessionLogger.OnLogUpdated += SessionLogger_OnLogUpdated;
+            _logLiveHooked = true;
+        }
+
+        private void UnhookLiveLog()
+        {
+            if (!_logLiveHooked)
+            {
+                return;
+            }
+
+            _sessionLogger.OnLogUpdated -= SessionLogger_OnLogUpdated;
+            _logLiveHooked = false;
+        }
+
+        private void SessionLogger_OnLogUpdated(object sender, string line)
+        {
+            _ = _dispatcher.RunAsync(RefreshDiagnosticLogText);
+        }
+
+        private void RefreshDiagnosticLogText()
+        {
+            try
+            {
+                string text = _sessionLogger.GetLogText();
+                DiagnosticLogText = string.IsNullOrWhiteSpace(text)
+                    ? _strings.Get("Login_LogEmpty", "(empty)")
+                    : text;
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLogText = string.Format(
+                    _strings.Get("Login_LogReadFail", "Failed to read log: {0}"),
+                    ex.Message);
+            }
+        }
+
+        private void RefreshLogButtonLabels()
+        {
+            ShowLogButtonLabel = IsLogPanelVisible
+                ? _strings.Get("Login_ShowLogHide.Content", "Hide log")
+                : _strings.Get("Login_ShowLog.Content", "Show diagnostic log");
+            ToggleLogButtonLabel = _sessionLogger.Enabled
+                ? _strings.Get("Login_ToggleLogOff.Content", "Disable log")
+                : _strings.Get("Login_ToggleLogOn.Content", "Enable log");
+        }
+
+        private void RaiseQrFullscreenCanExecuteChanged() =>
+            _showQrFullscreenCommand?.RaiseCanExecuteChanged();
+
         public async Task StartPairingFlowAsync()
         {
             _sessionLogger.PairingTraceActive = true;
@@ -165,14 +337,14 @@ namespace Unison.Core.ViewModels
                 HasError = false;
                 ErrorMessage = null;
                 QRData = null;
-                StatusText = "Iniciando pareamentoâ€¦";
+                StatusText = Loc("Login_StatusStartingPairing", "Starting pairing…");
                 _sessionLogger.WriteAlways("[Pairing] StartPairingFlow begin");
                 _sessionLogger.WriteAlways(
                     "[Pairing] Nota: FileNotFoundException first-chance no Output costuma ser " +
                     "probe de recurso UWP (benigno). EndOfStream no Background.winmd ao " +
                     "reclaim do socket tambem e tipico.");
 
-                StatusText = "Conectando ao WhatsAppâ€¦";
+                StatusText = Loc("Login_StatusConnecting", "Connecting to WhatsApp…");
                 await _whatsAppService.ConnectAsync();
                 _sessionLogger.WriteAlways(
                     "[Pairing] ConnectAsync returned; status=" +
@@ -184,13 +356,15 @@ namespace Unison.Core.ViewModels
                     return;
                 }
 
-                StatusText = "Aguardando QR do servidorâ€¦";
+                StatusText = Loc("Login_StatusWaitingQr", "Waiting for QR from server…");
                 var finished = await Task.WhenAny(qrWait.Task, Task.Delay(QrWaitTimeoutMs));
                 if (finished != qrWait.Task)
                 {
                     HasError = true;
-                    ErrorMessage = "Timeout aguardando QR (" + (QrWaitTimeoutMs / 1000) + "s)";
-                    StatusText = ErrorMessage + " â€” toque em Recarregar QR e abra o log.";
+                    string timeout = Loc("Login_StatusQrTimeout", "Timeout waiting for QR ({0}s) — tap Reload QR and open the log.")
+                        .Replace("{0}", (QrWaitTimeoutMs / 1000).ToString());
+                    ErrorMessage = timeout;
+                    StatusText = timeout;
                     _sessionLogger.WriteAlways(
                         "[Pairing] TIMEOUT waiting for QR. Last connection status=" +
                         (_whatsAppService.CurrentConnectionStatus ?? "(null)"));
@@ -206,34 +380,28 @@ namespace Unison.Core.ViewModels
                 _sessionLogger.WriteErrorAlways("[Pairing] StartPairingFlow failed", ex);
                 HasError = true;
                 ErrorMessage = ex.Message;
-                StatusText = "Falha: " + ex.GetType().Name + " â€” " + ex.Message;
+                StatusText = Loc("Login_StatusFailPrefix", "Failed: ") + ex.GetType().Name + " — " + ex.Message;
                 IsLoading = false;
             }
         }
 
-        /// <summary>Called by the view after ZXing successfully draws the QR image.</summary>
         public void OnQRDisplayed()
         {
             IsLoading = false;
             HasError = false;
-            StatusText = "Escaneie este cÃ³digo com o telefone";
+            StatusText = Loc("Login_QRStatus.Text", "Scan this code with your phone");
             _sessionLogger.WriteAlways("[Pairing] QR bitmap displayed on UI");
         }
 
-        /// <summary>Called by the view when QR bitmap generation fails.</summary>
         public void OnQRDisplayFailed(Exception ex)
         {
             IsLoading = false;
             HasError = true;
-            ErrorMessage = ex?.Message ?? "falha ao desenhar QR";
-            StatusText = "Falha ao desenhar QR: " + ErrorMessage;
+            ErrorMessage = ex?.Message ?? Loc("Login_StatusDrawFailedFallback", "failed to draw QR");
+            StatusText = Loc("Login_StatusDrawFailedPrefix", "Failed to draw QR: ") + ErrorMessage;
             _sessionLogger.WriteErrorAlways("[Pairing] DisplayQRCode failed", ex);
         }
 
-        /// <summary>
-        /// Asks for phone via DialogService, requests code from Pairing, shows it
-        /// with ShowPairingCodeAsync(this, code).
-        /// </summary>
         public async Task LinkWithPhoneAsync()
         {
             try
@@ -299,30 +467,34 @@ namespace Unison.Core.ViewModels
             }
         }
 
-        // helpers
-        private static string DescribeConnectionStatus(string status)
+        private string Loc(string key, string fallback)
+        {
+            return _strings != null ? _strings.Get(key, fallback) : fallback;
+        }
+
+        private string DescribeConnectionStatus(string status)
         {
             if (string.IsNullOrWhiteSpace(status))
             {
-                return "Connected";
+                return Loc("Login_Conn_Empty", "Connected");
             }
 
             switch (status.Trim().ToLowerInvariant())
             {
                 case "connecting":
-                    return "Opening a WebSocket…";
+                    return Loc("Login_Conn_Connecting", "Opening a WebSocket…");
                 case "connected":
-                    return "WebSocket connected — handshake…";
+                    return Loc("Login_Conn_Connected", "WebSocket connected — handshake…");
                 case "open":
-                    return "Handshake OK — waiting for pair-device…";
+                    return Loc("Login_Conn_Open", "Handshake OK — waiting for pair-device…");
                 case "disconnected":
-                    return "Disconnected — retrying…";
+                    return Loc("Login_Conn_Disconnected", "Disconnected — retrying…");
                 case "close":
-                    return "Connection closed";
+                    return Loc("Login_Conn_Close", "Connection closed");
                 case "restart":
-                    return "Restarting pairing…";
+                    return Loc("Login_Conn_Restart", "Restarting pairing…");
                 default:
-                    return "Status: " + status;
+                    return Loc("Login_Conn_Default", "Status: ") + status;
             }
         }
     }

@@ -1,4 +1,4 @@
-﻿<ResourceDictionary
+<ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
@@ -12,7 +12,7 @@
     
     <!-- Read-more link under collapsed message body (no underline chrome). -->
     <Style x:Key="ChatDetailReadMoreHyperlinkButtonStyle" TargetType="HyperlinkButton">
-        <Setter Property="Foreground" Value="{StaticResource ChatListUnreadBadgeBrush}"/>
+        <Setter Property="Foreground" Value="{ThemeResource ChatDetailSentLinkBrush}"/>
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="BorderBrush" Value="Transparent"/>
         <Setter Property="BorderThickness" Value="0"/>
@@ -75,11 +75,23 @@
         </Setter>
     </Style>
 
+    <Style x:Key="ChatDetailSentReadMoreHyperlinkButtonStyle"
+           TargetType="HyperlinkButton"
+           BasedOn="{StaticResource ChatDetailReadMoreHyperlinkButtonStyle}">
+        <Setter Property="Foreground" Value="{ThemeResource ChatDetailSentLinkBrush}"/>
+    </Style>
+
+    <Style x:Key="ChatDetailReceivedReadMoreHyperlinkButtonStyle"
+           TargetType="HyperlinkButton"
+           BasedOn="{StaticResource ChatDetailReadMoreHyperlinkButtonStyle}">
+        <Setter Property="Foreground" Value="{ThemeResource ChatDetailReceivedLinkBrush}"/>
+    </Style>
+
     <!-- Reaction chip under message bubble: 2px border, list-hover on PointerOver. -->
     <Style x:Key="ChatDetailReactionChipButtonStyle" TargetType="Button">
-        <Setter Property="Foreground" Value="{StaticResource ChatDetailReactionChipForegroundBrush}"/>
-        <Setter Property="Background" Value="{StaticResource ChatDetailReactionChipReceivedBrush}"/>
-        <Setter Property="BorderBrush" Value="{StaticResource ChatDetailReactionChipReceivedBorderBrush}"/>
+        <Setter Property="Foreground" Value="{ThemeResource ChatDetailReactionChipForegroundBrush}"/>
+        <Setter Property="Background" Value="{ThemeResource ChatDetailReactionChipReceivedBrush}"/>
+        <Setter Property="BorderBrush" Value="{ThemeResource ChatDetailReactionChipReceivedBorderBrush}"/>
         <Setter Property="BorderThickness" Value="2"/>
         <Setter Property="Padding" Value="8,3"/>
         <Setter Property="MinWidth" Value="28"/>
@@ -106,14 +118,14 @@
                                 <VisualState x:Name="PointerOver">
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Root" Storyboard.TargetProperty="Background">
-                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{StaticResource ChatDetailReactionChipPointerOverBrush}"/>
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource ChatDetailReactionChipPointerOverBrush}"/>
                                         </ObjectAnimationUsingKeyFrames>
                                     </Storyboard>
                                 </VisualState>
                                 <VisualState x:Name="Pressed">
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Root" Storyboard.TargetProperty="Background">
-                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{StaticResource ChatDetailReactionChipPointerOverBrush}"/>
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource ChatDetailReactionChipPointerOverBrush}"/>
                                         </ObjectAnimationUsingKeyFrames>
                                     </Storyboard>
                                 </VisualState>
@@ -142,7 +154,7 @@
     <!-- Full-area transparent button (media download overlay; no chrome). -->
     <Style x:Key="TransparentMediaButtonStyle" TargetType="Button">
         <Setter Property="Background" Value="Transparent"/>
-        <Setter Property="Foreground" Value="{StaticResource WhatsAppTextHighBrush}"/>
+        <Setter Property="Foreground" Value="{ThemeResource WhatsAppTextHighBrush}"/>
         <Setter Property="BorderBrush" Value="Transparent"/>
         <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="Padding" Value="0"/>
@@ -203,7 +215,7 @@
     <!-- Transparent icon button (no WinUI chrome border; tight padding). -->
     <Style x:Key="WhatsAppIconButtonStyle" TargetType="Button">
         <Setter Property="Background" Value="Transparent"/>
-        <Setter Property="Foreground" Value="{StaticResource WhatsAppTextHighBrush}"/>
+        <Setter Property="Foreground" Value="{ThemeResource WhatsAppTextHighBrush}"/>
         <Setter Property="BorderBrush" Value="Transparent"/>
         <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="Padding" Value="4"/>
@@ -227,14 +239,20 @@
                                 <VisualState x:Name="PointerOver">
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Root" Storyboard.TargetProperty="Background">
-                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{StaticResource WhatsAppItemHoverBrush}"/>
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource WhatsAppItemHoverBrush}"/>
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentPresenter" Storyboard.TargetProperty="Foreground">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource IconButtonForegroundPointerOverBrush}"/>
                                         </ObjectAnimationUsingKeyFrames>
                                     </Storyboard>
                                 </VisualState>
                                 <VisualState x:Name="Pressed">
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Root" Storyboard.TargetProperty="Background">
-                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{StaticResource WhatsAppItemSelectedBrush}"/>
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource WhatsAppItemSelectedBrush}"/>
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentPresenter" Storyboard.TargetProperty="Foreground">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource IconButtonForegroundPointerOverBrush}"/>
                                         </ObjectAnimationUsingKeyFrames>
                                     </Storyboard>
                                 </VisualState>
@@ -277,7 +295,7 @@
     <!-- Modern Menu Style (Gradescope/WhatsApp/Win11) -->
     <Style TargetType="MenuFlyoutPresenter" x:Key="ModernMenuFlyoutStyle">
         <Setter Property="Background" Value="#FF232323" />
-        <Setter Property="BorderBrush" Value="{StaticResource WhatsAppMenuOutlineBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource WhatsAppMenuOutlineBrush}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Padding" Value="4,8" />
         <Setter Property="MinWidth" Value="200" />
@@ -303,7 +321,7 @@
         <Setter Property="FontSize" Value="13" />
         <Setter Property="FontFamily" Value="{StaticResource MainFontSemibold}" />
         <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="Foreground" Value="{StaticResource WhatsAppFilterHeaderBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource WhatsAppFilterHeaderBrush}" />
         <Setter Property="IsEnabled" Value="False" />
         <Setter Property="Template">
             <Setter.Value>
@@ -389,7 +407,7 @@
     <!-- Rounded Square Button Style (Gradescope style) -->
     <Style TargetType="Button" x:Key="ModernIconButtonStyle">
         <Setter Property="Background" Value="Transparent" />
-        <Setter Property="Foreground" Value="{StaticResource WhatsAppTextHighBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource WhatsAppTextHighBrush}" />
         <Setter Property="BorderBrush" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Padding" Value="0" />
@@ -420,7 +438,7 @@
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="RootBorder"
                                                                        Storyboard.TargetProperty="Background">
-                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{StaticResource WhatsAppItemHoverBrush}" />
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource WhatsAppItemHoverBrush}" />
                                         </ObjectAnimationUsingKeyFrames>
                                     </Storyboard>
                                 </VisualState>
@@ -428,7 +446,7 @@
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="RootBorder"
                                                                        Storyboard.TargetProperty="Background">
-                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{StaticResource WhatsAppItemSelectedBrush}" />
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource WhatsAppItemSelectedBrush}" />
                                         </ObjectAnimationUsingKeyFrames>
                                     </Storyboard>
                                 </VisualState>
@@ -452,7 +470,7 @@
     <Style TargetType="ListViewItem" x:Key="WhatsAppChatListItemStyle">
         <Setter Property="FontFamily" Value="{StaticResource MainFont}" />
         <Setter Property="Background" Value="Transparent" />
-        <Setter Property="Foreground" Value="{StaticResource WhatsAppTextHighBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource WhatsAppTextHighBrush}" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="Padding" Value="0" />
@@ -463,39 +481,60 @@
                     <Border x:Name="RootGrid" Background="Transparent" CornerRadius="6">
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CommonStates">
-                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="Normal">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentPresenter" Storyboard.TargetProperty="Foreground">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource WhatsAppTextHighBrush}" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
                                 <VisualState x:Name="PointerOver">
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="RootGrid" Storyboard.TargetProperty="Background">
-                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{StaticResource WhatsAppChatListPointerOverBrush}" />
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource WhatsAppChatListPointerOverBrush}" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentPresenter" Storyboard.TargetProperty="Foreground">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource WhatsAppChatListItemActiveForegroundBrush}" />
                                         </ObjectAnimationUsingKeyFrames>
                                     </Storyboard>
                                 </VisualState>
                                 <VisualState x:Name="Pressed">
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="RootGrid" Storyboard.TargetProperty="Background">
-                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{StaticResource WhatsAppChatListSelectedBrush}" />
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource WhatsAppChatListSelectedBrush}" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentPresenter" Storyboard.TargetProperty="Foreground">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource WhatsAppChatListItemActiveForegroundBrush}" />
                                         </ObjectAnimationUsingKeyFrames>
                                     </Storyboard>
                                 </VisualState>
                                 <VisualState x:Name="Selected">
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="RootGrid" Storyboard.TargetProperty="Background">
-                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{StaticResource WhatsAppChatListSelectedBrush}" />
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource WhatsAppChatListSelectedBrush}" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentPresenter" Storyboard.TargetProperty="Foreground">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource WhatsAppChatListItemActiveForegroundBrush}" />
                                         </ObjectAnimationUsingKeyFrames>
                                     </Storyboard>
                                 </VisualState>
                                 <VisualState x:Name="SelectedPointerOver">
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="RootGrid" Storyboard.TargetProperty="Background">
-                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{StaticResource WhatsAppChatListSelectedBrush}" />
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource WhatsAppChatListSelectedBrush}" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentPresenter" Storyboard.TargetProperty="Foreground">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource WhatsAppChatListItemActiveForegroundBrush}" />
                                         </ObjectAnimationUsingKeyFrames>
                                     </Storyboard>
                                 </VisualState>
                                 <VisualState x:Name="SelectedPressed">
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="RootGrid" Storyboard.TargetProperty="Background">
-                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{StaticResource WhatsAppChatListSelectedBrush}" />
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource WhatsAppChatListSelectedBrush}" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentPresenter" Storyboard.TargetProperty="Foreground">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource WhatsAppChatListItemActiveForegroundBrush}" />
                                         </ObjectAnimationUsingKeyFrames>
                                     </Storyboard>
                                 </VisualState>
@@ -505,6 +544,7 @@
                                           Content="{TemplateBinding Content}"
                                           ContentTemplate="{TemplateBinding ContentTemplate}"
                                           ContentTransitions="{TemplateBinding ContentTransitions}"
+                                          Foreground="{TemplateBinding Foreground}"
                                           Padding="{TemplateBinding Padding}"
                                           HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
@@ -518,7 +558,7 @@
     <Style TargetType="ListViewItem" x:Key="WhatsAppSidebarItemStyle">
         <Setter Property="FontFamily" Value="{StaticResource MainFont}" />
         <Setter Property="Background" Value="Transparent" />
-        <Setter Property="Foreground" Value="{StaticResource WhatsAppTextHighBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource WhatsAppTextHighBrush}" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="Padding" Value="0" />
@@ -538,7 +578,7 @@
                                 <VisualState x:Name="PointerOver">
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="SidebarRootGrid" Storyboard.TargetProperty="Background">
-                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{StaticResource WhatsAppItemHoverBrush}" />
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource WhatsAppItemHoverBrush}" />
                                         </ObjectAnimationUsingKeyFrames>
                                         <DoubleAnimation Storyboard.TargetName="SelectionIndicator" Storyboard.TargetProperty="Opacity" To="0" Duration="0"/>
                                     </Storyboard>
@@ -546,7 +586,7 @@
                                 <VisualState x:Name="Pressed">
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="SidebarRootGrid" Storyboard.TargetProperty="Background">
-                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{StaticResource WhatsAppItemSelectedBrush}" />
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource WhatsAppItemSelectedBrush}" />
                                         </ObjectAnimationUsingKeyFrames>
                                         <DoubleAnimation Storyboard.TargetName="SelectionIndicator" Storyboard.TargetProperty="Opacity" To="0" Duration="0"/>
                                     </Storyboard>
@@ -554,7 +594,7 @@
                                 <VisualState x:Name="Selected">
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="SidebarRootGrid" Storyboard.TargetProperty="Background">
-                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{StaticResource WhatsAppItemSelectedBrush}" />
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource WhatsAppItemSelectedBrush}" />
                                         </ObjectAnimationUsingKeyFrames>
                                         <DoubleAnimation Storyboard.TargetName="SelectionIndicator" Storyboard.TargetProperty="Opacity" To="1" Duration="0"/>
                                     </Storyboard>
@@ -562,7 +602,7 @@
                                 <VisualState x:Name="SelectedPointerOver">
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="SidebarRootGrid" Storyboard.TargetProperty="Background">
-                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{StaticResource WhatsAppItemHoverBrush}" />
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource WhatsAppItemHoverBrush}" />
                                         </ObjectAnimationUsingKeyFrames>
                                         <DoubleAnimation Storyboard.TargetName="SelectionIndicator" Storyboard.TargetProperty="Opacity" To="1" Duration="0"/>
                                     </Storyboard>
@@ -570,7 +610,7 @@
                                 <VisualState x:Name="SelectedPressed">
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="SidebarRootGrid" Storyboard.TargetProperty="Background">
-                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{StaticResource WhatsAppItemSelectedBrush}" />
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource WhatsAppItemSelectedBrush}" />
                                         </ObjectAnimationUsingKeyFrames>
                                         <DoubleAnimation Storyboard.TargetName="SelectionIndicator" Storyboard.TargetProperty="Opacity" To="1" Duration="0"/>
                                     </Storyboard>
@@ -579,14 +619,14 @@
                                 <VisualState x:Name="SelectedUnfocused">
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="SidebarRootGrid" Storyboard.TargetProperty="Background">
-                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{StaticResource WhatsAppItemSelectedBrush}" />
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource WhatsAppItemSelectedBrush}" />
                                         </ObjectAnimationUsingKeyFrames>
                                         <DoubleAnimation Storyboard.TargetName="SelectionIndicator" Storyboard.TargetProperty="Opacity" To="1" Duration="0"/>
                                     </Storyboard>
                                 </VisualState>
                                 <VisualState x:Name="Disabled">
                                     <VisualState.Setters>
-                                        <Setter Target="ContentPresenter.Foreground" Value="{StaticResource WhatsAppTextLowBrush}"/>
+                                        <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource WhatsAppTextLowBrush}"/>
                                         <Setter Target="SidebarRootGrid.Opacity" Value="0.55"/>
                                         <Setter Target="SelectionIndicator.Opacity" Value="0"/>
                                     </VisualState.Setters>
@@ -597,7 +637,7 @@
                         <Grid>
                             <!-- Active screen marker: 4px green pill, radius 2, left of the icon -->
                             <Border x:Name="SelectionIndicator"
-                                    Background="{StaticResource WhatsAppGreenFocusBrush}"
+                                    Background="{ThemeResource WhatsAppGreenFocusBrush}"
                                     Width="4"
                                     Height="18"
                                     HorizontalAlignment="Left"
@@ -624,13 +664,14 @@
 
     <!--
       Shared key with Unison/Controls.xaml: ChatListSearchTextBoxStyle.
-      WhatsApp look: underlined search field, green focus, mirrored search glyph.
-      Used by ChatListView SearchBox (x:Name="SearchBox").
+      WhatsApp (UnisonPrivate-main): underlined field, CornerRadius 6, BorderThickness 1,1,1,0,
+      green focus underline, mirrored search glyph. NOT the Unison pill (CornerRadius 16 / no border).
+      Used by ChatListView SearchBox (x:Name="SearchBox") via ThemeResource.
     -->
     <Style TargetType="TextBox" x:Key="ChatListSearchTextBoxStyle">
-        <Setter Property="Foreground" Value="{StaticResource ChatListSearchForegroundBrush}"/>
-        <Setter Property="Background" Value="{StaticResource ChatListSearchBackgroundBrush}"/>
-        <Setter Property="BorderBrush" Value="{StaticResource ChatListSearchBorderBrush}"/>
+        <Setter Property="Foreground" Value="{ThemeResource ChatListSearchForegroundBrush}"/>
+        <Setter Property="Background" Value="{ThemeResource ChatListSearchBackgroundBrush}"/>
+        <Setter Property="BorderBrush" Value="{ThemeResource ChatListSearchBorderBrush}"/>
         <Setter Property="SelectionHighlightColor" Value="{ThemeResource TextControlSelectionHighlightColor}"/>
         <Setter Property="BorderThickness" Value="1,1,1,0"/>
         <Setter Property="FontFamily" Value="{ThemeResource ContentControlThemeFontFamily}"/>
@@ -687,7 +728,7 @@
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="BorderElement"
                                                                        Storyboard.TargetProperty="Background">
                                             <DiscreteObjectKeyFrame KeyTime="0"
-                                                                    Value="{StaticResource ChatListSearchPointerOverBrush}"/>
+                                                                    Value="{ThemeResource ChatListSearchPointerOverBrush}"/>
                                         </ObjectAnimationUsingKeyFrames>
                                         <DoubleAnimation Storyboard.TargetName="UnderlineElement"
                                                          Storyboard.TargetProperty="Height"
@@ -696,7 +737,7 @@
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="UnderlineElement"
                                                                        Storyboard.TargetProperty="Fill">
                                             <DiscreteObjectKeyFrame KeyTime="0"
-                                                                    Value="{StaticResource WhatsAppUnderlineNormalBrush}"/>
+                                                                    Value="{ThemeResource WhatsAppUnderlineNormalBrush}"/>
                                         </ObjectAnimationUsingKeyFrames>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="UnderlineElement"
                                                                        Storyboard.TargetProperty="Margin">
@@ -710,12 +751,12 @@
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PlaceholderTextContentPresenter"
                                                                        Storyboard.TargetProperty="Foreground">
                                             <DiscreteObjectKeyFrame KeyTime="0"
-                                                                    Value="{StaticResource ChatListSearchFocusedPlaceholderBrush}"/>
+                                                                    Value="{ThemeResource ChatListSearchFocusedPlaceholderBrush}"/>
                                         </ObjectAnimationUsingKeyFrames>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="BorderElement"
                                                                        Storyboard.TargetProperty="Background">
                                             <DiscreteObjectKeyFrame KeyTime="0"
-                                                                    Value="{StaticResource ChatListSearchFocusedBackgroundBrush}"/>
+                                                                    Value="{ThemeResource ChatListSearchFocusedBackgroundBrush}"/>
                                         </ObjectAnimationUsingKeyFrames>
                                         <DoubleAnimation Storyboard.TargetName="UnderlineElement"
                                                          Storyboard.TargetProperty="Height"
@@ -724,7 +765,7 @@
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="UnderlineElement"
                                                                        Storyboard.TargetProperty="Fill">
                                             <DiscreteObjectKeyFrame KeyTime="0"
-                                                                    Value="{StaticResource WhatsAppGreenFocusBrush}"/>
+                                                                    Value="{ThemeResource WhatsAppGreenFocusBrush}"/>
                                         </ObjectAnimationUsingKeyFrames>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="UnderlineElement"
                                                                        Storyboard.TargetProperty="Margin">
@@ -734,7 +775,7 @@
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentElement"
                                                                        Storyboard.TargetProperty="Foreground">
                                             <DiscreteObjectKeyFrame KeyTime="0"
-                                                                    Value="{StaticResource ChatListSearchForegroundBrush}"/>
+                                                                    Value="{ThemeResource ChatListSearchForegroundBrush}"/>
                                         </ObjectAnimationUsingKeyFrames>
                                     </Storyboard>
                                 </VisualState>
@@ -786,7 +827,7 @@
                                 Background="Transparent"
                                 IsHitTestVisible="False">
                             <Rectangle x:Name="UnderlineElement"
-                                       Fill="{StaticResource WhatsAppUnderlineNormalBrush}"
+                                       Fill="{ThemeResource WhatsAppUnderlineNormalBrush}"
                                        Height="1"
                                        Margin="0"
                                        VerticalAlignment="Bottom"
@@ -796,7 +837,7 @@
                                   Grid.Column="0"
                                   Glyph="&#xE721;"
                                   FontSize="14"
-                                  Foreground="{StaticResource ChatListSearchPlaceholderBrush}"
+                                  Foreground="{ThemeResource ChatListSearchPlaceholderBrush}"
                                   Margin="12,0,0,0"
                                   VerticalAlignment="Center"
                                   IsHitTestVisible="False"
@@ -826,7 +867,7 @@
                                    Grid.Row="1"
                                    Grid.Column="1"
                                    Grid.ColumnSpan="2"
-                                   Foreground="{StaticResource ChatListSearchPlaceholderBrush}"
+                                   Foreground="{ThemeResource ChatListSearchPlaceholderBrush}"
                                    Margin="0,2,0,0"
                                    Padding="{TemplateBinding Padding}"
                                    Text="{TemplateBinding PlaceholderText}"
@@ -838,10 +879,26 @@
         </Setter>
     </Style>
 
+    <!-- Inline ComboBox chrome (start footer, etc.): no fill/border; dropdown popup stays themed. -->
+    <Style x:Key="TransparentComboBoxStyle" TargetType="ComboBox">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="4,2,2,2"/>
+        <Setter Property="MinWidth" Value="0"/>
+        <Setter Property="MinHeight" Value="28"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="HorizontalAlignment" Value="Left"/>
+        <Setter Property="HorizontalContentAlignment" Value="Left"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="Foreground" Value="{ThemeResource WhatsAppTextHighBrush}"/>
+    </Style>
+
     <Style x:Key="TransparentTextBoxStyle" TargetType="TextBox">
         <Setter Property="MinWidth" Value="{ThemeResource TextControlThemeMinWidth}"/>
         <Setter Property="MinHeight" Value="{ThemeResource TextControlThemeMinHeight}"/>
-        <Setter Property="Foreground" Value="{ThemeResource TextControlForeground}"/>
+        <Setter Property="Foreground" Value="{ThemeResource ChatDetailComposerForegroundBrush}"/>
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="BorderBrush" Value="{ThemeResource TextControlBorderBrush}"/>
         <Setter Property="SelectionHighlightColor" Value="{ThemeResource TextControlSelectionHighlightColor}"/>
@@ -958,10 +1015,10 @@
                                             <DiscreteObjectKeyFrame KeyTime="0" Value="Transparent"/>
                                         </ObjectAnimationUsingKeyFrames>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PlaceholderTextContentPresenter" Storyboard.TargetProperty="Foreground">
-                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource TextControlPlaceholderForegroundPointerOver}"/>
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource ChatDetailComposerForegroundBrush}"/>
                                         </ObjectAnimationUsingKeyFrames>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentElement" Storyboard.TargetProperty="Foreground">
-                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource TextControlForegroundPointerOver}"/>
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource ChatDetailComposerForegroundBrush}"/>
                                         </ObjectAnimationUsingKeyFrames>
                                     </Storyboard>
                                 </VisualState>
@@ -978,7 +1035,7 @@
                                             <DiscreteObjectKeyFrame KeyTime="0" Value="Transparent"/>
                                         </ObjectAnimationUsingKeyFrames>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentElement" Storyboard.TargetProperty="Foreground">
-                                            <DiscreteObjectKeyFrame KeyTime="0" Value="White"/>
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource ChatDetailComposerForegroundBrush}"/>
                                         </ObjectAnimationUsingKeyFrames>
                                     </Storyboard>
                                 </VisualState>

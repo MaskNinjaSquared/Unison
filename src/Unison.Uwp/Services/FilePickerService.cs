@@ -234,5 +234,88 @@ namespace Unison.Uwp.Services
                 throw;
             }
         }
+
+        public async Task<string> PickSaveLocalFileAsync(
+            string sourceUriOrPath,
+            string suggestedFileName,
+            string mimeType = null)
+        {
+            try
+            {
+                StorageFile source = await ShareService.ResolveLocalFileAsync(sourceUriOrPath);
+                if (source == null)
+                {
+                    throw new InvalidOperationException("Arquivo local não encontrado.");
+                }
+
+                string suggested = string.IsNullOrWhiteSpace(suggestedFileName)
+                    ? source.Name
+                    : suggestedFileName.Trim();
+                string extension = GetSaveExtension(suggested, source.FileType, mimeType);
+
+                var picker = new FileSavePicker();
+                picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
+                picker.FileTypeChoices.Add(
+                    string.IsNullOrWhiteSpace(extension) ? "File" : extension.TrimStart('.').ToUpperInvariant(),
+                    new System.Collections.Generic.List<string> { extension });
+                picker.SuggestedFileName = StripExtension(suggested);
+
+                StorageFile dest = await picker.PickSaveFileAsync();
+                if (dest == null)
+                {
+                    return null;
+                }
+
+                await source.CopyAndReplaceAsync(dest);
+                return dest.Path;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[FilePickerService] SaveFile: " + ex.Message);
+                throw;
+            }
+        }
+
+        private static string GetSaveExtension(string suggestedFileName, string sourceFileType, string mimeType)
+        {
+            if (!string.IsNullOrWhiteSpace(suggestedFileName))
+            {
+                int dot = suggestedFileName.LastIndexOf('.');
+                if (dot > 0 && dot < suggestedFileName.Length - 1)
+                {
+                    return suggestedFileName.Substring(dot).ToLowerInvariant();
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(sourceFileType) && sourceFileType.StartsWith(".", StringComparison.Ordinal))
+            {
+                return sourceFileType.ToLowerInvariant();
+            }
+
+            string mime = (mimeType ?? string.Empty).ToLowerInvariant();
+            if (mime.Contains("pdf")) return ".pdf";
+            if (mime.Contains("msword") || mime.Contains("wordprocessingml")) return ".docx";
+            if (mime.Contains("spreadsheetml") || mime.Contains("ms-excel")) return ".xlsx";
+            if (mime.Contains("presentationml") || mime.Contains("ms-powerpoint")) return ".pptx";
+            if (mime.Contains("zip")) return ".zip";
+            if (mime.Contains("text/plain")) return ".txt";
+            return ".bin";
+        }
+
+        private static string StripExtension(string fileName)
+        {
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                return "Unison_file";
+            }
+
+            int dot = fileName.LastIndexOf('.');
+            if (dot > 0)
+            {
+                return fileName.Substring(0, dot);
+            }
+
+            return fileName;
+        }
     }
 }

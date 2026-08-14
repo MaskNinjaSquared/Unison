@@ -31,11 +31,14 @@ namespace Unison.Core.Contracts
         Task ShowPairingCodeAsync(LoginViewModel loginVm, string code);
 
         /// <summary>Opens the new-chat dialog bound to the supplied VM. Returns resolved JID or null.</summary>
-        Task<string> ShowNewChatDialogAsync(NewChatViewModel newChatVm);
+        Task<string> ShowNewChatDialogAsync(NewChatDialogViewModel newChatVm);
 
         /// <summary>
         /// Image send confirmation with preview. Returns true if the user taps Send.
         /// </summary>
         Task<bool> ShowImageSendPreviewAsync(byte[] imageBytes, string infoText);
+
+        /// <summary>Fullscreen pairing QR preview (tap on login QR). No-op if payload empty.</summary>
+        Task ShowQrFullscreenAsync(string qrData);
     }
 }

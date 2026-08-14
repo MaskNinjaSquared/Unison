@@ -175,7 +175,6 @@ namespace Unison.Uwp.Client
         private readonly Dictionary<string, TaskCompletionSource<BinaryNode>> _pendingQueries =
             new Dictionary<string, TaskCompletionSource<BinaryNode>>(StringComparer.Ordinal);
         private bool _isInitializing;
-        private bool _isHandshakeInProgress;
         private CancellationTokenSource _keepAliveCts;
         private DateTime _lastInboundFrameUtc = DateTime.MinValue;
         private int _keepAliveFailureCount;

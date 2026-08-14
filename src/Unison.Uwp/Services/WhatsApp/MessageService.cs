@@ -77,6 +77,16 @@ namespace Unison.Uwp.Services.WhatsApp
             return _whatsAppService.EnsureImageAvailableAsync(message);
         }
 
+        public Task<string> EnsureVideoAvailableAsync(ChatMessage message)
+        {
+            return _whatsAppService.EnsureVideoAvailableAsync(message);
+        }
+
+        public Task<string> EnsureDocumentAvailableAsync(ChatMessage message)
+        {
+            return _whatsAppService.EnsureDocumentAvailableAsync(message);
+        }
+
         public Task SetMessagePinnedAsync(string chatJid, ChatMessage message, bool pin, uint durationSeconds = 604800)
         {
             return _whatsAppService.SetMessagePinnedAsync(chatJid, message, pin, durationSeconds);
@@ -202,6 +212,16 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             Debug.WriteLine("[MessageService] Person upserts from history: " + writes);
+        }
+
+        public Task ResyncConversationsAsync(System.IProgress<ConversationResyncPhase> progress = null)
+        {
+            return _whatsAppService.ResyncConversationsAsync(progress);
+        }
+
+        public void StartNewChat(string jid)
+        {
+            _whatsAppService.StartNewChat(jid);
         }
     }
 }

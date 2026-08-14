@@ -30,10 +30,13 @@ namespace Unison.Core.ViewModels
         private readonly IProfileService _profileService;
         private readonly IDispatcher _dispatcher;
         private readonly INotificationService _notificationService;
+        private readonly IShortcutService _shortcutService;
         private readonly IRuntimeDiagnostics _diagnostics;
         private readonly ISystemInfoProvider _systemInfo;
         private readonly INavigator _navigator;
         private readonly IStringResources _strings;
+        private readonly ILocalSettings _localSettings;
+        private readonly ISessionLogger _sessionLogger;
 
         private bool _isPaneOpen;
         private string _currentUserName;
@@ -44,10 +47,18 @@ namespace Unison.Core.ViewModels
         private bool _isNarrowWindow;
         private bool _hasActiveChat;
         private ChatItem _pendingChat;
+        private string _pendingOpenChatJid;
         private bool _initialized;
         private bool _eventsHooked;
         private bool _startInProgress;
         private bool _startPairingOnLoginSurface = true;
+        private double _chatListPaneWidth;
+
+        /// <summary>
+        /// When true, Enter* / NavigateToAppShell update state but skip root Frame navigation
+        /// (BootView plays the exit animation, then calls <see cref="FinishBootRootNavigation"/>).
+        /// </summary>
+        public bool SuppressRootNavigation { get; set; }
 
         public ShellViewModel(
             IWhatsAppService whatsAppService,
@@ -55,29 +66,98 @@ namespace Unison.Core.ViewModels
             IProfileService profileService,
             IDispatcher dispatcher,
             INotificationService notificationService,
+            IShortcutService shortcutService,
             IRuntimeDiagnostics diagnostics,
             ISystemInfoProvider systemInfo,
             INavigator navigator,
-            IStringResources strings)
+            IStringResources strings,
+            ILocalSettings localSettings,
+            ISessionLogger sessionLogger = null)
         {
             _whatsAppService = whatsAppService;
             _connectionService = connectionService;
             _profileService = profileService;
             _dispatcher = dispatcher;
             _notificationService = notificationService;
+            _shortcutService = shortcutService;
             _diagnostics = diagnostics;
             _systemInfo = systemInfo;
             _navigator = navigator;
             _strings = strings;
+            _localSettings = localSettings ?? throw new ArgumentNullException(nameof(localSettings));
+            _sessionLogger = sessionLogger;
+
+            _chatListPaneWidth = ReadStoredChatListPaneWidth();
 
             TogglePaneCommand = new RelayCommand(() => IsPaneOpen = !IsPaneOpen);
             NavigateToSectionCommand = new RelayCommand<string>(NavigateToSection);
+
+            _navigator.ShellNavigated += Navigator_ShellNavigated;
+        }
+
+        private void PairingTrace(string message)
+        {
+            string line = "[Pairing/Shell] " + (message ?? string.Empty);
+            try
+            {
+                _sessionLogger?.WriteAlways(line);
+            }
+            catch
+            {
+            }
+
+            Debug.WriteLine(line);
+        }
+
+        private void Navigator_ShellNavigated(object sender, string route)
+        {
+            if (string.IsNullOrWhiteSpace(route))
+            {
+                return;
+            }
+
+            if (!string.Equals(ActiveSection, route, StringComparison.OrdinalIgnoreCase))
+            {
+                ActiveSection = route;
+            }
+
+            // Back from Settings/Debug can leave Overlay closed while VM still thinks open
+            // (light-dismiss during navigation). Force closed on handset after any shell nav.
+            if (IsPhoneHandset() && _isPaneOpen)
+            {
+                IsPaneOpen = false;
+            }
+
+            RaiseSystemBackButtonChanged();
         }
 
         public bool IsPaneOpen
         {
             get => _isPaneOpen;
             set => Set(ref _isPaneOpen, value);
+        }
+
+        /// <summary>
+        /// Chat-list column width in WideBoth (persisted via <see cref="LocalSettingsConstants.ChatListPaneWidth"/>).
+        /// </summary>
+        public double ChatListPaneWidth
+        {
+            get => _chatListPaneWidth;
+            set
+            {
+                double clamped = ClampChatListPaneWidth(value);
+                if (Set(ref _chatListPaneWidth, clamped))
+                {
+                    try
+                    {
+                        _localSettings.Set(LocalSettingsConstants.ChatListPaneWidth, clamped);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine("[ShellViewModel] Save ChatListPaneWidth failed: " + ex.Message);
+                    }
+                }
+            }
         }
 
         public string CurrentUserName
@@ -87,7 +167,7 @@ namespace Unison.Core.ViewModels
             {
                 if (Set(ref _currentUserName, value))
                 {
-                    OnPropertyChanged(nameof(ProfileDisplayName));
+                    RaiseProfileDisplayNameChanged();
                 }
             }
         }
@@ -117,6 +197,18 @@ namespace Unison.Core.ViewModels
             private set => Set(ref _appSurface, value);
         }
 
+        /// <summary>
+        /// Fired when leaving the authenticated shell (logout / session wipe / return to QR).
+        /// Hosts should drop chat detail state immediately — NavigationCache must not keep it.
+        /// </summary>
+        public event EventHandler SessionUiResetRequested;
+
+        /// <summary>
+        /// Raised when leaving Login for Connected — UI plays exit animation, then
+        /// calls <see cref="CompleteEnterConnectedNavigation"/>.
+        /// </summary>
+        public event EventHandler LoginExitTransitionRequested;
+
         /// <summary>WideBoth | NarrowList | NarrowDetail â€” maps to ChatPaneStates.</summary>
         public string ChatPane
         {
@@ -143,7 +235,15 @@ namespace Unison.Core.ViewModels
             {
                 if (Set(ref _hasActiveChat, value))
                 {
-                    OnPropertyChanged(nameof(ShowSystemBackButton));
+                    // Minimal: never leave an empty chat space open when the active chat drops.
+                    if (!value &&
+                        IsNarrowWindow &&
+                        string.Equals(ChatPane, PaneNarrowDetail, StringComparison.Ordinal))
+                    {
+                        ChatPane = PaneNarrowList;
+                    }
+
+                    RaiseSystemBackButtonChanged();
                 }
             }
         }
@@ -163,7 +263,57 @@ namespace Unison.Core.ViewModels
             private set => Set(ref _pendingChat, value);
         }
 
+        /// <summary>
+        /// JID queued from secondary tile / toast launch (<c>chat=</c> arg).
+        /// Cleared by <see cref="ClearPendingOpenChatJid"/> after ChatsView opens it.
+        /// </summary>
+        public string PendingOpenChatJid => _pendingOpenChatJid;
+
+        /// <summary>
+        /// Parses activation arguments and queues navigation into the target chat
+        /// (narrow → detail pane when open succeeds). Used by secondary tiles and toast clicks.
+        /// </summary>
+        public void QueueOpenChatFromActivation(string arguments)
+        {
+            string jid = LaunchActivationHelper.TryGetChatJid(arguments);
+            if (string.IsNullOrWhiteSpace(jid))
+            {
+                return;
+            }
+
+            // Prefer navigating onto Chats first so ChatsView is hooked before PropertyChanged.
+            if (string.Equals(AppSurface, SurfaceConnected, StringComparison.Ordinal))
+            {
+                try
+                {
+                    NavigateToSection(NavigationRoutes.Chats);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[ShellViewModel] Navigate chats for deep link failed: " + ex.Message);
+                }
+            }
+
+            _pendingOpenChatJid = jid.Trim();
+            RaisePendingOpenChatChanged();
+            Debug.WriteLine("[ShellViewModel] Queued open chat from activation: " + _pendingOpenChatJid);
+        }
+
+        public void ClearPendingOpenChatJid()
+        {
+            if (_pendingOpenChatJid == null)
+            {
+                return;
+            }
+
+            _pendingOpenChatJid = null;
+            RaisePendingOpenChatChanged();
+        }
+
+        /// <summary>Opens or closes the shell navigation pane.</summary>
         public ICommand TogglePaneCommand { get; }
+
+        /// <summary>Navigates the shell content frame. Parameter: a <see cref="Constants.NavigationRoutes"/> value.</summary>
         public ICommand NavigateToSectionCommand { get; }
 
         /// <summary>
@@ -180,6 +330,7 @@ namespace Unison.Core.ViewModels
             _whatsAppService.OnSessionCleared += WhatsAppService_OnSessionCleared;
             _whatsAppService.OnError += WhatsAppService_OnError;
             _whatsAppService.OnUserProfileChanged += WhatsAppService_OnUserProfileChanged;
+            _whatsAppService.OnConnectionUpdate += WhatsAppService_OnConnectionUpdate;
             if (_connectionService != null)
             {
                 _connectionService.ConnectionEnded += ConnectionService_ConnectionEnded;
@@ -189,7 +340,7 @@ namespace Unison.Core.ViewModels
 
         /// <summary>
         /// Fast-launch bootstrap: auth first, then Start (welcome) or AppShell.
-        /// Login/QR is only reached via Start â†’ Get started, or session wipe.
+        /// Login/QR is only reached via Start → Get started, or session wipe.
         /// Safe to call again (toast / second Boot): re-asserts root surface.
         /// </summary>
         public async Task InitializeAsync()
@@ -273,27 +424,175 @@ namespace Unison.Core.ViewModels
 
         public void EnterConnectedSurface()
         {
+            string previous = AppSurface;
             RefreshUserInfo();
+
+            // Stop LoginView from treating AppSurface change as "restart QR".
+            _startPairingOnLoginSurface = false;
+
+            // Reconnect / session-initialized must not kick the user out of Settings or Debug.
+            bool alreadyConnected = string.Equals(AppSurface, SurfaceConnected, StringComparison.Ordinal);
             AppSurface = SurfaceConnected;
-            ActiveSection = NavigationRoutes.Chats;
+
+            if (!alreadyConnected)
+            {
+                ActiveSection = NavigationRoutes.Chats;
+            }
+
             SyncChatPane();
-            OnPropertyChanged(nameof(ShowSystemBackButton));
+            RaiseSystemBackButtonChanged();
+            RaiseLoginPairingFlagChanged();
+
+            // Reconnect / session-initialized while already on AppShell: refresh only.
+            // Navigating again remounts ChatsView and drops list + detail selection.
+            if (alreadyConnected)
+            {
+                PairingTrace(
+                    "EnterConnectedSurface from=" + (previous ?? "(null)") +
+                    " alreadyConnected=True → skip NavigateAndClear (keep shell)");
+                return;
+            }
+
+            bool fromLogin = string.Equals(previous, SurfaceLogin, StringComparison.Ordinal);
+            if (fromLogin)
+            {
+                EventHandler handler = LoginExitTransitionRequested;
+                if (handler != null)
+                {
+                    PairingTrace(
+                        "EnterConnectedSurface from=Login alreadyConnected=" + alreadyConnected +
+                        " → defer NavigateAndClear for Login exit animation");
+                    try
+                    {
+                        handler(this, EventArgs.Empty);
+                        return;
+                    }
+                    catch (Exception ex)
+                    {
+                        PairingTrace("LoginExitTransitionRequested FAILED: " + ex.Message);
+                        Debug.WriteLine("[ShellViewModel] Login exit transition failed: " + ex.Message);
+                    }
+                }
+            }
+
+            PairingTrace(
+                "EnterConnectedSurface from=" + (previous ?? "(null)") +
+                " alreadyConnected=" + alreadyConnected +
+                " → NavigateAndClear(AppShell)");
+            // From Login without exit-handler: still prefer green Boot bridge.
+            if (fromLogin)
+            {
+                NavigateToBootBridge();
+                return;
+            }
+
+            NavigateToAppShell();
+        }
+
+        /// <summary>
+        /// Called by Login UI after the exit wipe animation finishes.
+        /// Lands on green Boot bridge, which then opens AppShell.
+        /// </summary>
+        public void CompleteEnterConnectedNavigation()
+        {
+            PairingTrace("CompleteEnterConnectedNavigation → NavigateAndClear(Boot postPairing)");
+            NavigateToBootBridge();
+        }
+
+        /// <summary>
+        /// Called by BootView after dwell + exit animation — navigates to the surface
+        /// prepared while <see cref="SuppressRootNavigation"/> was set.
+        /// </summary>
+        public void FinishBootRootNavigation()
+        {
+            SuppressRootNavigation = false;
+            PairingTrace("FinishBootRootNavigation surface=" + (AppSurface ?? "(null)"));
+
+            if (string.Equals(AppSurface, SurfaceConnected, StringComparison.Ordinal))
+            {
+                NavigateToAppShell();
+                return;
+            }
+
+            if (string.Equals(AppSurface, SurfaceLogin, StringComparison.Ordinal))
+            {
+                try
+                {
+                    _navigator.NavigateAndClear(NavigationRoutes.Login);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[ShellViewModel] FinishBoot → Login failed: " + ex.Message);
+                }
+                return;
+            }
+
             try
             {
-                _navigator.NavigateAndClear(NavigationRoutes.AppShell);
+                _navigator.NavigateAndClear(NavigationRoutes.Start);
             }
             catch (Exception ex)
             {
+                Debug.WriteLine("[ShellViewModel] FinishBoot → Start failed: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Called by BootView after the post-QR green bridge dwell (legacy alias).
+        /// </summary>
+        public void FinishBootToAppShell()
+        {
+            FinishBootRootNavigation();
+        }
+
+        private void NavigateToBootBridge()
+        {
+            try
+            {
+                _navigator.NavigateAndClear(NavigationRoutes.Boot, "postPairing");
+                PairingTrace("NavigateAndClear(Boot postPairing) OK");
+            }
+            catch (Exception ex)
+            {
+                PairingTrace("NavigateAndClear(Boot postPairing) FAILED: " + ex.Message);
+                Debug.WriteLine("[ShellViewModel] Navigate Boot bridge failed: " + ex.Message);
+                NavigateToAppShell();
+            }
+        }
+
+        private void NavigateToAppShell()
+        {
+            if (SuppressRootNavigation)
+            {
+                PairingTrace("NavigateToAppShell suppressed (Boot exit pending)");
+                return;
+            }
+
+            try
+            {
+                _navigator.NavigateAndClear(NavigationRoutes.AppShell);
+                PairingTrace("NavigateAndClear(AppShell) OK");
+            }
+            catch (Exception ex)
+            {
+                PairingTrace("NavigateAndClear(AppShell) FAILED: " + ex.Message);
                 Debug.WriteLine("[ShellViewModel] Navigate AppShell failed: " + ex.Message);
             }
         }
 
         public void EnterStartSurface()
         {
+            ResetAuthenticatedSessionUi();
             _startPairingOnLoginSurface = false;
             if (!Set(ref _appSurface, SurfaceStart))
             {
-                OnPropertyChanged(nameof(AppSurface));
+                RaiseAppSurfaceChanged();
+            }
+
+            if (SuppressRootNavigation)
+            {
+                PairingTrace("EnterStartSurface navigate suppressed (Boot exit pending)");
+                return;
             }
 
             try
@@ -307,21 +606,28 @@ namespace Unison.Core.ViewModels
         }
 
         /// <summary>
-        /// When true, LoginPage starts Connect/QR.
+        /// When true, LoginView starts Connect/QR.
         /// Cleared-session wipe sets false first (show Login), then true (start pairing).
         /// </summary>
         public bool StartPairingOnLoginSurface => _startPairingOnLoginSurface;
 
         public void EnterLoginSurface(bool startPairing = true)
         {
+            ResetAuthenticatedSessionUi();
             _startPairingOnLoginSurface = startPairing;
-            // Always notify so LoginPage can restart QR (or defer) even when already on Login.
+            // Always notify so LoginView can restart QR (or defer) even when already on Login.
             if (!Set(ref _appSurface, SurfaceLogin))
             {
-                OnPropertyChanged(nameof(AppSurface));
+                RaiseAppSurfaceChanged();
             }
 
-            OnPropertyChanged(nameof(StartPairingOnLoginSurface));
+            RaiseLoginPairingFlagChanged();
+
+            if (SuppressRootNavigation)
+            {
+                PairingTrace("EnterLoginSurface navigate suppressed (Boot exit pending)");
+                return;
+            }
 
             try
             {
@@ -333,6 +639,34 @@ namespace Unison.Core.ViewModels
             }
         }
 
+        /// <summary>
+        /// Drop chat chrome + shell navigation so returning to QR cannot revive prior ViewModels.
+        /// </summary>
+        private void ResetAuthenticatedSessionUi()
+        {
+            ClearChat();
+            ActiveSection = NavigationRoutes.Chats;
+            IsPaneOpen = false;
+
+            try
+            {
+                SessionUiResetRequested?.Invoke(this, EventArgs.Empty);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ShellViewModel] SessionUiResetRequested failed: " + ex.Message);
+            }
+
+            try
+            {
+                _navigator?.PurgeShellNavigation();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ShellViewModel] PurgeShellNavigation failed: " + ex.Message);
+            }
+        }
+
         private void NavigateToSection(string section)
         {
             if (string.IsNullOrWhiteSpace(section))
@@ -340,16 +674,24 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
-            ActiveSection = section;
+            // Overlay hamburger: close as soon as a section is chosen (Settings/Debug/Chats).
+            if (IsPhoneHandset() && _isPaneOpen)
+            {
+                IsPaneOpen = false;
+            }
+
             try
             {
+                // Navigate BEFORE ActiveSection so MainView.WireChatsViewMenu sees the live Frame.Content.
+                // (Setting ActiveSection first wired the previous page, then ShellNavigated skipped
+                // re-wire when the route string was already applied.)
                 if (string.Equals(section, NavigationRoutes.Settings, StringComparison.OrdinalIgnoreCase))
                 {
-                    _navigator.NavigateInShellAndClear(NavigationRoutes.Settings);
+                    _navigator.NavigateInShell(NavigationRoutes.Settings);
                 }
                 else if (string.Equals(section, NavigationRoutes.Debug, StringComparison.OrdinalIgnoreCase))
                 {
-                    _navigator.NavigateInShellAndClear(NavigationRoutes.Debug);
+                    _navigator.NavigateInShell(NavigationRoutes.Debug);
                 }
                 else
                 {
@@ -361,20 +703,49 @@ namespace Unison.Core.ViewModels
                 Debug.WriteLine("[ShellViewModel] NavigateInShell failed: " + ex.Message);
             }
 
-            OnPropertyChanged(nameof(ShowSystemBackButton));
+            ActiveSection = section;
+            RaiseSystemBackButtonChanged();
+        }
+
+        /// <summary>
+        /// Hardware / system back for shell sections (Settings / Debug → previous shell page).
+        /// Chat list/detail back is handled by ChatsView before this is called.
+        /// </summary>
+        public bool TryHandleShellBack()
+        {
+            if (_navigator.CanGoBackInShell)
+            {
+                _navigator.GoBackInShell();
+                return true;
+            }
+
+            if (string.Equals(ActiveSection, NavigationRoutes.Settings, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(ActiveSection, NavigationRoutes.Debug, StringComparison.OrdinalIgnoreCase))
+            {
+                NavigateToSection(NavigationRoutes.Chats);
+                return true;
+            }
+
+            return false;
         }
 
         public void ReportWindowNarrow(bool isNarrow)
         {
             // Handset (not Continuum): never switch to desktop dual-pane / Inline open
-            // hamburger just because landscape width â‰¥ 720.
+            // hamburger just because landscape width ≥ 720.
             if (IsPhoneHandset())
             {
                 isNarrow = true;
             }
 
+            bool changed = IsNarrowWindow != isNarrow;
             IsNarrowWindow = isNarrow;
-            CloseHamburgerIfPhoneHandset();
+            // Do not auto-close the hamburger here — layout thrash during sync /
+            // SizeChanged closed the pane right after the user opened it.
+            if (changed)
+            {
+                SyncChatPane();
+            }
         }
 
         /// <summary>
@@ -387,9 +758,6 @@ namespace Unison.Core.ViewModels
             {
                 // Re-assert narrow chat chrome after orientation (chat stays fullscreen).
                 ReportWindowNarrow(true);
-            }
-            else
-            {
                 CloseHamburgerIfPhoneHandset();
             }
         }
@@ -412,9 +780,9 @@ namespace Unison.Core.ViewModels
             }
             else
             {
-                // VSM WideState may open SplitView without changing the VM value â€”
-                // force PropertyChanged so MainPage closes the control.
-                OnPropertyChanged(nameof(IsPaneOpen));
+                // VSM Extended may open SplitView without changing the VM value —
+                // force PropertyChanged so MainView closes the control.
+                RaisePaneOpenChanged();
             }
         }
 
@@ -428,7 +796,7 @@ namespace Unison.Core.ViewModels
                 ChatPane = chat != null ? PaneNarrowDetail : PaneNarrowList;
             }
 
-            OnPropertyChanged(nameof(ShowSystemBackButton));
+            RaiseSystemBackButtonChanged();
         }
 
         public void ClearChat()
@@ -441,19 +809,24 @@ namespace Unison.Core.ViewModels
                 ChatPane = PaneNarrowList;
             }
 
-            OnPropertyChanged(nameof(ShowSystemBackButton));
+            RaiseSystemBackButtonChanged();
         }
 
         public void ReportActiveChat(bool hasActiveChat)
         {
             HasActiveChat = hasActiveChat;
+            if (!hasActiveChat)
+            {
+                PendingChat = null;
+            }
+
             if (IsNarrowWindow)
             {
                 SyncChatPane();
             }
             else
             {
-                OnPropertyChanged(nameof(ShowSystemBackButton));
+                RaiseSystemBackButtonChanged();
             }
         }
 
@@ -461,14 +834,44 @@ namespace Unison.Core.ViewModels
         {
             if (IsNarrowWindow)
             {
-                ChatPane = HasActiveChat ? PaneNarrowDetail : PaneNarrowList;
+                // Minimal: chat space only with an open intent (PendingChat) and active flag.
+                // Do not call EnsureNarrowListWhenNoActiveChat before assigning — that path
+                // cleared PendingChat while SelectChat was switching to NarrowDetail.
+                bool showDetail = HasActiveChat && PendingChat != null;
+                ChatPane = showDetail ? PaneNarrowDetail : PaneNarrowList;
             }
             else
             {
                 ChatPane = PaneWideBoth;
             }
 
-            OnPropertyChanged(nameof(ShowSystemBackButton));
+            RaiseSystemBackButtonChanged();
+        }
+
+        /// <summary>
+        /// Minimal / narrow: if the chat space is showing but nothing is selected, force list.
+        /// </summary>
+        public void EnsureNarrowListWhenNoActiveChat()
+        {
+            if (!IsNarrowWindow)
+            {
+                return;
+            }
+
+            if (!string.Equals(ChatPane, PaneNarrowDetail, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            if (HasActiveChat && PendingChat != null)
+            {
+                return;
+            }
+
+            PendingChat = null;
+            HasActiveChat = false;
+            ChatPane = PaneNarrowList;
+            RaiseSystemBackButtonChanged();
         }
 
         public void RefreshUserInfo()
@@ -500,6 +903,7 @@ namespace Unison.Core.ViewModels
             _whatsAppService.OnSessionCleared -= WhatsAppService_OnSessionCleared;
             _whatsAppService.OnError -= WhatsAppService_OnError;
             _whatsAppService.OnUserProfileChanged -= WhatsAppService_OnUserProfileChanged;
+            _whatsAppService.OnConnectionUpdate -= WhatsAppService_OnConnectionUpdate;
             if (_connectionService != null)
             {
                 _connectionService.ConnectionEnded -= ConnectionService_ConnectionEnded;
@@ -524,12 +928,10 @@ namespace Unison.Core.ViewModels
 
         private void WhatsAppService_OnSessionCleared(object sender, SessionClearedEventArgs e)
         {
-            // Raised on UI via WhatsAppService.RaiseSessionClearedAsync â€” keep sync so
+            // Raised on UI via WhatsAppService.RaiseSessionClearedAsync — keep sync so
             // ClearSessionAsync can show Login before keystore wipe continues.
             bool startPairing = e?.StartPairing ?? true;
             EnterLoginSurface(startPairing);
-            ActiveSection = "chats";
-            ClearChat();
             ApplyProfile(null);
             try { _notificationService.ClearAll(); } catch { }
         }
@@ -541,10 +943,96 @@ namespace Unison.Core.ViewModels
 
         private async void WhatsAppService_OnSessionInitialized(object sender, EventArgs e)
         {
+            PairingTrace("OnSessionInitialized received (surface=" + AppSurface + ")");
             await _dispatcher.RunAsync(() =>
             {
+                PairingTrace("OnSessionInitialized → EnterConnectedSurface");
+                Debug.WriteLine("[ShellViewModel] OnSessionInitialized → AppShell");
                 EnterConnectedSurface();
                 _whatsAppService.StartDeferredStartupMaintenance();
+            });
+        }
+
+        /// <summary>
+        /// Safety net: pairing stage-2 (515 restart) or an offline drain can publish
+        /// connection updates without OnSessionInitialized reaching us first (seen on
+        /// Mobile — phone shows "synced" while the app is still stuck on the QR page).
+        /// Any live-connection status while registered and still on Login/Startup means
+        /// we missed the primary signal — leave QR now instead of staying stuck forever.
+        /// </summary>
+        private async void WhatsAppService_OnConnectionUpdate(object sender, string status)
+        {
+            if (string.IsNullOrWhiteSpace(status))
+            {
+                return;
+            }
+
+            bool onLoginOrStartup =
+                string.Equals(AppSurface, SurfaceLogin, StringComparison.Ordinal) ||
+                string.Equals(AppSurface, SurfaceStartup, StringComparison.Ordinal);
+            if (!onLoginOrStartup)
+            {
+                return;
+            }
+
+            string normalized = status.Trim();
+            bool liveSignal =
+                string.Equals(normalized, "connected", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(normalized, "open", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(normalized, "synced", StringComparison.OrdinalIgnoreCase);
+            if (!liveSignal)
+            {
+                return;
+            }
+
+            PairingTrace(
+                "safety-net probe status=" + normalized +
+                " surface=" + AppSurface);
+
+            bool registered;
+            try
+            {
+                registered = await _whatsAppService.IsRegisteredAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                PairingTrace("safety-net IsRegistered FAILED: " + ex.Message);
+                Debug.WriteLine("[ShellViewModel] Registered probe failed: " + ex.Message);
+                return;
+            }
+
+            if (!registered)
+            {
+                PairingTrace("safety-net SKIP (not registered) status=" + normalized);
+                return;
+            }
+
+            await _dispatcher.RunAsync(() =>
+            {
+                // Re-check after the dispatcher hop — OnSessionInitialized may have won the race.
+                if (!string.Equals(AppSurface, SurfaceLogin, StringComparison.Ordinal) &&
+                    !string.Equals(AppSurface, SurfaceStartup, StringComparison.Ordinal))
+                {
+                    PairingTrace(
+                        "safety-net SKIP after dispatch (surface already " + AppSurface + ")");
+                    return;
+                }
+
+                PairingTrace(
+                    "safety-net FIRE status=" + normalized +
+                    " surface=" + AppSurface + " → EnterConnectedSurface");
+                Debug.WriteLine(
+                    "[ShellViewModel] ConnectionUpdate '" + normalized + "' while on " +
+                    AppSurface + " and registered → AppShell (safety net)");
+                EnterConnectedSurface();
+                try
+                {
+                    _whatsAppService.StartDeferredStartupMaintenance();
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[ShellViewModel] StartDeferredStartupMaintenance: " + ex.Message);
+                }
             });
         }
 
@@ -585,7 +1073,17 @@ namespace Unison.Core.ViewModels
                 await Task.Delay(120);
                 await _whatsAppService.LoadPersistedUiStateAsync();
                 _notificationService.UpdateBadge(_whatsAppService.GetTotalUnreadCount());
+                if (_shortcutService != null)
+                {
+                    await _shortcutService.RefreshPinnedUnreadAsync(_whatsAppService.Chats);
+                }
                 await _dispatcher.RunAsync(RefreshUserInfo);
+
+                // Chats may have arrived after ChatsView first Loaded — re-signal deep link.
+                if (!string.IsNullOrWhiteSpace(_pendingOpenChatJid))
+                {
+                    await _dispatcher.RunAsync(() => RaisePendingOpenChatChanged());
+                }
             }
             catch (Exception ex)
             {
@@ -596,5 +1094,49 @@ namespace Unison.Core.ViewModels
                 Debug.WriteLine($"[ShellViewModel] Persisted UI load failed: {ex.Message}");
             }
         }
+
+        private double ReadStoredChatListPaneWidth()
+        {
+            try
+            {
+                double saved = _localSettings.Get<double>(LocalSettingsConstants.ChatListPaneWidth);
+                return ClampChatListPaneWidth(saved);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ShellViewModel] Load ChatListPaneWidth failed: " + ex.Message);
+                return ChatPaneLayoutConstants.DefaultListWidth;
+            }
+        }
+
+        private static double ClampChatListPaneWidth(double value)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value))
+            {
+                return ChatPaneLayoutConstants.DefaultListWidth;
+            }
+
+            return Math.Max(
+                ChatPaneLayoutConstants.MinListWidth,
+                Math.Min(ChatPaneLayoutConstants.MaxListWidth, value));
+        }
+
+        private void RaiseSystemBackButtonChanged() =>
+            OnPropertyChanged(nameof(ShowSystemBackButton));
+
+        private void RaisePendingOpenChatChanged() =>
+            OnPropertyChanged(nameof(PendingOpenChatJid));
+
+        private void RaiseAppSurfaceChanged() =>
+            OnPropertyChanged(nameof(AppSurface));
+
+        private void RaiseLoginPairingFlagChanged() =>
+            OnPropertyChanged(nameof(StartPairingOnLoginSurface));
+
+        private void RaiseProfileDisplayNameChanged() =>
+            OnPropertyChanged(nameof(ProfileDisplayName));
+
+        private void RaisePaneOpenChanged() =>
+            OnPropertyChanged(nameof(IsPaneOpen));
     }
 }

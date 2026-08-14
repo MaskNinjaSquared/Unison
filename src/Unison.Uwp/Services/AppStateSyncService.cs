@@ -1499,7 +1499,7 @@ namespace Unison.Uwp.Services
             if (value.MuteAction != null && !string.IsNullOrWhiteSpace(chatJid))
             {
                 long? muteEnd = value.MuteAction.Muted ? (long?)value.MuteAction.MuteEndTimestamp : null;
-                await _owner.ApplyAppStateChatFlagsAsync(chatJid, muteEndTimestamp: muteEnd);
+                await _owner.ApplyAppStateChatFlagsAsync(chatJid, muteEndTimestamp: muteEnd, applyMute: true);
                 return true;
             }
 

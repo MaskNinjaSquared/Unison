@@ -1,13 +1,14 @@
 using System;
-using System.Diagnostics;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Models;
+using Unison.Core.Helpers;
 using Unison.Core.ViewModels;
 using Unison.Uwp.Helpers;
 using Unison.Uwp.Services;
@@ -15,6 +16,7 @@ using Unison.Baileys.Protocol;
 using Proto;
 using System.Linq;
 using System.Threading.Tasks;
+using Windows.Foundation;
 using Windows.UI.Core;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
@@ -79,11 +81,27 @@ namespace Unison.Uwp.UI.Views
 
         private void ChatListView_Loaded(object sender, RoutedEventArgs e)
         {
+            // Always re-hook shell menu: navigating to Settings unloads this control and
+            // drops MenuRequested; a subsequent Loaded must restore it or "…" does nothing.
+            if (ViewModel != null)
+            {
+                ViewModel.MenuRequested -= ViewModel_MenuRequested;
+                ViewModel.MenuRequested += ViewModel_MenuRequested;
+                ViewModel.OpenChatRequested -= ViewModel_OpenChatRequested;
+                ViewModel.OpenChatRequested += ViewModel_OpenChatRequested;
+            }
+
             if (_subscriptionsAttached)
             {
                 return;
             }
             _subscriptionsAttached = true;
+
+            if (ViewModel != null)
+            {
+                ViewModel.BeforeLocalConversationsCleared += ViewModel_BeforeLocalConversationsCleared;
+                ViewModel.AfterMenuActionCompleted += ViewModel_AfterMenuActionCompleted;
+            }
 
             var service = WhatsApp;
             service.OnConnectionUpdate += Service_OnConnectionUpdate;
@@ -122,6 +140,14 @@ namespace Unison.Uwp.UI.Views
             if (!_subscriptionsAttached)
             {
                 return;
+            }
+
+            if (ViewModel != null)
+            {
+                ViewModel.BeforeLocalConversationsCleared -= ViewModel_BeforeLocalConversationsCleared;
+                ViewModel.AfterMenuActionCompleted -= ViewModel_AfterMenuActionCompleted;
+                ViewModel.MenuRequested -= ViewModel_MenuRequested;
+                ViewModel.OpenChatRequested -= ViewModel_OpenChatRequested;
             }
 
             _searchDebounceTimer.Stop();
@@ -193,6 +219,25 @@ namespace Unison.Uwp.UI.Views
                 if (_initialSyncRendering)
                 {
                     UpdateInitialSyncText();
+                    return;
+                }
+
+                if (ViewModel != null && ViewModel.IsConversationResyncInProgress)
+                {
+                    if (string.IsNullOrEmpty(statusMessage))
+                    {
+                        return;
+                    }
+
+                    // Prefer localized preparing text over raw service strings during resync.
+                    if (string.Equals(statusMessage, "Saving chats...", StringComparison.Ordinal))
+                    {
+                        return;
+                    }
+
+                    ChatLoadingOverlay.Visibility = Visibility.Visible;
+                    ChatLoadingText.Text = statusMessage;
+                    _ = PresentSyncAsync(statusMessage, visible: true);
                     return;
                 }
 
@@ -303,6 +348,24 @@ namespace Unison.Uwp.UI.Views
                 {
                     ScheduleVisibleChatsRefresh();
                 }
+                else
+                {
+                    // After Move/Remove restore, rebind detail to the live list instance.
+                    var selected = ChatList.SelectedItem as ChatItem;
+                    if (selected != null)
+                    {
+                        ChatSelected?.Invoke(this, new ChatSelectedEventArgs(selected));
+                    }
+                    else if (!string.IsNullOrWhiteSpace(selectedJid))
+                    {
+                        RestoreSelectionByJid(selectedJid);
+                        selected = ChatList.SelectedItem as ChatItem;
+                        if (selected != null)
+                        {
+                            ChatSelected?.Invoke(this, new ChatSelectedEventArgs(selected));
+                        }
+                    }
+                }
             });
         }
 
@@ -354,6 +417,31 @@ namespace Unison.Uwp.UI.Views
             }
 
             return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// UWP TextBlock does not clip overflow into adjacent Grid columns; long sync strings
+        /// painted over header icons. Clip to arranged bounds + CharacterEllipsis.
+        /// Clear Clip when collapsed so a stale zero-rect does not stick across refresh.
+        /// </summary>
+        private void SyncStatusPanel_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            if (SyncStatusPanel == null)
+            {
+                return;
+            }
+
+            if (e.NewSize.Width <= 0 || e.NewSize.Height <= 0 ||
+                SyncStatusPanel.Visibility != Visibility.Visible)
+            {
+                SyncStatusPanel.Clip = null;
+                return;
+            }
+
+            SyncStatusPanel.Clip = new RectangleGeometry
+            {
+                Rect = new Rect(0, 0, e.NewSize.Width, e.NewSize.Height)
+            };
         }
 
         private void BeginInitialSyncRendering(int processed, int total)
@@ -416,7 +504,7 @@ namespace Unison.Uwp.UI.Views
             var service = WhatsApp;
             var source = Chats
                 .Where(c => c != null && !string.IsNullOrWhiteSpace(c.JID))
-                .OrderByDescending(c => c.IsPinned)
+                .OrderByDescending(c => c.IsChatPinned)
                 .ThenByDescending(c => c.PinnedTimestamp ?? 0)
                 .ThenByDescending(c => c.LastMessageTimestampUtc ?? DateTime.MinValue)
                 .ThenBy(c => c.Name ?? string.Empty, StringComparer.CurrentCultureIgnoreCase)
@@ -444,6 +532,14 @@ namespace Unison.Uwp.UI.Views
                 if (!visibleCanonical.Add(canonical))
                 {
                     continue;
+                }
+
+                try
+                {
+                    App.Services?.GetService<IChatStore>()?.ApplyTo(chat);
+                }
+                catch
+                {
                 }
 
                 VisibleChats.Add(chat);
@@ -481,7 +577,7 @@ namespace Unison.Uwp.UI.Views
         {
             // ObservableCollection.Move can make ListView report a temporary null
             // selection while the selected row is moved to the top. That transient
-            // event used to be propagated as a real deselection, causing MainPage to
+            // event used to be propagated as a real deselection, causing MainView to
             // call SetActiveChatAsync(null) immediately after sending a message.
             if (_suppressSelectionChanged || _isRefreshingVisibleChats)
             {
@@ -489,16 +585,104 @@ namespace Unison.Uwp.UI.Views
             }
 
             var chat = ChatList.SelectedItem as ChatItem;
-            if (chat == null && !string.IsNullOrWhiteSpace(_lastSelectedChatJid))
+            if (chat == null)
             {
-                // A null selection that was not explicitly requested is considered
-                // transient. Restore it without notifying MainPage.
-                RestoreSelectionByJid(_lastSelectedChatJid);
+                // Never notify a null selection — list rebuilds / Move / dedupe must not
+                // close the open chat. Re-select the last known conversation when possible.
+                if (!string.IsNullOrWhiteSpace(_lastSelectedChatJid))
+                {
+                    RestoreSelectionByJid(_lastSelectedChatJid);
+                }
+
                 return;
             }
 
-            _lastSelectedChatJid = chat?.JID;
+            _lastSelectedChatJid = chat.JID;
+
+            // Same conversation, possibly a new ChatItem instance after dedupe — still notify
+            // so ChatsView can rebind PendingChat without tearing down the detail.
             ChatSelected?.Invoke(this, new ChatSelectedEventArgs(chat));
+        }
+
+        /// <summary>Pin chat as Start secondary tile (ContextFlyout from chat row).</summary>
+        internal void PinChatToStart(ChatItem chat)
+        {
+            if (chat == null || ViewModel?.PinChatToStartCommand == null)
+            {
+                return;
+            }
+
+            if (ViewModel.PinChatToStartCommand.CanExecute(chat))
+            {
+                ViewModel.PinChatToStartCommand.Execute(chat);
+            }
+        }
+
+        internal void ToggleLocalMute(ChatItem chat)
+        {
+            SetLocalMute(chat, chat != null && chat.IsMutedLocally
+                ? (long?)null
+                : ChatMuteHelper.ForeverUnixSeconds);
+        }
+
+        internal void SetLocalMute(ChatItem chat, long? mutedUntilUnixSeconds)
+        {
+            if (chat == null || ViewModel?.SetLocalMuteCommand == null)
+            {
+                return;
+            }
+
+            var request = mutedUntilUnixSeconds.HasValue
+                ? ChatMuteRequest.Mute(chat, mutedUntilUnixSeconds.Value)
+                : ChatMuteRequest.Unmute(chat);
+
+            if (ViewModel.SetLocalMuteCommand.CanExecute(request))
+            {
+                ViewModel.SetLocalMuteCommand.Execute(request);
+            }
+        }
+
+        /// <summary>Selects a chat in the list without raising <see cref="ChatSelected"/> (caller opens detail).</summary>
+        internal void HighlightChatQuiet(ChatItem chat)
+        {
+            if (chat == null)
+            {
+                return;
+            }
+
+            bool previousSuppression = _suppressSelectionChanged;
+            _suppressSelectionChanged = true;
+            try
+            {
+                if (!VisibleChats.Contains(chat))
+                {
+                    // Ensure the row is visible even when a filter is active.
+                    VisibleChats.Insert(0, chat);
+                }
+
+                ChatList.SelectedItem = chat;
+                _lastSelectedChatJid = chat.JID;
+            }
+            finally
+            {
+                _suppressSelectionChanged = previousSuppression;
+            }
+        }
+
+        /// <summary>Finds a chat by JID / canonical id in the full source collection.</summary>
+        internal ChatItem FindChatByJid(string jid)
+        {
+            if (string.IsNullOrWhiteSpace(jid))
+            {
+                return null;
+            }
+
+            var service = WhatsApp;
+            string canonical = service.GetCanonicalJid(jid);
+            return Chats.FirstOrDefault(c =>
+                c != null &&
+                (string.Equals(c.JID, jid, StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(service.GetCanonicalJid(c.JID), canonical, StringComparison.OrdinalIgnoreCase)));
         }
 
         public void ClearSelection()
@@ -518,27 +702,36 @@ namespace Unison.Uwp.UI.Views
             }
         }
 
-        private async void NewChatButton_Click(object sender, RoutedEventArgs e)
+        private void ViewModel_MenuRequested(object sender, EventArgs e)
         {
-            if (App.Services == null)
-            {
-                return;
-            }
+            Debug.WriteLine("[ChatListView] MenuRequested → MenuClicked");
+            MenuClicked?.Invoke(this, EventArgs.Empty);
+        }
 
-            var dialogs = App.Services.GetRequiredService<Unison.Core.Contracts.IDialogService>();
-            var newChatVm = App.Services.GetRequiredService<NewChatViewModel>();
-            string jid = await dialogs.ShowNewChatDialogAsync(newChatVm);
+        private void MenuButton_Click(object sender, RoutedEventArgs e)
+        {
+            // Direct path so shell hamburger still opens if Command/MenuRequested was unhooked
+            // after Settings navigation (UWP Unloaded/Loaded races).
+            Debug.WriteLine("[ChatListView] MenuButton_Click");
+            MenuClicked?.Invoke(this, EventArgs.Empty);
+        }
+
+        private async void ViewModel_OpenChatRequested(object sender, string jid)
+        {
             if (string.IsNullOrEmpty(jid))
             {
                 return;
             }
 
-            var chat = Chats.FirstOrDefault(c => c.JID == jid);
-            if (chat == null)
+            // StartNewChat may populate asynchronously; give the source one short chance.
+            ChatItem chat = null;
+            for (int i = 0; i < 5 && chat == null; i++)
             {
-                WhatsApp.StartNewChat(jid);
-                await Task.Delay(100);
                 chat = Chats.FirstOrDefault(c => c.JID == jid);
+                if (chat == null)
+                {
+                    await Task.Delay(50);
+                }
             }
 
             if (chat != null)
@@ -547,13 +740,83 @@ namespace Unison.Uwp.UI.Views
             }
         }
 
-        private void MenuButton_Click(object sender, RoutedEventArgs e)
+        private void ViewModel_BeforeLocalConversationsCleared(object sender, EventArgs e)
         {
-            Debug.WriteLine("[ChatListView] MenuButton_Click");
-            MenuClicked?.Invoke(this, EventArgs.Empty);
+            _suppressSelectionChanged = true;
+            try
+            {
+                ChatList.SelectedItem = null;
+                _lastSelectedChatJid = null;
+            }
+            finally
+            {
+                _suppressSelectionChanged = false;
+            }
+
+            VisibleChats.Clear();
+            ChatLoadingOverlay.Visibility = Visibility.Visible;
+            ChatLoadingText.Text = LocalizedStrings.Get(
+                "ChatList_ResyncCleaningHistory",
+                "Cleaning history...");
+
+            // Leave NarrowDetail empty-state; restore list pane during wipe/resync.
+            try
+            {
+                FindAncestorChatsView()?.NotifyLocalConversationsCleared();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[ChatListView] NotifyLocalConversationsCleared: " + ex.Message);
+            }
         }
 
-        private async void RefreshContactNamesMenuItem_Click(object sender, RoutedEventArgs e)
+        private ChatsView FindAncestorChatsView()
+        {
+            DependencyObject current = this;
+            while (current != null)
+            {
+                var match = current as ChatsView;
+                if (match != null)
+                {
+                    return match;
+                }
+
+                current = VisualTreeHelper.GetParent(current);
+            }
+
+            return Window.Current?.Content != null
+                ? FindInSubtree<ChatsView>(Window.Current.Content as DependencyObject)
+                : null;
+        }
+
+        private static T FindInSubtree<T>(DependencyObject root) where T : class
+        {
+            if (root == null)
+            {
+                return null;
+            }
+
+            var match = root as T;
+            if (match != null)
+            {
+                return match;
+            }
+
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                var found = FindInSubtree<T>(VisualTreeHelper.GetChild(root, i));
+                if (found != null)
+                {
+                    return found;
+                }
+            }
+
+            return null;
+        }
+
+        private void ViewModel_AfterMenuActionCompleted(object sender, EventArgs e)
         {
             if (_initialSyncRendering || WhatsApp.IsInitialSyncSafeMode)
             {
@@ -561,16 +824,14 @@ namespace Unison.Uwp.UI.Views
                 return;
             }
 
-            await PresentSyncAsync(LocalizedStrings.Get("ChatList_RefreshingNames"), visible: true);
-            try
+            RefreshVisibleChats();
+
+            if (VisibleChats.Count == 0)
             {
-                // Prefer ContactService policy via WA forward (same as ChatListViewModel command).
-                await WhatsApp.RefreshContactNamesAsync(includeGroups: false, force: true);
-            }
-            finally
-            {
-                RefreshVisibleChats();
-                await PresentSyncAsync(null, visible: false);
+                ChatLoadingOverlay.Visibility = Visibility.Visible;
+                ChatLoadingText.Text = LocalizedStrings.Get(
+                    "ChatList_ResyncingConversations",
+                    "Re-syncing conversations...");
             }
         }
 
@@ -629,7 +890,7 @@ namespace Unison.Uwp.UI.Views
                 return;
             }
 
-            if (e.PropertyName == nameof(ChatItem.IsPinned) ||
+            if (e.PropertyName == nameof(ChatItem.IsChatPinned) ||
                 e.PropertyName == nameof(ChatItem.PinnedTimestamp))
             {
                 _ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal, RefreshVisibleChats);
@@ -833,12 +1094,12 @@ namespace Unison.Uwp.UI.Views
 
                 // PN/LID duplicates can receive app-state updates on different rows.
                 // Preserve pin state regardless of which row has the newest preview.
-                if (item.IsPinned && !existing.IsPinned)
+                if (item.IsChatPinned && !existing.IsChatPinned)
                 {
-                    existing.IsPinned = true;
+                    existing.IsChatPinned = true;
                     existing.PinnedTimestamp = item.PinnedTimestamp;
                 }
-                else if (item.IsPinned && existing.IsPinned &&
+                else if (item.IsChatPinned && existing.IsChatPinned &&
                          (item.PinnedTimestamp ?? 0) > (existing.PinnedTimestamp ?? 0))
                 {
                     existing.PinnedTimestamp = item.PinnedTimestamp;
@@ -857,9 +1118,9 @@ namespace Unison.Uwp.UI.Views
 
                 if (itemHasNewerPreview || samePreviewButBetterAvatar || samePreviewAndAvatarButBetterName)
                 {
-                    if (existing.IsPinned && !item.IsPinned)
+                    if (existing.IsChatPinned && !item.IsChatPinned)
                     {
-                        item.IsPinned = true;
+                        item.IsChatPinned = true;
                         item.PinnedTimestamp = existing.PinnedTimestamp;
                     }
                     deduped[existingIndex] = item;
@@ -867,7 +1128,7 @@ namespace Unison.Uwp.UI.Views
             }
 
             source = deduped
-                .OrderByDescending(c => c.IsPinned)
+                .OrderByDescending(c => c.IsChatPinned)
                 .ThenByDescending(c => c.PinnedTimestamp ?? 0)
                 .ThenByDescending(c => c.LastMessageTimestampUtc ?? DateTime.MinValue)
                 .ThenBy(c => c.Name ?? string.Empty, StringComparer.CurrentCultureIgnoreCase)
@@ -912,12 +1173,33 @@ namespace Unison.Uwp.UI.Views
                         ChatList.SelectedItem = selected;
                         _lastSelectedChatJid = selected.JID;
                     }
+                    else
+                    {
+                        // Keep the remembered JID so a later CollectionChanged can restore
+                        // (e.g. temporary remove during PN/LID merge).
+                        _lastSelectedChatJid = selectedJid;
+                    }
                 }
             }
             finally
             {
                 _suppressSelectionChanged = false;
                 _isRefreshingVisibleChats = false;
+            }
+
+            var restored = ChatList.SelectedItem as ChatItem;
+            if (restored != null)
+            {
+                ChatSelected?.Invoke(this, new ChatSelectedEventArgs(restored));
+            }
+            else if (!string.IsNullOrWhiteSpace(_lastSelectedChatJid))
+            {
+                RestoreSelectionByJid(_lastSelectedChatJid);
+                restored = ChatList.SelectedItem as ChatItem;
+                if (restored != null)
+                {
+                    ChatSelected?.Invoke(this, new ChatSelectedEventArgs(restored));
+                }
             }
         }
 

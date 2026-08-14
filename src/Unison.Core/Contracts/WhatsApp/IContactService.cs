@@ -58,5 +58,11 @@ namespace Unison.Core.Contracts.WhatsApp
 
         /// <summary>Clears the "already attempted this session" marker for a JID so it can be retried immediately.</summary>
         void ClearAvatarAttempted(string jid);
+
+        /// <summary>
+        /// User action: resolve a phone number to a WhatsApp JID (new-chat search).
+        /// Prefer this over calling WhatsAppService from ViewModels.
+        /// </summary>
+        Task<string> SearchContactAsync(string phoneNumber);
     }
 }

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Unison.Baileys.Protocol;
@@ -118,13 +118,13 @@ namespace Unison.Background
 
             switch ((mediaType ?? string.Empty).ToLowerInvariant())
             {
-                case "image": return "[Foto]";
-                case "video": return "[Vídeo]";
-                case "audio": return "[Áudio]";
-                case "ptt": return "[Mensagem de voz]";
-                case "document": return "[Documento]";
-                case "sticker": return "[Figurinha]";
-                default: return "Nova mensagem";
+                case "image": return "[Image]";
+                case "video": return "[Video]";
+                case "audio": return "[Audio]";
+                case "ptt": return "[Voice Message]";
+                case "document": return "[Document]";
+                case "sticker": return "[Sticker]";
+                default: return "New message";
             }
         }
 
@@ -176,7 +176,7 @@ namespace Unison.Background
             string baseJid = WA.GetBaseJid(
                 WA.NormalizeDeviceJid(jid));
             if (string.IsNullOrWhiteSpace(baseJid))
-                return "Nova mensagem";
+                return "New message";
             int separator = baseJid.IndexOf('@');
             return separator > 0
                 ? baseJid.Substring(0, separator)

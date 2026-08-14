@@ -34,6 +34,13 @@ namespace Unison.Uwp.UI.Controls
                 typeof(ChatAvatarControl),
                 new PropertyMetadata(48d, OnVisualPropertyChanged));
 
+        public static readonly DependencyProperty ShowBorderProperty =
+            DependencyProperty.Register(
+                nameof(ShowBorder),
+                typeof(bool),
+                typeof(ChatAvatarControl),
+                new PropertyMetadata(false, OnVisualPropertyChanged));
+
         public ChatAvatarControl()
         {
             InitializeComponent();
@@ -58,6 +65,16 @@ namespace Unison.Uwp.UI.Controls
             set { SetValue(SizeProperty, value); }
         }
 
+        /// <summary>
+        /// When true, draws the themed avatar ring (list + chat header). Off by default
+        /// for info panel, settings, and in-bubble contact avatars.
+        /// </summary>
+        public bool ShowBorder
+        {
+            get { return (bool)GetValue(ShowBorderProperty); }
+            set { SetValue(ShowBorderProperty, value); }
+        }
+
         private static void OnVisualPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             var control = d as ChatAvatarControl;
@@ -78,6 +95,9 @@ namespace Unison.Uwp.UI.Controls
             FallbackEllipse.Height = size;
             PhotoEllipse.Width = size;
             PhotoEllipse.Height = size;
+            BorderEllipse.Width = size;
+            BorderEllipse.Height = size;
+            BorderEllipse.Visibility = ShowBorder ? Visibility.Visible : Visibility.Collapsed;
 
             ContactFallbackIcon.FontSize = size * (20d / 48d);
             GroupFallbackHost.Width = size * 0.5;

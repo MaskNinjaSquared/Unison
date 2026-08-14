@@ -1,15 +1,18 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Windows.Input;
+
 using Unison.Core.Constants;
 using Unison.Core.Contracts;
+using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
 
 namespace Unison.Core.ViewModels
 {
     /// <summary>
-    /// App settings (notifications / live tiles / keep-alive / shell) + about credits.
+    /// App settings (notifications / live tiles / keep-alive / shell / language) + about credits.
     /// Mirrors Imgur SettingsViewModel: toggles write LocalSettingsConstants and
     /// notify platform services.
     /// </summary>
@@ -20,11 +23,17 @@ namespace Unison.Core.ViewModels
         private readonly INotificationService _notificationService;
         private readonly ILocationKeepAliveService _locationKeepAlive;
         private readonly IShellThemeService _shellTheme;
+        private readonly IAppLanguageService _appLanguage;
         private readonly IStringResources _strings;
+        private readonly IDialogService _dialogService;
+        private readonly IWhatsAppService _whatsAppService;
+        private readonly ShellViewModel _shell;
 
         private string _appVersion;
         private bool _keepAliveBusy;
         private bool _shellChangeBusy;
+        private bool _languageChangeBusy;
+        private bool _disconnectBusy;
 
         public SettingsViewModel(
             ILocalSettings localSettings,
@@ -32,14 +41,24 @@ namespace Unison.Core.ViewModels
             INotificationService notificationService,
             ILocationKeepAliveService locationKeepAlive,
             IShellThemeService shellTheme,
-            IStringResources strings)
+            IAppLanguageService appLanguage,
+            IStringResources strings,
+            IDialogService dialogService,
+            IWhatsAppService whatsAppService,
+            ShellViewModel shell)
         {
             _localSettings = localSettings;
             _liveTilesService = liveTilesService;
             _notificationService = notificationService;
             _locationKeepAlive = locationKeepAlive;
             _shellTheme = shellTheme;
+            _appLanguage = appLanguage;
             _strings = strings;
+            _dialogService = dialogService;
+            _whatsAppService = whatsAppService;
+            _shell = shell;
+
+            _shell.PropertyChanged += OnShellPropertyChanged;
 
             LeaveCommand = new RelayCommand(() => LeaveRequested?.Invoke(this, EventArgs.Empty));
             ChangeShellCommand = new RelayCommand<int>(index =>
@@ -51,9 +70,33 @@ namespace Unison.Core.ViewModels
 
                 _ = ChangeShellAsync(index);
             });
+            ChangeLanguageCommand = new RelayCommand<int>(index =>
+            {
+                if (_languageChangeBusy)
+                {
+                    return;
+                }
+
+                _ = ChangeLanguageAsync(index);
+            });
+            DisconnectCommand = new RelayCommand(() =>
+            {
+                if (_disconnectBusy)
+                {
+                    return;
+                }
+
+                _ = ConfirmAndDisconnectAsync();
+            });
         }
 
         public event EventHandler LeaveRequested;
+
+        /// <summary>Signed-in display name (from shell profile).</summary>
+        public string ProfileDisplayName => _shell.ProfileDisplayName;
+
+        /// <summary>Signed-in avatar URL (from shell profile).</summary>
+        public string CurrentUserAvatar => _shell.CurrentUserAvatar;
 
         public bool NotificationsEnabled
         {
@@ -121,6 +164,62 @@ namespace Unison.Core.ViewModels
         /// <summary>ComboBox SelectedIndex (OneWay). Changes go through <see cref="ChangeShellCommand"/>.</summary>
         public int SelectedShellIndex => (int)SelectedShell;
 
+        /// <summary>Current persisted UI language.</summary>
+        public AppLanguage SelectedLanguage
+        {
+            get
+            {
+                int raw = _localSettings.Get<int>(LocalSettingsConstants.SelectedLanguage);
+                return AppLanguageInfo.FromStored(raw);
+            }
+        }
+
+        /// <summary>ComboBox SelectedIndex into <see cref="LanguageOptions"/>.</summary>
+        public int SelectedLanguageIndex
+        {
+            get
+            {
+                AppLanguage selected = SelectedLanguage;
+                IReadOnlyList<AppLanguage> all = AppLanguageInfo.All;
+                for (int i = 0; i < all.Count; i++)
+                {
+                    if (all[i] == selected)
+                    {
+                        return i;
+                    }
+                }
+
+                return 0;
+            }
+        }
+
+        /// <summary>Native display names for the language ComboBox (order = <see cref="AppLanguageInfo.All"/>).</summary>
+        public IReadOnlyList<string> LanguageOptions => AppLanguageInfo.GetDisplayNames(_strings);
+
+        /// <summary>
+        /// Display string for ComboBox SelectedItem. Prefer over SelectedIndex alone:
+        /// UWP often applies SelectedIndex before ItemsSource and leaves -1 with OneWay.
+        /// </summary>
+        public string SelectedLanguageOption
+        {
+            get
+            {
+                IReadOnlyList<string> options = LanguageOptions;
+                int index = SelectedLanguageIndex;
+                if (options.Count == 0)
+                {
+                    return string.Empty;
+                }
+
+                if (index < 0 || index >= options.Count)
+                {
+                    return options[0];
+                }
+
+                return options[index];
+            }
+        }
+
         public string AppTitle => "Unison";
 
         public string AppDescription =>
@@ -137,26 +236,105 @@ namespace Unison.Core.ViewModels
         }
 
         public string DeveloperPrimary => "@MaskNinjaSquared";
-        public string Contributors => "@Maykon_Us, @Negociation (Thiago Araujo), @jjb-pro";
 
+        public string Contributors =>
+            "@MayconUs" + Environment.NewLine +
+            "@Negociation (Thiago Araujo)" + Environment.NewLine +
+            "@jjb-pro";
+
+        /// <summary>Leaves Settings and returns to the chats section.</summary>
         public ICommand LeaveCommand { get; }
 
-        /// <summary>Parameter: new shell index (0 Unison / 1 WhatsApp).</summary>
+        /// <summary>Applies a new app shell theme. Parameter: 0 = Unison, 1 = WhatsApp.</summary>
         public ICommand ChangeShellCommand { get; }
+
+        /// <summary>Changes UI language and restarts. Parameter: index into <see cref="LanguageOptions"/>.</summary>
+        public ICommand ChangeLanguageCommand { get; }
+
+        /// <summary>Confirms, then wipes local auth/session and returns to pairing.</summary>
+        public ICommand DisconnectCommand { get; }
 
         public void Initialize(string appVersion)
         {
             AppVersion = appVersion ?? string.Empty;
-            OnPropertyChanged(nameof(NotificationsEnabled));
-            OnPropertyChanged(nameof(LiveTilesEnabled));
-            OnPropertyChanged(nameof(LocationKeepAliveEnabled));
-            OnPropertyChanged(nameof(SelectedShell));
-            OnPropertyChanged(nameof(SelectedShellIndex));
-            OnPropertyChanged(nameof(AppTitle));
-            OnPropertyChanged(nameof(AppDescription));
-            OnPropertyChanged(nameof(AppBranch));
-            OnPropertyChanged(nameof(DeveloperPrimary));
-            OnPropertyChanged(nameof(Contributors));
+            RaiseToggleSettingsChanged();
+            RaiseShellSelectionChanged();
+            RaiseLanguageSelectionChanged();
+            RaiseAboutCopyChanged();
+            RaiseProfileHeaderChanged();
+        }
+
+        private void OnShellPropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(ShellViewModel.CurrentUserName) ||
+                e.PropertyName == nameof(ShellViewModel.ProfileDisplayName) ||
+                e.PropertyName == nameof(ShellViewModel.CurrentUserAvatar))
+            {
+                RaiseProfileHeaderChanged();
+            }
+        }
+
+        private void RaiseToggleSettingsChanged()
+        {
+            RaiseProperties(
+                nameof(NotificationsEnabled),
+                nameof(LiveTilesEnabled),
+                nameof(LocationKeepAliveEnabled),
+                nameof(AutoUnlinkOnLogoutEnabled));
+        }
+
+        private void RaiseShellSelectionChanged()
+        {
+            RaiseProperties(nameof(SelectedShell), nameof(SelectedShellIndex));
+        }
+
+        private void RaiseLanguageSelectionChanged()
+        {
+            RaiseProperties(
+                nameof(SelectedLanguage),
+                // Items first, then selection — avoids ComboBox blank SelectedIndex race.
+                nameof(LanguageOptions),
+                nameof(SelectedLanguageIndex),
+                nameof(SelectedLanguageOption));
+        }
+
+        private void RaiseAboutCopyChanged()
+        {
+            RaiseProperties(
+                nameof(AppTitle),
+                nameof(AppDescription),
+                nameof(AppBranch),
+                nameof(DeveloperPrimary),
+                nameof(Contributors));
+        }
+
+        private void RaiseProfileHeaderChanged()
+        {
+            RaiseProperties(nameof(ProfileDisplayName), nameof(CurrentUserAvatar));
+        }
+
+        private async Task ConfirmAndDisconnectAsync()
+        {
+            _disconnectBusy = true;
+            try
+            {
+                bool confirmed = await _dialogService.ShowConfirmAsync(
+                    title: _strings.Get("Settings_DisconnectTitle", "Disconnect?"),
+                    content: _strings.Get(
+                        "Settings_DisconnectBody",
+                        "If you disconnect, you will be taken to the pairing screen and all data and chats will be erased."),
+                    primaryButtonText: _strings.Get("Settings_DisconnectConfirm", "Disconnect"),
+                    closeButtonText: _strings.Get("Settings_DisconnectCancel", "Cancel"));
+
+                if (confirmed)
+                {
+                    await _whatsAppService.ClearSessionAsync();
+                }
+            }
+            finally
+            {
+                _disconnectBusy = false;
+            }
         }
 
         private async Task ChangeShellAsync(int index)
@@ -180,8 +358,39 @@ namespace Unison.Core.ViewModels
             finally
             {
                 _shellChangeBusy = false;
-                OnPropertyChanged(nameof(SelectedShell));
-                OnPropertyChanged(nameof(SelectedShellIndex));
+                RaiseShellSelectionChanged();
+            }
+        }
+
+        private async Task ChangeLanguageAsync(int index)
+        {
+            IReadOnlyList<AppLanguage> all = AppLanguageInfo.All;
+            if (index < 0 || index >= all.Count)
+            {
+                return;
+            }
+
+            AppLanguage language = all[index];
+            // Same as saved → ignore. Override staleness is healed by ApplyFromSettings on launch,
+            // not by ComboBox rebinds (those were toast+Exit looping on Mobile).
+            if (language == SelectedLanguage)
+            {
+                return;
+            }
+
+            System.Diagnostics.Debug.WriteLine(
+                "[SettingsViewModel] ChangeLanguage index=" + index + " → " + language +
+                " tag=" + AppLanguageInfo.GetTag(language));
+
+            _languageChangeBusy = true;
+            try
+            {
+                await _appLanguage.ChangeLanguageAndRestartAsync(language);
+            }
+            finally
+            {
+                _languageChangeBusy = false;
+                RaiseLanguageSelectionChanged();
             }
         }
 
@@ -193,19 +402,19 @@ namespace Unison.Core.ViewModels
                 if (enabled)
                 {
                     _localSettings.Set(LocalSettingsConstants.LocationKeepAliveEnabled, true);
-                    OnPropertyChanged(nameof(LocationKeepAliveEnabled));
+                    RaiseLocationKeepAliveChanged();
 
                     bool ok = await _locationKeepAlive.StartAsync();
                     if (!ok)
                     {
                         _localSettings.Set(LocalSettingsConstants.LocationKeepAliveEnabled, false);
-                        OnPropertyChanged(nameof(LocationKeepAliveEnabled));
+                        RaiseLocationKeepAliveChanged();
                     }
                 }
                 else
                 {
                     _localSettings.Set(LocalSettingsConstants.LocationKeepAliveEnabled, false);
-                    OnPropertyChanged(nameof(LocationKeepAliveEnabled));
+                    RaiseLocationKeepAliveChanged();
                     _locationKeepAlive.Stop();
                 }
             }
@@ -214,5 +423,8 @@ namespace Unison.Core.ViewModels
                 _keepAliveBusy = false;
             }
         }
+
+        private void RaiseLocationKeepAliveChanged() =>
+            OnPropertyChanged(nameof(LocationKeepAliveEnabled));
     }
 }

@@ -227,6 +227,27 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="ChatList_RefreshNames.Text" xml:space="preserve">
     <value>Atualizar nomes dos contatos</value>
   </data>
+  <data name="ChatList_ResyncConversations.Text" xml:space="preserve">
+    <value>Re-sincronizar conversas</value>
+  </data>
+  <data name="ChatList_ResyncConversationsTitle" xml:space="preserve">
+    <value>Re-sincronizar conversas?</value>
+  </data>
+  <data name="ChatList_ResyncConversationsBody" xml:space="preserve">
+    <value>Isso apaga todas as conversas e mensagens locais e baixa o histórico de novo. Seu vínculo com o WhatsApp permanece ativo.</value>
+  </data>
+  <data name="ChatList_ResyncConversationsConfirm" xml:space="preserve">
+    <value>Re-sincronizar</value>
+  </data>
+  <data name="ChatList_ResyncConversationsCancel" xml:space="preserve">
+    <value>Cancelar</value>
+  </data>
+  <data name="ChatList_ResyncingConversations" xml:space="preserve">
+    <value>Re-sincronizando conversas...</value>
+  </data>
+  <data name="ChatList_ResyncCleaningHistory" xml:space="preserve">
+    <value>Limpando histórico...</value>
+  </data>
   <data name="ChatList_SearchBox.PlaceholderText" xml:space="preserve">
     <value>Pesquisar ou iniciar conversa</value>
   </data>
@@ -247,6 +268,36 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   </data>
   <data name="ChatList_PreviewDocument" xml:space="preserve">
     <value>Documento</value>
+  </data>
+  <data name="ChatDetail_DocumentFallbackName" xml:space="preserve">
+    <value>Documento</value>
+  </data>
+  <data name="ChatDetail_DocumentOpen.Text" xml:space="preserve">
+    <value>Abrir documento</value>
+  </data>
+  <data name="ChatDetail_DocumentSaveAs.Text" xml:space="preserve">
+    <value>Salvar como…</value>
+  </data>
+  <data name="ChatDetail_DocumentDownloadTitle" xml:space="preserve">
+    <value>Deseja fazer o download deste arquivo?</value>
+  </data>
+  <data name="ChatDetail_DocumentDownloadBody" xml:space="preserve">
+    <value>O ficheiro será guardado localmente para poder abrir depois.</value>
+  </data>
+  <data name="ChatDetail_DocumentDownloadConfirm" xml:space="preserve">
+    <value>Download</value>
+  </data>
+  <data name="ChatDetail_DocumentDownloadCancel" xml:space="preserve">
+    <value>Cancelar</value>
+  </data>
+  <data name="ChatDetail_DocumentDownloadFailed" xml:space="preserve">
+    <value>Não foi possível baixar este arquivo.</value>
+  </data>
+  <data name="ChatDetail_DocumentOpenFailed" xml:space="preserve">
+    <value>Não foi possível abrir este arquivo.</value>
+  </data>
+  <data name="ChatDetail_DocumentSaveFailed" xml:space="preserve">
+    <value>Não foi possível salvar este arquivo.</value>
   </data>
   <data name="ChatList_PreviewReaction" xml:space="preserve">
     <value>Reação</value>
@@ -283,6 +334,9 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   </data>
   <data name="ChatDetail_Empty.Text" xml:space="preserve">
     <value>Selecione uma conversa para começar</value>
+  </data>
+  <data name="ChatDetail_GroupOnlyAdminsCanSend.Text" xml:space="preserve">
+    <value>Somente admins podem enviar mensagens</value>
   </data>
   <data name="ChatDetail_MessageInput.PlaceholderText" xml:space="preserve">
     <value>Digite uma mensagem</value>
@@ -365,11 +419,23 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="ChatDetail_AudioSendFailed" xml:space="preserve">
     <value>Não foi possível enviar o áudio.</value>
   </data>
+  <data name="ChatDetail_TextSendFailed" xml:space="preserve">
+    <value>Não foi possível enviar a mensagem.</value>
+  </data>
+  <data name="ChatDetail_ImageSendFailed" xml:space="preserve">
+    <value>Não foi possível enviar a imagem.</value>
+  </data>
   <data name="ChatDetail_AttachSendFailed" xml:space="preserve">
     <value>Não foi possível enviar o arquivo.</value>
   </data>
   <data name="ChatDetail_ImageDownloadFailed" xml:space="preserve">
     <value>Não foi possível descarregar esta imagem.</value>
+  </data>
+  <data name="ChatDetail_VideoDownloadFailed" xml:space="preserve">
+    <value>Não foi possível descarregar este vídeo.</value>
+  </data>
+  <data name="ChatDetail_Video" xml:space="preserve">
+    <value>Vídeo</value>
   </data>
   <data name="NewChatDialog.Title" xml:space="preserve">
     <value>Nova conversa</value>
@@ -605,6 +671,9 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="Settings_ShellRestartClose" xml:space="preserve">
     <value>OK</value>
   </data>
+  <data name="Settings_ReopenAppTitle" xml:space="preserve">
+    <value>Reabrir Unison?</value>
+  </data>
   <data name="Settings_ShellAppliedTitle" xml:space="preserve">
     <value>Shell aplicada</value>
   </data>
@@ -615,13 +684,16 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
     <value>Carregando...</value>
   </data>
   <data name="Start_Title.Text" xml:space="preserve">
-    <value>Bem-vindo ao WhatsApp</value>
+    <value>Bem-vindo ao Unison</value>
   </data>
   <data name="Start_Description.Text" xml:space="preserve">
-    <value>Uma forma simples, confiável e privada de usar o WhatsApp no computador.</value>
+    <value>Uma forma simples e confiável de usar o WhatsApp no Windows.</value>
   </data>
   <data name="Start_GetStarted.Content" xml:space="preserve">
     <value>Começar</value>
+  </data>
+  <data name="Start_Language.Text" xml:space="preserve">
+    <value>Idioma:</value>
   </data>
   <data name="Settings_About.Text" xml:space="preserve">
     <value>Sobre</value>
@@ -671,4 +743,179 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="Toast_AppName" xml:space="preserve">
     <value>Unison</value>
   </data>
-</root>
+
+  <data name="Settings_Language.Header" xml:space="preserve">
+    <value>Idioma</value>
+  </data>
+  <data name="Settings_Language.Text" xml:space="preserve">
+    <value>Escolha o idioma do aplicativo. O app reinicia para aplicar.</value>
+  </data>
+  <data name="Settings_LanguageRestartTitle" xml:space="preserve">
+    <value>Idioma atualizado</value>
+  </data>
+  <data name="Settings_LanguageRestartBody" xml:space="preserve">
+    <value>O Unison vai reiniciar para aplicar o novo idioma.</value>
+  </data>
+  <data name="Settings_LanguageRestartClose" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="Settings_Advanced.Text" xml:space="preserve">
+    <value>Configurações avançadas</value>
+  </data>
+
+  <data name="Settings_LanguageSystem" xml:space="preserve">
+    <value>Sistema</value>
+  </data>
+  <data name="Settings_Disconnect.Text" xml:space="preserve">
+    <value>Desconectar</value>
+  </data>
+  <data name="Settings_DisconnectTitle" xml:space="preserve">
+    <value>Deseja Desconectar?</value>
+  </data>
+  <data name="Settings_DisconnectBody" xml:space="preserve">
+    <value>Ao Desconectar você será levado para tela de pareamento e todos os dados e conversas serão apagados.</value>
+  </data>
+  <data name="Settings_DisconnectConfirm" xml:space="preserve">
+    <value>Desconectar</value>
+  </data>
+  <data name="Settings_DisconnectCancel" xml:space="preserve">
+    <value>Cancelar</value>
+  </data>
+
+  <data name="ChatDetail_ShowContact.Text" xml:space="preserve">
+    <value>Mostrar contato</value>
+  </data>
+  <data name="ChatDetail_Search.Text" xml:space="preserve">
+    <value>Pesquisar</value>
+  </data>
+  <data name="ChatDetail_MediaLinksDocs.Text" xml:space="preserve">
+    <value>Mídia, links e docs</value>
+  </data>
+  <data name="ChatDetail_MuteNotifications.Text" xml:space="preserve">
+    <value>Silenciar notificações</value>
+  </data>
+  <data name="ChatDetail_ExportChat.Text" xml:space="preserve">
+    <value>Exportar conversa</value>
+  </data>
+  <data name="ChatDetailInfo_Profile" xml:space="preserve">
+    <value>Perfil</value>
+  </data>
+  <data name="ChatDetailInfo_GroupInfo" xml:space="preserve">
+    <value>Info do grupo</value>
+  </data>
+  <data name="ChatDetailInfo_Files" xml:space="preserve">
+    <value>Ficheiros</value>
+  </data>
+  <data name="ChatDetailInfo_Calls" xml:space="preserve">
+    <value>Chamadas</value>
+  </data>
+  <data name="ChatDetailInfo_Name" xml:space="preserve">
+    <value>Nome</value>
+  </data>
+  <data name="ChatDetailInfo_GroupName" xml:space="preserve">
+    <value>Nome do grupo</value>
+  </data>
+  <data name="ChatDetailInfo_Phone" xml:space="preserve">
+    <value>Telefone</value>
+  </data>
+  <data name="ChatDetailInfo_Status" xml:space="preserve">
+    <value>Estado</value>
+  </data>
+  <data name="ChatDetailInfo_Description" xml:space="preserve">
+    <value>Descrição</value>
+  </data>
+  <data name="ChatDetailInfo_Notifications" xml:space="preserve">
+    <value>Notificações</value>
+  </data>
+  <data name="ChatDetailInfo_NotificationsOn" xml:space="preserve">
+    <value>Ativadas</value>
+  </data>
+  <data name="ChatDetailInfo_NotificationsOff" xml:space="preserve">
+    <value>Desativadas</value>
+  </data>
+  <data name="ChatDetail_PinToStart.Text" xml:space="preserve">
+    <value>Fixar na tela inicial</value>
+  </data>
+  <data name="ChatDetail_GroupInfo.Text" xml:space="preserve">
+    <value>Dados do grupo</value>
+  </data>
+  <data name="ChatDetail_GroupMedia.Text" xml:space="preserve">
+    <value>Mídia do grupo</value>
+  </data>
+  <data name="ChatDetail_MuteFor8Hours.Text" xml:space="preserve">
+    <value>8 horas</value>
+  </data>
+  <data name="ChatDetail_MuteFor1Week.Text" xml:space="preserve">
+    <value>1 semana</value>
+  </data>
+  <data name="ChatDetail_UnpinFromStart.Text" xml:space="preserve">
+    <value>Desafixar do Inicio</value>
+  </data>
+  <data name="ChatDetail_MuteForever.Text" xml:space="preserve">
+    <value>Sempre</value>
+  </data>
+  <data name="ChatDetail_UnmuteNotifications.Text" xml:space="preserve">
+    <value>Ativar notificações</value>
+  </data>
+  <data name="Login_StatusStartingPairing" xml:space="preserve">
+    <value>Iniciando pareamento...</value>
+  </data>
+  <data name="Login_StatusConnecting" xml:space="preserve">
+    <value>Conectando ao WhatsApp...</value>
+  </data>
+  <data name="Login_StatusWaitingQr" xml:space="preserve">
+    <value>Aguardando QR do servidor...</value>
+  </data>
+  <data name="Login_StatusQrReceived" xml:space="preserve">
+    <value>QR recebido - gerando imagem...</value>
+  </data>
+  <data name="Login_StatusQrTimeout" xml:space="preserve">
+    <value>Timeout aguardando QR ({0}s) - toque em Recarregar QR e abra o log.</value>
+  </data>
+  <data name="Login_StatusErrorPrefix" xml:space="preserve">
+    <value>Erro: </value>
+  </data>
+  <data name="Login_StatusFailPrefix" xml:space="preserve">
+    <value>Falha: </value>
+  </data>
+  <data name="Login_StatusDrawFailedPrefix" xml:space="preserve">
+    <value>Falha ao desenhar QR: </value>
+  </data>
+  <data name="Login_StatusDrawFailedFallback" xml:space="preserve">
+    <value>falha ao desenhar QR</value>
+  </data>
+  <data name="Login_UnknownError" xml:space="preserve">
+    <value>erro desconhecido</value>
+  </data>
+  <data name="Login_Conn_Empty" xml:space="preserve">
+    <value>Conectado</value>
+  </data>
+  <data name="Login_Conn_Connecting" xml:space="preserve">
+    <value>Abrindo WebSocket...</value>
+  </data>
+  <data name="Login_Conn_Connected" xml:space="preserve">
+    <value>WebSocket conectado - handshake...</value>
+  </data>
+  <data name="Login_Conn_Open" xml:space="preserve">
+    <value>Handshake OK - aguardando pair-device...</value>
+  </data>
+  <data name="Login_Conn_Disconnected" xml:space="preserve">
+    <value>Desconectado - tentando novamente...</value>
+  </data>
+  <data name="Login_Conn_Close" xml:space="preserve">
+    <value>Conexao fechada</value>
+  </data>
+  <data name="Login_Conn_Restart" xml:space="preserve">
+    <value>Reiniciando pareamento...</value>
+  </data>
+  <data name="Login_Conn_Default" xml:space="preserve">
+    <value>Status: </value>
+  </data>
+  <data name="ChatDetailInfo_PinAppBarLabel" xml:space="preserve">
+    <value>Fixar na
+Início</value>
+  </data>
+  <data name="ChatDetailInfo_UnpinAppBarLabel" xml:space="preserve">
+    <value>Desafixar
+do Início</value>
+  </data></root>

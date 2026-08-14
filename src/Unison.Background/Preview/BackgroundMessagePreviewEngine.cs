@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -348,58 +348,58 @@ namespace Unison.Background
                 return value.ExtendedTextMessage.Text;
             if (value.ImageMessage != null)
                 return WithCaption(
-                    "[Foto]",
+                    "[Image]",
                     value.ImageMessage.Caption);
             if (value.VideoMessage != null)
                 return WithCaption(
-                    "[Vídeo]",
+                    "[Video]",
                     value.VideoMessage.Caption);
             if (value.DocumentMessage != null)
                 return WithCaption(
-                    "[Documento]",
+                    "[Document]",
                     value.DocumentMessage.FileName);
             if (value.AudioMessage != null)
                 return value.AudioMessage.Ptt
-                    ? "[Mensagem de voz]"
-                    : "[Áudio]";
+                    ? "[Voice Message]"
+                    : "[Audio]";
             if (value.StickerMessage != null)
-                return "[Figurinha]";
+                return "[Sticker]";
             if (value.ContactMessage != null)
                 return WithCaption(
-                    "[Contato]",
+                    "[Contact]",
                     value.ContactMessage.DisplayName);
             if (value.ContactsArrayMessage != null)
-                return "[Contatos]";
+                return "[Contacts]";
             if (value.LocationMessage != null ||
                 value.LiveLocationMessage != null)
-                return "[Localização]";
+                return "[Location]";
             if (value.ReactionMessage != null)
                 return WithCaption(
-                    "[Reação]",
+                    "[Reaction]",
                     value.ReactionMessage.Text);
             if (value.PollCreationMessage != null)
                 return WithCaption(
-                    "[Enquete]",
+                    "[Poll]",
                     value.PollCreationMessage.Name);
             if (value.PollCreationMessageV2 != null)
                 return WithCaption(
-                    "[Enquete]",
+                    "[Poll]",
                     value.PollCreationMessageV2.Name);
             if (value.PollCreationMessageV3 != null)
                 return WithCaption(
-                    "[Enquete]",
+                    "[Poll]",
                     value.PollCreationMessageV3.Name);
             if (value.ScheduledCallCreationMessage != null)
                 return WithCaption(
-                    "[Chamada agendada]",
+                    "[Scheduled Call]",
                     value.ScheduledCallCreationMessage.Title);
             if (value.CallLogMesssage != null || value.Call != null)
-                return "[Chamada]";
+                return "[Call]";
             if (value.ProtocolMessage != null)
                 return null;
             if (value.SenderKeyDistributionMessage != null)
                 return null;
-            return "[Nova mensagem]";
+            return "[Message]";
         }
 
         private static Message Unwrap(Message message)
@@ -476,7 +476,7 @@ namespace Unison.Background
         private static string FriendlyJid(string jid)
         {
             if (string.IsNullOrWhiteSpace(jid))
-                return "Nova mensagem";
+                return "New message";
             string baseJid = WA.GetBaseJid(
                 WA.NormalizeDeviceJid(jid));
             int separator = (baseJid ?? string.Empty).IndexOf('@');

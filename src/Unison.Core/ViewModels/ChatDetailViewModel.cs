@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Windows.Input;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
+using Unison.Core.Exceptions;
 using Unison.Core.Factories;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
@@ -15,8 +16,9 @@ namespace Unison.Core.ViewModels
 {
     /// <summary>
     /// Active conversation: composer, send text/media, mic session + overlay, load-more / history,
-    /// pin / audio prepare, and presence watch (Storyboards stay in the view).
-    /// Timeline items are <see cref="ChatMessageViewModel"/> via <see cref="IChatMessageVmFactory"/>.
+    /// and presence watch (Storyboards stay in the view).
+    /// Per-bubble media / pin actions live on <see cref="ChatMessageViewModel"/>.
+    /// Timeline items via <see cref="IChatMessageVmFactory"/>.
     /// </summary>
     public class ChatDetailViewModel : Observable
     {
@@ -25,8 +27,14 @@ namespace Unison.Core.ViewModels
         /// <summary>Load / live updates / presence for the active JID.</summary>
         private readonly IWhatsAppService _whatsAppService;
 
-        /// <summary>Send text / image / audio / pin via the message facade.</summary>
+        /// <summary>Send text / image / audio via the message facade.</summary>
         private readonly IMessageService _messageService;
+
+        /// <summary>Start shortcuts (SecondaryTile / future widgets).</summary>
+        private readonly IShortcutService _shortcutService;
+
+        /// <summary>SQLite local chat metadata (live-tile pin / mute).</summary>
+        private readonly IChatStore _chatStore;
 
         /// <summary>Unitary microphone capture (returns session handles).</summary>
         private readonly IAudioRecordingService _audioRecording;
@@ -43,8 +51,17 @@ namespace Unison.Core.ViewModels
         /// <summary>On-demand bubble VMs for the timeline.</summary>
         private readonly IChatMessageVmFactory _messageFactory;
 
+        /// <summary>On-demand profile / group info pane VMs.</summary>
+        private readonly IChatDetailInfoViewModelFactory _infoFactory;
+
         /// <summary>Localized presence / header subtitle copy.</summary>
         private readonly IStringResources _strings;
+
+        /// <summary>Debug session log (visible on Debug screen).</summary>
+        private readonly ISessionLogger _sessionLogger;
+
+        /// <summary>Runtime diagnostics journal (Debug screen).</summary>
+        private readonly IRuntimeDiagnostics _diagnostics;
 
         // ── State ─────────────────────────────────────────────────────────────
 
@@ -57,6 +74,8 @@ namespace Unison.Core.ViewModels
         private bool _isLoadingMessages;
         private bool _isLoadingMore;
         private string _recordingChatJid;
+        private bool _isChatDetailInfoOpen;
+        private ChatDetailInfoViewModel _chatDetailInfo;
 
         private IAudioRecordingSession _recordingSession;
         private CancellationTokenSource _elapsedCts;
@@ -71,45 +90,77 @@ namespace Unison.Core.ViewModels
         public ChatDetailViewModel(
             IWhatsAppService whatsAppService,
             IMessageService messageService,
+            IShortcutService shortcutService,
+            IChatStore chatStore,
             IAudioRecordingService audioRecording,
             IFilePicker filePicker,
             IDialogService dialogs,
             IDispatcher dispatcher,
             IChatMessageVmFactory messageFactory,
-            IStringResources strings)
+            IChatDetailInfoViewModelFactory infoFactory,
+            IStringResources strings,
+            ISessionLogger sessionLogger = null,
+            IRuntimeDiagnostics diagnostics = null)
         {
             _whatsAppService = whatsAppService;
             _messageService = messageService;
+            _shortcutService = shortcutService;
+            _chatStore = chatStore;
             _audioRecording = audioRecording;
             _filePicker = filePicker;
             _dialogs = dialogs;
             _dispatcher = dispatcher;
             _messageFactory = messageFactory ?? throw new ArgumentNullException(nameof(messageFactory));
+            _infoFactory = infoFactory ?? throw new ArgumentNullException(nameof(infoFactory));
             _strings = strings;
+            _sessionLogger = sessionLogger;
+            _diagnostics = diagnostics;
 
             Messages = new ObservableCollection<ChatMessageViewModel>();
 
             SendMessageCommand = new RelayCommand(
-                async () => await SendMessageAsync(),
+                () => _ = RunSafeAsync(SendMessageAsync, "send-text"),
                 () => CanCompose && !string.IsNullOrWhiteSpace(MessageText));
 
             AttachMediaCommand = new RelayCommand(
-                async () => await AttachMediaAsync(),
+                () => _ = RunSafeAsync(AttachMediaAsync, "attach"),
                 () => CanCompose);
 
             StartRecordingCommand = new RelayCommand(
-                async () => await StartRecordingAsync(),
+                () => _ = RunSafeAsync(StartRecordingAsync, "record-start"),
                 () => CanCompose);
 
             CancelRecordingCommand = new RelayCommand(
-                async () => await CancelRecordingCoreAsync(),
+                () => _ = RunSafeAsync(CancelRecordingCoreAsync, "record-cancel"),
                 () => _isRecording);
 
             SendRecordingCommand = new RelayCommand(
-                async () => await StopAndSendRecordingAsync(),
+                () => _ = RunSafeAsync(StopAndSendRecordingAsync, "send-voice"),
                 () => _isRecording && !_isSending);
 
             BackCommand = new RelayCommand(() => BackRequested?.Invoke(this, EventArgs.Empty));
+            PinToStartCommand = new RelayCommand(
+                () => _ = ToggleWidgetPinAsync(),
+                () => ActiveChat != null && !string.IsNullOrWhiteSpace(ActiveChat.JID) && _shortcutService != null && _chatStore != null);
+            MuteFor8HoursCommand = new RelayCommand(
+                () => _ = SetLocalMuteAsync(ChatMuteHelper.FromNow(ChatMuteHelper.EightHours)),
+                () => CanMuteActiveChat());
+            MuteFor1WeekCommand = new RelayCommand(
+                () => _ = SetLocalMuteAsync(ChatMuteHelper.FromNow(ChatMuteHelper.OneWeek)),
+                () => CanMuteActiveChat());
+            MuteForeverCommand = new RelayCommand(
+                () => _ = SetLocalMuteAsync(ChatMuteHelper.ForeverUnixSeconds),
+                () => CanMuteActiveChat());
+            UnmuteLocalCommand = new RelayCommand(
+                () => _ = SetLocalMuteAsync(null),
+                () => CanMuteActiveChat() && ActiveChat.IsMutedLocally);
+            OpenChatDetailInfoCommand = new RelayCommand(
+                OpenActiveChatDetailInfo,
+                () => ActiveChat != null);
+            OpenChatDetailInfoFromAvatarCommand = new RelayCommand(
+                OpenActiveChatDetailInfo,
+                () => ActiveChat != null);
+            CloseChatDetailInfoCommand = new RelayCommand(CloseChatDetailInfo);
         }
 
         // ── Lifecycle ─────────────────────────────────────────────────────────
@@ -141,8 +192,18 @@ namespace Unison.Core.ViewModels
         /// <summary>Wrap a domain message for the timeline (view load/sync paths).</summary>
         public ChatMessageViewModel CreateMessageVm(ChatMessage message)
         {
-            return _messageFactory.Create(message);
+            var vm = _messageFactory.Create(message);
+            if (vm != null)
+            {
+                vm.PinnedChanged -= OnBubblePinnedChanged;
+                vm.PinnedChanged += OnBubblePinnedChanged;
+            }
+
+            return vm;
         }
+
+        private void OnBubblePinnedChanged(object sender, EventArgs e) =>
+            MessagePinnedChanged?.Invoke(this, EventArgs.Empty);
 
         // ── Events ────────────────────────────────────────────────────────────
 
@@ -167,11 +228,28 @@ namespace Unison.Core.ViewModels
             get => _activeChat;
             private set
             {
+                if (_activeChat != null)
+                {
+                    _activeChat.PropertyChanged -= OnActiveChatPropertyChanged;
+                }
+
                 Set(ref _activeChat, value);
                 HasActiveChat = value != null;
+                if (_activeChat != null)
+                {
+                    _activeChat.PropertyChanged += OnActiveChatPropertyChanged;
+                }
+
                 RaiseComposerCommandsChanged();
+                OnPropertyChanged(nameof(IsGroupLockedForMessages));
             }
         }
+
+        /// <summary>
+        /// True when the active chat is a group in announce-only mode and the current user is not an admin.
+        /// Bind the composer lock UI to this; values refresh when group metadata is applied.
+        /// </summary>
+        public bool IsGroupLockedForMessages => ActiveChat != null && ActiveChat.IsGroupLockedForMessages;
 
         public string MessageText
         {
@@ -179,7 +257,7 @@ namespace Unison.Core.ViewModels
             set
             {
                 Set(ref _messageText, value);
-                (SendMessageCommand as RelayCommand)?.RaiseCanExecuteChanged();
+                RaiseSendMessageCanExecuteChanged();
             }
         }
 
@@ -215,6 +293,20 @@ namespace Unison.Core.ViewModels
             private set => Set(ref _hasActiveChat, value);
         }
 
+        /// <summary>Shows the profile / group info pane beside (or over) the chat.</summary>
+        public bool IsChatDetailInfoOpen
+        {
+            get => _isChatDetailInfoOpen;
+            private set => Set(ref _isChatDetailInfoOpen, value);
+        }
+
+        /// <summary>Current info pane VM (null when closed). Created on demand by the factory.</summary>
+        public ChatDetailInfoViewModel ChatDetailInfo
+        {
+            get => _chatDetailInfo;
+            private set => Set(ref _chatDetailInfo, value);
+        }
+
         public bool IsLoadingMessages
         {
             get => _isLoadingMessages;
@@ -227,28 +319,343 @@ namespace Unison.Core.ViewModels
             set => Set(ref _isLoadingMore, value);
         }
 
-        private bool CanCompose => ActiveChat != null && !_isSending && !_isRecording;
+        private bool CanCompose =>
+            ActiveChat != null &&
+            !_isSending &&
+            !_isRecording &&
+            !IsGroupLockedForMessages;
 
         // ── Commands ──────────────────────────────────────────────────────────
 
+        /// <summary>Sends the current composer text (or pending media) to the active chat.</summary>
         public ICommand SendMessageCommand { get; }
+
+        /// <summary>Opens the file picker and stages an image/video for send.</summary>
         public ICommand AttachMediaCommand { get; }
+
+        /// <summary>Starts audio capture for a voice note.</summary>
         public ICommand StartRecordingCommand { get; }
+
+        /// <summary>Aborts the in-progress voice recording without sending.</summary>
         public ICommand CancelRecordingCommand { get; }
+
+        /// <summary>Stops recording and sends the captured voice note.</summary>
         public ICommand SendRecordingCommand { get; }
+
+        /// <summary>Leaves the chat detail surface (raises <see cref="BackRequested"/>).</summary>
         public ICommand BackCommand { get; }
+
+        /// <summary>Pins/unpins the active chat Start live tile (toggles SQLite + SecondaryTile).</summary>
+        public ICommand PinToStartCommand { get; }
+
+        public ICommand MuteFor8HoursCommand { get; }
+        public ICommand MuteFor1WeekCommand { get; }
+        public ICommand MuteForeverCommand { get; }
+        public ICommand UnmuteLocalCommand { get; }
+
+        /// <summary>Opens the info pane for the active chat (user or group) — header title/status.</summary>
+        public ICommand OpenChatDetailInfoCommand { get; }
+
+        /// <summary>Same pane as <see cref="OpenChatDetailInfoCommand"/>; wired from header avatar tap (not a Button).</summary>
+        public ICommand OpenChatDetailInfoFromAvatarCommand { get; }
+
+        /// <summary>Closes the info pane (bound to the panel close button).</summary>
+        public ICommand CloseChatDetailInfoCommand { get; }
+
+        /// <summary>Label for the live-tile pin menu (localized via string service when bound in code).</summary>
+        public string LiveTilePinMenuLabel
+        {
+            get
+            {
+                bool pinned = ActiveChat != null && ActiveChat.IsWidgetPinned;
+                if (pinned)
+                {
+                    return _strings != null
+                        ? _strings.Get("ChatDetail_UnpinFromStart.Text", "Unpin from Start")
+                        : "Unpin from Start";
+                }
+
+                return _strings != null
+                    ? _strings.Get("ChatDetail_PinToStart.Text", "Pin to Start")
+                    : "Pin to Start";
+            }
+        }
+
+        /// <summary>True when mute submenu should show duration options (not unmuted→unmute-only).</summary>
+        public bool ShowMuteDurationOptions => ActiveChat != null && !ActiveChat.IsMutedLocally;
+
+        public bool ShowUnmuteOption => ActiveChat != null && ActiveChat.IsMutedLocally;
 
         // ── Actions ───────────────────────────────────────────────────────────
 
+        public void OpenActiveChatDetailInfo()
+        {
+            if (ActiveChat == null)
+            {
+                return;
+            }
+
+            OpenChatDetailInfo(ActiveChat);
+        }
+
+        /// <summary>
+        /// Opens (or replaces) the info pane for <paramref name="chat"/>.
+        /// Uses <see cref="IChatDetailInfoViewModelFactory.CreateGroup"/> / <c>CreateUser</c>.
+        /// </summary>
+        public void OpenChatDetailInfo(ChatItem chat)
+        {
+            if (chat == null)
+            {
+                return;
+            }
+
+            ChatDetailInfoViewModel previous = ChatDetailInfo;
+            ChatDetailInfoViewModel next = chat.IsGroup
+                ? _infoFactory.CreateGroup(chat)
+                : _infoFactory.CreateUser(chat);
+
+            ChatDetailInfo = next;
+            IsChatDetailInfoOpen = true;
+            previous?.Detach();
+            (OpenChatDetailInfoCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (OpenChatDetailInfoFromAvatarCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        }
+
+        /// <summary>Opens a 1:1 profile in the same pane (e.g. future group-sender tap).</summary>
+        public void OpenUserChatDetailInfo(ChatItem contact)
+        {
+            if (contact == null)
+            {
+                return;
+            }
+
+            ChatDetailInfoViewModel previous = ChatDetailInfo;
+            ChatDetailInfo = _infoFactory.CreateUser(contact);
+            IsChatDetailInfoOpen = true;
+            previous?.Detach();
+        }
+
+        public void CloseChatDetailInfo()
+        {
+            if (!IsChatDetailInfoOpen && ChatDetailInfo == null)
+            {
+                return;
+            }
+
+            ChatDetailInfoViewModel previous = ChatDetailInfo;
+            IsChatDetailInfoOpen = false;
+            ChatDetailInfo = null;
+            previous?.Detach();
+        }
+
         public void SyncActiveChat(ChatItem chat)
         {
+            string previousJid = ActiveChat?.JID;
+            string nextJid = chat?.JID;
+            bool chatChanged = !string.Equals(previousJid, nextJid, StringComparison.OrdinalIgnoreCase);
+
             ActiveChat = chat;
+            if (chat != null && _chatStore != null)
+            {
+                _chatStore.ApplyTo(chat);
+                _ = SyncLocalStateAsync(chat);
+            }
+
+            if (chatChanged || chat == null)
+            {
+                CloseChatDetailInfo();
+            }
+
+            RaisePinToStartCanExecuteChanged();
+            RaiseMuteCommandsCanExecuteChanged();
+            (OpenChatDetailInfoCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (OpenChatDetailInfoFromAvatarCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            OnPropertyChanged(nameof(LiveTilePinMenuLabel));
+            OnPropertyChanged(nameof(ShowMuteDurationOptions));
+            OnPropertyChanged(nameof(ShowUnmuteOption));
+            OnPropertyChanged(nameof(IsGroupLockedForMessages));
+            if (LooksLikeGroupChat(chat))
+            {
+                _ = RefreshGroupSendPermissionsSafeAsync(chat.JID);
+            }
+
             if (chat == null)
             {
                 MessageText = string.Empty;
                 StopPresenceWatch();
                 _ = CancelRecordingCoreAsync();
             }
+        }
+
+        private static bool LooksLikeGroupChat(ChatItem chat)
+        {
+            if (chat == null)
+            {
+                return false;
+            }
+
+            if (chat.IsGroup)
+            {
+                return true;
+            }
+
+            return !string.IsNullOrWhiteSpace(chat.JID) &&
+                   chat.JID.IndexOf("@g.us", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private void OnActiveChatPropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e == null)
+            {
+                return;
+            }
+
+            if (string.IsNullOrEmpty(e.PropertyName) ||
+                e.PropertyName == nameof(ChatItem.IsGroupLockedForMessages) ||
+                e.PropertyName == nameof(ChatItem.IsAnnounceOnly) ||
+                e.PropertyName == nameof(ChatItem.MyGroupRole) ||
+                e.PropertyName == nameof(ChatItem.IsGroup) ||
+                e.PropertyName == nameof(ChatItem.IsGroupAdmin))
+            {
+                OnPropertyChanged(nameof(IsGroupLockedForMessages));
+                RaiseComposerCommandsChanged();
+            }
+        }
+
+        private async Task RefreshGroupSendPermissionsSafeAsync(string groupJid)
+        {
+            if (string.IsNullOrWhiteSpace(groupJid) || _whatsAppService == null)
+            {
+                return;
+            }
+
+            try
+            {
+                await _whatsAppService.RefreshGroupSendPermissionsAsync(groupJid).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[ChatDetailViewModel] RefreshGroupSendPermissions failed: " + ex.Message);
+            }
+        }
+
+        private async Task SyncLocalStateAsync(ChatItem chat)
+        {
+            if (chat == null || _chatStore == null)
+            {
+                return;
+            }
+
+            try
+            {
+                await _chatStore.ApplyToAsync(chat).ConfigureAwait(false);
+                // Reconcile SecondaryTile existence once when opening the chat.
+                if (_shortcutService != null)
+                {
+                    bool tileExists = await _shortcutService.IsChatPinnedAsync(chat.JID).ConfigureAwait(false);
+                    if (tileExists != chat.IsWidgetPinned)
+                    {
+                        chat.IsWidgetPinned = tileExists;
+                        await _chatStore.UpsertAsync(
+                            chat.JID,
+                            chat.LocalStatus,
+                            chat.IsWidgetPinned,
+                            chat.IsChatPinned,
+                            chat.MutedUntil).ConfigureAwait(false);
+                    }
+                }
+
+                await _dispatcher.RunAsync(() =>
+                {
+                    RaiseMuteCommandsCanExecuteChanged();
+                    OnPropertyChanged(nameof(LiveTilePinMenuLabel));
+                    OnPropertyChanged(nameof(ShowMuteDurationOptions));
+                    OnPropertyChanged(nameof(ShowUnmuteOption));
+                }).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[ChatDetailViewModel] SyncLocalState failed: " + ex.Message);
+            }
+        }
+
+        private bool CanMuteActiveChat()
+        {
+            return ActiveChat != null &&
+                   !string.IsNullOrWhiteSpace(ActiveChat.JID) &&
+                   _chatStore != null;
+        }
+
+        private async Task ToggleWidgetPinAsync()
+        {
+            if (ActiveChat == null || _shortcutService == null || _chatStore == null)
+            {
+                return;
+            }
+
+            ChatItem chat = ActiveChat;
+            bool nextPinned = !chat.IsWidgetPinned;
+            try
+            {
+                bool ok = nextPinned
+                    ? await _shortcutService.PinChatAsync(chat)
+                    : await _shortcutService.UnpinChatAsync(chat.JID);
+
+                if (!ok && nextPinned)
+                {
+                    // User cancelled the pin dialog — leave SQLite unchanged.
+                    return;
+                }
+
+                chat.IsWidgetPinned = nextPinned;
+                await _chatStore.UpsertAsync(
+                    chat.JID,
+                    chat.LocalStatus,
+                    chat.IsWidgetPinned,
+                    chat.IsChatPinned,
+                    chat.MutedUntil);
+                OnPropertyChanged(nameof(LiveTilePinMenuLabel));
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[ChatDetailViewModel] ToggleWidgetPin failed: " + ex.Message);
+            }
+        }
+
+        private async Task SetLocalMuteAsync(long? mutedUntilUnixSeconds)
+        {
+            if (ActiveChat == null || _chatStore == null)
+            {
+                return;
+            }
+
+            ChatItem chat = ActiveChat;
+            try
+            {
+                chat.MutedUntil = mutedUntilUnixSeconds;
+                await _chatStore.UpsertAsync(
+                    chat.JID,
+                    chat.LocalStatus,
+                    chat.IsWidgetPinned,
+                    chat.IsChatPinned,
+                    chat.MutedUntil);
+                RaiseMuteCommandsCanExecuteChanged();
+                OnPropertyChanged(nameof(ShowMuteDurationOptions));
+                OnPropertyChanged(nameof(ShowUnmuteOption));
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[ChatDetailViewModel] SetLocalMute failed: " + ex.Message);
+            }
+        }
+
+        private void RaiseMuteCommandsCanExecuteChanged()
+        {
+            (MuteFor8HoursCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (MuteFor1WeekCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (MuteForeverCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (UnmuteLocalCommand as RelayCommand)?.RaiseCanExecuteChanged();
         }
 
         public async Task SetActiveChatAsync(ChatItem chat)
@@ -279,11 +686,28 @@ namespace Unison.Core.ViewModels
             }
 
             ActiveChat = chat;
+            if (chat != null && _chatStore != null)
+            {
+                _chatStore.ApplyTo(chat);
+                await SyncLocalStateAsync(chat).ConfigureAwait(false);
+            }
+
+            RaisePinToStartCanExecuteChanged();
+            RaiseMuteCommandsCanExecuteChanged();
+            OnPropertyChanged(nameof(LiveTilePinMenuLabel));
+            OnPropertyChanged(nameof(ShowMuteDurationOptions));
+            OnPropertyChanged(nameof(ShowUnmuteOption));
+            OnPropertyChanged(nameof(IsGroupLockedForMessages));
 
             if (chat == null)
             {
                 Messages.Clear();
                 return;
+            }
+
+            if (LooksLikeGroupChat(chat))
+            {
+                _ = RefreshGroupSendPermissionsSafeAsync(chat.JID);
             }
 
             Messages.Clear();
@@ -300,12 +724,36 @@ namespace Unison.Core.ViewModels
                 }
 
                 AppendLiveMessages();
+
+                if (Messages.Count == 0)
+                {
+                    TryApplyPreviewFallback(chat);
+                }
+
+                _ = HydratePendingStickersAsync();
             }
             finally
             {
                 if (!token.IsCancellationRequested)
                     IsLoadingMessages = false;
             }
+        }
+
+        private void TryApplyPreviewFallback(ChatItem chat)
+        {
+            if (chat == null || _messageFactory == null || _whatsAppService == null)
+            {
+                return;
+            }
+
+            string selfName = _strings?.Get("Chat_SelfFallbackName", "You") ?? "You";
+            ChatMessage fallback = ChatPreviewMessageFactory.TryCreate(chat, selfName);
+            if (fallback != null)
+            {
+                Messages.Add(_messageFactory.Create(fallback));
+            }
+
+            _ = _whatsAppService.EnsureHistoryOnDemandAsync(chat.JID, 80);
         }
 
         public async Task<bool> LoadMoreMessagesAsync()
@@ -324,6 +772,8 @@ namespace Unison.Core.ViewModels
                     if (older[i] != null)
                         Messages.Insert(i, _messageFactory.Create(older[i]));
                 }
+
+                _ = HydratePendingStickersAsync();
                 return true;
             }
             finally
@@ -337,104 +787,30 @@ namespace Unison.Core.ViewModels
             return _activeChat != null && _whatsAppService.IsHistoryOnDemandPending(_activeChat.JID);
         }
 
-        /// <summary>Pin or unpin a message in the active chat (flyout actions).</summary>
-        public async Task SetMessagePinnedAsync(ChatMessage message, bool pin, uint durationSeconds = 604800)
+        /// <summary>Download sticker media for rows that still only have protocol keys.</summary>
+        private async Task HydratePendingStickersAsync()
         {
-            if (_activeChat == null || message == null || string.IsNullOrWhiteSpace(message.Id))
-            {
-                return;
-            }
+            var pendingVms = Messages
+                .Where(m => m?.Model != null &&
+                            m.Model.IsSticker &&
+                            !m.Model.HasImage &&
+                            !m.Model.IsStickerFailed)
+                .ToList();
 
-            try
+            foreach (var vm in pendingVms)
             {
-                await _messageService.SetMessagePinnedAsync(_activeChat.JID, message, pin, durationSeconds);
-                MessagePinnedChanged?.Invoke(this, EventArgs.Empty);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine("[ChatDetailViewModel] Pin/unpin failed: " + ex.Message);
-            }
-        }
-
-        /// <summary>
-        /// Downloads/decrypts audio for playback. Returns local URI or null (dialog already shown).
-        /// MediaElement play/pause stays in the view.
-        /// </summary>
-        public async Task<string> EnsureAudioReadyAsync(ChatMessage message)
-        {
-            if (message == null || !message.IsAudio)
-            {
-                return null;
-            }
-
-            try
-            {
-                string uri = await _messageService.EnsureAudioAvailableAsync(message);
-                if (string.IsNullOrWhiteSpace(uri))
-                {
-                    throw new InvalidOperationException("Audio unavailable.");
-                }
-
-                return uri;
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine("[ChatDetailViewModel] Audio prepare failed: " + ex.Message);
                 try
                 {
-                    await _dialogs.ShowMessageAsync(
-                        _strings.Get("Toast_AppName", "Unison"),
-                        _strings.Get("ChatDetail_AudioPlayFailed", "Could not play this audio."),
-                        _strings.Get("Common_OK", "OK"));
+                    await vm.EnsureImageReadyAsync(showErrorDialog: false);
                 }
-                catch
+                catch (Exception ex)
                 {
+                    System.Diagnostics.Debug.WriteLine("[ChatDetailViewModel] Sticker hydrate failed: " + ex.Message);
+                    if (vm.Model != null)
+                    {
+                        vm.Model.IsStickerFailed = true;
+                    }
                 }
-
-                return null;
-            }
-        }
-
-        /// <summary>
-        /// Downloads/decrypts an image for the bubble. Returns local URI or null (dialog already shown).
-        /// </summary>
-        public async Task<string> EnsureImageReadyAsync(ChatMessage message)
-        {
-            if (message == null || !message.IsImage)
-            {
-                return null;
-            }
-
-            if (!string.IsNullOrWhiteSpace(message.ImageUri))
-            {
-                return message.ImageUri;
-            }
-
-            try
-            {
-                string uri = await _messageService.EnsureImageAvailableAsync(message);
-                if (string.IsNullOrWhiteSpace(uri))
-                {
-                    throw new InvalidOperationException("Image unavailable.");
-                }
-
-                return uri;
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine("[ChatDetailViewModel] Image prepare failed: " + ex.Message);
-                try
-                {
-                    await _dialogs.ShowMessageAsync(
-                        _strings.Get("Toast_AppName", "Unison"),
-                        _strings.Get("ChatDetail_ImageDownloadFailed", "Could not download this image."),
-                        _strings.Get("Common_OK", "OK"));
-                }
-                catch
-                {
-                }
-
-                return null;
             }
         }
 
@@ -492,11 +868,20 @@ namespace Unison.Core.ViewModels
 
         private void RaiseComposerCommandsChanged()
         {
-            (SendMessageCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            RaiseSendMessageCanExecuteChanged();
             (AttachMediaCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (StartRecordingCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (CancelRecordingCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (SendRecordingCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        }
+
+        private void RaiseSendMessageCanExecuteChanged() =>
+            (SendMessageCommand as RelayCommand)?.RaiseCanExecuteChanged();
+
+        private void RaisePinToStartCanExecuteChanged()
+        {
+            (PinToStartCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            RaiseMuteCommandsCanExecuteChanged();
         }
 
         private void EnsurePresenceHandlerAttached()
@@ -657,18 +1042,31 @@ namespace Unison.Core.ViewModels
             if (string.IsNullOrWhiteSpace(MessageText) || _activeChat == null) return;
 
             string text = MessageText;
+            string jid = _activeChat.JID;
             IsSending = true;
             MessageText = string.Empty;
+            // Optimistic bubble is queued inside the service before transport completes —
+            // ask the view to stick to bottom immediately.
+            MessageSent?.Invoke(this, EventArgs.Empty);
+            LogSend("text-start", "jid=" + jid + "; chars=" + text.Length);
 
             try
             {
-                await _messageService.SendTextMessageAsync(_activeChat.JID, text);
+                await _messageService.SendTextMessageAsync(jid, text);
                 MessageSent?.Invoke(this, EventArgs.Empty);
+                LogSend("text-ok", "jid=" + jid);
+            }
+            catch (UnisonUserException ex)
+            {
+                MessageText = text;
+                await PresentUserExceptionAsync(ex, "text-fail");
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[ChatDetailViewModel] Send error: {ex.Message}");
                 MessageText = text;
+                await PresentUserExceptionAsync(
+                    new TextSendException("SendText failed: " + ex.Message, ex),
+                    "text-fail");
             }
             finally
             {
@@ -686,12 +1084,15 @@ namespace Unison.Core.ViewModels
                 PickedChatMedia picked = await _filePicker.PickChatAttachmentAsync();
                 if (picked == null || picked.Bytes == null || picked.Bytes.Length == 0)
                 {
+                    LogSend("attach-cancelled");
                     return;
                 }
 
                 if (picked.IsAudio)
                 {
                     IsSending = true;
+                    MessageSent?.Invoke(this, EventArgs.Empty);
+                    LogSend("audio-attach-start", "bytes=" + picked.Bytes.Length);
                     try
                     {
                         await _messageService.SendAudioMessageAsync(
@@ -701,6 +1102,17 @@ namespace Unison.Core.ViewModels
                             durationSeconds: 0,
                             isVoiceMessage: false);
                         MessageSent?.Invoke(this, EventArgs.Empty);
+                        LogSend("audio-attach-ok");
+                    }
+                    catch (UnisonUserException ex)
+                    {
+                        await PresentUserExceptionAsync(ex, "audio-attach-fail");
+                    }
+                    catch (Exception ex)
+                    {
+                        await PresentUserExceptionAsync(
+                            new AudioSendException("Attach audio failed: " + ex.Message, ex),
+                            "audio-attach-fail");
                     }
                     finally
                     {
@@ -712,6 +1124,9 @@ namespace Unison.Core.ViewModels
 
                 if (!picked.IsImage)
                 {
+                    await PresentUserExceptionAsync(
+                        new AttachmentSendException("Unsupported attachment type."),
+                        "attach-unsupported");
                     return;
                 }
 
@@ -719,11 +1134,14 @@ namespace Unison.Core.ViewModels
                 bool confirmed = await _dialogs.ShowImageSendPreviewAsync(picked.Bytes, info);
                 if (!confirmed || _activeChat == null)
                 {
+                    LogSend("image-attach-cancelled");
                     return;
                 }
 
                 string caption = string.IsNullOrWhiteSpace(MessageText) ? null : MessageText.Trim();
                 IsSending = true;
+                MessageSent?.Invoke(this, EventArgs.Empty);
+                LogSend("image-attach-start", "bytes=" + picked.Bytes.Length);
                 try
                 {
                     await _messageService.SendImageAsync(targetJid, picked.Bytes, caption);
@@ -733,20 +1151,34 @@ namespace Unison.Core.ViewModels
                     }
 
                     MessageSent?.Invoke(this, EventArgs.Empty);
+                    LogSend("image-attach-ok");
+                }
+                catch (UnisonUserException ex)
+                {
+                    await PresentUserExceptionAsync(ex, "image-attach-fail");
+                }
+                catch (Exception ex)
+                {
+                    await PresentUserExceptionAsync(
+                        new ImageSendException("Attach image failed: " + ex.Message, ex),
+                        "image-attach-fail");
                 }
                 finally
                 {
                     IsSending = false;
                 }
             }
+            catch (UnisonUserException ex)
+            {
+                IsSending = false;
+                await PresentUserExceptionAsync(ex, "attach-fail");
+            }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine("[ChatDetailViewModel] Attach error: " + ex.Message);
                 IsSending = false;
-                await _dialogs.ShowMessageAsync(
-                    _strings.Get("Toast_AppName", "Unison"),
-                    _strings.Get("ChatDetail_AttachSendFailed", "Could not send the file."),
-                    _strings.Get("Common_OK", "OK"));
+                await PresentUserExceptionAsync(
+                    new AttachmentSendException("Attach failed: " + ex.Message, ex),
+                    "attach-fail");
             }
         }
 
@@ -756,6 +1188,7 @@ namespace Unison.Core.ViewModels
 
             try
             {
+                LogSend("record-start");
                 _recordingSession = await _audioRecording.StartAsync();
                 _recordingChatJid = _activeChat.JID;
                 RecordingElapsedText = "0:00";
@@ -764,12 +1197,11 @@ namespace Unison.Core.ViewModels
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine("[ChatDetailViewModel] Record start error: " + ex.Message);
+                LogSendError("record-start-fail", ex);
                 await CancelRecordingCoreAsync();
-                await _dialogs.ShowMessageAsync(
-                    _strings.Get("Toast_AppName", "Unison"),
-                    _strings.Get("ChatDetail_RecordFailed", "Could not record audio. Check microphone permission."),
-                    _strings.Get("Common_OK", "OK"));
+                await ShowSimpleErrorAsync(
+                    "ChatDetail_RecordFailed",
+                    "Could not record audio. Check microphone permission.");
             }
         }
 
@@ -793,12 +1225,11 @@ namespace Unison.Core.ViewModels
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine("[ChatDetailViewModel] Record stop error: " + ex.Message);
+                LogSendError("record-stop-fail", ex);
                 await CancelRecordingCoreAsync();
-                await _dialogs.ShowMessageAsync(
-                    _strings.Get("Toast_AppName", "Unison"),
-                    _strings.Get("ChatDetail_RecordFailed", "Could not record audio. Check microphone permission."),
-                    _strings.Get("Common_OK", "OK"));
+                await ShowSimpleErrorAsync(
+                    "ChatDetail_RecordFailed",
+                    "Could not record audio. Check microphone permission.");
                 return;
             }
 
@@ -809,14 +1240,15 @@ namespace Unison.Core.ViewModels
 
             if (string.IsNullOrWhiteSpace(targetJid))
             {
-                await _dialogs.ShowMessageAsync(
-                    _strings.Get("Toast_AppName", "Unison"),
-                    _strings.Get("ChatDetail_RecordingChatUnavailable", "The conversation for this recording is no longer available."),
-                    _strings.Get("Common_OK", "OK"));
+                await ShowSimpleErrorAsync(
+                    "ChatDetail_RecordingChatUnavailable",
+                    "The conversation for this recording is no longer available.");
                 return;
             }
 
             IsSending = true;
+            MessageSent?.Invoke(this, EventArgs.Empty);
+            LogSend("voice-send-start", "bytes=" + (recording.Bytes?.Length ?? 0));
             try
             {
                 await _messageService.SendAudioMessageAsync(
@@ -826,18 +1258,123 @@ namespace Unison.Core.ViewModels
                     recording.DurationSeconds,
                     recording.IsVoiceNote);
                 MessageSent?.Invoke(this, EventArgs.Empty);
+                LogSend("voice-send-ok");
+            }
+            catch (UnisonUserException ex)
+            {
+                await PresentUserExceptionAsync(ex, "voice-send-fail");
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine("[ChatDetailViewModel] Voice send error: " + ex.Message);
-                await _dialogs.ShowMessageAsync(
-                    _strings.Get("Toast_AppName", "Unison"),
-                    _strings.Get("ChatDetail_AudioSendFailed", "Could not send the audio."),
-                    _strings.Get("Common_OK", "OK"));
+                await PresentUserExceptionAsync(
+                    new AudioSendException("Voice send failed: " + ex.Message, ex),
+                    "voice-send-fail");
             }
             finally
             {
                 IsSending = false;
+            }
+        }
+
+        /// <summary>Outer safety net so async command exceptions never tear down the app.</summary>
+        private async Task RunSafeAsync(Func<Task> action, string op)
+        {
+            try
+            {
+                await action();
+            }
+            catch (UnisonUserException ex)
+            {
+                await PresentUserExceptionAsync(ex, op + "-unhandled");
+            }
+            catch (Exception ex)
+            {
+                LogSendError(op + "-unhandled", ex);
+                await ShowSimpleErrorAsync(
+                    "ChatDetail_AttachSendFailed",
+                    "Could not complete that action.");
+            }
+        }
+
+        private async Task PresentUserExceptionAsync(UnisonUserException ex, string logEvent)
+        {
+            if (ex == null)
+            {
+                return;
+            }
+
+            LogSendError(logEvent, ex);
+            await ShowSimpleErrorAsync(ex.ResourceKey, ex.FallbackMessage);
+        }
+
+        private async Task ShowSimpleErrorAsync(string resourceKey, string fallback)
+        {
+            if (_dialogs == null)
+            {
+                return;
+            }
+
+            try
+            {
+                await _dialogs.ShowMessageAsync(
+                    _strings != null ? _strings.Get("Toast_AppName", "Unison") : "Unison",
+                    _strings != null ? _strings.Get(resourceKey, fallback) : fallback,
+                    _strings != null ? _strings.Get("Common_OK", "OK") : "OK");
+            }
+            catch (Exception dialogEx)
+            {
+                System.Diagnostics.Debug.WriteLine("[ChatDetailViewModel] dialog failed: " + dialogEx.Message);
+            }
+        }
+
+        private void LogSend(string eventName, string details = null)
+        {
+            string jid = _activeChat?.JID ?? "?";
+            string payload = string.Format(
+                "jid={0}{1}",
+                jid,
+                string.IsNullOrWhiteSpace(details) ? string.Empty : "; " + details);
+
+            try
+            {
+                _diagnostics?.Write("send", eventName, payload);
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                _sessionLogger?.WriteAlways("[send/" + eventName + "] " + payload);
+            }
+            catch
+            {
+            }
+
+            System.Diagnostics.Debug.WriteLine("[send/" + eventName + "] " + payload);
+        }
+
+        private void LogSendError(string eventName, Exception ex)
+        {
+            string detail = ex == null ? null : (ex.GetType().Name + ": " + ex.Message);
+            LogSend(eventName, detail);
+            try
+            {
+                _sessionLogger?.WriteErrorAlways("[send/" + eventName + "]", ex);
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                if (ex != null)
+                {
+                    _diagnostics?.RecordException("send", eventName, ex, "jid=" + (_activeChat?.JID ?? "?"));
+                }
+            }
+            catch
+            {
             }
         }
 
@@ -858,7 +1395,7 @@ namespace Unison.Core.ViewModels
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine("[ChatDetailViewModel] Cancel recording: " + ex.Message);
+                LogSendError("record-cancel", ex);
             }
             finally
             {
@@ -948,6 +1485,27 @@ namespace Unison.Core.ViewModels
             var live = _whatsAppService.GetLiveMessages(_activeChat.JID);
             if (live == null || live.Count == 0) return;
 
+            bool hasRealLive = live.Any(m =>
+                m != null &&
+                !string.IsNullOrEmpty(m.Id) &&
+                !m.IsPreviewFallback &&
+                !ChatPreviewMessageFactory.IsPreviewFallbackId(m.Id));
+            if (!hasRealLive)
+            {
+                return;
+            }
+
+            for (int i = Messages.Count - 1; i >= 0; i--)
+            {
+                var existing = Messages[i];
+                if (existing?.Model != null &&
+                    (existing.Model.IsPreviewFallback ||
+                     ChatPreviewMessageFactory.IsPreviewFallbackId(existing.Model.Id)))
+                {
+                    Messages.RemoveAt(i);
+                }
+            }
+
             var existingIds = new HashSet<string>(
                 Messages.Where(m => m?.Id != null).Select(m => m.Id),
                 StringComparer.Ordinal);
@@ -955,6 +1513,7 @@ namespace Unison.Core.ViewModels
             foreach (var msg in live)
             {
                 if (msg == null || string.IsNullOrEmpty(msg.Id)) continue;
+                if (msg.IsPreviewFallback || ChatPreviewMessageFactory.IsPreviewFallbackId(msg.Id)) continue;
                 if (existingIds.Contains(msg.Id)) continue;
                 Messages.Add(_messageFactory.Create(msg));
                 existingIds.Add(msg.Id);

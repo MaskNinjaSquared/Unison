@@ -1,0 +1,132 @@
+<Page
+    x:Class="Unison.Uwp.UI.Views.BootView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
+    Background="#FF20C064">
+
+    <!--
+      Page + RootGrid start #20C064 (no theme flash under splash).
+      When Unison wordmark begins (~1.20s), Page.Background → theme so exit wipe reveals it.
+      Frame 0: icon alone, centered — size tracks window short-side (~splash).
+      Intro: icon shrinks + slides left; "Unison" fades in.
+      Exit: RootGrid floats up to reveal page theme background.
+    -->
+    <Grid x:Name="RootGrid" Background="#FF20C064">
+        <Grid.RenderTransform>
+            <TranslateTransform x:Name="RootGridTranslate" Y="0"/>
+        </Grid.RenderTransform>
+
+        <Grid.Resources>
+            <Storyboard x:Name="BootIntroStoryboard">
+                <DoubleAnimation x:Name="BootIconTranslateXAnim"
+                                 Storyboard.TargetName="BootIconTranslate"
+                                 Storyboard.TargetProperty="X"
+                                 From="0"
+                                 BeginTime="0:0:0.40"
+                                 Duration="0:0:0.80">
+                    <DoubleAnimation.EasingFunction>
+                        <CubicEase EasingMode="EaseOut"/>
+                    </DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+                <DoubleAnimation Storyboard.TargetName="BootIconScale"
+                                 Storyboard.TargetProperty="ScaleX"
+                                 From="1" To="0.58"
+                                 BeginTime="0:0:0.40"
+                                 Duration="0:0:0.80">
+                    <DoubleAnimation.EasingFunction>
+                        <CubicEase EasingMode="EaseOut"/>
+                    </DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+                <DoubleAnimation Storyboard.TargetName="BootIconScale"
+                                 Storyboard.TargetProperty="ScaleY"
+                                 From="1" To="0.58"
+                                 BeginTime="0:0:0.40"
+                                 Duration="0:0:0.80">
+                    <DoubleAnimation.EasingFunction>
+                        <CubicEase EasingMode="EaseOut"/>
+                    </DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+                <!-- After icon settles: fade in wordmark (position set in code to center the pair). -->
+                <DoubleAnimation Storyboard.TargetName="BootWordmark"
+                                 Storyboard.TargetProperty="Opacity"
+                                 From="0" To="1"
+                                 BeginTime="0:0:1.20"
+                                 Duration="0:0:0.55">
+                    <DoubleAnimation.EasingFunction>
+                        <QuadraticEase EasingMode="EaseOut"/>
+                    </DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+            </Storyboard>
+
+            <Storyboard x:Name="BootExitStoryboard">
+                <DoubleAnimation x:Name="BootExitYAnim"
+                                 Storyboard.TargetName="RootGridTranslate"
+                                 Storyboard.TargetProperty="Y"
+                                 From="0"
+                                 Duration="0:0:0.45">
+                    <DoubleAnimation.EasingFunction>
+                        <CubicEase EasingMode="EaseIn"/>
+                    </DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+                <DoubleAnimation Storyboard.TargetName="RootGrid"
+                                 Storyboard.TargetProperty="Opacity"
+                                 From="1" To="0"
+                                 Duration="0:0:0.40">
+                    <DoubleAnimation.EasingFunction>
+                        <QuadraticEase EasingMode="EaseIn"/>
+                    </DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+            </Storyboard>
+        </Grid.Resources>
+
+        <!-- Icon: screen center; Width/Height set in code to match splash vs window. -->
+        <Viewbox x:Name="BootIcon"
+                 Width="96"
+                 Height="96"
+                 HorizontalAlignment="Center"
+                 VerticalAlignment="Center"
+                 RenderTransformOrigin="0.5,0.5">
+            <Viewbox.RenderTransform>
+                <TransformGroup>
+                    <ScaleTransform x:Name="BootIconScale" ScaleX="1" ScaleY="1"/>
+                    <TranslateTransform x:Name="BootIconTranslate" X="0" Y="0"/>
+                </TransformGroup>
+            </Viewbox.RenderTransform>
+            <Canvas Width="200" Height="201">
+                <Path Fill="White"
+                      Data="M0,200.896L14.1284,149.311C5.4001,134.179 0.815293,117.013 0.836483,99.5436 0.859453,44.6544 45.528,0 100.419,0 127.056,0.0134258 152.058,10.3793 170.861,29.196 189.664,48.0125 200.01,73.0235 200,99.6236 199.976,154.509 155.3,199.171 100.417,199.171L100.374,199.171C83.7095,199.165,67.3343,194.984,52.789,187.053L0,200.896z"/>
+                <Path Fill="#FF20C064"
+                      Data="M158.965,41.0799C174.532,56.5739 183.254,77.6527 183.184,99.6165 183.167,145.239 146.038,182.358 100.418,182.358L100.387,182.358C85.5319,182.349,70.9649,178.362,58.2603,170.822L55.2352,169.03 23.9089,177.244 32.2718,146.714 30.3026,143.583C22.0137,130.394 17.627,115.128 17.6495,99.5501 17.6657,53.9305 54.7943,16.8157 100.45,16.8157 122.413,16.7636 143.483,25.5011 158.965,41.0799z"/>
+                <Path Fill="White"
+                      Data="M75.5292,57.9289C77.7408,62.85 82.5753,75.1551 83.1977,76.399 83.8204,77.6429 84.2332,79.099 83.4048,80.7569 82.5765,82.4149 82.1663,83.453 80.9198,84.9052 79.6733,86.3575 78.3025,88.148 77.1859,89.2633 75.9379,90.503 74.6386,91.851 76.0922,94.3399 77.5458,96.8289 82.5385,104.974 89.935,111.569 99.4414,120.045 107.454,122.674 109.944,123.917 112.434,125.161 113.884,124.953 115.336,123.292 116.789,121.632 121.551,116.03 123.212,113.54 124.872,111.049 126.53,111.462 128.811,112.293 131.092,113.124 143.323,119.143 145.813,120.388 148.303,121.633 149.962,122.252 150.583,123.292 151.205,124.333 151.203,129.311 149.131,135.121 147.059,140.931 136.902,146.536 132.338,146.95 127.774,147.364 123.497,149.013 102.48,140.724 77.1883,130.751 61.2179,104.829 59.9754,103.167 58.7329,101.505 49.8164,89.6762 49.8164,77.4344 49.8164,65.1927 56.2466,59.1742 58.5258,56.6839 60.805,54.1937 63.5011,53.5713 65.1604,53.5713L69.93,53.6293C71.7016,53.7011,73.6641,53.786,75.5292,57.9289z"/>
+            </Canvas>
+        </Viewbox>
+
+        <TextBlock x:Name="BootWordmark"
+                   Text="Unison"
+                   Foreground="White"
+                   FontSize="40"
+                   FontFamily="{StaticResource MainFontSemibold}"
+                   FontWeight="SemiBold"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"
+                   Opacity="0"
+                   CharacterSpacing="40"
+                   IsHitTestVisible="False">
+            <TextBlock.RenderTransform>
+                <TranslateTransform x:Name="BootWordmarkTranslate" X="0"/>
+            </TextBlock.RenderTransform>
+        </TextBlock>
+
+        <muxc:ProgressBar IsIndeterminate="True"
+                          Height="4"
+                          VerticalAlignment="Bottom"
+                          Margin="0"
+                          Foreground="White"
+                          Background="#33FFFFFF"
+                          BorderThickness="0"
+                          ShowError="False"
+                          ShowPaused="False"/>
+    </Grid>
+</Page>

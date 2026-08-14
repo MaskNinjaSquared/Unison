@@ -1,141 +1,262 @@
 ﻿using System;
+using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
+using Unison.Core.Models;
 
 namespace Unison.Core.ViewModels
 {
     /// <summary>
-    /// Debug / diagnostics pane (session log, verbose toggle, wipe session).
+    /// Debug / diagnostics pane (session log, runtime health, verbose toggle, wipe session).
     /// Confirm dialogs use <see cref="IDialogService"/> (Imgur pattern).
     /// </summary>
     public class DebugViewModel : Observable
     {
-        // â”€â”€ DI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        private const int MaxDisplayedLogCharacters = 60000;
 
-        /// <summary>WhatsApp session (verbose flag + ClearSession).</summary>
         private readonly IWhatsAppService _whatsAppService;
-
-        /// <summary>Persistent session log text / save / clear.</summary>
         private readonly ISessionLogger _sessionLogger;
-
-        /// <summary>Confirm wipe and other platform dialogs.</summary>
         private readonly IDialogService _dialogService;
-
-        /// <summary>Localized wipe dialog strings.</summary>
         private readonly IStringResources _strings;
-
-        // â”€â”€ State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        private readonly IRuntimeDiagnostics _runtimeDiagnostics;
 
         private bool _isSessionLoggingEnabled;
         private bool _isVerboseLoggingEnabled;
         private string _logText;
+        private string _runtimeHealthText;
+        private string _runtimeExportStatusText;
+        private string _buildInfoText;
+        private bool _isActive;
+        private readonly object _pendingLogLock = new object();
+        private readonly StringBuilder _pendingLogLines = new StringBuilder();
 
         public DebugViewModel(
             IWhatsAppService whatsAppService,
             ISessionLogger sessionLogger,
-            IDispatcher dispatcher,
             IDialogService dialogService,
-            IStringResources strings)
+            IStringResources strings,
+            IRuntimeDiagnostics runtimeDiagnostics)
         {
             _whatsAppService = whatsAppService;
             _sessionLogger = sessionLogger;
             _dialogService = dialogService;
             _strings = strings;
+            _runtimeDiagnostics = runtimeDiagnostics;
 
             _isSessionLoggingEnabled = sessionLogger.Enabled;
             _isVerboseLoggingEnabled = whatsAppService.VerboseLogging;
-            _logText = sessionLogger.GetLogText();
+            _logText = TrimDisplayedLog(sessionLogger.GetLogText());
+            _runtimeHealthText = _strings.Get("Debug_Collecting.Text", "Collecting runtime state...");
+            _runtimeExportStatusText = string.Empty;
+            _buildInfoText = "Build: ?";
 
-            // Persist current log buffer to a file.
             SaveLogCommand = new RelayCommand(async () => await _sessionLogger.SaveToFileAsync());
-
-            // Clear in-memory log and the bound text.
             ClearLogCommand = new RelayCommand(() =>
             {
                 _sessionLogger.Clear();
                 LogText = string.Empty;
             });
-
-            // Confirm then wipe auth/session (returns to pairing).
             DeleteSessionCommand = new RelayCommand(async () => await ConfirmAndDeleteSessionAsync());
-
-            // Leave debug and return to chats (shell listens to BackRequested).
             BackCommand = new RelayCommand(() => BackRequested?.Invoke(this, EventArgs.Empty));
+            RefreshRuntimeCommand = new RelayCommand(RefreshRuntimeHealth);
+            SaveRuntimeReportCommand = new RelayCommand(async () => await SaveRuntimeReportAsync());
+            ClearRuntimeLogCommand = new RelayCommand(async () => await ClearRuntimeLogAsync());
         }
-
-        // â”€â”€ Events â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         /// <summary>Raised when the user taps back on the debug surface.</summary>
         public event EventHandler BackRequested;
 
-        // â”€â”€ Lifecycle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        /// <summary>Raised when the displayed session log text changes (view may auto-scroll).</summary>
+        public event EventHandler LogTextChanged;
+
+        /// <summary>Bind toggles / start timers when the debug pane becomes visible.</summary>
+        public void Activate(string buildInfoText = null)
+        {
+            if (_isActive)
+            {
+                return;
+            }
+
+            _isActive = true;
+            if (!string.IsNullOrEmpty(buildInfoText))
+            {
+                BuildInfoText = buildInfoText;
+            }
+
+            RefreshFromServices();
+            _sessionLogger.OnLogUpdated -= SessionLogger_OnLogUpdated;
+            _sessionLogger.OnLogUpdated += SessionLogger_OnLogUpdated;
+            RefreshRuntimeHealth();
+        }
+
+        /// <summary>Stop live subscriptions when the pane is hidden.</summary>
+        public void Deactivate()
+        {
+            if (!_isActive)
+            {
+                return;
+            }
+
+            _isActive = false;
+            _sessionLogger.OnLogUpdated -= SessionLogger_OnLogUpdated;
+            lock (_pendingLogLock)
+            {
+                _pendingLogLines.Clear();
+            }
+        }
 
         /// <summary>Refresh toggle/log snapshot from services when the pane opens.</summary>
         public void RefreshFromServices()
         {
             IsSessionLoggingEnabled = _sessionLogger.Enabled;
             IsVerboseLoggingEnabled = _whatsAppService.VerboseLogging;
-            LogText = _sessionLogger.GetLogText();
+            LogText = TrimDisplayedLog(_sessionLogger.GetLogText());
         }
 
-        /// <summary>Append one live log line (view forwards SessionLogger updates).</summary>
-        public void AppendLogLine(string entry)
+        /// <summary>Drain buffered live log lines onto <see cref="LogText"/> (view timer).</summary>
+        public void FlushPendingLogLines()
         {
-            LogText += (entry ?? string.Empty) + "\n";
+            string chunk;
+            lock (_pendingLogLock)
+            {
+                if (_pendingLogLines.Length == 0)
+                {
+                    return;
+                }
+
+                chunk = _pendingLogLines.ToString();
+                _pendingLogLines.Clear();
+            }
+
+            LogText = TrimDisplayedLog((LogText ?? string.Empty) + chunk);
         }
 
-        // â”€â”€ Bindable state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-        /// <summary>Persist session log to LocalFolder when enabled.</summary>
         public bool IsSessionLoggingEnabled
         {
             get => _isSessionLoggingEnabled;
             set
             {
                 if (Set(ref _isSessionLoggingEnabled, value))
+                {
                     _sessionLogger.Enabled = value;
+                }
             }
         }
 
-        /// <summary>Verbose protocol / Baileys logging on WhatsAppService.</summary>
         public bool IsVerboseLoggingEnabled
         {
             get => _isVerboseLoggingEnabled;
             set
             {
                 if (Set(ref _isVerboseLoggingEnabled, value))
+                {
                     _whatsAppService.SetVerboseLogging(value, nameof(DebugViewModel));
+                }
             }
         }
 
-        /// <summary>Full log text shown in the debug TextBox.</summary>
         public string LogText
         {
             get => _logText;
-            private set => Set(ref _logText, value);
+            private set
+            {
+                if (Set(ref _logText, value))
+                {
+                    LogTextChanged?.Invoke(this, EventArgs.Empty);
+                }
+            }
         }
 
-        // â”€â”€ Commands â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        public string RuntimeHealthText
+        {
+            get => _runtimeHealthText;
+            private set => Set(ref _runtimeHealthText, value);
+        }
 
-        /// <summary>Save log buffer to a file via ISessionLogger.</summary>
+        public string RuntimeExportStatusText
+        {
+            get => _runtimeExportStatusText;
+            private set => Set(ref _runtimeExportStatusText, value);
+        }
+
+        public string BuildInfoText
+        {
+            get => _buildInfoText;
+            private set => Set(ref _buildInfoText, value);
+        }
+
+        /// <summary>Persists the in-memory session log buffer to a file.</summary>
         public ICommand SaveLogCommand { get; }
 
-        /// <summary>Clear the session log buffer and UI text.</summary>
+        /// <summary>Clears the session log buffer and the bound display text.</summary>
         public ICommand ClearLogCommand { get; }
 
-        /// <summary>Confirm and delete the WhatsApp session (pairing required again).</summary>
+        /// <summary>Confirms, then deletes local auth/session and returns to pairing.</summary>
         public ICommand DeleteSessionCommand { get; }
 
-        /// <summary>Leave the debug pane.</summary>
+        /// <summary>Leaves the debug pane (raises <see cref="BackRequested"/>).</summary>
         public ICommand BackCommand { get; }
+
+        /// <summary>Refreshes the runtime health snapshot text immediately.</summary>
+        public ICommand RefreshRuntimeCommand { get; }
+
+        /// <summary>Exports a diagnostic report and shows the result path/status.</summary>
+        public ICommand SaveRuntimeReportCommand { get; }
+
+        /// <summary>Clears the runtime diagnostics journal and refreshes the UI.</summary>
+        public ICommand ClearRuntimeLogCommand { get; }
 
         /// <summary>Alias used by older code-behind paths.</summary>
         public Task WipeSessionAsync() => ConfirmAndDeleteSessionAsync();
 
-        // â”€â”€ Private â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        private void SessionLogger_OnLogUpdated(object sender, string line)
+        {
+            lock (_pendingLogLock)
+            {
+                _pendingLogLines.AppendLine(line ?? string.Empty);
+                if (_pendingLogLines.Length > MaxDisplayedLogCharacters)
+                {
+                    string keep = _pendingLogLines.ToString();
+                    _pendingLogLines.Clear();
+                    _pendingLogLines.Append(keep.Substring(keep.Length - MaxDisplayedLogCharacters));
+                }
+            }
+        }
+
+        public void RefreshRuntimeHealth()
+        {
+            try
+            {
+                RuntimeDiagnosticsSnapshot snapshot = _runtimeDiagnostics.CaptureSnapshot();
+                string recent = _runtimeDiagnostics.GetRecentText();
+                RuntimeHealthText = snapshot.ToDisplayText() +
+                    Environment.NewLine +
+                    "RECENT RUNTIME EVENTS" + Environment.NewLine +
+                    (string.IsNullOrWhiteSpace(recent) ? "<none>" : recent);
+            }
+            catch (Exception ex)
+            {
+                RuntimeHealthText = "Unable to capture runtime health: " + ex.Message;
+            }
+        }
+
+        private async Task SaveRuntimeReportAsync()
+        {
+            RuntimeExportStatusText = _strings.Get("Debug_PreparingReport", "Preparing report…");
+            string result = await _runtimeDiagnostics.ExportReportAsync();
+            RuntimeExportStatusText = result;
+            RefreshRuntimeHealth();
+        }
+
+        private async Task ClearRuntimeLogAsync()
+        {
+            await _runtimeDiagnostics.ClearAsync();
+            RuntimeExportStatusText = _strings.Get("Debug_RuntimeCleared", "Runtime log cleared.");
+            RefreshRuntimeHealth();
+        }
 
         private async Task ConfirmAndDeleteSessionAsync()
         {
@@ -149,6 +270,16 @@ namespace Unison.Core.ViewModels
             {
                 await _whatsAppService.ClearSessionAsync();
             }
+        }
+
+        private static string TrimDisplayedLog(string text)
+        {
+            if (string.IsNullOrEmpty(text) || text.Length <= MaxDisplayedLogCharacters)
+            {
+                return text ?? string.Empty;
+            }
+
+            return text.Substring(text.Length - MaxDisplayedLogCharacters);
         }
     }
 }

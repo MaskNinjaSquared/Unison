@@ -1,0 +1,67 @@
+<UserControl
+    x:Class="Unison.Uwp.UI.Controls.LoginQrCodeControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Unison.Uwp.UI.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <!--
+      MinHeight reserves the full QR card so short viewports can scroll it fully into view.
+      Image tap → ShowQrFullscreenCommand; Reload button sits on top and does not fire that.
+    -->
+    <ScrollViewer MinHeight="320"
+                  VerticalScrollBarVisibility="Auto"
+                  VerticalScrollMode="Enabled"
+                  HorizontalScrollMode="Disabled"
+                  ZoomMode="Disabled">
+        <StackPanel HorizontalAlignment="Center">
+            <Grid x:Name="QRCodeContainer" Margin="0,0,0,16" HorizontalAlignment="Center">
+                <Border x:Name="QRCodeBorder" Padding="12"
+                        Background="{ThemeResource LoginQrCardBackgroundBrush}"
+                        BorderThickness="1"
+                        BorderBrush="{ThemeResource LoginQrCardBorderBrush}"
+                        CornerRadius="4">
+                    <Grid Width="264" Height="264">
+                        <Image x:Name="QRCodeImage"
+                               Width="264"
+                               Height="264"
+                               Stretch="Uniform"
+                               Tapped="QRCodeImage_Tapped"/>
+                        <controls:ModernProgressRing x:Name="QRProgress"
+                                                     Width="48"
+                                                     Height="48"
+                                                     Foreground="{ThemeResource LoginAccentBrush}"
+                                                     HorizontalAlignment="Center"
+                                                     VerticalAlignment="Center"
+                                                     IsActive="True"/>
+                    </Grid>
+                </Border>
+
+                <Button x:Name="ReloadQRButton"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Click="ReloadQRButton_Click"
+                        Visibility="Collapsed"
+                        Background="{ThemeResource LoginActionBrush}"
+                        Foreground="{ThemeResource LoginOnAccentForegroundBrush}"
+                        Padding="16,8">
+                    <StackPanel Orientation="Horizontal">
+                        <FontIcon Glyph="&#xE72C;" FontFamily="{StaticResource IconFont}" FontSize="16" Margin="0,0,8,0"/>
+                        <TextBlock x:Uid="Login_ReloadQR" Text="Reload QR Code"/>
+                    </StackPanel>
+                </Button>
+            </Grid>
+
+            <TextBlock x:Name="QRStatusText"
+                       x:Uid="Login_QRStatus"
+                       Text="Scan this code with your phone"
+                       FontSize="15"
+                       HorizontalAlignment="Center"
+                       Opacity="0.5"
+                       FontFamily="{StaticResource MainFont}"
+                       TextWrapping="Wrap"/>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

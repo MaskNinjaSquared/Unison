@@ -20,7 +20,8 @@ namespace Unison.Core.Contracts
             bool isMuted,
             bool suppressToast,
             int totalUnread,
-            string avatarUrl = null);
+            string avatarUrl = null,
+            int chatUnread = -1);
 
         /// <summary>Generic toast (e.g. session logged out). Respects notifications setting.</summary>
         void ShowToast(string title, string body);

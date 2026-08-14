@@ -1,0 +1,240 @@
+<UserControl
+    x:Class="Unison.Uwp.UI.Views.VideoViewerView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    d:DesignHeight="800"
+    d:DesignWidth="480"
+    RequestedTheme="Dark"
+    PointerEntered="Root_PointerEntered"
+    PointerExited="Root_PointerExited">
+
+    <!-- Imgur FullScreenMediaView layout: player + tap zones (±10s) + chrome + transport -->
+    <Grid x:Name="Root" Background="Black">
+        <MediaPlayerElement x:Name="Player"
+                            Stretch="Uniform"
+                            AutoPlay="False"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Stretch"
+                            AreTransportControlsEnabled="False"/>
+
+        <!-- Gesture zones: left double-tap −10s | center chrome | right +10s -->
+        <Grid x:Name="PlayerInteractionCommandsOverlay"
+              Visibility="Visible"
+              HorizontalAlignment="Stretch"
+              Opacity="0.3">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="0.25*"/>
+                <ColumnDefinition Width="0.5*"/>
+                <ColumnDefinition Width="0.25*"/>
+            </Grid.ColumnDefinitions>
+            <Rectangle Fill="Transparent" Grid.Column="0"
+                       Tapped="Player_Tapped" DoubleTapped="Back_DoubleTapped"/>
+            <Rectangle Fill="Transparent" Grid.Column="1"
+                       Tapped="Player_Tapped"/>
+            <Rectangle Fill="Transparent" Grid.Column="2"
+                       Tapped="Player_Tapped" DoubleTapped="Next_DoubleTapped"/>
+        </Grid>
+
+        <Border x:Name="SeekBackwardFeedback"
+                HorizontalAlignment="Left" VerticalAlignment="Center"
+                Margin="20,0,0,0" Width="88" Height="88" CornerRadius="44"
+                Background="#99000000" Opacity="0" IsHitTestVisible="False">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <FontIcon Glyph="&#xE892;"
+                          FontFamily="{StaticResource IconFont}"
+                          FontSize="22"
+                          Foreground="{ThemeResource WhatsAppGreenFocusBrush}"
+                          VerticalAlignment="Center"
+                          Margin="0,0,4,0"/>
+                <TextBlock Text="-10"
+                           FontSize="20"
+                           FontWeight="SemiBold"
+                           Foreground="{ThemeResource WhatsAppGreenFocusBrush}"
+                           VerticalAlignment="Center"
+                           TextLineBounds="Tight"/>
+            </StackPanel>
+        </Border>
+        <Border x:Name="SeekForwardFeedback"
+                HorizontalAlignment="Right" VerticalAlignment="Center"
+                Margin="0,0,20,0" Width="88" Height="88" CornerRadius="44"
+                Background="#99000000" Opacity="0" IsHitTestVisible="False">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <TextBlock Text="+10"
+                           FontSize="20"
+                           FontWeight="SemiBold"
+                           Foreground="{ThemeResource WhatsAppGreenFocusBrush}"
+                           VerticalAlignment="Center"
+                           TextLineBounds="Tight"
+                           Margin="0,0,4,0"/>
+                <FontIcon Glyph="&#xE893;"
+                          FontFamily="{StaticResource IconFont}"
+                          FontSize="22"
+                          Foreground="{ThemeResource WhatsAppGreenFocusBrush}"
+                          VerticalAlignment="Center"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Header chrome -->
+        <Border x:Name="HeaderChrome"
+                VerticalAlignment="Top"
+                HorizontalAlignment="Stretch"
+                Background="Transparent"
+                Padding="11,12,16,12"
+                Canvas.ZIndex="2"
+                Tapped="Chrome_Tapped">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <Button x:Name="BackButton"
+                        Grid.Column="0"
+                        Command="{x:Bind ViewModel.CloseCommand, Mode=OneWay}"
+                        Width="34" Height="34"
+                        Margin="0,0,8,0"
+                        VerticalAlignment="Center"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Padding="0">
+                    <Grid Width="34" Height="34">
+                        <Ellipse Fill="#E6232424"/>
+                        <TextBlock Text="&#xE72B;"
+                                   FontFamily="{StaticResource IconFont}"
+                                   FontSize="14"
+                                   FontWeight="SemiBold"
+                                   Foreground="WhiteSmoke"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
+                    </Grid>
+                </Button>
+
+                <StackPanel x:Name="TitleInfoPanel"
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            Margin="0,0,8,0"
+                            Visibility="Collapsed">
+                    <TextBlock Text="{x:Bind ViewModel.SenderDisplayName, Mode=OneWay}"
+                               FontSize="16"
+                               FontWeight="SemiBold"
+                               FontFamily="{StaticResource MainFont}"
+                               Foreground="White"
+                               TextTrimming="CharacterEllipsis"
+                               MaxLines="1"/>
+                    <TextBlock Text="{x:Bind ViewModel.FormattedDateTime, Mode=OneWay}"
+                               FontSize="12"
+                               FontFamily="{StaticResource MainFont}"
+                               Foreground="#B3FFFFFF"
+                               Margin="0,2,0,0"
+                               TextTrimming="CharacterEllipsis"
+                               MaxLines="1"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="2"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center">
+                    <!-- Placeholders: visible but disabled until video export lands -->
+                    <Button Command="{x:Bind ViewModel.DownloadCommand, Mode=OneWay}"
+                            IsEnabled="False"
+                            Style="{StaticResource WhatsAppIconButtonStyle}"
+                            Width="40" Height="40"
+                            Opacity="0.35"
+                            ToolTipService.ToolTip="{x:Bind ViewModel.DownloadTooltip, Mode=OneWay}">
+                        <TextBlock Text="&#xE896;"
+                                   FontFamily="{StaticResource IconFont}"
+                                   FontSize="18"
+                                   Foreground="White"/>
+                    </Button>
+                    <Button Command="{x:Bind ViewModel.ShareCommand, Mode=OneWay}"
+                            IsEnabled="False"
+                            Style="{StaticResource WhatsAppIconButtonStyle}"
+                            Width="40" Height="40"
+                            Opacity="0.35"
+                            ToolTipService.ToolTip="{x:Bind ViewModel.ShareTooltip, Mode=OneWay}">
+                        <TextBlock Text="&#xE72D;"
+                                   FontFamily="{StaticResource IconFont}"
+                                   FontSize="18"
+                                   Foreground="White"/>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Bottom transport (Imgur): play | position | slider | overflow (disabled extras) -->
+        <Grid x:Name="PlayerTransportControls"
+              Opacity="0.9"
+              Background="#CC1C1C1C"
+              Height="48"
+              VerticalAlignment="Bottom"
+              Visibility="Collapsed"
+              Canvas.ZIndex="2"
+              Tapped="Chrome_Tapped">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition MinWidth="50" Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <!-- AppBarButton (not Button): mobile Button chrome pads the glyph smaller. Same as Imgur FullScreenMediaView. -->
+            <StackPanel VerticalAlignment="Center" Orientation="Horizontal" Grid.Column="0">
+                <AppBarButton x:Name="TransportControlPlay"
+                              Margin="5,0"
+                              MaxWidth="40"
+                              LabelPosition="Collapsed"
+                              Tapped="TransportControlPlay_Tapped">
+                    <AppBarButton.Content>
+                        <Grid>
+                            <FontIcon x:Name="canPlayIcon"
+                                      Visibility="Collapsed"
+                                      Glyph="&#xE768;"
+                                      FontFamily="{StaticResource IconFont}"
+                                      FontSize="20"
+                                      FontWeight="ExtraBold"
+                                      Foreground="White"/>
+                            <FontIcon x:Name="canPauseIcon"
+                                      Visibility="Visible"
+                                      Glyph="&#xE769;"
+                                      FontFamily="{StaticResource IconFont}"
+                                      FontSize="20"
+                                      FontWeight="ExtraBold"
+                                      Foreground="White"/>
+                        </Grid>
+                    </AppBarButton.Content>
+                </AppBarButton>
+                <TextBlock x:Name="PositionText"
+                           VerticalAlignment="Center"
+                           Foreground="{ThemeResource WhatsAppGreenFocusBrush}"
+                           Text="00:00"
+                           FontFamily="{StaticResource MainFont}"
+                           Margin="0,0,4,0"/>
+            </StackPanel>
+            <Slider x:Name="PlayerSlider"
+                    Grid.Column="1"
+                    VerticalAlignment="Center"
+                    Background="White"
+                    Foreground="{ThemeResource WhatsAppGreenFocusBrush}"
+                    Opacity="0.8"
+                    HorizontalAlignment="Stretch"
+                    StepFrequency="1"
+                    ValueChanged="PlayerSlider_ValueChanged"
+                    Margin="10,0"/>
+            <AppBarButton Grid.Column="2"
+                          Margin="0,0,5,0"
+                          MaxWidth="40"
+                          LabelPosition="Collapsed"
+                          IsEnabled="False"
+                          Opacity="0.35"
+                          ToolTipService.ToolTip="More">
+                <AppBarButton.Content>
+                    <FontIcon Glyph="&#xE712;"
+                              FontFamily="{StaticResource IconFont}"
+                              FontSize="18"
+                              Foreground="White"/>
+                </AppBarButton.Content>
+            </AppBarButton>
+        </Grid>
+    </Grid>
+</UserControl>

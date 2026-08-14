@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace Unison.Core.Models
 {
     /// <summary>
@@ -14,6 +16,14 @@ namespace Unison.Core.Models
         public bool IsSticker { get; set; }
         public bool IsAudio { get; set; }
         public bool IsVoice { get; set; }
+        public bool IsDocument { get; set; }
         public string Caption { get; set; }
+        public string QuotedText { get; set; }
+        /// <summary>Media kind for the quoted bubble strip (Text = plain quote body).</summary>
+        public ChatPreviewKind QuotedKind { get; set; }
+        public string QuotedSenderName { get; set; }
+        /// <summary>WhatsApp ContextInfo.StanzaId of the quoted message (when present).</summary>
+        public string QuotedMessageId { get; set; }
+        public List<string> MentionedJids { get; set; }
     }
 }

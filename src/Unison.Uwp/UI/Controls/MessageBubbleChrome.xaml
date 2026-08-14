@@ -11,14 +11,63 @@
     <Grid x:Name="RootGrid">
         <Grid x:Name="CompositionHost"/>
 
-        <!-- Runtime fallback when composition NineGrid/mask is unavailable -->
+        <!--
+          Fallback (Mobile / no Composition): colors via ThemeResource so OS Light/Dark
+          updates without ActualThemeChanged (missing on Creators Update 15063).
+        -->
         <Grid x:Name="FallbackHost">
-            <Border x:Name="BodyHighlightBorder"/>
-            <Border x:Name="BodyFillBorder" Margin="0,1,0,0"/>
+            <!-- Outgoing (sent) -->
+            <Grid x:Name="OutgoingHost" Visibility="Collapsed">
+                <Border x:Name="OutgoingHighlightBorder"
+                        Background="{ThemeResource ChatDetailSentBubbleHighlightBrush}"
+                        CornerRadius="16,16,4,16"/>
+                <Border x:Name="OutgoingFillBorder"
+                        Background="{ThemeResource ChatDetailSentBubbleBrush}"
+                        Margin="0,1,0,0"
+                        CornerRadius="16,16,4,16"/>
+                <Grid x:Name="OutgoingTailContainer"
+                      Width="10" Height="10"
+                      VerticalAlignment="Bottom"
+                      HorizontalAlignment="Right"
+                      Margin="-1,0,-1,0"
+                      Visibility="Collapsed">
+                    <Path Stretch="Fill"
+                          Fill="{ThemeResource ChatDetailSentBubbleHighlightBrush}"
+                          Data="M0,0 L10,0 L0,10 Z"/>
+                    <Path Stretch="Fill"
+                          Margin="0,1,0,0"
+                          Fill="{ThemeResource ChatDetailSentBubbleBrush}"
+                          Data="M0,0 L10,0 L0,10 Z"/>
+                </Grid>
+            </Grid>
 
-            <Grid x:Name="TailContainer" Width="10" Height="10" VerticalAlignment="Bottom" Margin="-1,0,-1,0">
-                <Path x:Name="TailHighlightPath" Stretch="Fill"/>
-                <Path x:Name="TailFillPath" Stretch="Fill" Margin="0,1,0,0"/>
+            <!-- Incoming (received) -->
+            <Grid x:Name="IncomingHost" Visibility="Collapsed">
+                <Border x:Name="IncomingHighlightBorder"
+                        Background="{ThemeResource ChatDetailReceivedBubbleHighlightBrush}"
+                        CornerRadius="16,16,16,4"/>
+                <Border x:Name="IncomingFillBorder"
+                        Background="{ThemeResource ChatDetailReceivedBubbleBrush}"
+                        Margin="0,1,0,0"
+                        CornerRadius="16,16,16,4"/>
+                <Grid x:Name="IncomingTailContainer"
+                      Width="10" Height="10"
+                      VerticalAlignment="Bottom"
+                      HorizontalAlignment="Left"
+                      Margin="-1,0,-1,0"
+                      RenderTransformOrigin="0.5,0.5"
+                      Visibility="Collapsed">
+                    <Grid.RenderTransform>
+                        <ScaleTransform ScaleX="-1" ScaleY="1"/>
+                    </Grid.RenderTransform>
+                    <Path Stretch="Fill"
+                          Fill="{ThemeResource ChatDetailReceivedBubbleHighlightBrush}"
+                          Data="M0,0 L10,0 L0,10 Z"/>
+                    <Path Stretch="Fill"
+                          Margin="0,1,0,0"
+                          Fill="{ThemeResource ChatDetailReceivedBubbleBrush}"
+                          Data="M0,0 L10,0 L0,10 Z"/>
+                </Grid>
             </Grid>
         </Grid>
     </Grid>

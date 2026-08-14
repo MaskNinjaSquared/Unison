@@ -25,5 +25,14 @@ namespace Unison.Core.Contracts
         /// Returns the destination path, or null if cancelled.
         /// </summary>
         Task<string> PickSaveLocalImageAsync(string sourceUriOrPath, string suggestedFileName);
+
+        /// <summary>
+        /// Saves any local cached file (document/audio/…) via FileSavePicker.
+        /// Returns the destination path, or null if cancelled.
+        /// </summary>
+        Task<string> PickSaveLocalFileAsync(
+            string sourceUriOrPath,
+            string suggestedFileName,
+            string mimeType = null);
     }
 }

@@ -185,14 +185,14 @@ namespace Unison.Uwp.Services.WhatsApp
                     await _whatsApp.ClearSessionAsync().ConfigureAwait(false);
                 }
 
-                string title = _strings.Get("Toast_LoggedOutTitle", "Sessão desvinculada");
+                string title = _strings.Get("Toast_LoggedOutTitle", "Session unlinked");
                 string body = e.Reason == DisconnectReason.ConnectionReplaced
                     ? _strings.Get(
                         "Toast_SessionReplacedBody",
-                        "Outra sessão WhatsApp Web assumiu a ligação. Escaneie o QR novamente.")
+                        "Another WhatsApp Web session took over. Scan the QR code again.")
                     : _strings.Get(
                         "Toast_LoggedOutBody",
-                        "A sessão foi desconectada no telemóvel. Escaneie o QR para voltar a ligar.");
+                        "The session was disconnected on your phone. Scan the QR code to link again.");
 
                 try
                 {

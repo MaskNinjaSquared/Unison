@@ -42,9 +42,16 @@ namespace Unison.Core.ViewModels
 
         public ChatMessageViewModel Message { get; }
 
+        /// <summary>Closes the fullscreen image viewer overlay.</summary>
         public ICommand CloseCommand { get; }
+
+        /// <summary>Shares the current image via the platform share sheet.</summary>
         public ICommand ShareCommand { get; }
+
+        /// <summary>Saves the current image to the device Pictures library.</summary>
         public ICommand DownloadCommand { get; }
+
+        /// <summary>Shows or hides the top/bottom chrome bars over the image.</summary>
         public ICommand ToggleChromeCommand { get; }
 
         public string ImageUri => Message.ImageUri;
@@ -118,13 +125,18 @@ namespace Unison.Core.ViewModels
                     return;
                 }
 
-                (DownloadCommand as RelayCommand)?.RaiseCanExecuteChanged();
-                (ShareCommand as RelayCommand)?.RaiseCanExecuteChanged();
+                RaiseExportCommandsChanged();
             }
         }
 
         private bool CanExport =>
             !string.IsNullOrWhiteSpace(ImageUri);
+
+        private void RaiseExportCommandsChanged()
+        {
+            (DownloadCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (ShareCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        }
 
         private async System.Threading.Tasks.Task ShareAsync()
         {

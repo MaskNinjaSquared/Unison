@@ -24,6 +24,15 @@ namespace Unison.Uwp.Helpers
             }
         }
 
+        /// <summary>
+        /// Drop cached loader after <c>PrimaryLanguageOverride</c> changes so the next
+        /// lookup uses the new language list.
+        /// </summary>
+        public static void Reset()
+        {
+            _loader = null;
+        }
+
         /// <param name="fallback">Used when the key is missing; when null, the key (or empty) is returned.</param>
         public static string Get(string key, string fallback = null)
         {

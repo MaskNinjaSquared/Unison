@@ -7,10 +7,10 @@
     mc:Ignorable="d">
 
     <TextBlock x:Uid="Login_LinkPhone"
-               Text="Conectar com número de telefone"
+               Text="Link with phone number"
                FontSize="15"
                FontFamily="{StaticResource MainFont}"
-               Foreground="{StaticResource LoginActionBrush}"
+               Foreground="{ThemeResource LoginActionBrush}"
                TextAlignment="Center"
                TextWrapping="Wrap"
                TextDecorations="Underline"/>

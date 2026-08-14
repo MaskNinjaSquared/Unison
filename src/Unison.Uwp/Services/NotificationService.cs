@@ -26,6 +26,7 @@ namespace Unison.Uwp.Services
         private readonly object _sync = new object();
         private bool _initialized;
         private ILiveTilesService _liveTiles;
+        private IShortcutService _shortcuts;
 
         private NotificationService()
         {
@@ -36,8 +37,15 @@ namespace Unison.Uwp.Services
             _liveTiles = liveTiles ?? LiveTilesService.Instance;
         }
 
+        public void AttachShortcuts(IShortcutService shortcuts)
+        {
+            _shortcuts = shortcuts;
+        }
+
         private ILiveTilesService LiveTiles =>
             _liveTiles ?? LiveTilesService.Instance;
+
+        private IShortcutService Shortcuts => _shortcuts;
 
         private static bool IsNotificationsSettingEnabled()
         {
@@ -74,7 +82,8 @@ namespace Unison.Uwp.Services
             bool isMuted,
             bool suppressToast,
             int totalUnread,
-            string avatarUrl = null)
+            string avatarUrl = null,
+            int chatUnread = -1)
         {
             Initialize();
 
@@ -116,6 +125,16 @@ namespace Unison.Uwp.Services
                 totalUnread);
 
             UpdateBadge(notificationsEnabled ? totalUnread : 0);
+
+            if (chatUnread >= 0 && Shortcuts != null)
+            {
+                Shortcuts.UpdatePinnedChatTile(
+                    chatJid,
+                    chatUnread,
+                    content.Title,
+                    content.Preview,
+                    avatarUrl);
+            }
         }
 
         public void ShowToast(string title, string body)
@@ -175,6 +194,11 @@ namespace Unison.Uwp.Services
             }
 
             UpdateBadge(IsNotificationsSettingEnabled() ? totalUnread : 0);
+
+            if (Shortcuts != null)
+            {
+                _ = Shortcuts.RefreshPinnedUnreadAsync(chats);
+            }
         }
 
         public void UpdateBadge(int totalUnread)

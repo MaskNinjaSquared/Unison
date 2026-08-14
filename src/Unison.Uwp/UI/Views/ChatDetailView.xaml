@@ -21,20 +21,13 @@
     </UserControl.Resources>
 
     <Grid x:Name="ChatDetailGrid"
-          Background="{StaticResource ChatDetailBackgroundBrush}"
-          BorderBrush="{StaticResource ChatDetailPaneSeparatorBrush}"
+          Background="{ThemeResource ChatDetailBackgroundBrush}"
+          BorderBrush="{ThemeResource ChatDetailPaneSeparatorBrush}"
           BorderThickness="1,0,0,0">
         <VisualStateManager.VisualStateGroups>
+            <!-- LayoutStates (app-wide): Minimal | Extended | ExtendedWide -->
             <VisualStateGroup x:Name="LayoutStates">
-                <VisualState x:Name="WideState">
-                    <VisualState.StateTriggers>
-                        <AdaptiveTrigger MinWindowWidth="720"/>
-                    </VisualState.StateTriggers>
-                    <VisualState.Setters>
-                        <Setter Target="ChatDetailGrid.BorderThickness" Value="1,0,0,0"/>
-                    </VisualState.Setters>
-                </VisualState>
-                <VisualState x:Name="NarrowState">
+                <VisualState x:Name="Minimal">
                     <VisualState.StateTriggers>
                         <AdaptiveTrigger MinWindowWidth="0"/>
                     </VisualState.StateTriggers>
@@ -43,10 +36,24 @@
                         <Setter Target="ChatDetailGrid.BorderThickness" Value="0"/>
                     </VisualState.Setters>
                 </VisualState>
+                <VisualState x:Name="Extended">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="720"/>
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="ChatDetailGrid.BorderThickness" Value="1,0,0,0"/>
+                    </VisualState.Setters>
+                </VisualState>
             </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
 
         <Grid x:Name="ActiveChatGrid" Visibility="Collapsed">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="ChatColumn" Width="*"/>
+                <ColumnDefinition x:Name="InfoColumn" Width="0"/>
+            </Grid.ColumnDefinitions>
+
+            <Grid x:Name="ChatSurface" Grid.Column="0">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
@@ -61,45 +68,203 @@
             <toolkit:DropShadowPanel Grid.Row="0"
                                      Canvas.ZIndex="2"
                                      BlurRadius="12"
-                                     OffsetX="0"
+                                     OffsetX="4"
                                      OffsetY="4"
                                      ShadowOpacity="0.55"
                                      Color="Black"
                                      HorizontalContentAlignment="Stretch"
                                      VerticalContentAlignment="Stretch">
-                <Grid Height="64" Padding="12,0" Background="{StaticResource ChatDetailHeaderBrush}">
+                <Grid Height="64" Padding="12,0" Background="{ThemeResource ChatDetailHeaderBrush}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
                     <Button x:Name="BackButton" Grid.Column="0" Click="BackButton_Click"
                             Style="{StaticResource WhatsAppIconButtonStyle}"
-                            Width="40" Height="40" VerticalAlignment="Center" Margin="0,0,4,0">
+                            Width="40" Height="40" VerticalAlignment="Center" Margin="0,0,4,0"
+                            Foreground="{ThemeResource ChatDetailHeaderTitleBrush}">
                         <TextBlock Text="&#xE72B;" FontFamily="{StaticResource IconFont}" FontSize="18"/>
                     </Button>
 
-                    <!-- Avatar with contact/group fallback under photo -->
                     <controls:ChatAvatarControl x:Name="HeaderAvatar"
                                                 Grid.Column="1"
                                                 Size="40"
                                                 Width="40" Height="40"
+                                                ShowBorder="True"
                                                 VerticalAlignment="Center"
-                                                Margin="0,0,12,0"/>
+                                                Margin="0,0,6,0"
+                                                Tapped="HeaderAvatar_Tapped"/>
 
-                    <!-- Name + Status stack (with TranslateTransform for slide-up animation) -->
-                    <StackPanel Grid.Column="2" x:Name="TitleStatusPanel" VerticalAlignment="Center">
-                        <StackPanel.RenderTransform>
-                            <TranslateTransform x:Name="TitleTranslateTransform" Y="0"/>
-                        </StackPanel.RenderTransform>
-                        <TextBlock x:Name="ChatTitleText" x:Uid="ChatDetail_SelectChat" Text="Select a chat" FontSize="18"
-                                   FontFamily="{StaticResource MainFontSemibold}" FontWeight="SemiBold"
-                                   Foreground="{StaticResource ChatDetailHeaderTitleBrush}"/>
-                        <TextBlock x:Name="ChatStatusText" Text="" FontSize="13"
-                                   FontFamily="{StaticResource MainFont}"
-                                   Foreground="{StaticResource ChatDetailHeaderStatusBrush}" Opacity="0"
-                                   Visibility="Collapsed"/>
+                    <!-- Name + status only (avatar has its own tap → OpenChatDetailInfoFromAvatarCommand). -->
+                    <Button x:Name="HeaderInfoButton"
+                            Grid.Column="2"
+                            Click="HeaderInfoButton_Click"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Padding="6"
+                            HorizontalAlignment="Stretch"
+                            Margin="0,5,5,5"
+                            HorizontalContentAlignment="Left"
+                            VerticalAlignment="Stretch"
+                            VerticalContentAlignment="Center">
+                        <StackPanel x:Name="TitleStatusPanel" VerticalAlignment="Center" Margin="0,0,8,0"
+                                    HorizontalAlignment="Left">
+                            <StackPanel.RenderTransform>
+                                <TranslateTransform x:Name="TitleTranslateTransform" Y="0"/>
+                            </StackPanel.RenderTransform>
+                            <TextBlock x:Name="ChatTitleText" x:Uid="ChatDetail_SelectChat" Text="Select a chat" FontSize="18"
+                                       FontFamily="{StaticResource MainFontSemibold}" FontWeight="SemiBold"
+                                       Foreground="{ThemeResource ChatDetailHeaderTitleBrush}"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <TextBlock x:Name="ChatStatusText" Text="" FontSize="13"
+                                       FontFamily="{StaticResource MainFont}"
+                                       Foreground="{ThemeResource ChatDetailHeaderStatusBrush}" Opacity="0"
+                                       Visibility="Collapsed"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+                    </Button>
+
+                    <!-- Contact actions (1:1 chats) — disabled until call/contact commands exist -->
+                    <StackPanel x:Name="ContactHeaderActions"
+                                Grid.Column="3"
+                                Orientation="Horizontal"
+                                VerticalAlignment="Center"
+                                Visibility="Collapsed">
+                        <Button x:Name="ContactVideoCallButton"
+                                Style="{StaticResource WhatsAppIconButtonStyle}"
+                                IsEnabled="False"
+                                Width="40" Height="40" Margin="0,0,2,0"
+                                Foreground="{ThemeResource ChatDetailHeaderTitleBrush}"
+                                ToolTipService.ToolTip="Video call">
+                            <FontIcon Glyph="&#xE714;" FontFamily="{StaticResource IconFont}" FontSize="16"/>
+                        </Button>
+                        <Button x:Name="ContactAudioCallButton"
+                                Style="{StaticResource WhatsAppIconButtonStyle}"
+                                IsEnabled="False"
+                                Width="40" Height="40" Margin="0,0,2,0"
+                                Foreground="{ThemeResource ChatDetailHeaderTitleBrush}"
+                                ToolTipService.ToolTip="Voice call">
+                            <FontIcon Glyph="&#xE717;" FontFamily="{StaticResource IconFont}" FontSize="16"/>
+                        </Button>
+                        <Button x:Name="ContactMoreButton"
+                                Style="{StaticResource WhatsAppIconButtonStyle}"
+                                Width="40" Height="40"
+                                Foreground="{ThemeResource ChatDetailHeaderTitleBrush}"
+                                ToolTipService.ToolTip="More">
+                            <FontIcon Glyph="&#xE712;" FontFamily="{StaticResource IconFont}" FontSize="16"/>
+                            <Button.Flyout>
+                                <MenuFlyout MenuFlyoutPresenterStyle="{StaticResource ModernMenuFlyoutStyle}"
+                                            Opening="ChatMoreFlyout_Opening">
+                                    <MenuFlyoutItem x:Uid="ChatDetail_ShowContact" Text="View contact" IsEnabled="False"
+                                                    Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
+                                    <MenuFlyoutItem x:Uid="ChatDetail_Search" Text="Search" IsEnabled="False"
+                                                    Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
+                                    <MenuFlyoutItem x:Uid="ChatDetail_MediaLinksDocs" Text="Media, links, and docs" IsEnabled="False"
+                                                    Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
+                                    <MenuFlyoutSubItem Tag="localMuteSub"
+                                                       x:Uid="ChatDetail_MuteNotifications"
+                                                       Text="Mute notifications">
+                                        <MenuFlyoutSubItem.Icon>
+                                            <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE74F;"/>
+                                        </MenuFlyoutSubItem.Icon>
+                                        <MenuFlyoutItem x:Uid="ChatDetail_MuteFor8Hours" Text="8 hours"
+                                                        Command="{Binding MuteFor8HoursCommand}"
+                                                        Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
+                                        <MenuFlyoutItem x:Uid="ChatDetail_MuteFor1Week" Text="1 week"
+                                                        Command="{Binding MuteFor1WeekCommand}"
+                                                        Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
+                                        <MenuFlyoutItem x:Uid="ChatDetail_MuteForever" Text="Always"
+                                                        Command="{Binding MuteForeverCommand}"
+                                                        Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
+                                    </MenuFlyoutSubItem>
+                                    <MenuFlyoutItem Tag="unmute"
+                                                    x:Uid="ChatDetail_UnmuteNotifications"
+                                                    Text="Unmute notifications"
+                                                    Command="{Binding UnmuteLocalCommand}"
+                                                    Visibility="Collapsed"
+                                                    Style="{StaticResource ModernMenuFlyoutItemStyle}">
+                                        <MenuFlyoutItem.Icon>
+                                            <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE74F;"/>
+                                        </MenuFlyoutItem.Icon>
+                                    </MenuFlyoutItem>
+                                    <MenuFlyoutItem x:Uid="ChatDetail_ExportChat" Text="Export chat" IsEnabled="False"
+                                                    Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
+                                    <MenuFlyoutItem Tag="widgetPin"
+                                                    Text="{Binding LiveTilePinMenuLabel}"
+                                                    Command="{Binding PinToStartCommand}"
+                                                    Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
+                                </MenuFlyout>
+                            </Button.Flyout>
+                        </Button>
+                    </StackPanel>
+
+                    <!-- Group actions — disabled until group commands exist -->
+                    <StackPanel x:Name="GroupHeaderActions"
+                                Grid.Column="3"
+                                Orientation="Horizontal"
+                                VerticalAlignment="Center"
+                                Visibility="Collapsed">
+                        <Button x:Name="GroupVideoCallButton"
+                                Style="{StaticResource WhatsAppIconButtonStyle}"
+                                IsEnabled="False"
+                                Width="40" Height="40" Margin="0,0,2,0"
+                                Foreground="{ThemeResource ChatDetailHeaderTitleBrush}"
+                                ToolTipService.ToolTip="Video call">
+                            <FontIcon Glyph="&#xE714;" FontFamily="{StaticResource IconFont}" FontSize="16"/>
+                        </Button>
+                        <Button x:Name="GroupMoreButton"
+                                Style="{StaticResource WhatsAppIconButtonStyle}"
+                                Width="40" Height="40"
+                                Foreground="{ThemeResource ChatDetailHeaderTitleBrush}"
+                                ToolTipService.ToolTip="More">
+                            <FontIcon Glyph="&#xE712;" FontFamily="{StaticResource IconFont}" FontSize="16"/>
+                            <Button.Flyout>
+                                <MenuFlyout MenuFlyoutPresenterStyle="{StaticResource ModernMenuFlyoutStyle}"
+                                            Opening="ChatMoreFlyout_Opening">
+                                    <MenuFlyoutItem x:Uid="ChatDetail_GroupInfo" Text="Group info" IsEnabled="False"
+                                                    Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
+                                    <MenuFlyoutItem x:Uid="ChatDetail_Search" Text="Search" IsEnabled="False"
+                                                    Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
+                                    <MenuFlyoutItem x:Uid="ChatDetail_GroupMedia" Text="Group media" IsEnabled="False"
+                                                    Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
+                                    <MenuFlyoutSubItem Tag="localMuteSub"
+                                                       x:Uid="ChatDetail_MuteNotifications"
+                                                       Text="Mute notifications">
+                                        <MenuFlyoutSubItem.Icon>
+                                            <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE74F;"/>
+                                        </MenuFlyoutSubItem.Icon>
+                                        <MenuFlyoutItem x:Uid="ChatDetail_MuteFor8Hours" Text="8 hours"
+                                                        Command="{Binding MuteFor8HoursCommand}"
+                                                        Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
+                                        <MenuFlyoutItem x:Uid="ChatDetail_MuteFor1Week" Text="1 week"
+                                                        Command="{Binding MuteFor1WeekCommand}"
+                                                        Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
+                                        <MenuFlyoutItem x:Uid="ChatDetail_MuteForever" Text="Always"
+                                                        Command="{Binding MuteForeverCommand}"
+                                                        Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
+                                    </MenuFlyoutSubItem>
+                                    <MenuFlyoutItem Tag="unmute"
+                                                    x:Uid="ChatDetail_UnmuteNotifications"
+                                                    Text="Unmute notifications"
+                                                    Command="{Binding UnmuteLocalCommand}"
+                                                    Visibility="Collapsed"
+                                                    Style="{StaticResource ModernMenuFlyoutItemStyle}">
+                                        <MenuFlyoutItem.Icon>
+                                            <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE74F;"/>
+                                        </MenuFlyoutItem.Icon>
+                                    </MenuFlyoutItem>
+                                    <MenuFlyoutItem x:Uid="ChatDetail_ExportChat" Text="Export chat" IsEnabled="False"
+                                                    Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
+                                    <MenuFlyoutItem Tag="widgetPin"
+                                                    Text="{Binding LiveTilePinMenuLabel}"
+                                                    Command="{Binding PinToStartCommand}"
+                                                    Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
+                                </MenuFlyout>
+                            </Button.Flyout>
+                        </Button>
                     </StackPanel>
                 </Grid>
             </toolkit:DropShadowPanel>
@@ -107,17 +272,17 @@
             <Button Grid.Row="1" x:Name="PinnedMessageButton" Visibility="Collapsed"
                     Click="PinnedMessageButton_Click"
                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
-                    Background="{StaticResource ChatDetailPinnedBarBackgroundBrush}" BorderThickness="0" Padding="12,7">
+                    Background="{ThemeResource ChatDetailPinnedBarBackgroundBrush}" BorderThickness="0" Padding="12,7">
                 <Grid HorizontalAlignment="Stretch">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock Text="&#xE718;" FontFamily="{StaticResource IconFont}" FontSize="16"
-                               Foreground="{StaticResource ChatDetailAccentBrush}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                               Foreground="{ThemeResource ChatDetailAccentBrush}" VerticalAlignment="Center" Margin="0,0,10,0"/>
                     <StackPanel Grid.Column="1" HorizontalAlignment="Stretch">
-                        <TextBlock x:Name="PinnedMessageTitleText" x:Uid="ChatDetail_Pinned" Text="Pinned message" FontSize="11" Foreground="{StaticResource ChatDetailAccentBrush}"/>
-                        <TextBlock x:Name="PinnedMessagePreviewText" Text="" FontSize="13" Foreground="{StaticResource ChatDetailPinnedPreviewBrush}"
+                        <TextBlock x:Name="PinnedMessageTitleText" x:Uid="ChatDetail_Pinned" Text="Pinned message" FontSize="11" Foreground="{ThemeResource ChatDetailAccentBrush}"/>
+                        <TextBlock x:Name="PinnedMessagePreviewText" Text="" FontSize="13" Foreground="{ThemeResource ChatDetailPinnedPreviewBrush}"
                                    TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
                     </StackPanel>
                 </Grid>
@@ -137,13 +302,21 @@
                 </ListView.ItemContainerStyle>
             </ListView>
 
-            <!-- Non-visual native audio player used by message bubbles. -->
-            <MediaElement x:Name="AudioPlayer" Grid.Row="2" Width="1" Height="1" Opacity="0"
-                          IsHitTestVisible="False" AutoPlay="False"
-                          MediaEnded="AudioPlayer_MediaEnded" MediaFailed="AudioPlayer_MediaFailed"/>
+            <!-- Hidden player for voice bubbles; SMTC driven via MediaPlayer (Imgur-style). -->
+            <MediaPlayerElement x:Name="AudioPlayer" Grid.Row="2"
+                                Width="1" Height="1" Opacity="0"
+                                IsHitTestVisible="False"
+                                AreTransportControlsEnabled="False"
+                                AutoPlay="False"/>
 
-            <!-- Composer / recording overlay share row 3 -->
-            <Grid Grid.Row="3" Background="{StaticResource ChatDetailInputBarBackgroundBrush}">
+            <!-- Composer / recording overlay share row 3 (hidden when group announce-lock) -->
+            <Grid Grid.Row="3"
+                  Background="{ThemeResource ChatDetailInputBarBackgroundBrush}"
+                  Visibility="{Binding IsGroupLockedForMessages, Converter={StaticResource InvertedBooleanToVisibilityConverter}}">
+                <Border Height="1"
+                        VerticalAlignment="Top"
+                        Background="{ThemeResource ChatDetailInputBarTopBorderBrush}"
+                        IsHitTestVisible="False"/>
 
                 <!-- Normal input bar (hidden while recording) -->
                 <Grid Padding="12"
@@ -173,7 +346,7 @@
                             Width="40" Height="40"
                             Command="{Binding StartRecordingCommand}">
                         <TextBlock x:Name="MicIcon" Text="&#xE720;" FontFamily="{StaticResource IconFont}" FontSize="20"
-                                   Foreground="{StaticResource ChatDetailAccentBrush}"/>
+                                   Foreground="{ThemeResource ChatDetailAccentBrush}"/>
                     </Button>
 
                     <Button x:Name="SendButton" Grid.Column="3"
@@ -181,12 +354,12 @@
                             Width="40" Height="40"
                             Command="{Binding SendMessageCommand}">
                         <TextBlock Text="&#xE724;" FontFamily="{StaticResource IconFont}" FontSize="20"
-                                   Foreground="{StaticResource ChatDetailAccentBrush}"/>
+                                   Foreground="{ThemeResource ChatDetailAccentBrush}"/>
                     </Button>
                 </Grid>
 
                 <!-- Recording overlay: red mic + elapsed | trash + send -->
-                <Grid Padding="12"
+                <Grid x:Name="RecordingOverlay" Padding="12"
                       Visibility="{Binding IsRecording, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
@@ -195,24 +368,33 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
-                    <TextBlock Text="&#xE720;" FontFamily="{StaticResource IconFont}" FontSize="22"
-                               Foreground="Red" VerticalAlignment="Center" Margin="4,0,0,0"/>
+                    <TextBlock x:Name="RecordingMicIcon"
+                               Text="&#xE720;" FontFamily="{StaticResource IconFont}" FontSize="22"
+                               Foreground="Red" VerticalAlignment="Center" Margin="4,0,0,0"
+                               RenderTransformOrigin="0.5,0.5">
+                        <TextBlock.RenderTransform>
+                            <TranslateTransform x:Name="RecordingMicTranslate"/>
+                        </TextBlock.RenderTransform>
+                    </TextBlock>
 
-                    <TextBlock Grid.Column="1"
+                    <TextBlock x:Name="RecordingElapsedText"
+                               Grid.Column="1"
                                Text="{Binding RecordingElapsedText}"
                                FontSize="16"
                                FontFamily="{StaticResource MainFont}"
-                               Foreground="{StaticResource ChatDetailHeaderTitleBrush}"
+                               Foreground="{ThemeResource ChatDetailHeaderTitleBrush}"
                                VerticalAlignment="Center"
                                Margin="12,0,8,0"/>
 
-                    <Button Grid.Column="2"
+                    <Button x:Name="CancelRecordingButton"
+                            Grid.Column="2"
                             Style="{StaticResource WhatsAppIconButtonStyle}"
                             Width="40" Height="40"
-                            Command="{Binding CancelRecordingCommand}"
+                            Click="CancelRecordingButton_Click"
                             ToolTipService.ToolTip="Cancel">
-                        <TextBlock Text="&#xE74D;" FontFamily="{StaticResource IconFont}" FontSize="20"
-                                   Foreground="{StaticResource ChatDetailMutedTextBrush}"/>
+                        <TextBlock x:Name="RecordingTrashIcon"
+                                   Text="&#xE74D;" FontFamily="{StaticResource IconFont}" FontSize="20"
+                                   Foreground="{ThemeResource ChatDetailMutedTextBrush}"/>
                     </Button>
 
                     <Button Grid.Column="3"
@@ -221,17 +403,56 @@
                             Command="{Binding SendRecordingCommand}"
                             ToolTipService.ToolTip="Send">
                         <TextBlock Text="&#xE724;" FontFamily="{StaticResource IconFont}" FontSize="20"
-                                   Foreground="{StaticResource ChatDetailAccentBrush}"/>
+                                   Foreground="{ThemeResource ChatDetailAccentBrush}"/>
                     </Button>
                 </Grid>
             </Grid>
 
+            <!-- Group announce-only lock (replaces composer on row 3) -->
+            <Grid Grid.Row="3"
+                  Background="{ThemeResource ChatDetailInputBarBackgroundBrush}"
+                  Visibility="{Binding IsGroupLockedForMessages, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <Border Height="1"
+                        VerticalAlignment="Top"
+                        Background="{ThemeResource ChatDetailInputBarTopBorderBrush}"
+                        IsHitTestVisible="False"/>
+                <TextBlock x:Uid="ChatDetail_GroupOnlyAdminsCanSend"
+                           Text="Only admins can send messages"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           TextAlignment="Center"
+                           TextWrapping="WrapWholeWords"
+                           Margin="16,14"
+                           FontSize="14"
+                           FontFamily="{StaticResource MainFont}"
+                           Foreground="{ThemeResource ChatDetailMutedTextBrush}"/>
+            </Grid>
+            </Grid><!-- ChatSurface -->
+
+            <controls:ChatDetailInfoControl x:Name="ChatDetailInfoPanel"
+                                            Grid.Column="1"
+                                            Visibility="Collapsed"
+                                            CloseCommand="{Binding CloseChatDetailInfoCommand}">
+                <controls:ChatDetailInfoControl.RenderTransform>
+                    <TranslateTransform x:Name="ChatDetailInfoSlideTransform" X="0"/>
+                </controls:ChatDetailInfoControl.RenderTransform>
+            </controls:ChatDetailInfoControl>
         </Grid>
 
         <!-- Empty State -->
         <Grid x:Name="EmptyStateGrid" VerticalAlignment="Center" HorizontalAlignment="Center">
-            <StackPanel>
-                <TextBlock x:Uid="ChatDetail_Empty" Text="Select a chat to start messaging" Foreground="{StaticResource ChatDetailMutedTextBrush}" FontSize="16" FontFamily="{StaticResource MainFont}"/>
+            <StackPanel HorizontalAlignment="Center">
+                <Button x:Name="EmptyBackButton"
+                        Style="{StaticResource WhatsAppIconButtonStyle}"
+                        Width="40" Height="40"
+                        Margin="0,0,0,16"
+                        HorizontalAlignment="Center"
+                        Visibility="Collapsed"
+                        Click="BackButton_Click"
+                        ToolTipService.ToolTip="Back">
+                    <FontIcon Glyph="&#xE72B;" FontFamily="{StaticResource IconFont}" FontSize="16"/>
+                </Button>
+                <TextBlock x:Uid="ChatDetail_Empty" Text="Select a chat to start messaging" Foreground="{ThemeResource ChatDetailMutedTextBrush}" FontSize="16" FontFamily="{StaticResource MainFont}" TextAlignment="Center"/>
             </StackPanel>
         </Grid>
 
@@ -239,5 +460,10 @@
         <views:ImageViewerView x:Name="ImageViewerOverlay"
                                Visibility="Collapsed"
                                Canvas.ZIndex="100"/>
+
+        <!-- Full-screen video viewer (Imgur FullScreenMediaView layout) -->
+        <views:VideoViewerView x:Name="VideoViewerOverlay"
+                               Visibility="Collapsed"
+                               Canvas.ZIndex="101"/>
     </Grid>
 </UserControl>

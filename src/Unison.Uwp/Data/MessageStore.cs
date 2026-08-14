@@ -1141,7 +1141,12 @@ namespace Unison.Uwp.Data
                         continue;
                     }
 
-                    string preview = latest.Content;
+                    bool isGroup = JidHelper.IsGroupJid(jid);
+                    string author = ChatPreviewNormalizer.FormatListAuthorPrefix(
+                        latest,
+                        isGroup,
+                        LocalizedStrings.Get("Chat_SelfFallbackName", "You"));
+                    string preview = ChatPreviewNormalizer.FormatListPreview(latest, isGroup);
                     if (string.IsNullOrWhiteSpace(preview))
                     {
                         preview = latest.IsImage ? "[Image]" : "[Media]";
@@ -1158,12 +1163,13 @@ namespace Unison.Uwp.Data
                         JID = jid,
                         Name = jid.Split('@')[0],
                         LastMessage = cleanPreview,
+                        LastMessageAuthor = author,
                         LastMessageKind = kind,
                         Timestamp = latest.Timestamp.ToString("g"),
                         LastMessageTimestampUtc = latest.Timestamp.Kind == DateTimeKind.Utc
                             ? latest.Timestamp
                             : latest.Timestamp.ToUniversalTime(),
-                        Kind = JidHelper.IsGroupJid(jid) ? ChatKind.Group : ChatKind.Direct
+                        Kind = isGroup ? ChatKind.Group : ChatKind.Direct
                     });
                 }
 
@@ -1246,7 +1252,21 @@ namespace Unison.Uwp.Data
         /// Rotates the store epoch: new syncId folder becomes active immediately;
         /// the previous tree is deleted in the background (no in-place file deletes).
         /// </summary>
-        public async Task WipeAllDataAsync()
+        public Task WipeAllDataAsync()
+        {
+            return RotateEpochAsync(preserveIdentitySidecars: false, reason: "epoch-wipe");
+        }
+
+        /// <summary>
+        /// Rotates the store epoch clearing chats/messages/outbox, but copies contact-name
+        /// and JID-alias sidecars into the new epoch (session/auth stays elsewhere).
+        /// </summary>
+        public Task WipeChatsAndMessagesAsync()
+        {
+            return RotateEpochAsync(preserveIdentitySidecars: true, reason: "chats-messages-wipe");
+        }
+
+        private async Task RotateEpochAsync(bool preserveIdentitySidecars, string reason)
         {
             lock (_cacheLock)
             {
@@ -1277,13 +1297,18 @@ namespace Unison.Uwp.Data
                     newSyncId);
                 await BindEpochFoldersAsync(newSyncId).ConfigureAwait(false);
 
+                if (preserveIdentitySidecars && oldRoot != null)
+                {
+                    await CopyIdentitySidecarsAsync(oldRoot, _storeRoot).ConfigureAwait(false);
+                }
+
                 WhatsAppService.Log(
-                    $"[MessageStore] Epoch rotated {oldSyncId} -> {newSyncId}; resync can write immediately.");
-                MarkForceHistoryRepair("epoch-wipe");
+                    $"[MessageStore] Epoch rotated {oldSyncId} -> {newSyncId} ({reason}); resync can write immediately.");
+                MarkForceHistoryRepair(reason);
             }
             catch (Exception ex)
             {
-                WhatsAppService.Log($"[MessageStore] Failed to rotate epoch: {ex.Message}");
+                WhatsAppService.Log($"[MessageStore] Failed to rotate epoch ({reason}): {ex.Message}");
             }
             finally
             {
@@ -1310,6 +1335,42 @@ namespace Unison.Uwp.Data
 
                     await DeleteLegacyRootArtifactsAsync().ConfigureAwait(false);
                 });
+            }
+        }
+
+        private static async Task CopyIdentitySidecarsAsync(StorageFolder from, StorageFolder to)
+        {
+            if (from == null || to == null)
+            {
+                return;
+            }
+
+            string[] files =
+            {
+                CONTACT_NAMES_FILE,
+                PHONE_CONTACT_NAMES_FILE,
+                JID_ALIASES_FILE
+            };
+
+            foreach (string name in files)
+            {
+                try
+                {
+                    var item = await from.TryGetItemAsync(name);
+                    var file = item as StorageFile;
+                    if (file == null)
+                    {
+                        continue;
+                    }
+
+                    await file.CopyAsync(to, name, NameCollisionOption.ReplaceExisting);
+                    WhatsAppService.Log($"[MessageStore] Copied identity sidecar into new epoch: {name}");
+                }
+                catch (Exception ex)
+                {
+                    WhatsAppService.Log(
+                        $"[MessageStore] Failed to copy identity sidecar {name}: {ex.Message}");
+                }
             }
         }
 

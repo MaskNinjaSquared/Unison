@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.ObjectModel;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -10,9 +10,15 @@ using Unison.Core.Helpers;
 using Unison.Core.Mappers;
 using Unison.Core.Models;
 using Unison.Core.ViewModels;
+using Unison.Uwp.Client;
 using Unison.Uwp.Helpers;
 using Unison.Uwp.Services;
 using Unison.Uwp.Services.WhatsApp;
+using Windows.Foundation;
+using Windows.Media;
+using Windows.Media.Core;
+using Windows.Media.Playback;
+using Windows.UI;
 using Windows.UI.Core;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
@@ -31,16 +37,19 @@ namespace Unison.Uwp.UI.Views
         private ObservableCollection<ChatMessageViewModel> _messages;
         private readonly bool _isWindowsMobile;
         public event EventHandler BackRequested;
+        private Storyboard _chatDetailInfoSlideStoryboard;
+        private bool _chatDetailInfoPaneShown;
 
         /// <summary>
         /// DI ViewModel owns composer, pin, audio prepare, presence watch, and timeline VMs.
         /// List chrome / MediaElement / Storyboards stay in code-behind.
-        /// Loaded → InitializeAsync; Unloaded → UninitializeAsync.
+        /// Loaded â†’ InitializeAsync; Unloaded â†’ UninitializeAsync.
         /// </summary>
         public ChatDetailViewModel ViewModel { get; private set; }
 
         private readonly IStringResources _strings;
         private readonly IChatMessageVmFactory _messageFactory;
+        private readonly IVoicePlaybackRoutingService _voiceRouting;
 
         /// <summary>
         /// Concrete client for UWP-only helpers (ClearUnread, SchedulePersist, cast paths).
@@ -57,6 +66,8 @@ namespace Unison.Uwp.UI.Views
         private bool _isSyncingFromService = false;
         private bool _syncRequestedAgain = false;
         private DateTime _suppressLoadMoreUntilUtc = DateTime.MinValue;
+        /// <summary>After an outgoing send, keep snapping to the true bottom until the bubble lands.</summary>
+        private DateTime _stickToBottomUntilUtc = DateTime.MinValue;
         private CancellationTokenSource _chatLoadCts;
         private bool _serviceEventsAttached;
         private const int MaxUiMessages = 300;
@@ -64,6 +75,14 @@ namespace Unison.Uwp.UI.Views
         private List<ChatMessageViewModel> _activePinnedMessages = new List<ChatMessageViewModel>();
         private int _displayedPinnedIndex;
         private ChatMessage _playingAudioMessage;
+        private ChatMessageViewModel _playingAudioVm;
+        private MediaPlayer _audioMediaPlayer;
+        private DispatcherTimer _audioPositionTimer;
+        private bool _cancelRecordingAnimating;
+
+        /// <summary>Transient target of quote-tap flash; cleared after a short delay.</summary>
+        private ChatMessageViewModel _highlightedMessage;
+        private int _highlightGeneration;
 
         /// <summary>Cancels in-flight Storyboard sequences when presence watch restarts.</summary>
         private CancellationTokenSource _presenceAnimationCts;
@@ -72,6 +91,7 @@ namespace Unison.Uwp.UI.Views
         {
             _strings = App.Services?.GetService<IStringResources>();
             _messageFactory = App.Services?.GetService<IChatMessageVmFactory>() ?? new ChatMessageVmFactory();
+            _voiceRouting = App.Services?.GetService<IVoicePlaybackRoutingService>();
 
             if (App.Services != null)
             {
@@ -80,13 +100,15 @@ namespace Unison.Uwp.UI.Views
                 ViewModel.BackRequested += (s, e) => BackRequested?.Invoke(this, e);
                 ViewModel.MessageSent += (s, e) =>
                 {
-                    _ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal, ScrollToBottom);
+                    _stickToBottomUntilUtc = DateTime.UtcNow.AddSeconds(2);
+                    _ = StickScrollToBottomAfterSendAsync();
                 };
                 ViewModel.MessagePinnedChanged += (s, e) =>
                 {
                     _ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal, UpdatePinnedBanner);
                 };
                 ViewModel.PresenceAnimationRequested += ViewModel_PresenceAnimationRequested;
+                ViewModel.PropertyChanged += ViewModel_PropertyChanged;
                 _isWindowsMobile = App.Services.GetRequiredService<ISystemInfoProvider>().IsMobile();
             }
 
@@ -99,6 +121,7 @@ namespace Unison.Uwp.UI.Views
             MessageListView.Loaded += MessageListView_Loaded;
             this.Loaded += ChatDetailView_Loaded;
             this.Unloaded += ChatDetailView_Unloaded;
+            this.SizeChanged += ChatDetailView_SizeChanged;
         }
 
         private void ChatDetailView_Loaded(object sender, RoutedEventArgs e)
@@ -113,6 +136,8 @@ namespace Unison.Uwp.UI.Views
                 WhatsApp.OnChatMessagesChanged += WhatsAppService_OnChatMessagesChanged;
                 _serviceEventsAttached = true;
             }
+
+            ApplyChatDetailInfoPane();
         }
 
         private void ChatDetailView_Unloaded(object sender, RoutedEventArgs e)
@@ -127,11 +152,15 @@ namespace Unison.Uwp.UI.Views
             _chatLoadCts?.Dispose();
             _chatLoadCts = null;
             CancelPresenceAnimation();
-            AudioPlayer.Stop();
-            AudioPlayer.Source = null;
-            _playingAudioMessage = null;
+            ClearMessageHighlight();
+            TryCloseVideoViewer();
+            TryCloseImageViewer();
+            StopAudioPlayback();
+            _voiceRouting?.DetachPlayer();
             if (ViewModel != null)
             {
+                ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
+                ViewModel.CloseChatDetailInfo();
                 ViewModel.StopPresenceWatch();
                 _ = ViewModel.UninitializeAsync();
             }
@@ -147,6 +176,225 @@ namespace Unison.Uwp.UI.Views
             {
                 _scrollViewer.ViewChanged -= ScrollViewer_ViewChanged;
             }
+        }
+
+        private void ChatDetailView_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            if (ViewModel?.IsChatDetailInfoOpen == true)
+            {
+                ApplyChatDetailInfoPane();
+            }
+        }
+
+        private void ViewModel_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(ChatDetailViewModel.IsChatDetailInfoOpen) ||
+                e.PropertyName == nameof(ChatDetailViewModel.ChatDetailInfo))
+            {
+                ApplyChatDetailInfoPane();
+            }
+        }
+
+        /// <summary>
+        /// Minimal: info covers the chat. Extended+: fixed 400px column on the right.
+        /// Opening slides the pane in from the right; SizeChanged only reflows columns.
+        /// </summary>
+        private void ApplyChatDetailInfoPane()
+        {
+            if (ChatDetailInfoPanel == null || ChatColumn == null || InfoColumn == null)
+            {
+                return;
+            }
+
+            bool open = ViewModel?.IsChatDetailInfoOpen == true;
+            ChatDetailInfoPanel.InfoViewModel = ViewModel?.ChatDetailInfo;
+
+            if (open)
+            {
+                ApplyChatDetailInfoColumns(open: true);
+                if (!_chatDetailInfoPaneShown)
+                {
+                    _chatDetailInfoPaneShown = true;
+                    ChatDetailInfoPanel.Visibility = Visibility.Visible;
+                    AnimateChatDetailInfoSlideIn();
+                }
+
+                return;
+            }
+
+            if (_chatDetailInfoPaneShown)
+            {
+                _chatDetailInfoPaneShown = false;
+                AnimateChatDetailInfoSlideOut(() =>
+                {
+                    if (ViewModel?.IsChatDetailInfoOpen == true)
+                    {
+                        return;
+                    }
+
+                    ChatDetailInfoPanel.Visibility = Visibility.Collapsed;
+                    ApplyChatDetailInfoColumns(open: false);
+                    if (ChatDetailInfoSlideTransform != null)
+                    {
+                        ChatDetailInfoSlideTransform.X = 0;
+                    }
+                });
+                return;
+            }
+
+            ChatDetailInfoPanel.Visibility = Visibility.Collapsed;
+            ApplyChatDetailInfoColumns(open: false);
+        }
+
+        private void ApplyChatDetailInfoColumns(bool open)
+        {
+            if (!open)
+            {
+                ChatColumn.Width = new GridLength(1, GridUnitType.Star);
+                InfoColumn.Width = new GridLength(0);
+                return;
+            }
+
+            if (IsMinimalLayout())
+            {
+                ChatColumn.Width = new GridLength(0);
+                InfoColumn.Width = new GridLength(1, GridUnitType.Star);
+            }
+            else
+            {
+                ChatColumn.Width = new GridLength(1, GridUnitType.Star);
+                InfoColumn.Width = new GridLength(400);
+            }
+        }
+
+        private void StopChatDetailInfoSlide()
+        {
+            try
+            {
+                _chatDetailInfoSlideStoryboard?.Stop();
+            }
+            catch
+            {
+            }
+
+            _chatDetailInfoSlideStoryboard = null;
+        }
+
+        private double ResolveChatDetailInfoSlideWidth()
+        {
+            double width = ChatDetailInfoPanel.ActualWidth;
+            if (width > 1)
+            {
+                return width;
+            }
+
+            if (IsMinimalLayout())
+            {
+                return Math.Max(ActualWidth, 320);
+            }
+
+            return 400;
+        }
+
+        private void AnimateChatDetailInfoSlideIn()
+        {
+            if (ChatDetailInfoSlideTransform == null)
+            {
+                return;
+            }
+
+            StopChatDetailInfoSlide();
+            double from = ResolveChatDetailInfoSlideWidth();
+            ChatDetailInfoSlideTransform.X = from;
+
+            // After column layout, snap start offset to the real pane width then ease to 0.
+            _ = Dispatcher.RunAsync(CoreDispatcherPriority.Low, () =>
+            {
+                if (!_chatDetailInfoPaneShown || ChatDetailInfoSlideTransform == null)
+                {
+                    return;
+                }
+
+                StopChatDetailInfoSlide();
+                from = ResolveChatDetailInfoSlideWidth();
+                ChatDetailInfoSlideTransform.X = from;
+
+                var anim = new DoubleAnimation
+                {
+                    To = 0,
+                    Duration = TimeSpan.FromMilliseconds(240),
+                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+                };
+                Storyboard.SetTarget(anim, ChatDetailInfoSlideTransform);
+                Storyboard.SetTargetProperty(anim, "X");
+
+                var sb = new Storyboard();
+                sb.Children.Add(anim);
+                _chatDetailInfoSlideStoryboard = sb;
+                sb.Begin();
+            });
+        }
+
+        private void AnimateChatDetailInfoSlideOut(Action completed)
+        {
+            if (ChatDetailInfoSlideTransform == null)
+            {
+                completed?.Invoke();
+                return;
+            }
+
+            StopChatDetailInfoSlide();
+            double to = ResolveChatDetailInfoSlideWidth();
+
+            var anim = new DoubleAnimation
+            {
+                To = to,
+                Duration = TimeSpan.FromMilliseconds(180),
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseIn }
+            };
+            Storyboard.SetTarget(anim, ChatDetailInfoSlideTransform);
+            Storyboard.SetTargetProperty(anim, "X");
+
+            var sb = new Storyboard();
+            sb.Children.Add(anim);
+            sb.Completed += (s, e) =>
+            {
+                if (ReferenceEquals(_chatDetailInfoSlideStoryboard, sb))
+                {
+                    _chatDetailInfoSlideStoryboard = null;
+                }
+
+                completed?.Invoke();
+            };
+            _chatDetailInfoSlideStoryboard = sb;
+            sb.Begin();
+        }
+
+        private bool IsMinimalLayout()
+        {
+            if (LayoutStates?.CurrentState != null)
+            {
+                return string.Equals(LayoutStates.CurrentState.Name, "Minimal", StringComparison.Ordinal);
+            }
+
+            return ActualWidth > 0 && ActualWidth < 720;
+        }
+
+        /// <summary>Closes fullscreen media or the info pane; returns true if consumed.</summary>
+        public bool TryConsumeBack()
+        {
+            if (TryCloseVideoViewer() || TryCloseImageViewer())
+            {
+                return true;
+            }
+
+            if (ViewModel?.IsChatDetailInfoOpen == true)
+            {
+                ViewModel.CloseChatDetailInfo();
+                return true;
+            }
+
+            return false;
         }
 
         private void MessageListView_Loaded(object sender, RoutedEventArgs e)
@@ -224,6 +472,7 @@ namespace Unison.Uwp.UI.Views
                 {
                     Debug.WriteLine($"[ChatDetailView] Received {moreMessages.Count} messages to prepend.");
                     _emptyLoadAttempts = 0;
+                    RemovePreviewFallbackMessages(_messages);
                     bool isGroup = _activeChat.IsGroup ||
                         requestedJid.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
                     // Insert at top in chronological order
@@ -283,12 +532,103 @@ namespace Unison.Uwp.UI.Views
 
         private void BackButton_Click(object sender, RoutedEventArgs e)
         {
-            if (TryCloseImageViewer())
+            // Fullscreen chrome / info pane — close overlay before leaving the chat.
+            if (TryConsumeBack())
             {
                 return;
             }
 
+            if (ViewModel?.BackCommand?.CanExecute(null) == true)
+            {
+                ViewModel.BackCommand.Execute(null);
+                return;
+            }
+
             BackRequested?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void HeaderInfoButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (ViewModel?.OpenChatDetailInfoCommand?.CanExecute(null) == true)
+            {
+                ViewModel.OpenChatDetailInfoCommand.Execute(null);
+            }
+        }
+
+        private void HeaderAvatar_Tapped(object sender, TappedRoutedEventArgs e)
+        {
+            e.Handled = true;
+            if (ViewModel?.OpenChatDetailInfoFromAvatarCommand?.CanExecute(null) == true)
+            {
+                ViewModel.OpenChatDetailInfoFromAvatarCommand.Execute(null);
+            }
+        }
+
+        /// <summary>
+        /// MenuFlyout Visibility bindings are unreliable on UWP — swap mute/unmute on open.
+        /// </summary>
+        private void ChatMoreFlyout_Opening(object sender, object e)
+        {
+            var flyout = sender as MenuFlyout;
+            if (flyout == null || ViewModel == null)
+            {
+                return;
+            }
+
+            ChatItem chat = ViewModel.ActiveChat;
+            if (chat != null)
+            {
+                try
+                {
+                    App.Services?.GetService<IChatStore>()?.ApplyTo(chat);
+                }
+                catch
+                {
+                }
+            }
+
+            bool muted = chat != null && chat.IsMutedLocally;
+            foreach (var item in flyout.Items)
+            {
+                var menuItem = item as MenuFlyoutItem;
+                var subItem = item as MenuFlyoutSubItem;
+                string tag = (menuItem?.Tag as string) ?? (subItem?.Tag as string);
+
+                if (string.Equals(tag, "localMuteSub", StringComparison.Ordinal) && subItem != null)
+                {
+                    subItem.Visibility = muted ? Visibility.Collapsed : Visibility.Visible;
+                    subItem.Text = LocalizedStrings.Get("ChatDetail_MuteNotifications.Text", "Mute notifications");
+                }
+                else if (string.Equals(tag, "unmute", StringComparison.Ordinal) && menuItem != null)
+                {
+                    menuItem.Visibility = muted ? Visibility.Visible : Visibility.Collapsed;
+                    menuItem.Text = LocalizedStrings.Get("ChatDetail_UnmuteNotifications.Text", "Unmute notifications");
+                }
+                else if (string.Equals(tag, "widgetPin", StringComparison.Ordinal) && menuItem != null)
+                {
+                    menuItem.Text = ViewModel.LiveTilePinMenuLabel;
+                }
+            }
+        }
+
+        private void UpdateEmptyBackButtonVisibility()
+        {
+            if (EmptyBackButton == null)
+            {
+                return;
+            }
+
+            bool narrow = false;
+            try
+            {
+                var shell = App.Services?.GetService<ShellViewModel>();
+                narrow = shell != null && shell.IsNarrowWindow;
+            }
+            catch
+            {
+            }
+
+            EmptyBackButton.Visibility = narrow ? Visibility.Visible : Visibility.Collapsed;
         }
 
         /// <summary>Invoked from <see cref="Templates.MessageTemplates"/> when a loaded image is tapped.</summary>
@@ -310,6 +650,8 @@ namespace Unison.Uwp.UI.Views
             {
                 return;
             }
+
+            TryCloseVideoViewer();
 
             var share = App.Services.GetService<IShareService>();
             var files = App.Services.GetService<IFilePicker>();
@@ -343,14 +685,127 @@ namespace Unison.Uwp.UI.Views
             return true;
         }
 
+        /// <summary>Opens Imgur-style fullscreen video; stops bubble audio first.</summary>
+        internal void OnVideoOpenButtonClick(object sender, RoutedEventArgs e)
+        {
+            var element = sender as FrameworkElement;
+            var vm = element?.DataContext as ChatMessageViewModel;
+            if (vm == null || !vm.HasLocalVideo)
+            {
+                return;
+            }
+
+            OpenVideoViewer(vm);
+        }
+
+        internal void OnDocumentReadyContextRequested(object sender, RightTappedRoutedEventArgs e)
+        {
+            ShowDocumentReadyMenu(sender as FrameworkElement, e?.GetPosition(sender as UIElement) ?? default(Point));
+            e.Handled = true;
+        }
+
+        internal void OnDocumentReadyHolding(object sender, HoldingRoutedEventArgs e)
+        {
+            if (e.HoldingState != Windows.UI.Input.HoldingState.Started)
+            {
+                return;
+            }
+
+            ShowDocumentReadyMenu(sender as FrameworkElement, e.GetPosition(sender as UIElement));
+            e.Handled = true;
+        }
+
+        /// <summary>Ready-state context menu: Abrir / Salvar como.</summary>
+        private void ShowDocumentReadyMenu(FrameworkElement anchor, Point position)
+        {
+            var vm = anchor?.DataContext as ChatMessageViewModel;
+            if (anchor == null || vm == null || !vm.HasLocalDocument || ViewModel == null)
+            {
+                return;
+            }
+
+            string openLabel = LocalizedStrings.Get("ChatDetail_DocumentOpen.Label", "Open document");
+            string saveLabel = LocalizedStrings.Get("ChatDetail_DocumentSaveAs.Label", "Save as…");
+
+            var flyout = new MenuFlyout();
+            var openItem = new MenuFlyoutItem
+            {
+                Text = openLabel,
+                Icon = new FontIcon { Glyph = "\uE8E5", FontFamily = (FontFamily)Application.Current.Resources["IconFont"] }
+            };
+            openItem.Click += async (_, __) => await vm.OpenDocumentAsync();
+            flyout.Items.Add(openItem);
+
+            var saveItem = new MenuFlyoutItem
+            {
+                Text = saveLabel,
+                Icon = new FontIcon { Glyph = "\uE792", FontFamily = (FontFamily)Application.Current.Resources["IconFont"] }
+            };
+            saveItem.Click += async (_, __) => await vm.SaveDocumentAsAsync();
+            flyout.Items.Add(saveItem);
+
+            try
+            {
+                flyout.ShowAt(anchor, position);
+            }
+            catch
+            {
+                try { flyout.ShowAt(anchor); } catch { }
+            }
+        }
+
+        private void OpenVideoViewer(ChatMessageViewModel messageVm)
+        {
+            if (VideoViewerOverlay == null || messageVm == null)
+            {
+                return;
+            }
+
+            TryCloseImageViewer();
+            StopAudioPlayback();
+
+            var viewerVm = new VideoViewerViewModel(messageVm, _strings);
+            VideoViewerOverlay.CloseRequested -= VideoViewerOverlay_CloseRequested;
+            VideoViewerOverlay.ResolveSmtcMetadata = ResolveVideoSmtcMetadata;
+            VideoViewerOverlay.ViewModel = viewerVm;
+            VideoViewerOverlay.CloseRequested += VideoViewerOverlay_CloseRequested;
+            VideoViewerOverlay.Visibility = Visibility.Visible;
+        }
+
+        private Tuple<string, string> ResolveVideoSmtcMetadata(ChatMessageViewModel messageVm)
+        {
+            string title;
+            string artist;
+            ResolveAudioSmtcMetadata(messageVm?.Model, out title, out artist);
+            return Tuple.Create(title, artist);
+        }
+
+        private void VideoViewerOverlay_CloseRequested(object sender, EventArgs e)
+        {
+            TryCloseVideoViewer();
+        }
+
+        private bool TryCloseVideoViewer()
+        {
+            if (VideoViewerOverlay == null || VideoViewerOverlay.Visibility != Visibility.Visible)
+            {
+                return false;
+            }
+
+            VideoViewerOverlay.CloseRequested -= VideoViewerOverlay_CloseRequested;
+            VideoViewerOverlay.ResolveSmtcMetadata = null;
+            VideoViewerOverlay.ViewModel = null;
+            VideoViewerOverlay.Visibility = Visibility.Collapsed;
+            return true;
+        }
+
+        /// <summary>Chat currently shown in the detail surface (may lag list selection during refresh).</summary>
+        public ChatItem ActiveChatItem => _activeChat;
+
         public async Task SetActiveChatAsync(ChatItem chat)
         {
+            TryCloseVideoViewer();
             TryCloseImageViewer();
-
-            _chatLoadCts?.Cancel();
-            _chatLoadCts?.Dispose();
-            _chatLoadCts = new CancellationTokenSource();
-            var token = _chatLoadCts.Token;
 
             var service = WhatsApp;
             if (chat != null)
@@ -370,7 +825,40 @@ namespace Unison.Uwp.UI.Views
                         chat.JID = canonicalJid;
                     }
                 }
+
+                // Same conversation already open / loading — do not cancel in-flight load.
+                // List rebuilds often replace ChatItem instances; only rebind the reference.
+                if (_activeChat != null &&
+                    string.Equals(
+                        service.GetCanonicalJid(_activeChat.JID),
+                        service.GetCanonicalJid(chat.JID),
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!ReferenceEquals(_activeChat, chat))
+                    {
+                        _activeChat.PropertyChanged -= ActiveChat_PropertyChanged;
+                        _activeChat = chat;
+                        _activeChat.PropertyChanged += ActiveChat_PropertyChanged;
+                        service.SetActiveChatJid(chat.JID);
+                        ViewModel?.SyncActiveChat(chat);
+                        if (ActiveChatGrid.Visibility == Visibility.Visible)
+                        {
+                            ApplyChatTitle(chat, service);
+                            ApplyHeaderAvatar(chat);
+                            ApplyHeaderActions(
+                                isGroup: chat.IsGroup || (chat.JID ?? string.Empty).EndsWith("@g.us", StringComparison.OrdinalIgnoreCase),
+                                visible: true);
+                        }
+                    }
+
+                    return;
+                }
             }
+
+            _chatLoadCts?.Cancel();
+            _chatLoadCts?.Dispose();
+            _chatLoadCts = new CancellationTokenSource();
+            var token = _chatLoadCts.Token;
 
             if (_activeChat != null)
             {
@@ -396,9 +884,11 @@ namespace Unison.Uwp.UI.Views
 
             if (chat == null)
             {
+                ClearMessageHighlight();
                 _messages.Clear();
                 ActiveChatGrid.Visibility = Visibility.Collapsed;
                 EmptyStateGrid.Visibility = Visibility.Visible;
+                UpdateEmptyBackButtonVisibility();
                 PinnedMessageButton.Visibility = Visibility.Collapsed;
                 _displayedPinnedMessage = null;
                 _activePinnedMessages.Clear();
@@ -408,12 +898,17 @@ namespace Unison.Uwp.UI.Views
                     HeaderAvatar.AvatarUrl = null;
                     HeaderAvatar.IsGroup = false;
                 }
+                ApplyHeaderActions(isGroup: false, visible: false);
                 return;
             }
 
             _activeChat.PropertyChanged += ActiveChat_PropertyChanged;
             ActiveChatGrid.Visibility = Visibility.Visible;
             EmptyStateGrid.Visibility = Visibility.Collapsed;
+            if (EmptyBackButton != null)
+            {
+                EmptyBackButton.Visibility = Visibility.Collapsed;
+            }
 
             ChatStatusText.Text = "";
             ChatStatusText.Opacity = 0;
@@ -433,6 +928,7 @@ namespace Unison.Uwp.UI.Views
                 }
             }
 
+            ClearMessageHighlight();
             _messages.Clear();
             string requestedJid = service.GetCanonicalJid(chat.JID);
             Debug.WriteLine($"[ChatDetailView] Loading messages for {requestedJid}");
@@ -472,12 +968,20 @@ namespace Unison.Uwp.UI.Views
             }
             UpdatePinnedBanner();
 
-            if (visibleMessages.Count > 0)
+            if (visibleMessages.Count == 0)
+            {
+                TryApplyPreviewFallback(chat, requestedJid, activeIsGroup, service);
+            }
+            else
             {
                 var lastMsg = visibleMessages[visibleMessages.Count - 1];
                 bool isGroup = chat.IsGroup ||
                     (chat.JID ?? string.Empty).EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
                 string rawPreview = ChatPreviewNormalizer.FormatListPreview(lastMsg, isGroup);
+                string authorPrefix = ChatPreviewNormalizer.FormatListAuthorPrefix(
+                    lastMsg,
+                    isGroup,
+                    _strings?.Get("Chat_SelfFallbackName", "You") ?? "You");
                 ChatPreviewNormalizer.Normalize(
                     rawPreview,
                     ChatPreviewNormalizer.InferKindFromMessage(lastMsg),
@@ -494,10 +998,17 @@ namespace Unison.Uwp.UI.Views
                     : DateTime.MinValue;
 
                 if (lastMsg.Timestamp != DateTime.MinValue && loadedUtc >= currentUtc &&
-                    (chat.LastMessage != preview || chat.LastMessageKind != previewKind || currentUtc == DateTime.MinValue))
+                    (chat.LastMessage != preview ||
+                     chat.LastMessageKind != previewKind ||
+                     chat.LastMessageAuthor != authorPrefix ||
+                     currentUtc == DateTime.MinValue))
                 {
                     chat.LastMessage = preview;
+                    chat.LastMessageAuthor = authorPrefix;
                     chat.LastMessageKind = previewKind;
+                    chat.LastMessageMentionedJids = lastMsg.MentionedJids != null && lastMsg.MentionedJids.Count > 0
+                        ? new System.Collections.Generic.List<string>(lastMsg.MentionedJids)
+                        : null;
                     chat.LastMessageTimestampUtc = loadedUtc;
                     chat.Timestamp = WhatsAppMapper.FormatTimestamp(
                         lastMsg.Timestamp,
@@ -514,6 +1025,65 @@ namespace Unison.Uwp.UI.Views
             else if (!_isWindowsMobile && ViewModel != null)
             {
                 ViewModel.StartPresenceWatch(chat.JID);
+            }
+        }
+
+        /// <summary>
+        /// When the store has no messages but the chat list already shows a preview,
+        /// surface that preview as an ephemeral bubble and ask WhatsApp for history.
+        /// </summary>
+        private void TryApplyPreviewFallback(ChatItem chat, string requestedJid, bool isGroup, WhatsAppService service)
+        {
+            if (chat == null || service == null)
+            {
+                return;
+            }
+
+            string selfName = _strings?.Get("Chat_SelfFallbackName", "You") ?? "You";
+            ChatMessage fallback = ChatPreviewMessageFactory.TryCreate(chat, selfName);
+            if (fallback == null)
+            {
+                // Still try history-on-demand when the timeline is empty.
+                _ = service.EnsureHistoryOnDemandAsync(requestedJid, 80);
+                return;
+            }
+
+            if (isGroup &&
+                (string.IsNullOrEmpty(fallback.RemoteJid) ||
+                 !fallback.RemoteJid.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase)))
+            {
+                fallback.RemoteJid = requestedJid;
+            }
+
+            var visible = new List<ChatMessage> { fallback };
+            RecomputeMessageRuns(visible, isGroup);
+            _messages.Add(ToVm(fallback));
+            UpdatePinnedBanner();
+            Debug.WriteLine($"[ChatDetailView] Applied preview fallback for {requestedJid}");
+
+            _ = service.EnsureHistoryOnDemandAsync(requestedJid, 80);
+        }
+
+        private static void RemovePreviewFallbackMessages(ObservableCollection<ChatMessageViewModel> messages)
+        {
+            if (messages == null || messages.Count == 0)
+            {
+                return;
+            }
+
+            for (int i = messages.Count - 1; i >= 0; i--)
+            {
+                var vm = messages[i];
+                if (vm?.Model == null)
+                {
+                    continue;
+                }
+
+                if (vm.Model.IsPreviewFallback ||
+                    ChatPreviewMessageFactory.IsPreviewFallbackId(vm.Model.Id))
+                {
+                    messages.RemoveAt(i);
+                }
             }
         }
 
@@ -546,6 +1116,7 @@ namespace Unison.Uwp.UI.Views
         {
             if (HeaderAvatar == null || chat == null)
             {
+                ApplyHeaderActions(isGroup: false, visible: false);
                 return;
             }
 
@@ -555,6 +1126,24 @@ namespace Unison.Uwp.UI.Views
 
             HeaderAvatar.IsGroup = isGroup;
             HeaderAvatar.AvatarUrl = chat.AvatarUrl;
+            ApplyHeaderActions(isGroup, visible: true);
+        }
+
+        private void ApplyHeaderActions(bool isGroup, bool visible)
+        {
+            if (ContactHeaderActions != null)
+            {
+                ContactHeaderActions.Visibility = visible && !isGroup
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+            }
+
+            if (GroupHeaderActions != null)
+            {
+                GroupHeaderActions.Visibility = visible && isGroup
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+            }
         }
 
         /// <summary>
@@ -659,26 +1248,124 @@ namespace Unison.Uwp.UI.Views
             }
 
             _suppressLoadMoreUntilUtc = DateTime.UtcNow.AddMilliseconds(900);
-            var last = _messages[_messages.Count - 1];
-            MessageListView.ScrollIntoView(last, ScrollIntoViewAlignment.Leading);
+            EnsureMessageListScrollViewer();
 
-            // One deferred correction is enough after layout. The previous eight-pass
-            // loop repeatedly forced layout for more than two seconds on every message.
+            var last = _messages[_messages.Count - 1];
+            TryScrollIntoView(last);
+            ApplyScrollToMaxOffset();
+
+            // One deferred correction after layout so the new bubble's realized height is included.
+            // Fire-and-forget on the dispatcher: any exception here (e.g. ScrollIntoView's
+            // well-known E_FAIL when the container isn't generated yet — more frequent on
+            // slower/older ListView virtualization such as Windows 10 Mobile) has no awaiter,
+            // so it must be swallowed here or it becomes a fatal unhandled exception.
             _ = Dispatcher.RunAsync(CoreDispatcherPriority.Low, async () =>
             {
-                await Task.Delay(160);
-                if (_messages.Count == 0 || last != _messages[_messages.Count - 1])
+                try
                 {
-                    return;
-                }
+                    await Task.Delay(120);
+                    if (_messages.Count == 0)
+                    {
+                        return;
+                    }
 
-                MessageListView.ScrollIntoView(last, ScrollIntoViewAlignment.Leading);
-                if (_scrollViewer != null)
+                    var currentLast = _messages[_messages.Count - 1];
+                    TryScrollIntoView(currentLast);
+                    ApplyScrollToMaxOffset();
+                }
+                catch (Exception ex)
                 {
-                    double target = Math.Max(0, _scrollViewer.ExtentHeight - _scrollViewer.ViewportHeight);
-                    _scrollViewer.ChangeView(null, target, null, true);
+                    Debug.WriteLine("[ChatDetailView] Deferred ScrollToBottom correction failed: " + ex.Message);
                 }
             });
+        }
+
+        /// <summary>
+        /// <see cref="ListViewBase.ScrollIntoView(object, ScrollIntoViewAlignment)"/> can throw
+        /// COMException (E_FAIL) when called right after items are inserted and the container
+        /// hasn't been generated yet — observed reliably on Windows 10 Mobile. Never let it
+        /// escape as an unhandled exception (it would tear down the whole app via
+        /// App.UnhandledException).
+        /// </summary>
+        private void TryScrollIntoView(object item, ScrollIntoViewAlignment alignment = ScrollIntoViewAlignment.Leading)
+        {
+            if (item == null)
+            {
+                return;
+            }
+
+            try
+            {
+                MessageListView.ScrollIntoView(item, alignment);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatDetailView] ScrollIntoView failed: " + ex.Message);
+            }
+        }
+
+        private void EnsureMessageListScrollViewer()
+        {
+            if (_scrollViewer != null)
+            {
+                return;
+            }
+
+            _scrollViewer = FindScrollViewer(MessageListView);
+            if (_scrollViewer != null)
+            {
+                _scrollViewer.ViewChanged -= ScrollViewer_ViewChanged;
+                _scrollViewer.ViewChanged += ScrollViewer_ViewChanged;
+            }
+        }
+
+        private void ApplyScrollToMaxOffset()
+        {
+            if (_scrollViewer == null)
+            {
+                EnsureMessageListScrollViewer();
+            }
+
+            if (_scrollViewer == null)
+            {
+                return;
+            }
+
+            double target = Math.Max(0, _scrollViewer.ExtentHeight - _scrollViewer.ViewportHeight);
+            if (Math.Abs(_scrollViewer.VerticalOffset - target) > 0.5)
+            {
+                _scrollViewer.ChangeView(null, target, null, true);
+            }
+        }
+
+        /// <summary>
+        /// Keeps the viewport glued to the max offset while the optimistic bubble
+        /// is inserted and laid out after an outgoing send.
+        /// </summary>
+        private async Task StickScrollToBottomAfterSendAsync()
+        {
+            try
+            {
+                await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, ScrollToBottom);
+                await Task.Delay(80);
+                await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
+                {
+                    if (_messages.Count > 0)
+                    {
+                        TryScrollIntoView(_messages[_messages.Count - 1]);
+                    }
+                    ApplyScrollToMaxOffset();
+                });
+                await Task.Delay(200);
+                if (DateTime.UtcNow <= _stickToBottomUntilUtc)
+                {
+                    await Dispatcher.RunAsync(CoreDispatcherPriority.Low, ApplyScrollToMaxOffset);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatDetailView] StickScrollToBottomAfterSendAsync: " + ex.Message);
+            }
         }
 
         private ChatMessageViewModel ToVm(ChatMessage message)
@@ -755,7 +1442,56 @@ namespace Unison.Uwp.UI.Views
                     !string.IsNullOrWhiteSpace(current.SenderName) &&
                     !string.Equals(current.SenderName, "Me", StringComparison.OrdinalIgnoreCase) &&
                     !string.Equals(current.SenderName, "You", StringComparison.OrdinalIgnoreCase);
+
+                bool contactSlot = isGroup && !current.IsFromMe;
+                current.ShowContactSlot = contactSlot;
+                // Avatar on the first bubble of a participant run.
+                current.ShowContact = contactSlot && isRunStart;
+                current.ContactUri = contactSlot
+                    ? ResolveParticipantContactUri(current.ParticipantJid, service)
+                    : null;
             }
+        }
+
+        private static string ResolveParticipantContactUri(string participantJid, WhatsAppService service)
+        {
+            if (service == null || string.IsNullOrWhiteSpace(participantJid))
+            {
+                return null;
+            }
+
+            string normalized = NormalizeJidForMatch(participantJid);
+            foreach (var chat in service.Chats)
+            {
+                if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
+                {
+                    continue;
+                }
+
+                if (string.Equals(NormalizeJidForMatch(chat.JID), normalized, StringComparison.OrdinalIgnoreCase))
+                {
+                    return chat.AvatarUrl;
+                }
+            }
+
+            return null;
+        }
+
+        private static string NormalizeJidForMatch(string jid)
+        {
+            if (string.IsNullOrWhiteSpace(jid))
+            {
+                return string.Empty;
+            }
+
+            string value = jid.Trim();
+            int slash = value.IndexOf('/');
+            if (slash >= 0)
+            {
+                value = value.Substring(0, slash);
+            }
+
+            return value;
         }
 
         private static void EnsureGroupSenderName(ChatMessage message, WhatsAppService service)
@@ -848,6 +1584,9 @@ namespace Unison.Uwp.UI.Views
             return (_scrollViewer.ExtentHeight - (_scrollViewer.VerticalOffset + _scrollViewer.ViewportHeight)) < 120;
         }
 
+        private bool ShouldStickScrollToBottom() =>
+            DateTime.UtcNow <= _stickToBottomUntilUtc || IsNearBottom();
+
         private async Task SyncMessagesFromServiceAsync()
         {
             if (_activeChat == null || _isSyncingFromService)
@@ -860,7 +1599,7 @@ namespace Unison.Uwp.UI.Views
             string requestedJid = service.GetCanonicalJid(_activeChat.JID);
             try
             {
-                bool wasNearBottom = IsNearBottom();
+                bool stickToBottom = ShouldStickScrollToBottom();
                 var serviceMessages = await service.LoadMessagesForChatAsync(requestedJid);
                 if (_activeChat == null ||
                     !string.Equals(service.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase) ||
@@ -878,6 +1617,13 @@ namespace Unison.Uwp.UI.Views
                     }
 
                     bool changed = false;
+                    int countBeforeFallbackStrip = _messages.Count;
+                    RemovePreviewFallbackMessages(_messages);
+                    if (_messages.Count != countBeforeFallbackStrip)
+                    {
+                        changed = true;
+                    }
+
                     var existingIds = new HashSet<string>(_messages
                         .Where(m => m != null && !string.IsNullOrWhiteSpace(m.Id))
                         .Select(m => m.Id));
@@ -961,7 +1707,7 @@ namespace Unison.Uwp.UI.Views
                         bool isGroup = _activeChat.IsGroup ||
                             requestedJid.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
                         RecomputeMessageRuns(_messages, isGroup);
-                        if (wasNearBottom)
+                        if (stickToBottom || ShouldStickScrollToBottom())
                         {
                             ScrollToBottom();
                         }
@@ -1043,7 +1789,7 @@ namespace Unison.Uwp.UI.Views
             string preview = _displayedPinnedMessage.Caption;
             if (string.IsNullOrWhiteSpace(preview)) preview = _displayedPinnedMessage.Content;
             PinnedMessagePreviewText.Text = string.IsNullOrWhiteSpace(preview)
-                ? "[MÃ­dia]"
+                ? "[MÃƒÂ­dia]"
                 : preview.Replace("\r", " ").Replace("\n", " ");
             PinnedMessageTitleText.Text = _activePinnedMessages.Count > 1
                 ? LocalizedStrings.Format("ChatDetail_PinnedIndex", _displayedPinnedIndex + 1, _activePinnedMessages.Count)
@@ -1055,11 +1801,81 @@ namespace Unison.Uwp.UI.Views
         {
             if (_displayedPinnedMessage == null) return;
 
-            MessageListView.ScrollIntoView(_displayedPinnedMessage, ScrollIntoViewAlignment.Leading);
+            TryScrollIntoView(_displayedPinnedMessage);
             if (_activePinnedMessages.Count > 1)
             {
                 _displayedPinnedIndex = (_displayedPinnedIndex + 1) % _activePinnedMessages.Count;
                 ShowPinnedBannerItem();
+            }
+        }
+
+        /// <summary>Invoked from <see cref="Templates.MessageTemplates"/> when the quote/reply block is tapped.</summary>
+        internal void OnQuotedMessageTapped(object sender, TappedRoutedEventArgs e)
+        {
+            var sourceVm = (sender as FrameworkElement)?.DataContext as ChatMessageViewModel;
+            string quotedId = sourceVm?.QuotedMessageId;
+            if (string.IsNullOrWhiteSpace(quotedId) || _messages == null)
+            {
+                return;
+            }
+
+            ChatMessageViewModel target = null;
+            for (int i = 0; i < _messages.Count; i++)
+            {
+                var candidate = _messages[i];
+                if (candidate != null && string.Equals(candidate.Id, quotedId, StringComparison.Ordinal))
+                {
+                    target = candidate;
+                    break;
+                }
+            }
+
+            // Quote is only actionable when the original message is already in the loaded list.
+            if (target == null)
+            {
+                return;
+            }
+
+            TryScrollIntoView(target);
+            _ = FlashMessageHighlightAsync(target);
+            e.Handled = true;
+        }
+
+        private async Task FlashMessageHighlightAsync(ChatMessageViewModel target)
+        {
+            if (target == null) return;
+
+            ClearMessageHighlight();
+
+            int generation = ++_highlightGeneration;
+            _highlightedMessage = target;
+            target.IsHighlighted = true;
+
+            try
+            {
+                await Task.Delay(1100);
+            }
+            catch
+            {
+                // Ignore â€” delay is only for UI timing.
+            }
+
+            if (generation != _highlightGeneration || _highlightedMessage != target)
+            {
+                return;
+            }
+
+            target.IsHighlighted = false;
+            _highlightedMessage = null;
+        }
+
+        private void ClearMessageHighlight()
+        {
+            _highlightGeneration++;
+            if (_highlightedMessage != null)
+            {
+                _highlightedMessage.IsHighlighted = false;
+                _highlightedMessage = null;
             }
         }
 
@@ -1082,19 +1898,25 @@ namespace Unison.Uwp.UI.Views
 
         private void ShowMessageActions(FrameworkElement anchor)
         {
-            var message = UnwrapMessage(anchor?.DataContext);
+            var vm = anchor?.DataContext as ChatMessageViewModel;
+            var message = vm?.Model ?? UnwrapMessage(anchor?.DataContext);
             if (message == null || _activeChat == null || string.IsNullOrWhiteSpace(message.Id)) return;
+
+            if (vm == null && ViewModel != null)
+            {
+                vm = ViewModel.CreateMessageVm(message);
+            }
 
             var flyout = new MenuFlyout();
             if (message.IsPinned)
             {
-                AddPinAction(flyout, message, "Desafixar mensagem", false, 0);
+                AddPinAction(flyout, vm, "Desafixar mensagem", false, 0);
             }
             else
             {
-                AddPinAction(flyout, message, "Fixar por 24 horas", true, 86400);
-                AddPinAction(flyout, message, "Fixar por 7 dias", true, 604800);
-                AddPinAction(flyout, message, "Fixar por 30 dias", true, 2592000);
+                AddPinAction(flyout, vm, "Fixar por 24 horas", true, 86400);
+                AddPinAction(flyout, vm, "Fixar por 7 dias", true, 604800);
+                AddPinAction(flyout, vm, "Fixar por 30 dias", true, 2592000);
             }
             // The one-argument FlyoutBase.ShowAt overload requires Windows 10 1809.
             // Windows 10 Mobile 15063 supports the original MenuFlyout overload.
@@ -1103,87 +1925,697 @@ namespace Unison.Uwp.UI.Views
                 Math.Max(0, anchor.ActualHeight / 2)));
         }
 
-        private void AddPinAction(MenuFlyout flyout, ChatMessage message, string label, bool pin, uint durationSeconds)
+        private void AddPinAction(MenuFlyout flyout, ChatMessageViewModel vm, string label, bool pin, uint durationSeconds)
         {
             var item = new MenuFlyoutItem { Text = label };
             item.Click += async (s, e) =>
             {
-                if (ViewModel == null) return;
-                await ViewModel.SetMessagePinnedAsync(message, pin, durationSeconds);
+                if (vm?.Model == null)
+                {
+                    return;
+                }
+
+                if (string.IsNullOrWhiteSpace(vm.Model.RemoteJid) && _activeChat != null)
+                {
+                    vm.Model.RemoteJid = _activeChat.JID;
+                }
+
+                await vm.SetPinnedAsync(pin, durationSeconds);
                 UpdatePinnedBanner();
             };
             flyout.Items.Add(item);
         }
 
-        /// <summary>Invoked from <see cref="Templates.MessageTemplates"/> (external DataTemplate events).</summary>
-        internal async void OnAudioButtonClick(object sender, RoutedEventArgs e)
-        {
-            var message = UnwrapMessage((sender as FrameworkElement)?.DataContext);
-            if (message == null || !message.IsAudio || ViewModel == null) return;
-
-            try
-            {
-                if (_playingAudioMessage != null &&
-                    string.Equals(_playingAudioMessage.Id, message.Id, StringComparison.Ordinal) &&
-                    AudioPlayer.CurrentState == MediaElementState.Playing)
-                {
-                    AudioPlayer.Pause();
-                    return;
-                }
-
-                string uri = await ViewModel.EnsureAudioReadyAsync(message);
-                if (string.IsNullOrWhiteSpace(uri)) return;
-
-                AudioPlayer.Stop();
-                AudioPlayer.Source = new Uri(uri);
-                _playingAudioMessage = message;
-                AudioPlayer.Play();
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine(string.Format("[ChatDetailView] Audio playback failed: {0}", ex));
-            }
-        }
-
-        /// <summary>Invoked from <see cref="Templates.MessageTemplates"/> image download overlay.</summary>
-        internal async void OnImageDownloadButtonClick(object sender, RoutedEventArgs e)
+        /// <summary>Play / resume / pause for a ready local audio bubble + SMTC.</summary>
+        internal async void OnAudioPlayButtonClick(object sender, RoutedEventArgs e)
         {
             var element = sender as FrameworkElement;
             var vm = element?.DataContext as ChatMessageViewModel;
             var message = vm?.Model ?? UnwrapMessage(element?.DataContext);
-            if (message == null || !message.NeedsImageDownload || ViewModel == null) return;
-
-            if (vm != null)
+            if (message == null || !message.IsAudio || ViewModel == null)
             {
-                vm.IsImageDownloading = true;
+                return;
             }
 
             try
             {
-                await ViewModel.EnsureImageReadyAsync(message);
+                EnsureAudioMediaPlayer();
+                var player = _audioMediaPlayer;
+                if (player == null)
+                {
+                    LogAudio("play-no-player", message, null);
+                    return;
+                }
+
+                // Toggle pause on the same bubble.
+                if (_playingAudioVm != null &&
+                    ReferenceEquals(_playingAudioVm, vm) &&
+                    vm.AudioPlaybackStatus == AudioPlaybackStatus.Playing)
+                {
+                    LogAudio("pause", message, null);
+                    player.Pause();
+                    vm.AudioPlaybackStatus = AudioPlaybackStatus.Paused;
+                    StopAudioPositionTimer();
+                    _voiceRouting?.EndSession();
+                    return;
+                }
+
+                // Resume paused bubble without resetting source.
+                if (_playingAudioVm != null &&
+                    ReferenceEquals(_playingAudioVm, vm) &&
+                    vm.AudioPlaybackStatus == AudioPlaybackStatus.Paused)
+                {
+                    LogAudio("resume", message, null);
+                    ApplySmtcMetadata(message);
+                    player.Play();
+                    _voiceRouting?.BeginSession();
+                    vm.AudioPlaybackStatus = AudioPlaybackStatus.Playing;
+                    StartAudioPositionTimer();
+                    return;
+                }
+
+                // Always resolve a playable URI (network if needed; oggâ†’wav via Concentus on Mobile).
+                if (string.IsNullOrWhiteSpace(message.AudioUri) && vm != null)
+                {
+                    vm.AudioPlaybackStatus = AudioPlaybackStatus.Downloading;
+                }
+
+                LogAudio("play-ensure", message, "uriIn=" + (message.AudioUri ?? "null"));
+                string uri = vm != null
+                    ? await vm.EnsureAudioReadyAsync(showErrorDialog: true)
+                    : null;
+                if (string.IsNullOrWhiteSpace(uri))
+                {
+                    LogAudio("play-ensure-empty", message, null);
+                    vm?.MarkAudioUnavailable();
+                    return;
+                }
+
+                // Stop any other bubble.
+                if (_playingAudioVm != null && !ReferenceEquals(_playingAudioVm, vm))
+                {
+                    _playingAudioVm.ResetAudioPlaybackToReady();
+                }
+
+                LogAudio(
+                    "play-start",
+                    message,
+                    string.Format(
+                        "uri={0} mime={1} mobile={2}",
+                        uri,
+                        message.AudioMimeType ?? "?",
+                        _isWindowsMobile));
+
+                ApplySmtcMetadata(message);
+                player.Source = MediaSource.CreateFromUri(new Uri(uri));
+                _playingAudioMessage = message;
+                _playingAudioVm = vm;
+                if (vm != null)
+                {
+                    vm.AudioPlaybackPositionSeconds = 0;
+                    vm.AudioPlaybackStatus = AudioPlaybackStatus.Playing;
+                }
+
+                player.Play();
+                // Route after Play — AudioRoutingManager needs an active Communications stream.
+                _voiceRouting?.BeginSession();
+                StartAudioPositionTimer();
             }
             catch (Exception ex)
             {
-                Debug.WriteLine(string.Format("[ChatDetailView] Image download failed: {0}", ex));
+                LogAudio("play-exception", message, ex.ToString());
+                vm?.MarkAudioUnavailable();
+            }
+        }
+
+        private void EnsureAudioMediaPlayer()
+        {
+            if (_audioMediaPlayer != null)
+            {
+                return;
+            }
+
+            bool useCommunications =
+                _voiceRouting != null &&
+                string.Equals(
+                    _voiceRouting.PreferredAudioCategory,
+                    "Communications",
+                    StringComparison.OrdinalIgnoreCase);
+
+            _audioMediaPlayer = new MediaPlayer
+            {
+                // Mobile: Communications enables AudioRoutingManager (speaker ↔ earpiece).
+                // Desktop: Media uses the system default device.
+                AudioCategory = useCommunications || _isWindowsMobile
+                    ? MediaPlayerAudioCategory.Communications
+                    : MediaPlayerAudioCategory.Media,
+                AutoPlay = false
+            };
+            _audioMediaPlayer.MediaEnded += AudioMediaPlayer_MediaEnded;
+            _audioMediaPlayer.MediaFailed += AudioMediaPlayer_MediaFailed;
+            _audioMediaPlayer.MediaOpened += AudioMediaPlayer_MediaOpened;
+            _audioMediaPlayer.PlaybackSession.PlaybackStateChanged += AudioPlaybackSession_PlaybackStateChanged;
+            _audioMediaPlayer.CommandManager.IsEnabled = true;
+            AudioPlayer.SetMediaPlayer(_audioMediaPlayer);
+            _voiceRouting?.AttachPlayer(_audioMediaPlayer);
+        }
+
+        private async void AudioPlaybackSession_PlaybackStateChanged(MediaPlaybackSession sender, object args)
+        {
+            try
+            {
+                await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
+                {
+                    if (_playingAudioVm == null || _audioMediaPlayer == null)
+                    {
+                        return;
+                    }
+
+                    var state = _audioMediaPlayer.PlaybackSession.PlaybackState;
+                    if (state == MediaPlaybackState.Paused &&
+                        _playingAudioVm.AudioPlaybackStatus == AudioPlaybackStatus.Playing)
+                    {
+                        // Keep current second frozen (SMTC / system pause).
+                        _playingAudioVm.AudioPlaybackStatus = AudioPlaybackStatus.Paused;
+                        StopAudioPositionTimer();
+                    }
+                    else if (state == MediaPlaybackState.Playing &&
+                             _playingAudioVm.AudioPlaybackStatus == AudioPlaybackStatus.Paused)
+                    {
+                        _playingAudioVm.AudioPlaybackStatus = AudioPlaybackStatus.Playing;
+                        StartAudioPositionTimer();
+                    }
+                });
+            }
+            catch
+            {
+            }
+        }
+
+        private void StartAudioPositionTimer()
+        {
+            if (_audioPositionTimer == null)
+            {
+                _audioPositionTimer = new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMilliseconds(250)
+                };
+                _audioPositionTimer.Tick += AudioPositionTimer_Tick;
+            }
+
+            _audioPositionTimer.Start();
+        }
+
+        private void StopAudioPositionTimer()
+        {
+            try
+            {
+                _audioPositionTimer?.Stop();
+            }
+            catch
+            {
+            }
+        }
+
+        private void AudioPositionTimer_Tick(object sender, object e)
+        {
+            try
+            {
+                if (_playingAudioVm == null ||
+                    _audioMediaPlayer == null ||
+                    _playingAudioVm.AudioPlaybackStatus != AudioPlaybackStatus.Playing)
+                {
+                    return;
+                }
+
+                double secs = _audioMediaPlayer.PlaybackSession.Position.TotalSeconds;
+                if (secs < 0)
+                {
+                    secs = 0;
+                }
+
+                _playingAudioVm.AudioPlaybackPositionSeconds = (uint)Math.Floor(secs);
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>Seek the active bubble's MediaPlayer (Imgur PlayerSlider scrub).</summary>
+        internal void SeekAudioPlayback(ChatMessageViewModel vm, double seconds)
+        {
+            if (vm == null ||
+                _playingAudioVm == null ||
+                !ReferenceEquals(_playingAudioVm, vm) ||
+                _audioMediaPlayer == null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (seconds < 0)
+                {
+                    seconds = 0;
+                }
+
+                double max = _audioMediaPlayer.PlaybackSession.NaturalDuration.TotalSeconds;
+                if (!double.IsNaN(max) && max > 0 && seconds > max)
+                {
+                    seconds = max;
+                }
+
+                _audioMediaPlayer.PlaybackSession.Position = TimeSpan.FromSeconds(seconds);
+                vm.AudioPlaybackPositionSeconds = (uint)Math.Floor(seconds);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatDetailView] Audio seek failed: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// SMTC display:
+        /// Group → Title = group name, Artist = message author.
+        /// 1:1 → Title = "Unison", Artist = message author.
+        /// Must be re-applied after Source is set (MediaOpened) — assigning Source clears DisplayUpdater.
+        /// </summary>
+        private void ApplySmtcMetadata(ChatMessage message)
+        {
+            try
+            {
+                var player = _audioMediaPlayer;
+                if (player == null || message == null)
+                {
+                    return;
+                }
+
+                var smtc = player.SystemMediaTransportControls;
+                smtc.IsEnabled = true;
+                smtc.IsPlayEnabled = true;
+                smtc.IsPauseEnabled = true;
+
+                string title;
+                string artist;
+                ResolveAudioSmtcMetadata(message, out title, out artist);
+
+                var updater = smtc.DisplayUpdater;
+                updater.ClearAll();
+                updater.Type = MediaPlaybackType.Music;
+                updater.AppMediaId = "Unison.VoiceNote";
+                updater.MusicProperties.Title = title;
+                updater.MusicProperties.Artist = artist;
+                updater.Update();
+
+                LogAudio("smtc", message, "title=\"" + title + "\" artist=\"" + artist + "\"");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatDetailView] SMTC update failed: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Group: title = group name, artist = sender.
+        /// 1:1: title = Unison, artist = sender.
+        /// </summary>
+        private void ResolveAudioSmtcMetadata(ChatMessage message, out string title, out string artist)
+        {
+            var chat = ViewModel?.ActiveChat ?? _activeChat;
+            bool isGroup = chat != null &&
+                (chat.IsGroup ||
+                 (!string.IsNullOrWhiteSpace(chat.JID) &&
+                  chat.JID.IndexOf("@g.us", StringComparison.OrdinalIgnoreCase) >= 0));
+
+            artist = ResolveMessageAuthorForSmtc(message, chat);
+
+            if (isGroup)
+            {
+                title = !string.IsNullOrWhiteSpace(chat?.Name)
+                    ? chat.Name.Trim()
+                    : null;
+                if (string.IsNullOrWhiteSpace(title))
+                {
+                    title = chat?.GetNameResolved(_strings);
+                }
+
+                if (string.IsNullOrWhiteSpace(title))
+                {
+                    title = "Chat";
+                }
+
+                return;
+            }
+
+            title = "Unison";
+        }
+
+        private string ResolveMessageAuthorForSmtc(ChatMessage message, ChatItem chat)
+        {
+            if (message == null)
+            {
+                return "Chat";
+            }
+
+            if (message.IsFromMe)
+            {
+                return _strings != null
+                    ? _strings.Get("Chat_SelfFallbackName", "You")
+                    : "You";
+            }
+
+            EnsureGroupSenderName(message, WhatsApp);
+
+            if (!string.IsNullOrWhiteSpace(message.SenderName) &&
+                !string.Equals(message.SenderName, "Me", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(message.SenderName, "You", StringComparison.OrdinalIgnoreCase))
+            {
+                return message.SenderName.Trim();
+            }
+
+            string jid = message.ParticipantJid;
+            if (string.IsNullOrWhiteSpace(jid))
+            {
+                jid = chat?.JID;
+            }
+
+            try
+            {
+                if (WhatsApp != null && !string.IsNullOrWhiteSpace(jid))
+                {
+                    string resolved = WhatsApp.ResolveDisplayName(jid, "sender");
+                    if (!string.IsNullOrWhiteSpace(resolved))
+                    {
+                        return resolved.Trim();
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            if (chat != null)
+            {
+                string name = chat.GetNameResolved(_strings);
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    return name.Trim();
+                }
+
+                if (!string.IsNullOrWhiteSpace(chat.Name))
+                {
+                    return chat.Name.Trim();
+                }
+            }
+
+            return "Chat";
+        }
+
+        private void StopAudioPlayback()
+        {
+            StopAudioPositionTimer();
+            _voiceRouting?.EndSession();
+            try
+            {
+                if (_audioMediaPlayer != null)
+                {
+                    _audioMediaPlayer.Pause();
+                    _audioMediaPlayer.Source = null;
+                    try
+                    {
+                        _audioMediaPlayer.SystemMediaTransportControls.IsEnabled = false;
+                    }
+                    catch
+                    {
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            _playingAudioVm?.ResetAudioPlaybackToReady();
+            _playingAudioVm = null;
+            _playingAudioMessage = null;
+        }
+
+        private async void AudioMediaPlayer_MediaOpened(MediaPlayer sender, object args)
+        {
+            try
+            {
+                string detail = null;
+                try
+                {
+                    var session = sender?.PlaybackSession;
+                    detail = string.Format(
+                        "durationSec={0:0.###} state={1}",
+                        session != null ? session.NaturalDuration.TotalSeconds : -1,
+                        session != null ? session.PlaybackState.ToString() : "?");
+                }
+                catch
+                {
+                    detail = "opened";
+                }
+
+                await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
+                {
+                    LogAudio("media-opened", _playingAudioMessage, detail);
+                    // Source assignment clears DisplayUpdater — re-apply on open.
+                    if (_playingAudioMessage != null)
+                    {
+                        ApplySmtcMetadata(_playingAudioMessage);
+                    }
+
+                    // Stream is live — reassert speaker if session already began.
+                    if (_playingAudioVm != null &&
+                        _playingAudioVm.AudioPlaybackStatus == AudioPlaybackStatus.Playing)
+                    {
+                        _voiceRouting?.BeginSession();
+                    }
+                });
+            }
+            catch
+            {
+            }
+        }
+
+        private async void AudioMediaPlayer_MediaEnded(MediaPlayer sender, object args)
+        {
+            await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
+            {
+                StopAudioPositionTimer();
+                _voiceRouting?.EndSession();
+                _playingAudioVm?.ResetAudioPlaybackToReady();
+                _playingAudioVm = null;
+                _playingAudioMessage = null;
+            });
+        }
+
+        private async void AudioMediaPlayer_MediaFailed(MediaPlayer sender, MediaPlayerFailedEventArgs args)
+        {
+            string detail = string.Format(
+                "error={0} ext={1} msg={2}",
+                args?.Error,
+                args?.ExtendedErrorCode,
+                args?.ErrorMessage);
+            LogAudio("media-failed", _playingAudioMessage, detail);
+            Debug.WriteLine(string.Format("[ChatDetailView] MediaPlayer failed: {0}", args?.ErrorMessage));
+            await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
+            {
+                StopAudioPositionTimer();
+                _voiceRouting?.EndSession();
+                if (_playingAudioVm != null)
+                {
+                    _playingAudioVm.MarkAudioUnavailable();
+                }
+
+                _playingAudioVm = null;
+                _playingAudioMessage = null;
+            });
+        }
+
+        /// <summary>Session log (+ DebugView) for mobile audio diagnosis â€” always captured.</summary>
+        private void LogAudio(string stage, ChatMessage message, string details)
+        {
+            string id = message?.Id ?? "?";
+            string line = string.Format(
+                "[Audio/{0}] id={1} {2}",
+                stage,
+                id,
+                details ?? string.Empty);
+            try
+            {
+                Debug.WriteLine(line);
+                SessionLogger.Instance.WriteAlways(line);
+                App.Services?.GetService<IRuntimeDiagnostics>()?.Write("Audio", stage, line);
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>Trash: fade timer â†’ slide red mic onto trash â†’ flash trash â†’ cancel recording.</summary>
+        private async void CancelRecordingButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (ViewModel == null || !ViewModel.IsRecording || _cancelRecordingAnimating)
+            {
+                return;
+            }
+
+            _cancelRecordingAnimating = true;
+            CancelRecordingButton.IsEnabled = false;
+            try
+            {
+                await PlayCancelRecordingAnimationAsync();
+                if (ViewModel.CancelRecordingCommand != null &&
+                    ViewModel.CancelRecordingCommand.CanExecute(null))
+                {
+                    ViewModel.CancelRecordingCommand.Execute(null);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatDetailView] Cancel recording anim: " + ex.Message);
+                try
+                {
+                    if (ViewModel.CancelRecordingCommand?.CanExecute(null) == true)
+                    {
+                        ViewModel.CancelRecordingCommand.Execute(null);
+                    }
+                }
+                catch
+                {
+                }
             }
             finally
             {
-                if (vm != null)
-                {
-                    vm.IsImageDownloading = false;
-                }
+                ResetRecordingOverlayVisuals();
+                _cancelRecordingAnimating = false;
+                CancelRecordingButton.IsEnabled = true;
             }
         }
 
-        private void AudioPlayer_MediaEnded(object sender, RoutedEventArgs e)
+        private Task PlayCancelRecordingAnimationAsync()
         {
-            _playingAudioMessage = null;
+            var tcs = new TaskCompletionSource<bool>();
+
+            try
+            {
+                RecordingOverlay?.UpdateLayout();
+                double slideX = 0;
+                if (RecordingMicIcon != null && RecordingTrashIcon != null && RecordingOverlay != null)
+                {
+                    GeneralTransform micToOverlay = RecordingMicIcon.TransformToVisual(RecordingOverlay);
+                    GeneralTransform trashToOverlay = RecordingTrashIcon.TransformToVisual(RecordingOverlay);
+                    Point micPt = micToOverlay.TransformPoint(new Point(0, 0));
+                    Point trashPt = trashToOverlay.TransformPoint(new Point(0, 0));
+                    slideX = trashPt.X - micPt.X;
+                }
+
+                var storyboard = new Storyboard();
+
+                if (RecordingElapsedText != null)
+                {
+                    var fade = new DoubleAnimation
+                    {
+                        To = 0,
+                        Duration = TimeSpan.FromMilliseconds(220),
+                        EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+                    };
+                    Storyboard.SetTarget(fade, RecordingElapsedText);
+                    Storyboard.SetTargetProperty(fade, "Opacity");
+                    storyboard.Children.Add(fade);
+                }
+
+                if (RecordingMicTranslate != null)
+                {
+                    var slide = new DoubleAnimation
+                    {
+                        To = slideX,
+                        BeginTime = TimeSpan.FromMilliseconds(180),
+                        Duration = TimeSpan.FromMilliseconds(320),
+                        EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseInOut }
+                    };
+                    Storyboard.SetTarget(slide, RecordingMicTranslate);
+                    Storyboard.SetTargetProperty(slide, "X");
+                    storyboard.Children.Add(slide);
+                }
+
+                if (RecordingTrashIcon != null)
+                {
+                    RecordingTrashIcon.Foreground = new SolidColorBrush(Colors.Red);
+
+                    var flashDown = new DoubleAnimation
+                    {
+                        From = 1,
+                        To = 0.25,
+                        BeginTime = TimeSpan.FromMilliseconds(500),
+                        Duration = TimeSpan.FromMilliseconds(110),
+                        AutoReverse = true,
+                        RepeatBehavior = new RepeatBehavior(2)
+                    };
+                    Storyboard.SetTarget(flashDown, RecordingTrashIcon);
+                    Storyboard.SetTargetProperty(flashDown, "Opacity");
+                    storyboard.Children.Add(flashDown);
+                }
+
+                EventHandler<object> completed = null;
+                completed = (s, args) =>
+                {
+                    storyboard.Completed -= completed;
+                    tcs.TrySetResult(true);
+                };
+                storyboard.Completed += completed;
+                storyboard.Begin();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatDetailView] Build cancel anim failed: " + ex.Message);
+                tcs.TrySetResult(false);
+            }
+
+            return tcs.Task;
         }
 
-        private void AudioPlayer_MediaFailed(object sender, ExceptionRoutedEventArgs e)
+        private void ResetRecordingOverlayVisuals()
         {
-            Debug.WriteLine(string.Format("[ChatDetailView] MediaElement failed: {0}", e.ErrorMessage));
-            _playingAudioMessage = null;
+            try
+            {
+                if (RecordingElapsedText != null)
+                {
+                    RecordingElapsedText.Opacity = 1;
+                }
+
+                if (RecordingMicTranslate != null)
+                {
+                    RecordingMicTranslate.X = 0;
+                    RecordingMicTranslate.Y = 0;
+                }
+
+                if (RecordingTrashIcon != null)
+                {
+                    RecordingTrashIcon.Opacity = 1;
+                    Brush muted = null;
+                    try
+                    {
+                        muted = Resources["ChatDetailMutedTextBrush"] as Brush
+                            ?? Application.Current.Resources["ChatDetailMutedTextBrush"] as Brush;
+                    }
+                    catch
+                    {
+                    }
+
+                    RecordingTrashIcon.Foreground = muted ?? new SolidColorBrush(Color.FromArgb(255, 136, 136, 136));
+                }
+
+                if (RecordingMicIcon != null)
+                {
+                    RecordingMicIcon.Opacity = 1;
+                }
+            }
+            catch
+            {
+            }
         }
 
         #region Presence Animation
@@ -1236,7 +2668,7 @@ namespace Unison.Uwp.UI.Views
         }
 
         /// <summary>
-        /// Full sequence: show presence status 5s → crossfade to "select for contact info" 5s → fade out → slide back
+        /// Full sequence: show presence status 5s â†’ crossfade to "select for contact info" 5s â†’ fade out â†’ slide back
         /// </summary>
         private async Task AnimateStatusSequenceAsync(string statusText, CancellationToken ct)
         {
@@ -1270,7 +2702,7 @@ namespace Unison.Uwp.UI.Views
         }
 
         /// <summary>
-        /// Fallback-only sequence: show "select for contact info" 5s → fade out → slide back
+        /// Fallback-only sequence: show "select for contact info" 5s â†’ fade out â†’ slide back
         /// </summary>
         private async Task AnimateFallbackOnlyAsync(CancellationToken ct)
         {

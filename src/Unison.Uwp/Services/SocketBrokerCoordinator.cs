@@ -154,8 +154,7 @@ namespace Unison.Uwp.Services
                     "status=" + _accessStatus);
             }
 
-            if (_accessStatus == BackgroundAccessStatus.Denied ||
-                _accessStatus == BackgroundAccessStatus.DeniedBySystemPolicy ||
+            if (_accessStatus == BackgroundAccessStatus.DeniedBySystemPolicy ||
                 _accessStatus == BackgroundAccessStatus.DeniedByUser)
             {
                 RuntimeDiagnosticsService.Instance.Write(

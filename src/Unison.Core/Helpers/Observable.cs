@@ -21,5 +21,19 @@ namespace Unison.Core.Helpers
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
+
+        /// <summary>Notifies several bindable names in one call (keeps ViewModel handlers readable).</summary>
+        protected void RaiseProperties(params string[] propertyNames)
+        {
+            if (propertyNames == null || propertyNames.Length == 0)
+            {
+                return;
+            }
+
+            for (int i = 0; i < propertyNames.Length; i++)
+            {
+                OnPropertyChanged(propertyNames[i]);
+            }
+        }
     }
 }
