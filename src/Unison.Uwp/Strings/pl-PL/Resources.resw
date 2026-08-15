@@ -1,0 +1,840 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!-- 
+    Microsoft ResX Schema 
+    
+    Version 2.0
+    
+    The primary goals of this format is to allow a simple XML format 
+    that is mostly human readable. The generation and parsing of the 
+    various data types are done through the TypeConverter classes 
+    associated with the data types.
+    
+    Example:
+    
+    ... ado.net/XML headers & schema ...
+    <resheader name="resmimetype">text/microsoft-resx</resheader>
+    <resheader name="version">2.0</resheader>
+    <resheader name="reader">System.Resources.ResXResourceReader, System.Windows.Forms, ...</resheader>
+    <resheader name="writer">System.Resources.ResXResourceWriter, System.Windows.Forms, ...</resheader>
+    <data name="Name1"><value>this is my long string</value><comment>this is a comment</comment></data>
+    <data name="Color1" type="System.Drawing.Color, System.Drawing">Blue</data>
+    <data name="Bitmap1" mimetype="application/x-microsoft.net.object.binary.base64">
+        <value>[base64 mime encoded serialized .NET Framework object]</value>
+    </data>
+    <data name="Icon1" type="System.Drawing.Icon, System.Drawing" mimetype="application/x-microsoft.net.object.bytearray.base64">
+        <value>[base64 mime encoded string representing a byte array form of the .NET Framework object]</value>
+        <comment>This is a comment</comment>
+    </data>
+                
+    There are any number of "resheader" rows that contain simple 
+    name/value pairs.
+    
+    Each data row contains a name, and value. The row also contains a 
+    type or mimetype. Type corresponds to a .NET class that support 
+    text/value conversion through the TypeConverter architecture. 
+    Classes that don't support this are serialized and stored with the 
+    mimetype set.
+    
+    The mimetype is used for serialized objects, and tells the 
+    ResXResourceReader how to depersist the object. This is currently not 
+    extensible. For a given mimetype the value must be set accordingly:
+    
+    Note - application/x-microsoft.net.object.binary.base64 is the format 
+    that the ResXResourceWriter will generate, however the reader can 
+    read any of the formats listed below.
+    
+    mimetype: application/x-microsoft.net.object.binary.base64
+    value   : The object must be serialized with 
+            : System.Runtime.Serialization.Formatters.Binary.BinaryFormatter
+            : and then encoded with base64 encoding.
+    
+    mimetype: application/x-microsoft.net.object.soap.base64
+    value   : The object must be serialized with 
+            : System.Runtime.Serialization.Formatters.Soap.SoapFormatter
+            : and then encoded with base64 encoding.
+
+    mimetype: application/x-microsoft.net.object.bytearray.base64
+    value   : The object must be serialized into a byte array 
+            : using a System.ComponentModel.TypeConverter
+            : and then encoded with base64 encoding.
+    -->
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="Login_ReloadQR.Text" xml:space="preserve">
+    <value>Załaduj ponownie kod QR</value>
+  </data>
+  <data name="Login_QRStatus.Text" xml:space="preserve">
+    <value>Zeskanuj ten kod swoim telefonem</value>
+  </data>
+  <data name="Login_ShowLog.Content" xml:space="preserve">
+    <value>Wyświetl dziennik diagnostyczny</value>
+  </data>
+  <data name="Login_ShowLogHide.Content" xml:space="preserve">
+    <value>Ukryj dziennik (dotknij ponownie, aby odświeżyć)</value>
+  </data>
+  <data name="Login_LogTitle.Text" xml:space="preserve">
+    <value>Dziennik diagnostyczny</value>
+  </data>
+  <data name="Login_ToggleLogOn.Content" xml:space="preserve">
+    <value>Włącz logowanie</value>
+  </data>
+  <data name="Login_ToggleLogOff.Content" xml:space="preserve">
+    <value>Wyłacz logowanie</value>
+  </data>
+  <data name="Login_CloseLog.Content" xml:space="preserve">
+    <value>Zamknij</value>
+  </data>
+  <data name="Login_PairPhoneTitle" xml:space="preserve">
+    <value>Połącz za pomocą numeru telefonu</value>
+  </data>
+  <data name="Login_PairPhonePrompt" xml:space="preserve">
+    <value>Wprowadź numer z kodem kraju, tylko cyfry</value>
+  </data>
+  <data name="Login_PairPhoneContinue" xml:space="preserve">
+    <value>Kontynuuj</value>
+  </data>
+  <data name="Login_PairPhoneCancel" xml:space="preserve">
+    <value>Anuluj</value>
+  </data>
+  <data name="Login_PairPhoneInvalidTitle" xml:space="preserve">
+    <value>Nieprawidłowy numer</value>
+  </data>
+  <data name="Login_PairPhoneInvalidBody" xml:space="preserve">
+    <value>Wprowadź pełny numer z kodem kraju (np.48123456789).</value>
+  </data>
+  <data name="Login_PairPhoneNoConnTitle" xml:space="preserve">
+    <value>Brak połączenia</value>
+  </data>
+  <data name="Login_PairPhoneNoConnBody" xml:space="preserve">
+    <value>Nie udało się połączyć z WhatsApp w celu uzyskania kodu. Sprawdź dziennik diagnostyczny.</value>
+  </data>
+  <data name="Login_PairPhoneCodeTitle" xml:space="preserve">
+    <value>Kod parowania</value>
+  </data>
+  <data name="Login_PairPhoneCodeBody" xml:space="preserve">
+    <value>W telefonie z WhatsApp:
+
+Powiązane urządzenia &gt; Połącz urządzenie &gt; Połacz za pomoca numeru telefonu
+
+Wprowadź ten kod:
+
+{0}</value>
+  </data>
+  <data name="Login_PairPhoneFailTitle" xml:space="preserve">
+    <value>Nie udało się sparować za pomocą numeru</value>
+  </data>
+  <data name="Login_LogEmpty" xml:space="preserve">
+    <value>(Dziennik jest nadal pusty — parowanie automatycznie zapisuje etapy [Pairing]. Stuknij "Załaduj ponownie QR" i otwórz dziennik ponownie; włącz pełne logowanie sesji tylko wtedy, gdy potrzebujesz pełnego ruchu.)</value>
+  </data>
+  <data name="Login_LogReadFail" xml:space="preserve">
+    <value>Nie udało się odczytać dziennika: {0}</value>
+  </data>
+  <data name="Login_LogEnabledHint" xml:space="preserve">
+    <value>Logowanie WŁĄCZONE. Stuknij Załaduj ponownie QR lub połącz ponownie, aby zarejestrować nową próbę.
+
+Wyłącz po zakończeniu diagnozy: pozostawienie włączonego spowalnia aplikację.</value>
+  </data>
+  <data name="Login_LogDisabledHint" xml:space="preserve">
+    <value>Logowanie WYŁĄCZONE (zalecane do normalnego użytku).</value>
+  </data>
+  <data name="Login_LogToggleFail" xml:space="preserve">
+    <value>Nie udało się przełączyć logowania: {0}</value>
+  </data>
+  <data name="ChatList_Header.Text" xml:space="preserve">
+    <value>Czaty</value>
+  </data>
+  <data name="ChatList_SyncUpdating.Text" xml:space="preserve">
+    <value>Aktualizowanie...</value>
+  </data>
+  <data name="ChatList_FilterHeader.Text" xml:space="preserve">
+    <value>Filtruj czaty według</value>
+  </data>
+  <data name="ChatList_FilterUnread.Text" xml:space="preserve">
+    <value>Nieprzeczytane</value>
+  </data>
+  <data name="ChatList_FilterFavorites.Text" xml:space="preserve">
+    <value>Ulubione</value>
+  </data>
+  <data name="ChatList_FilterContacts.Text" xml:space="preserve">
+    <value>Kontakty</value>
+  </data>
+  <data name="ChatList_FilterNonContacts.Text" xml:space="preserve">
+    <value>Nieznane kontakty</value>
+  </data>
+  <data name="ChatList_FilterGroups.Text" xml:space="preserve">
+    <value>Grupy</value>
+  </data>
+  <data name="ChatList_FilterDrafts.Text" xml:space="preserve">
+    <value>Szkice</value>
+  </data>
+  <data name="ChatList_RefreshNames.Text" xml:space="preserve">
+    <value>Odśwież nazwy kontaktów</value>
+  </data>
+  <data name="ChatList_SearchBox.PlaceholderText" xml:space="preserve">
+    <value>Szukaj lub rozpocznij nowy czat</value>
+  </data>
+  <data name="ChatList_PreviewPhoto" xml:space="preserve">
+    <value>Zdjęcie</value>
+  </data>
+  <data name="ChatList_PreviewVideo" xml:space="preserve">
+    <value>Wideo</value>
+  </data>
+  <data name="ChatList_PreviewSticker" xml:space="preserve">
+    <value>Naklejka</value>
+  </data>
+  <data name="ChatList_PreviewVoice" xml:space="preserve">
+    <value>Wiadomość głosowa</value>
+  </data>
+  <data name="ChatDetail_Audio" xml:space="preserve">
+    <value>Audio</value>
+  </data>
+  <data name="ChatList_Loading.Text" xml:space="preserve">
+    <value>Przygotowywanie konwersacji...</value>
+  </data>
+  <data name="ChatList_RefreshingNames" xml:space="preserve">
+    <value>Odświeżanie nazw kontaktów...</value>
+  </data>
+  <data name="ChatList_Connecting" xml:space="preserve">
+    <value>Łączenie...</value>
+  </data>
+  <data name="ChatList_Handshake" xml:space="preserve">
+    <value>Uzgadnianie połączenia</value>
+  </data>
+  <data name="ChatList_Updating" xml:space="preserve">
+    <value>Aktualizowanie...</value>
+  </data>
+  <data name="ChatList_SyncProgress" xml:space="preserve">
+    <value>Synchronizowanie konwersacji... {0} of {1}</value>
+  </data>
+  <data name="ChatList_SyncProgressCount" xml:space="preserve">
+    <value>Synchronizowanie konwersacji.{0} Załadowano</value>
+  </data>
+  <data name="ChatList_SyncDone" xml:space="preserve">
+    <value>Synchronizacja zakończona</value>
+  </data>
+  <data name="ChatList_Organizing" xml:space="preserve">
+    <value>Organizowanie czatów...</value>
+  </data>
+  <data name="ChatDetail_SelectChat.Text" xml:space="preserve">
+    <value>Wybierz czat</value>
+  </data>
+  <data name="ChatDetail_Empty.Text" xml:space="preserve">
+    <value>Wybierz czat, aby rozpocząć pisanie</value>
+  </data>
+  <data name="ChatDetail_MessageInput.PlaceholderText" xml:space="preserve">
+    <value>Napisz wiadomość</value>
+  </data>
+  <data name="ChatDetail_AttachCamera.Text" xml:space="preserve">
+    <value>Aparat</value>
+  </data>
+  <data name="ChatDetail_AttachFile.Text" xml:space="preserve">
+    <value>Plik</value>
+  </data>
+  <data name="ChatDetail_AttachContact.Text" xml:space="preserve">
+    <value>Kontakt</value>
+  </data>
+  <data name="ChatDetail_AttachMedia.Text" xml:space="preserve">
+    <value>Multimedia</value>
+  </data>
+  <data name="ChatDetail_AttachAudio.Text" xml:space="preserve">
+    <value>Dźwięk</value>
+  </data>
+  <data name="ChatDetail_AttachLocation.Text" xml:space="preserve">
+    <value>Lokalizacja</value>
+  </data>
+  <data name="ChatDetail_AttachTitle.Text" xml:space="preserve">
+    <value>ZAŁĄCZ</value>
+  </data>
+  <data name="ChatDetail_AttachFlyoutTooltip.Content" xml:space="preserve">
+    <value>Załącz</value>
+  </data>
+  <data name="ChatDetail_AttachBarTooltip.Content" xml:space="preserve">
+    <value>Załącz</value>
+  </data>
+  <data name="ChatDetail_AttachCameraTile.Text" xml:space="preserve">
+    <value>Aparat</value>
+  </data>
+  <data name="ChatDetail_AttachFileTile.Text" xml:space="preserve">
+    <value>Plik</value>
+  </data>
+  <data name="ChatDetail_AttachContactTile.Text" xml:space="preserve">
+    <value>Kontakt</value>
+  </data>
+  <data name="ChatDetail_AttachMediaTile.Text" xml:space="preserve">
+    <value>Multimedia</value>
+  </data>
+  <data name="ChatDetail_AttachAudioTile.Text" xml:space="preserve">
+    <value>Dźwięk</value>
+  </data>
+  <data name="ChatDetail_AttachLocationTile.Text" xml:space="preserve">
+    <value>Lokalizacja</value>
+  </data>
+  <data name="ChatDetail_Pinned.Text" xml:space="preserve">
+    <value>Przypinana wiadomość</value>
+  </data>
+  <data name="ChatDetail_ReadMore" xml:space="preserve">
+    <value>Czytaj więcej</value>
+  </data>
+  <data name="ChatDetail_ReadLess" xml:space="preserve">
+    <value>Czytaj mniej</value>
+  </data>
+  <data name="ChatDetail_PinnedIndex" xml:space="preserve">
+    <value>Przypinana wiadomość {0} of {1}</value>
+  </data>
+  <data name="Chat_SelfMarker" xml:space="preserve">
+    <value>(Ty)</value>
+  </data>
+  <data name="Chat_SelfFallbackName" xml:space="preserve">
+    <value>Ty</value>
+  </data>
+  <data name="ChatDetail_PersonalSubtitle.Text" xml:space="preserve">
+    <value>Wiadomości do mnie</value>
+  </data>
+  <data name="ChatDetail_PresenceOnline" xml:space="preserve">
+    <value>online</value>
+  </data>
+  <data name="ChatDetail_PresenceTyping" xml:space="preserve">
+    <value>pisze...</value>
+  </data>
+  <data name="ChatDetail_PresenceLastSeenToday" xml:space="preserve">
+    <value>ostatnio widziano dziś o {0}</value>
+  </data>
+  <data name="ChatDetail_PresenceLastSeenYesterday" xml:space="preserve">
+    <value>ostatnio widziano wczoraj o {0}</value>
+  </data>
+  <data name="ChatDetail_PresenceLastSeenWeekday" xml:space="preserve">
+    <value>ostatnio widziano w {0} o {1}</value>
+  </data>
+  <data name="ChatDetail_PresenceLastSeenDate" xml:space="preserve">
+    <value>ostatnio widziano {0} o {1}</value>
+  </data>
+  <data name="ChatDetail_PresenceLastSeenRecently" xml:space="preserve">
+    <value>ostatnio widziano niedawno</value>
+  </data>
+  <data name="ChatDetail_SelectForContactInfo" xml:space="preserve">
+    <value>dotknij kontaktu, aby zobaczyć więcej</value>
+  </data>
+  <data name="ChatDetail_SelectForGroupInfo" xml:space="preserve">
+    <value>dotknij tutaj, aby zobaczyć info o grupie</value>
+  </data>
+  <data name="ImageViewer_Download" xml:space="preserve">
+    <value>Pobierz</value>
+  </data>
+  <data name="ImageViewer_Share" xml:space="preserve">
+    <value>Udostępnij</value>
+  </data>
+  <data name="ImageViewer_UnknownSender" xml:space="preserve">
+    <value>Kontakt</value>
+  </data>
+  <data name="ChatDetail_SendImage.Title" xml:space="preserve">
+    <value>Wyślij zdjęcie</value>
+  </data>
+  <data name="ChatDetail_SendImage.PrimaryButtonText" xml:space="preserve">
+    <value>Wyslij</value>
+  </data>
+  <data name="ChatDetail_SendImage.SecondaryButtonText" xml:space="preserve">
+    <value>Anuluj</value>
+  </data>
+  <data name="ChatDetail_AudioPlayFailed" xml:space="preserve">
+    <value>Nie można odtworzyć tego nagrania.</value>
+  </data>
+  <data name="ChatDetail_RecordFailed" xml:space="preserve">
+    <value>Nie można nagrać dźwięku. Sprawdź uprawnienie mikrofonu.</value>
+  </data>
+  <data name="ChatDetail_RecordingChatUnavailable" xml:space="preserve">
+    <value>Rozmowa tego nagrania nie jest już dostępna.</value>
+  </data>
+  <data name="ChatDetail_AudioSendFailed" xml:space="preserve">
+    <value>Nie można wysłać nagrania.</value>
+  </data>
+  <data name="ChatDetail_AttachSendFailed" xml:space="preserve">
+    <value>Nie można wysłać pliku.</value>
+  </data>
+  <data name="ChatDetail_ImageDownloadFailed" xml:space="preserve">
+    <value>Nie można pobrać tego obrazu.</value>
+  </data>
+  <data name="NewChatDialog.Title" xml:space="preserve">
+    <value>Nowy czat</value>
+  </data>
+  <data name="NewChatDialog.PrimaryButtonText" xml:space="preserve">
+    <value>Rozpocznij czat</value>
+  </data>
+  <data name="NewChatDialog.SecondaryButtonText" xml:space="preserve">
+    <value>Anuluj</value>
+  </data>
+  <data name="NewChat_Hint.Text" xml:space="preserve">
+    <value>Wprowadź numer telefonu osoby, do której chcesz napisać.</value>
+  </data>
+  <data name="NewChat_Phone.Header" xml:space="preserve">
+    <value>Numer telefonu</value>
+  </data>
+  <data name="NewChat_Phone.PlaceholderText" xml:space="preserve">
+    <value>np. +48123456789</value>
+  </data>
+  <data name="NewChat_EnterPhone" xml:space="preserve">
+    <value>Wprowadź numer telefonu.</value>
+  </data>
+  <data name="NewChat_Searching" xml:space="preserve">
+    <value>Szukanie...</value>
+  </data>
+  <data name="NewChat_NotFound" xml:space="preserve">
+    <value>Nie znaleziono konta WhatsApp dla tego numeru.</value>
+  </data>
+  <data name="NewChat_Error" xml:space="preserve">
+    <value>Błąd: {0}</value>
+  </data>
+  <data name="Debug_Title.Text" xml:space="preserve">
+    <value>Debugowanie &amp; logi protokołu</value>
+  </data>
+  <data name="Debug_Logging.Text" xml:space="preserve">
+    <value>Logowanie</value>
+  </data>
+  <data name="Debug_Verbose.Header" xml:space="preserve">
+    <value>Szczegółowe logowanie</value>
+  </data>
+  <data name="Debug_Verbose.Text" xml:space="preserve">
+    <value>Włącz szczegółowe dane wyjściowe debugowania. Może to spowolnić aplikację.</value>
+  </data>
+  <data name="Debug_Capture.Header" xml:space="preserve">
+    <value>Przechwytuj ruch protokołu</value>
+  </data>
+  <data name="Debug_Capture.Text" xml:space="preserve">
+    <value>Zarejestruj wszystkie przychodzące i wychodzące węzły binarne</value>
+  </data>
+  <data name="Debug_VerboseTitle.Text" xml:space="preserve">
+    <value>Szczegółowe logowanie</value>
+  </data>
+  <data name="Debug_VerboseDesc.Text" xml:space="preserve">
+    <value>Włącz szczegółowe dane wyjściowe debugowania. Może spowolnić aplikację.</value>
+  </data>
+  <data name="Debug_RuntimeTitle.Text" xml:space="preserve">
+    <value>Stan aplikacji</value>
+  </data>
+  <data name="Debug_RuntimeDesc.Text" xml:space="preserve">
+    <value>Liczniki ciągłe dla połączenia, kolejek, wysyłania, odbierania i pamięci. Treść wiadomości nie jest rejestrowana.</value>
+  </data>
+  <data name="Debug_Refresh.Content" xml:space="preserve">
+    <value>Odśwież</value>
+  </data>
+  <data name="Debug_SaveReport.Content" xml:space="preserve">
+    <value>Zapisz raport diagnostyczny</value>
+  </data>
+  <data name="Debug_ClearRuntime.Content" xml:space="preserve">
+    <value>Wyczyść dziennik środowiska</value>
+  </data>
+  <data name="Debug_Collecting.Text" xml:space="preserve">
+    <value>Zbieranie stanu środowiska...</value>
+  </data>
+  <data name="Debug_CaptureTitle.Text" xml:space="preserve">
+    <value>Przechwyć ruch protokołu</value>
+  </data>
+  <data name="Debug_CaptureDesc.Text" xml:space="preserve">
+    <value>Rejestruj wszystkie przychodzące i wychodzące węzły binarne.</value>
+  </data>
+  <data name="Debug_LiveStream.Text" xml:space="preserve">
+    <value>Podgląd na żywo</value>
+  </data>
+  <data name="Debug_SaveLog.Content" xml:space="preserve">
+    <value>Zapisz dziennik</value>
+  </data>
+  <data name="Debug_ClearLog.Content" xml:space="preserve">
+    <value>Wyczyść</value>
+  </data>
+  <data name="Debug_Actions.Text" xml:space="preserve">
+    <value>Akcje</value>
+  </data>
+  <data name="Debug_Crypto.Header" xml:space="preserve">
+    <value>Polecenia</value>
+  </data>
+  <data name="Debug_Crypto.Text" xml:space="preserve">
+    <value>Uruchom lokalny autotest kryptograficzny.</value>
+  </data>
+  <data name="Debug_WipeBox.Header" xml:space="preserve">
+    <value>Wyczyść sesję</value>
+  </data>
+  <data name="Debug_WipeBox.Text" xml:space="preserve">
+    <value>Usuń lokalne dane uwierzytelniające i wróć do parowania.</value>
+  </data>
+  <data name="Debug_StatusBox.Header" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="Debug_StatusBox.Text" xml:space="preserve">
+    <value>Wersja kompilacji i architektura pakietu.</value>
+  </data>
+  <data name="Debug_Wipe.Content" xml:space="preserve">
+    <value>Wyczyść sesję</value>
+  </data>
+  <data name="Debug_WipeTitle" xml:space="preserve">
+    <value>Wyczyść sesję?</value>
+  </data>
+  <data name="Debug_WipeBody" xml:space="preserve">
+    <value>Spowoduje to usunięcie wszystkich lokalnych danych uwierzytelniających i zamknięcie aplikacji. Konieczne będzie ponowne sparowanie.</value>
+  </data>
+  <data name="Debug_WipeDelete" xml:space="preserve">
+    <value>Usuń</value>
+  </data>
+  <data name="Debug_WipeCancel" xml:space="preserve">
+    <value>Anuluj</value>
+  </data>
+  <data name="Debug_PreparingReport" xml:space="preserve">
+    <value>Przygotowywanie raportu...</value>
+  </data>
+  <data name="Debug_RuntimeCleared" xml:space="preserve">
+    <value>Wyczyszczono dziennik wykonania.</value>
+  </data>
+  <data name="Shell_Chats.Text" xml:space="preserve">
+    <value>Czaty</value>
+  </data>
+  <data name="Shell_Debug.Text" xml:space="preserve">
+    <value>Debugowanie</value>
+  </data>
+  <data name="Common_Cancel" xml:space="preserve">
+    <value>Anuluj</value>
+  </data>
+  <data name="Common_OK" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="Common_Yesterday" xml:space="preserve">
+    <value>Wczoraj</value>
+  </data>
+  <data name="Login_InstrTitle.Text" xml:space="preserve">
+    <value>Korzystaj z WhatsApp na komputerze</value>
+  </data>
+  <data name="Login_InstrStep1.Text" xml:space="preserve">
+    <value>1. Otwórz WhatsApp w telefonie</value>
+  </data>
+  <data name="Login_InstrStep2.Text" xml:space="preserve">
+    <value>2. Stuknij Menu lub Ustawienia i wybierz Połączone urządzenia</value>
+  </data>
+  <data name="Login_InstrStep3.Text" xml:space="preserve">
+    <value>3. Stuknij Połącz urządzenie</value>
+  </data>
+  <data name="Login_InstrStep4.Text" xml:space="preserve">
+    <value>4. Skieruj telefon na ten ekran, aby zeskanować kod</value>
+  </data>
+  <data name="Login_LinkPhone.Text" xml:space="preserve">
+    <value>Połącz, używając numeru telefonu</value>
+  </data>
+  <data name="Login_DevResetTitle" xml:space="preserve">
+    <value>Reset deweloperski</value>
+  </data>
+  <data name="Login_DevResetBody" xml:space="preserve">
+    <value>Sesja i dane lokalne zostały wyczyszczone. Aplikacja zamknie się w celu czystego ponownego uruchomienia.</value>
+  </data>
+  <data name="Settings_Title.Text" xml:space="preserve">
+    <value>Ustawienia</value>
+  </data>
+  <data name="Settings_General.Text" xml:space="preserve">
+    <value>Ogólne</value>
+  </data>
+  <data name="Settings_Notifications.Header" xml:space="preserve">
+    <value>Powiadomienia</value>
+  </data>
+  <data name="Settings_Notifications.Text" xml:space="preserve">
+    <value>Pokaż powiadomienia i etykietę dla przychodzących wiadomości.</value>
+  </data>
+  <data name="Settings_LiveTiles.Header" xml:space="preserve">
+    <value>Żywe kafelki</value>
+  </data>
+  <data name="Settings_LiveTiles.Text" xml:space="preserve">
+    <value>Aktualizuj główny kafelek najnowszą wiadomością.</value>
+  </data>
+  <data name="Settings_About.Text" xml:space="preserve">
+    <value>O aplikacji</value>
+  </data>
+  <data name="Settings_VersionLabel.Text" xml:space="preserve">
+    <value>Wersja</value>
+  </data>
+  <data name="Settings_BranchLabel.Text" xml:space="preserve">
+    <value>Wersja rozwojowa</value>
+  </data>
+  <data name="Settings_Developers.Text" xml:space="preserve">
+    <value>Deweloperzy</value>
+  </data>
+  <data name="Boot_Loading.Text" xml:space="preserve">
+    <value>Ładowanie...</value>
+  </data>
+  <data name="ChatList_PreviewDocument" xml:space="preserve">
+    <value>Dokument</value>
+  </data>
+  <data name="ChatList_PreviewReaction" xml:space="preserve">
+    <value>Reakcja</value>
+  </data>
+  <data name="Settings_AppBranch.Text" xml:space="preserve">
+    <value>Release</value>
+  </data>
+  <data name="Settings_AppDescription.Text" xml:space="preserve">
+    <value>Klient WhatsApp oparty na Baileys dla Windows Universal Platform.</value>
+  </data>
+  <data name="Settings_Customization.Text" xml:space="preserve">
+    <value>Personalizacja</value>
+  </data>
+  <data name="Settings_KeepAlive.Header" xml:space="preserve">
+    <value>Tryb w tle</value>
+  </data>
+  <data name="Settings_KeepAlive.Text" xml:space="preserve">
+    <value>Używa lokalizacji tylko po to, by Windows 10 Mobile nie zawieszał aplikacji (sztuczka Unogram). Pozycja nie jest odczytywana ani wysyłana. Zużywa więcej baterii.</value>
+  </data>
+  <data name="Settings_AutoUnlink.Header" xml:space="preserve">
+    <value>Automatyczne odłączenie</value>
+  </data>
+  <data name="Settings_AutoUnlink.Text" xml:space="preserve">
+    <value>Jeśli telefon unieważni sesję, wyczyść lokalne dane i pokaż kod QR. Wyłącz, aby zachować aplikację jako kopię zapasową i tylko ponawiać połączenie.</value>
+  </data>
+  <data name="Settings_Shell.Header" xml:space="preserve">
+    <value>Shell</value>
+  </data>
+  <data name="Settings_Shell.Text" xml:space="preserve">
+    <value>Wybierz wygląd aplikacji.</value>
+  </data>
+  <data name="Settings_ShellAppliedBody" xml:space="preserve">
+    <value>Wybrana powłoka jest teraz aktywna.</value>
+  </data>
+  <data name="Settings_ShellAppliedTitle" xml:space="preserve">
+    <value>Powłoka zastosowana</value>
+  </data>
+  <data name="Settings_ShellRestartBody" xml:space="preserve">
+    <value>Unison uruchomi się ponownie, aby zastosować nową powłokę.</value>
+  </data>
+  <data name="Settings_ShellRestartClose" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="Settings_ShellRestartTitle" xml:space="preserve">
+    <value>Powłoka zaktualizowana</value>
+  </data>
+  <data name="Shell_Archived.Text" xml:space="preserve">
+    <value>Zarchiwizowane czaty</value>
+  </data>
+  <data name="Shell_Calls.Text" xml:space="preserve">
+    <value>Połączenia</value>
+  </data>
+  <data name="Shell_Profile.Text" xml:space="preserve">
+    <value>Profil</value>
+  </data>
+  <data name="Shell_Settings.Text" xml:space="preserve">
+    <value>Ustawienia</value>
+  </data>
+  <data name="Shell_Starred.Text" xml:space="preserve">
+    <value>Oznaczone wiadomości</value>
+  </data>
+  <data name="Shell_Status.Text" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="Start_Description.Text" xml:space="preserve">
+    <value>Prosty, niezawodny i prywatny sposób korzystania z WhatsApp na komputerze.</value>
+  </data>
+  <data name="Start_GetStarted.Content" xml:space="preserve">
+    <value>Rozpocznij</value>
+  </data>
+  <data name="Start_Title.Text" xml:space="preserve">
+    <value>Witamy w Unison</value>
+  </data>
+  <data name="Toast_AppName" xml:space="preserve">
+    <value>Unison</value>
+  </data>
+  <data name="Toast_DisconnectedBody" xml:space="preserve">
+    <value>Otwórz aplikację, aby przywrócić połączenie z WhatsApp.</value>
+  </data>
+  <data name="Toast_DisconnectedTitle" xml:space="preserve">
+    <value>Unison rozłączony</value>
+  </data>
+  <data name="Toast_LoggedOutTitle" xml:space="preserve">
+    <value>Sesja odłączona</value>
+  </data>
+  <data name="Toast_LoggedOutBody" xml:space="preserve">
+    <value>Sesja została rozłączona na telefonie. Zeskanuj kod QR, aby połączyć ponownie.</value>
+  </data>
+  <data name="Toast_SessionReplacedBody" xml:space="preserve">
+    <value>Inna sesja WhatsApp Web przejęła połączenie. Zeskanuj ponownie kod QR.</value>
+  </data>
+  <data name="Toast_GenericFallbackBody" xml:space="preserve">
+    <value>Otwórz Unison, aby załadować wiadomość.</value>
+  </data>
+  <data name="Toast_GenericFallbackTitle" xml:space="preserve">
+    <value>Nowa aktywność WhatsApp</value>
+  </data>
+  <data name="Toast_MediaPlaceholder" xml:space="preserve">
+    <value>[Multimedia]</value>
+  </data>
+  <data name="Toast_NewMessageFallback" xml:space="preserve">
+    <value>Nowa wiadomość</value>
+  </data>
+  <data name="ChatList_PinChat.Text" xml:space="preserve">
+    <value>Przypnij czat</value>
+  </data>
+  <data name="ChatList_UnpinChat.Text" xml:space="preserve">
+    <value>Odepnij czat</value>
+  </data>
+  <data name="ChatDetailInfo_PinChatAppBarLabel" xml:space="preserve">
+    <value>Przypnij
+czat</value>
+  </data>
+  <data name="ChatDetailInfo_UnpinChatAppBarLabel" xml:space="preserve">
+    <value>Odepnij
+czat</value>
+  </data>
+  <data name="ChatDetailInfo_Files" xml:space="preserve">
+    <value>Pliki</value>
+  </data>
+  <data name="ChatDetailInfo_Media" xml:space="preserve">
+    <value>Media</value>
+  </data>
+  <data name="ChatDetail_Search.Text" xml:space="preserve">
+    <value>Szukaj</value>
+  </data>
+  <data name="ChatDetail_ExportChat.Text" xml:space="preserve">
+    <value>Eksportuj czat</value>
+  </data>
+  <data name="ChatDetailInfo_Phone" xml:space="preserve">
+    <value>Telefon</value>
+  </data>
+  <data name="ChatDetailInfo_CallsEmpty" xml:space="preserve">
+    <value>Polaczenia wykonywane i odbierane pojawia sie tutaj.</value>
+  </data>
+  <data name="ChatDetail_GroupMedia.Text" xml:space="preserve">
+    <value>Media grupy</value>
+  </data>
+  <data name="ChatDetailInfo_MediaEmpty" xml:space="preserve">
+    <value>Zdjecia, filmy i nagrania pojawia sie tutaj.</value>
+  </data>
+  <data name="ChatDetail_MuteNotifications.Text" xml:space="preserve">
+    <value>Wycisz powiadomienia</value>
+  </data>
+  <data name="ChatDetailInfo_MembersEmpty" xml:space="preserve">
+    <value>Czlonkowie grupy pojawia sie tutaj.</value>
+  </data>
+  <data name="ChatDetailInfo_UnpinAppBarLabel" xml:space="preserve">
+    <value>Odepnij ze
+Start</value>
+  </data>
+  <data name="ChatDetailInfo_Notifications" xml:space="preserve">
+    <value>Powiadomienia</value>
+  </data>
+  <data name="ChatDetailInfo_GroupInfo" xml:space="preserve">
+    <value>Info o grupie</value>
+  </data>
+  <data name="ChatDetail_PinToStart.Text" xml:space="preserve">
+    <value>Przypnij do Start</value>
+  </data>
+  <data name="ChatDetail_UnmuteNotifications.Text" xml:space="preserve">
+    <value>Wlacz powiadomienia</value>
+  </data>
+  <data name="ChatDetail_MuteFor1Week.Text" xml:space="preserve">
+    <value>1 tydzien</value>
+  </data>
+  <data name="ChatDetailInfo_Description" xml:space="preserve">
+    <value>Opis</value>
+  </data>
+  <data name="ChatDetailInfo_MemberCountSingular" xml:space="preserve">
+    <value>1 czlonek</value>
+  </data>
+  <data name="ChatDetailInfo_Profile" xml:space="preserve">
+    <value>Profil</value>
+  </data>
+  <data name="ChatDetail_ShowContact.Text" xml:space="preserve">
+    <value>Zobacz kontakt</value>
+  </data>
+  <data name="ChatDetailInfo_Calls" xml:space="preserve">
+    <value>Polaczenia</value>
+  </data>
+  <data name="ChatDetailInfo_NotificationsOn" xml:space="preserve">
+    <value>Wl.</value>
+  </data>
+  <data name="ChatDetailInfo_Name" xml:space="preserve">
+    <value>Nazwa</value>
+  </data>
+  <data name="ChatDetailInfo_NotificationsOff" xml:space="preserve">
+    <value>Wyl.</value>
+  </data>
+  <data name="ChatDetailInfo_MemberCount" xml:space="preserve">
+    <value>{0} czlonkow</value>
+  </data>
+  <data name="ChatDetailInfo_FilesEmpty" xml:space="preserve">
+    <value>Dokumenty pojawia sie tutaj.</value>
+  </data>
+  <data name="ChatDetailInfo_Status" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="ChatDetailInfo_GroupName" xml:space="preserve">
+    <value>Nazwa grupy</value>
+  </data>
+  <data name="ChatDetail_MuteFor8Hours.Text" xml:space="preserve">
+    <value>8 godzin</value>
+  </data>
+  <data name="ChatDetail_MuteForever.Text" xml:space="preserve">
+    <value>Zawsze</value>
+  </data>
+  <data name="ChatDetailInfo_Members" xml:space="preserve">
+    <value>Czlonkowie</value>
+  </data>
+  <data name="ChatDetail_GroupInfo.Text" xml:space="preserve">
+    <value>Info o grupie</value>
+  </data>
+  <data name="ChatDetail_MediaLinksDocs.Text" xml:space="preserve">
+    <value>Media, linki i dokumenty</value>
+  </data>
+  <data name="ChatDetailInfo_PinAppBarLabel" xml:space="preserve">
+    <value>Przypnij do
+Start</value>
+  </data>
+  <data name="ChatDetail_UnpinFromStart.Text" xml:space="preserve">
+    <value>Odepnij ze Start</value>
+  </data>
+</root>

@@ -1,0 +1,25 @@
+<UserControl
+    x:Class="Unison.Uwp.UI.Controls.SettingsSectionHeader"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Margin="5,20,0,5">
+
+    <!-- Reusable icon + title row used by Settings / Debug surfaces. -->
+    <StackPanel Orientation="Horizontal">
+        <FontIcon x:Name="IconElement"
+                  FontFamily="{StaticResource IconFont}"
+                  FontSize="18"
+                  Margin="0,2,8,0"
+                  Glyph="{x:Bind Glyph, Mode=OneWay}"
+                  Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
+        <TextBlock x:Name="TitleElement"
+                   Text="{x:Bind Title, Mode=OneWay}"
+                   FontWeight="SemiBold"
+                   FontSize="17"
+                   Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                   FontFamily="{StaticResource MainFontSemibold}"/>
+    </StackPanel>
+</UserControl>

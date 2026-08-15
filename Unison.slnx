@@ -1,0 +1,34 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="ARM" />
+    <Platform Name="ARM64" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Folder Name="/documentation/">
+    <File Path="README.md" />
+  </Folder>
+  <Folder Name="/scripts/">
+    <File Path="scripts/build.ps1" />
+    <File Path="scripts/build_sign.ps1" />
+    <File Path="scripts/deploy.ps1" />
+  </Folder>
+  <Project Path="src/Unison.Uwp/Unison.Uwp.csproj" Id="a1b2c3d4-e5f6-7890-abcd-ef1234567890">
+    <Platform Solution="*|ARM" Project="ARM" />
+    <Platform Solution="*|ARM64" Project="ARM64" />
+    <Platform Solution="*|x64" Project="x64" />
+    <Platform Solution="*|x86" Project="x86" />
+    <Platform Solution="*|Any CPU" Project="x86" />
+    <Deploy />
+  </Project>
+  <Project Path="src/Unison.Background/Unison.Background.csproj" Id="7810e354-6a96-48b9-95e6-a4048db6ec26">
+    <Platform Solution="*|ARM" Project="ARM" />
+    <Platform Solution="*|ARM64" Project="ARM64" />
+    <Platform Solution="*|x64" Project="x64" />
+    <Platform Solution="*|x86" Project="x86" />
+  </Project>
+  <Project Path="src/Unison.Core/Unison.Core.csproj" Id="0aa2854f-305b-4701-81d8-7757c510a4c2" />
+  <Project Path="src/Unison.Baileys/Unison.Baileys.csproj" Id="a65f1d27-e2c9-410f-a892-015a7a9699ee" />
+  <Project Path="src/Unison.Socket/Unison.Socket.csproj" Id="3f5c1a82-9d4e-4b67-8c31-2e7a6b0d9f14" />
+</Solution>

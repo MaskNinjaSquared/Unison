@@ -1,0 +1,74 @@
+<UserControl
+    x:Class="Unison.Uwp.UI.Controls.MessageBubbleChrome"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    d:DesignHeight="64"
+    d:DesignWidth="240">
+
+    <Grid x:Name="RootGrid">
+        <Grid x:Name="CompositionHost"/>
+
+        <!--
+          Fallback (Mobile / no Composition): colors via ThemeResource so OS Light/Dark
+          updates without ActualThemeChanged (missing on Creators Update 15063).
+        -->
+        <Grid x:Name="FallbackHost">
+            <!-- Outgoing (sent) -->
+            <Grid x:Name="OutgoingHost" Visibility="Collapsed">
+                <Border x:Name="OutgoingHighlightBorder"
+                        Background="{ThemeResource ChatDetailSentBubbleHighlightBrush}"
+                        CornerRadius="16,16,4,16"/>
+                <Border x:Name="OutgoingFillBorder"
+                        Background="{ThemeResource ChatDetailSentBubbleBrush}"
+                        Margin="0,1,0,0"
+                        CornerRadius="16,16,4,16"/>
+                <Grid x:Name="OutgoingTailContainer"
+                      Width="10" Height="10"
+                      VerticalAlignment="Bottom"
+                      HorizontalAlignment="Right"
+                      Margin="-1,0,-1,0"
+                      Visibility="Collapsed">
+                    <Path Stretch="Fill"
+                          Fill="{ThemeResource ChatDetailSentBubbleHighlightBrush}"
+                          Data="M0,0 L10,0 L0,10 Z"/>
+                    <Path Stretch="Fill"
+                          Margin="0,1,0,0"
+                          Fill="{ThemeResource ChatDetailSentBubbleBrush}"
+                          Data="M0,0 L10,0 L0,10 Z"/>
+                </Grid>
+            </Grid>
+
+            <!-- Incoming (received) -->
+            <Grid x:Name="IncomingHost" Visibility="Collapsed">
+                <Border x:Name="IncomingHighlightBorder"
+                        Background="{ThemeResource ChatDetailReceivedBubbleHighlightBrush}"
+                        CornerRadius="16,16,16,4"/>
+                <Border x:Name="IncomingFillBorder"
+                        Background="{ThemeResource ChatDetailReceivedBubbleBrush}"
+                        Margin="0,1,0,0"
+                        CornerRadius="16,16,16,4"/>
+                <Grid x:Name="IncomingTailContainer"
+                      Width="10" Height="10"
+                      VerticalAlignment="Bottom"
+                      HorizontalAlignment="Left"
+                      Margin="-1,0,-1,0"
+                      RenderTransformOrigin="0.5,0.5"
+                      Visibility="Collapsed">
+                    <Grid.RenderTransform>
+                        <ScaleTransform ScaleX="-1" ScaleY="1"/>
+                    </Grid.RenderTransform>
+                    <Path Stretch="Fill"
+                          Fill="{ThemeResource ChatDetailReceivedBubbleHighlightBrush}"
+                          Data="M0,0 L10,0 L0,10 Z"/>
+                    <Path Stretch="Fill"
+                          Margin="0,1,0,0"
+                          Fill="{ThemeResource ChatDetailReceivedBubbleBrush}"
+                          Data="M0,0 L10,0 L0,10 Z"/>
+                </Grid>
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>

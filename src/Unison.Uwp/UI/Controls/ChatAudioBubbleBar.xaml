@@ -1,0 +1,74 @@
+<UserControl
+    x:Class="Unison.Uwp.UI.Controls.ChatAudioBubbleBar"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    x:Name="Root"
+    MinWidth="250"
+    MinHeight="36"
+    HorizontalAlignment="Stretch">
+
+    <!-- play | label↔slider (fade) | timestamp — Imgur-style transport for voice bubbles -->
+    <Grid MinWidth="250">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*" MinWidth="96"/>
+            <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+
+        <Grid VerticalAlignment="Center" Margin="0,0,6,0">
+            <Button x:Name="PlayButton"
+                    Click="PlayPause_Click"
+                    Style="{StaticResource WhatsAppIconButtonStyle}"
+                    Padding="0"
+                    MinWidth="36" MinHeight="36"
+                    Visibility="Collapsed">
+                <TextBlock Text="&#xE768;" FontFamily="{StaticResource IconFont}" FontSize="20"
+                           Foreground="{Binding GlyphForeground, ElementName=Root}"/>
+            </Button>
+            <Button x:Name="PauseButton"
+                    Click="PlayPause_Click"
+                    Style="{StaticResource WhatsAppIconButtonStyle}"
+                    Padding="0"
+                    MinWidth="36" MinHeight="36"
+                    Visibility="Collapsed">
+                <TextBlock Text="&#xE769;" FontFamily="{StaticResource IconFont}" FontSize="20"
+                           Foreground="{Binding GlyphForeground, ElementName=Root}"/>
+            </Button>
+        </Grid>
+
+        <!-- Mid: Ready label fades out ↔ slider fades in while Playing/Paused -->
+        <Grid Grid.Column="1" VerticalAlignment="Center" Margin="0,0,8,0" MinHeight="28">
+            <TextBlock x:Name="ReadyLabel"
+                       Text="Voice message"
+                       FontSize="14"
+                       VerticalAlignment="Center"
+                       TextTrimming="CharacterEllipsis"
+                       Foreground="{Binding GlyphForeground, ElementName=Root}"
+                       Opacity="1"/>
+            <!-- Imgur-style: StepFrequency=1; visible only while Playing/Paused (fade) -->
+            <Slider x:Name="PositionSlider"
+                    Minimum="0"
+                    Maximum="1"
+                    StepFrequency="1"
+                    Opacity="0"
+                    IsHitTestVisible="False"
+                    VerticalAlignment="Center"
+                    Margin="0,2,0,0"
+                    Foreground="{ThemeResource WhatsAppGreenFocusBrush}"
+                    PointerPressed="PositionSlider_PointerPressed"
+                    PointerReleased="PositionSlider_PointerReleased"
+                    PointerCaptureLost="PositionSlider_PointerCaptureLost"
+                    ValueChanged="PositionSlider_ValueChanged"/>
+        </Grid>
+
+        <TextBlock x:Name="TimestampText"
+                   Grid.Column="2"
+                   Text="0:00"
+                   FontSize="12"
+                   FontFamily="{StaticResource MainFont}"
+                   VerticalAlignment="Center"
+                   MinWidth="36"
+                   TextAlignment="Right"
+                   Foreground="{Binding GlyphForeground, ElementName=Root}"/>
+    </Grid>
+</UserControl>

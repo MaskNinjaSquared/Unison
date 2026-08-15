@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Directives xmlns="http://schemas.microsoft.com/netfx/2013/01/metadata">
+  <Application>
+    <!-- Keep directives narrow: "Required All" on every assembly stresses ILC 1.7.6 Analysis. -->
+    <Assembly Name="*Application*" Dynamic="Required Public" Serialize="Required Public" />
+    <Assembly Name="Newtonsoft.Json" Dynamic="Required Public" Serialize="Required Public" />
+    <Assembly Name="Google.Protobuf" Dynamic="Required Public" Serialize="Required Public" />
+    <Assembly Name="BouncyCastle.Crypto" Dynamic="Required Public" />
+    <Assembly Name="Unison.Background" Dynamic="Required Public" Serialize="Required Public" />
+    <Assembly Name="Unison.Baileys" Dynamic="Required Public" Serialize="Required Public" />
+    <Assembly Name="Unison.Core" Dynamic="Required Public" Serialize="Required Public" />
+    <Assembly Name="zxing" Dynamic="Required Public" />
+  </Application>
+</Directives>

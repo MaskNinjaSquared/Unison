@@ -1,23 +1,39 @@
 # Unison
-UWP WhatsApp client aimed primarily for Windows 10 Mobile from porting Baileys
-(secondary WhatsApp MD device client)
 
-Aiming to get desktop users on board who hate the new wrapper, but can't find a place to request help.
+UWP WhatsApp Multi-Device client, aimed mainly at Windows 10 Mobile. Built as a Baileys-style secondary device.
 
-What works:
+## Status
 
-- Message sending
-- Image sending
-- Getting images
-- Contact names via their ~ name - not true contact names from phone yet (wait to load)
-- Profile pictures (wait a lot, be patient)
-- Starting new chats with completely new numbers (I know, right?)
+Works for day-to-day chat on a linked session:
 
-What needs to work:
+- text/image/voice-note send & receive
+- attach from gallery and in-chat microphone recording
+- contact names & profile pictures
+- on-demand image download + fullscreen viewer
+- new chats by phone number; self-chat
+- background socket
+- real toast notifications for message envelopes
+- UI localization
 
-- Proper Session saving
-- A lot more
+The client is still under development. Note: None of the early users who tested the app were banned. If you've been blocked, please let us know. 
 
-Essentially a barebones client. Works until it doesn't.
+## Layout
 
-Note that of around 50 users, I've never had a user who's been banned (though I once had some sort of issue, wasn't a ban), and I would definitely like to hear from someone who *was* banned.
+| Project | Role |
+|---|---|
+| `src/Unison.Uwp` | UWP app, views, DI adapters |
+| `src/Unison.Core` | Contracts, models, ViewModels |
+| `src/Unison.Baileys` | Protocol / crypto |
+| `src/Unison.Background` | Out-of-process socket activity task |
+
+Solution: `Unison.slnx`.
+
+## Build & deploy
+
+```powershell
+.\scripts\build_sign.ps1          # ARM Release by default
+.\scripts\deploy.ps1 -IP <device>
+```
+
+> [!WARNING]
+> Debug/ARM builds do not work on Windows Phone unless compiled with the .NET Native compiler. This project uses newer .NET Standard APIs that require runtime support unavailable in non-.NET Native builds.

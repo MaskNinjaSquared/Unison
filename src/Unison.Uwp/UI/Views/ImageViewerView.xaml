@@ -1,0 +1,153 @@
+<UserControl
+    x:Class="Unison.Uwp.UI.Views.ImageViewerView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    d:DesignHeight="800"
+    d:DesignWidth="480">
+
+    <!-- Single full-bleed layer: image stays fixed; chrome overlays fade in/out on top. -->
+    <Grid x:Name="RootGrid"
+          Background="Black"
+          Tapped="RootGrid_Tapped">
+
+        <!-- Image area: pinch + drag via CompositeTransform (Imgur FullScreenImageView) -->
+        <Grid x:Name="ImageArea"
+              Background="Black"
+              ManipulationMode="Scale,TranslateX,TranslateY"
+              ManipulationDelta="ImageArea_ManipulationDelta"
+              ManipulationCompleted="ImageArea_ManipulationCompleted"
+              DoubleTapped="ImageArea_DoubleTapped"
+              PointerWheelChanged="ImageArea_PointerWheelChanged">
+            <Grid x:Name="ImageHost"
+                  HorizontalAlignment="Stretch"
+                  VerticalAlignment="Stretch"
+                  Background="Transparent"
+                  RenderTransformOrigin="0.5,0.5">
+                <Grid.RenderTransform>
+                    <CompositeTransform x:Name="ImageTransform"/>
+                </Grid.RenderTransform>
+                <Image x:Name="ViewerImage"
+                       Stretch="Uniform"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       ImageOpened="ViewerImage_ImageOpened"/>
+            </Grid>
+
+            <!-- While zoomed, disable so pan is not stolen by chrome -->
+            <Rectangle x:Name="TopTapZone"
+                       VerticalAlignment="Top"
+                       Height="120"
+                       Fill="Transparent"
+                       Tapped="TopTapZone_Tapped"/>
+        </Grid>
+
+        <!-- Top chrome overlay -->
+        <Grid x:Name="TopChrome"
+              VerticalAlignment="Top"
+              Canvas.ZIndex="2"
+              Tapped="Chrome_Tapped">
+            <Grid.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                    <GradientStop Color="#CC000000" Offset="0"/>
+                    <GradientStop Color="#99000000" Offset="0.55"/>
+                    <GradientStop Color="#00000000" Offset="1"/>
+                </LinearGradientBrush>
+            </Grid.Background>
+            <Grid MinHeight="72" Padding="8,12,8,28">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <Button x:Name="BackButton"
+                        Grid.Column="0"
+                        Command="{x:Bind ViewModel.CloseCommand, Mode=OneWay}"
+                        Width="34" Height="34"
+                        Margin="4,0,8,0"
+                        VerticalAlignment="Top"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Padding="0">
+                    <Grid Width="34" Height="34">
+                        <Ellipse Fill="#E6232424"/>
+                        <TextBlock Text="&#xE72B;"
+                                   FontFamily="{StaticResource IconFont}"
+                                   FontSize="14"
+                                   FontWeight="SemiBold"
+                                   Foreground="WhiteSmoke"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
+                    </Grid>
+                </Button>
+
+                <StackPanel x:Name="TitleInfoPanel"
+                            Grid.Column="1"
+                            VerticalAlignment="Top"
+                            Margin="0,2,8,0">
+                    <TextBlock Text="{x:Bind ViewModel.SenderDisplayName, Mode=OneWay}"
+                               FontSize="16"
+                               FontWeight="SemiBold"
+                               FontFamily="{StaticResource MainFont}"
+                               Foreground="White"
+                               TextTrimming="CharacterEllipsis"
+                               MaxLines="1"/>
+                    <TextBlock Text="{x:Bind ViewModel.FormattedDateTime, Mode=OneWay}"
+                               FontSize="12"
+                               FontFamily="{StaticResource MainFont}"
+                               Foreground="#B3FFFFFF"
+                               Margin="0,2,0,0"
+                               TextTrimming="CharacterEllipsis"
+                               MaxLines="1"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="2"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Top">
+                    <Button Command="{x:Bind ViewModel.DownloadCommand, Mode=OneWay}"
+                            Style="{StaticResource WhatsAppIconButtonStyle}"
+                            Width="40" Height="40"
+                            ToolTipService.ToolTip="{x:Bind ViewModel.DownloadTooltip, Mode=OneWay}">
+                        <TextBlock Text="&#xE896;"
+                                   FontFamily="{StaticResource IconFont}"
+                                   FontSize="18"
+                                   Foreground="White"/>
+                    </Button>
+                    <Button Command="{x:Bind ViewModel.ShareCommand, Mode=OneWay}"
+                            Style="{StaticResource WhatsAppIconButtonStyle}"
+                            Width="40" Height="40"
+                            ToolTipService.ToolTip="{x:Bind ViewModel.ShareTooltip, Mode=OneWay}">
+                        <TextBlock Text="&#xE72D;"
+                                   FontFamily="{StaticResource IconFont}"
+                                   FontSize="18"
+                                   Foreground="White"/>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Grid>
+
+        <!-- Caption overlay at bottom (does not reserve layout space / resize the photo) -->
+        <Border x:Name="CaptionChrome"
+                VerticalAlignment="Bottom"
+                HorizontalAlignment="Stretch"
+                Background="#CC111111"
+                Padding="16,12,16,16"
+                Canvas.ZIndex="2"
+                Visibility="Collapsed"
+                Tapped="Chrome_Tapped">
+            <TextBlock Text="{x:Bind ViewModel.Caption, Mode=OneWay}"
+                       FontSize="15"
+                       FontFamily="{StaticResource MainFont}"
+                       Foreground="White"
+                       TextWrapping="Wrap"
+                       TextTrimming="CharacterEllipsis"
+                       MaxLines="5"
+                       TextAlignment="Center"
+                       HorizontalAlignment="Stretch"
+                       IsTextSelectionEnabled="True"/>
+        </Border>
+    </Grid>
+</UserControl>

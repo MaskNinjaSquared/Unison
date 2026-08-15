@@ -1,0 +1,188 @@
+<UserControl
+    x:Class="Unison.Uwp.UI.Views.ChatListView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:templates="using:Unison.Uwp.UI.Templates"
+    xmlns:controls="using:Unison.Uwp.UI.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    d:DesignHeight="800"
+    d:DesignWidth="400">
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <templates:ChatItemTemplates/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Grid x:Name="ChatListGrid" Background="{ThemeResource ChatListBackgroundBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- WhatsApp-style Header -->
+        <!-- Title | sync (clipped/ellipsis) | icon cluster — sync must never push or paint over icons. -->
+        <Grid Grid.Row="0"  Padding="16,12,16,12" Background="Transparent">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*" MinWidth="0"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            
+            <TextBlock x:Name="HeaderTitle" 
+                       x:Uid="ChatList_Header"
+                       Text="Chats" 
+                       FontSize="24" 
+                       Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                       FontFamily="{StaticResource MainFontSemibold}" 
+                       FontWeight="SemiBold"
+                       VerticalAlignment="Center"/>
+
+            <Grid x:Name="SyncStatusPanel" Grid.Column="1"
+                  
+                  VerticalAlignment="Center" HorizontalAlignment="Stretch"
+                  Margin="10,0,8,0"
+                  SizeChanged="SyncStatusPanel_SizeChanged"
+                  Visibility="{x:Bind ViewModel.ShowSyncStatusInUi, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*" MinWidth="0"/>
+                </Grid.ColumnDefinitions>
+                <controls:ModernProgressRing IsActive="{x:Bind ViewModel.ShowSyncStatusInUi, Mode=OneWay}"
+                                             Width="14" Height="14"
+                                             VerticalAlignment="Center"
+                                             Foreground="{ThemeResource ChatListSyncStatusBrush}"/>
+                <TextBlock x:Name="SyncStatusText" Grid.Column="1"
+                           Text="{x:Bind ViewModel.SyncStatusText, Mode=OneWay}"
+                           Foreground="{ThemeResource ChatListSyncStatusBrush}" FontSize="14"
+                           FontFamily="{StaticResource MainFont}" VerticalAlignment="Center" Margin="6,0,0,0"
+                           HorizontalAlignment="Stretch"
+                           TextWrapping="NoWrap"
+                           TextTrimming="CharacterEllipsis"
+                           MaxLines="1"/>
+            </Grid>
+
+            <StackPanel Grid.Column="2"
+                        Orientation="Horizontal"
+                        VerticalAlignment="Center"
+                        Canvas.ZIndex="1">
+                <!-- UnisonIcons.ttf (ex-PathIcon shapes). FontIcon survives sync/refresh layout thrash. -->
+                <Button x:Name="NewChatButton" 
+                        Command="{Binding NewChatCommand}"
+                        Style="{StaticResource ModernIconButtonStyle}" 
+                        Margin="0,0,8,0">
+                    <FontIcon Glyph="&#xEA02;"
+                              FontFamily="{StaticResource UnisonIconFont}"
+                              FontSize="18"
+                              Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
+                </Button>
+
+                <Button x:Name="FilterButton" 
+                        Style="{StaticResource ModernIconButtonStyle}"
+                        Margin="0,0,8,0">
+                    <FontIcon Glyph="&#xEA01;"
+                              FontFamily="{StaticResource UnisonIconFont}"
+                              FontSize="18"
+                              Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
+                    <Button.Flyout>
+                        <MenuFlyout MenuFlyoutPresenterStyle="{StaticResource ModernMenuFlyoutStyle}">
+                            <MenuFlyoutItem x:Uid="ChatList_FilterHeader" Text="Filter chats by" Style="{StaticResource ModernMenuFlyoutHeaderStyle}"/>
+                            <MenuFlyoutItem x:Uid="ChatList_FilterUnread" Text="Unread" Style="{StaticResource ModernMenuFlyoutItemStyle}">
+                                <MenuFlyoutItem.Icon>
+                                    <PathIcon Style="{StaticResource UnreadIconStyle}" Foreground="White"/>
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutItem x:Uid="ChatList_FilterFavorites" Text="Favorites" Style="{StaticResource ModernMenuFlyoutItemStyle}">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xEB51;" FontFamily="{StaticResource IconFont}" Foreground="White"/>
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutItem x:Uid="ChatList_FilterContacts" Text="Contacts" Style="{StaticResource ModernMenuFlyoutItemStyle}">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE77B;" FontFamily="{StaticResource IconFont}" Foreground="White"/>
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutItem x:Uid="ChatList_FilterNonContacts" Text="Non-contacts" Style="{StaticResource ModernMenuFlyoutItemStyle}">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE8F8;" FontFamily="{StaticResource IconFont}" Foreground="White"/>
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutItem x:Uid="ChatList_FilterGroups" Text="Groups" Style="{StaticResource ModernMenuFlyoutItemStyle}">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE716;" FontFamily="{StaticResource IconFont}" Foreground="White"/>
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutItem x:Uid="ChatList_FilterDrafts" Text="Drafts" Style="{StaticResource ModernMenuFlyoutItemStyle}">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE70F;" FontFamily="{StaticResource IconFont}" Foreground="White"/>
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutSeparator/>
+                            <!-- Hidden until FULL_HISTORY_ON_DEMAND reliably returns payloads on personal accounts. -->
+                            <MenuFlyoutItem x:Uid="ChatList_ResyncConversations" Text="Re-sync conversations"
+                                            Visibility="Collapsed"
+                                            Command="{Binding ResyncConversationsCommand}"
+                                            Style="{StaticResource ModernMenuFlyoutItemStyle}">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE895;" FontFamily="{StaticResource IconFont}" Foreground="White"/>
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutItem x:Uid="ChatList_RefreshNames" Text="Refresh contact names"
+                                            Command="{Binding RefreshContactNamesCommand}"
+                                            Style="{StaticResource ModernMenuFlyoutItemStyle}">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE72C;" FontFamily="{StaticResource IconFont}" Foreground="White"/>
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                        </MenuFlyout>
+                    </Button.Flyout>
+                </Button>
+
+                <Button x:Name="MenuButton" 
+                        Click="MenuButton_Click"
+                        Style="{StaticResource ModernIconButtonStyle}">
+                    <FontIcon Glyph="&#xE712;" FontFamily="{StaticResource IconFont}" FontSize="18"/>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <!-- Search Bar -->
+        <TextBox Grid.Row="1" 
+                 x:Name="SearchBox"
+                 x:Uid="ChatList_SearchBox"
+                 Margin="16,0,16,16"
+                 PlaceholderText="Search or start a new chat" 
+                 Style="{ThemeResource ChatListSearchTextBoxStyle}"
+                 Text="{Binding SearchQuery, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+
+
+        
+        <ListView Grid.Row="2" x:Name="ChatList" 
+                  ItemsSource="{x:Bind ViewModel.VisibleChats}"
+                  ItemTemplate="{StaticResource ChatItemTemplate}"
+                  ItemContainerStyle="{StaticResource WhatsAppChatListItemStyle}"
+                  SelectionMode="Single"
+                  SelectionChanged="ChatList_SelectionChanged"
+                  ContainerContentChanging="ChatList_ContainerContentChanging"
+                  ShowsScrollingPlaceholders="False"
+                  Margin="0,0,0,0">
+        </ListView>
+        
+        <!-- Loading overlay. Text comes from the view model so the wipe/resync phases can say
+             what they are doing; it seeds itself with the same string this used to hardcode. -->
+        <Grid x:Name="ChatLoadingOverlay" Grid.Row="2" Background="{ThemeResource ChatListBackgroundBrush}"
+              Visibility="{x:Bind ViewModel.IsLoadingOverlayVisible, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                <controls:ModernProgressRing IsActive="True" Width="36" Height="36"/>
+                <TextBlock x:Name="ChatLoadingText"
+                           Text="{x:Bind ViewModel.LoadingOverlayText, Mode=OneWay}"
+                           FontSize="14" Foreground="{ThemeResource WhatsAppTextMediumBrush}" Margin="0,16,0,0" HorizontalAlignment="Center" FontFamily="{StaticResource MainFont}"/>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</UserControl>

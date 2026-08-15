@@ -1,0 +1,250 @@
+using System;
+using System.Diagnostics;
+using System.Threading.Tasks;
+using Windows.Storage;
+using Unison.Baileys.Crypto;
+using Newtonsoft.Json;
+
+using Unison.Baileys.Client;
+using Unison.Core.Helpers;
+
+namespace Unison.Uwp.Client
+{
+    /// <summary>
+    /// Persists authentication state to local storage.
+    /// Uses ApplicationData.Current.LocalSettings for UWP.
+    /// </summary>
+    public class AuthStore : IAuthPersistence
+    {
+        private const string AUTH_STATE_KEY = "auth_state";
+        private const string CONTAINER_NAME = "WhatsAppAuth";
+        
+        private readonly ApplicationDataContainer _settings;
+
+        public AuthStore()
+        {
+            _settings = ApplicationData.Current.LocalSettings
+                .CreateContainer(CONTAINER_NAME, ApplicationDataCreateDisposition.Always);
+        }
+
+        /// <summary>
+        /// Stores the auth state to local storage
+        /// </summary>
+        public async Task SaveAsync(AuthState state)
+        {
+            try
+            {
+                if (state == null)
+                {
+                    Debug.WriteLine("[AuthStore] Save skipped: auth state is null");
+                    return;
+                }
+
+                if (state.NoiseKey?.Private == null ||
+                    state.NoiseKey.Public == null ||
+                    state.SignedIdentityKey?.Private == null ||
+                    state.SignedIdentityKey.Public == null ||
+                    state.SignedPreKey?.KeyPair?.Private == null ||
+                    state.SignedPreKey.KeyPair.Public == null ||
+                    state.SignedPreKey.Signature == null)
+                {
+                    Debug.WriteLine("[AuthStore] Save skipped: auth state is incomplete");
+                    return;
+                }
+
+                var dto = new AuthStateDto
+                {
+                    NoiseKeyPrivate = Convert.ToBase64String(state.NoiseKey.Private),
+                    NoiseKeyPublic = Convert.ToBase64String(state.NoiseKey.Public),
+                    SignedIdentityKeyPrivate = Convert.ToBase64String(state.SignedIdentityKey.Private),
+                    SignedIdentityKeyPublic = Convert.ToBase64String(state.SignedIdentityKey.Public),
+                    PairingEphemeralPrivate = state.PairingEphemeralKeyPair?.Private != null ? Convert.ToBase64String(state.PairingEphemeralKeyPair.Private) : null,
+                    PairingEphemeralPublic = state.PairingEphemeralKeyPair?.Public != null ? Convert.ToBase64String(state.PairingEphemeralKeyPair.Public) : null,
+                    SignedPreKeyId = state.SignedPreKey.KeyId,
+                    SignedPreKeyPrivate = Convert.ToBase64String(state.SignedPreKey.KeyPair.Private),
+                    SignedPreKeyPublic = Convert.ToBase64String(state.SignedPreKey.KeyPair.Public),
+                    SignedPreKeySignature = Convert.ToBase64String(state.SignedPreKey.Signature),
+                    RegistrationId = state.RegistrationId,
+                    AdvSecretKey = state.AdvSecretKey,
+                    PairingCode = state.PairingCode,
+                    RoutingInfo = state.RoutingInfo != null ? Convert.ToBase64String(state.RoutingInfo) : null,
+                    NextPreKeyId = state.NextPreKeyId,
+                    MeId = state.Me?.Id,
+                    MeName = state.Me?.Name,
+                    MePhone = ResolveMePhone(state.Me?.Phone, state.Me?.Id),
+                    MeLid = state.Me?.Lid,
+                    MeAvatarUrl = state.Me?.AvatarUrl,
+                    Registered = state.Registered,
+                    MyAppStateKeyId = state.MyAppStateKeyId,
+                    LastAccountSyncTimestamp = state.LastAccountSyncTimestamp,
+                    SenderKeyMemory = state.SenderKeyMemory
+                };
+
+                var json = JsonConvert.SerializeObject(dto);
+                _settings.Values[AUTH_STATE_KEY] = json;
+                
+                Debug.WriteLine("[AuthStore] Saved auth state");
+                await Task.CompletedTask;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[AuthStore] Failed to save: {ex.Message}");
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Loads the auth state from local storage
+        /// </summary>
+        public async Task<AuthState> LoadAsync()
+        {
+            try
+            {
+                if (!_settings.Values.ContainsKey(AUTH_STATE_KEY))
+                {
+                    Debug.WriteLine("[AuthStore] No saved auth state found");
+                    return null;
+                }
+
+                var json = _settings.Values[AUTH_STATE_KEY] as string;
+                if (string.IsNullOrEmpty(json))
+                    return null;
+
+                var dto = JsonConvert.DeserializeObject<AuthStateDto>(json);
+                if (dto == null)
+                    return null;
+
+                var state = new AuthState
+                {
+                    NoiseKey = new KeyPair(
+                        Convert.FromBase64String(dto.NoiseKeyPrivate),
+                        Convert.FromBase64String(dto.NoiseKeyPublic)
+                    ),
+                    SignedIdentityKey = new KeyPair(
+                        Convert.FromBase64String(dto.SignedIdentityKeyPrivate),
+                        Convert.FromBase64String(dto.SignedIdentityKeyPublic)
+                    ),
+                    PairingEphemeralKeyPair = !string.IsNullOrEmpty(dto.PairingEphemeralPrivate) && !string.IsNullOrEmpty(dto.PairingEphemeralPublic)
+                        ? new KeyPair(
+                            Convert.FromBase64String(dto.PairingEphemeralPrivate),
+                            Convert.FromBase64String(dto.PairingEphemeralPublic)
+                        )
+                        : null,
+                    SignedPreKey = new SignedPreKeyData
+                    {
+                        KeyId = dto.SignedPreKeyId,
+                        KeyPair = new KeyPair(
+                            Convert.FromBase64String(dto.SignedPreKeyPrivate),
+                            Convert.FromBase64String(dto.SignedPreKeyPublic)
+                        ),
+                        Signature = Convert.FromBase64String(dto.SignedPreKeySignature)
+                    },
+                    RegistrationId = dto.RegistrationId,
+                    AdvSecretKey = dto.AdvSecretKey,
+                    PairingCode = dto.PairingCode,
+                    RoutingInfo = !string.IsNullOrEmpty(dto.RoutingInfo) 
+                        ? Convert.FromBase64String(dto.RoutingInfo) 
+                        : null,
+                    NextPreKeyId = dto.NextPreKeyId,
+                    Registered = dto.Registered,
+                    MyAppStateKeyId = dto.MyAppStateKeyId,
+                    LastAccountSyncTimestamp = dto.LastAccountSyncTimestamp,
+                    SenderKeyMemory = dto.SenderKeyMemory ?? new System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<string>>()
+                };
+
+                if (!string.IsNullOrEmpty(dto.MeId))
+                {
+                    state.Me = new UserInfo
+                    {
+                        Id = dto.MeId,
+                        Name = dto.MeName,
+                        Phone = ResolveMePhone(dto.MePhone, dto.MeId),
+                        Lid = dto.MeLid,
+                        AvatarUrl = dto.MeAvatarUrl
+                    };
+                }
+
+                Debug.WriteLine($"[AuthStore] Loaded auth state, registered: {state.Registered}");
+                await Task.CompletedTask;
+                return state;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[AuthStore] Failed to load: {ex.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Clears the stored auth state
+        /// </summary>
+        public async Task ClearAsync()
+        {
+            try
+            {
+                if (_settings.Values.ContainsKey(AUTH_STATE_KEY))
+                {
+                    _settings.Values.Remove(AUTH_STATE_KEY);
+                }
+                Debug.WriteLine("[AuthStore] Cleared auth state");
+                await Task.CompletedTask;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[AuthStore] Failed to clear: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Checks if auth state exists
+        /// </summary>
+        public bool HasSavedState()
+        {
+            return _settings.Values.ContainsKey(AUTH_STATE_KEY);
+        }
+
+        /// <summary>
+        /// PN digits for the account. Prefers the stored value; otherwise takes them from the JID.
+        /// </summary>
+        private static string ResolveMePhone(string storedPhone, string meId)
+        {
+            if (!string.IsNullOrWhiteSpace(storedPhone))
+            {
+                return storedPhone.Trim();
+            }
+
+            return JidHelper.TryPhoneFromJid(meId);
+        }
+
+        /// <summary>
+        /// DTO for JSON serialization of auth state
+        /// </summary>
+        private class AuthStateDto
+        {
+            public string NoiseKeyPrivate { get; set; }
+            public string NoiseKeyPublic { get; set; }
+            public string SignedIdentityKeyPrivate { get; set; }
+            public string SignedIdentityKeyPublic { get; set; }
+            public string PairingEphemeralPrivate { get; set; }
+            public string PairingEphemeralPublic { get; set; }
+            public int SignedPreKeyId { get; set; }
+            public string SignedPreKeyPrivate { get; set; }
+            public string SignedPreKeyPublic { get; set; }
+            public string SignedPreKeySignature { get; set; }
+            public int RegistrationId { get; set; }
+            public string AdvSecretKey { get; set; }
+            public string PairingCode { get; set; }
+            public string RoutingInfo { get; set; }
+            public int NextPreKeyId { get; set; }
+            public string MeId { get; set; }
+            public string MeName { get; set; }
+            public string MePhone { get; set; }
+            public string MeLid { get; set; }
+            public string MeAvatarUrl { get; set; }
+            public bool Registered { get; set; }
+            public string MyAppStateKeyId { get; set; }
+            public long LastAccountSyncTimestamp { get; set; }
+            public System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<string>> SenderKeyMemory { get; set; }
+        }
+    }
+}

@@ -1,0 +1,144 @@
+<UserControl
+    x:Class="Unison.Uwp.UI.Controls.AboutControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:helpers="using:Unison.Uwp.UI.Helpers"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    d:DesignHeight="320"
+    d:DesignWidth="300"
+    mc:Ignorable="d">
+
+    <Grid HorizontalAlignment="Stretch">
+        <StackPanel>
+            <StackPanel Margin="2,20,0,0" Orientation="Horizontal">
+                <FontIcon
+                    Margin="0,2,8,0"
+                    FontFamily="{StaticResource IconFont}"
+                    FontSize="18"
+                    FontWeight="Normal"
+                    Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                    Glyph="&#xE946;" />
+                <TextBlock
+                    x:Uid="Settings_About"
+                    FontFamily="{StaticResource MainFontSemibold}"
+                    FontSize="18"
+                    FontWeight="SemiBold"
+                    Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                    Text="About" />
+            </StackPanel>
+
+            <!--
+                Row0: logo (col0) + title/description (col1)
+                Row1+: Version / Branch / Developers span both columns (below logo + Unison).
+            -->
+            <Grid Margin="0,8,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Image
+                    Grid.Row="0"
+                    Grid.Column="0"
+                    Width="100"
+                    Height="100"
+                    Margin="-20,-25,-10,0"
+                    VerticalAlignment="Top"
+                    Source="ms-appx:///Assets/Square150x150Logo.png"
+                    Stretch="Uniform" />
+
+                <StackPanel
+                    Grid.Row="0"
+                    Grid.Column="1"
+                    VerticalAlignment="Top">
+                    <TextBlock
+                        FontSize="16"
+                        FontWeight="SemiBold"
+                        Foreground="{StaticResource UnisonGreenBrightBrush}"
+                        Text="{x:Bind ViewModel.AppTitle, Mode=OneWay}"
+                        TextWrapping="Wrap" />
+                    <TextBlock
+                        Margin="0,2,0,0"
+                        FontSize="12"
+                        Foreground="{ThemeResource WhatsAppTextMediumBrush}"
+                        Text="{x:Bind ViewModel.AppDescription, Mode=OneWay}"
+                        TextWrapping="Wrap" />
+                </StackPanel>
+
+                <StackPanel
+                    Grid.Row="1"
+                    Grid.Column="0"
+                    Grid.ColumnSpan="2"
+                    Margin="0,8,0,0"
+                    Orientation="Horizontal">
+                    <TextBlock
+                        x:Uid="Settings_VersionLabel"
+                        FontSize="14"
+                        FontWeight="SemiBold"
+                        Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                        Text="Version" />
+                    <TextBlock
+                        Margin="5,0,0,0"
+                        FontSize="14"
+                        FontWeight="SemiLight"
+                        Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                        Text="{x:Bind ViewModel.AppVersion, Mode=OneWay}" />
+                </StackPanel>
+
+                <StackPanel
+                    Grid.Row="2"
+                    Grid.Column="0"
+                    Grid.ColumnSpan="2"
+                    Margin="0,2,0,0"
+                    Orientation="Horizontal">
+                    <TextBlock
+                        x:Uid="Settings_BranchLabel"
+                        FontSize="14"
+                        FontWeight="SemiBold"
+                        Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                        Text="Branch" />
+                    <TextBlock
+                        Margin="5,0,0,0"
+                        FontSize="14"
+                        FontWeight="SemiLight"
+                        Foreground="{StaticResource UnisonGreenBrightBrush}"
+                        Text="{x:Bind ViewModel.AppBranch, Mode=OneWay}" />
+                </StackPanel>
+
+                <StackPanel
+                    Grid.Row="3"
+                    Grid.Column="0"
+                    Grid.ColumnSpan="2"
+                    Margin="0,12,0,0">
+                    <TextBlock
+                        x:Uid="Settings_Developers"
+                        Margin="0,0,0,4"
+                        FontSize="14"
+                        FontWeight="Bold"
+                        Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                        Text="Developers" />
+                    <RichTextBlock
+                        FontSize="14"
+                        Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                        TextWrapping="Wrap"
+                        IsTextSelectionEnabled="True"
+                        helpers:RichTextBuilder.Text="{x:Bind ViewModel.DeveloperPrimary, Mode=OneWay}" />
+                    <RichTextBlock
+                        Margin="0,2,0,0"
+                        FontSize="14"
+                        Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                        TextWrapping="Wrap"
+                        IsTextSelectionEnabled="True"
+                        helpers:RichTextBuilder.Text="{x:Bind ViewModel.Contributors, Mode=OneWay}" />
+                </StackPanel>
+            </Grid>
+        </StackPanel>
+    </Grid>
+</UserControl>

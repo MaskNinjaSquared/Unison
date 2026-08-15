@@ -1,0 +1,162 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:selectors="using:Unison.Uwp.UI.TemplateSelectors">
+
+    <!-- Preview chips for chat-list last-message kind (used by ChatListPreviewStrip).
+         Non-voice chips inherit Foreground (list hover/selection white in Unison Light).
+         Voice keeps the blue accent via ChatPreviewKindToBrushConverter. -->
+    <selectors:ChatPreviewKindTemplateSelector x:Key="ChatPreviewKindTemplateSelector">
+        <selectors:ChatPreviewKindTemplateSelector.TextTemplate>
+            <DataTemplate>
+                <Border Width="0" Height="0"/>
+            </DataTemplate>
+        </selectors:ChatPreviewKindTemplateSelector.TextTemplate>
+
+        <selectors:ChatPreviewKindTemplateSelector.ImageTemplate>
+            <DataTemplate>
+                <Grid VerticalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*" MinWidth="0"/>
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Glyph="&#xE91B;"
+                              FontFamily="{StaticResource IconFont}"
+                              FontSize="14"
+                              VerticalAlignment="Center"
+                              Margin="0,0,4,0"/>
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding Converter={StaticResource ChatPreviewKindToLabelConverter}}"
+                               FontSize="16"
+                               VerticalAlignment="Center"
+                               FontFamily="{StaticResource MainFont}"
+                               TextWrapping="NoWrap"
+                               TextTrimming="CharacterEllipsis"
+                               MaxLines="1"/>
+                </Grid>
+            </DataTemplate>
+        </selectors:ChatPreviewKindTemplateSelector.ImageTemplate>
+
+        <selectors:ChatPreviewKindTemplateSelector.VideoTemplate>
+            <DataTemplate>
+                <Grid VerticalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*" MinWidth="0"/>
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Glyph="&#xE979;"
+                              FontFamily="{StaticResource IconFont}"
+                              FontSize="14"
+                              VerticalAlignment="Center"
+                              Margin="0,0,4,0"/>
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding Converter={StaticResource ChatPreviewKindToLabelConverter}}"
+                               FontSize="16"
+                               VerticalAlignment="Center"
+                               FontFamily="{StaticResource MainFont}"
+                               TextWrapping="NoWrap"
+                               TextTrimming="CharacterEllipsis"
+                               MaxLines="1"/>
+                </Grid>
+            </DataTemplate>
+        </selectors:ChatPreviewKindTemplateSelector.VideoTemplate>
+
+        <selectors:ChatPreviewKindTemplateSelector.StickerTemplate>
+            <DataTemplate>
+                <Grid VerticalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*" MinWidth="0"/>
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Glyph="&#xF4AA;"
+                              FontFamily="{StaticResource IconFont}"
+                              FontSize="14"
+                              VerticalAlignment="Center"
+                              Margin="0,0,4,0"/>
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding Converter={StaticResource ChatPreviewKindToLabelConverter}}"
+                               FontSize="16"
+                               VerticalAlignment="Center"
+                               FontFamily="{StaticResource MainFont}"
+                               TextWrapping="NoWrap"
+                               TextTrimming="CharacterEllipsis"
+                               MaxLines="1"/>
+                </Grid>
+            </DataTemplate>
+        </selectors:ChatPreviewKindTemplateSelector.StickerTemplate>
+
+        <selectors:ChatPreviewKindTemplateSelector.VoiceTemplate>
+            <DataTemplate>
+                <Grid VerticalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*" MinWidth="0"/>
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Glyph="&#xEC71;"
+                              FontFamily="{StaticResource IconFont}"
+                              FontSize="14"
+                              Foreground="{Binding Converter={StaticResource ChatPreviewKindToBrushConverter}, ConverterParameter=icon}"
+                              VerticalAlignment="Center"
+                              Margin="0,0,4,0"/>
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding Converter={StaticResource ChatPreviewKindToLabelConverter}}"
+                               FontSize="16"
+                               Foreground="{Binding Converter={StaticResource ChatPreviewKindToBrushConverter}}"
+                               VerticalAlignment="Center"
+                               FontFamily="{StaticResource MainFont}"
+                               TextWrapping="NoWrap"
+                               TextTrimming="CharacterEllipsis"
+                               MaxLines="1"/>
+                </Grid>
+            </DataTemplate>
+        </selectors:ChatPreviewKindTemplateSelector.VoiceTemplate>
+
+        <selectors:ChatPreviewKindTemplateSelector.DocumentTemplate>
+            <DataTemplate>
+                <Grid VerticalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*" MinWidth="0"/>
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Glyph="&#xE8A5;"
+                              FontFamily="{StaticResource IconFont}"
+                              FontSize="14"
+                              VerticalAlignment="Center"
+                              Margin="0,0,4,0"/>
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding Converter={StaticResource ChatPreviewKindToLabelConverter}}"
+                               FontSize="16"
+                               VerticalAlignment="Center"
+                               FontFamily="{StaticResource MainFont}"
+                               TextWrapping="NoWrap"
+                               TextTrimming="CharacterEllipsis"
+                               MaxLines="1"/>
+                </Grid>
+            </DataTemplate>
+        </selectors:ChatPreviewKindTemplateSelector.DocumentTemplate>
+
+        <selectors:ChatPreviewKindTemplateSelector.ReactionTemplate>
+            <DataTemplate>
+                <Grid VerticalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*" MinWidth="0"/>
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Glyph="&#xE76E;"
+                              FontFamily="{StaticResource IconFont}"
+                              FontSize="14"
+                              VerticalAlignment="Center"
+                              Margin="0,0,4,0"/>
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding Converter={StaticResource ChatPreviewKindToLabelConverter}}"
+                               FontSize="16"
+                               VerticalAlignment="Center"
+                               FontFamily="{StaticResource MainFont}"
+                               TextWrapping="NoWrap"
+                               TextTrimming="CharacterEllipsis"
+                               MaxLines="1"/>
+                </Grid>
+            </DataTemplate>
+        </selectors:ChatPreviewKindTemplateSelector.ReactionTemplate>
+    </selectors:ChatPreviewKindTemplateSelector>
+</ResourceDictionary>

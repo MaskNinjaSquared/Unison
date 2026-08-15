@@ -1,0 +1,22 @@
+<UserControl
+    x:Class="Unison.Uwp.UI.Controls.ModernProgressRing"
+    x:Name="Root"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    d:DesignHeight="60"
+    d:DesignWidth="60">
+
+    <!--
+        ProgressRing nativo + IsActive DP via x:Bind (sem ApplyState no code-behind).
+        Visibility colapsa o host quando inativo.
+    -->
+    <Grid Visibility="{x:Bind IsActive, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+        <ProgressRing HorizontalAlignment="Stretch"
+                      VerticalAlignment="Stretch"
+                      IsActive="{x:Bind IsActive, Mode=OneWay}"
+                      Foreground="{x:Bind Foreground, Mode=OneWay}"/>
+    </Grid>
+</UserControl>
