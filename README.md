@@ -21,12 +21,13 @@ The client is still under development. Note: None of the early users who tested 
 
 | Project | Role |
 |---|---|
-| `src/Unison.Uwp` | UWP app, views, DI adapters |
+| `src/Unison.Uwp` | UWP app, views, DI adapters, SocketBridge |
 | `src/Unison.Core` | Contracts, models, ViewModels |
-| `src/Unison.Baileys` | Protocol / crypto |
+| `src/Unison.Socket` | WhatsApp session / protocol (Baileys 7.0.0-rc14) |
+| `src/Unison.Baileys` | Noise, Signal, binary XML, protobuf, crypto |
 | `src/Unison.Background` | Out-of-process socket activity task |
 
-Solution: `Unison.slnx`.
+Solution: `Unison.slnx`. Architecture wiki (English, current): [`docs/wiki/`](docs/wiki/Home.md).
 
 ## Build & deploy
 
