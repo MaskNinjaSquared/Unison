@@ -417,6 +417,39 @@ namespace Unison.Core.Models
         public string ImageFileEncSha256Base64 { get; set; }
         public string ImageMimeType { get; set; }
 
+        private string _thumbnailUri;
+        /// <summary>Low-quality jpegThumbnail from the protocol, cached as a local file.</summary>
+        public string ThumbnailUri
+        {
+            get => _thumbnailUri;
+            set
+            {
+                if (_thumbnailUri == value) return;
+                _thumbnailUri = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasMediaThumbnail));
+            }
+        }
+
+        private string _mediaThumbnailBase64;
+        /// <summary>Embedded jpegThumbnail (base64) when the file cache is not written yet.</summary>
+        public string MediaThumbnailBase64
+        {
+            get => _mediaThumbnailBase64;
+            set
+            {
+                if (_mediaThumbnailBase64 == value) return;
+                _mediaThumbnailBase64 = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasMediaThumbnail));
+            }
+        }
+
+        [JsonIgnore]
+        public bool HasMediaThumbnail =>
+            !string.IsNullOrWhiteSpace(ThumbnailUri) ||
+            !string.IsNullOrWhiteSpace(MediaThumbnailBase64);
+
         private string _videoUri;
         /// <summary>Local cached video file (ms-appdata) after on-demand download.</summary>
         public string VideoUri
@@ -847,6 +880,8 @@ namespace Unison.Core.Models
         }
 
         public string FormattedTime => Timestamp == DateTime.MinValue ? string.Empty : Timestamp.ToString("HH:mm");
+
+        public string FormattedDate => Timestamp == DateTime.MinValue ? string.Empty : Timestamp.ToString("d");
 
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
         {

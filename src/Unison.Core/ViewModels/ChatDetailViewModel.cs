@@ -11,6 +11,7 @@ using Unison.Core.Exceptions;
 using Unison.Core.Factories;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
+using Unison.Core.State;
 
 namespace Unison.Core.ViewModels
 {
@@ -27,6 +28,12 @@ namespace Unison.Core.ViewModels
         /// <summary>Load / live updates / presence for the active JID.</summary>
         private readonly IWhatsAppService _whatsAppService;
 
+        /// <summary>
+        /// The chat list. Message reads still go through the service, because finding a chat's
+        /// messages needs the canonical-JID mapping that the store knows nothing about.
+        /// </summary>
+        private readonly IChatStateStore _chatState;
+
         /// <summary>Send text / image / audio via the message facade.</summary>
         private readonly IMessageService _messageService;
 
@@ -35,6 +42,9 @@ namespace Unison.Core.ViewModels
 
         /// <summary>SQLite local chat metadata (live-tile pin / mute).</summary>
         private readonly IChatStore _chatStore;
+
+        /// <summary>Conversation-level actions the account shares: pinning, marking read.</summary>
+        private readonly IChatService _chatService;
 
         /// <summary>Unitary microphone capture (returns session handles).</summary>
         private readonly IAudioRecordingService _audioRecording;
@@ -89,6 +99,7 @@ namespace Unison.Core.ViewModels
 
         public ChatDetailViewModel(
             IWhatsAppService whatsAppService,
+            IChatStateStore chatState,
             IMessageService messageService,
             IShortcutService shortcutService,
             IChatStore chatStore,
@@ -100,9 +111,12 @@ namespace Unison.Core.ViewModels
             IChatDetailInfoViewModelFactory infoFactory,
             IStringResources strings,
             ISessionLogger sessionLogger = null,
-            IRuntimeDiagnostics diagnostics = null)
+            IRuntimeDiagnostics diagnostics = null,
+            IChatService chatService = null)
         {
+            _chatService = chatService;
             _whatsAppService = whatsAppService;
+            _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _messageService = messageService;
             _shortcutService = shortcutService;
             _chatStore = chatStore;
@@ -125,6 +139,20 @@ namespace Unison.Core.ViewModels
             AttachMediaCommand = new RelayCommand(
                 () => _ = RunSafeAsync(AttachMediaAsync, "attach"),
                 () => CanCompose);
+
+            AttachAudioCommand = new RelayCommand(
+                () => _ = RunSafeAsync(AttachAudioAsync, "attach-audio"),
+                () => CanCompose);
+
+            // The four below are declared, wired and permanently unavailable. Each needs a send
+            // route the app does not have yet - a document upload, a vCard, a location - and
+            // saying so through CanExecute means the flyout item and the tile grey themselves
+            // out from the same binding as the working ones. The day the route exists, only the
+            // predicate changes; no markup moves.
+            AttachCameraCommand = new RelayCommand(() => { }, () => false);
+            AttachFileCommand = new RelayCommand(() => { }, () => false);
+            AttachContactCommand = new RelayCommand(() => { }, () => false);
+            AttachLocationCommand = new RelayCommand(() => { }, () => false);
 
             StartRecordingCommand = new RelayCommand(
                 () => _ = RunSafeAsync(StartRecordingAsync, "record-start"),
@@ -319,7 +347,12 @@ namespace Unison.Core.ViewModels
             set => Set(ref _isLoadingMore, value);
         }
 
-        private bool CanCompose =>
+        /// <summary>
+        /// Whether the composer accepts input at all. Public because the wide-layout clip button
+        /// binds its enabled state to it: with no flyout item available there is nothing worth
+        /// opening, and a flyout of six greyed rows is a worse answer than a greyed button.
+        /// </summary>
+        public bool CanCompose =>
             ActiveChat != null &&
             !_isSending &&
             !_isRecording &&
@@ -330,8 +363,26 @@ namespace Unison.Core.ViewModels
         /// <summary>Sends the current composer text (or pending media) to the active chat.</summary>
         public ICommand SendMessageCommand { get; }
 
-        /// <summary>Opens the file picker and stages an image/video for send.</summary>
+        /// <summary>Opens the picture picker and stages an image for send.</summary>
         public ICommand AttachMediaCommand { get; }
+
+        /// <summary>Opens the music picker and sends the clip as a non-voice audio message.</summary>
+        public ICommand AttachAudioCommand { get; }
+
+        /// <summary>Take a photo. Unavailable: there is no capture surface yet.</summary>
+        public ICommand AttachCameraCommand { get; }
+
+        /// <summary>
+        /// Send an arbitrary document. Unavailable: the socket can build and upload a
+        /// DocumentMessage, but nothing in the app asks it to.
+        /// </summary>
+        public ICommand AttachFileCommand { get; }
+
+        /// <summary>Share a contact card. Unavailable: no vCard send route.</summary>
+        public ICommand AttachContactCommand { get; }
+
+        /// <summary>Share a location. Unavailable: no location send route.</summary>
+        public ICommand AttachLocationCommand { get; }
 
         /// <summary>Starts audio capture for a voice note.</summary>
         public ICommand StartRecordingCommand { get; }
@@ -385,6 +436,36 @@ namespace Unison.Core.ViewModels
         public bool ShowMuteDurationOptions => ActiveChat != null && !ActiveChat.IsMutedLocally;
 
         public bool ShowUnmuteOption => ActiveChat != null && ActiveChat.IsMutedLocally;
+
+        /// <summary>
+        /// Re-reads the local chat row before the overflow menu is built. Mute can be changed from
+        /// the chat list, from a notification, or on another device, and the menu has to offer
+        /// "mute" or "unmute" based on what is true now rather than on what was true when the
+        /// conversation was opened.
+        /// </summary>
+        public void RefreshLocalChatState()
+        {
+            ChatItem chat = ActiveChat;
+            if (chat == null || _chatStore == null)
+            {
+                return;
+            }
+
+            try
+            {
+                _chatStore.ApplyTo(chat);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[ChatDetailViewModel] RefreshLocalChatState failed: " + ex.Message);
+            }
+
+            OnPropertyChanged(nameof(ShowMuteDurationOptions));
+            OnPropertyChanged(nameof(ShowUnmuteOption));
+            OnPropertyChanged(nameof(LiveTilePinMenuLabel));
+            RaiseMuteCommandsCanExecuteChanged();
+        }
 
         // ── Actions ───────────────────────────────────────────────────────────
 
@@ -446,6 +527,38 @@ namespace Unison.Core.ViewModels
             IsChatDetailInfoOpen = false;
             ChatDetailInfo = null;
             previous?.Detach();
+        }
+
+        /// <summary>
+        /// The conversation is now on screen, so everything in it counts as seen: the badge is
+        /// cleared here and on the phone, and whoever wrote the messages is told they were read.
+        /// </summary>
+        /// <remarks>
+        /// Reading is a consequence of opening a chat, not a command the user issues, so it is
+        /// driven from here rather than from a button. It is safe to call on every open - nothing
+        /// goes out on the wire when there was nothing unread.
+        /// </remarks>
+        public async Task MarkChatOpenedAsync(ChatItem chat)
+        {
+            if (chat == null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (_chatService != null)
+                {
+                    await _chatService.MarkReadAsync(chat);
+                    return;
+                }
+
+                await _whatsAppService.ClearUnreadForChatAsync(chat.JID);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[ChatDetailViewModel] MarkChatOpened failed: " + ex.Message);
+            }
         }
 
         public void SyncActiveChat(ChatItem chat)
@@ -676,7 +789,7 @@ namespace Unison.Core.ViewModels
                 if (!string.IsNullOrWhiteSpace(canonical) &&
                     !string.Equals(canonical, chat.JID, StringComparison.OrdinalIgnoreCase))
                 {
-                    var canonicalChat = _whatsAppService.Chats.FirstOrDefault(c =>
+                    var canonicalChat = _chatState.Chats.FirstOrDefault(c =>
                         string.Equals(_whatsAppService.GetCanonicalJid(c.JID), canonical, StringComparison.OrdinalIgnoreCase));
                     if (canonicalChat != null)
                         chat = canonicalChat;
@@ -868,8 +981,10 @@ namespace Unison.Core.ViewModels
 
         private void RaiseComposerCommandsChanged()
         {
+            OnPropertyChanged(nameof(CanCompose));
             RaiseSendMessageCanExecuteChanged();
             (AttachMediaCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (AttachAudioCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (StartRecordingCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (CancelRecordingCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (SendRecordingCommand as RelayCommand)?.RaiseCanExecuteChanged();
@@ -891,7 +1006,7 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
-            _whatsAppService.OnPresenceUpdate += WhatsApp_OnPresenceUpdate;
+            _messageService.PresenceUpdated += MessageService_PresenceUpdated;
             _presenceHandlerAttached = true;
         }
 
@@ -902,11 +1017,11 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
-            _whatsAppService.OnPresenceUpdate -= WhatsApp_OnPresenceUpdate;
+            _messageService.PresenceUpdated -= MessageService_PresenceUpdated;
             _presenceHandlerAttached = false;
         }
 
-        private void WhatsApp_OnPresenceUpdate(object sender, PresenceUpdateEventArgs e)
+        private void MessageService_PresenceUpdated(object sender, PresenceUpdateEventArgs e)
         {
             if (_presenceCts == null || _presenceCts.IsCancellationRequested)
             {
@@ -937,7 +1052,7 @@ namespace Unison.Core.ViewModels
 
                     if (!subscribed && !string.IsNullOrEmpty(subscribeJid) && _whatsAppService.IsConnected)
                     {
-                        await _whatsAppService.PresenceSubscribeAsync(subscribeJid);
+                        await _messageService.SubscribeToPresenceAsync(subscribeJid);
                         subscribed = true;
                     }
 
@@ -1074,99 +1189,40 @@ namespace Unison.Core.ViewModels
             }
         }
 
-        private async Task AttachMediaAsync()
+        private Task AttachMediaAsync() =>
+            AttachAsync(() => _filePicker.PickChatImageAsync(), SendPickedImageAsync, "image");
+
+        private Task AttachAudioAsync() =>
+            AttachAsync(() => _filePicker.PickChatAudioAsync(), SendPickedAudioAsync, "audio");
+
+        /// <summary>
+        /// Picks a file of one kind and sends it, with the guards and the failure reporting that
+        /// every attachment shares.
+        /// </summary>
+        /// <remarks>
+        /// One picker per kind, rather than the single mixed one this used to open. The old picker
+        /// accepted pictures and audio together and then read the extension back off the chosen
+        /// file to decide which it had been handed - a guess it only had to make because the user
+        /// had not been asked. Now the menu item is the answer.
+        /// </remarks>
+        private async Task AttachAsync(
+            Func<Task<PickedChatMedia>> pick,
+            Func<string, PickedChatMedia, Task> send,
+            string kind)
         {
             if (_activeChat == null || _isSending || _isRecording) return;
 
             string targetJid = _activeChat.JID;
             try
             {
-                PickedChatMedia picked = await _filePicker.PickChatAttachmentAsync();
+                PickedChatMedia picked = await pick();
                 if (picked == null || picked.Bytes == null || picked.Bytes.Length == 0)
                 {
-                    LogSend("attach-cancelled");
+                    LogSend("attach-cancelled", "kind=" + kind);
                     return;
                 }
 
-                if (picked.IsAudio)
-                {
-                    IsSending = true;
-                    MessageSent?.Invoke(this, EventArgs.Empty);
-                    LogSend("audio-attach-start", "bytes=" + picked.Bytes.Length);
-                    try
-                    {
-                        await _messageService.SendAudioMessageAsync(
-                            targetJid,
-                            picked.Bytes,
-                            picked.MimeType ?? "audio/mp4",
-                            durationSeconds: 0,
-                            isVoiceMessage: false);
-                        MessageSent?.Invoke(this, EventArgs.Empty);
-                        LogSend("audio-attach-ok");
-                    }
-                    catch (UnisonUserException ex)
-                    {
-                        await PresentUserExceptionAsync(ex, "audio-attach-fail");
-                    }
-                    catch (Exception ex)
-                    {
-                        await PresentUserExceptionAsync(
-                            new AudioSendException("Attach audio failed: " + ex.Message, ex),
-                            "audio-attach-fail");
-                    }
-                    finally
-                    {
-                        IsSending = false;
-                    }
-
-                    return;
-                }
-
-                if (!picked.IsImage)
-                {
-                    await PresentUserExceptionAsync(
-                        new AttachmentSendException("Unsupported attachment type."),
-                        "attach-unsupported");
-                    return;
-                }
-
-                string info = string.Format("{0} ({1} KB)", picked.FileName ?? "image", picked.Bytes.Length / 1024);
-                bool confirmed = await _dialogs.ShowImageSendPreviewAsync(picked.Bytes, info);
-                if (!confirmed || _activeChat == null)
-                {
-                    LogSend("image-attach-cancelled");
-                    return;
-                }
-
-                string caption = string.IsNullOrWhiteSpace(MessageText) ? null : MessageText.Trim();
-                IsSending = true;
-                MessageSent?.Invoke(this, EventArgs.Empty);
-                LogSend("image-attach-start", "bytes=" + picked.Bytes.Length);
-                try
-                {
-                    await _messageService.SendImageAsync(targetJid, picked.Bytes, caption);
-                    if (caption != null)
-                    {
-                        MessageText = string.Empty;
-                    }
-
-                    MessageSent?.Invoke(this, EventArgs.Empty);
-                    LogSend("image-attach-ok");
-                }
-                catch (UnisonUserException ex)
-                {
-                    await PresentUserExceptionAsync(ex, "image-attach-fail");
-                }
-                catch (Exception ex)
-                {
-                    await PresentUserExceptionAsync(
-                        new ImageSendException("Attach image failed: " + ex.Message, ex),
-                        "image-attach-fail");
-                }
-                finally
-                {
-                    IsSending = false;
-                }
+                await send(targetJid, picked);
             }
             catch (UnisonUserException ex)
             {
@@ -1179,6 +1235,87 @@ namespace Unison.Core.ViewModels
                 await PresentUserExceptionAsync(
                     new AttachmentSendException("Attach failed: " + ex.Message, ex),
                     "attach-fail");
+            }
+        }
+
+        private async Task SendPickedAudioAsync(string targetJid, PickedChatMedia picked)
+        {
+            IsSending = true;
+            MessageSent?.Invoke(this, EventArgs.Empty);
+            LogSend("audio-attach-start", "bytes=" + picked.Bytes.Length);
+            try
+            {
+                await _messageService.SendAudioMessageAsync(
+                    targetJid,
+                    picked.Bytes,
+                    picked.MimeType ?? "audio/mp4",
+                    durationSeconds: 0,
+                    isVoiceMessage: false);
+                MessageSent?.Invoke(this, EventArgs.Empty);
+                LogSend("audio-attach-ok");
+            }
+            catch (UnisonUserException ex)
+            {
+                await PresentUserExceptionAsync(ex, "audio-attach-fail");
+            }
+            catch (Exception ex)
+            {
+                await PresentUserExceptionAsync(
+                    new AudioSendException("Attach audio failed: " + ex.Message, ex),
+                    "audio-attach-fail");
+            }
+            finally
+            {
+                IsSending = false;
+            }
+        }
+
+        private async Task SendPickedImageAsync(string targetJid, PickedChatMedia picked)
+        {
+            if (!picked.IsImage)
+            {
+                await PresentUserExceptionAsync(
+                    new AttachmentSendException("Unsupported attachment type."),
+                    "attach-unsupported");
+                return;
+            }
+
+            string info = string.Format("{0} ({1} KB)", picked.FileName ?? "image", picked.Bytes.Length / 1024);
+            bool confirmed = await _dialogs.ShowImageSendPreviewAsync(picked.Bytes, info);
+            if (!confirmed || _activeChat == null)
+            {
+                LogSend("image-attach-cancelled");
+                return;
+            }
+
+            string caption = string.IsNullOrWhiteSpace(MessageText) ? null : MessageText.Trim();
+            IsSending = true;
+            MessageSent?.Invoke(this, EventArgs.Empty);
+            LogSend("image-attach-start", "bytes=" + picked.Bytes.Length);
+            try
+            {
+                await _messageService.SendImageAsync(targetJid, picked.Bytes, caption);
+                if (caption != null)
+                {
+                    MessageText = string.Empty;
+                }
+
+                MessageSent?.Invoke(this, EventArgs.Empty);
+                LogSend("image-attach-ok");
+            }
+            catch (UnisonUserException ex)
+            {
+                await PresentUserExceptionAsync(ex, "image-attach-fail");
+            }
+            catch (Exception ex)
+            {
+                await PresentUserExceptionAsync(
+                    new ImageSendException("Attach image failed: " + ex.Message, ex),
+                    "image-attach-fail");
+            }
+            finally
+            {
+                IsSending = false;
             }
         }
 
@@ -1254,7 +1391,7 @@ namespace Unison.Core.ViewModels
                 await _messageService.SendAudioMessageAsync(
                     targetJid,
                     recording.Bytes,
-                    recording.MimeType ?? "audio/mp4",
+                    recording.MimeType ?? "audio/ogg; codecs=opus",
                     recording.DurationSeconds,
                     recording.IsVoiceNote);
                 MessageSent?.Invoke(this, EventArgs.Empty);

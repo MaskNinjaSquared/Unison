@@ -34,7 +34,7 @@ namespace Unison.Uwp.Services
             string tileId = BuildTileId(chat.JID);
             string displayName = ResolveDisplayName(chat);
             string arguments = BuildLaunchArgument(chat.JID);
-            Uri logo = ResolveLogoUri(chat.AvatarUrl);
+            Uri logo = ResolveLogoUri(chat.GetAvatarUrl(preferHigh: false));
 
             try
             {
@@ -284,7 +284,7 @@ namespace Unison.Uwp.Services
                 chat.UnreadCount,
                 ResolveDisplayName(chat),
                 preview,
-                chat.AvatarUrl);
+                chat.GetAvatarUrl(preferHigh: false));
         }
 
         private static void ApplyBadge(string tileId, int unreadCount)

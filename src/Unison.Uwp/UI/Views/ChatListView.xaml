@@ -158,13 +158,12 @@
                  Margin="16,0,16,16"
                  PlaceholderText="Search or start a new chat" 
                  Style="{ThemeResource ChatListSearchTextBoxStyle}"
-                 Text="{Binding SearchQuery, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                 TextChanged="SearchBox_TextChanged"/>
+                 Text="{Binding SearchQuery, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
 
 
         
         <ListView Grid.Row="2" x:Name="ChatList" 
-                  ItemsSource="{x:Bind VisibleChats}"
+                  ItemsSource="{x:Bind ViewModel.VisibleChats}"
                   ItemTemplate="{StaticResource ChatItemTemplate}"
                   ItemContainerStyle="{StaticResource WhatsAppChatListItemStyle}"
                   SelectionMode="Single"
@@ -174,11 +173,15 @@
                   Margin="0,0,0,0">
         </ListView>
         
-        <!-- Loading overlay -->
-        <Grid x:Name="ChatLoadingOverlay" Grid.Row="2" Background="{ThemeResource ChatListBackgroundBrush}" Visibility="Visible">
+        <!-- Loading overlay. Text comes from the view model so the wipe/resync phases can say
+             what they are doing; it seeds itself with the same string this used to hardcode. -->
+        <Grid x:Name="ChatLoadingOverlay" Grid.Row="2" Background="{ThemeResource ChatListBackgroundBrush}"
+              Visibility="{x:Bind ViewModel.IsLoadingOverlayVisible, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                 <controls:ModernProgressRing IsActive="True" Width="36" Height="36"/>
-                <TextBlock x:Name="ChatLoadingText" x:Uid="ChatList_Loading" Text="Preparing conversations?" FontSize="14" Foreground="{ThemeResource WhatsAppTextMediumBrush}" Margin="0,16,0,0" HorizontalAlignment="Center" FontFamily="{StaticResource MainFont}"/>
+                <TextBlock x:Name="ChatLoadingText"
+                           Text="{x:Bind ViewModel.LoadingOverlayText, Mode=OneWay}"
+                           FontSize="14" Foreground="{ThemeResource WhatsAppTextMediumBrush}" Margin="0,16,0,0" HorizontalAlignment="Center" FontFamily="{StaticResource MainFont}"/>
             </StackPanel>
         </Grid>
     </Grid>

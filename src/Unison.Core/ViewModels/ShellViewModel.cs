@@ -7,6 +7,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
+using Unison.Core.State;
 
 namespace Unison.Core.ViewModels
 {
@@ -26,6 +27,10 @@ namespace Unison.Core.ViewModels
         public const string PaneNarrowDetail = "NarrowDetail";
 
         private readonly IWhatsAppService _whatsAppService;
+
+        /// <summary>The chat list, read from its owner rather than from the service that fills it.</summary>
+        private readonly IChatStateStore _chatState;
+
         private readonly IConnectionService _connectionService;
         private readonly IProfileService _profileService;
         private readonly IDispatcher _dispatcher;
@@ -40,6 +45,7 @@ namespace Unison.Core.ViewModels
 
         private bool _isPaneOpen;
         private string _currentUserName;
+        private string _currentUserPhone;
         private string _currentUserAvatar;
         private string _activeSection = "chats";
         private string _appSurface = SurfaceStartup;
@@ -62,6 +68,7 @@ namespace Unison.Core.ViewModels
 
         public ShellViewModel(
             IWhatsAppService whatsAppService,
+            IChatStateStore chatState,
             IConnectionService connectionService,
             IProfileService profileService,
             IDispatcher dispatcher,
@@ -75,6 +82,7 @@ namespace Unison.Core.ViewModels
             ISessionLogger sessionLogger = null)
         {
             _whatsAppService = whatsAppService;
+            _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _connectionService = connectionService;
             _profileService = profileService;
             _dispatcher = dispatcher;
@@ -172,11 +180,36 @@ namespace Unison.Core.ViewModels
             }
         }
 
-        /// <summary>Name for profile row; localized "Profile" when empty.</summary>
-        public string ProfileDisplayName =>
-            string.IsNullOrWhiteSpace(CurrentUserName)
-                ? _strings.Get("Shell_Profile.Text", "Profile")
-                : CurrentUserName;
+        /// <summary>Push name, or the account phone when the name is still unknown.</summary>
+        public string ProfileDisplayName
+        {
+            get
+            {
+                if (!string.IsNullOrWhiteSpace(CurrentUserName))
+                {
+                    return CurrentUserName;
+                }
+
+                if (!string.IsNullOrWhiteSpace(CurrentUserPhone))
+                {
+                    return CurrentUserPhone;
+                }
+
+                return _strings.Get("Shell_Profile.Text", "Profile");
+            }
+        }
+
+        public string CurrentUserPhone
+        {
+            get => _currentUserPhone;
+            private set
+            {
+                if (Set(ref _currentUserPhone, value))
+                {
+                    RaiseProfileDisplayNameChanged();
+                }
+            }
+        }
 
         public string CurrentUserAvatar
         {
@@ -326,14 +359,18 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
-            _whatsAppService.OnSessionInitialized += WhatsAppService_OnSessionInitialized;
-            _whatsAppService.OnSessionCleared += WhatsAppService_OnSessionCleared;
-            _whatsAppService.OnError += WhatsAppService_OnError;
-            _whatsAppService.OnUserProfileChanged += WhatsAppService_OnUserProfileChanged;
-            _whatsAppService.OnConnectionUpdate += WhatsAppService_OnConnectionUpdate;
             if (_connectionService != null)
             {
+                _connectionService.SessionEstablished += Connection_SessionEstablished;
+                _connectionService.SessionCleared += Connection_SessionCleared;
+                _connectionService.Failed += Connection_Failed;
+                _connectionService.StatusChanged += Connection_StatusChanged;
                 _connectionService.ConnectionEnded += ConnectionService_ConnectionEnded;
+            }
+
+            if (_profileService != null)
+            {
+                _profileService.ProfileChanged += Profile_Changed;
             }
             _eventsHooked = true;
         }
@@ -613,9 +650,18 @@ namespace Unison.Core.ViewModels
 
         public void EnterLoginSurface(bool startPairing = true)
         {
-            ResetAuthenticatedSessionUi();
+            bool alreadyOnLogin = string.Equals(_appSurface, SurfaceLogin, StringComparison.Ordinal);
             _startPairingOnLoginSurface = startPairing;
-            // Always notify so LoginView can restart QR (or defer) even when already on Login.
+
+            // Wipe raises SessionCleared twice (show Login, then start QR). The second must
+            // only flip the pairing flag — remounting Login looks like a double navigation.
+            if (alreadyOnLogin)
+            {
+                RaiseLoginPairingFlagChanged();
+                PairingTrace("EnterLoginSurface already on Login → skip navigate, startPairing=" + startPairing);
+                return;
+            }
+
             if (!Set(ref _appSurface, SurfaceLogin))
             {
                 RaiseAppSurfaceChanged();
@@ -629,13 +675,28 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
+            // Navigate first. Collapsing the chat pane while AppShell is still on screen
+            // is the flash before QR; NavigateAndClear tears the shell down anyway.
             try
             {
                 _navigator.NavigateAndClear(NavigationRoutes.Login);
+                PairingTrace("EnterLoginSurface NavigateAndClear(Login) startPairing=" + startPairing);
             }
             catch (Exception ex)
             {
                 Debug.WriteLine("[ShellViewModel] Navigate Login failed: " + ex.Message);
+            }
+
+            ClearChat();
+            ActiveSection = NavigationRoutes.Chats;
+            IsPaneOpen = false;
+            try
+            {
+                _navigator?.PurgeShellNavigation();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ShellViewModel] PurgeShellNavigation failed: " + ex.Message);
             }
         }
 
@@ -884,11 +945,13 @@ namespace Unison.Core.ViewModels
             if (profile == null)
             {
                 CurrentUserName = null;
+                CurrentUserPhone = null;
                 CurrentUserAvatar = null;
                 return;
             }
 
             CurrentUserName = profile.Name;
+            CurrentUserPhone = profile.Phone;
             CurrentUserAvatar = profile.AvatarUrl;
         }
 
@@ -899,14 +962,18 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
-            _whatsAppService.OnSessionInitialized -= WhatsAppService_OnSessionInitialized;
-            _whatsAppService.OnSessionCleared -= WhatsAppService_OnSessionCleared;
-            _whatsAppService.OnError -= WhatsAppService_OnError;
-            _whatsAppService.OnUserProfileChanged -= WhatsAppService_OnUserProfileChanged;
-            _whatsAppService.OnConnectionUpdate -= WhatsAppService_OnConnectionUpdate;
             if (_connectionService != null)
             {
+                _connectionService.SessionEstablished -= Connection_SessionEstablished;
+                _connectionService.SessionCleared -= Connection_SessionCleared;
+                _connectionService.Failed -= Connection_Failed;
+                _connectionService.StatusChanged -= Connection_StatusChanged;
                 _connectionService.ConnectionEnded -= ConnectionService_ConnectionEnded;
+            }
+
+            if (_profileService != null)
+            {
+                _profileService.ProfileChanged -= Profile_Changed;
             }
             _eventsHooked = false;
         }
@@ -914,7 +981,7 @@ namespace Unison.Core.ViewModels
         private void ConnectionService_ConnectionEnded(object sender, ConnectionEndedEventArgs e)
         {
             // Wipe + toast are owned by IConnectionService (facade).
-            // Shell navigates via OnSessionCleared when auto-unlink clears the session.
+            // Shell navigates via SessionCleared when auto-unlink clears the session.
             if (e == null)
             {
                 return;
@@ -926,28 +993,28 @@ namespace Unison.Core.ViewModels
                 " requiresRelink=" + e.RequiresRelink);
         }
 
-        private void WhatsAppService_OnSessionCleared(object sender, SessionClearedEventArgs e)
+        private void Connection_SessionCleared(object sender, SessionClearedEventArgs e)
         {
-            // Raised on UI via WhatsAppService.RaiseSessionClearedAsync — keep sync so
-            // ClearSessionAsync can show Login before keystore wipe continues.
+            // Raised on the UI thread by the wipe itself — keep this synchronous so Login is on
+            // screen before the keystore wipe continues.
             bool startPairing = e?.StartPairing ?? true;
             EnterLoginSurface(startPairing);
             ApplyProfile(null);
             try { _notificationService.ClearAll(); } catch { }
         }
 
-        private async void WhatsAppService_OnUserProfileChanged(object sender, EventArgs e)
+        private async void Profile_Changed(object sender, EventArgs e)
         {
             await _dispatcher.RunAsync(RefreshUserInfo);
         }
 
-        private async void WhatsAppService_OnSessionInitialized(object sender, EventArgs e)
+        private async void Connection_SessionEstablished(object sender, EventArgs e)
         {
-            PairingTrace("OnSessionInitialized received (surface=" + AppSurface + ")");
+            PairingTrace("SessionEstablished received (surface=" + AppSurface + ")");
             await _dispatcher.RunAsync(() =>
             {
-                PairingTrace("OnSessionInitialized → EnterConnectedSurface");
-                Debug.WriteLine("[ShellViewModel] OnSessionInitialized → AppShell");
+                PairingTrace("SessionEstablished → EnterConnectedSurface");
+                Debug.WriteLine("[ShellViewModel] SessionEstablished → AppShell");
                 EnterConnectedSurface();
                 _whatsAppService.StartDeferredStartupMaintenance();
             });
@@ -955,12 +1022,12 @@ namespace Unison.Core.ViewModels
 
         /// <summary>
         /// Safety net: pairing stage-2 (515 restart) or an offline drain can publish
-        /// connection updates without OnSessionInitialized reaching us first (seen on
+        /// connection updates without SessionEstablished reaching us first (seen on
         /// Mobile — phone shows "synced" while the app is still stuck on the QR page).
         /// Any live-connection status while registered and still on Login/Startup means
         /// we missed the primary signal — leave QR now instead of staying stuck forever.
         /// </summary>
-        private async void WhatsAppService_OnConnectionUpdate(object sender, string status)
+        private async void Connection_StatusChanged(object sender, string status)
         {
             if (string.IsNullOrWhiteSpace(status))
             {
@@ -1009,7 +1076,7 @@ namespace Unison.Core.ViewModels
 
             await _dispatcher.RunAsync(() =>
             {
-                // Re-check after the dispatcher hop — OnSessionInitialized may have won the race.
+                // Re-check after the dispatcher hop — SessionEstablished may have won the race.
                 if (!string.Equals(AppSurface, SurfaceLogin, StringComparison.Ordinal) &&
                     !string.Equals(AppSurface, SurfaceStartup, StringComparison.Ordinal))
                 {
@@ -1036,7 +1103,7 @@ namespace Unison.Core.ViewModels
             });
         }
 
-        private void WhatsAppService_OnError(object sender, Exception ex)
+        private void Connection_Failed(object sender, Exception ex)
         {
             Debug.WriteLine($"[ShellViewModel] Error: {ex?.Message}");
         }
@@ -1075,7 +1142,7 @@ namespace Unison.Core.ViewModels
                 _notificationService.UpdateBadge(_whatsAppService.GetTotalUnreadCount());
                 if (_shortcutService != null)
                 {
-                    await _shortcutService.RefreshPinnedUnreadAsync(_whatsAppService.Chats);
+                    await _shortcutService.RefreshPinnedUnreadAsync(_chatState.Chats);
                 }
                 await _dispatcher.RunAsync(RefreshUserInfo);
 

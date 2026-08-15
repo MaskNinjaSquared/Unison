@@ -21,6 +21,17 @@ namespace Unison.Core.Contracts
         Task<PickedChatMedia> PickChatAttachmentAsync();
 
         /// <summary>
+        /// Chat composer attach, pictures only (optimized JPEG/PNG bytes).
+        /// Returns null if the user cancels.
+        /// </summary>
+        Task<PickedChatMedia> PickChatImageAsync();
+
+        /// <summary>
+        /// Chat composer attach, audio only. Returns null if the user cancels.
+        /// </summary>
+        Task<PickedChatMedia> PickChatAudioAsync();
+
+        /// <summary>
         /// Saves a local cached image (<c>ms-appdata</c> / path) via FileSavePicker.
         /// Returns the destination path, or null if cancelled.
         /// </summary>

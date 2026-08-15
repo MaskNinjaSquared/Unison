@@ -18,10 +18,9 @@ namespace Unison.Core.ViewModels
         private const int MaxDisplayedLogCharacters = 60000;
 
         private readonly IWhatsAppService _whatsAppService;
-        private readonly ISessionLogger _sessionLogger;
+        private readonly IDiagnosticsConsole _console;
         private readonly IDialogService _dialogService;
         private readonly IStringResources _strings;
-        private readonly IRuntimeDiagnostics _runtimeDiagnostics;
 
         private bool _isSessionLoggingEnabled;
         private bool _isVerboseLoggingEnabled;
@@ -29,34 +28,35 @@ namespace Unison.Core.ViewModels
         private string _runtimeHealthText;
         private string _runtimeExportStatusText;
         private string _buildInfoText;
+        private string _socketSliceText;
         private bool _isActive;
         private readonly object _pendingLogLock = new object();
         private readonly StringBuilder _pendingLogLines = new StringBuilder();
+        private readonly StringBuilder _socketSliceLines = new StringBuilder();
 
         public DebugViewModel(
             IWhatsAppService whatsAppService,
-            ISessionLogger sessionLogger,
+            IDiagnosticsConsole console,
             IDialogService dialogService,
-            IStringResources strings,
-            IRuntimeDiagnostics runtimeDiagnostics)
+            IStringResources strings)
         {
             _whatsAppService = whatsAppService;
-            _sessionLogger = sessionLogger;
+            _console = console;
             _dialogService = dialogService;
             _strings = strings;
-            _runtimeDiagnostics = runtimeDiagnostics;
 
-            _isSessionLoggingEnabled = sessionLogger.Enabled;
+            _isSessionLoggingEnabled = console.IsCaptureEnabled;
             _isVerboseLoggingEnabled = whatsAppService.VerboseLogging;
-            _logText = TrimDisplayedLog(sessionLogger.GetLogText());
+            _logText = TrimDisplayedLog(console.GetCapturedLog());
             _runtimeHealthText = _strings.Get("Debug_Collecting.Text", "Collecting runtime state...");
             _runtimeExportStatusText = string.Empty;
             _buildInfoText = "Build: ?";
+            _socketSliceText = string.Empty;
 
-            SaveLogCommand = new RelayCommand(async () => await _sessionLogger.SaveToFileAsync());
+            SaveLogCommand = new RelayCommand(async () => await _console.SaveCapturedLogAsync());
             ClearLogCommand = new RelayCommand(() =>
             {
-                _sessionLogger.Clear();
+                _console.ClearCapturedLog();
                 LogText = string.Empty;
             });
             DeleteSessionCommand = new RelayCommand(async () => await ConfirmAndDeleteSessionAsync());
@@ -64,6 +64,11 @@ namespace Unison.Core.ViewModels
             RefreshRuntimeCommand = new RelayCommand(RefreshRuntimeHealth);
             SaveRuntimeReportCommand = new RelayCommand(async () => await SaveRuntimeReportAsync());
             ClearRuntimeLogCommand = new RelayCommand(async () => await ClearRuntimeLogAsync());
+            RunSocketSliceCommand = new RelayCommand(async () => await RunSocketSliceAsync());
+            StopSocketSliceCommand = new RelayCommand(async () => await StopSocketSliceAsync());
+
+            _console.SocketSliceReported += Console_SocketSliceReported;
+            _console.SocketSliceQrReceived += Console_SocketSliceQrReceived;
         }
 
         /// <summary>Raised when the user taps back on the debug surface.</summary>
@@ -87,8 +92,8 @@ namespace Unison.Core.ViewModels
             }
 
             RefreshFromServices();
-            _sessionLogger.OnLogUpdated -= SessionLogger_OnLogUpdated;
-            _sessionLogger.OnLogUpdated += SessionLogger_OnLogUpdated;
+            _console.LogLineAppended -= Console_LogLineAppended;
+            _console.LogLineAppended += Console_LogLineAppended;
             RefreshRuntimeHealth();
         }
 
@@ -101,7 +106,7 @@ namespace Unison.Core.ViewModels
             }
 
             _isActive = false;
-            _sessionLogger.OnLogUpdated -= SessionLogger_OnLogUpdated;
+            _console.LogLineAppended -= Console_LogLineAppended;
             lock (_pendingLogLock)
             {
                 _pendingLogLines.Clear();
@@ -111,9 +116,9 @@ namespace Unison.Core.ViewModels
         /// <summary>Refresh toggle/log snapshot from services when the pane opens.</summary>
         public void RefreshFromServices()
         {
-            IsSessionLoggingEnabled = _sessionLogger.Enabled;
+            IsSessionLoggingEnabled = _console.IsCaptureEnabled;
             IsVerboseLoggingEnabled = _whatsAppService.VerboseLogging;
-            LogText = TrimDisplayedLog(_sessionLogger.GetLogText());
+            LogText = TrimDisplayedLog(_console.GetCapturedLog());
         }
 
         /// <summary>Drain buffered live log lines onto <see cref="LogText"/> (view timer).</summary>
@@ -141,7 +146,7 @@ namespace Unison.Core.ViewModels
             {
                 if (Set(ref _isSessionLoggingEnabled, value))
                 {
-                    _sessionLogger.Enabled = value;
+                    _console.IsCaptureEnabled = value;
                 }
             }
         }
@@ -209,10 +214,64 @@ namespace Unison.Core.ViewModels
         /// <summary>Clears the runtime diagnostics journal and refreshes the UI.</summary>
         public ICommand ClearRuntimeLogCommand { get; }
 
+        /// <summary>
+        /// Runs the new Unison.Socket stack against the real servers on throwaway credentials.
+        /// Nothing in the app depends on the result; this only proves the rewrite works.
+        /// </summary>
+        public ICommand RunSocketSliceCommand { get; }
+
+        /// <summary>Tears down the probe connection.</summary>
+        public ICommand StopSocketSliceCommand { get; }
+
+        /// <summary>Hides the whole section on builds where the probe was not registered.</summary>
+        public bool IsSocketSliceAvailable => _console.IsSocketSliceAvailable;
+
+        public string SocketSliceText
+        {
+            get => _socketSliceText;
+            private set => Set(ref _socketSliceText, value);
+        }
+
         /// <summary>Alias used by older code-behind paths.</summary>
         public Task WipeSessionAsync() => ConfirmAndDeleteSessionAsync();
 
-        private void SessionLogger_OnLogUpdated(object sender, string line)
+        private async Task RunSocketSliceAsync()
+        {
+            if (_console.IsSocketSliceRunning)
+            {
+                return;
+            }
+
+            _socketSliceLines.Clear();
+            SocketSliceText = string.Empty;
+
+            await _console.RunSocketSliceAsync();
+        }
+
+        private Task StopSocketSliceAsync()
+        {
+            return _console.StopSocketSliceAsync();
+        }
+
+        private void Console_SocketSliceReported(object sender, string line)
+        {
+            _socketSliceLines.AppendLine(line ?? string.Empty);
+            SocketSliceText = _socketSliceLines.ToString();
+        }
+
+        private async void Console_SocketSliceQrReceived(object sender, string qr)
+        {
+            try
+            {
+                await _dialogService.ShowQrFullscreenAsync(qr);
+            }
+            catch (Exception ex)
+            {
+                Console_SocketSliceReported(this, "Could not show QR: " + ex.Message);
+            }
+        }
+
+        private void Console_LogLineAppended(object sender, string line)
         {
             lock (_pendingLogLock)
             {
@@ -230,8 +289,8 @@ namespace Unison.Core.ViewModels
         {
             try
             {
-                RuntimeDiagnosticsSnapshot snapshot = _runtimeDiagnostics.CaptureSnapshot();
-                string recent = _runtimeDiagnostics.GetRecentText();
+                RuntimeDiagnosticsSnapshot snapshot = _console.CaptureRuntimeSnapshot();
+                string recent = _console.GetRecentRuntimeText();
                 RuntimeHealthText = snapshot.ToDisplayText() +
                     Environment.NewLine +
                     "RECENT RUNTIME EVENTS" + Environment.NewLine +
@@ -246,14 +305,14 @@ namespace Unison.Core.ViewModels
         private async Task SaveRuntimeReportAsync()
         {
             RuntimeExportStatusText = _strings.Get("Debug_PreparingReport", "Preparing report…");
-            string result = await _runtimeDiagnostics.ExportReportAsync();
+            string result = await _console.ExportRuntimeReportAsync();
             RuntimeExportStatusText = result;
             RefreshRuntimeHealth();
         }
 
         private async Task ClearRuntimeLogAsync()
         {
-            await _runtimeDiagnostics.ClearAsync();
+            await _console.ClearRuntimeLogAsync();
             RuntimeExportStatusText = _strings.Get("Debug_RuntimeCleared", "Runtime log cleared.");
             RefreshRuntimeHealth();
         }

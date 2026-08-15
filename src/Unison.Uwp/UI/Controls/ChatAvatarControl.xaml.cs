@@ -147,7 +147,11 @@ namespace Unison.Uwp.UI.Controls
             {
                 var whatsApp = App.GetWhatsAppService() as WhatsAppService ?? WhatsAppService.Instance;
                 var chat = whatsApp.Chats
-                    .FirstOrDefault(c => string.Equals(c.AvatarUrl, url, StringComparison.Ordinal));
+                    .FirstOrDefault(c =>
+                        string.Equals(c.AvatarUrl, url, StringComparison.Ordinal) ||
+                        string.Equals(c.AvatarHighUrl, url, StringComparison.Ordinal) ||
+                        string.Equals(c.GetAvatarUrl(false), url, StringComparison.Ordinal) ||
+                        string.Equals(c.GetAvatarUrl(true), url, StringComparison.Ordinal));
                 if (chat != null)
                 {
                     whatsApp.MarkAvatarImageLoadFailed(chat, "ui-brush-failed:" + (e?.ErrorMessage ?? "unknown"));

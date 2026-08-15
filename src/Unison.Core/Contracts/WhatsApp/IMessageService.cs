@@ -12,6 +12,24 @@ namespace Unison.Core.Contracts.WhatsApp
     public interface IMessageService
     {
         /// <summary>
+        /// The message list of a chat changed - the JID is the chat. Sent, received, edited,
+        /// deleted and reacted all arrive the same way, so listeners reload rather than patch.
+        /// </summary>
+        event System.EventHandler<string> ChatMessagesChanged;
+
+        /// <summary>
+        /// Typing / online state for a chat the app subscribed to with
+        /// <see cref="SubscribeToPresenceAsync"/>.
+        /// </summary>
+        event System.EventHandler<PresenceUpdateEventArgs> PresenceUpdated;
+
+        /// <summary>
+        /// Asks the server to start reporting presence for a chat. It only reports for chats
+        /// that asked, and only for a while, so an open conversation renews this.
+        /// </summary>
+        Task SubscribeToPresenceAsync(string jid);
+
+        /// <summary>
         /// Persists people from the payload (UpsertIfChanged), then applies history sync.
         /// </summary>
         Task SyncMessageHistoryAsync(HistorySync sync);

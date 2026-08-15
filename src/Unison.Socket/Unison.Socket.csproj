@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <RootNamespace>Unison.Socket</RootNamespace>
+    <AssemblyName>Unison.Socket</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Unison.Baileys\Unison.Baileys.csproj" />
+  </ItemGroup>
+
+</Project>

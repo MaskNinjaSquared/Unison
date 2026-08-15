@@ -62,22 +62,59 @@ namespace Unison.Uwp.Services
             }
         }
 
-        public async Task<PickedChatMedia> PickChatAttachmentAsync()
+        private static readonly string[] ImageExtensions = { ".jpg", ".jpeg", ".png" };
+
+        private static readonly string[] AudioExtensions = { ".m4a", ".mp3", ".aac", ".wav", ".amr", ".ogg" };
+
+        private static readonly string[] ImageAndAudioExtensions =
+        {
+            ".jpg", ".jpeg", ".png", ".m4a", ".mp3", ".aac", ".wav", ".amr", ".ogg"
+        };
+
+        public Task<PickedChatMedia> PickChatAttachmentAsync() =>
+            PickChatMediaAsync(
+                ImageAndAudioExtensions,
+                PickerLocationId.PicturesLibrary,
+                PickerViewMode.Thumbnail,
+                "PickChatAttachment");
+
+        public Task<PickedChatMedia> PickChatImageAsync() =>
+            PickChatMediaAsync(
+                ImageExtensions,
+                PickerLocationId.PicturesLibrary,
+                PickerViewMode.Thumbnail,
+                "PickChatImage");
+
+        public Task<PickedChatMedia> PickChatAudioAsync() =>
+            PickChatMediaAsync(
+                AudioExtensions,
+                PickerLocationId.MusicLibrary,
+                PickerViewMode.List,
+                "PickChatAudio");
+
+        /// <summary>
+        /// Shows a picker restricted to the given extensions and reads whatever comes back.
+        /// </summary>
+        /// <remarks>
+        /// The filter is the whole point of having three of these. A picker offering pictures and
+        /// audio at once has to be followed by a guess at which one the user meant - and worse, it
+        /// starts in the pictures library whether or not that is where they were going.
+        /// </remarks>
+        private static async Task<PickedChatMedia> PickChatMediaAsync(
+            string[] extensions,
+            PickerLocationId startLocation,
+            PickerViewMode viewMode,
+            string logTag)
         {
             try
             {
                 var picker = new FileOpenPicker();
-                picker.ViewMode = PickerViewMode.Thumbnail;
-                picker.SuggestedStartLocation = PickerLocationId.PicturesLibrary;
-                picker.FileTypeFilter.Add(".jpg");
-                picker.FileTypeFilter.Add(".jpeg");
-                picker.FileTypeFilter.Add(".png");
-                picker.FileTypeFilter.Add(".m4a");
-                picker.FileTypeFilter.Add(".mp3");
-                picker.FileTypeFilter.Add(".aac");
-                picker.FileTypeFilter.Add(".wav");
-                picker.FileTypeFilter.Add(".amr");
-                picker.FileTypeFilter.Add(".ogg");
+                picker.ViewMode = viewMode;
+                picker.SuggestedStartLocation = startLocation;
+                foreach (string extension in extensions)
+                {
+                    picker.FileTypeFilter.Add(extension);
+                }
 
                 StorageFile file = await picker.PickSingleFileAsync();
                 if (file == null)
@@ -85,47 +122,55 @@ namespace Unison.Uwp.Services
                     return null;
                 }
 
-                string extension = (file.FileType ?? string.Empty).ToLowerInvariant();
-                if (IsAudioExtension(extension))
-                {
-                    var properties = await file.GetBasicPropertiesAsync();
-                    if (properties.Size > MaxAudioBytes)
-                    {
-                        throw new InvalidOperationException("O áudio selecionado é maior que 20 MB.");
-                    }
-
-                    byte[] bytes = await ReadStorageFileBytesAsync(file);
-                    return new PickedChatMedia
-                    {
-                        Bytes = bytes,
-                        MimeType = GetAudioMimeType(extension),
-                        FileName = file.Name,
-                        IsAudio = true,
-                        IsImage = false
-                    };
-                }
-
-                var imageProps = await file.GetBasicPropertiesAsync();
-                if (imageProps.Size > MaxImageBytes)
-                {
-                    throw new InvalidOperationException("The selected image is larger than 25 MB.");
-                }
-
-                byte[] optimized = await ReadOptimizedImageAsync(file, 1600);
-                return new PickedChatMedia
-                {
-                    Bytes = optimized,
-                    MimeType = "image/jpeg",
-                    FileName = file.Name,
-                    IsAudio = false,
-                    IsImage = true
-                };
+                return await ReadPickedChatMediaAsync(file);
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine("[FilePickerService] PickChatAttachment: " + ex.Message);
+                System.Diagnostics.Debug.WriteLine("[FilePickerService] " + logTag + ": " + ex.Message);
                 throw;
             }
+        }
+
+        /// <summary>
+        /// Turns a chosen file into bytes ready to send: audio verbatim, pictures re-encoded.
+        /// </summary>
+        private static async Task<PickedChatMedia> ReadPickedChatMediaAsync(StorageFile file)
+        {
+            string extension = (file.FileType ?? string.Empty).ToLowerInvariant();
+            if (IsAudioExtension(extension))
+            {
+                var properties = await file.GetBasicPropertiesAsync();
+                if (properties.Size > MaxAudioBytes)
+                {
+                    throw new InvalidOperationException("O áudio selecionado é maior que 20 MB.");
+                }
+
+                byte[] bytes = await ReadStorageFileBytesAsync(file);
+                return new PickedChatMedia
+                {
+                    Bytes = bytes,
+                    MimeType = GetAudioMimeType(extension),
+                    FileName = file.Name,
+                    IsAudio = true,
+                    IsImage = false
+                };
+            }
+
+            var imageProps = await file.GetBasicPropertiesAsync();
+            if (imageProps.Size > MaxImageBytes)
+            {
+                throw new InvalidOperationException("The selected image is larger than 25 MB.");
+            }
+
+            byte[] optimized = await ReadOptimizedImageAsync(file, 1600);
+            return new PickedChatMedia
+            {
+                Bytes = optimized,
+                MimeType = "image/jpeg",
+                FileName = file.Name,
+                IsAudio = false,
+                IsImage = true
+            };
         }
 
         private static bool IsAudioExtension(string extension)

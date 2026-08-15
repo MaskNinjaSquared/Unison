@@ -9,6 +9,8 @@ namespace Unison.Core.Models
         public string Id { get; set; }
         public string Lid { get; set; }
         public string Name { get; set; }
+        /// <summary>Account phone digits; UI placeholder when <see cref="Name"/> is empty.</summary>
+        public string Phone { get; set; }
         public string AvatarUrl { get; set; }
     }
 }

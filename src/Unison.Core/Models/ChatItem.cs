@@ -118,10 +118,64 @@ namespace Unison.Core.Models
         public bool HasUnread => _unreadCount > 0;
 
         private string _avatarUrl;
+        /// <summary>Preview / low-res file. Display through <see cref="GetAvatarUrl"/>.</summary>
         public string AvatarUrl
         {
             get => _avatarUrl;
             set { _avatarUrl = value; OnPropertyChanged(); }
+        }
+
+        private string _avatarHighUrl;
+        /// <summary>Full-size picture (Baileys type=image), cached as *_high.jpg. Display through <see cref="GetAvatarUrl"/>.</summary>
+        public string AvatarHighUrl
+        {
+            get => _avatarHighUrl;
+            set
+            {
+                if (_avatarHighUrl == value) return;
+                _avatarHighUrl = value;
+                OnPropertyChanged();
+            }
+        }
+
+        /// <summary>
+        /// The URI the UI should show. Each size falls back to the other so a chat with only
+        /// preview still has a photo in the info pane, and a chat with only the high file still
+        /// has one in the list.
+        /// </summary>
+        /// <param name="preferHigh">True for large surfaces (info, header); false for the list.</param>
+        public string GetAvatarUrl(bool preferHigh)
+        {
+            return GetAvatarUrl(_avatarUrl, _avatarHighUrl, preferHigh);
+        }
+
+        /// <summary>
+        /// Overload for compiled list bindings: x:Bind cannot take a bool literal, so the list
+        /// path is preview-first and re-evaluates when either URI property changes.
+        /// </summary>
+        public string GetAvatarUrl(string previewUrl, string highUrl)
+        {
+            return GetAvatarUrl(previewUrl, highUrl, false);
+        }
+
+        public string GetAvatarUrl(string previewUrl, string highUrl, bool preferHigh)
+        {
+            return preferHigh
+                ? (!string.IsNullOrWhiteSpace(highUrl) ? highUrl : previewUrl)
+                : (!string.IsNullOrWhiteSpace(previewUrl) ? previewUrl : highUrl);
+        }
+
+        private int _groupMemberCount;
+        /// <summary>Participant count from group metadata. 0 = not yet known.</summary>
+        public int GroupMemberCount
+        {
+            get => _groupMemberCount;
+            set
+            {
+                if (_groupMemberCount == value) return;
+                _groupMemberCount = value;
+                OnPropertyChanged();
+            }
         }
 
         private DateTime? _avatarFetchedAtUtc;

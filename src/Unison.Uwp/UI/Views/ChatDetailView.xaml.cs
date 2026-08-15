@@ -1,10 +1,11 @@
-﻿using System;
+using System;
 using System.Collections.ObjectModel;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Unison.Core.Contracts;
+using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Factories;
 using Unison.Core.Helpers;
 using Unison.Core.Mappers;
@@ -52,10 +53,19 @@ namespace Unison.Uwp.UI.Views
         private readonly IVoicePlaybackRoutingService _voiceRouting;
 
         /// <summary>
-        /// Concrete client for UWP-only helpers (ClearUnread, SchedulePersist, cast paths).
+        /// Chat state the timeline needs and the view model does not hold: canonical JIDs, older
+        /// pages of history, and which conversation is on screen for the notification suppressor.
+        /// Through the contract rather than the class, so this view survives the client behind it
+        /// being replaced.
         /// </summary>
-        private WhatsAppService WhatsApp =>
-            App.GetWhatsAppService() as WhatsAppService ?? WhatsAppService.Instance;
+        private IWhatsAppService WhatsApp => App.GetWhatsAppService();
+
+        /// <summary>
+        /// Where message-shaped news comes from. The client above is still here for the UWP-only
+        /// helpers, but anything the domain has a word for is asked of the facade.
+        /// </summary>
+        private IMessageService MessagesFacade =>
+            App.Services?.GetService(typeof(IMessageService)) as IMessageService;
 
         public bool HasActiveChat => ActiveChatGrid.Visibility == Visibility.Visible;
 
@@ -86,6 +96,20 @@ namespace Unison.Uwp.UI.Views
 
         /// <summary>Cancels in-flight Storyboard sequences when presence watch restarts.</summary>
         private CancellationTokenSource _presenceAnimationCts;
+
+        /// <summary>Adaptive layout group, watched to lower the attachment bar when it widens.</summary>
+        private VisualStateGroup _layoutStates;
+
+        /// <summary>
+        /// Whether the narrow-layout attachment bar is up. Kept here rather than on the view model
+        /// because it is the position of a menu and nothing else - the wide layout does the same
+        /// job with a flyout that no one outside the markup knows about, and this should cost the
+        /// same. The six commands it invokes are the part that belongs to the view model.
+        /// </summary>
+        private bool _attachMenuOpen;
+
+        /// <summary>The slide in flight, kept so a fast second tap can cut the first one short.</summary>
+        private Storyboard _attachMenuStoryboard;
 
         public ChatDetailView()
         {
@@ -131,20 +155,165 @@ namespace Unison.Uwp.UI.Views
                 _ = ViewModel.InitializeAsync();
             }
 
-            if (!_serviceEventsAttached)
+            var messages = MessagesFacade;
+            if (!_serviceEventsAttached && messages != null)
             {
-                WhatsApp.OnChatMessagesChanged += WhatsAppService_OnChatMessagesChanged;
+                messages.ChatMessagesChanged += MessageService_ChatMessagesChanged;
                 _serviceEventsAttached = true;
             }
 
             ApplyChatDetailInfoPane();
+            HookLayoutStateChanges();
+        }
+
+        /// <summary>
+        /// Watches the adaptive layout so the attachment bar can be lowered when the window grows
+        /// past the point where the wide layout's flyout takes over.
+        /// </summary>
+        /// <remarks>
+        /// Without this, widening the window while the bar is up leaves it there with no way to
+        /// dismiss it: the button that raised it has been swapped for the flyout one, and the
+        /// flyout's own dismissal has nothing to do with the bar. Read off the state group rather
+        /// than re-testing the width here, so the breakpoint stays declared in one place.
+        /// </remarks>
+        private void HookLayoutStateChanges()
+        {
+            if (_layoutStates != null || ChatDetailGrid == null)
+            {
+                return;
+            }
+
+            foreach (var group in VisualStateManager.GetVisualStateGroups(ChatDetailGrid))
+            {
+                if (group.Name != "LayoutStates")
+                {
+                    continue;
+                }
+
+                _layoutStates = group;
+                group.CurrentStateChanged += LayoutStates_CurrentStateChanged;
+                break;
+            }
+        }
+
+        private void LayoutStates_CurrentStateChanged(object sender, VisualStateChangedEventArgs e)
+        {
+            if (e.NewState != null && e.NewState.Name != "Minimal")
+            {
+                SetAttachMenuOpen(false);
+            }
+        }
+
+        private void AttachBarButton_Click(object sender, RoutedEventArgs e) =>
+            SetAttachMenuOpen(!_attachMenuOpen);
+
+        private void AttachMenuScrim_Tapped(object sender, TappedRoutedEventArgs e)
+        {
+            e.Handled = true;
+            SetAttachMenuOpen(false);
+        }
+
+        /// <summary>Choosing an option dismisses the bar, as a flyout item would.</summary>
+        private void AttachTile_Invoked(object sender, RoutedEventArgs e) => SetAttachMenuOpen(false);
+
+        private void AttachMenuCloseButton_Click(object sender, RoutedEventArgs e) =>
+            SetAttachMenuOpen(false);
+
+        /// <summary>
+        /// Raises or lowers the attachment bar. The dimming behind it and the composer trading
+        /// places with it are the AttachMenuStates storyboards in the markup; the slide is here,
+        /// because it is the only part that has to be measured first.
+        /// </summary>
+        /// <remarks>
+        /// Focus is pushed back to the clip on the way up. Without it the caret stays in the
+        /// message box that is no longer on screen, and on a phone that means the soft keyboard
+        /// sitting over the bar the user just opened.
+        /// </remarks>
+        private void SetAttachMenuOpen(bool open)
+        {
+            if (_attachMenuOpen == open || AttachMenuBar == null)
+            {
+                return;
+            }
+
+            _attachMenuOpen = open;
+            VisualStateManager.GoToState(this, open ? "AttachMenuOpen" : "AttachMenuClosed", true);
+
+            if (_attachMenuStoryboard != null)
+            {
+                _attachMenuStoryboard.Stop();
+                _attachMenuStoryboard = null;
+            }
+
+            if (open)
+            {
+                // Shown before it is measured, and measured before it is animated: the distance to
+                // travel is the bar's own height, and a collapsed element does not have one. The
+                // cap goes on in between, for the same reason - the heading and strip it discounts
+                // have no height until the bar is up.
+                AttachMenuBar.Visibility = Visibility.Visible;
+                ApplyAttachTileSize(ActualWidth);
+                AttachMenuBar.UpdateLayout();
+                ApplyAttachMenuHeightCap(ActualHeight);
+                AttachMenuBar.UpdateLayout();
+                AttachBarButton.Focus(FocusState.Programmatic);
+            }
+
+            double distance = AttachMenuBar.ActualHeight;
+            if (distance <= 0)
+            {
+                distance = 320;
+            }
+
+            _attachMenuStoryboard = BuildAttachMenuSlide(open, distance);
+            _attachMenuStoryboard.Begin();
+        }
+
+        /// <summary>
+        /// Builds the slide, in code because the distance is the bar's measured height and only
+        /// exists once the tiles have wrapped into rows at the current window width.
+        /// </summary>
+        private Storyboard BuildAttachMenuSlide(bool open, double distance)
+        {
+            var slide = new DoubleAnimation
+            {
+                From = open ? distance : 0,
+                To = open ? 0 : distance,
+                Duration = new Duration(TimeSpan.FromMilliseconds(220)),
+                EasingFunction = new CubicEase { EasingMode = open ? EasingMode.EaseOut : EasingMode.EaseIn }
+            };
+            Storyboard.SetTarget(slide, AttachMenuBar);
+            Storyboard.SetTargetProperty(slide, "(UIElement.RenderTransform).(TranslateTransform.Y)");
+
+            var storyboard = new Storyboard();
+            storyboard.Children.Add(slide);
+
+            if (!open)
+            {
+                storyboard.Completed += AttachMenuHide_Completed;
+            }
+
+            return storyboard;
+        }
+
+        private void AttachMenuHide_Completed(object sender, object e)
+        {
+            // Guarded: a reopen during the slide out leaves this queued, and letting it run would
+            // collapse the bar that is on its way back up.
+            if (_attachMenuOpen)
+            {
+                return;
+            }
+
+            AttachMenuBar.Visibility = Visibility.Collapsed;
         }
 
         private void ChatDetailView_Unloaded(object sender, RoutedEventArgs e)
         {
-            if (_serviceEventsAttached)
+            var messages = MessagesFacade;
+            if (_serviceEventsAttached && messages != null)
             {
-                WhatsApp.OnChatMessagesChanged -= WhatsAppService_OnChatMessagesChanged;
+                messages.ChatMessagesChanged -= MessageService_ChatMessagesChanged;
                 _serviceEventsAttached = false;
             }
 
@@ -184,6 +353,73 @@ namespace Unison.Uwp.UI.Views
             {
                 ApplyChatDetailInfoPane();
             }
+
+            ApplyAttachTileSize(e.NewSize.Width);
+            ApplyAttachMenuHeightCap(e.NewSize.Height);
+        }
+
+        /// <summary>Largest a tile gets: the size Whatsapp drew them at on Windows Phone 8.</summary>
+        private const double AttachTileMaxSize = 150;
+
+        /// <summary>
+        /// Sizes the attachment tiles so three fit across the window, up to
+        /// <see cref="AttachTileMaxSize"/>.
+        /// </summary>
+        /// <remarks>
+        /// Measured here rather than left to star columns because a column wider than a tile will
+        /// grow gives the surplus to the gap between them. Handing the tiles the width instead
+        /// means the gap stays at their margins and the surplus ends up outside the block, which
+        /// the grid then centres.
+        /// </remarks>
+        private void ApplyAttachTileSize(double barWidth)
+        {
+            if (AttachMenuTilesGrid == null || barWidth <= 0)
+            {
+                return;
+            }
+
+            // Off the top: the scroller's padding, then 10px of margin around each of the three.
+            double usable = barWidth - 10 - (3 * 10);
+            double size = Math.Min(AttachTileMaxSize, usable / 3);
+            if (size <= 0)
+            {
+                return;
+            }
+
+            foreach (UIElement child in AttachMenuTilesGrid.Children)
+            {
+                var tile = child as Unison.Uwp.UI.Controls.AttachTile;
+                if (tile != null)
+                {
+                    tile.Width = size;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Ceiling on how much of the chat the attachment bar may take, past which the tiles
+        /// scroll.
+        /// </summary>
+        /// <remarks>
+        /// Sizing the tiles off the width already keeps them to two rows and around half the
+        /// screen upright, so this never comes into play there. It is for landscape, where the
+        /// window stays wide enough to hand the tiles a size the height cannot afford.
+        /// </remarks>
+        private const double AttachMenuMaxHeightRatio = 0.65;
+
+        private void ApplyAttachMenuHeightCap(double surfaceHeight)
+        {
+            if (AttachMenuTilesScroll == null || surfaceHeight <= 0)
+            {
+                return;
+            }
+
+            // The heading and the chevron strip come off the top of the allowance: they are the
+            // part that must stay on screen for the bar to be usable at all.
+            double chrome = AttachMenuTitle.ActualHeight + AttachMenuCloseStrip.ActualHeight;
+            double available = (surfaceHeight * AttachMenuMaxHeightRatio) - chrome;
+
+            AttachMenuTilesScroll.MaxHeight = available > 0 ? available : 0;
         }
 
         private void ViewModel_PropertyChanged(object sender, PropertyChangedEventArgs e)
@@ -388,6 +624,12 @@ namespace Unison.Uwp.UI.Views
                 return true;
             }
 
+            if (_attachMenuOpen)
+            {
+                SetAttachMenuOpen(false);
+                return true;
+            }
+
             if (ViewModel?.IsChatDetailInfoOpen == true)
             {
                 ViewModel.CloseChatDetailInfo();
@@ -575,19 +817,10 @@ namespace Unison.Uwp.UI.Views
                 return;
             }
 
-            ChatItem chat = ViewModel.ActiveChat;
-            if (chat != null)
-            {
-                try
-                {
-                    App.Services?.GetService<IChatStore>()?.ApplyTo(chat);
-                }
-                catch
-                {
-                }
-            }
-
-            bool muted = chat != null && chat.IsMutedLocally;
+            // Mute can have been changed elsewhere since this chat was opened; the view model
+            // re-reads it so the menu offers the action that actually applies.
+            ViewModel.RefreshLocalChatState();
+            bool muted = ViewModel.ShowUnmuteOption;
             foreach (var item in flyout.Items)
             {
                 var menuItem = item as MenuFlyoutItem;
@@ -598,6 +831,32 @@ namespace Unison.Uwp.UI.Views
                 {
                     subItem.Visibility = muted ? Visibility.Collapsed : Visibility.Visible;
                     subItem.Text = LocalizedStrings.Get("ChatDetail_MuteNotifications.Text", "Mute notifications");
+                    subItem.Foreground = new SolidColorBrush(Windows.UI.Colors.White);
+                    foreach (var child in subItem.Items)
+                    {
+                        var duration = child as MenuFlyoutItem;
+                        if (duration == null)
+                        {
+                            continue;
+                        }
+
+                        string durationTag = duration.Tag as string;
+                        if (string.Equals(durationTag, "mute8h", StringComparison.Ordinal) ||
+                            duration.Command == ViewModel.MuteFor8HoursCommand)
+                        {
+                            duration.Text = LocalizedStrings.Get("ChatDetail_MuteFor8Hours.Text", "8 hours");
+                        }
+                        else if (string.Equals(durationTag, "mute1w", StringComparison.Ordinal) ||
+                                 duration.Command == ViewModel.MuteFor1WeekCommand)
+                        {
+                            duration.Text = LocalizedStrings.Get("ChatDetail_MuteFor1Week.Text", "1 week");
+                        }
+                        else if (string.Equals(durationTag, "muteForever", StringComparison.Ordinal) ||
+                                 duration.Command == ViewModel.MuteForeverCommand)
+                        {
+                            duration.Text = LocalizedStrings.Get("ChatDetail_MuteForever.Text", "Always");
+                        }
+                    }
                 }
                 else if (string.Equals(tag, "unmute", StringComparison.Ordinal) && menuItem != null)
                 {
@@ -642,6 +901,42 @@ namespace Unison.Uwp.UI.Views
             }
 
             OpenImageViewer(vm);
+        }
+
+        internal async void OpenInfoImage(ChatMessageViewModel vm)
+        {
+            if (vm == null)
+            {
+                return;
+            }
+
+            if (vm.NeedsImageDownload)
+            {
+                await vm.DownloadImageAsync();
+            }
+
+            if (vm.HasImage)
+            {
+                OpenImageViewer(vm);
+            }
+        }
+
+        internal async void OpenInfoVideo(ChatMessageViewModel vm)
+        {
+            if (vm == null)
+            {
+                return;
+            }
+
+            if (vm.NeedsVideoDownload)
+            {
+                await vm.DownloadVideoAsync();
+            }
+
+            if (vm.HasLocalVideo)
+            {
+                OpenVideoViewer(vm);
+            }
         }
 
         private void OpenImageViewer(ChatMessageViewModel messageVm)
@@ -869,12 +1164,16 @@ namespace Unison.Uwp.UI.Views
             service.SetActiveChatJid(chat?.JID);
             ViewModel?.SyncActiveChat(chat);
 
-            if (chat != null)
+            // A menu belongs to the conversation it was opened over, so a different one arriving
+            // takes it down with everything else that was on screen.
+            SetAttachMenuOpen(false);
+
+            if (chat != null && ViewModel != null)
             {
-                // PN/LID aliases can temporarily produce more than one row for the same
-                // conversation. Clear all equivalent rows so the green unread indicator
-                // cannot reappear from an alias after opening the chat.
-                await service.ClearUnreadForChatAsync(chat.JID);
+                // Opening a chat is what makes it read, everywhere - the badge here, the badge on
+                // the phone, and the ticks on the sender's screen. The view only reports that it
+                // happened.
+                await ViewModel.MarkChatOpenedAsync(chat);
             }
 
             _hasReachedStart = false;
@@ -1032,7 +1331,7 @@ namespace Unison.Uwp.UI.Views
         /// When the store has no messages but the chat list already shows a preview,
         /// surface that preview as an ephemeral bubble and ask WhatsApp for history.
         /// </summary>
-        private void TryApplyPreviewFallback(ChatItem chat, string requestedJid, bool isGroup, WhatsAppService service)
+        private void TryApplyPreviewFallback(ChatItem chat, string requestedJid, bool isGroup, IWhatsAppService service)
         {
             if (chat == null || service == null)
             {
@@ -1102,6 +1401,7 @@ namespace Unison.Uwp.UI.Views
                 });
             }
             else if (e.PropertyName == nameof(ChatItem.AvatarUrl) ||
+                     e.PropertyName == nameof(ChatItem.AvatarHighUrl) ||
                      e.PropertyName == nameof(ChatItem.Kind) ||
                      e.PropertyName == nameof(ChatItem.IsGroup))
             {
@@ -1125,7 +1425,7 @@ namespace Unison.Uwp.UI.Views
                     && chat.JID.IndexOf("@g.us", StringComparison.OrdinalIgnoreCase) >= 0);
 
             HeaderAvatar.IsGroup = isGroup;
-            HeaderAvatar.AvatarUrl = chat.AvatarUrl;
+            HeaderAvatar.AvatarUrl = chat.GetAvatarUrl(preferHigh: true);
             ApplyHeaderActions(isGroup, visible: true);
         }
 
@@ -1150,7 +1450,7 @@ namespace Unison.Uwp.UI.Views
         /// Groups/direct use resolved labels; Personal uses <see cref="ChatItem.GetNameResolved"/>
         /// (marker via <see cref="IStringResources"/>) with optional Runs + subtitle.
         /// </summary>
-        private void ApplyChatTitle(ChatItem chat, WhatsAppService service)
+        private void ApplyChatTitle(ChatItem chat, IWhatsAppService service)
         {
             if (chat == null || ChatTitleText == null)
             {
@@ -1453,7 +1753,7 @@ namespace Unison.Uwp.UI.Views
             }
         }
 
-        private static string ResolveParticipantContactUri(string participantJid, WhatsAppService service)
+        private static string ResolveParticipantContactUri(string participantJid, IWhatsAppService service)
         {
             if (service == null || string.IsNullOrWhiteSpace(participantJid))
             {
@@ -1470,7 +1770,7 @@ namespace Unison.Uwp.UI.Views
 
                 if (string.Equals(NormalizeJidForMatch(chat.JID), normalized, StringComparison.OrdinalIgnoreCase))
                 {
-                    return chat.AvatarUrl;
+                    return chat.GetAvatarUrl(preferHigh: false);
                 }
             }
 
@@ -1494,7 +1794,7 @@ namespace Unison.Uwp.UI.Views
             return value;
         }
 
-        private static void EnsureGroupSenderName(ChatMessage message, WhatsAppService service)
+        private static void EnsureGroupSenderName(ChatMessage message, IWhatsAppService service)
         {
             if (message == null || message.IsFromMe)
             {
@@ -1549,7 +1849,7 @@ namespace Unison.Uwp.UI.Views
             return string.Equals(left.SenderName ?? string.Empty, right.SenderName ?? string.Empty, StringComparison.OrdinalIgnoreCase);
         }
 
-        private void WhatsAppService_OnChatMessagesChanged(object sender, string updatedJid)
+        private void MessageService_ChatMessagesChanged(object sender, string updatedJid)
         {
             if (_activeChat == null || string.IsNullOrWhiteSpace(updatedJid))
             {
@@ -1950,8 +2250,28 @@ namespace Unison.Uwp.UI.Views
         internal async void OnAudioPlayButtonClick(object sender, RoutedEventArgs e)
         {
             var element = sender as FrameworkElement;
-            var vm = element?.DataContext as ChatMessageViewModel;
-            var message = vm?.Model ?? UnwrapMessage(element?.DataContext);
+            await PlayOrPauseAudioAsync(element?.DataContext as ChatMessageViewModel);
+        }
+
+        internal async void PlayOrPauseAudioFromInfo(ChatMessageViewModel vm)
+        {
+            if (vm == null)
+            {
+                return;
+            }
+
+            if (!vm.HasLocalAudio || vm.ShowAudioDownloadIcon || vm.NeedsAudioDownload)
+            {
+                await vm.DownloadAudioAsync();
+                return;
+            }
+
+            await PlayOrPauseAudioAsync(vm);
+        }
+
+        private async System.Threading.Tasks.Task PlayOrPauseAudioAsync(ChatMessageViewModel vm)
+        {
+            var message = vm?.Model;
             if (message == null || !message.IsAudio || ViewModel == null)
             {
                 return;

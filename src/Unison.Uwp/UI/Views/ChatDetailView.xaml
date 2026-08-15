@@ -17,6 +17,7 @@
             <ResourceDictionary.MergedDictionaries>
                 <templates:MessageTemplates/>
             </ResourceDictionary.MergedDictionaries>
+
         </ResourceDictionary>
     </UserControl.Resources>
 
@@ -34,6 +35,14 @@
                     <VisualState.Setters>
                         <!-- Full-screen detail: no list beside → no left separator -->
                         <Setter Target="ChatDetailGrid.BorderThickness" Value="0"/>
+                        <!--
+                            Which attach button is on screen is the only thing that separates the
+                            two menus: one opens a flyout, the other raises the bar. The bars
+                            themselves are driven purely by the view model, so nothing here and
+                            nothing bound ever competes for the same Visibility.
+                        -->
+                        <Setter Target="AttachFlyoutButton.Visibility" Value="Collapsed"/>
+                        <Setter Target="AttachBarButton.Visibility" Value="Visible"/>
                     </VisualState.Setters>
                 </VisualState>
                 <VisualState x:Name="Extended">
@@ -42,7 +51,54 @@
                     </VisualState.StateTriggers>
                     <VisualState.Setters>
                         <Setter Target="ChatDetailGrid.BorderThickness" Value="1,0,0,0"/>
+                        <Setter Target="AttachFlyoutButton.Visibility" Value="Visible"/>
+                        <Setter Target="AttachBarButton.Visibility" Value="Collapsed"/>
                     </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+
+            <!--
+                Everything that happens around the attachment bar arriving and leaving: the
+                conversation dimming behind it, and the composer trading places with it. Neither
+                state is entered by a trigger - the view raises them - but keeping them here means
+                the timings are editable without touching code.
+                The bar's own slide is not here: how far it travels is its own height, and that
+                changes with how many rows of tiles the window fits, so it is measured and run
+                from the view. Both run for the same 0.22s, which is why the composer only comes
+                back at the end - it would otherwise appear under a bar still on its way down.
+            -->
+            <VisualStateGroup x:Name="AttachMenuStates">
+                <VisualState x:Name="AttachMenuClosed">
+                    <Storyboard>
+                        <DoubleAnimation Storyboard.TargetName="AttachMenuScrim"
+                                         Storyboard.TargetProperty="Opacity"
+                                         To="0"
+                                         Duration="0:0:0.22"/>
+                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="AttachMenuScrim"
+                                                       Storyboard.TargetProperty="Visibility">
+                            <DiscreteObjectKeyFrame KeyTime="0:0:0.22" Value="Collapsed"/>
+                        </ObjectAnimationUsingKeyFrames>
+                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ComposerHost"
+                                                       Storyboard.TargetProperty="Visibility">
+                            <DiscreteObjectKeyFrame KeyTime="0:0:0.22" Value="Visible"/>
+                        </ObjectAnimationUsingKeyFrames>
+                    </Storyboard>
+                </VisualState>
+                <VisualState x:Name="AttachMenuOpen">
+                    <Storyboard>
+                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ComposerHost"
+                                                       Storyboard.TargetProperty="Visibility">
+                            <DiscreteObjectKeyFrame KeyTime="0" Value="Collapsed"/>
+                        </ObjectAnimationUsingKeyFrames>
+                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="AttachMenuScrim"
+                                                       Storyboard.TargetProperty="Visibility">
+                            <DiscreteObjectKeyFrame KeyTime="0" Value="Visible"/>
+                        </ObjectAnimationUsingKeyFrames>
+                        <DoubleAnimation Storyboard.TargetName="AttachMenuScrim"
+                                         Storyboard.TargetProperty="Opacity"
+                                         To="1"
+                                         Duration="0:0:0.22"/>
+                    </Storyboard>
                 </VisualState>
             </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
@@ -158,7 +214,8 @@
                             <Button.Flyout>
                                 <MenuFlyout MenuFlyoutPresenterStyle="{StaticResource ModernMenuFlyoutStyle}"
                                             Opening="ChatMoreFlyout_Opening">
-                                    <MenuFlyoutItem x:Uid="ChatDetail_ShowContact" Text="View contact" IsEnabled="False"
+                                    <MenuFlyoutItem x:Uid="ChatDetail_ShowContact" Text="View contact"
+                                                    Command="{Binding OpenChatDetailInfoCommand}"
                                                     Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
                                     <MenuFlyoutItem x:Uid="ChatDetail_Search" Text="Search" IsEnabled="False"
                                                     Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
@@ -166,7 +223,8 @@
                                                     Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
                                     <MenuFlyoutSubItem Tag="localMuteSub"
                                                        x:Uid="ChatDetail_MuteNotifications"
-                                                       Text="Mute notifications">
+                                                       Text="Mute notifications"
+                                                       Style="{StaticResource ModernMenuFlyoutSubItemStyle}">
                                         <MenuFlyoutSubItem.Icon>
                                             <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE74F;"/>
                                         </MenuFlyoutSubItem.Icon>
@@ -224,7 +282,8 @@
                             <Button.Flyout>
                                 <MenuFlyout MenuFlyoutPresenterStyle="{StaticResource ModernMenuFlyoutStyle}"
                                             Opening="ChatMoreFlyout_Opening">
-                                    <MenuFlyoutItem x:Uid="ChatDetail_GroupInfo" Text="Group info" IsEnabled="False"
+                                    <MenuFlyoutItem x:Uid="ChatDetail_GroupInfo" Text="Group info"
+                                                    Command="{Binding OpenChatDetailInfoCommand}"
                                                     Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
                                     <MenuFlyoutItem x:Uid="ChatDetail_Search" Text="Search" IsEnabled="False"
                                                     Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
@@ -232,7 +291,8 @@
                                                     Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
                                     <MenuFlyoutSubItem Tag="localMuteSub"
                                                        x:Uid="ChatDetail_MuteNotifications"
-                                                       Text="Mute notifications">
+                                                       Text="Mute notifications"
+                                                       Style="{StaticResource ModernMenuFlyoutSubItemStyle}">
                                         <MenuFlyoutSubItem.Icon>
                                             <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE74F;"/>
                                         </MenuFlyoutSubItem.Icon>
@@ -309,14 +369,36 @@
                                 AreTransportControlsEnabled="False"
                                 AutoPlay="False"/>
 
-            <!-- Composer / recording overlay share row 3 (hidden when group announce-lock) -->
+            <!--
+                Dimmer for the narrow-layout attachment bar. Spans every row and outranks the
+                header (which sits at 2) so the whole conversation goes back, WP8-style, leaving
+                only the bar lit - the bar's own row is pushed above it at 4. Tapping anywhere on
+                it lowers the bar, which is the only way out besides choosing something.
+            -->
+            <Border x:Name="AttachMenuScrim"
+                    Grid.RowSpan="4"
+                    Canvas.ZIndex="3"
+                    Background="#99000000"
+                    Opacity="0"
+                    Tapped="AttachMenuScrim_Tapped"
+                    Visibility="Collapsed"/>
+
+            <!-- Composer / recording / attach bars share row 3 (hidden when group announce-lock) -->
             <Grid Grid.Row="3"
+                  Canvas.ZIndex="4"
                   Background="{ThemeResource ChatDetailInputBarBackgroundBrush}"
                   Visibility="{Binding IsGroupLockedForMessages, Converter={StaticResource InvertedBooleanToVisibilityConverter}}">
                 <Border Height="1"
                         VerticalAlignment="Top"
                         Background="{ThemeResource ChatDetailInputBarTopBorderBrush}"
                         IsHitTestVisible="False"/>
+
+                <!--
+                    Wrapper with nothing bound to it, so the code-behind can stand the whole
+                    composer down for the attachment bar without fighting the recording binding
+                    on the two panels inside - which is the whole reason it exists.
+                -->
+                <Grid x:Name="ComposerHost">
 
                 <!-- Normal input bar (hidden while recording) -->
                 <Grid Padding="12"
@@ -328,9 +410,79 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
-                    <Button Style="{StaticResource WhatsAppIconButtonStyle}"
+                    <!-- Wide layout: the six options as a flyout off the clip. -->
+                    <Button x:Name="AttachFlyoutButton"
+                            Style="{StaticResource WhatsAppIconButtonStyle}"
                             Width="40" Height="40"
-                            Command="{Binding AttachMediaCommand}">
+                            Visibility="Collapsed"
+                            IsEnabled="{Binding CanCompose}">
+                        <ToolTipService.ToolTip>
+                            <ToolTip x:Uid="ChatDetail_AttachFlyoutTooltip" Content="Attach"/>
+                        </ToolTipService.ToolTip>
+                        <TextBlock Text="&#xE710;" FontFamily="{StaticResource IconFont}" FontSize="20"/>
+                        <Button.Flyout>
+                            <MenuFlyout MenuFlyoutPresenterStyle="{StaticResource ModernMenuFlyoutStyle}">
+                                <MenuFlyoutItem x:Uid="ChatDetail_AttachCamera"
+                                                Text="Camera"
+                                                Style="{StaticResource ModernMenuFlyoutItemStyle}"
+                                                Command="{Binding AttachCameraCommand}">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xE722;" FontFamily="{StaticResource IconFont}"/>
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                                <MenuFlyoutItem x:Uid="ChatDetail_AttachFile"
+                                                Text="File"
+                                                Style="{StaticResource ModernMenuFlyoutItemStyle}"
+                                                Command="{Binding AttachFileCommand}">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xE8A5;" FontFamily="{StaticResource IconFont}"/>
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                                <MenuFlyoutItem x:Uid="ChatDetail_AttachContact"
+                                                Text="Contact"
+                                                Style="{StaticResource ModernMenuFlyoutItemStyle}"
+                                                Command="{Binding AttachContactCommand}">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xE77B;" FontFamily="{StaticResource IconFont}"/>
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                                <MenuFlyoutItem x:Uid="ChatDetail_AttachMedia"
+                                                Text="Media"
+                                                Style="{StaticResource ModernMenuFlyoutItemStyle}"
+                                                Command="{Binding AttachMediaCommand}">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xEB9F;" FontFamily="{StaticResource IconFont}"/>
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                                <MenuFlyoutItem x:Uid="ChatDetail_AttachAudio"
+                                                Text="Audio"
+                                                Style="{StaticResource ModernMenuFlyoutItemStyle}"
+                                                Command="{Binding AttachAudioCommand}">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xE8D6;" FontFamily="{StaticResource IconFont}"/>
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                                <MenuFlyoutItem x:Uid="ChatDetail_AttachLocation"
+                                                Text="Location"
+                                                Style="{StaticResource ModernMenuFlyoutItemStyle}"
+                                                Command="{Binding AttachLocationCommand}">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xE707;" FontFamily="{StaticResource IconFont}"/>
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                            </MenuFlyout>
+                        </Button.Flyout>
+                    </Button>
+
+                    <!-- Narrow layout: the same six as a bar over the chat. -->
+                    <Button x:Name="AttachBarButton"
+                            Style="{StaticResource WhatsAppIconButtonStyle}"
+                            Width="40" Height="40"
+                            IsEnabled="{Binding CanCompose}"
+                            Click="AttachBarButton_Click">
+                        <ToolTipService.ToolTip>
+                            <ToolTip x:Uid="ChatDetail_AttachBarTooltip" Content="Attach"/>
+                        </ToolTipService.ToolTip>
                         <TextBlock Text="&#xE710;" FontFamily="{StaticResource IconFont}" FontSize="20"/>
                     </Button>
 
@@ -405,6 +557,129 @@
                         <TextBlock Text="&#xE724;" FontFamily="{StaticResource IconFont}" FontSize="20"
                                    Foreground="{ThemeResource ChatDetailAccentBrush}"/>
                     </Button>
+                </Grid>
+
+                </Grid>
+
+                <!--
+                    Attachment bar (narrow layout): a heading, six tiles in place of the composer,
+                    and a strip that holds nothing but the chevron that puts it away. It slides in
+                    and out on the transform below, which is why it is offset off-screen to start.
+                -->
+                <Grid x:Name="AttachMenuBar" Visibility="Collapsed">
+                    <!-- What the bar slides on. Parked off the bottom edge until it is raised. -->
+                    <Grid.RenderTransform>
+                        <TranslateTransform x:Name="AttachMenuTranslate" Y="1000"/>
+                    </Grid.RenderTransform>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="64"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Heading, left edge flush with the first tile. -->
+                    <TextBlock x:Name="AttachMenuTitle"
+                               x:Uid="ChatDetail_AttachTitle"
+                               Text="ATTACH"
+                               Margin="10,14,10,4"
+                               FontFamily="{StaticResource MainFont}"
+                               FontSize="13"
+                               Foreground="{ThemeResource ChatDetailMutedTextBrush}"/>
+
+                    <!--
+                        Three columns, always, with the tiles taking their size from the window
+                        rather than holding a fixed one. On a 480-wide phone that lands on the
+                        150px Whatsapp drew for Windows Phone 8 and the six fit in two rows;
+                        anything narrower shrinks to match instead of spilling into a third row
+                        and eating the conversation.
+                        The scroller is only a floor for landscape, where the height is capped and
+                        two rows of what a 640-wide window would give no longer fit.
+                        Padding here is half the gap the tiles want, their margins supplying the
+                        other half, so the space around the block matches the space between them.
+                    -->
+                    <ScrollViewer x:Name="AttachMenuTilesScroll"
+                                  Grid.Row="1"
+                                  Padding="5,5,5,0"
+                                  HorizontalScrollMode="Disabled"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  VerticalScrollBarVisibility="Auto">
+                        <!--
+                            Columns sized by the tiles rather than the other way round, so the gap
+                            between them is always their 10px of margin and never the slack of a
+                            window wider than three tiles want to be. What is left over goes to the
+                            sides, the block sitting centred in it.
+                        -->
+                        <Grid x:Name="AttachMenuTilesGrid" HorizontalAlignment="Center">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <controls:AttachTile Grid.Row="0" Grid.Column="0"
+                                                 Glyph="ms-appx:///Assets/Attach/inline-picture.png"
+                                                 Label="Camera"
+                                                 LocalizationUid="ChatDetail_AttachCameraTile"
+                                                 Command="{Binding AttachCameraCommand}"
+                                                 Invoked="AttachTile_Invoked"/>
+
+                            <controls:AttachTile Grid.Row="0" Grid.Column="1"
+                                                 Glyph="ms-appx:///Assets/Attach/inline-doc.png"
+                                                 Label="File"
+                                                 LocalizationUid="ChatDetail_AttachFileTile"
+                                                 Command="{Binding AttachFileCommand}"
+                                                 Invoked="AttachTile_Invoked"/>
+
+                            <controls:AttachTile Grid.Row="0" Grid.Column="2"
+                                                 Glyph="ms-appx:///Assets/Attach/inline-contact.png"
+                                                 Label="Contact"
+                                                 LocalizationUid="ChatDetail_AttachContactTile"
+                                                 Command="{Binding AttachContactCommand}"
+                                                 Invoked="AttachTile_Invoked"/>
+
+                            <controls:AttachTile Grid.Row="1" Grid.Column="0"
+                                                 Glyph="ms-appx:///Assets/Attach/inline-video.png"
+                                                 Label="Media"
+                                                 LocalizationUid="ChatDetail_AttachMediaTile"
+                                                 Command="{Binding AttachMediaCommand}"
+                                                 Invoked="AttachTile_Invoked"/>
+
+                            <controls:AttachTile Grid.Row="1" Grid.Column="1"
+                                                 Glyph="ms-appx:///Assets/Attach/inline-audio.png"
+                                                 Label="Audio"
+                                                 LocalizationUid="ChatDetail_AttachAudioTile"
+                                                 Command="{Binding AttachAudioCommand}"
+                                                 Invoked="AttachTile_Invoked"/>
+
+                            <controls:AttachTile Grid.Row="1" Grid.Column="2"
+                                                 Glyph="ms-appx:///Assets/Attach/inline-location.png"
+                                                 Label="Location"
+                                                 LocalizationUid="ChatDetail_AttachLocationTile"
+                                                 Command="{Binding AttachLocationCommand}"
+                                                 Invoked="AttachTile_Invoked"/>
+                        </Grid>
+                    </ScrollViewer>
+
+                    <!--
+                        Empty strip, save for the chevron that sends the bar back down. Same height
+                        and same padding as the composer it stands in for, so the chevron lands
+                        exactly where the clip that raised the bar was - one spot, one round trip.
+                    -->
+                    <Grid x:Name="AttachMenuCloseStrip" Grid.Row="2" Padding="12,0">
+                        <Button x:Name="AttachMenuCloseButton"
+                                Style="{StaticResource WhatsAppIconButtonStyle}"
+                                Width="40" Height="40"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center"
+                                Click="AttachMenuCloseButton_Click">
+                            <TextBlock Text="&#xE70D;" FontFamily="{StaticResource IconFont}" FontSize="16"
+                                       Foreground="{ThemeResource ChatDetailMutedTextBrush}"/>
+                        </Button>
+                    </Grid>
                 </Grid>
             </Grid>
 

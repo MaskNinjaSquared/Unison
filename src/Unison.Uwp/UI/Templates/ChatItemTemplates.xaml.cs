@@ -19,6 +19,26 @@ namespace Unison.Uwp.UI.Templates
             InitializeComponent();
         }
 
+        /// <summary>
+        /// The title for a row when the chat has no name of its own - a group with no subject
+        /// yet, or a contact that is still just a number. Lives here because it is a function
+        /// binding in this template and a static is the only shape x:Bind accepts.
+        /// </summary>
+        public static string GetChatDisplayName(string name, ChatKind kind)
+        {
+            var item = new ChatItem { Name = name, Kind = kind };
+            IStringResources strings = null;
+            try
+            {
+                strings = App.Services?.GetService<IStringResources>();
+            }
+            catch
+            {
+            }
+
+            return item.GetNameResolved(strings);
+        }
+
         private void ChatContextFlyout_Opening(object sender, object e)
         {
             var flyout = sender as MenuFlyout;
@@ -44,7 +64,14 @@ namespace Unison.Uwp.UI.Templates
                 var subItem = item as MenuFlyoutSubItem;
                 string tag = (menuItem?.Tag as string) ?? (subItem?.Tag as string);
 
-                if (string.Equals(tag, "widgetPin", StringComparison.Ordinal) && menuItem != null)
+                if (string.Equals(tag, "chatPin", StringComparison.Ordinal) && menuItem != null)
+                {
+                    menuItem.Text = chat.IsChatPinned
+                        ? LocalizedStrings.Get("ChatList_UnpinChat.Text", "Unpin chat")
+                        : LocalizedStrings.Get("ChatList_PinChat.Text", "Pin chat");
+                    menuItem.Visibility = Visibility.Visible;
+                }
+                else if (string.Equals(tag, "widgetPin", StringComparison.Ordinal) && menuItem != null)
                 {
                     menuItem.Text = chat.IsWidgetPinned
                         ? LocalizedStrings.Get("ChatDetail_UnpinFromStart.Text", "Unpin from Start")
@@ -56,6 +83,24 @@ namespace Unison.Uwp.UI.Templates
                     // Desmutado → submenu "Silenciar notificações"; mutado → esconde.
                     subItem.Visibility = muted ? Visibility.Collapsed : Visibility.Visible;
                     subItem.Text = LocalizedStrings.Get("ChatDetail_MuteNotifications.Text", "Mute notifications");
+                    subItem.Foreground = new SolidColorBrush(Windows.UI.Colors.White);
+                    foreach (var child in subItem.Items)
+                    {
+                        var duration = child as MenuFlyoutItem;
+                        string durationTag = duration?.Tag as string;
+                        if (string.Equals(durationTag, "mute8h", StringComparison.Ordinal))
+                        {
+                            duration.Text = LocalizedStrings.Get("ChatDetail_MuteFor8Hours.Text", "8 hours");
+                        }
+                        else if (string.Equals(durationTag, "mute1w", StringComparison.Ordinal))
+                        {
+                            duration.Text = LocalizedStrings.Get("ChatDetail_MuteFor1Week.Text", "1 week");
+                        }
+                        else if (string.Equals(durationTag, "muteForever", StringComparison.Ordinal))
+                        {
+                            duration.Text = LocalizedStrings.Get("ChatDetail_MuteForever.Text", "Always");
+                        }
+                    }
                 }
                 else if (string.Equals(tag, "unmute", StringComparison.Ordinal) && menuItem != null)
                 {
@@ -63,6 +108,15 @@ namespace Unison.Uwp.UI.Templates
                     menuItem.Visibility = muted ? Visibility.Visible : Visibility.Collapsed;
                     menuItem.Text = LocalizedStrings.Get("ChatDetail_UnmuteNotifications.Text", "Unmute notifications");
                 }
+            }
+        }
+
+        private void PinChat_Click(object sender, RoutedEventArgs e)
+        {
+            var chat = ResolveChat(sender as FrameworkElement);
+            if (chat != null)
+            {
+                FindChatList(sender)?.SetChatPinned(chat, !chat.IsChatPinned);
             }
         }
 

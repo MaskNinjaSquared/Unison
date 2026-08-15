@@ -1,0 +1,86 @@
+<UserControl
+    x:Class="Unison.Uwp.UI.Controls.ChatInfoFileRowControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    d:DesignHeight="56"
+    d:DesignWidth="360"
+    HorizontalAlignment="Stretch">
+
+    <Grid Padding="16,8" HorizontalAlignment="Stretch">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+
+        <Button Grid.Column="0"
+                Command="{Binding DocumentPrimaryCommand}"
+                Background="Transparent"
+                BorderThickness="0"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Stretch"
+                Padding="0"
+                MinHeight="40">
+            <Grid HorizontalAlignment="Stretch">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="&#xE7C3;"
+                           FontFamily="{StaticResource IconFont}"
+                           FontSize="24"
+                           Foreground="White"
+                           VerticalAlignment="Center"
+                           Margin="0,0,10,0"/>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding DocumentDisplayName}"
+                               Foreground="White"
+                               FontSize="14"
+                               FontFamily="{StaticResource MainFont}"
+                               TextWrapping="NoWrap"
+                               TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Text="{Binding FormattedDate}"
+                               Foreground="#E8FFFFFF"
+                               FontSize="12"
+                               FontFamily="{StaticResource MainFont}"
+                               Margin="0,2,0,0"/>
+                </StackPanel>
+            </Grid>
+        </Button>
+
+        <Button Grid.Column="1"
+                Command="{Binding DocumentPrimaryCommand}"
+                Background="Transparent"
+                BorderThickness="0"
+                Width="40" Height="40"
+                Padding="0"
+                ToolTipService.ToolTip="View"
+                VerticalAlignment="Center">
+            <TextBlock Text="&#xE890;"
+                       FontFamily="{StaticResource IconFont}"
+                       FontSize="18"
+                       Foreground="White"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"/>
+        </Button>
+
+        <Button Grid.Column="2"
+                Command="{Binding ExportDocumentCommand}"
+                Background="Transparent"
+                BorderThickness="0"
+                Width="40" Height="40"
+                Padding="0"
+                ToolTipService.ToolTip="Save"
+                VerticalAlignment="Center">
+            <TextBlock Text="&#xE896;"
+                       FontFamily="{StaticResource IconFont}"
+                       FontSize="18"
+                       Foreground="White"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"/>
+        </Button>
+    </Grid>
+</UserControl>

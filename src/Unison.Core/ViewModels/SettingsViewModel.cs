@@ -27,6 +27,10 @@ namespace Unison.Core.ViewModels
         private readonly IStringResources _strings;
         private readonly IDialogService _dialogService;
         private readonly IWhatsAppService _whatsAppService;
+
+        /// <summary>Owns leaving the account: unlink on the server, then wipe locally.</summary>
+        private readonly IConnectionService _connectionService;
+
         private readonly ShellViewModel _shell;
 
         private string _appVersion;
@@ -45,6 +49,7 @@ namespace Unison.Core.ViewModels
             IStringResources strings,
             IDialogService dialogService,
             IWhatsAppService whatsAppService,
+            IConnectionService connectionService,
             ShellViewModel shell)
         {
             _localSettings = localSettings;
@@ -56,6 +61,7 @@ namespace Unison.Core.ViewModels
             _strings = strings;
             _dialogService = dialogService;
             _whatsAppService = whatsAppService;
+            _connectionService = connectionService ?? throw new ArgumentNullException(nameof(connectionService));
             _shell = shell;
 
             _shell.PropertyChanged += OnShellPropertyChanged;
@@ -267,6 +273,7 @@ namespace Unison.Core.ViewModels
         private void OnShellPropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
             if (e.PropertyName == nameof(ShellViewModel.CurrentUserName) ||
+                e.PropertyName == nameof(ShellViewModel.CurrentUserPhone) ||
                 e.PropertyName == nameof(ShellViewModel.ProfileDisplayName) ||
                 e.PropertyName == nameof(ShellViewModel.CurrentUserAvatar))
             {
@@ -328,7 +335,9 @@ namespace Unison.Core.ViewModels
 
                 if (confirmed)
                 {
-                    await _whatsAppService.ClearSessionAsync();
+                    // Through the facade, so the account is told we are leaving before the keys
+                    // that would prove who is leaving are gone.
+                    await _connectionService.LogoutAsync("settings");
                 }
             }
             finally

@@ -407,6 +407,25 @@ namespace Unison.Core.ViewModels
             }
         }
 
+        /// <summary>Ensures the document is in cache, then opens the save picker.</summary>
+        public async Task ExportDocumentAsync()
+        {
+            if (!Model.IsDocument)
+            {
+                return;
+            }
+
+            if (!HasLocalDocument)
+            {
+                await DownloadDocumentAsync(confirmFirst: false);
+            }
+
+            if (HasLocalDocument)
+            {
+                await SaveDocumentAsAsync();
+            }
+        }
+
         public async Task SaveDocumentAsAsync()
         {
             if (!Model.IsDocument || _filePicker == null)
@@ -561,6 +580,7 @@ namespace Unison.Core.ViewModels
             (DownloadDocumentCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (OpenDocumentCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (SaveDocumentAsCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (ExportDocumentCommand as RelayCommand)?.RaiseCanExecuteChanged();
         }
     }
 }

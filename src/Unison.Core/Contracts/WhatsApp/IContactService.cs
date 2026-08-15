@@ -11,6 +11,12 @@ namespace Unison.Core.Contracts.WhatsApp
     public interface IContactService
     {
         /// <summary>
+        /// Names were resolved for one or more chats, so anything showing a bare number can ask
+        /// for its label again.
+        /// </summary>
+        event System.EventHandler DisplayNamesUpdated;
+
+        /// <summary>
         /// Reads the device address book and maps display names onto direct-chat JIDs.
         /// Upserts <see cref="Person"/> name/phone when changed.
         /// Returns jid â†’ display name for the in-memory phone overlay.

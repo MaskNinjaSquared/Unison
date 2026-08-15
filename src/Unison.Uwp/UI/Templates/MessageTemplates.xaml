@@ -327,6 +327,13 @@
                                            Foreground="{ThemeResource ChatDetailSentMetaBrush}"
                                            VerticalAlignment="Center"
                                            Visibility="{x:Bind IsVideo, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                <!-- Same glyph the chat list uses for a sticker preview. -->
+                                <TextBlock Text="&#xF4AA;"
+                                           FontFamily="{StaticResource IconFont}"
+                                           FontSize="12"
+                                           Foreground="{ThemeResource ChatDetailSentMetaBrush}"
+                                           VerticalAlignment="Center"
+                                           Visibility="{x:Bind IsSticker, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                                 <TextBlock Text="{x:Bind VideoFooterDurationText, Mode=OneWay}"
                                            FontSize="11"
                                            FontFamily="{StaticResource MainFont}"
@@ -726,6 +733,13 @@
                                            Foreground="{ThemeResource ChatDetailReceivedMetaBrush}"
                                            VerticalAlignment="Center"
                                            Visibility="{x:Bind IsVideo, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                <!-- Same glyph the chat list uses for a sticker preview. -->
+                                <TextBlock Text="&#xF4AA;"
+                                           FontFamily="{StaticResource IconFont}"
+                                           FontSize="12"
+                                           Foreground="{ThemeResource ChatDetailReceivedMetaBrush}"
+                                           VerticalAlignment="Center"
+                                           Visibility="{x:Bind IsSticker, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                                 <TextBlock Text="{x:Bind VideoFooterDurationText, Mode=OneWay}"
                                            FontSize="11"
                                            FontFamily="{StaticResource MainFont}"

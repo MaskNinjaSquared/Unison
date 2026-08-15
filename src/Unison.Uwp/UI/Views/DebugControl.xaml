@@ -153,6 +153,43 @@
                     </StackPanel>
                 </Border>
 
+                <StackPanel Visibility="{Binding IsSocketSliceAvailable, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <controls:SettingsSectionHeader Glyph="&#xE968;"
+                                                    Title="Socket Rewrite (experimental)"
+                                                    LocalizationUid="Debug_SocketSlice"/>
+
+                    <Border Background="{ThemeResource SettingBoxBackgroundBrush}"
+                            BorderBrush="{ThemeResource SettingBoxBorderBrush}" BorderThickness="1"
+                            CornerRadius="5" Margin="5" HorizontalAlignment="Stretch">
+                        <StackPanel>
+                            <TextBlock x:Uid="Debug_SocketSliceDesc"
+                                       Text="Connects with the new Unison.Socket stack using throwaway credentials, so your signed-in session is never touched. Scan the QR to validate pairing."
+                                       Margin="12,12,12,0"
+                                       FontSize="12" TextWrapping="Wrap"
+                                       Foreground="{ThemeResource WhatsAppTextMediumBrush}"
+                                       Opacity="0.9"/>
+
+                            <StackPanel Orientation="Horizontal" Margin="12,12,12,0">
+                                <Button x:Uid="Debug_SocketSliceRun" Content="Run Slice"
+                                        Command="{Binding RunSocketSliceCommand}" Margin="0,0,8,0"/>
+                                <Button x:Uid="Debug_SocketSliceStop" Content="Stop"
+                                        Command="{Binding StopSocketSliceCommand}"/>
+                            </StackPanel>
+
+                            <Border Background="{ThemeResource SettingBoxInsetBackgroundBrush}"
+                                    BorderBrush="{ThemeResource SettingBoxInsetBorderBrush}" BorderThickness="1"
+                                    CornerRadius="4" Margin="12,12,12,12" Padding="12">
+                                <ScrollViewer Height="260">
+                                    <TextBlock Text="{Binding SocketSliceText}"
+                                               FontSize="12" FontFamily="Consolas" TextWrapping="Wrap"
+                                               IsTextSelectionEnabled="True"
+                                               Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
+                                </ScrollViewer>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
                 <controls:SettingsSectionHeader Glyph="&#xE90F;"
                                                 Title="Actions"
                                                 LocalizationUid="Debug_Actions"/>

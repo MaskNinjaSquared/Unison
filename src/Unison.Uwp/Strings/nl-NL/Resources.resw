@@ -227,27 +227,6 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   <data name="ChatList_RefreshNames.Text" xml:space="preserve">
     <value>Ververs contacten</value>
   </data>
-  <data name="ChatList_ResyncConversations.Text" xml:space="preserve">
-    <value>Gesprekken opnieuw synchroniseren</value>
-  </data>
-  <data name="ChatList_ResyncConversationsTitle" xml:space="preserve">
-    <value>Gesprekken opnieuw synchroniseren?</value>
-  </data>
-  <data name="ChatList_ResyncConversationsBody" xml:space="preserve">
-    <value>Dit verwijdert alle lokale chats en berichten en downloadt de geschiedenis opnieuw. Je WhatsApp-koppeling blijft actief.</value>
-  </data>
-  <data name="ChatList_ResyncConversationsConfirm" xml:space="preserve">
-    <value>Opnieuw synchroniseren</value>
-  </data>
-  <data name="ChatList_ResyncConversationsCancel" xml:space="preserve">
-    <value>Annuleren</value>
-  </data>
-  <data name="ChatList_ResyncingConversations" xml:space="preserve">
-    <value>Gesprekken opnieuw synchroniseren...</value>
-  </data>
-  <data name="ChatList_ResyncCleaningHistory" xml:space="preserve">
-    <value>Geschiedenis wissen...</value>
-  </data>
   <data name="ChatList_SearchBox.PlaceholderText" xml:space="preserve">
     <value>Zoek of start een nieuwe chat</value>
   </data>
@@ -305,11 +284,53 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   <data name="ChatDetail_Empty.Text" xml:space="preserve">
     <value>Selecteer een chat om te beginnen met chatten</value>
   </data>
-  <data name="ChatDetail_GroupOnlyAdminsCanSend.Text" xml:space="preserve">
-    <value>Alleen admins kunnen berichten sturen</value>
-  </data>
   <data name="ChatDetail_MessageInput.PlaceholderText" xml:space="preserve">
     <value>Type een bericht</value>
+  </data>
+  <data name="ChatDetail_AttachCamera.Text" xml:space="preserve">
+    <value>Camera</value>
+  </data>
+  <data name="ChatDetail_AttachFile.Text" xml:space="preserve">
+    <value>Bestand</value>
+  </data>
+  <data name="ChatDetail_AttachContact.Text" xml:space="preserve">
+    <value>Contact</value>
+  </data>
+  <data name="ChatDetail_AttachMedia.Text" xml:space="preserve">
+    <value>Media</value>
+  </data>
+  <data name="ChatDetail_AttachAudio.Text" xml:space="preserve">
+    <value>Audio</value>
+  </data>
+  <data name="ChatDetail_AttachLocation.Text" xml:space="preserve">
+    <value>Locatie</value>
+  </data>
+  <data name="ChatDetail_AttachTitle.Text" xml:space="preserve">
+    <value>BIJVOEGEN</value>
+  </data>
+  <data name="ChatDetail_AttachFlyoutTooltip.Content" xml:space="preserve">
+    <value>Bijvoegen</value>
+  </data>
+  <data name="ChatDetail_AttachBarTooltip.Content" xml:space="preserve">
+    <value>Bijvoegen</value>
+  </data>
+  <data name="ChatDetail_AttachCameraTile.Text" xml:space="preserve">
+    <value>Camera</value>
+  </data>
+  <data name="ChatDetail_AttachFileTile.Text" xml:space="preserve">
+    <value>Bestand</value>
+  </data>
+  <data name="ChatDetail_AttachContactTile.Text" xml:space="preserve">
+    <value>Contact</value>
+  </data>
+  <data name="ChatDetail_AttachMediaTile.Text" xml:space="preserve">
+    <value>Media</value>
+  </data>
+  <data name="ChatDetail_AttachAudioTile.Text" xml:space="preserve">
+    <value>Audio</value>
+  </data>
+  <data name="ChatDetail_AttachLocationTile.Text" xml:space="preserve">
+    <value>Locatie</value>
   </data>
   <data name="ChatDetail_Pinned.Text" xml:space="preserve">
     <value>Vastgezet bericht</value>
@@ -394,12 +415,6 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   </data>
   <data name="ChatDetail_ImageDownloadFailed" xml:space="preserve">
     <value>Deze afbeelding kon niet worden gedownload.</value>
-  </data>
-  <data name="ChatDetail_VideoDownloadFailed" xml:space="preserve">
-    <value>Deze video kon niet worden gedownload.</value>
-  </data>
-  <data name="ChatDetail_Video" xml:space="preserve">
-    <value>Video</value>
   </data>
   <data name="NewChatDialog.Title" xml:space="preserve">
     <value>Nieuwe chat</value>
@@ -635,9 +650,6 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   <data name="Settings_ShellRestartClose" xml:space="preserve">
     <value>OK</value>
   </data>
-  <data name="Settings_ReopenAppTitle" xml:space="preserve">
-    <value>Unison opnieuw openen?</value>
-  </data>
   <data name="Settings_ShellAppliedTitle" xml:space="preserve">
     <value>Thema applied</value>
   </data>
@@ -651,13 +663,10 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
     <value>Welkom bij Unison</value>
   </data>
   <data name="Start_Description.Text" xml:space="preserve">
-    <value>Een simpele, betrouwbare manier om WhatsApp te gebruiken op Windows.</value>
+    <value>Een simpele, betrouwbare en privé manier om WhatsApp te gebruiken op je computer</value>
   </data>
   <data name="Start_GetStarted.Content" xml:space="preserve">
     <value>Beginnen</value>
-  </data>
-  <data name="Start_Language.Text" xml:space="preserve">
-    <value>Taal:</value>
   </data>
   <data name="Settings_About.Text" xml:space="preserve">
     <value>Over</value>
@@ -707,179 +716,125 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   <data name="Toast_AppName" xml:space="preserve">
     <value>Unison</value>
   </data>
-
-  <data name="Settings_Language.Header" xml:space="preserve">
-    <value>Taal</value>
+  <data name="ChatList_PinChat.Text" xml:space="preserve">
+    <value>Chat vastmaken</value>
   </data>
-  <data name="Settings_Language.Text" xml:space="preserve">
-    <value>Kies de app-taal. De app herstart om dit toe te passen.</value>
+  <data name="ChatList_UnpinChat.Text" xml:space="preserve">
+    <value>Chat losmaken</value>
   </data>
-  <data name="Settings_LanguageRestartTitle" xml:space="preserve">
-    <value>Taal bijgewerkt</value>
+  <data name="ChatDetailInfo_PinChatAppBarLabel" xml:space="preserve">
+    <value>Chat
+vastmaken</value>
   </data>
-  <data name="Settings_LanguageRestartBody" xml:space="preserve">
-    <value>Unison wordt opnieuw gestart om de nieuwe taal toe te passen.</value>
-  </data>
-  <data name="Settings_LanguageRestartClose" xml:space="preserve">
-    <value>OK</value>
-  </data>
-  <data name="Settings_Advanced.Text" xml:space="preserve">
-    <value>Geavanceerde instellingen</value>
-  </data>
-
-  <data name="Settings_LanguageSystem" xml:space="preserve">
-    <value>Systeem</value>
-  </data>
-  <data name="Settings_Disconnect.Text" xml:space="preserve">
-    <value>Verbinding verbreken</value>
-  </data>
-  <data name="Settings_DisconnectTitle" xml:space="preserve">
-    <value>Verbinding verbreken?</value>
-  </data>
-  <data name="Settings_DisconnectBody" xml:space="preserve">
-    <value>Als je de verbinding verbreekt, ga je naar het koppelingsscherm en worden alle gegevens en chats gewist.</value>
-  </data>
-  <data name="Settings_DisconnectConfirm" xml:space="preserve">
-    <value>Verbreken</value>
-  </data>
-  <data name="Settings_DisconnectCancel" xml:space="preserve">
-    <value>Annuleren</value>
-  </data>
-
-  <data name="ChatDetail_ShowContact.Text" xml:space="preserve">
-    <value>View contact</value>
-  </data>
-  <data name="ChatDetail_Search.Text" xml:space="preserve">
-    <value>Search</value>
-  </data>
-  <data name="ChatDetail_MediaLinksDocs.Text" xml:space="preserve">
-    <value>Media, links, and docs</value>
-  </data>
-  <data name="ChatDetail_MuteNotifications.Text" xml:space="preserve">
-    <value>Mute notifications</value>
-  </data>
-  <data name="ChatDetail_ExportChat.Text" xml:space="preserve">
-    <value>Export chat</value>
-  </data>
-  <data name="ChatDetailInfo_Profile" xml:space="preserve">
-    <value>Profile</value>
-  </data>
-  <data name="ChatDetailInfo_GroupInfo" xml:space="preserve">
-    <value>Group info</value>
+  <data name="ChatDetailInfo_UnpinChatAppBarLabel" xml:space="preserve">
+    <value>Chat
+losmaken</value>
   </data>
   <data name="ChatDetailInfo_Files" xml:space="preserve">
-    <value>Files</value>
+    <value>Bestanden</value>
   </data>
-  <data name="ChatDetailInfo_Calls" xml:space="preserve">
-    <value>Calls</value>
+  <data name="ChatDetailInfo_Media" xml:space="preserve">
+    <value>Media</value>
   </data>
-  <data name="ChatDetailInfo_Name" xml:space="preserve">
-    <value>Name</value>
+  <data name="ChatDetail_Search.Text" xml:space="preserve">
+    <value>Zoeken</value>
   </data>
-  <data name="ChatDetailInfo_GroupName" xml:space="preserve">
-    <value>Group name</value>
+  <data name="ChatDetail_ExportChat.Text" xml:space="preserve">
+    <value>Chat exporteren</value>
   </data>
   <data name="ChatDetailInfo_Phone" xml:space="preserve">
-    <value>Phone</value>
+    <value>Telefoon</value>
   </data>
-  <data name="ChatDetailInfo_Status" xml:space="preserve">
-    <value>Status</value>
-  </data>
-  <data name="ChatDetailInfo_Description" xml:space="preserve">
-    <value>Description</value>
-  </data>
-  <data name="ChatDetailInfo_Notifications" xml:space="preserve">
-    <value>Notifications</value>
-  </data>
-  <data name="ChatDetailInfo_NotificationsOn" xml:space="preserve">
-    <value>On</value>
-  </data>
-  <data name="ChatDetailInfo_NotificationsOff" xml:space="preserve">
-    <value>Off</value>
-  </data>
-  <data name="ChatDetail_PinToStart.Text" xml:space="preserve">
-    <value>Pin to Start</value>
-  </data>
-  <data name="ChatDetail_GroupInfo.Text" xml:space="preserve">
-    <value>Group info</value>
+  <data name="ChatDetailInfo_CallsEmpty" xml:space="preserve">
+    <value>Oproepen die je plaatst en ontvangt verschijnen hier.</value>
   </data>
   <data name="ChatDetail_GroupMedia.Text" xml:space="preserve">
-    <value>Group media</value>
+    <value>Groepsmedia</value>
   </data>
-  <data name="ChatDetail_MuteFor8Hours.Text" xml:space="preserve">
-    <value>8 uur</value>
+  <data name="ChatDetailInfo_MediaEmpty" xml:space="preserve">
+    <value>Foto's, video's en audio verschijnen hier.</value>
+  </data>
+  <data name="ChatDetail_MuteNotifications.Text" xml:space="preserve">
+    <value>Meldingen dempen</value>
+  </data>
+  <data name="ChatDetailInfo_MembersEmpty" xml:space="preserve">
+    <value>Groepsleden verschijnen hier.</value>
+  </data>
+  <data name="ChatDetailInfo_UnpinAppBarLabel" xml:space="preserve">
+    <value>Losmaken van
+Start</value>
+  </data>
+  <data name="ChatDetailInfo_Notifications" xml:space="preserve">
+    <value>Meldingen</value>
+  </data>
+  <data name="ChatDetailInfo_GroupInfo" xml:space="preserve">
+    <value>Groepsinfo</value>
+  </data>
+  <data name="ChatDetail_PinToStart.Text" xml:space="preserve">
+    <value>Vastmaken aan Start</value>
+  </data>
+  <data name="ChatDetail_UnmuteNotifications.Text" xml:space="preserve">
+    <value>Meldingen aanzetten</value>
   </data>
   <data name="ChatDetail_MuteFor1Week.Text" xml:space="preserve">
     <value>1 week</value>
   </data>
-  <data name="ChatDetail_UnpinFromStart.Text" xml:space="preserve">
-    <value>Losmaken van Start</value>
+  <data name="ChatDetailInfo_Description" xml:space="preserve">
+    <value>Beschrijving</value>
+  </data>
+  <data name="ChatDetailInfo_MemberCountSingular" xml:space="preserve">
+    <value>1 lid</value>
+  </data>
+  <data name="ChatDetailInfo_Profile" xml:space="preserve">
+    <value>Profiel</value>
+  </data>
+  <data name="ChatDetail_ShowContact.Text" xml:space="preserve">
+    <value>Contact bekijken</value>
+  </data>
+  <data name="ChatDetailInfo_Calls" xml:space="preserve">
+    <value>Oproepen</value>
+  </data>
+  <data name="ChatDetailInfo_NotificationsOn" xml:space="preserve">
+    <value>Aan</value>
+  </data>
+  <data name="ChatDetailInfo_Name" xml:space="preserve">
+    <value>Naam</value>
+  </data>
+  <data name="ChatDetailInfo_NotificationsOff" xml:space="preserve">
+    <value>Uit</value>
+  </data>
+  <data name="ChatDetailInfo_MemberCount" xml:space="preserve">
+    <value>{0} leden</value>
+  </data>
+  <data name="ChatDetailInfo_FilesEmpty" xml:space="preserve">
+    <value>Documenten verschijnen hier.</value>
+  </data>
+  <data name="ChatDetailInfo_Status" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="ChatDetailInfo_GroupName" xml:space="preserve">
+    <value>Groepsnaam</value>
+  </data>
+  <data name="ChatDetail_MuteFor8Hours.Text" xml:space="preserve">
+    <value>8 uur</value>
   </data>
   <data name="ChatDetail_MuteForever.Text" xml:space="preserve">
     <value>Altijd</value>
   </data>
-  <data name="ChatDetail_UnmuteNotifications.Text" xml:space="preserve">
-    <value>Meldingen dempen opheffen</value>
+  <data name="ChatDetailInfo_Members" xml:space="preserve">
+    <value>Leden</value>
   </data>
-  <data name="Login_StatusStartingPairing" xml:space="preserve">
-    <value>Koppelen starten...</value>
+  <data name="ChatDetail_GroupInfo.Text" xml:space="preserve">
+    <value>Groepsinfo</value>
   </data>
-  <data name="Login_StatusConnecting" xml:space="preserve">
-    <value>Verbinden met WhatsApp...</value>
-  </data>
-  <data name="Login_StatusWaitingQr" xml:space="preserve">
-    <value>Wachten op QR van server...</value>
-  </data>
-  <data name="Login_StatusQrReceived" xml:space="preserve">
-    <value>QR ontvangen - afbeelding maken...</value>
-  </data>
-  <data name="Login_StatusQrTimeout" xml:space="preserve">
-    <value>Time-out wachten op QR ({0}s) - tik op QR herladen en open het logboek.</value>
-  </data>
-  <data name="Login_StatusErrorPrefix" xml:space="preserve">
-    <value>Fout: </value>
-  </data>
-  <data name="Login_StatusFailPrefix" xml:space="preserve">
-    <value>Mislukt: </value>
-  </data>
-  <data name="Login_StatusDrawFailedPrefix" xml:space="preserve">
-    <value>QR tekenen mislukt: </value>
-  </data>
-  <data name="Login_StatusDrawFailedFallback" xml:space="preserve">
-    <value>QR tekenen mislukt</value>
-  </data>
-  <data name="Login_UnknownError" xml:space="preserve">
-    <value>onbekende fout</value>
-  </data>
-  <data name="Login_Conn_Empty" xml:space="preserve">
-    <value>Verbonden</value>
-  </data>
-  <data name="Login_Conn_Connecting" xml:space="preserve">
-    <value>WebSocket openen...</value>
-  </data>
-  <data name="Login_Conn_Connected" xml:space="preserve">
-    <value>WebSocket verbonden - handshake...</value>
-  </data>
-  <data name="Login_Conn_Open" xml:space="preserve">
-    <value>Handshake OK - wachten op pair-device...</value>
-  </data>
-  <data name="Login_Conn_Disconnected" xml:space="preserve">
-    <value>Verbinding verbroken - opnieuw proberen...</value>
-  </data>
-  <data name="Login_Conn_Close" xml:space="preserve">
-    <value>Verbinding gesloten</value>
-  </data>
-  <data name="Login_Conn_Restart" xml:space="preserve">
-    <value>Koppelen opnieuw starten...</value>
-  </data>
-  <data name="Login_Conn_Default" xml:space="preserve">
-    <value>Status: </value>
+  <data name="ChatDetail_MediaLinksDocs.Text" xml:space="preserve">
+    <value>Media, links en docs</value>
   </data>
   <data name="ChatDetailInfo_PinAppBarLabel" xml:space="preserve">
-    <value>Vastzetten
-op Start</value>
+    <value>Vastmaken aan
+Start</value>
   </data>
-  <data name="ChatDetailInfo_UnpinAppBarLabel" xml:space="preserve">
-    <value>Losmaken
-van Start</value>
-  </data></root>
+  <data name="ChatDetail_UnpinFromStart.Text" xml:space="preserve">
+    <value>Losmaken van Start</value>
+  </data>
+</root>

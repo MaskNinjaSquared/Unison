@@ -1,0 +1,112 @@
+<UserControl
+    x:Class="Unison.Uwp.UI.Controls.AttachTile"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Width="150"
+    Height="150"
+    Margin="5"
+    SizeChanged="AttachTile_SizeChanged">
+
+    <UserControl.Resources>
+        <!--
+            Square accent tile, at most the 150x150 Whatsapp used on Windows Phone 8. The host
+            sets the width so three fit across whatever phone this is - a 480-wide screen lands on
+            the original 150, narrower ones shrink to match rather than spilling into a third row -
+            and the tile squares itself off whatever it is given.
+            Its own template rather than the shared icon button because that one is a transparent
+            40x40 square, and everything about this is the opposite. Disabled fades the whole tile
+            instead of greying it, so an unavailable option still reads as one of the set rather
+            than as a hole in the grid.
+        -->
+        <Style x:Key="AttachTileButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="{ThemeResource ChatDetailAccentBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="8,8,8,10"/>
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="MinHeight" Value="0"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="VerticalAlignment" Value="Stretch"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+            <Setter Property="UseSystemFocusVisuals" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root"
+                                Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}">
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CommonStates">
+                                    <VisualState x:Name="Normal"/>
+                                    <VisualState x:Name="PointerOver">
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Root"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="0.85"
+                                                             Duration="0"/>
+                                        </Storyboard>
+                                    </VisualState>
+                                    <VisualState x:Name="Pressed">
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Root"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="0.7"
+                                                             Duration="0"/>
+                                        </Storyboard>
+                                    </VisualState>
+                                    <VisualState x:Name="Disabled">
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Root"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="0.35"
+                                                             Duration="0"/>
+                                        </Storyboard>
+                                    </VisualState>
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                            <ContentPresenter Content="{TemplateBinding Content}"
+                                              Foreground="{TemplateBinding Foreground}"
+                                              HorizontalAlignment="Stretch"
+                                              VerticalAlignment="Stretch"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <!--
+        The command is bound straight through, so an option with nothing behind it greys itself
+        out from its own CanExecute - there is no enabled flag for a caller to get wrong.
+    -->
+    <Button Style="{StaticResource AttachTileButtonStyle}"
+            Command="{x:Bind Command, Mode=OneWay}"
+            Click="Tile_Click">
+        <Grid>
+            <Grid.RowDefinitions>
+                <!-- Whatsapp's proportions: a gap that pushes the glyph off the top edge. -->
+                <RowDefinition Height="0.225*"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <Image Grid.Row="1"
+                   Width="54" Height="54"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Top"
+                   Source="{x:Bind Glyph, Mode=OneWay}"/>
+            <TextBlock Grid.Row="2"
+                       Text="{x:Bind Label, Mode=OneWay}"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Bottom"
+                       TextAlignment="Center"
+                       TextTrimming="CharacterEllipsis"
+                       FontFamily="{StaticResource MainFont}"
+                       FontSize="14"
+                       Foreground="White"/>
+        </Grid>
+    </Button>
+</UserControl>

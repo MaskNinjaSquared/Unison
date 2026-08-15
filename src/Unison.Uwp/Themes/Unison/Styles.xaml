@@ -295,7 +295,8 @@
             <SolidColorBrush x:Key="SettingsHeroForegroundBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="IconButtonForegroundPointerOverBrush" Color="#FF20C064"/>
             <SolidColorBrush x:Key="ChatDetailReactionChipBrush" Color="#FF363636"/>
-            <SolidColorBrush x:Key="ChatDetailReactionChipForegroundBrush" Color="#FFE9EDEF"/>
+            <!-- Both chip fills are light here, so the count reads dark rather than white. -->
+            <SolidColorBrush x:Key="ChatDetailReactionChipForegroundBrush" Color="#FF111B21"/>
             <SolidColorBrush x:Key="ChatDetailReactionChipSentBrush" Color="#FF4FC05F"/>
             <SolidColorBrush x:Key="ChatDetailReactionChipSentBorderBrush" Color="#FF3AAA4A"/>
             <SolidColorBrush x:Key="ChatDetailReactionChipReceivedBrush" Color="#FFEEEEEE"/>

@@ -30,4 +30,5 @@
   </Project>
   <Project Path="src/Unison.Core/Unison.Core.csproj" Id="0aa2854f-305b-4701-81d8-7757c510a4c2" />
   <Project Path="src/Unison.Baileys/Unison.Baileys.csproj" Id="a65f1d27-e2c9-410f-a892-015a7a9699ee" />
+  <Project Path="src/Unison.Socket/Unison.Socket.csproj" Id="3f5c1a82-9d4e-4b67-8c31-2e7a6b0d9f14" />
 </Solution>

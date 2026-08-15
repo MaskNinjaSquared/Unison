@@ -170,6 +170,8 @@ namespace Unison.Baileys.Client
     {
         public string Id { get; set; }  // JID
         public string Name { get; set; }
+        /// <summary>PN digits from the account JID — not a display name.</summary>
+        public string Phone { get; set; }
         public string Lid { get; set; } // Linked ID
         public string AvatarUrl { get; set; }
     }

@@ -17,8 +17,10 @@ namespace Unison.Core.Contracts.WhatsApp
         IReadOnlyDictionary<string, string> JidAlias { get; }
         string CurrentConnectionStatus { get; }
         string CurrentUserName { get; set; }
+        /// <summary>Account phone digits from the PN JID — placeholder when the push name is unknown.</summary>
+        string CurrentUserPhone { get; }
         string CurrentUserAvatar { get; set; }
-        /// <summary>Logged-in user snapshot (Id/Lid/Name/AvatarUrl).</summary>
+        /// <summary>Logged-in user snapshot (Id/Lid/Name/Phone/AvatarUrl).</summary>
         Profile CurrentProfile { get; }
         bool VerboseLogging { get; }
         bool IsConnected { get; }
@@ -26,6 +28,15 @@ namespace Unison.Core.Contracts.WhatsApp
         bool IsInitialSyncSafeMode { get; }
         int InitialSyncProcessedConversations { get; }
         int InitialSyncTotalConversations { get; }
+
+        // ---------------------------------------------------------------------
+        // Raw client events.
+        //
+        // For the facades only. Each one is re-published by the facade that owns the subject -
+        // connection, history, contacts, messages, profile - and screens listen there. Anything
+        // subscribing here directly is coupling itself to the client that happens to produce the
+        // event today, which is exactly what the facades exist to prevent.
+        // ---------------------------------------------------------------------
 
         event EventHandler<string> OnConnectionUpdate;
         event EventHandler<HistorySync> OnHistorySyncReceived;
@@ -43,6 +54,12 @@ namespace Unison.Core.Contracts.WhatsApp
         event EventHandler<Exception> OnError;
         event EventHandler<string> OnChatMessagesChanged;
         event EventHandler<string> OnQRCodeReceived;
+        /// <summary>
+        /// The code on screen is dead: the server ran out of refs to rotate through, or the
+        /// socket dropped before anyone scanned it. Nothing reconnects on its own here, so the
+        /// pairing surface has to offer a reload.
+        /// </summary>
+        event EventHandler OnQrExpired;
         event EventHandler<InitialSyncProgressEventArgs> OnInitialSyncProgress;
         /// <summary>Presence / chatstate for the subscribed contact (forwards SocketClient).</summary>
         event EventHandler<PresenceUpdateEventArgs> OnPresenceUpdate;
@@ -57,11 +74,24 @@ namespace Unison.Core.Contracts.WhatsApp
         Task ClearSessionAsync();
 
         /// <summary>
+        /// Asks WhatsApp to unlink this device, then drops the socket. Only the server side:
+        /// local data is wiped by <see cref="ClearSessionAsync"/>, and callers that want both
+        /// should go through <see cref="IConnectionService.LogoutAsync"/>.
+        /// </summary>
+        Task NotifyServerLogoutAsync(string reason = null);
+
+        /// <summary>
         /// Deletes local chats + messages and requests history sync again.
         /// Keeps WhatsApp auth/session linked.
         /// Prefer <see cref="IMessageService.ResyncConversationsAsync"/> from ViewModels.
         /// </summary>
         Task ResyncConversationsAsync(System.IProgress<Models.ConversationResyncPhase> progress = null);
+
+        /// <summary>
+        /// Drops the in-memory chats, messages and the seen-message index, so history delivered
+        /// after a wipe is applied instead of being mistaken for a duplicate.
+        /// </summary>
+        Task ClearConversationCachesAsync();
 
         void Disconnect();
 
@@ -100,6 +130,12 @@ namespace Unison.Core.Contracts.WhatsApp
 
         /// <summary>Queries metadata for all joined groups.</summary>
         Task QueryAllGroupsAsync();
+
+        /// <summary>
+        /// Same, but ignores the window that suppresses a repeat pass. For callers that ask
+        /// because a group is still showing its JID rather than on a schedule.
+        /// </summary>
+        Task QueryAllGroupsAsync(bool force);
 
         /// <summary>Queries metadata for group chats whose display name is still unresolved.</summary>
         Task QueryUnresolvedGroupMetadataAsync(int limit = 25);
@@ -148,9 +184,29 @@ namespace Unison.Core.Contracts.WhatsApp
 
         /// <summary>Fetches the best available profile picture for a chat (incl. group-avatar fallback) and applies it.</summary>
         Task FetchAndApplyAvatarAsync(ChatItem chat, CancellationToken token);
+
+        /// <summary>
+        /// Baileys <c>type=image</c> (full-size) for a group, cached as <c>*_high.jpg</c>.
+        /// No-op for 1:1 chats or when the high file is already on disk.
+        /// </summary>
+        Task EnsureHighQualityGroupAvatarAsync(ChatItem chat);
         void MarkAvatarImageLoadFailed(ChatItem chat, string reason);
         void RequestAvatarRefresh(ChatItem chat, bool force = false);
         void SetActiveChatJid(string jid);
+
+        /// <summary>
+        /// Zeroes the unread count for a conversation, on every row that is the same conversation.
+        /// PN/LID aliases can briefly produce more than one row, and a leftover alias is enough to
+        /// put the green badge back on a chat the user just read.
+        /// </summary>
+        Task ClearUnreadForChatAsync(string jid);
+
+        /// <summary>
+        /// Writes the account's chat-list pin to the in-memory rows and to the local mirror,
+        /// without telling the server. Prefer <see cref="IChatService.SetPinnedAsync"/>, which is
+        /// what actually pins the chat; this is the local half of it.
+        /// </summary>
+        Task ApplyChatPinAsync(string jid, bool pinned);
 
         /// <summary>Subscribes to presence for a 1:1 JID when the socket is connected; no-op otherwise.</summary>
         Task PresenceSubscribeAsync(string jid);

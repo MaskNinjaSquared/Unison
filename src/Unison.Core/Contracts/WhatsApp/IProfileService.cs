@@ -10,6 +10,12 @@ namespace Unison.Core.Contracts.WhatsApp
     public interface IProfileService
     {
         /// <summary>
+        /// The logged-in user's name or picture changed, from any source: the app state sync,
+        /// a fresh avatar fetch, or pairing filling in an identity that was empty.
+        /// </summary>
+        event System.EventHandler ProfileChanged;
+
+        /// <summary>
         /// Returns the current profile from auth / in-memory state (no network).
         /// </summary>
         Profile GetCurrentProfile();

@@ -227,27 +227,6 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="ChatList_RefreshNames.Text" xml:space="preserve">
     <value>Segarkan nama kontak</value>
   </data>
-  <data name="ChatList_ResyncConversations.Text" xml:space="preserve">
-    <value>Sinkronkan ulang percakapan</value>
-  </data>
-  <data name="ChatList_ResyncConversationsTitle" xml:space="preserve">
-    <value>Sinkronkan ulang percakapan?</value>
-  </data>
-  <data name="ChatList_ResyncConversationsBody" xml:space="preserve">
-    <value>Ini menghapus semua chat dan pesan lokal, lalu mengunduh riwayat lagi. Tautan WhatsApp Anda tetap aktif.</value>
-  </data>
-  <data name="ChatList_ResyncConversationsConfirm" xml:space="preserve">
-    <value>Sinkronkan ulang</value>
-  </data>
-  <data name="ChatList_ResyncConversationsCancel" xml:space="preserve">
-    <value>Batal</value>
-  </data>
-  <data name="ChatList_ResyncingConversations" xml:space="preserve">
-    <value>Menyinkronkan ulang percakapan...</value>
-  </data>
-  <data name="ChatList_ResyncCleaningHistory" xml:space="preserve">
-    <value>Membersihkan riwayat...</value>
-  </data>
   <data name="ChatList_SearchBox.PlaceholderText" xml:space="preserve">
     <value>Cari atau mulai obrolan baru</value>
   </data>
@@ -305,11 +284,53 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="ChatDetail_Empty.Text" xml:space="preserve">
     <value>Pilih obrolan untuk mulai berkirim pesan</value>
   </data>
-  <data name="ChatDetail_GroupOnlyAdminsCanSend.Text" xml:space="preserve">
-    <value>Hanya admin yang dapat mengirim pesan</value>
-  </data>
   <data name="ChatDetail_MessageInput.PlaceholderText" xml:space="preserve">
     <value>Ketik pesan</value>
+  </data>
+  <data name="ChatDetail_AttachCamera.Text" xml:space="preserve">
+    <value>Kamera</value>
+  </data>
+  <data name="ChatDetail_AttachFile.Text" xml:space="preserve">
+    <value>Berkas</value>
+  </data>
+  <data name="ChatDetail_AttachContact.Text" xml:space="preserve">
+    <value>Kontak</value>
+  </data>
+  <data name="ChatDetail_AttachMedia.Text" xml:space="preserve">
+    <value>Media</value>
+  </data>
+  <data name="ChatDetail_AttachAudio.Text" xml:space="preserve">
+    <value>Audio</value>
+  </data>
+  <data name="ChatDetail_AttachLocation.Text" xml:space="preserve">
+    <value>Lokasi</value>
+  </data>
+  <data name="ChatDetail_AttachTitle.Text" xml:space="preserve">
+    <value>LAMPIRKAN</value>
+  </data>
+  <data name="ChatDetail_AttachFlyoutTooltip.Content" xml:space="preserve">
+    <value>Lampirkan</value>
+  </data>
+  <data name="ChatDetail_AttachBarTooltip.Content" xml:space="preserve">
+    <value>Lampirkan</value>
+  </data>
+  <data name="ChatDetail_AttachCameraTile.Text" xml:space="preserve">
+    <value>Kamera</value>
+  </data>
+  <data name="ChatDetail_AttachFileTile.Text" xml:space="preserve">
+    <value>Berkas</value>
+  </data>
+  <data name="ChatDetail_AttachContactTile.Text" xml:space="preserve">
+    <value>Kontak</value>
+  </data>
+  <data name="ChatDetail_AttachMediaTile.Text" xml:space="preserve">
+    <value>Media</value>
+  </data>
+  <data name="ChatDetail_AttachAudioTile.Text" xml:space="preserve">
+    <value>Audio</value>
+  </data>
+  <data name="ChatDetail_AttachLocationTile.Text" xml:space="preserve">
+    <value>Lokasi</value>
   </data>
   <data name="ChatDetail_Pinned.Text" xml:space="preserve">
     <value>Pesan yang disematkan</value>
@@ -394,12 +415,6 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   </data>
   <data name="ChatDetail_ImageDownloadFailed" xml:space="preserve">
     <value>Tidak dapat mengunduh gambar ini.</value>
-  </data>
-  <data name="ChatDetail_VideoDownloadFailed" xml:space="preserve">
-    <value>Tidak dapat mengunduh video ini.</value>
-  </data>
-  <data name="ChatDetail_Video" xml:space="preserve">
-    <value>Video</value>
   </data>
   <data name="NewChatDialog.Title" xml:space="preserve">
     <value>Obrolan baru</value>
@@ -635,9 +650,6 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="Settings_ShellRestartClose" xml:space="preserve">
     <value>OK</value>
   </data>
-  <data name="Settings_ReopenAppTitle" xml:space="preserve">
-    <value>Buka ulang Unison?</value>
-  </data>
   <data name="Settings_ShellAppliedTitle" xml:space="preserve">
     <value>Shell diterapkan</value>
   </data>
@@ -651,13 +663,10 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
     <value>Selamat datang di Unison</value>
   </data>
   <data name="Start_Description.Text" xml:space="preserve">
-    <value>Cara sederhana dan andal untuk menggunakan WhatsApp di Windows.</value>
+    <value>Cara sederhana, andal, dan pribadi untuk menggunakan WhatsApp di komputer Anda.</value>
   </data>
   <data name="Start_GetStarted.Content" xml:space="preserve">
     <value>Mulai</value>
-  </data>
-  <data name="Start_Language.Text" xml:space="preserve">
-    <value>Bahasa:</value>
   </data>
   <data name="Settings_About.Text" xml:space="preserve">
     <value>Tentang</value>
@@ -707,179 +716,125 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="Toast_AppName" xml:space="preserve">
     <value>Unison</value>
   </data>
-
-  <data name="Settings_Language.Header" xml:space="preserve">
-    <value>Bahasa</value>
+  <data name="ChatList_PinChat.Text" xml:space="preserve">
+    <value>Sematkan obrolan</value>
   </data>
-  <data name="Settings_Language.Text" xml:space="preserve">
-    <value>Pilih bahasa aplikasi. Aplikasi akan dimulai ulang untuk menerapkan.</value>
+  <data name="ChatList_UnpinChat.Text" xml:space="preserve">
+    <value>Lepas sematan</value>
   </data>
-  <data name="Settings_LanguageRestartTitle" xml:space="preserve">
-    <value>Bahasa diperbarui</value>
+  <data name="ChatDetailInfo_PinChatAppBarLabel" xml:space="preserve">
+    <value>Sematkan
+obrolan</value>
   </data>
-  <data name="Settings_LanguageRestartBody" xml:space="preserve">
-    <value>Unison akan dimulai ulang untuk menerapkan bahasa baru.</value>
-  </data>
-  <data name="Settings_LanguageRestartClose" xml:space="preserve">
-    <value>OK</value>
-  </data>
-  <data name="Settings_Advanced.Text" xml:space="preserve">
-    <value>Pengaturan lanjutan</value>
-  </data>
-
-  <data name="Settings_LanguageSystem" xml:space="preserve">
-    <value>Sistem</value>
-  </data>
-  <data name="Settings_Disconnect.Text" xml:space="preserve">
-    <value>Putuskan</value>
-  </data>
-  <data name="Settings_DisconnectTitle" xml:space="preserve">
-    <value>Putuskan koneksi?</value>
-  </data>
-  <data name="Settings_DisconnectBody" xml:space="preserve">
-    <value>Jika Anda memutuskan koneksi, Anda akan dibawa ke layar pemasangan dan semua data serta percakapan akan dihapus.</value>
-  </data>
-  <data name="Settings_DisconnectConfirm" xml:space="preserve">
-    <value>Putuskan</value>
-  </data>
-  <data name="Settings_DisconnectCancel" xml:space="preserve">
-    <value>Batal</value>
-  </data>
-
-  <data name="ChatDetail_ShowContact.Text" xml:space="preserve">
-    <value>View contact</value>
-  </data>
-  <data name="ChatDetail_Search.Text" xml:space="preserve">
-    <value>Search</value>
-  </data>
-  <data name="ChatDetail_MediaLinksDocs.Text" xml:space="preserve">
-    <value>Media, links, and docs</value>
-  </data>
-  <data name="ChatDetail_MuteNotifications.Text" xml:space="preserve">
-    <value>Mute notifications</value>
-  </data>
-  <data name="ChatDetail_ExportChat.Text" xml:space="preserve">
-    <value>Export chat</value>
-  </data>
-  <data name="ChatDetailInfo_Profile" xml:space="preserve">
-    <value>Profile</value>
-  </data>
-  <data name="ChatDetailInfo_GroupInfo" xml:space="preserve">
-    <value>Group info</value>
+  <data name="ChatDetailInfo_UnpinChatAppBarLabel" xml:space="preserve">
+    <value>Lepas
+sematan</value>
   </data>
   <data name="ChatDetailInfo_Files" xml:space="preserve">
-    <value>Files</value>
+    <value>File</value>
   </data>
-  <data name="ChatDetailInfo_Calls" xml:space="preserve">
-    <value>Calls</value>
+  <data name="ChatDetailInfo_Media" xml:space="preserve">
+    <value>Media</value>
   </data>
-  <data name="ChatDetailInfo_Name" xml:space="preserve">
-    <value>Name</value>
+  <data name="ChatDetail_Search.Text" xml:space="preserve">
+    <value>Cari</value>
   </data>
-  <data name="ChatDetailInfo_GroupName" xml:space="preserve">
-    <value>Group name</value>
+  <data name="ChatDetail_ExportChat.Text" xml:space="preserve">
+    <value>Ekspor obrolan</value>
   </data>
   <data name="ChatDetailInfo_Phone" xml:space="preserve">
-    <value>Phone</value>
+    <value>Telepon</value>
   </data>
-  <data name="ChatDetailInfo_Status" xml:space="preserve">
-    <value>Status</value>
-  </data>
-  <data name="ChatDetailInfo_Description" xml:space="preserve">
-    <value>Description</value>
-  </data>
-  <data name="ChatDetailInfo_Notifications" xml:space="preserve">
-    <value>Notifications</value>
-  </data>
-  <data name="ChatDetailInfo_NotificationsOn" xml:space="preserve">
-    <value>On</value>
-  </data>
-  <data name="ChatDetailInfo_NotificationsOff" xml:space="preserve">
-    <value>Off</value>
-  </data>
-  <data name="ChatDetail_PinToStart.Text" xml:space="preserve">
-    <value>Pin to Start</value>
-  </data>
-  <data name="ChatDetail_GroupInfo.Text" xml:space="preserve">
-    <value>Group info</value>
+  <data name="ChatDetailInfo_CallsEmpty" xml:space="preserve">
+    <value>Panggilan yang Anda buat dan terima akan muncul di sini.</value>
   </data>
   <data name="ChatDetail_GroupMedia.Text" xml:space="preserve">
-    <value>Group media</value>
+    <value>Media grup</value>
   </data>
-  <data name="ChatDetail_MuteFor8Hours.Text" xml:space="preserve">
-    <value>8 jam</value>
+  <data name="ChatDetailInfo_MediaEmpty" xml:space="preserve">
+    <value>Foto, video, dan audio akan muncul di sini.</value>
+  </data>
+  <data name="ChatDetail_MuteNotifications.Text" xml:space="preserve">
+    <value>Bisukan notifikasi</value>
+  </data>
+  <data name="ChatDetailInfo_MembersEmpty" xml:space="preserve">
+    <value>Anggota grup akan muncul di sini.</value>
+  </data>
+  <data name="ChatDetailInfo_UnpinAppBarLabel" xml:space="preserve">
+    <value>Lepas dari
+Start</value>
+  </data>
+  <data name="ChatDetailInfo_Notifications" xml:space="preserve">
+    <value>Notifikasi</value>
+  </data>
+  <data name="ChatDetailInfo_GroupInfo" xml:space="preserve">
+    <value>Info grup</value>
+  </data>
+  <data name="ChatDetail_PinToStart.Text" xml:space="preserve">
+    <value>Sematkan ke Start</value>
+  </data>
+  <data name="ChatDetail_UnmuteNotifications.Text" xml:space="preserve">
+    <value>Nyalakan notifikasi</value>
   </data>
   <data name="ChatDetail_MuteFor1Week.Text" xml:space="preserve">
     <value>1 minggu</value>
   </data>
-  <data name="ChatDetail_UnpinFromStart.Text" xml:space="preserve">
-    <value>Lepas pin dari Start</value>
+  <data name="ChatDetailInfo_Description" xml:space="preserve">
+    <value>Deskripsi</value>
+  </data>
+  <data name="ChatDetailInfo_MemberCountSingular" xml:space="preserve">
+    <value>1 anggota</value>
+  </data>
+  <data name="ChatDetailInfo_Profile" xml:space="preserve">
+    <value>Profil</value>
+  </data>
+  <data name="ChatDetail_ShowContact.Text" xml:space="preserve">
+    <value>Lihat kontak</value>
+  </data>
+  <data name="ChatDetailInfo_Calls" xml:space="preserve">
+    <value>Panggilan</value>
+  </data>
+  <data name="ChatDetailInfo_NotificationsOn" xml:space="preserve">
+    <value>Aktif</value>
+  </data>
+  <data name="ChatDetailInfo_Name" xml:space="preserve">
+    <value>Nama</value>
+  </data>
+  <data name="ChatDetailInfo_NotificationsOff" xml:space="preserve">
+    <value>Nonaktif</value>
+  </data>
+  <data name="ChatDetailInfo_MemberCount" xml:space="preserve">
+    <value>{0} anggota</value>
+  </data>
+  <data name="ChatDetailInfo_FilesEmpty" xml:space="preserve">
+    <value>Dokumen akan muncul di sini.</value>
+  </data>
+  <data name="ChatDetailInfo_Status" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="ChatDetailInfo_GroupName" xml:space="preserve">
+    <value>Nama grup</value>
+  </data>
+  <data name="ChatDetail_MuteFor8Hours.Text" xml:space="preserve">
+    <value>8 jam</value>
   </data>
   <data name="ChatDetail_MuteForever.Text" xml:space="preserve">
-    <value>Selamanya</value>
+    <value>Selalu</value>
   </data>
-  <data name="ChatDetail_UnmuteNotifications.Text" xml:space="preserve">
-    <value>Suarakan notifikasi</value>
+  <data name="ChatDetailInfo_Members" xml:space="preserve">
+    <value>Anggota</value>
   </data>
-  <data name="Login_StatusStartingPairing" xml:space="preserve">
-    <value>Memulai pemasangan...</value>
+  <data name="ChatDetail_GroupInfo.Text" xml:space="preserve">
+    <value>Info grup</value>
   </data>
-  <data name="Login_StatusConnecting" xml:space="preserve">
-    <value>Menghubungkan ke WhatsApp...</value>
-  </data>
-  <data name="Login_StatusWaitingQr" xml:space="preserve">
-    <value>Menunggu QR dari server...</value>
-  </data>
-  <data name="Login_StatusQrReceived" xml:space="preserve">
-    <value>QR diterima - membuat gambar...</value>
-  </data>
-  <data name="Login_StatusQrTimeout" xml:space="preserve">
-    <value>Waktu habis menunggu QR ({0}s) - ketuk Muat ulang QR dan buka log.</value>
-  </data>
-  <data name="Login_StatusErrorPrefix" xml:space="preserve">
-    <value>Kesalahan: </value>
-  </data>
-  <data name="Login_StatusFailPrefix" xml:space="preserve">
-    <value>Gagal: </value>
-  </data>
-  <data name="Login_StatusDrawFailedPrefix" xml:space="preserve">
-    <value>Gagal menggambar QR: </value>
-  </data>
-  <data name="Login_StatusDrawFailedFallback" xml:space="preserve">
-    <value>gagal menggambar QR</value>
-  </data>
-  <data name="Login_UnknownError" xml:space="preserve">
-    <value>kesalahan tidak diketahui</value>
-  </data>
-  <data name="Login_Conn_Empty" xml:space="preserve">
-    <value>Terhubung</value>
-  </data>
-  <data name="Login_Conn_Connecting" xml:space="preserve">
-    <value>Membuka WebSocket...</value>
-  </data>
-  <data name="Login_Conn_Connected" xml:space="preserve">
-    <value>WebSocket terhubung - handshake...</value>
-  </data>
-  <data name="Login_Conn_Open" xml:space="preserve">
-    <value>Handshake OK - menunggu pair-device...</value>
-  </data>
-  <data name="Login_Conn_Disconnected" xml:space="preserve">
-    <value>Terputus - mencoba lagi...</value>
-  </data>
-  <data name="Login_Conn_Close" xml:space="preserve">
-    <value>Koneksi ditutup</value>
-  </data>
-  <data name="Login_Conn_Restart" xml:space="preserve">
-    <value>Memulai ulang pemasangan...</value>
-  </data>
-  <data name="Login_Conn_Default" xml:space="preserve">
-    <value>Status: </value>
+  <data name="ChatDetail_MediaLinksDocs.Text" xml:space="preserve">
+    <value>Media, tautan, dan dokumen</value>
   </data>
   <data name="ChatDetailInfo_PinAppBarLabel" xml:space="preserve">
     <value>Sematkan ke
 Start</value>
   </data>
-  <data name="ChatDetailInfo_UnpinAppBarLabel" xml:space="preserve">
-    <value>Lepas pin
-dari Start</value>
-  </data></root>
+  <data name="ChatDetail_UnpinFromStart.Text" xml:space="preserve">
+    <value>Lepas dari Start</value>
+  </data>
+</root>

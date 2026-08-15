@@ -6,6 +6,7 @@ using Unison.Baileys.Crypto;
 using Newtonsoft.Json;
 
 using Unison.Baileys.Client;
+using Unison.Core.Helpers;
 
 namespace Unison.Uwp.Client
 {
@@ -70,6 +71,7 @@ namespace Unison.Uwp.Client
                     NextPreKeyId = state.NextPreKeyId,
                     MeId = state.Me?.Id,
                     MeName = state.Me?.Name,
+                    MePhone = ResolveMePhone(state.Me?.Phone, state.Me?.Id),
                     MeLid = state.Me?.Lid,
                     MeAvatarUrl = state.Me?.AvatarUrl,
                     Registered = state.Registered,
@@ -156,6 +158,7 @@ namespace Unison.Uwp.Client
                     {
                         Id = dto.MeId,
                         Name = dto.MeName,
+                        Phone = ResolveMePhone(dto.MePhone, dto.MeId),
                         Lid = dto.MeLid,
                         AvatarUrl = dto.MeAvatarUrl
                     };
@@ -201,6 +204,19 @@ namespace Unison.Uwp.Client
         }
 
         /// <summary>
+        /// PN digits for the account. Prefers the stored value; otherwise takes them from the JID.
+        /// </summary>
+        private static string ResolveMePhone(string storedPhone, string meId)
+        {
+            if (!string.IsNullOrWhiteSpace(storedPhone))
+            {
+                return storedPhone.Trim();
+            }
+
+            return JidHelper.TryPhoneFromJid(meId);
+        }
+
+        /// <summary>
         /// DTO for JSON serialization of auth state
         /// </summary>
         private class AuthStateDto
@@ -222,6 +238,7 @@ namespace Unison.Uwp.Client
             public int NextPreKeyId { get; set; }
             public string MeId { get; set; }
             public string MeName { get; set; }
+            public string MePhone { get; set; }
             public string MeLid { get; set; }
             public string MeAvatarUrl { get; set; }
             public bool Registered { get; set; }

@@ -16,7 +16,7 @@ namespace Unison.Core.ViewModels
         /// <summary>How long we wait for OnQRCodeReceived after ConnectAsync.</summary>
         private const int QrWaitTimeoutMs = 45000;
 
-        private readonly IWhatsAppService _whatsAppService;
+        private readonly IConnectionService _connection;
         private readonly IDispatcher _dispatcher;
         private readonly ISessionLogger _sessionLogger;
         private readonly IDialogService _dialogService;
@@ -35,15 +35,16 @@ namespace Unison.Core.ViewModels
         private string _showLogButtonLabel;
         private string _toggleLogButtonLabel;
         private bool _logLiveHooked;
+        private bool _connectionHooked;
 
         public LoginViewModel(
-            IWhatsAppService whatsAppService,
+            IConnectionService connection,
             IDispatcher dispatcher,
             ISessionLogger sessionLogger,
             IDialogService dialogService,
             IStringResources strings)
         {
-            _whatsAppService = whatsAppService;
+            _connection = connection;
             _dispatcher = dispatcher;
             _sessionLogger = sessionLogger;
             _dialogService = dialogService;
@@ -62,44 +63,105 @@ namespace Unison.Core.ViewModels
             _versionText = "v?";
             RefreshLogButtonLabels();
 
-            _whatsAppService.OnQRCodeReceived += async (s, qrData) =>
-            {
-                int len = qrData?.Length ?? 0;
-                _sessionLogger.WriteAlways($"[Pairing] OnQRCodeReceived len={len}");
-                await _dispatcher.RunAsync(() =>
-                {
-                    QRData = qrData;
-                    StatusText = Loc("Login_StatusQrReceived", "QR received — generating image…");
-                    _qrWaitTcs?.TrySetResult(qrData);
-                });
-            };
+            Attach();
+        }
 
-            _whatsAppService.OnConnectionUpdate += async (s, status) =>
+        /// <summary>
+        /// Starts listening to the pairing facade. Called from the constructor so a screen that
+        /// is still being built does not miss the first code, and again by the view when it is
+        /// re-attached to the tree. Doing it twice is harmless.
+        /// </summary>
+        public void Attach()
+        {
+            if (_connectionHooked || _connection == null)
             {
-                string value = status ?? string.Empty;
-                _sessionLogger.WriteAlways($"[Pairing] connection={value}");
-                await _dispatcher.RunAsync(() =>
-                {
-                    if (string.IsNullOrEmpty(QRData))
-                    {
-                        StatusText = DescribeConnectionStatus(value);
-                    }
-                });
-            };
+                return;
+            }
 
-            _whatsAppService.OnError += async (s, ex) =>
+            _connection.QrReceived += Connection_QrReceived;
+            _connection.QrExpired += Connection_QrExpired;
+            _connection.StatusChanged += Connection_StatusChanged;
+            _connection.Failed += Connection_Failed;
+            _connectionHooked = true;
+        }
+
+        /// <summary>
+        /// Stops listening. The facade outlives this view model, so without it every login screen
+        /// ever shown would stay alive on the end of these events, redrawing a UI nobody sees.
+        /// </summary>
+        public void Detach()
+        {
+            if (!_connectionHooked || _connection == null)
             {
-                _sessionLogger.WriteErrorAlways("[Pairing] OnError", ex);
-                await _dispatcher.RunAsync(() =>
+                return;
+            }
+
+            _connection.QrReceived -= Connection_QrReceived;
+            _connection.QrExpired -= Connection_QrExpired;
+            _connection.StatusChanged -= Connection_StatusChanged;
+            _connection.Failed -= Connection_Failed;
+            _connectionHooked = false;
+        }
+
+        private void Connection_QrReceived(object sender, string qrData)
+        {
+            int len = qrData?.Length ?? 0;
+            _sessionLogger.WriteAlways($"[Pairing] QR received len={len}");
+            _ = _dispatcher.RunAsync(() =>
+            {
+                QRData = qrData;
+                StatusText = Loc("Login_StatusQrReceived", "QR received — generating image…");
+                _qrWaitTcs?.TrySetResult(qrData);
+            });
+        }
+
+        private void Connection_QrExpired(object sender, EventArgs e)
+        {
+            _sessionLogger.WriteAlways("[Pairing] QR expired");
+            _ = _dispatcher.RunAsync(() =>
+            {
+                // Dropping the payload is what disables the fullscreen preview and lets the
+                // status text through again; the error is what raises the reload button.
+                QRData = null;
+                IsLoading = false;
+                HasError = true;
+                ErrorMessage = Loc(
+                    "Login_StatusQrExpired",
+                    "QR code expired - tap Reload QR to get a new one.");
+                StatusText = ErrorMessage;
+
+                // Completing rather than cancelling: a pairing flow still waiting for its first
+                // QR should stop waiting, but it must not surface a cancellation on top of the
+                // message that already explains what happened.
+                _qrWaitTcs?.TrySetResult(null);
+            });
+        }
+
+        private void Connection_StatusChanged(object sender, string status)
+        {
+            string value = status ?? string.Empty;
+            _sessionLogger.WriteAlways($"[Pairing] connection={value}");
+            _ = _dispatcher.RunAsync(() =>
+            {
+                if (string.IsNullOrEmpty(QRData))
                 {
-                    if (string.IsNullOrEmpty(QRData))
-                    {
-                        HasError = true;
-                        ErrorMessage = ex?.Message ?? Loc("Login_UnknownError", "unknown error");
-                        StatusText = Loc("Login_StatusErrorPrefix", "Error: ") + ErrorMessage;
-                    }
-                });
-            };
+                    StatusText = DescribeConnectionStatus(value);
+                }
+            });
+        }
+
+        private void Connection_Failed(object sender, Exception ex)
+        {
+            _sessionLogger.WriteErrorAlways("[Pairing] connection failed", ex);
+            _ = _dispatcher.RunAsync(() =>
+            {
+                if (string.IsNullOrEmpty(QRData))
+                {
+                    HasError = true;
+                    ErrorMessage = ex?.Message ?? Loc("Login_UnknownError", "unknown error");
+                    StatusText = Loc("Login_StatusErrorPrefix", "Error: ") + ErrorMessage;
+                }
+            });
         }
 
         public bool IsLoading
@@ -210,7 +272,7 @@ namespace Unison.Core.ViewModels
 
         public async Task ResetSessionForDevAsync()
         {
-            await _whatsAppService.ClearSessionAsync();
+            await _connection.ClearLocalSessionAsync();
             await _dialogService.ShowMessageAsync(
                 _strings.Get("Login_DevResetTitle"),
                 _strings.Get("Login_DevResetBody"),
@@ -345,10 +407,10 @@ namespace Unison.Core.ViewModels
                     "reclaim do socket tambem e tipico.");
 
                 StatusText = Loc("Login_StatusConnecting", "Connecting to WhatsApp…");
-                await _whatsAppService.ConnectAsync();
+                await _connection.StartPairingAsync();
                 _sessionLogger.WriteAlways(
-                    "[Pairing] ConnectAsync returned; status=" +
-                    (_whatsAppService.CurrentConnectionStatus ?? "(null)"));
+                    "[Pairing] StartPairing returned; status=" +
+                    (_connection.CurrentStatus ?? "(null)"));
 
                 if (!string.IsNullOrEmpty(QRData))
                 {
@@ -367,7 +429,7 @@ namespace Unison.Core.ViewModels
                     StatusText = timeout;
                     _sessionLogger.WriteAlways(
                         "[Pairing] TIMEOUT waiting for QR. Last connection status=" +
-                        (_whatsAppService.CurrentConnectionStatus ?? "(null)"));
+                        (_connection.CurrentStatus ?? "(null)"));
                     IsLoading = false;
                     return;
                 }
@@ -432,16 +494,11 @@ namespace Unison.Core.ViewModels
                 _sessionLogger.PairingTraceActive = true;
                 _sessionLogger.WriteAlways("[Pairing] phone pairing start phoneLen=" + phone.Length);
 
-                if (_whatsAppService.Pairing == null)
-                {
-                    await _whatsAppService.ConnectAsync();
-                }
-
-                var pairing = _whatsAppService.Pairing;
-                if (pairing == null)
+                string code = await _connection.RequestPairingCodeAsync(phone);
+                if (string.IsNullOrEmpty(code))
                 {
                     IsLoading = false;
-                    _sessionLogger.WriteAlways("[Pairing] phone pairing: Pairing handler null");
+                    _sessionLogger.WriteAlways("[Pairing] phone pairing unavailable");
                     await _dialogService.ShowMessageAsync(
                         _strings.Get("Login_PairPhoneNoConnTitle"),
                         _strings.Get("Login_PairPhoneNoConnBody"),
@@ -449,7 +506,6 @@ namespace Unison.Core.ViewModels
                     return;
                 }
 
-                string code = await pairing.RequestPairingCodeAsync(phone);
                 IsLoading = false;
                 _sessionLogger.WriteAlways(
                     "[Pairing] phone pairing code received len=" + (code?.Length ?? 0));

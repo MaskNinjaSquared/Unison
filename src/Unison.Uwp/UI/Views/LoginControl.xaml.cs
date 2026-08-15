@@ -40,6 +40,10 @@ namespace Unison.Uwp.UI.Views
                 return;
             }
 
+            // Unloading detaches, and a control can be put back in the tree with the same view
+            // model, so this is what makes a second visit still receive codes.
+            ViewModel.Attach();
+
             try
             {
                 var v = Windows.ApplicationModel.Package.Current.Id.Version;
@@ -201,6 +205,7 @@ namespace Unison.Uwp.UI.Views
             }
 
             ViewModel?.DeactivateDiagnostics();
+            ViewModel?.Detach();
         }
 
         public async Task StartPairingFlowAsync()

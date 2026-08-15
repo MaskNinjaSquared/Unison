@@ -87,6 +87,10 @@ namespace Unison.Core.ViewModels
                 () => _ = SaveDocumentAsAsync(),
                 () => HasLocalDocument);
 
+            ExportDocumentCommand = new RelayCommand(
+                () => _ = ExportDocumentAsync(),
+                () => Model.IsDocument && !IsDocumentDownloading);
+
             Model.PropertyChanged += OnModelPropertyChanged;
             SyncAudioPlaybackStatusFromModel();
         }
@@ -169,6 +173,9 @@ namespace Unison.Core.ViewModels
             name == nameof(ChatMessage.NeedsImageDownload) ||
             name == nameof(ChatMessage.HasImage) ||
             name == nameof(ChatMessage.ImageUri) ||
+            name == nameof(ChatMessage.ThumbnailUri) ||
+            name == nameof(ChatMessage.MediaThumbnailBase64) ||
+            name == nameof(ChatMessage.HasMediaThumbnail) ||
             name == nameof(ChatMessage.IsImage) ||
             name == nameof(ChatMessage.ShowStickerError) ||
             name == nameof(ChatMessage.ShowStickerLoading) ||
@@ -234,6 +241,9 @@ namespace Unison.Core.ViewModels
 
         /// <summary>FileSavePicker for a cached document.</summary>
         public ICommand SaveDocumentAsCommand { get; }
+
+        /// <summary>Download to cache if needed, then FileSavePicker to disk.</summary>
+        public ICommand ExportDocumentCommand { get; }
 
         public bool IsExpanded
         {
@@ -512,6 +522,7 @@ namespace Unison.Core.ViewModels
                 nameof(AudioButtonText),
                 nameof(AudioReadyLabelText),
                 nameof(AudioTimestampText),
+                nameof(MediaBadgeDurationText),
                 nameof(AudioSliderMaximum),
                 nameof(AudioSliderValue));
             RaiseMediaCommandsChanged();
@@ -526,7 +537,8 @@ namespace Unison.Core.ViewModels
                 nameof(HasLocalAudio),
                 nameof(AudioButtonText),
                 nameof(IsAudio),
-                nameof(ShowTextContent));
+                nameof(ShowTextContent),
+                nameof(MediaBadgeDurationText));
         }
 
         private void RaiseQuoteUiChanged()
@@ -551,6 +563,10 @@ namespace Unison.Core.ViewModels
                 nameof(IsSticker),
                 nameof(HasImage),
                 nameof(ImageUri),
+                nameof(InfoPreviewUri),
+                nameof(InfoPreviewBase64),
+                nameof(HasInfoPreviewUri),
+                nameof(HasInfoPreviewBase64),
                 nameof(NeedsImageDownload),
                 nameof(IsImage),
                 nameof(ShowTextContent));
@@ -568,10 +584,13 @@ namespace Unison.Core.ViewModels
                 nameof(HasVideoPoster),
                 nameof(VideoUri),
                 nameof(VideoPosterUri),
+                nameof(InfoPreviewUri),
+                nameof(HasInfoPreviewUri),
                 nameof(ShowVideoDownloadIcon),
                 nameof(ShowVideoPlayOverlay),
                 nameof(ShowVideoFooterDuration),
                 nameof(VideoFooterDurationText),
+                nameof(MediaBadgeDurationText),
                 nameof(ShowTextContent));
             RaiseMediaCommandsChanged();
         }
@@ -708,6 +727,23 @@ namespace Unison.Core.ViewModels
                 }
 
                 uint seconds = Model.VideoDurationSeconds;
+                return string.Format("{0}:{1:00}", seconds / 60, seconds % 60);
+            }
+        }
+
+        /// <summary>Duration badge for the chat-info media grid (available before download).</summary>
+        public string MediaBadgeDurationText
+        {
+            get
+            {
+                uint seconds = Model.IsVideo
+                    ? Model.VideoDurationSeconds
+                    : Model.AudioDurationSeconds;
+                if (seconds == 0)
+                {
+                    return string.Empty;
+                }
+
                 return string.Format("{0}:{1:00}", seconds / 60, seconds % 60);
             }
         }
@@ -870,6 +906,38 @@ namespace Unison.Core.ViewModels
         }
 
         public string FormattedTime => Model.FormattedTime;
+
+        public string FormattedDate => Model.FormattedDate;
+
+        /// <summary>Local image for the chat-info media grid (downloaded file, then jpegThumbnail cache).</summary>
+        public string InfoPreviewUri
+        {
+            get
+            {
+                if (!string.IsNullOrWhiteSpace(Model.ImageUri))
+                {
+                    return Model.ImageUri;
+                }
+
+                if (!string.IsNullOrWhiteSpace(Model.ThumbnailUri))
+                {
+                    return Model.ThumbnailUri;
+                }
+
+                if (Model.IsVideo && Model.HasVideoPoster)
+                {
+                    return Model.VideoPosterUri;
+                }
+
+                return null;
+            }
+        }
+
+        public string InfoPreviewBase64 => Model.MediaThumbnailBase64;
+
+        public bool HasInfoPreviewBase64 => !string.IsNullOrWhiteSpace(Model.MediaThumbnailBase64);
+
+        public bool HasInfoPreviewUri => !string.IsNullOrWhiteSpace(InfoPreviewUri);
 
         private void RaiseExpandPropsChanged()
         {

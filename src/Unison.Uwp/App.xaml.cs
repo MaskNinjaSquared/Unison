@@ -18,13 +18,25 @@ using Unison.Baileys.Client;
 using Unison.Core.Constants;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
+using Unison.Core.Diagnostics;
 using Unison.Core.Factories;
 using Unison.Core.Mappers;
+using Unison.Core.State;
 using Unison.Core.ViewModels;
+using Unison.Socket.Abstractions;
+using Unison.Socket.Signal;
 using Unison.Uwp.Client;
 using Unison.Uwp.Data;
 using Unison.Uwp.Services;
+using Unison.Uwp.Services.Socket;
 using Unison.Uwp.Services.WhatsApp;
+using Unison.Uwp.Services.WhatsApp.Chats;
+using Unison.Uwp.Services.WhatsApp.Connection;
+using Unison.Uwp.Services.WhatsApp.Contacts;
+using Unison.Uwp.Services.WhatsApp.Diagnostics;
+using Unison.Uwp.Services.WhatsApp.History;
+using Unison.Uwp.Services.WhatsApp.Messages;
+using Unison.Uwp.Services.WhatsApp.Profiles;
 
 namespace Unison.Uwp
 {
@@ -44,14 +56,16 @@ namespace Unison.Uwp
         public static bool IsWindowVisible { get; private set; } = true;
 
         /// <summary>DI-resolved WhatsApp service (same instance as the legacy singleton).</summary>
+        /// <summary>
+        /// The WhatsApp service, or null while the container is still being built. The service is
+        /// no longer able to conjure itself on demand, because its state now belongs to the
+        /// container, so an early caller is told there is nothing yet instead of being handed an
+        /// instance that shares nothing with the one the app will actually use.
+        /// </summary>
         internal static IWhatsAppService GetWhatsAppService()
         {
-            if (Services != null)
-            {
-                return Services.GetRequiredService<IWhatsAppService>();
-            }
-
-            return WhatsAppService.Instance;
+            var services = Services;
+            return services == null ? null : services.GetRequiredService<IWhatsAppService>();
         }
 
         /// <summary>
@@ -136,7 +150,14 @@ namespace Unison.Uwp
                     {
                         try
                         {
-                            await App.GetWhatsAppService().ReleaseMemoryAsync();
+                            // Memory pressure can arrive before the container is up, and there is
+                            // nothing holding memory to release at that point anyway.
+                            var whatsApp = App.GetWhatsAppService();
+                            if (whatsApp != null)
+                            {
+                                await whatsApp.ReleaseMemoryAsync();
+                            }
+
                             if (nivel == Windows.System.AppMemoryUsageLevel.OverLimit)
                             {
                                 GC.Collect();
@@ -167,6 +188,15 @@ namespace Unison.Uwp
             var services = new ServiceCollection();
 
             services.AddSingleton<IDispatcher, DispatcherService>();
+
+            // Single owner of the in-memory chat state, and built before the service that fills
+            // it: WhatsAppService receives this instance rather than creating one, so the store
+            // outlives it and the view models that read it need nothing from that class.
+            //
+            // The concrete type is registered too because WhatsAppService still reaches the
+            // transitional dictionaries on it. That registration goes away with those.
+            services.AddSingleton<ChatStateStore>(_ => new ChatStateStore(new UiThreadDispatcherService()));
+            services.AddSingleton<IChatStateStore>(sp => sp.GetRequiredService<ChatStateStore>());
             services.AddSingleton<IDialogService, DialogService>();
             services.AddSingleton<ILocalSettings, LocalSettingsService>();
             services.AddSingleton<INavigator>(_ => new NavigatorService(rootFrame));
@@ -178,13 +208,30 @@ namespace Unison.Uwp
             services.AddSingleton<IMediaProcessor, MediaProcessorAdapter>();
             services.AddSingleton<IAuthPersistence>(_ => new AuthStore());
             services.AddSingleton<IKeyStore>(_ => new FileKeyStore());
-            services.AddSingleton<IWhatsAppService>(_ => WhatsAppService.Instance);
+            services.AddSingleton<IWhatsAppService>(
+                sp => WhatsAppService.Create(sp.GetRequiredService<ChatStateStore>()));
 #if DEBUG
             // Dev-only tooling: file-watch based debug send. Never attached/started in Release.
             services.AddSingleton<IDebugSendService, DebugSendService>();
 #endif
-            services.AddSingleton<IProfileService, ProfileService>();
-            services.AddSingleton<IMessageService, MessageService>();
+            // The connection is a SocketBridge, so there is always a session to hand out.
+            services.AddSingleton<IWhatsAppSessionProvider>(sp => new BridgeSessionProvider(
+                () => ((WhatsAppService)sp.GetRequiredService<IWhatsAppService>()).Socket));
+
+            services.AddSingleton<IProfileService>(sp => new ProfileFacade(
+                sp.GetRequiredService<IWhatsAppSessionProvider>(),
+                sp.GetRequiredService<IWhatsAppService>()));
+
+            // Falls back to the service's own resync when the socket is down and the session
+            // provider has nothing to give it.
+            services.AddSingleton(sp => new HistoryFacade(
+                sp.GetRequiredService<IWhatsAppSessionProvider>(),
+                sp.GetRequiredService<IWhatsAppService>(),
+                sp.GetRequiredService<IMessageStore>(),
+                sp.GetRequiredService<ILocalSettings>()));
+            services.AddSingleton<IHistoryService>(sp => sp.GetRequiredService<HistoryFacade>());
+
+            services.AddSingleton<IMessageService, MessageFacade>();
             services.AddSingleton<IChatItemVmFactory, ChatItemVmFactory>();
             services.AddSingleton<IChatMessageVmFactory, ChatMessageVmFactory>();
             services.AddSingleton<IChatDetailInfoViewModelFactory, ChatDetailInfoViewModelFactory>();
@@ -193,7 +240,22 @@ namespace Unison.Uwp
             services.AddSingleton<IPersonStore, PersonStore>();
             services.AddSingleton<IChatStore, ChatStore>();
             services.AddSingleton<ILocalContactsService, LocalContactsService>();
-            services.AddSingleton<IContactService, ContactService>();
+
+            // The LID mapping store is registered either way: it is the eventual replacement for
+            // the JidAlias dictionaries, and nothing forces it to wait for the socket rewrite.
+            services.AddSingleton<ILidMappingStorage, SqliteLidMappingStorage>();
+            services.AddSingleton(sp => new LidMappingStore(sp.GetRequiredService<ILidMappingStorage>()));
+
+            services.AddSingleton<IContactService>(sp => new ContactFacade(
+                sp.GetRequiredService<IWhatsAppSessionProvider>(),
+                sp.GetRequiredService<ILocalContactsService>(),
+                sp.GetRequiredService<IPersonStore>(),
+                sp.GetRequiredService<IWhatsAppService>(),
+                sp.GetRequiredService<LidMappingStore>()));
+            services.AddSingleton<IChatService>(sp => new ChatFacade(
+                sp.GetRequiredService<IWhatsAppSessionProvider>(),
+                sp.GetRequiredService<IWhatsAppService>(),
+                sp.GetRequiredService<IChatStore>()));
             services.AddSingleton<ILiveTilesService>(_ => LiveTilesService.Instance);
             services.AddSingleton<IShortcutService, ShortcutService>();
             services.AddSingleton<INotificationService>(sp =>
@@ -213,12 +275,24 @@ namespace Unison.Uwp
             services.AddSingleton<IReactionMapper, ReactionMapper>();
             services.AddSingleton<IChatMessageMapper, ChatMessageMapper>();
             services.AddSingleton<IStringResources, StringResourcesService>();
-            services.AddSingleton<IConnectionService, ConnectionService>();
+            services.AddSingleton<IConnectionService>(sp => new ConnectionFacade(
+                sp.GetRequiredService<ILocalSettings>(),
+                sp.GetRequiredService<INotificationService>(),
+                sp.GetRequiredService<IStringResources>(),
+                sp.GetRequiredService<IWhatsAppSessionProvider>()));
             services.AddSingleton<ISystemInfoProvider, SystemInfoProvider>();
             services.AddSingleton<IStatusBarService, StatusBarService>();
             services.AddSingleton<ILocationKeepAliveService, LocationKeepAliveService>();
             services.AddSingleton<IShellThemeService, ShellThemeService>();
             services.AddSingleton<IAppLanguageService, AppLanguageService>();
+
+            // Validation harness for the Unison.Socket rewrite. Reachable only from the debug
+            // pane and runs on throwaway credentials, so it cannot affect the signed-in session.
+            services.AddSingleton<ISocketSliceProbe, SocketSliceProbe>();
+
+            // Read side of diagnostics, for the debug pane only. Code that merely records events
+            // keeps injecting ISessionLogger / IRuntimeDiagnostics directly.
+            services.AddSingleton<IDiagnosticsConsole, DiagnosticsConsole>();
 
             services.AddTransient<LoginViewModel>();
             services.AddTransient<StartViewModel>();
@@ -237,6 +311,10 @@ namespace Unison.Uwp
             whatsAppImpl.AttachContactService(Services.GetRequiredService<IContactService>());
             whatsAppImpl.AttachConnectionService(Services.GetRequiredService<IConnectionService>());
             Services.GetRequiredService<IConnectionService>().AttachWhatsAppService(whatsApp);
+            // The remaining facades relay client events to the screens, and they can only relay
+            // what they were around to hear. Build them now rather than when a screen first asks.
+            Services.GetRequiredService<IProfileService>();
+            Services.GetRequiredService<IHistoryService>();
             whatsAppImpl.AttachPersonStore(Services.GetRequiredService<IPersonStore>());
             whatsAppImpl.AttachChatStore(Services.GetRequiredService<IChatStore>());
 #if DEBUG

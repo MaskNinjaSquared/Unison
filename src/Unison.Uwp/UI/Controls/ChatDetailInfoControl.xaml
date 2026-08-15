@@ -3,7 +3,6 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Unison.Uwp.UI.Controls"
-    xmlns:toolkit="using:Microsoft.Toolkit.Uwp.UI.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
@@ -13,25 +12,8 @@
     <UserControl.Resources>
         <SolidColorBrush x:Key="ChatDetailInfoBackgroundBrush" Color="#01B051"/>
         <SolidColorBrush x:Key="ChatDetailInfoCommandBarBrush" Color="#019944"/>
-        <SolidColorBrush x:Key="ChatDetailInfoTextBrush" Color="White"/>
-        <SolidColorBrush x:Key="ChatDetailInfoMutedTextBrush" Color="#E8FFFFFF"/>
         <SolidColorBrush x:Key="ChatDetailInfoCloseHoverBrush" Color="#33FFFFFF"/>
         <SolidColorBrush x:Key="ChatDetailInfoClosePressedBrush" Color="#55FFFFFF"/>
-
-        <Style x:Key="ChatDetailInfoSectionLabelStyle" TargetType="TextBlock">
-            <Setter Property="FontFamily" Value="{StaticResource MainFontSemibold}"/>
-            <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Foreground" Value="{StaticResource ChatDetailInfoTextBrush}"/>
-            <Setter Property="Margin" Value="0,16,0,4"/>
-        </Style>
-        <Style x:Key="ChatDetailInfoSectionValueStyle" TargetType="TextBlock">
-            <Setter Property="FontFamily" Value="{StaticResource MainFont}"/>
-            <Setter Property="FontWeight" Value="Normal"/>
-            <Setter Property="FontSize" Value="16"/>
-            <Setter Property="Foreground" Value="{StaticResource ChatDetailInfoTextBrush}"/>
-            <Setter Property="TextWrapping" Value="Wrap"/>
-        </Style>
 
         <Style x:Key="ChatDetailInfoCloseButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
@@ -97,7 +79,6 @@
             </Setter>
         </Style>
 
-        <!-- WP8-style app-bar button: glyph + label stacked (CommandBar often forces Compact). -->
         <Style x:Key="ChatDetailInfoAppBarButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="White"/>
@@ -165,219 +146,19 @@
             <RowDefinition Height="64"/>
         </Grid.RowDefinitions>
 
-        <!-- Full-bleed host: Pivot fills width; Close overlays top-right (no side column stealing space). -->
         <Grid x:Name="InfoBodyHost"
               Grid.Row="0"
               HorizontalAlignment="Stretch"
-              VerticalAlignment="Stretch"
-              SizeChanged="InfoBodyHost_SizeChanged">
+              VerticalAlignment="Stretch">
 
-            <Pivot x:Name="InfoPivot"
-                   Foreground="White"
-                   Margin="0,10,0,0"
-                   HorizontalAlignment="Stretch"
-                   VerticalAlignment="Stretch"
-                   HorizontalContentAlignment="Stretch"
-                   VerticalContentAlignment="Stretch"
-                   SelectionChanged="InfoPivot_SelectionChanged">
-                <Pivot.Resources>
-                    <Style TargetType="PivotItem">
-                        <Setter Property="Margin" Value="0"/>
-                        <Setter Property="Padding" Value="0"/>
-                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                        <Setter Property="VerticalContentAlignment" Value="Stretch"/>
-                        <Setter Property="Template">
-                            <Setter.Value>
-                                <ControlTemplate TargetType="PivotItem">
-                                    <Grid Background="{TemplateBinding Background}"
-                                          HorizontalAlignment="Stretch"
-                                          VerticalAlignment="Stretch">
-                                        <ContentPresenter Content="{TemplateBinding Content}"
-                                                          ContentTemplate="{TemplateBinding ContentTemplate}"
-                                                          Margin="{TemplateBinding Padding}"
-                                                          HorizontalAlignment="Stretch"
-                                                          VerticalAlignment="Stretch"
-                                                          HorizontalContentAlignment="Stretch"
-                                                          VerticalContentAlignment="Stretch"/>
-                                    </Grid>
-                                </ControlTemplate>
-                            </Setter.Value>
-                        </Setter>
-                    </Style>
-
-                    <!-- No selection underline; selected = white, others = white @ ~60% opacity. -->
-                    <Style TargetType="PivotHeaderItem">
-                        <Setter Property="FontSize" Value="14"/>
-                        <Setter Property="FontFamily" Value="{StaticResource MainFontSemibold}"/>
-                        <Setter Property="FontWeight" Value="Bold"/>
-                        <Setter Property="Background" Value="Transparent"/>
-                        <Setter Property="Foreground" Value="#99FFFFFF"/>
-                        <Setter Property="Padding" Value="14,0,14,0"/>
-                        <Setter Property="Height" Value="44"/>
-                        <Setter Property="VerticalContentAlignment" Value="Center"/>
-                        <Setter Property="IsTabStop" Value="False"/>
-                        <Setter Property="Template">
-                            <Setter.Value>
-                                <ControlTemplate TargetType="PivotHeaderItem">
-                                    <Grid x:Name="Grid" Background="{TemplateBinding Background}">
-                                        <VisualStateManager.VisualStateGroups>
-                                            <VisualStateGroup x:Name="SelectionStates">
-                                                <VisualState x:Name="Disabled">
-                                                    <Storyboard>
-                                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentPresenter"
-                                                                                       Storyboard.TargetProperty="Foreground">
-                                                            <DiscreteObjectKeyFrame KeyTime="0" Value="#40FFFFFF"/>
-                                                        </ObjectAnimationUsingKeyFrames>
-                                                    </Storyboard>
-                                                </VisualState>
-                                                <VisualState x:Name="Unselected"/>
-                                                <VisualState x:Name="UnselectedLocked">
-                                                    <Storyboard>
-                                                        <DoubleAnimation Storyboard.TargetName="ContentPresenterTranslateTransform"
-                                                                         Storyboard.TargetProperty="X"
-                                                                         Duration="0"
-                                                                         To="0"/>
-                                                        <DoubleAnimation Storyboard.TargetName="ContentPresenter"
-                                                                         Storyboard.TargetProperty="Opacity"
-                                                                         Duration="0"
-                                                                         To="0"/>
-                                                    </Storyboard>
-                                                </VisualState>
-                                                <VisualState x:Name="Selected">
-                                                    <Storyboard>
-                                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentPresenter"
-                                                                                       Storyboard.TargetProperty="Foreground">
-                                                            <DiscreteObjectKeyFrame KeyTime="0" Value="White"/>
-                                                        </ObjectAnimationUsingKeyFrames>
-                                                    </Storyboard>
-                                                </VisualState>
-                                                <VisualState x:Name="UnselectedPointerOver">
-                                                    <Storyboard>
-                                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentPresenter"
-                                                                                       Storyboard.TargetProperty="Foreground">
-                                                            <DiscreteObjectKeyFrame KeyTime="0" Value="#CCFFFFFF"/>
-                                                        </ObjectAnimationUsingKeyFrames>
-                                                    </Storyboard>
-                                                </VisualState>
-                                                <VisualState x:Name="SelectedPointerOver">
-                                                    <Storyboard>
-                                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentPresenter"
-                                                                                       Storyboard.TargetProperty="Foreground">
-                                                            <DiscreteObjectKeyFrame KeyTime="0" Value="White"/>
-                                                        </ObjectAnimationUsingKeyFrames>
-                                                    </Storyboard>
-                                                </VisualState>
-                                                <VisualState x:Name="UnselectedPressed">
-                                                    <Storyboard>
-                                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentPresenter"
-                                                                                       Storyboard.TargetProperty="Foreground">
-                                                            <DiscreteObjectKeyFrame KeyTime="0" Value="#B3FFFFFF"/>
-                                                        </ObjectAnimationUsingKeyFrames>
-                                                    </Storyboard>
-                                                </VisualState>
-                                                <VisualState x:Name="SelectedPressed">
-                                                    <Storyboard>
-                                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentPresenter"
-                                                                                       Storyboard.TargetProperty="Foreground">
-                                                            <DiscreteObjectKeyFrame KeyTime="0" Value="White"/>
-                                                        </ObjectAnimationUsingKeyFrames>
-                                                    </Storyboard>
-                                                </VisualState>
-                                            </VisualStateGroup>
-                                        </VisualStateManager.VisualStateGroups>
-
-                                        <!-- Intentionally no SelectionIndicator / Pipeline underline. -->
-                                        <ContentPresenter x:Name="ContentPresenter"
-                                                          Content="{TemplateBinding Content}"
-                                                          ContentTemplate="{TemplateBinding ContentTemplate}"
-                                                          FontSize="{TemplateBinding FontSize}"
-                                                          FontFamily="{TemplateBinding FontFamily}"
-                                                          FontWeight="{TemplateBinding FontWeight}"
-                                                          Foreground="{TemplateBinding Foreground}"
-                                                          Margin="{TemplateBinding Padding}"
-                                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}">
-                                            <ContentPresenter.RenderTransform>
-                                                <TranslateTransform x:Name="ContentPresenterTranslateTransform"/>
-                                            </ContentPresenter.RenderTransform>
-                                        </ContentPresenter>
-                                    </Grid>
-                                </ControlTemplate>
-                            </Setter.Value>
-                        </Setter>
-                    </Style>
-                </Pivot.Resources>
-                <Pivot.HeaderTemplate>
-                    <DataTemplate>
-                        <TextBlock Text="{Binding}"
-                                   FontFamily="{StaticResource MainFontSemibold}"
-                                   FontWeight="Bold"
-                                   FontSize="14"/>
-                    </DataTemplate>
-                </Pivot.HeaderTemplate>
-
-                <PivotItem x:Name="ProfilePivotItem">
-                    <ScrollViewer x:Name="ProfileScrollViewer"
-                                  VerticalScrollBarVisibility="Auto"
-                                  HorizontalScrollBarVisibility="Disabled"
-                                  HorizontalAlignment="Stretch"
-                                  VerticalAlignment="Top"
-                                  VerticalContentAlignment="Top"
-                                  Padding="20,8,20,16">
-                        <StackPanel HorizontalAlignment="Stretch">
-                            <toolkit:DropShadowPanel
-                                                     OffsetX="0"
-                                                     OffsetY="2"
-                                                     ShadowOpacity="0"
-                                                     Color="Black"
-                                                     HorizontalAlignment="Center"
-                                                     Margin="0,16,0,24">
-                                <controls:ChatAvatarControl x:Name="InfoAvatar"
-                                                            Size="300"
-                                                            Width="300"
-                                                            Height="300"
-                                                            />
-                            </toolkit:DropShadowPanel>
-
-                            <TextBlock x:Name="NameLabel"
-                                       Style="{StaticResource ChatDetailInfoSectionLabelStyle}"
-                                       Text="NAME"/>
-                            <TextBlock x:Name="NameValue"
-                                       Style="{StaticResource ChatDetailInfoSectionValueStyle}"/>
-
-                            <StackPanel x:Name="PhoneSection" Margin="0,20,0,0" HorizontalAlignment="Stretch">
-                                <TextBlock x:Name="PhoneLabel"
-                                           Style="{StaticResource ChatDetailInfoSectionLabelStyle}"
-                                           Text="PHONE"/>
-                                <TextBlock x:Name="PhoneValue"
-                                           Style="{StaticResource ChatDetailInfoSectionValueStyle}"/>
-                            </StackPanel>
-
-                            <TextBlock x:Name="StatusLabel"
-                                       Margin="0,20,0,0"
-                                       Style="{StaticResource ChatDetailInfoSectionLabelStyle}"
-                                       Text="STATUS"/>
-                            <TextBlock x:Name="StatusValue"
-                                       Style="{StaticResource ChatDetailInfoSectionValueStyle}"/>
-
-                            <TextBlock x:Name="NotificationsLabel"
-                                       Margin="0,20,0,0"
-                                       Style="{StaticResource ChatDetailInfoSectionLabelStyle}"
-                                       Text="NOTIFICATIONS"/>
-                            <TextBlock x:Name="NotificationsValue"
-                                       Style="{StaticResource ChatDetailInfoSectionValueStyle}"/>
-                        </StackPanel>
-                    </ScrollViewer>
-                </PivotItem>
-
-                <PivotItem x:Name="FilesPivotItem">
-                    <Grid HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
-                </PivotItem>
-
-                <PivotItem x:Name="CallsPivotItem">
-                    <Grid HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
-                </PivotItem>
-            </Pivot>
+            <controls:ChatDetailUserInfoControl x:Name="UserInfoPanel"
+                                                HorizontalAlignment="Stretch"
+                                                VerticalAlignment="Stretch"
+                                                Visibility="Collapsed"/>
+            <controls:ChatDetailGroupInfoControl x:Name="GroupInfoPanel"
+                                                 HorizontalAlignment="Stretch"
+                                                 VerticalAlignment="Stretch"
+                                                 Visibility="Collapsed"/>
 
             <Button x:Name="CloseButton"
                     HorizontalAlignment="Right"
@@ -398,6 +179,31 @@
                         HorizontalAlignment="Right"
                         VerticalAlignment="Stretch"
                         Margin="0">
+                <Button x:Name="ChatPinButton"
+                        Style="{StaticResource ChatDetailInfoAppBarButtonStyle}"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Stretch"
+                        Click="ChatPinButton_Click"
+                        ToolTipService.ToolTip="Pin chat">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <FontIcon Glyph="&#xE840;"
+                                  FontFamily="{StaticResource IconFont}"
+                                  FontSize="18"
+                                  Foreground="White"
+                                  HorizontalAlignment="Center"/>
+                        <TextBlock x:Name="ChatPinButtonLabel"
+                                   Text="Pin&#x0a;chat"
+                                   FontSize="10"
+                                   FontFamily="{StaticResource MainFont}"
+                                   Foreground="White"
+                                   Margin="0,2,0,0"
+                                   TextAlignment="Center"
+                                   TextWrapping="Wrap"
+                                   TextLineBounds="Tight"
+                                   MaxWidth="68"
+                                   MaxLines="2"/>
+                    </StackPanel>
+                </Button>
                 <Button x:Name="PinButton"
                         Style="{StaticResource ChatDetailInfoAppBarButtonStyle}"
                         HorizontalAlignment="Right"

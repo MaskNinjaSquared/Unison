@@ -79,6 +79,17 @@ namespace Unison.Core.ViewModels
             }
 
 
+            if (e?.PropertyName == nameof(ChatItem.AvatarUrl) ||
+
+                e?.PropertyName == nameof(ChatItem.AvatarHighUrl))
+
+            {
+
+                Raise(nameof(AvatarUrl));
+
+            }
+
+
 
             if (e?.PropertyName == nameof(ChatItem.MutedUntil) ||
 
@@ -164,7 +175,7 @@ namespace Unison.Core.ViewModels
 
         public string Timestamp => Model.Timestamp;
 
-        public string AvatarUrl => Model.AvatarUrl;
+        public string AvatarUrl => Model.GetAvatarUrl(preferHigh: false);
 
         public bool IsGroup => Model.IsGroup;
 
