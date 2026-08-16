@@ -1,0 +1,18 @@
+---
+description: Unison.Socket / Baileys protocol conventions and handler split
+globs: src/Unison.Socket/**,src/Unison.Baileys/**,src/Unison.Uwp/Client/SocketBridge.cs
+alwaysApply: false
+---
+
+# Socket stack
+
+Read `docs/wiki/Socket-Stack.md`. Spec: `docs/wiki/Coding-Standards.md` §8.
+
+- `ConnectionHandler` = wire only (Noise, framing, IQ, keep-alive). Features register on `NodeDispatcher`.
+- One IQ/operation per `UseCase`. Header: purpose, what it does not do, `Ports: rc14 <path>`.
+- Host seams in `Abstractions/`. Do not take WinRT or Core ViewModels in Socket.
+- Attach message/media/app-state/groups from the host (`SocketBridge`), not by bloating `WhatsAppSession` with domain state.
+- LID mapping is `LidMappingStore`, not a new JidAlias table.
+- `TransferSocketToBrokerAsync` / reclaim stay false until the session can lend the transport.
+
+Do not compile `SocketClient.cs`. Do not add protocol switches back onto `WhatsAppService`.

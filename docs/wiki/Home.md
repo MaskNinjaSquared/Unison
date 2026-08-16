@@ -29,6 +29,7 @@ The **Unison.Socket** stack (Baileys **7.0.0-rc14**) is now the foundation for W
 | [Application layer](Application-Layer) | Core, UWP facades, DI, ViewModels |
 | [Background broker](Background-Broker) | Out-of-process socket, journal, toasts |
 | [UI and shell](UI-and-Shell) | Navigation, themes, i18n, chat surface |
+| [Coding standards](Coding-Standards) | Spec: MVVM, DI, folders, façades — how to write new code |
 | [Migration](Migration) | What moved, what is still legacy |
 | [Changelog](Changelog) | Newest → oldest product and architecture notes |
 

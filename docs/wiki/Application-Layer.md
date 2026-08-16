@@ -2,6 +2,8 @@
 
 UWP hosts the app. Core holds contracts and ViewModels. WhatsApp **facades** are the API screens should use. `WhatsAppService` remains the compatibility client underneath several of those facades.
 
+Rules for new code (MVVM, DI, folders): [Coding standards](Coding-Standards).
+
 ## Unison.Core
 
 netstandard2.0, no XAML, no WinRT.

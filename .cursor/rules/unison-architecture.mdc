@@ -1,0 +1,17 @@
+---
+description: Unison architecture — read wiki first; layer and migration invariants
+alwaysApply: true
+---
+
+# Architecture
+
+Read `docs/wiki/Home.md` + `docs/wiki/Architecture.md` before editing. Coding spec: `docs/wiki/Coding-Standards.md`.
+
+- Protocol/session: `Unison.Socket` (`WhatsAppSession` / `ConnectionHandler`). UI talks to **façades**, not raw client events.
+- `WhatsAppService` is a compatibility client. Do not grow it for UI; add members on the façade that owns the subject.
+- Live connection: `SocketBridge` → `WhatsAppSession`. `SocketClient.cs` is not in the csproj — do not revive it.
+- `Unison.Core`: no XAML/WinRT. `Unison.Background`: no Core/Socket.
+- `ConnectionHandler` never calls use cases and never holds chats. Reconnect stays in the host.
+- Broker transfer on `SocketBridge` returns false. Do not fake a successful handoff.
+
+DI: register in `App.ConfigureServices`. New services are interface (Core) + implementation (UWP) + constructor injection. No new `Foo.Instance`.

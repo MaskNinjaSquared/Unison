@@ -2,6 +2,8 @@
 
 Unison’s UI is a UWP app (`Unison.Uwp`) with ViewModels in `Unison.Core`. Target: **Windows 10 Mobile** first, desktop UWP second. Min version **10.0.16299**. UI stack includes **WinUI 2.7** (`Microsoft.UI.Xaml` 2.7.3).
 
+How to add views, controls, and dialogs: [Coding standards](Coding-Standards).
+
 ## Navigation
 
 Routes live in Core (`NavigationRoutes`). Page types live only in `NavigatorService` (UWP). Auth boundaries use `NavigateAndClear` (no back stack into login).
@@ -132,3 +134,5 @@ A large set of former code-behind interactions is bound with **Microsoft.Xaml.Be
 | Image send preview | `DialogService` + `ImageSendPreviewDialog` |
 | New chat by number | `NewChatDialog` + `NewChatDialogViewModel` |
 | Share / save image | `ShareService` / `IFilePicker.PickSaveLocalImageAsync` |
+
+Folder rules, bindings, and dialogs: [Coding standards](Coding-Standards).

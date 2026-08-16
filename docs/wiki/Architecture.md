@@ -150,6 +150,7 @@ Facades extracted **policy** around it (pairing/logout, pin/mark-read, contact o
 
 - Protocol internals → [Socket stack](Socket-Stack)
 - Facades, DI, ViewModels → [Application layer](Application-Layer)
+- How to write new code → [Coding standards](Coding-Standards)
 - Suspended socket and toasts → [Background broker](Background-Broker)
 - Shell, chat UI, i18n → [UI and shell](UI-and-Shell)
 - Remaining work → [Migration](Migration)

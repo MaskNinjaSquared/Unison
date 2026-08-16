@@ -1,0 +1,19 @@
+---
+description: Unison MVVM, UI folders, bindings, dialogs, and ViewModels
+globs: src/Unison.Uwp/UI/**,src/Unison.Uwp/**/*.xaml,src/Unison.Core/ViewModels/**,src/Unison.Core/Factories/**
+alwaysApply: false
+---
+
+# MVVM and UI
+
+Full spec: `docs/wiki/Coding-Standards.md`.
+
+- Every view has a ViewModel in `Unison.Core/ViewModels`. Bind `DataContext`; commands are `RelayCommand`.
+- Collection items with actions (`ChatMessage`, chat rows) are ViewModels created by DI factories — never `new` from a view.
+- Bindings and Behaviors (`Microsoft.Xaml.Interactivity`) for actions. Code-behind only: navigation, Loaded/Unloaded, Storyboards, `MediaElement`, scroll.
+- Reusable visuals → `UI/Controls/`. Dialogs → `UI/Dialogs/` shown only via `IDialogService` (pass the target VM when the dialog has form state).
+- Converters → `UI/Converters/`. Templates → `UI/Templates/`. No ViewModels in UWP.
+- Strings: `x:Uid` / `IStringResources` / `.resw` in all shipped languages. No hardcoded UI copy in a VM.
+- Routes in `NavigationRoutes`; page types only in `NavigatorService`.
+
+Exceptions (do not “fix” in passing): `ChatDetailView` list/scroll/MediaElement; `VisibleChats` safe-mode mirror. Move slices toward the VM, do not expand the hybrid.

@@ -27,7 +27,7 @@ The client is still under development. Note: None of the early users who tested 
 | `src/Unison.Baileys` | Noise, Signal, binary XML, protobuf, crypto |
 | `src/Unison.Background` | Out-of-process socket activity task |
 
-Solution: `Unison.slnx`. Architecture wiki (English, current): [`docs/wiki/`](docs/wiki/Home.md).
+Solution: `Unison.slnx`. Docs: [`docs/wiki/`](docs/wiki/Home.md) (architecture) · [`Coding-Standards`](docs/wiki/Coding-Standards.md) (how to write code). Agents: [`AGENTS.md`](AGENTS.md).
 
 ## Build & deploy
 
