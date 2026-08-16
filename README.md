@@ -45,3 +45,11 @@ Solution: `Unison.slnx`. Docs: [`docs/wiki/`](docs/wiki/Home.md) (architecture) 
 
 > [!WARNING]
 > Debug/ARM builds do not work on Windows Phone unless compiled with the .NET Native compiler. This project uses newer .NET Standard APIs that require runtime support unavailable in non-.NET Native builds.
+
+## License
+
+Source-available under the [PolyForm Noncommercial License 1.0.0](LICENSE).
+
+You may use, modify, and share Unison for **non-commercial** purposes (personal, hobby, research, and the non-commercial organizations listed in the license). Selling Unison, or using it to provide a commercial product or service, is not allowed.
+
+This is not an OSI-approved open-source license. The full terms are in [`LICENSE`](LICENSE).
