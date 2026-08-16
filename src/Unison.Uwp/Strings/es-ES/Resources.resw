@@ -255,6 +255,9 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   <data name="ChatDetail_AttachBarTooltip.Content" xml:space="preserve">
     <value>Adjuntar</value>
   </data>
+  <data name="ChatDetail_ScrollToBottomTooltip.Content" xml:space="preserve">
+    <value>Ir al final</value>
+  </data>
   <data name="ChatDetail_AttachCameraTile.Text" xml:space="preserve">
     <value>Cámara</value>
   </data>
@@ -516,6 +519,15 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   <data name="Common_OK" xml:space="preserve">
     <value>Aceptar</value>
   </data>
+  <data name="Login_BackgroundAccessTitle" xml:space="preserve">
+    <value>Aplicaciones en segundo plano</value>
+  </data>
+  <data name="Login_BackgroundAccessBody" xml:space="preserve">
+    <value>Unison necesita permiso para ejecutarse en segundo plano y conectar con WhatsApp. Activa Unison en Configuración → Privacidad → Aplicaciones en segundo plano y vuelve aquí.</value>
+  </data>
+  <data name="Login_BackgroundAccessRetry" xml:space="preserve">
+    <value>El acceso en segundo plano está activo. Pulsa Recargar QR para conectar.</value>
+  </data>
   <data name="Common_Yesterday" xml:space="preserve">
     <value>Ayer</value>
   </data>
@@ -576,6 +588,42 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   <data name="Settings_Customization.Text" xml:space="preserve">
     <value>Personalización</value>
   </data>
+  <data name="Settings_Language.Header" xml:space="preserve">
+    <value>Idioma</value>
+  </data>
+  <data name="Settings_Language.Text" xml:space="preserve">
+    <value>Elige el idioma de la aplicación. Se reiniciará para aplicarlo.</value>
+  </data>
+  <data name="Settings_LanguageSystem" xml:space="preserve">
+    <value>Sistema</value>
+  </data>
+  <data name="Settings_LanguageRestartTitle" xml:space="preserve">
+    <value>Idioma actualizado</value>
+  </data>
+  <data name="Settings_LanguageRestartBody" xml:space="preserve">
+    <value>Unison se reiniciará para aplicar el nuevo idioma.</value>
+  </data>
+  <data name="Settings_LanguageRestartClose" xml:space="preserve">
+    <value>Aceptar</value>
+  </data>
+  <data name="Settings_Advanced.Text" xml:space="preserve">
+    <value>Ajustes avanzados</value>
+  </data>
+  <data name="Settings_Disconnect.Text" xml:space="preserve">
+    <value>Desconectar</value>
+  </data>
+  <data name="Settings_DisconnectTitle" xml:space="preserve">
+    <value>¿Desconectar?</value>
+  </data>
+  <data name="Settings_DisconnectBody" xml:space="preserve">
+    <value>Si te desconectas, irás a la pantalla de vinculación y se borrarán todos los datos y chats.</value>
+  </data>
+  <data name="Settings_DisconnectConfirm" xml:space="preserve">
+    <value>Desconectar</value>
+  </data>
+  <data name="Settings_DisconnectCancel" xml:space="preserve">
+    <value>Cancelar</value>
+  </data>
   <data name="Settings_Shell.Header" xml:space="preserve">
     <value>Shell</value>
   </data>
@@ -608,6 +656,9 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   </data>
   <data name="Start_GetStarted.Content" xml:space="preserve">
     <value>Comenzar</value>
+  </data>
+  <data name="Start_Language.Text" xml:space="preserve">
+    <value>Idioma:</value>
   </data>
   <data name="Settings_About.Text" xml:space="preserve">
     <value>Acerca de</value>

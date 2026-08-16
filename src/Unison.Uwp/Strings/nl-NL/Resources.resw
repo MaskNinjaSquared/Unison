@@ -314,6 +314,9 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   <data name="ChatDetail_AttachBarTooltip.Content" xml:space="preserve">
     <value>Bijvoegen</value>
   </data>
+  <data name="ChatDetail_ScrollToBottomTooltip.Content" xml:space="preserve">
+    <value>Naar het einde</value>
+  </data>
   <data name="ChatDetail_AttachCameraTile.Text" xml:space="preserve">
     <value>Camera</value>
   </data>
@@ -575,6 +578,15 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   <data name="Common_OK" xml:space="preserve">
     <value>OK</value>
   </data>
+  <data name="Login_BackgroundAccessTitle" xml:space="preserve">
+    <value>Apps op de achtergrond</value>
+  </data>
+  <data name="Login_BackgroundAccessBody" xml:space="preserve">
+    <value>Unison heeft toestemming nodig om op de achtergrond te draaien om met WhatsApp te verbinden. Zet Unison aan onder Instellingen → Privacy → Apps op de achtergrond en kom daarna terug.</value>
+  </data>
+  <data name="Login_BackgroundAccessRetry" xml:space="preserve">
+    <value>Achtergrondtoegang staat aan. Tik op QR opnieuw laden om te verbinden.</value>
+  </data>
   <data name="Common_Yesterday" xml:space="preserve">
     <value>Gisteren</value>
   </data>
@@ -635,6 +647,42 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   <data name="Settings_Customization.Text" xml:space="preserve">
     <value>Vormgeving</value>
   </data>
+  <data name="Settings_Language.Header" xml:space="preserve">
+    <value>Taal</value>
+  </data>
+  <data name="Settings_Language.Text" xml:space="preserve">
+    <value>Kies de taal van de app. De app herstart om dit toe te passen.</value>
+  </data>
+  <data name="Settings_LanguageSystem" xml:space="preserve">
+    <value>Systeem</value>
+  </data>
+  <data name="Settings_LanguageRestartTitle" xml:space="preserve">
+    <value>Taal bijgewerkt</value>
+  </data>
+  <data name="Settings_LanguageRestartBody" xml:space="preserve">
+    <value>Unison wordt opnieuw gestart om de nieuwe taal toe te passen.</value>
+  </data>
+  <data name="Settings_LanguageRestartClose" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="Settings_Advanced.Text" xml:space="preserve">
+    <value>Geavanceerde instellingen</value>
+  </data>
+  <data name="Settings_Disconnect.Text" xml:space="preserve">
+    <value>Verbinding verbreken</value>
+  </data>
+  <data name="Settings_DisconnectTitle" xml:space="preserve">
+    <value>Verbinding verbreken?</value>
+  </data>
+  <data name="Settings_DisconnectBody" xml:space="preserve">
+    <value>Als je de verbinding verbreekt, ga je naar het koppelingsscherm en worden alle gegevens en chats gewist.</value>
+  </data>
+  <data name="Settings_DisconnectConfirm" xml:space="preserve">
+    <value>Verbreken</value>
+  </data>
+  <data name="Settings_DisconnectCancel" xml:space="preserve">
+    <value>Annuleren</value>
+  </data>
   <data name="Settings_Shell.Header" xml:space="preserve">
     <value>Thema</value>
   </data>
@@ -667,6 +715,9 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   </data>
   <data name="Start_GetStarted.Content" xml:space="preserve">
     <value>Beginnen</value>
+  </data>
+  <data name="Start_Language.Text" xml:space="preserve">
+    <value>Taal:</value>
   </data>
   <data name="Settings_About.Text" xml:space="preserve">
     <value>Over</value>

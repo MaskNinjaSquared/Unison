@@ -42,6 +42,7 @@ namespace Unison.Core.ViewModels
         private readonly IStringResources _strings;
         private readonly ILocalSettings _localSettings;
         private readonly ISessionLogger _sessionLogger;
+        private readonly IBackgroundAccessPrompt _backgroundAccessPrompt;
 
         private bool _isPaneOpen;
         private string _currentUserName;
@@ -79,7 +80,8 @@ namespace Unison.Core.ViewModels
             INavigator navigator,
             IStringResources strings,
             ILocalSettings localSettings,
-            ISessionLogger sessionLogger = null)
+            ISessionLogger sessionLogger = null,
+            IBackgroundAccessPrompt backgroundAccessPrompt = null)
         {
             _whatsAppService = whatsAppService;
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
@@ -94,6 +96,7 @@ namespace Unison.Core.ViewModels
             _strings = strings;
             _localSettings = localSettings ?? throw new ArgumentNullException(nameof(localSettings));
             _sessionLogger = sessionLogger;
+            _backgroundAccessPrompt = backgroundAccessPrompt;
 
             _chatListPaneWidth = ReadStoredChatListPaneWidth();
 
@@ -400,6 +403,12 @@ namespace Unison.Core.ViewModels
 
             try
             {
+                if (_backgroundAccessPrompt != null &&
+                    !await _backgroundAccessPrompt.EnsureOrExitAsync())
+                {
+                    return;
+                }
+
                 await _whatsAppService.InitializeConnectionStateAsync();
 
                 // Cold start: profile from auth / memory (no network).
@@ -544,6 +553,12 @@ namespace Unison.Core.ViewModels
         {
             SuppressRootNavigation = false;
             PairingTrace("FinishBootRootNavigation surface=" + (AppSurface ?? "(null)"));
+
+            if (string.Equals(AppSurface, SurfaceStartup, StringComparison.Ordinal))
+            {
+                PairingTrace("FinishBootRootNavigation skipped (still Startup)");
+                return;
+            }
 
             if (string.Equals(AppSurface, SurfaceConnected, StringComparison.Ordinal))
             {

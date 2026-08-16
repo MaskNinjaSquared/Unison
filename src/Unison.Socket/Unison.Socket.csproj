@@ -4,6 +4,8 @@
     <TargetFramework>netstandard2.0</TargetFramework>
     <RootNamespace>Unison.Socket</RootNamespace>
     <AssemblyName>Unison.Socket</AssemblyName>
+    <!-- Accidental nested SDK projects under this folder must not be compiled in. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);Unison.Socket/**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>

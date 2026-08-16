@@ -154,7 +154,11 @@ namespace Unison.Uwp.Client
 
         public event EventHandler OnSessionInitialized;
 
+        // Pairing companion-reg and app-state collection names are handled inside
+        // Unison.Socket (PairingFlow / app-state use cases). Kept for IWhatsAppSocket.
+#pragma warning disable CS0067
         public event EventHandler<BinaryNode> OnLinkCodeCompanionReg;
+#pragma warning restore CS0067
 
         public event EventHandler<BinaryNode> OnMessage;
 
@@ -182,7 +186,10 @@ namespace Unison.Uwp.Client
 
         public event Func<object, int, Task> OnReceivedPendingNotifications;
 
+        // App-state dirty notifications already go through OnDirtyNotificationReceived.
+#pragma warning disable CS0067
         public event Func<object, string, Task> OnServerSyncCollectionReceived;
+#pragma warning restore CS0067
 
         // -- Host callbacks --------------------------------------------------
 

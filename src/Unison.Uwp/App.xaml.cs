@@ -20,6 +20,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Diagnostics;
 using Unison.Core.Factories;
+using Unison.Core.Helpers;
 using Unison.Core.Mappers;
 using Unison.Core.State;
 using Unison.Core.ViewModels;
@@ -267,6 +268,9 @@ namespace Unison.Uwp
             });
             services.AddSingleton<IRuntimeDiagnostics>(_ => RuntimeDiagnosticsService.Instance);
             services.AddSingleton<ISocketBrokerService>(_ => SocketBrokerCoordinator.Instance);
+            services.AddSingleton<IBackgroundAccessService, BackgroundAccessService>();
+            services.AddSingleton<IAppLifecycle, AppLifecycleService>();
+            services.AddSingleton<IBackgroundAccessPrompt, BackgroundAccessPrompt>();
             services.AddSingleton<IUriLauncher, UriLauncherService>();
             services.AddSingleton<IFilePicker, FilePickerService>();
             services.AddSingleton<IShareService, ShareService>();

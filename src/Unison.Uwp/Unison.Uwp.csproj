@@ -20,7 +20,7 @@
     <PackageCertificateThumbprint>
     </PackageCertificateThumbprint>
     <!-- APPX4001: declare bundle platforms explicitly -->
-    <AppxBundlePlatforms>x86|x64|arm</AppxBundlePlatforms>
+    <AppxBundlePlatforms>arm</AppxBundlePlatforms>
     <!-- PRI257: avoid NuGet satellite assemblies overriding app default language -->
     <AppxGeneratePrisForPortableLibrariesEnabled>false</AppxGeneratePrisForPortableLibrariesEnabled>
     <!-- Prefer 64-bit ILC; can avoid some 1.7.6 Analysis NREs -->
@@ -35,7 +35,7 @@
     <AppxBundleAutoResourcePackageQualifiers>Scale|DXFeatureLevel</AppxBundleAutoResourcePackageQualifiers>
     <!-- Language list (semicolons) must stay in the main package; Scale=200 matches
          the scale-qualified splash/logos so MakeAppx finds a main-package candidate. -->
-    <AppxDefaultResourceQualifiers>Language=en-US;pt-BR;es-ES;nl-NL;id-ID;it-IT;pl-PL|Scale=200</AppxDefaultResourceQualifiers>
+    <AppxDefaultResourceQualifiers>Language=en-US;pt-BR;es-ES;nl-NL;id-ID;it-IT;pl-PL;uk-UA|Scale=200</AppxDefaultResourceQualifiers>
     <PackageCertificateKeyFile>Unison.Uwp_TemporaryKey.pfx</PackageCertificateKeyFile>
     <AppInstallerUpdateFrequency>0</AppInstallerUpdateFrequency>
     <AppInstallerCheckForUpdateFrequency>OnApplicationRun</AppInstallerCheckForUpdateFrequency>
@@ -183,6 +183,8 @@
     <Compile Include="Transport\StreamSocketWebSocketTransport.cs" />
     <Compile Include="Transport\NoiseSessionStore.cs" />
     <Compile Include="Services\SocketBrokerCoordinator.cs" />
+    <Compile Include="Services\BackgroundAccessService.cs" />
+    <Compile Include="Services\AppLifecycleService.cs" />
     <Compile Include="Services\UriLauncherService.cs" />
     <Compile Include="Services\FilePickerService.cs" />
     <Compile Include="Services\ShareService.cs" />
@@ -231,15 +233,6 @@
     </Compile>
     <Compile Include="UI\Controls\SettingsSectionHeader.xaml.cs">
       <DependentUpon>SettingsSectionHeader.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="UI\Views\LoginControl.xaml.cs">
-      <DependentUpon>LoginControl.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="UI\Views\SettingsControl.xaml.cs">
-      <DependentUpon>SettingsControl.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="UI\Views\DebugControl.xaml.cs">
-      <DependentUpon>DebugControl.xaml</DependentUpon>
     </Compile>
     <Compile Include="UI\Views\BootView.xaml.cs">
       <DependentUpon>BootView.xaml</DependentUpon>
@@ -526,18 +519,6 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
-    <Page Include="UI\Views\LoginControl.xaml">
-      <Generator>MSBuild:Compile</Generator>
-      <SubType>Designer</SubType>
-    </Page>
-    <Page Include="UI\Views\SettingsControl.xaml">
-      <Generator>MSBuild:Compile</Generator>
-      <SubType>Designer</SubType>
-    </Page>
-    <Page Include="UI\Views\DebugControl.xaml">
-      <Generator>MSBuild:Compile</Generator>
-      <SubType>Designer</SubType>
-    </Page>
     <Page Include="UI\Views\BootView.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -651,6 +632,7 @@
     <PRIResource Include="Strings\id-ID\Resources.resw" />
     <PRIResource Include="Strings\it-IT\Resources.resw" />
     <PRIResource Include="Strings\pl-PL\Resources.resw" />
+    <PRIResource Include="Strings\uk-UA\Resources.resw" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Unison.Background\Unison.Background.csproj">

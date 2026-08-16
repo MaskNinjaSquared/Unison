@@ -314,6 +314,9 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="ChatDetail_AttachBarTooltip.Content" xml:space="preserve">
     <value>Lampirkan</value>
   </data>
+  <data name="ChatDetail_ScrollToBottomTooltip.Content" xml:space="preserve">
+    <value>Ke pesan terbaru</value>
+  </data>
   <data name="ChatDetail_AttachCameraTile.Text" xml:space="preserve">
     <value>Kamera</value>
   </data>
@@ -575,6 +578,15 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="Common_OK" xml:space="preserve">
     <value>OK</value>
   </data>
+  <data name="Login_BackgroundAccessTitle" xml:space="preserve">
+    <value>Aplikasi latar belakang</value>
+  </data>
+  <data name="Login_BackgroundAccessBody" xml:space="preserve">
+    <value>Unison memerlukan izin untuk berjalan di latar belakang agar dapat terhubung ke WhatsApp. Aktifkan Unison di Pengaturan → Privasi → Aplikasi latar belakang, lalu kembali ke sini.</value>
+  </data>
+  <data name="Login_BackgroundAccessRetry" xml:space="preserve">
+    <value>Akses latar belakang sudah aktif. Ketuk Muat ulang QR untuk terhubung.</value>
+  </data>
   <data name="Common_Yesterday" xml:space="preserve">
     <value>Kemarin</value>
   </data>
@@ -635,6 +647,42 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="Settings_Customization.Text" xml:space="preserve">
     <value>Kustomisasi</value>
   </data>
+  <data name="Settings_Language.Header" xml:space="preserve">
+    <value>Bahasa</value>
+  </data>
+  <data name="Settings_Language.Text" xml:space="preserve">
+    <value>Pilih bahasa aplikasi. Aplikasi akan dimulai ulang untuk menerapkannya.</value>
+  </data>
+  <data name="Settings_LanguageSystem" xml:space="preserve">
+    <value>Sistem</value>
+  </data>
+  <data name="Settings_LanguageRestartTitle" xml:space="preserve">
+    <value>Bahasa diperbarui</value>
+  </data>
+  <data name="Settings_LanguageRestartBody" xml:space="preserve">
+    <value>Unison akan dimulai ulang untuk menerapkan bahasa baru.</value>
+  </data>
+  <data name="Settings_LanguageRestartClose" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="Settings_Advanced.Text" xml:space="preserve">
+    <value>Pengaturan lanjutan</value>
+  </data>
+  <data name="Settings_Disconnect.Text" xml:space="preserve">
+    <value>Putuskan</value>
+  </data>
+  <data name="Settings_DisconnectTitle" xml:space="preserve">
+    <value>Putuskan?</value>
+  </data>
+  <data name="Settings_DisconnectBody" xml:space="preserve">
+    <value>Jika Anda memutuskan, Anda akan ke layar tautan dan semua data serta obrolan akan dihapus.</value>
+  </data>
+  <data name="Settings_DisconnectConfirm" xml:space="preserve">
+    <value>Putuskan</value>
+  </data>
+  <data name="Settings_DisconnectCancel" xml:space="preserve">
+    <value>Batal</value>
+  </data>
   <data name="Settings_Shell.Header" xml:space="preserve">
     <value>Shell</value>
   </data>
@@ -667,6 +715,9 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   </data>
   <data name="Start_GetStarted.Content" xml:space="preserve">
     <value>Mulai</value>
+  </data>
+  <data name="Start_Language.Text" xml:space="preserve">
+    <value>Bahasa:</value>
   </data>
   <data name="Settings_About.Text" xml:space="preserve">
     <value>Tentang</value>

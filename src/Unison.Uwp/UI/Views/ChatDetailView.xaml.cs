@@ -267,6 +267,7 @@ namespace Unison.Uwp.UI.Views
 
             _attachMenuStoryboard = BuildAttachMenuSlide(open, distance);
             _attachMenuStoryboard.Begin();
+            UpdateScrollToBottomButton();
         }
 
         /// <summary>
@@ -356,6 +357,7 @@ namespace Unison.Uwp.UI.Views
 
             ApplyAttachTileSize(e.NewSize.Width);
             ApplyAttachMenuHeightCap(e.NewSize.Height);
+            UpdateScrollToBottomButton();
         }
 
         /// <summary>Largest a tile gets: the size Whatsapp drew them at on Windows Phone 8.</summary>
@@ -428,6 +430,12 @@ namespace Unison.Uwp.UI.Views
                 e.PropertyName == nameof(ChatDetailViewModel.ChatDetailInfo))
             {
                 ApplyChatDetailInfoPane();
+            }
+
+            if (e.PropertyName == nameof(ChatDetailViewModel.IsRecording) ||
+                e.PropertyName == nameof(ChatDetailViewModel.IsGroupLockedForMessages))
+            {
+                UpdateScrollToBottomButton();
             }
         }
 
@@ -655,6 +663,8 @@ namespace Unison.Uwp.UI.Views
                 _scrollViewer.ViewChanged -= ScrollViewer_ViewChanged;
                 _scrollViewer.ViewChanged += ScrollViewer_ViewChanged;
             }
+
+            UpdateScrollToBottomButton();
         }
 
         private ScrollViewer FindScrollViewer(DependencyObject element)
@@ -671,6 +681,8 @@ namespace Unison.Uwp.UI.Views
 
         private async void ScrollViewer_ViewChanged(object sender, ScrollViewerViewChangedEventArgs e)
         {
+            UpdateScrollToBottomButton();
+
             if (_scrollViewer == null || _isLoadingMore || _hasReachedStart || _activeChat == null) return;
             if (DateTime.UtcNow < _suppressLoadMoreUntilUtc) return;
 
@@ -717,7 +729,7 @@ namespace Unison.Uwp.UI.Views
                     RemovePreviewFallbackMessages(_messages);
                     bool isGroup = _activeChat.IsGroup ||
                         requestedJid.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
-                    // Insert at top in chronological order
+                    // Insert by timestamp so a late history page lands in chronological order.
                     for (int i = 0; i < moreMessages.Count; i++)
                     {
                         var more = moreMessages[i];
@@ -727,7 +739,7 @@ namespace Unison.Uwp.UI.Views
                         {
                             more.RemoteJid = requestedJid;
                         }
-                        _messages.Insert(i, ToVm(more));
+                        InsertTimelineMessage(more);
                     }
                     RecomputeMessageRuns(_messages, isGroup);
 
@@ -1540,6 +1552,11 @@ namespace Unison.Uwp.UI.Views
             }
         }
 
+        private void ScrollToBottomButton_Click(object sender, RoutedEventArgs e)
+        {
+            ScrollToBottom();
+        }
+
         private void ScrollToBottom()
         {
             if (_messages.Count == 0)
@@ -1636,6 +1653,8 @@ namespace Unison.Uwp.UI.Views
             {
                 _scrollViewer.ChangeView(null, target, null, true);
             }
+
+            UpdateScrollToBottomButton();
         }
 
         /// <summary>
@@ -1666,6 +1685,28 @@ namespace Unison.Uwp.UI.Views
             {
                 Debug.WriteLine("[ChatDetailView] StickScrollToBottomAfterSendAsync: " + ex.Message);
             }
+        }
+
+        private void InsertTimelineMessage(ChatMessage message)
+        {
+            if (message == null)
+            {
+                return;
+            }
+
+            var vm = ToVm(message);
+            if (vm == null)
+            {
+                return;
+            }
+
+            int index = ChatMessageOrder.FindInsertIndex(
+                _messages.Count,
+                i => _messages[i]?.Timestamp ?? DateTime.MinValue,
+                i => _messages[i]?.Id,
+                message.Timestamp,
+                message.Id);
+            _messages.Insert(index, vm);
         }
 
         private ChatMessageViewModel ToVm(ChatMessage message)
@@ -1884,6 +1925,37 @@ namespace Unison.Uwp.UI.Views
             return (_scrollViewer.ExtentHeight - (_scrollViewer.VerticalOffset + _scrollViewer.ViewportHeight)) < 120;
         }
 
+        /// <summary>
+        /// Jump-to-latest chip: send bar visible (not recording / attach / group-lock)
+        /// and the viewport is not already at the max vertical offset.
+        /// </summary>
+        private void UpdateScrollToBottomButton()
+        {
+            if (ScrollToBottomButton == null)
+            {
+                return;
+            }
+
+            bool sendBarVisible =
+                !_attachMenuOpen &&
+                ViewModel?.IsRecording != true &&
+                ViewModel?.IsGroupLockedForMessages != true &&
+                ComposerHost != null &&
+                ComposerHost.Visibility == Visibility.Visible;
+
+            bool awayFromBottom = false;
+            if (_scrollViewer != null)
+            {
+                double maxOffset = Math.Max(0, _scrollViewer.ExtentHeight - _scrollViewer.ViewportHeight);
+                awayFromBottom = maxOffset > 8 &&
+                    (_scrollViewer.VerticalOffset + 120) < maxOffset;
+            }
+
+            ScrollToBottomButton.Visibility = sendBarVisible && awayFromBottom
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        }
+
         private bool ShouldStickScrollToBottom() =>
             DateTime.UtcNow <= _stickToBottomUntilUtc || IsNearBottom();
 
@@ -1979,14 +2051,7 @@ namespace Unison.Uwp.UI.Views
                             msg.RemoteJid = requestedJid;
                         }
 
-                        if (i <= _messages.Count)
-                        {
-                            _messages.Insert(i, ToVm(msg));
-                        }
-                        else
-                        {
-                            _messages.Add(ToVm(msg));
-                        }
+                        InsertTimelineMessage(msg);
 
                         if (!string.IsNullOrWhiteSpace(msg.Id))
                         {

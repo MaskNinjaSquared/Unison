@@ -16,7 +16,7 @@ Day-to-day chat on a linked session:
 - Group and user chat-info panes
 - Background socket activity task and real message toasts
 - Pin chats to Start
-- Localized UI (seven shipped languages plus System)
+- Localized UI (eight shipped languages plus System)
 
 The **Unison.Socket** stack (Baileys **7.0.0-rc14**) is now the foundation for WhatsApp communication. `WhatsAppService` is still present as a compatibility client and will shrink as remaining legacy flows move to facades.
 
@@ -30,6 +30,7 @@ The **Unison.Socket** stack (Baileys **7.0.0-rc14**) is now the foundation for W
 | [Background broker](Background-Broker) | Out-of-process socket, journal, toasts |
 | [UI and shell](UI-and-Shell) | Navigation, themes, i18n, chat surface |
 | [Coding standards](Coding-Standards) | Spec: MVVM, DI, folders, façades — how to write new code |
+| [Adding languages](Adding-Languages) | Tutorial: new `.resw` pack, package registration, `AppLanguage` enum |
 | [Migration](Migration) | What moved, what is still legacy |
 | [Changelog](Changelog) | Newest → oldest product and architecture notes |
 

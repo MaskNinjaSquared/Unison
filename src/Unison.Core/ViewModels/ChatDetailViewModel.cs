@@ -883,7 +883,7 @@ namespace Unison.Core.ViewModels
                 for (int i = 0; i < older.Count; i++)
                 {
                     if (older[i] != null)
-                        Messages.Insert(i, _messageFactory.Create(older[i]));
+                        InsertTimelineMessage(older[i]);
                 }
 
                 _ = HydratePendingStickersAsync();
@@ -1652,9 +1652,31 @@ namespace Unison.Core.ViewModels
                 if (msg == null || string.IsNullOrEmpty(msg.Id)) continue;
                 if (msg.IsPreviewFallback || ChatPreviewMessageFactory.IsPreviewFallbackId(msg.Id)) continue;
                 if (existingIds.Contains(msg.Id)) continue;
-                Messages.Add(_messageFactory.Create(msg));
+                InsertTimelineMessage(msg);
                 existingIds.Add(msg.Id);
             }
+        }
+
+        private void InsertTimelineMessage(ChatMessage message)
+        {
+            if (message == null || _messageFactory == null)
+            {
+                return;
+            }
+
+            var vm = _messageFactory.Create(message);
+            if (vm == null)
+            {
+                return;
+            }
+
+            int index = ChatMessageOrder.FindInsertIndex(
+                Messages.Count,
+                i => Messages[i]?.Timestamp ?? DateTime.MinValue,
+                i => Messages[i]?.Id,
+                message.Timestamp,
+                message.Id);
+            Messages.Insert(index, vm);
         }
     }
 }

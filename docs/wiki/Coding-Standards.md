@@ -32,12 +32,12 @@ Agents: read this before adding a view, service, façade, or socket use case.
 |---|---|
 | `BootView` | `ShellViewModel` (boot navigation) |
 | `StartView` | `StartViewModel` |
-| `LoginView` / `LoginControl` | `LoginViewModel` |
+| `LoginView` | `LoginViewModel` |
 | `MainView` (AppShell) | `ShellViewModel` |
 | `ChatsView` / `ChatListView` | `ChatListViewModel` |
 | `ChatDetailView` | `ChatDetailViewModel` |
 | Chat info pane | `ChatDetailInfoViewModel` |
-| `SettingsView` / `SettingsControl` | `SettingsViewModel` |
+| `SettingsView` | `SettingsViewModel` |
 | `DebugView` | `DebugViewModel` |
 | `ImageViewerView` | `ImageViewerViewModel` |
 | `VideoViewerView` | `VideoViewerViewModel` |
@@ -78,7 +78,9 @@ Prefer Behaviors over `Click=` handlers.
 
 ### Page vs control
 
-Root **pages** (`*View` : `Page`) host **controls** (`*Control` : `UserControl`) when the surface is large (Login, Settings, Debug). The page owns navigation chrome; the control owns the bound layout.
+A screen is one **page** (`*View` : `Page`) with its layout and code-behind in that file. Do not wrap a page in a same-surface `*Control` UserControl (Login/Settings/Debug used to do this — they are pages now).
+
+Host a **control** (`*Control` : `UserControl`) only when it is reused or is a real child surface — e.g. `ChatsView` hosts `ChatListView` + `ChatDetailView`, and `UI/Controls/` pieces (avatar, setting box, QR). The page owns navigation; reusable controls own their bound layout.
 
 ---
 
@@ -86,7 +88,7 @@ Root **pages** (`*View` : `Page`) host **controls** (`*Control` : `UserControl`)
 
 ```
 src/Unison.Uwp/UI/
-  Views/              pages and large surface controls
+  Views/              pages (`*View`) and nested surfaces that are real child views (chat list/detail)
   Controls/           reusable pieces (avatar, setting box, bubbles chrome, chat-info panes)
   Dialogs/            ContentDialog XAML only
   Converters/         IValueConverter
@@ -171,9 +173,10 @@ Do not grow `IWhatsAppService` for UI features. Add the member on the façade th
 - Master-detail stays on `ChatsView` (not a Frame push list → detail).
 - Settings keys and defaults: `LocalSettingsConstants`. Do not invent a parallel key string; Background toasts that share a key must keep the **same literal**.
 - UI strings: `Strings/{tag}/Resources.resw` + `x:Uid` and/or `IStringResources`. English fallback for missing keys.
-- Shipped languages: `en-US`, `pt-BR`, `es-ES`, `it-IT`, `nl-NL`, `id-ID`, `pl-PL`. Add the key to **all** packs, or English-only with fallback — never a hardcoded sentence in a ViewModel.
+- Shipped languages: `en-US`, `pt-BR`, `es-ES`, `it-IT`, `nl-NL`, `id-ID`, `pl-PL`, `uk-UA`. Add the key to **all** packs, or English-only with fallback — never a hardcoded sentence in a ViewModel.
 - Language packs stay in the **main** package (`AppxDefaultResourceQualifiers`). Do not split resource packs.
 - Apply language **before** `InitializeComponent` (already in `App` ctor).
+- New locale: follow [Adding languages](Adding-Languages) (folder + PRI + manifest + enum). Do not add a `.resw` without registering it.
 
 ---
 

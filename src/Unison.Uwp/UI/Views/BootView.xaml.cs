@@ -238,6 +238,14 @@ namespace Unison.Uwp.UI.Views
                     if (!postPairing)
                     {
                         await shell.InitializeAsync();
+                        if (string.Equals(
+                                shell.AppSurface,
+                                ShellViewModel.SurfaceStartup,
+                                StringComparison.Ordinal))
+                        {
+                            // Background-apps prompt cancelled — process is exiting.
+                            return;
+                        }
                     }
                     // postPairing: already Connected after QR wipe.
                 }

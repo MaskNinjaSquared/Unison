@@ -18,6 +18,54 @@
                 <templates:MessageTemplates/>
             </ResourceDictionary.MergedDictionaries>
 
+            <Style x:Key="ScrollToBottomButtonStyle" TargetType="Button">
+                <Setter Property="Background" Value="{ThemeResource ChatDetailInputBarBackgroundBrush}"/>
+                <Setter Property="Foreground" Value="{ThemeResource ChatDetailHeaderTitleBrush}"/>
+                <Setter Property="BorderBrush" Value="{ThemeResource ChatDetailInputBarTopBorderBrush}"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="Padding" Value="0"/>
+                <Setter Property="MinWidth" Value="0"/>
+                <Setter Property="MinHeight" Value="0"/>
+                <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                <Setter Property="VerticalContentAlignment" Value="Center"/>
+                <Setter Property="UseSystemFocusVisuals" Value="False"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Root"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="20">
+                                <VisualStateManager.VisualStateGroups>
+                                    <VisualStateGroup x:Name="CommonStates">
+                                        <VisualState x:Name="Normal"/>
+                                        <VisualState x:Name="PointerOver">
+                                            <Storyboard>
+                                                <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Root" Storyboard.TargetProperty="Background">
+                                                    <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource WhatsAppItemHoverBrush}"/>
+                                                </ObjectAnimationUsingKeyFrames>
+                                            </Storyboard>
+                                        </VisualState>
+                                        <VisualState x:Name="Pressed">
+                                            <Storyboard>
+                                                <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Root" Storyboard.TargetProperty="Background">
+                                                    <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource WhatsAppItemSelectedBrush}"/>
+                                                </ObjectAnimationUsingKeyFrames>
+                                            </Storyboard>
+                                        </VisualState>
+                                    </VisualStateGroup>
+                                </VisualStateManager.VisualStateGroups>
+                                <ContentPresenter x:Name="ContentPresenter"
+                                                  Content="{TemplateBinding Content}"
+                                                  Foreground="{TemplateBinding Foreground}"
+                                                  HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                  VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
         </ResourceDictionary>
     </UserControl.Resources>
 
@@ -361,6 +409,23 @@
                     </Style>
                 </ListView.ItemContainerStyle>
             </ListView>
+
+            <Button x:Name="ScrollToBottomButton"
+                    Grid.Row="2"
+                    Canvas.ZIndex="2"
+                    Width="40" Height="40"
+                    Margin="0,0,12,12"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Bottom"
+                    Visibility="Collapsed"
+                    Style="{StaticResource ScrollToBottomButtonStyle}"
+                    Click="ScrollToBottomButton_Click">
+                <ToolTipService.ToolTip>
+                    <ToolTip x:Uid="ChatDetail_ScrollToBottomTooltip" Content="Jump to latest"/>
+                </ToolTipService.ToolTip>
+                <TextBlock Text="&#xE74B;" FontFamily="{StaticResource IconFont}" FontSize="16"
+                           Foreground="{ThemeResource ChatDetailAccentBrush}"/>
+            </Button>
 
             <!-- Hidden player for voice bubbles; SMTC driven via MediaPlayer (Imgur-style). -->
             <MediaPlayerElement x:Name="AudioPlayer" Grid.Row="2"

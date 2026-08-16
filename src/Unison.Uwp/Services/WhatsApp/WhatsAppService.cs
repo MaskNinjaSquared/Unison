@@ -708,6 +708,7 @@ namespace Unison.Uwp.Services.WhatsApp
             public DateTime Timestamp { get; set; }
             public bool IsGroup { get; set; }
             public int UnreadDelta { get; set; }
+            public ChatPreviewKind Kind { get; set; }
         }
 
         private readonly object _offlineReplayUiLock = new object();
@@ -1479,17 +1480,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private static DateTime ToComparableUtc(DateTime timestamp)
         {
-            if (timestamp == DateTime.MinValue || timestamp == DateTime.MaxValue)
-            {
-                return timestamp;
-            }
-
-            if (timestamp.Kind == DateTimeKind.Utc)
-            {
-                return timestamp;
-            }
-
-            return timestamp.ToUniversalTime();
+            return ChatMessageOrder.ToComparableUtc(timestamp);
         }
 
         /// <summary>
@@ -2475,8 +2466,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             if (!HasMessageId(normalizedTarget, messageId))
             {
-                targetMessages.Add(existingMessage);
-                targetMessages.Sort((a, b) => a.Timestamp.CompareTo(b.Timestamp));
+                ChatMessageOrder.InsertSorted(targetMessages, existingMessage);
                 RegisterMessageId(normalizedTarget, messageId);
             }
 
@@ -3280,7 +3270,8 @@ namespace Unison.Uwp.Services.WhatsApp
                                 preview,
                                 message?.Timestamp ?? DateTime.MinValue,
                                 item.Key.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase),
-                                message?.IsFromMe == true);
+                                message?.IsFromMe == true,
+                                ChatPreviewNormalizer.InferKindFromMessage(message));
                         }
 
                         RuntimeDiagnosticsService.Instance.Write(
@@ -5478,7 +5469,13 @@ namespace Unison.Uwp.Services.WhatsApp
                 : null;
             if (latest != null && string.Equals(latest.Id, target.Id, StringComparison.Ordinal))
             {
-                await RefreshChatPreviewFromReplayAsync(canonical, target.Content, target.Timestamp, canonical.EndsWith("@g.us"), target.IsFromMe);
+                await RefreshChatPreviewFromReplayAsync(
+                    canonical,
+                    target.Content,
+                    target.Timestamp,
+                    canonical.EndsWith("@g.us"),
+                    target.IsFromMe,
+                    ChatPreviewNormalizer.InferKindFromMessage(target));
             }
         }
 
@@ -7532,6 +7529,8 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 ApplyPendingStateToMessage(jid, chatMessage);
 
+                ChatPreviewKind previewKind = ResolvePreviewKind(chatMessage, renderInfo);
+
                 SetIncomingMessagePumpStage("dedupe", e);
                 // Add to MessagesByChat
                 if (!MessagesByChat.ContainsKey(jid))
@@ -7576,7 +7575,8 @@ namespace Unison.Uwp.Services.WhatsApp
                                 displayContent,
                                 chatMessage.Timestamp,
                                 isGroup,
-                                isActuallyFromMe));
+                                isActuallyFromMe,
+                                previewKind));
                     }
                     else
                     {
@@ -7587,7 +7587,8 @@ namespace Unison.Uwp.Services.WhatsApp
                             chatMessage.Timestamp,
                             isGroup,
                             isActuallyFromMe,
-                            countUnread: false);
+                            countUnread: false,
+                            previewKind);
                     }
                     if (!e.IsOffline)
                     {
@@ -7643,7 +7644,8 @@ namespace Unison.Uwp.Services.WhatsApp
                                 displayContent,
                                 chatMessage.Timestamp,
                                 isGroup,
-                                isActuallyFromMe));
+                                isActuallyFromMe,
+                                previewKind));
                     }
                     else
                     {
@@ -7654,7 +7656,8 @@ namespace Unison.Uwp.Services.WhatsApp
                             chatMessage.Timestamp,
                             isGroup,
                             isActuallyFromMe,
-                            countUnread: false);
+                            countUnread: false,
+                            previewKind);
                     }
                     if (!e.IsOffline)
                     {
@@ -7663,7 +7666,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     return;
                 }
 
-                MessagesByChat[jid].Add(chatMessage);
+                ChatMessageOrder.InsertSorted(MessagesByChat[jid], chatMessage);
                 TrimInMemoryMessageWindow(jid);
                 RegisterMessageId(jid, chatMessage.Id);
                 ResolveMissingMessage(jid, chatMessage.Id, "live-arrival");
@@ -7680,7 +7683,8 @@ namespace Unison.Uwp.Services.WhatsApp
                         chatMessage.Timestamp,
                         isGroup,
                         isActuallyFromMe,
-                        countUnread: true);
+                        countUnread: true,
+                        previewKind);
                     QueueOfflineReplayMessageForPersist(jid, chatMessage);
 
                     if (IsActiveChatJid(jid))
@@ -7871,13 +7875,28 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
+        private static ChatPreviewKind ResolvePreviewKind(ChatMessage message, MessageRenderInfo renderInfo)
+        {
+            if (renderInfo != null)
+            {
+                ChatPreviewKind fromRender = renderInfo.PreviewKind;
+                if (fromRender != ChatPreviewKind.Text)
+                {
+                    return fromRender;
+                }
+            }
+
+            return ChatPreviewNormalizer.InferKindFromMessage(message);
+        }
+
         private void RecordOfflineReplayChatSummary(
             string jid,
             string preview,
             DateTime timestamp,
             bool isGroup,
             bool isFromMe,
-            bool countUnread)
+            bool countUnread,
+            ChatPreviewKind kind = ChatPreviewKind.Text)
         {
             string canonical = GetCanonicalJid(NormalizeJid(jid));
             if (string.IsNullOrWhiteSpace(canonical))
@@ -7897,7 +7916,8 @@ namespace Unison.Uwp.Services.WhatsApp
                     {
                         Jid = canonical,
                         Timestamp = DateTime.MinValue,
-                        IsGroup = isGroup
+                        IsGroup = isGroup,
+                        Kind = ChatPreviewKind.Text
                     };
                     _offlineReplayUiSummaries[canonical] = summary;
                 }
@@ -7908,6 +7928,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     summary.Timestamp = comparableTimestamp;
                     summary.Preview = preview ?? string.Empty;
                     summary.IsGroup = isGroup;
+                    summary.Kind = kind;
                 }
 
                 if (countUnread && !isFromMe && !IsActiveChatJid(canonical))
@@ -7960,7 +7981,8 @@ namespace Unison.Uwp.Services.WhatsApp
                             Preview = pair.Value.Preview,
                             Timestamp = pair.Value.Timestamp,
                             IsGroup = pair.Value.IsGroup,
-                            UnreadDelta = pair.Value.UnreadDelta
+                            UnreadDelta = pair.Value.UnreadDelta,
+                            Kind = pair.Value.Kind
                         },
                         StringComparer.OrdinalIgnoreCase);
 
@@ -8003,7 +8025,12 @@ namespace Unison.Uwp.Services.WhatsApp
                         {
                             ApplyChatKind(row);
                             if (summary.Timestamp != DateTime.MinValue &&
-                                ApplyChatPreviewIfNewer(row, summary.Preview ?? string.Empty, summary.Timestamp))
+                                ApplyChatPreviewIfNewer(
+                                    row,
+                                    summary.Preview ?? string.Empty,
+                                    summary.Timestamp,
+                                    false,
+                                    summary.Kind))
                             {
                                 updated++;
                             }
@@ -8391,7 +8418,13 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        private async Task RefreshChatPreviewFromReplayAsync(string jid, string displayContent, DateTime timestamp, bool isGroup, bool isFromMe)
+        private async Task RefreshChatPreviewFromReplayAsync(
+            string jid,
+            string displayContent,
+            DateTime timestamp,
+            bool isGroup,
+            bool isFromMe,
+            ChatPreviewKind? kindHint = null)
         {
             if (string.IsNullOrWhiteSpace(jid))
             {
@@ -8409,7 +8442,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     ChatItem preferred = null;
                     foreach (var row in rows)
                     {
-                        if (ApplyChatPreviewIfNewer(row, displayContent, timestamp))
+                        if (ApplyChatPreviewIfNewer(row, displayContent, timestamp, false, kindHint))
                         {
                             preferred = preferred ?? row;
                         }
@@ -8999,7 +9032,7 @@ namespace Unison.Uwp.Services.WhatsApp
                                         ApplyDocumentMetadata(newMsg, renderInfo.DocumentMessage);
                                     }
                                     ApplyPendingStateToMessage(jid, newMsg);
-                                    MessagesByChat[jid].Add(newMsg);
+                                    ChatMessageOrder.InsertSorted(MessagesByChat[jid], newMsg);
                                     existingIds.Add(msgId);
                                     RegisterMessageId(jid, msgId);
                                     if (isGroup && !fromMe && string.IsNullOrWhiteSpace(historyParticipantJid))
@@ -9153,7 +9186,7 @@ namespace Unison.Uwp.Services.WhatsApp
                                 Debug.WriteLine($"[WhatsAppService] {completedHistoryState.RequestType} produced payload with no new messages: requestId={completedHistoryState.RequestId}, chat={normJid}, baseline={completedHistoryState.BaselineMessageCount}, current={MessagesByChat[jid].Count}, trigger={completedHistoryState.TriggerReason ?? "unspecified"}");
                             }
 
-                            MessagesByChat[jid].Sort((a, b) => a.Timestamp.CompareTo(b.Timestamp));
+                            ChatMessageOrder.SortInPlace(MessagesByChat[jid]);
                             if (MessagesByChat[jid].Count > MaxActiveChatMessagesInMemory)
                             {
                                 int removeCount = MessagesByChat[jid].Count - MaxActiveChatMessagesInMemory;
@@ -10128,12 +10161,13 @@ namespace Unison.Uwp.Services.WhatsApp
 
                     if (uniquePrevious.Count > 0)
                     {
-                        MessagesByChat[normJid].InsertRange(0, uniquePrevious);
-                        foreach (var m in uniquePrevious)
+                        var cache = MessagesByChat[normJid];
+                        foreach (var older in uniquePrevious)
                         {
-                            RegisterMessageId(normJid, m?.Id);
+                            ChatMessageOrder.InsertSorted(cache, older);
+                            RegisterMessageId(normJid, older?.Id);
                         }
-                        Debug.WriteLine($"[WhatsAppService] Added {uniquePrevious.Count} older messages for {normJid}. total_in_cache={MessagesByChat[normJid].Count}, total_on_disk={totalCount}");
+                        Debug.WriteLine($"[WhatsAppService] Added {uniquePrevious.Count} older messages for {normJid}. total_in_cache={cache.Count}, total_on_disk={totalCount}");
                     }
                     previousMessages = uniquePrevious;
                 }
@@ -12836,8 +12870,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             }
                             if (!messages.Any(m => string.Equals(m?.Id, target.Id, StringComparison.Ordinal)))
                             {
-                                messages.Add(target);
-                                messages.Sort((a, b) => a.Timestamp.CompareTo(b.Timestamp));
+                                ChatMessageOrder.InsertSorted(messages, target);
                                 TrimInMemoryMessageWindow(canonical);
                                 RegisterMessageId(canonical, target.Id);
                             }
@@ -13030,7 +13063,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             ApplyPendingStateToMessage(normJid, msg);
             if (!MessagesByChat.ContainsKey(normJid)) MessagesByChat[normJid] = new List<ChatMessage>();
-            MessagesByChat[normJid].Add(msg);
+            ChatMessageOrder.InsertSorted(MessagesByChat[normJid], msg);
             TrimInMemoryMessageWindow(normJid);
             RegisterMessageId(normJid, msg.Id);
             await UpdateChatPreviewForLocalSendAsync(normJid, text, msg.Timestamp, ChatPreviewKind.Text, msg.MentionedJids);
@@ -13110,7 +13143,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             if (!MessagesByChat.ContainsKey(normJid))
                 MessagesByChat[normJid] = new List<ChatMessage>();
-            MessagesByChat[normJid].Add(msg);
+            ChatMessageOrder.InsertSorted(MessagesByChat[normJid], msg);
             TrimInMemoryMessageWindow(normJid);
             RegisterMessageId(normJid, msg.Id);
             await UpdateChatPreviewForLocalSendAsync(normJid, preview, msg.Timestamp, ChatPreviewKind.Image);
@@ -13147,7 +13180,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 Status = ResolveSentStatus(normJid)
             };
             if (!MessagesByChat.ContainsKey(normJid)) MessagesByChat[normJid] = new List<ChatMessage>();
-            MessagesByChat[normJid].Add(msg);
+            ChatMessageOrder.InsertSorted(MessagesByChat[normJid], msg);
             TrimInMemoryMessageWindow(normJid);
             RegisterMessageId(normJid, msg.Id);
             await UpdateChatPreviewForLocalSendAsync(normJid, preview, msg.Timestamp, ChatPreviewKind.Voice);
@@ -15665,7 +15698,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             }
                         }
 
-                        primaryMsgs.Sort((a, b) => a.Timestamp.CompareTo(b.Timestamp));
+                        ChatMessageOrder.SortInPlace(primaryMsgs);
                         MessagesByChat.Remove(key);
                         _messageIdIndexByChat.Remove(key);
                         normalizedMessageKeyCount++;
