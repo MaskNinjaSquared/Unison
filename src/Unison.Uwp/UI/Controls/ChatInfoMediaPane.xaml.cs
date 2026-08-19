@@ -1,8 +1,10 @@
 using System;
 using System.Collections;
+using Unison.Core.ViewModels;
 using Windows.UI.Core;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Media;
 
 namespace Unison.Uwp.UI.Controls
 {
@@ -10,6 +12,9 @@ namespace Unison.Uwp.UI.Controls
     {
         private bool _squareSyncQueued;
         private double _lastItemHeight;
+        private ChatDetailInfoViewModel _pagingViewModel;
+        private bool _isFilesPane;
+        private ScrollViewer _scrollViewer;
 
         public ChatInfoMediaPane()
         {
@@ -17,31 +22,122 @@ namespace Unison.Uwp.UI.Controls
             MediaGrid.ContainerContentChanging += MediaGrid_ContainerContentChanging;
         }
 
-        public void Bind(IEnumerable items, bool hasItems, string emptyText)
+        /// <summary>
+        /// Tiles are materialized a page at a time; scrolling to the bottom asks for the next one.
+        /// Safe to call on every apply — only the view model reference is stored.
+        /// </summary>
+        public void AttachPaging(ChatDetailInfoViewModel viewModel, bool isFilesPane)
+        {
+            _pagingViewModel = viewModel;
+            _isFilesPane = isFilesPane;
+            EnsureScrollHook();
+        }
+
+        public void Bind(IEnumerable items, bool hasItems, string emptyText, bool isLoading)
         {
             if (MediaEmptyText != null)
             {
                 MediaEmptyText.Text = emptyText ?? string.Empty;
             }
 
+            if (MediaLoadingRing != null)
+            {
+                MediaLoadingRing.IsActive = isLoading;
+                MediaLoadingRing.Visibility = isLoading ? Visibility.Visible : Visibility.Collapsed;
+            }
+
             if (MediaEmptyHost != null)
             {
-                MediaEmptyHost.Visibility = hasItems ? Visibility.Collapsed : Visibility.Visible;
+                MediaEmptyHost.Visibility = (!isLoading && !hasItems) ? Visibility.Visible : Visibility.Collapsed;
             }
 
             if (MediaGrid != null)
             {
-                if (!ReferenceEquals(MediaGrid.ItemsSource, items))
+                if (isLoading)
                 {
-                    MediaGrid.ItemsSource = items;
+                    MediaGrid.Visibility = Visibility.Collapsed;
                 }
-
-                MediaGrid.Visibility = hasItems ? Visibility.Visible : Visibility.Collapsed;
-                if (hasItems)
+                else
                 {
-                    QueueSyncSquareItemSize();
+                    if (!ReferenceEquals(MediaGrid.ItemsSource, items))
+                    {
+                        MediaGrid.ItemsSource = items;
+                    }
+
+                    MediaGrid.Visibility = hasItems ? Visibility.Visible : Visibility.Collapsed;
+                    if (hasItems)
+                    {
+                        QueueSyncSquareItemSize();
+                        EnsureScrollHook();
+                    }
                 }
             }
+        }
+
+        private void EnsureScrollHook()
+        {
+            if (_scrollViewer != null || MediaGrid == null)
+            {
+                return;
+            }
+
+            _scrollViewer = FindScrollViewer(MediaGrid);
+            if (_scrollViewer != null)
+            {
+                _scrollViewer.ViewChanged -= MediaScroll_ViewChanged;
+                _scrollViewer.ViewChanged += MediaScroll_ViewChanged;
+            }
+        }
+
+        private void MediaScroll_ViewChanged(object sender, ScrollViewerViewChangedEventArgs e)
+        {
+            var vm = _pagingViewModel;
+            var scroll = _scrollViewer;
+            if (vm == null || scroll == null)
+            {
+                return;
+            }
+
+            bool canLoadMore = _isFilesPane ? vm.CanLoadMoreFiles : vm.CanLoadMoreMedia;
+            if (!canLoadMore || scroll.ScrollableHeight <= 0)
+            {
+                return;
+            }
+
+            if (scroll.VerticalOffset < scroll.ScrollableHeight - 240)
+            {
+                return;
+            }
+
+            if (_isFilesPane)
+            {
+                vm.LoadMoreFiles();
+            }
+            else
+            {
+                vm.LoadMoreMedia();
+            }
+        }
+
+        private static ScrollViewer FindScrollViewer(DependencyObject element)
+        {
+            var scroll = element as ScrollViewer;
+            if (scroll != null)
+            {
+                return scroll;
+            }
+
+            int count = VisualTreeHelper.GetChildrenCount(element);
+            for (int i = 0; i < count; i++)
+            {
+                ScrollViewer found = FindScrollViewer(VisualTreeHelper.GetChild(element, i));
+                if (found != null)
+                {
+                    return found;
+                }
+            }
+
+            return null;
         }
 
         public FrameworkElement Host => MediaHost;

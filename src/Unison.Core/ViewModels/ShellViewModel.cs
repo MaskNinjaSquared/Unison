@@ -769,6 +769,10 @@ namespace Unison.Core.ViewModels
                 {
                     _navigator.NavigateInShell(NavigationRoutes.Debug);
                 }
+                else if (string.Equals(section, NavigationRoutes.Status, StringComparison.OrdinalIgnoreCase))
+                {
+                    _navigator.NavigateInShellAndClear(NavigationRoutes.Status);
+                }
                 else
                 {
                     _navigator.NavigateInShellAndClear(NavigationRoutes.Chats);

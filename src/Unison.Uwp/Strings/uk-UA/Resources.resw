@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -557,6 +557,12 @@
   <data name="Shell_Status.Text" xml:space="preserve">
     <value>Статус</value>
   </data>
+  <data name="StatusList_Header.Text" xml:space="preserve">
+    <value>Статус</value>
+  </data>
+  <data name="StatusList_Empty.Text" xml:space="preserve">
+    <value>Немає недавніх оновлень статусу</value>
+  </data>
   <data name="Shell_Starred.Text" xml:space="preserve">
     <value>Позначені зірочкою</value>
   </data>
@@ -578,6 +584,15 @@
   <data name="Common_OK" xml:space="preserve">
     <value>Гаразд</value>
   </data>
+  <data name="Common_Close" xml:space="preserve">
+    <value>Закрити</value>
+  </data>
+  <data name="Reactions_TitleOne" xml:space="preserve">
+    <value>1 реакція</value>
+  </data>
+  <data name="Reactions_TitleMany" xml:space="preserve">
+    <value>Реакцій: {0}</value>
+  </data>
   <data name="Login_BackgroundAccessTitle" xml:space="preserve">
     <value>Фонові програми</value>
   </data>
@@ -589,6 +604,9 @@
   </data>
   <data name="Common_Yesterday" xml:space="preserve">
     <value>Учора</value>
+  </data>
+  <data name="Common_Today" xml:space="preserve">
+    <value>Сьогодні</value>
   </data>
   <data name="Login_InstrTitle.Text" xml:space="preserve">
     <value>Використовуйте WhatsApp на комп'ютері</value>
@@ -643,6 +661,12 @@
   </data>
   <data name="Settings_AutoUnlink.Text" xml:space="preserve">
     <value>Якщо телефон анулює цей сеанс, очистити локальні дані та показати QR-код. Вимкніть, щоб залишити застосунок як резервний і лише повторювати спроби з'єднання.</value>
+  </data>
+  <data name="Settings_PublishWindowsContacts.Header" xml:space="preserve">
+    <value>Показувати контакти Unison у Windows</value>
+  </data>
+  <data name="Settings_PublishWindowsContacts.Text" xml:space="preserve">
+    <value>Додає чати 1:1 до окремого списку Unison у програмі Люди. Типово вимкнено.</value>
   </data>
   <data name="Settings_Customization.Text" xml:space="preserve">
     <value>Налаштування вигляду</value>
@@ -799,6 +823,15 @@
   <data name="ChatDetailInfo_MembersEmpty" xml:space="preserve">
     <value>Учасники групи з'являться тут.</value>
   </data>
+  <data name="ChatDetailInfo_Admin.Text" xml:space="preserve">
+    <value>Адмін</value>
+  </data>
+  <data name="ChatDetailInfo_GroupsInCommon" xml:space="preserve">
+    <value>Спільні групи</value>
+  </data>
+  <data name="ChatDetailInfo_GroupsInCommonEmpty" xml:space="preserve">
+    <value>Немає спільних груп.</value>
+  </data>
   <data name="ChatDetailInfo_MediaEmpty" xml:space="preserve">
     <value>Фото, відео та аудіо з'являться тут.</value>
   </data>
@@ -853,6 +886,13 @@
   </data>
   <data name="ChatDetail_ShowContact.Text" xml:space="preserve">
     <value>Переглянути контакт</value>
+  </data>
+  <data name="ChatDetail_AddContact.Text" xml:space="preserve">
+    <value>Додати контакт</value>
+  </data>
+  <data name="ChatDetailInfo_AddContactAppBarLabel" xml:space="preserve">
+    <value>Додати
+контакт</value>
   </data>
   <data name="ChatDetailInfo_NotificationsOn" xml:space="preserve">
     <value>Увімк.</value>

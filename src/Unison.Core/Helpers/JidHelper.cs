@@ -62,6 +62,23 @@ namespace Unison.Core.Helpers
             return user + "@" + server;
         }
 
+        /// <summary>WhatsApp Status feed JID (not a 1:1 chat).</summary>
+        public const string StatusBroadcastJid = "status@broadcast";
+
+        public static bool IsStatusBroadcast(string jid)
+        {
+            string normalized = Normalize(jid);
+            return !string.IsNullOrEmpty(normalized) &&
+                   string.Equals(normalized, StatusBroadcastJid, StringComparison.OrdinalIgnoreCase);
+        }
+
+        public static bool IsBroadcastJid(string jid)
+        {
+            string normalized = Normalize(jid);
+            return !string.IsNullOrEmpty(normalized) &&
+                   normalized.EndsWith("@broadcast", StringComparison.OrdinalIgnoreCase);
+        }
+
         /// <summary>
         /// Phone digits from a PN JID (@s.whatsapp.net); otherwise null.
         /// </summary>

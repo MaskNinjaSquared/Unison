@@ -26,10 +26,10 @@ namespace Unison.Core.ViewModels
         private readonly IAppLanguageService _appLanguage;
         private readonly IStringResources _strings;
         private readonly IDialogService _dialogService;
-        private readonly IWhatsAppService _whatsAppService;
 
         /// <summary>Owns leaving the account: unlink on the server, then wipe locally.</summary>
         private readonly IConnectionService _connectionService;
+        private readonly IContactService _contacts;
 
         private readonly ShellViewModel _shell;
 
@@ -38,6 +38,7 @@ namespace Unison.Core.ViewModels
         private bool _shellChangeBusy;
         private bool _languageChangeBusy;
         private bool _disconnectBusy;
+        private bool _publishContactsBusy;
 
         public SettingsViewModel(
             ILocalSettings localSettings,
@@ -48,9 +49,9 @@ namespace Unison.Core.ViewModels
             IAppLanguageService appLanguage,
             IStringResources strings,
             IDialogService dialogService,
-            IWhatsAppService whatsAppService,
             IConnectionService connectionService,
-            ShellViewModel shell)
+            ShellViewModel shell,
+            IContactService contacts = null)
         {
             _localSettings = localSettings;
             _liveTilesService = liveTilesService;
@@ -60,9 +61,9 @@ namespace Unison.Core.ViewModels
             _appLanguage = appLanguage;
             _strings = strings;
             _dialogService = dialogService;
-            _whatsAppService = whatsAppService;
             _connectionService = connectionService ?? throw new ArgumentNullException(nameof(connectionService));
             _shell = shell;
+            _contacts = contacts;
 
             _shell.PropertyChanged += OnShellPropertyChanged;
 
@@ -152,6 +153,24 @@ namespace Unison.Core.ViewModels
             {
                 _localSettings.Set(LocalSettingsConstants.AutoUnlinkOnLogoutEnabled, value);
                 OnPropertyChanged();
+            }
+        }
+
+        /// <summary>
+        /// Copies 1:1 Unison chats into a separate Windows People list. Off by default.
+        /// </summary>
+        public bool PublishContactsToWindowsEnabled
+        {
+            get => _localSettings.Get<bool>(LocalSettingsConstants.PublishContactsToWindowsEnabled);
+            set
+            {
+                if (_publishContactsBusy)
+                {
+                    OnPropertyChanged();
+                    return;
+                }
+
+                _ = SetPublishContactsToWindowsAsync(value);
             }
         }
 
@@ -287,7 +306,8 @@ namespace Unison.Core.ViewModels
                 nameof(NotificationsEnabled),
                 nameof(LiveTilesEnabled),
                 nameof(LocationKeepAliveEnabled),
-                nameof(AutoUnlinkOnLogoutEnabled));
+                nameof(AutoUnlinkOnLogoutEnabled),
+                nameof(PublishContactsToWindowsEnabled));
         }
 
         private void RaiseShellSelectionChanged()
@@ -435,5 +455,31 @@ namespace Unison.Core.ViewModels
 
         private void RaiseLocationKeepAliveChanged() =>
             OnPropertyChanged(nameof(LocationKeepAliveEnabled));
+
+        private async Task SetPublishContactsToWindowsAsync(bool enabled)
+        {
+            _publishContactsBusy = true;
+            try
+            {
+                if (_contacts != null)
+                {
+                    await _contacts.SetPublishContactsToWindowsAsync(enabled);
+                }
+                else
+                {
+                    _localSettings.Set(LocalSettingsConstants.PublishContactsToWindowsEnabled, enabled);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[SettingsViewModel] Publish contacts to Windows failed: " + ex.Message);
+            }
+            finally
+            {
+                _publishContactsBusy = false;
+                OnPropertyChanged(nameof(PublishContactsToWindowsEnabled));
+            }
+        }
     }
 }

@@ -54,7 +54,7 @@ namespace Unison.Core.Helpers
                 while (true)
                 {
                     WriteLog("background access denied — prompting");
-                    bool ok = await _dialogs.ShowConfirmAsync(
+                    ConfirmPromptResult result = await _dialogs.ShowConfirmResultAsync(
                         Get("Login_BackgroundAccessTitle", "Background apps"),
                         Get(
                             "Login_BackgroundAccessBody",
@@ -62,11 +62,22 @@ namespace Unison.Core.Helpers
                         Get("Common_OK", "OK"),
                         Get("Common_Cancel", "Cancel"));
 
-                    if (!ok)
+                    if (result == ConfirmPromptResult.Cancel)
                     {
                         WriteLog("background access prompt cancelled — exit");
                         _lifecycle?.Exit();
                         return false;
+                    }
+
+                    if (result == ConfirmPromptResult.Dismissed)
+                    {
+                        WriteLog("background access prompt dismissed — show again on resume");
+                        if (_lifecycle != null)
+                        {
+                            await _lifecycle.WaitUntilForegroundAsync();
+                        }
+
+                        continue;
                     }
 
                     if (await _access.RefreshAllowedAsync())
@@ -75,17 +86,11 @@ namespace Unison.Core.Helpers
                         return true;
                     }
 
-                    WriteLog("opening system background-apps settings");
+                    WriteLog("still denied after OK — opening Settings, prompt stays the gate");
                     bool launched = await _access.OpenSettingsAsync();
                     if (launched && _lifecycle != null)
                     {
                         await _lifecycle.WaitUntilForegroundAsync();
-                    }
-
-                    if (await _access.RefreshAllowedAsync())
-                    {
-                        WriteLog("background access allowed after Settings");
-                        return true;
                     }
                 }
             }

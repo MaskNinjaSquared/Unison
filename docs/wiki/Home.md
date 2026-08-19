@@ -13,12 +13,12 @@ Day-to-day chat on a linked session:
 - Contact names and profile pictures (including the rc14 LID flow)
 - On-demand image / video / document download and fullscreen viewers
 - New chats by phone number, plus self-chat
-- Group and user chat-info panes
+- Group and user chat-info panes (Members roster, member info + groups in common, author avatars on bubbles)
 - Background socket activity task and real message toasts
 - Pin chats to Start
 - Localized UI (eight shipped languages plus System)
 
-The **Unison.Socket** stack (Baileys **7.0.0-rc14**) is now the foundation for WhatsApp communication. `WhatsAppService` is still present as a compatibility client and will shrink as remaining legacy flows move to facades.
+The **Unison.Socket** stack (Baileys **7.0.0-rc14**) is now the foundation for WhatsApp communication. `WhatsAppService` is still the compatibility client; shrinking it to connection-only is [WhatsAppService extraction](WhatsAppService-Extraction) (phase 0 done: dead code + partials).
 
 ## Wiki map
 
@@ -31,7 +31,8 @@ The **Unison.Socket** stack (Baileys **7.0.0-rc14**) is now the foundation for W
 | [UI and shell](UI-and-Shell) | Navigation, themes, i18n, chat surface |
 | [Coding standards](Coding-Standards) | Spec: MVVM, DI, folders, façades — how to write new code |
 | [Adding languages](Adding-Languages) | Tutorial: new `.resw` pack, package registration, `AppLanguage` enum |
-| [Migration](Migration) | What moved, what is still legacy |
+| [Migration](Migration) | What moved, what is still legacy (history SQLite, broker, SocketClient) |
+| [WhatsAppService extraction](WhatsAppService-Extraction) | Phase 0 done; plan to move the client into façades |
 | [Changelog](Changelog) | Newest → oldest product and architecture notes |
 
 ## Solution layout

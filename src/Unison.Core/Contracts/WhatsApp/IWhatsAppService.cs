@@ -185,6 +185,17 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>Fetches the best available profile picture for a chat (incl. group-avatar fallback) and applies it.</summary>
         Task FetchAndApplyAvatarAsync(ChatItem chat, CancellationToken token);
 
+        /// <summary>One member picture GET (PN candidates first). Does not stamp the roster.</summary>
+        Task<GroupMemberAvatarFetchResult> FetchGroupMemberAvatarAsync(
+            GroupMember member,
+            CancellationToken token);
+
+        /// <summary>
+        /// Writes a picture hit, a confirmed miss (<c>no-picture</c>), or a transient failure
+        /// onto every roster row that matches <paramref name="memberJid"/>.
+        /// </summary>
+        void ApplyGroupMemberAvatarOutcome(string memberJid, GroupMemberAvatarFetchResult result);
+
         /// <summary>
         /// Baileys <c>type=image</c> (full-size) for a group, cached as <c>*_high.jpg</c>.
         /// No-op for 1:1 chats or when the high file is already on disk.
@@ -240,8 +251,39 @@ namespace Unison.Core.Contracts.WhatsApp
 
         Task SetMessagePinnedAsync(string chatJid, ChatMessage message, bool pin, uint durationSeconds = 604800);
 
-        /// <summary>History sync body used by <see cref="IMessageService"/> after Person upserts.</summary>
+        /// <summary>
+        /// Completes resync/progress after a history chunk. Prefer
+        /// <see cref="IHistoryService.NotifySqliteHistoryChunkApplied"/> from façades.
+        /// </summary>
         Task ProcessHistorySyncCoreAsync(HistorySync sync);
+
+        /// <summary>
+        /// Completes resync wait / initial-sync progress after the SQLite history path applied a chunk.
+        /// Prefer <see cref="IHistoryService.NotifySqliteHistoryChunkApplied"/> from façades.
+        /// </summary>
+        void NotifyHistorySqliteChunkApplied(string syncType, int conversationCount);
+
+        /// <summary>
+        /// Marks initial-sync progress as active when a non-on-demand SQLite history chunk starts
+        /// persisting (so the chat list banner is not blank during long writes).
+        /// </summary>
+        void NotifyHistorySqliteChunkStarted(string syncType, int conversationCount);
+
+        /// <summary>
+        /// Records LID↔PN pairs from a history chunk.
+        /// Called from <see cref="IHistoryService"/> on the SQLite path.
+        /// </summary>
+        void ApplyHistoryLidMappings(IEnumerable<KeyValuePair<string, string>> lidToPn, string source);
+
+        /// <summary>
+        /// Seeds in-memory message cache from SQLite history rows (detail open after SQLite-only sync).
+        /// </summary>
+        Task SeedChatMessagesInMemoryAsync(string chatJid, IList<ChatMessage> messages);
+
+        /// <summary>
+        /// Clears on-demand in-flight / backoff for chats after a SQLite history chunk.
+        /// </summary>
+        void CompleteHistoryOnDemandForChats(IEnumerable<string> chatJids);
 
         /// <summary>Delegates to <see cref="IContactService"/> (owns batch/backoff policy); kept for legacy callers.</summary>
         Task RetrieveContactPicturesCoreAsync(CancellationToken cancellationToken = default(CancellationToken));

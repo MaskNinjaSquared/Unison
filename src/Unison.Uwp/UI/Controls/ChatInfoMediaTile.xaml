@@ -6,89 +6,112 @@
     HorizontalAlignment="Stretch"
     VerticalAlignment="Stretch">
 
-    <Grid x:Name="Root"
-          Background="#FF1A1A1A"
-          HorizontalAlignment="Stretch"
-          VerticalAlignment="Stretch">
-        <TextBlock x:Name="ImageGlyph"
-                   Text="&#xE91B;"
-                   FontFamily="{StaticResource IconFont}"
-                   FontSize="36"
-                   Foreground="#66FFFFFF"
+    <!-- Border.CornerRadius is API contract 1 (safe on Creators Update / W10 Mobile).
+         Grid.CornerRadius and Control.CornerRadius need 1809 and crash XAML parse on 15063. -->
+    <Border x:Name="Root"
+            CornerRadius="4"
+            Background="#00210F"
+            BorderBrush="#FF1A1A1A"
+            BorderThickness="1"
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Stretch">
+        <Grid HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+            <TextBlock x:Name="ImageGlyph"
+                       Text="&#xE91B;"
+                       FontFamily="{StaticResource IconFont}"
+                       FontSize="36"
+                       Foreground="#66FFFFFF"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       IsHitTestVisible="False"/>
+            <Image x:Name="DownloadPlaceholder"
+                   Source="ms-appx:///Assets/Media/wallpaper-placeholder-white.png"
+                   Stretch="Uniform"
+                   MaxWidth="80"
                    HorizontalAlignment="Center"
                    VerticalAlignment="Center"
-                   IsHitTestVisible="False"/>
-        <controls:ChatInfoBlurredThumb x:Name="Thumb"/>
+                   IsHitTestVisible="False"
+                   Visibility="Collapsed"/>
+            <controls:ChatInfoBlurredThumb x:Name="Thumb"/>
 
-        <Grid x:Name="PlayHost"
-              HorizontalAlignment="Center"
-              VerticalAlignment="Center"
-              IsHitTestVisible="False">
-            <Ellipse Width="40" Height="40" Fill="#99000000"/>
-            <TextBlock x:Name="DownloadGlyph"
-                       Text="&#xE896;"
-                       FontFamily="{StaticResource IconFont}"
-                       FontSize="20"
-                       Foreground="White"
-                       HorizontalAlignment="Center"
-                       VerticalAlignment="Center"
-                       Visibility="Collapsed"/>
-            <TextBlock x:Name="PlayGlyph"
-                       Text="&#xE768;"
-                       FontFamily="{StaticResource IconFont}"
-                       FontSize="20"
-                       Foreground="White"
-                       HorizontalAlignment="Center"
-                       VerticalAlignment="Center"
-                       Visibility="Collapsed"/>
-            <TextBlock x:Name="PauseGlyph"
-                       Text="&#xE769;"
-                       FontFamily="{StaticResource IconFont}"
-                       FontSize="20"
-                       Foreground="White"
-                       HorizontalAlignment="Center"
-                       VerticalAlignment="Center"
-                       Visibility="Collapsed"/>
+            <Grid x:Name="PlayHost"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Center"
+                  IsHitTestVisible="False">
+                <Ellipse Width="40" Height="40" Fill="#99000000"/>
+                <TextBlock x:Name="DownloadGlyph"
+                           Text="&#xE896;"
+                           FontFamily="{StaticResource IconFont}"
+                           FontSize="20"
+                           Foreground="White"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Visibility="Collapsed"/>
+                <TextBlock x:Name="PlayGlyph"
+                           Text="&#xE768;"
+                           FontFamily="{StaticResource IconFont}"
+                           FontSize="20"
+                           Foreground="White"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Visibility="Collapsed"/>
+                <TextBlock x:Name="PauseGlyph"
+                           Text="&#xE769;"
+                           FontFamily="{StaticResource IconFont}"
+                           FontSize="20"
+                           Foreground="White"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Visibility="Collapsed"/>
+            </Grid>
+
+            <Button x:Name="DownloadImageButton"
+                    Command="{Binding DownloadImageCommand}"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Padding="0"
+                    MinWidth="40"
+                    MinHeight="40"
+                    Width="40"
+                    Height="40"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Visibility="Collapsed">
+                <Grid Width="40" Height="40">
+                    <Ellipse Fill="#99000000"/>
+                    <TextBlock Text="&#xE896;"
+                               FontFamily="{StaticResource IconFont}"
+                               FontSize="20"
+                               Foreground="White"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"/>
+                </Grid>
+            </Button>
+            <ProgressRing x:Name="BusyRing"
+                          Width="28"
+                          Height="28"
+                          Foreground="White"
+                          IsActive="False"
+                          Visibility="Collapsed"/>
+
+            <StackPanel x:Name="Footer"
+                        Orientation="Horizontal"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Bottom"
+                        Margin="6,0,0,6"
+                        IsHitTestVisible="False">
+                <TextBlock x:Name="FooterIcon"
+                           FontFamily="{StaticResource IconFont}"
+                           FontSize="12"
+                           Foreground="White"
+                           VerticalAlignment="Center"/>
+                <TextBlock x:Name="FooterDuration"
+                           FontFamily="{StaticResource MainFont}"
+                           FontSize="11"
+                           Foreground="White"
+                           Margin="4,0,0,0"
+                           VerticalAlignment="Center"/>
+            </StackPanel>
         </Grid>
-
-        <Button x:Name="DownloadImageButton"
-                Command="{Binding DownloadImageCommand}"
-                Background="Transparent"
-                BorderThickness="0"
-                HorizontalAlignment="Stretch"
-                VerticalAlignment="Stretch"
-                Visibility="Collapsed">
-            <TextBlock Text="&#xE896;"
-                       FontFamily="{StaticResource IconFont}"
-                       FontSize="28"
-                       Foreground="White"
-                       HorizontalAlignment="Center"
-                       VerticalAlignment="Center"/>
-        </Button>
-        <ProgressRing x:Name="BusyRing"
-                      Width="28"
-                      Height="28"
-                      Foreground="White"
-                      IsActive="False"
-                      Visibility="Collapsed"/>
-
-        <StackPanel x:Name="Footer"
-                    Orientation="Horizontal"
-                    HorizontalAlignment="Left"
-                    VerticalAlignment="Bottom"
-                    Margin="6,0,0,6"
-                    IsHitTestVisible="False">
-            <TextBlock x:Name="FooterIcon"
-                       FontFamily="{StaticResource IconFont}"
-                       FontSize="12"
-                       Foreground="White"
-                       VerticalAlignment="Center"/>
-            <TextBlock x:Name="FooterDuration"
-                       FontFamily="{StaticResource MainFont}"
-                       FontSize="11"
-                       Foreground="White"
-                       Margin="4,0,0,0"
-                       VerticalAlignment="Center"/>
-        </StackPanel>
-    </Grid>
+    </Border>
 </UserControl>

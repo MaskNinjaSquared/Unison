@@ -429,10 +429,16 @@ namespace Unison.Core.State
             target.Name = source.Name;
             target.LastMessage = source.LastMessage;
             target.LastMessageAuthor = source.LastMessageAuthor;
+            target.LastMessageKind = source.LastMessageKind;
+            target.LastMessageTimestampUtc = source.LastMessageTimestampUtc;
             target.Timestamp = source.Timestamp;
             target.UnreadCount = source.UnreadCount;
             target.AvatarUrl = source.AvatarUrl;
             target.AvatarHighUrl = source.AvatarHighUrl;
+            if (source.IsGroup)
+            {
+                target.IsGroup = true;
+            }
         }
     }
 }

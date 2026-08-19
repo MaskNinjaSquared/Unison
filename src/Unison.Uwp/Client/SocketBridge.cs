@@ -665,9 +665,9 @@ namespace Unison.Uwp.Client
             return MessageContent.GenerateMessageId(_authState.Me != null ? _authState.Me.Id : null);
         }
 
-        public Task<BinaryNode> QueryGroupMetadataAsync(string groupJid)
+        public async Task<BinaryNode> QueryGroupMetadataAsync(string groupJid)
         {
-            return QueryAsync(new BinaryNode(
+            var response = await QueryAsync(new BinaryNode(
                 "iq",
                 new Dictionary<string, string>
                 {
@@ -679,7 +679,10 @@ namespace Unison.Uwp.Client
                 new List<BinaryNode>
                 {
                     new BinaryNode("query", new Dictionary<string, string> { { "request", "interactive" } })
-                }));
+                })).ConfigureAwait(false);
+
+            await HarvestGroupMappingsAsync(response, "group-metadata").ConfigureAwait(false);
+            return response;
         }
 
         public async Task<BinaryNode> QueryParticipatingGroupsAsync()
@@ -702,7 +705,7 @@ namespace Unison.Uwp.Client
                     })
                 })).ConfigureAwait(false);
 
-            await HarvestGroupMappingsAsync(response).ConfigureAwait(false);
+            await HarvestGroupMappingsAsync(response, "participating-groups").ConfigureAwait(false);
             return response;
         }
 
@@ -715,7 +718,7 @@ namespace Unison.Uwp.Client
         /// as much as the crypto does, because a contact whose two addresses are not linked shows
         /// up as a bare number. The reply is being parsed for subjects anyway; this costs a walk.
         /// </remarks>
-        private async Task HarvestGroupMappingsAsync(BinaryNode response)
+        private async Task HarvestGroupMappingsAsync(BinaryNode response, string source)
         {
             if (response == null)
             {
@@ -742,8 +745,8 @@ namespace Unison.Uwp.Client
                 return;
             }
 
-            Store(mappings, "participating-groups", true);
-            await ForwardMappingsAsync(mappings, "group-listing").ConfigureAwait(false);
+            Store(mappings, source, true);
+            await ForwardMappingsAsync(mappings, source).ConfigureAwait(false);
         }
 
         public Task<BinaryNode> QueryUsyncAsync(

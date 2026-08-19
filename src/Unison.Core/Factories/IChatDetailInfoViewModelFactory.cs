@@ -9,5 +9,8 @@ namespace Unison.Core.Factories
         ChatDetailInfoViewModel CreateUser(ChatItem contact);
 
         ChatDetailInfoViewModel CreateGroup(ChatItem group);
+
+        /// <summary>Group-member profile (media/files filtered to that participant).</summary>
+        ChatDetailInfoViewModel CreateGroupMember(ChatItem group, GroupMember member);
     }
 }

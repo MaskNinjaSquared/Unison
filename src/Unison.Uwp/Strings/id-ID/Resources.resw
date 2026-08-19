@@ -557,6 +557,12 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="Shell_Status.Text" xml:space="preserve">
     <value>Status</value>
   </data>
+  <data name="StatusList_Header.Text" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="StatusList_Empty.Text" xml:space="preserve">
+    <value>Tidak ada pembaruan status terbaru</value>
+  </data>
   <data name="Shell_Starred.Text" xml:space="preserve">
     <value>Pesan berbintang</value>
   </data>
@@ -578,6 +584,15 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="Common_OK" xml:space="preserve">
     <value>OK</value>
   </data>
+  <data name="Common_Close" xml:space="preserve">
+    <value>Tutup</value>
+  </data>
+  <data name="Reactions_TitleOne" xml:space="preserve">
+    <value>1 reaksi</value>
+  </data>
+  <data name="Reactions_TitleMany" xml:space="preserve">
+    <value>{0} reaksi</value>
+  </data>
   <data name="Login_BackgroundAccessTitle" xml:space="preserve">
     <value>Aplikasi latar belakang</value>
   </data>
@@ -589,6 +604,9 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   </data>
   <data name="Common_Yesterday" xml:space="preserve">
     <value>Kemarin</value>
+  </data>
+  <data name="Common_Today" xml:space="preserve">
+    <value>Hari ini</value>
   </data>
   <data name="Login_InstrTitle.Text" xml:space="preserve">
     <value>Gunakan WhatsApp di komputer Anda</value>
@@ -643,6 +661,12 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   </data>
   <data name="Settings_AutoUnlink.Text" xml:space="preserve">
     <value>Jika ponsel membatalkan sesi ini, hapus data lokal dan tampilkan QR. Matikan untuk menjaga aplikasi sebagai cadangan dan hanya mencoba menyambung ulang.</value>
+  </data>
+  <data name="Settings_PublishWindowsContacts.Header" xml:space="preserve">
+    <value>Tampilkan kontak Unison di Windows</value>
+  </data>
+  <data name="Settings_PublishWindowsContacts.Text" xml:space="preserve">
+    <value>Menambahkan obrolan 1:1 ke daftar Unison terpisah di aplikasi Orang. Nonaktif secara default.</value>
   </data>
   <data name="Settings_Customization.Text" xml:space="preserve">
     <value>Kustomisasi</value>
@@ -811,6 +835,15 @@ sematan</value>
   <data name="ChatDetailInfo_MembersEmpty" xml:space="preserve">
     <value>Anggota grup akan muncul di sini.</value>
   </data>
+  <data name="ChatDetailInfo_Admin.Text" xml:space="preserve">
+    <value>Admin</value>
+  </data>
+  <data name="ChatDetailInfo_GroupsInCommon" xml:space="preserve">
+    <value>Grup yang sama</value>
+  </data>
+  <data name="ChatDetailInfo_GroupsInCommonEmpty" xml:space="preserve">
+    <value>Tidak ada grup yang sama.</value>
+  </data>
   <data name="ChatDetailInfo_UnpinAppBarLabel" xml:space="preserve">
     <value>Lepas dari
 Start</value>
@@ -841,6 +874,13 @@ Start</value>
   </data>
   <data name="ChatDetail_ShowContact.Text" xml:space="preserve">
     <value>Lihat kontak</value>
+  </data>
+  <data name="ChatDetail_AddContact.Text" xml:space="preserve">
+    <value>Tambah kontak</value>
+  </data>
+  <data name="ChatDetailInfo_AddContactAppBarLabel" xml:space="preserve">
+    <value>Tambah
+kontak</value>
   </data>
   <data name="ChatDetailInfo_Calls" xml:space="preserve">
     <value>Panggilan</value>

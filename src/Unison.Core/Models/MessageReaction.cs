@@ -4,7 +4,7 @@ namespace Unison.Core.Models
 {
     /// <summary>
     /// A single emoji reaction attached to a <see cref="ChatMessage"/>.
-    /// Persisted in the message JSON (MessageStore) until SQLite migration.
+        /// Persisted in SQLite <c>history_message_reaction</c>.
     /// </summary>
     public sealed class MessageReaction
     {

@@ -67,6 +67,33 @@ namespace Unison.Socket.Media
                 return null;
             }
 
+            if (message.StickerMessage != null)
+            {
+                var sticker = message.StickerMessage;
+                return new MediaAttachment((path, url, key, stamp) =>
+                {
+                    sticker.DirectPath = path;
+                    sticker.Url = url;
+                    if (key != null)
+                    {
+                        sticker.MediaKey = ByteString.CopyFrom(key);
+                        sticker.MediaKeyTimestamp = stamp;
+                    }
+                })
+                {
+                    // Stickers derive their keys as images do, which is why the type is not
+                    // "sticker" here: the derivation table is what this value feeds.
+                    MediaType = Media.MediaType.Image,
+                    Url = sticker.Url,
+                    DirectPath = sticker.DirectPath,
+                    MediaKey = ToBytes(sticker.MediaKey),
+                    FileSha256 = ToBytes(sticker.FileSha256),
+                    FileEncSha256 = ToBytes(sticker.FileEncSha256),
+                    FileLength = (long)sticker.FileLength,
+                    Mimetype = sticker.Mimetype
+                };
+            }
+
             if (message.ImageMessage != null)
             {
                 var media = message.ImageMessage;
@@ -157,33 +184,6 @@ namespace Unison.Socket.Media
                 })
                 {
                     MediaType = Media.MediaType.Document,
-                    Url = media.Url,
-                    DirectPath = media.DirectPath,
-                    MediaKey = ToBytes(media.MediaKey),
-                    FileSha256 = ToBytes(media.FileSha256),
-                    FileEncSha256 = ToBytes(media.FileEncSha256),
-                    FileLength = (long)media.FileLength,
-                    Mimetype = media.Mimetype
-                };
-            }
-
-            if (message.StickerMessage != null)
-            {
-                var media = message.StickerMessage;
-                return new MediaAttachment((path, url, key, stamp) =>
-                {
-                    media.DirectPath = path;
-                    media.Url = url;
-                    if (key != null)
-                    {
-                        media.MediaKey = ByteString.CopyFrom(key);
-                        media.MediaKeyTimestamp = stamp;
-                    }
-                })
-                {
-                    // Stickers derive their keys as images do, which is why the type is not
-                    // "sticker" here: the derivation table is what this value feeds.
-                    MediaType = Media.MediaType.Image,
                     Url = media.Url,
                     DirectPath = media.DirectPath,
                     MediaKey = ToBytes(media.MediaKey),

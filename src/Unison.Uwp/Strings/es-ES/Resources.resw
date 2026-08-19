@@ -498,6 +498,12 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   <data name="Shell_Status.Text" xml:space="preserve">
     <value>Estado</value>
   </data>
+  <data name="StatusList_Header.Text" xml:space="preserve">
+    <value>Estado</value>
+  </data>
+  <data name="StatusList_Empty.Text" xml:space="preserve">
+    <value>No hay actualizaciones de estado recientes</value>
+  </data>
   <data name="Shell_Starred.Text" xml:space="preserve">
     <value>Mensajes destacados</value>
   </data>
@@ -519,6 +525,15 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   <data name="Common_OK" xml:space="preserve">
     <value>Aceptar</value>
   </data>
+  <data name="Common_Close" xml:space="preserve">
+    <value>Cerrar</value>
+  </data>
+  <data name="Reactions_TitleOne" xml:space="preserve">
+    <value>1 reacción</value>
+  </data>
+  <data name="Reactions_TitleMany" xml:space="preserve">
+    <value>{0} reacciones</value>
+  </data>
   <data name="Login_BackgroundAccessTitle" xml:space="preserve">
     <value>Aplicaciones en segundo plano</value>
   </data>
@@ -530,6 +545,9 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   </data>
   <data name="Common_Yesterday" xml:space="preserve">
     <value>Ayer</value>
+  </data>
+  <data name="Common_Today" xml:space="preserve">
+    <value>Hoy</value>
   </data>
   <data name="Login_InstrTitle.Text" xml:space="preserve">
     <value>Usa WhatsApp en tu ordenador</value>
@@ -584,6 +602,12 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   </data>
   <data name="Settings_AutoUnlink.Text" xml:space="preserve">
     <value>Si el teléfono invalida la sesión, borrar datos locales y mostrar el QR. Desactívalo para mantener la app como respaldo y solo reintentar la conexión.</value>
+  </data>
+  <data name="Settings_PublishWindowsContacts.Header" xml:space="preserve">
+    <value>Mostrar contactos de Unison en Windows</value>
+  </data>
+  <data name="Settings_PublishWindowsContacts.Text" xml:space="preserve">
+    <value>Añade tus chats 1:1 a una lista Unison en Personas. Desactivado de forma predeterminada.</value>
   </data>
   <data name="Settings_Customization.Text" xml:space="preserve">
     <value>Personalización</value>
@@ -752,6 +776,15 @@ fijar</value>
   <data name="ChatDetailInfo_MembersEmpty" xml:space="preserve">
     <value>Los miembros del grupo apareceran aqui.</value>
   </data>
+  <data name="ChatDetailInfo_Admin.Text" xml:space="preserve">
+    <value>Admin</value>
+  </data>
+  <data name="ChatDetailInfo_GroupsInCommon" xml:space="preserve">
+    <value>Grupos en común</value>
+  </data>
+  <data name="ChatDetailInfo_GroupsInCommonEmpty" xml:space="preserve">
+    <value>No hay grupos en común.</value>
+  </data>
   <data name="ChatDetailInfo_UnpinAppBarLabel" xml:space="preserve">
     <value>Desanclar de
 Inicio</value>
@@ -782,6 +815,13 @@ Inicio</value>
   </data>
   <data name="ChatDetail_ShowContact.Text" xml:space="preserve">
     <value>Ver contacto</value>
+  </data>
+  <data name="ChatDetail_AddContact.Text" xml:space="preserve">
+    <value>Añadir contacto</value>
+  </data>
+  <data name="ChatDetailInfo_AddContactAppBarLabel" xml:space="preserve">
+    <value>Añadir
+contacto</value>
   </data>
   <data name="ChatDetailInfo_Calls" xml:space="preserve">
     <value>Llamadas</value>

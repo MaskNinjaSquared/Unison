@@ -113,13 +113,11 @@
                             </StackPanel>
                         </ListViewItem>
 
-                        <ListViewItem Tag="status" IsEnabled="False" Foreground="{ThemeResource WhatsAppTextLowBrush}">
+                        <ListViewItem Tag="status">
                             <Grid Padding="12,0" HorizontalAlignment="Stretch">
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <TextBlock Text="&#xE7C9;" FontFamily="{StaticResource IconFont}" FontSize="20" VerticalAlignment="Center" Width="24"
-                                               Foreground="{ThemeResource WhatsAppTextLowBrush}"/>
-                                    <TextBlock x:Uid="Shell_Status" Text="Status" Margin="16,0,0,0" FontSize="14" VerticalAlignment="Center"
-                                               Foreground="{ThemeResource WhatsAppTextLowBrush}"/>
+                                    <TextBlock Text="&#xE7C9;" FontFamily="{StaticResource IconFont}" FontSize="20" VerticalAlignment="Center" Width="24"/>
+                                    <TextBlock x:Uid="Shell_Status" Text="Status" Margin="16,0,0,0" FontSize="14" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Grid>
                         </ListViewItem>

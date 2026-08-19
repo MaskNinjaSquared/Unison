@@ -35,7 +35,6 @@ namespace Unison.Core.Contracts
 
         Task SaveChatsAsync(IEnumerable<ChatItem> chats);
         Task<List<ChatItem>> LoadChatsAsync();
-        Task<List<ChatItem>> LoadChatsBackupAsync();
         Task<List<ChatItem>> RecoverChatsFromMessageFilesAsync();
         Task WipeAllDataAsync();
 

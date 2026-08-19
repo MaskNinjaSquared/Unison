@@ -554,6 +554,15 @@ Wyłącz po zakończeniu diagnozy: pozostawienie włączonego spowalnia aplikacj
   <data name="Common_OK" xml:space="preserve">
     <value>OK</value>
   </data>
+  <data name="Common_Close" xml:space="preserve">
+    <value>Zamknij</value>
+  </data>
+  <data name="Reactions_TitleOne" xml:space="preserve">
+    <value>1 reakcja</value>
+  </data>
+  <data name="Reactions_TitleMany" xml:space="preserve">
+    <value>Reakcje: {0}</value>
+  </data>
   <data name="Login_BackgroundAccessTitle" xml:space="preserve">
     <value>Aplikacje w tle</value>
   </data>
@@ -565,6 +574,9 @@ Wyłącz po zakończeniu diagnozy: pozostawienie włączonego spowalnia aplikacj
   </data>
   <data name="Common_Yesterday" xml:space="preserve">
     <value>Wczoraj</value>
+  </data>
+  <data name="Common_Today" xml:space="preserve">
+    <value>Dzisiaj</value>
   </data>
   <data name="Login_InstrTitle.Text" xml:space="preserve">
     <value>Korzystaj z WhatsApp na komputerze</value>
@@ -686,6 +698,12 @@ Wyłącz po zakończeniu diagnozy: pozostawienie włączonego spowalnia aplikacj
   <data name="Settings_AutoUnlink.Text" xml:space="preserve">
     <value>Jeśli telefon unieważni sesję, wyczyść lokalne dane i pokaż kod QR. Wyłącz, aby zachować aplikację jako kopię zapasową i tylko ponawiać połączenie.</value>
   </data>
+  <data name="Settings_PublishWindowsContacts.Header" xml:space="preserve">
+    <value>Pokaż kontakty Unison w Windows</value>
+  </data>
+  <data name="Settings_PublishWindowsContacts.Text" xml:space="preserve">
+    <value>Dodaje czaty 1:1 do osobnej listy Unison w aplikacji Osoby. Domyślnie wyłączone.</value>
+  </data>
   <data name="Settings_Shell.Header" xml:space="preserve">
     <value>Shell</value>
   </data>
@@ -724,6 +742,12 @@ Wyłącz po zakończeniu diagnozy: pozostawienie włączonego spowalnia aplikacj
   </data>
   <data name="Shell_Status.Text" xml:space="preserve">
     <value>Status</value>
+  </data>
+  <data name="StatusList_Header.Text" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="StatusList_Empty.Text" xml:space="preserve">
+    <value>Brak ostatnich aktualizacji statusu</value>
   </data>
   <data name="Start_Description.Text" xml:space="preserve">
     <value>Prosty, niezawodny i prywatny sposób korzystania z WhatsApp na komputerze.</value>
@@ -811,6 +835,15 @@ czat</value>
   <data name="ChatDetailInfo_MembersEmpty" xml:space="preserve">
     <value>Czlonkowie grupy pojawia sie tutaj.</value>
   </data>
+  <data name="ChatDetailInfo_Admin.Text" xml:space="preserve">
+    <value>Admin</value>
+  </data>
+  <data name="ChatDetailInfo_GroupsInCommon" xml:space="preserve">
+    <value>Wspólne grupy</value>
+  </data>
+  <data name="ChatDetailInfo_GroupsInCommonEmpty" xml:space="preserve">
+    <value>Brak wspólnych grup.</value>
+  </data>
   <data name="ChatDetailInfo_UnpinAppBarLabel" xml:space="preserve">
     <value>Odepnij ze
 Start</value>
@@ -841,6 +874,13 @@ Start</value>
   </data>
   <data name="ChatDetail_ShowContact.Text" xml:space="preserve">
     <value>Zobacz kontakt</value>
+  </data>
+  <data name="ChatDetail_AddContact.Text" xml:space="preserve">
+    <value>Dodaj kontakt</value>
+  </data>
+  <data name="ChatDetailInfo_AddContactAppBarLabel" xml:space="preserve">
+    <value>Dodaj
+kontakt</value>
   </data>
   <data name="ChatDetailInfo_Calls" xml:space="preserve">
     <value>Polaczenia</value>

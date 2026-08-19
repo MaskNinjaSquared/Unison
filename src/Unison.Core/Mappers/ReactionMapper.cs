@@ -29,7 +29,7 @@ namespace Unison.Core.Mappers
             {
                 try
                 {
-                    timestamp = DateTimeOffset.FromUnixTimeMilliseconds(reactionMessage.SenderTimestampMs).LocalDateTime;
+                    timestamp = DateTimeOffset.FromUnixTimeMilliseconds(reactionMessage.SenderTimestampMs).UtcDateTime;
                 }
                 catch
                 {
@@ -68,7 +68,7 @@ namespace Unison.Core.Mappers
             {
                 try
                 {
-                    timestamp = DateTimeOffset.FromUnixTimeMilliseconds(reaction.SenderTimestampMs).LocalDateTime;
+                    timestamp = DateTimeOffset.FromUnixTimeMilliseconds(reaction.SenderTimestampMs).UtcDateTime;
                 }
                 catch
                 {

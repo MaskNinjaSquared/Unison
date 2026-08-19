@@ -557,6 +557,12 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="Shell_Status.Text" xml:space="preserve">
     <value>Status</value>
   </data>
+  <data name="StatusList_Header.Text" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="StatusList_Empty.Text" xml:space="preserve">
+    <value>Nenhuma atualização de status recente</value>
+  </data>
   <data name="Shell_Starred.Text" xml:space="preserve">
     <value>Mensagens favoritas</value>
   </data>
@@ -578,6 +584,15 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="Common_OK" xml:space="preserve">
     <value>OK</value>
   </data>
+  <data name="Common_Close" xml:space="preserve">
+    <value>Fechar</value>
+  </data>
+  <data name="Reactions_TitleOne" xml:space="preserve">
+    <value>1 reação</value>
+  </data>
+  <data name="Reactions_TitleMany" xml:space="preserve">
+    <value>{0} reações</value>
+  </data>
   <data name="Login_BackgroundAccessTitle" xml:space="preserve">
     <value>Execução em segundo plano</value>
   </data>
@@ -589,6 +604,9 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   </data>
   <data name="Common_Yesterday" xml:space="preserve">
     <value>Ontem</value>
+  </data>
+  <data name="Common_Today" xml:space="preserve">
+    <value>Hoje</value>
   </data>
   <data name="Login_InstrTitle.Text" xml:space="preserve">
     <value>Use o WhatsApp no computador</value>
@@ -643,6 +661,12 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   </data>
   <data name="Settings_AutoUnlink.Text" xml:space="preserve">
     <value>Se a sessão for invalidada no telemóvel, limpar dados locais e pedir QR. Desligue para manter o app como backup e só tentar reconectar.</value>
+  </data>
+  <data name="Settings_PublishWindowsContacts.Header" xml:space="preserve">
+    <value>Mostrar contatos do Unison no Windows</value>
+  </data>
+  <data name="Settings_PublishWindowsContacts.Text" xml:space="preserve">
+    <value>Adiciona as conversas 1:1 a uma lista Unison na app Pessoas. Desligado por padrão.</value>
   </data>
   <data name="Settings_Customization.Text" xml:space="preserve">
     <value>Personalização</value>
@@ -811,6 +835,15 @@ conversa</value>
   <data name="ChatDetailInfo_MembersEmpty" xml:space="preserve">
     <value>Os membros do grupo aparecerão aqui.</value>
   </data>
+  <data name="ChatDetailInfo_Admin.Text" xml:space="preserve">
+    <value>Admin</value>
+  </data>
+  <data name="ChatDetailInfo_GroupsInCommon" xml:space="preserve">
+    <value>Grupos em comum</value>
+  </data>
+  <data name="ChatDetailInfo_GroupsInCommonEmpty" xml:space="preserve">
+    <value>Nenhum grupo em comum.</value>
+  </data>
   <data name="ChatDetailInfo_UnpinAppBarLabel" xml:space="preserve">
     <value>Desafixar do
 Início</value>
@@ -841,6 +874,13 @@ Início</value>
   </data>
   <data name="ChatDetail_ShowContact.Text" xml:space="preserve">
     <value>Ver contato</value>
+  </data>
+  <data name="ChatDetail_AddContact.Text" xml:space="preserve">
+    <value>Adicionar contato</value>
+  </data>
+  <data name="ChatDetailInfo_AddContactAppBarLabel" xml:space="preserve">
+    <value>Adicionar
+contato</value>
   </data>
   <data name="ChatDetailInfo_Calls" xml:space="preserve">
     <value>Chamadas</value>

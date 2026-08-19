@@ -16,6 +16,9 @@ namespace Unison.Core.Factories
         private readonly IMessageStore _messageStore;
         private readonly IChatMessageVmFactory _messageVmFactory;
         private readonly IWhatsAppService _whatsApp;
+        private readonly IPersonStore _personStore;
+        private readonly IMessageService _messages;
+        private readonly IContactService _contacts;
 
         public ChatDetailInfoViewModelFactory(
             IShortcutService shortcutService,
@@ -25,7 +28,10 @@ namespace Unison.Core.Factories
             IChatService chatService = null,
             IMessageStore messageStore = null,
             IChatMessageVmFactory messageVmFactory = null,
-            IWhatsAppService whatsApp = null)
+            IWhatsAppService whatsApp = null,
+            IPersonStore personStore = null,
+            IMessageService messages = null,
+            IContactService contacts = null)
         {
             _shortcutService = shortcutService;
             _chatStore = chatStore;
@@ -35,6 +41,9 @@ namespace Unison.Core.Factories
             _messageStore = messageStore;
             _messageVmFactory = messageVmFactory;
             _whatsApp = whatsApp;
+            _personStore = personStore;
+            _messages = messages;
+            _contacts = contacts;
         }
 
         public ChatDetailInfoViewModel CreateUser(ChatItem contact)
@@ -44,7 +53,7 @@ namespace Unison.Core.Factories
                 throw new ArgumentNullException(nameof(contact));
             }
 
-            return Create(contact, isGroup: false);
+            return Create(contact, isGroup: false, member: null);
         }
 
         public ChatDetailInfoViewModel CreateGroup(ChatItem group)
@@ -54,10 +63,25 @@ namespace Unison.Core.Factories
                 throw new ArgumentNullException(nameof(group));
             }
 
-            return Create(group, isGroup: true);
+            return Create(group, isGroup: true, member: null);
         }
 
-        private ChatDetailInfoViewModel Create(ChatItem source, bool isGroup)
+        public ChatDetailInfoViewModel CreateGroupMember(ChatItem group, GroupMember member)
+        {
+            if (group == null)
+            {
+                throw new ArgumentNullException(nameof(group));
+            }
+
+            if (member == null)
+            {
+                throw new ArgumentNullException(nameof(member));
+            }
+
+            return Create(group, isGroup: false, member: member);
+        }
+
+        private ChatDetailInfoViewModel Create(ChatItem source, bool isGroup, GroupMember member)
         {
             return new ChatDetailInfoViewModel(
                 source,
@@ -69,7 +93,11 @@ namespace Unison.Core.Factories
                 _chatService,
                 _messageStore,
                 _messageVmFactory,
-                _whatsApp);
+                _whatsApp,
+                member,
+                _personStore,
+                _messages,
+                _contacts);
         }
     }
 }

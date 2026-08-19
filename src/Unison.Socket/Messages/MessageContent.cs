@@ -90,6 +90,11 @@ namespace Unison.Socket.Messages
                 return string.Empty;
             }
 
+            if (message.StickerMessage != null)
+            {
+                return "sticker";
+            }
+
             if (message.ImageMessage != null)
             {
                 return "image";
@@ -123,11 +128,6 @@ namespace Unison.Socket.Messages
             if (message.LiveLocationMessage != null)
             {
                 return "livelocation";
-            }
-
-            if (message.StickerMessage != null)
-            {
-                return "sticker";
             }
 
             if (message.ListMessage != null)
@@ -235,6 +235,11 @@ namespace Unison.Socket.Messages
 
         private static global::Proto.Message Unwrap(global::Proto.Message message)
         {
+            if (message.DeviceSentMessage?.Message != null)
+            {
+                return message.DeviceSentMessage.Message;
+            }
+
             var wrapper = message.EphemeralMessage ??
                           message.ViewOnceMessage ??
                           message.DocumentWithCaptionMessage ??

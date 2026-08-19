@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Threading;
 using Microsoft.Extensions.DependencyInjection;
+using Unison.Core.Constants;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Factories;
@@ -70,9 +71,6 @@ namespace Unison.Uwp.UI.Views
         public bool HasActiveChat => ActiveChatGrid.Visibility == Visibility.Visible;
 
         private ScrollViewer _scrollViewer;
-        private bool _isLoadingMore = false;
-        private bool _hasReachedStart = false;
-        private int _emptyLoadAttempts = 0;
         private bool _isSyncingFromService = false;
         private bool _syncRequestedAgain = false;
         private DateTime _suppressLoadMoreUntilUtc = DateTime.MinValue;
@@ -80,7 +78,7 @@ namespace Unison.Uwp.UI.Views
         private DateTime _stickToBottomUntilUtc = DateTime.MinValue;
         private CancellationTokenSource _chatLoadCts;
         private bool _serviceEventsAttached;
-        private const int MaxUiMessages = 300;
+        private bool _viewModelEventsAttached;
         private ChatMessageViewModel _displayedPinnedMessage;
         private List<ChatMessageViewModel> _activePinnedMessages = new List<ChatMessageViewModel>();
         private int _displayedPinnedIndex;
@@ -88,6 +86,8 @@ namespace Unison.Uwp.UI.Views
         private ChatMessageViewModel _playingAudioVm;
         private MediaPlayer _audioMediaPlayer;
         private DispatcherTimer _audioPositionTimer;
+        private DispatcherTimer _dateSeparatorTimer;
+        private DateTime _dateSeparatorTimerDay;
         private bool _cancelRecordingAnimating;
 
         /// <summary>Transient target of quote-tap flash; cleared after a short delay.</summary>
@@ -121,18 +121,6 @@ namespace Unison.Uwp.UI.Views
             {
                 ViewModel = App.Services.GetRequiredService<ChatDetailViewModel>();
                 DataContext = ViewModel;
-                ViewModel.BackRequested += (s, e) => BackRequested?.Invoke(this, e);
-                ViewModel.MessageSent += (s, e) =>
-                {
-                    _stickToBottomUntilUtc = DateTime.UtcNow.AddSeconds(2);
-                    _ = StickScrollToBottomAfterSendAsync();
-                };
-                ViewModel.MessagePinnedChanged += (s, e) =>
-                {
-                    _ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal, UpdatePinnedBanner);
-                };
-                ViewModel.PresenceAnimationRequested += ViewModel_PresenceAnimationRequested;
-                ViewModel.PropertyChanged += ViewModel_PropertyChanged;
                 _isWindowsMobile = App.Services.GetRequiredService<ISystemInfoProvider>().IsMobile();
             }
 
@@ -152,6 +140,7 @@ namespace Unison.Uwp.UI.Views
         {
             if (ViewModel != null)
             {
+                AttachViewModelEvents();
                 _ = ViewModel.InitializeAsync();
             }
 
@@ -164,6 +153,58 @@ namespace Unison.Uwp.UI.Views
 
             ApplyChatDetailInfoPane();
             HookLayoutStateChanges();
+            StartDateSeparatorTimer();
+        }
+
+        /// <summary>
+        /// ViewModel events live on the Loaded/Unloaded pair, not on the constructor. The view model
+        /// is transient but a live <see cref="ChatItem"/> keeps it subscribed, so a handler pointing
+        /// back here would keep the whole visual tree alive after navigating away.
+        /// </summary>
+        private void AttachViewModelEvents()
+        {
+            if (_viewModelEventsAttached || ViewModel == null)
+            {
+                return;
+            }
+
+            _viewModelEventsAttached = true;
+            ViewModel.BackRequested += ViewModel_BackRequested;
+            ViewModel.MessageSent += ViewModel_MessageSent;
+            ViewModel.MessagePinnedChanged += ViewModel_MessagePinnedChanged;
+            ViewModel.PresenceAnimationRequested += ViewModel_PresenceAnimationRequested;
+            ViewModel.PropertyChanged += ViewModel_PropertyChanged;
+        }
+
+        private void DetachViewModelEvents()
+        {
+            if (!_viewModelEventsAttached || ViewModel == null)
+            {
+                return;
+            }
+
+            _viewModelEventsAttached = false;
+            ViewModel.BackRequested -= ViewModel_BackRequested;
+            ViewModel.MessageSent -= ViewModel_MessageSent;
+            ViewModel.MessagePinnedChanged -= ViewModel_MessagePinnedChanged;
+            ViewModel.PresenceAnimationRequested -= ViewModel_PresenceAnimationRequested;
+            ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
+        }
+
+        private void ViewModel_BackRequested(object sender, EventArgs e)
+        {
+            BackRequested?.Invoke(this, e);
+        }
+
+        private void ViewModel_MessageSent(object sender, EventArgs e)
+        {
+            _stickToBottomUntilUtc = DateTime.UtcNow.AddSeconds(2);
+            _ = StickScrollToBottomAfterSendAsync();
+        }
+
+        private void ViewModel_MessagePinnedChanged(object sender, EventArgs e)
+        {
+            _ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal, UpdatePinnedBanner);
         }
 
         /// <summary>
@@ -326,10 +367,11 @@ namespace Unison.Uwp.UI.Views
             TryCloseVideoViewer();
             TryCloseImageViewer();
             StopAudioPlayback();
+            StopDateSeparatorTimer();
             _voiceRouting?.DetachPlayer();
             if (ViewModel != null)
             {
-                ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
+                DetachViewModelEvents();
                 ViewModel.CloseChatDetailInfo();
                 ViewModel.StopPresenceWatch();
                 _ = ViewModel.UninitializeAsync();
@@ -445,13 +487,28 @@ namespace Unison.Uwp.UI.Views
         /// </summary>
         private void ApplyChatDetailInfoPane()
         {
-            if (ChatDetailInfoPanel == null || ChatColumn == null || InfoColumn == null)
+            if (ChatDetailInfoPaneHost == null || ChatColumn == null || InfoColumn == null)
             {
                 return;
             }
 
             bool open = ViewModel?.IsChatDetailInfoOpen == true;
-            ChatDetailInfoPanel.InfoViewModel = ViewModel?.ChatDetailInfo;
+            var info = ViewModel?.ChatDetailInfo;
+            bool member = info != null && info.IsGroupMember;
+
+            if (ChatDetailInfoPanel != null)
+            {
+                ChatDetailInfoPanel.InfoViewModel = open && !member ? info : null;
+                ChatDetailInfoPanel.Visibility =
+                    open && !member ? Visibility.Visible : Visibility.Collapsed;
+            }
+
+            if (ChatDetailMemberInfoPanel != null)
+            {
+                ChatDetailMemberInfoPanel.InfoViewModel = open && member ? info : null;
+                ChatDetailMemberInfoPanel.Visibility =
+                    open && member ? Visibility.Visible : Visibility.Collapsed;
+            }
 
             if (open)
             {
@@ -459,7 +516,7 @@ namespace Unison.Uwp.UI.Views
                 if (!_chatDetailInfoPaneShown)
                 {
                     _chatDetailInfoPaneShown = true;
-                    ChatDetailInfoPanel.Visibility = Visibility.Visible;
+                    ChatDetailInfoPaneHost.Visibility = Visibility.Visible;
                     AnimateChatDetailInfoSlideIn();
                 }
 
@@ -476,7 +533,17 @@ namespace Unison.Uwp.UI.Views
                         return;
                     }
 
-                    ChatDetailInfoPanel.Visibility = Visibility.Collapsed;
+                    ChatDetailInfoPaneHost.Visibility = Visibility.Collapsed;
+                    if (ChatDetailInfoPanel != null)
+                    {
+                        ChatDetailInfoPanel.Visibility = Visibility.Collapsed;
+                    }
+
+                    if (ChatDetailMemberInfoPanel != null)
+                    {
+                        ChatDetailMemberInfoPanel.Visibility = Visibility.Collapsed;
+                    }
+
                     ApplyChatDetailInfoColumns(open: false);
                     if (ChatDetailInfoSlideTransform != null)
                     {
@@ -486,12 +553,17 @@ namespace Unison.Uwp.UI.Views
                 return;
             }
 
-            ChatDetailInfoPanel.Visibility = Visibility.Collapsed;
+            ChatDetailInfoPaneHost.Visibility = Visibility.Collapsed;
             ApplyChatDetailInfoColumns(open: false);
         }
 
         private void ApplyChatDetailInfoColumns(bool open)
         {
+            string state = !open
+                ? "InfoClosed"
+                : (ShouldUseFullScreenChatInfo() ? "InfoFullScreen" : "InfoDocked");
+            VisualStateManager.GoToState(this, state, false);
+
             if (!open)
             {
                 ChatColumn.Width = new GridLength(1, GridUnitType.Star);
@@ -499,7 +571,7 @@ namespace Unison.Uwp.UI.Views
                 return;
             }
 
-            if (IsMinimalLayout())
+            if (ShouldUseFullScreenChatInfo())
             {
                 ChatColumn.Width = new GridLength(0);
                 InfoColumn.Width = new GridLength(1, GridUnitType.Star);
@@ -507,7 +579,7 @@ namespace Unison.Uwp.UI.Views
             else
             {
                 ChatColumn.Width = new GridLength(1, GridUnitType.Star);
-                InfoColumn.Width = new GridLength(400);
+                InfoColumn.Width = new GridLength(ChatPaneLayoutConstants.ChatDetailInfoPaneWidth);
             }
         }
 
@@ -526,18 +598,28 @@ namespace Unison.Uwp.UI.Views
 
         private double ResolveChatDetailInfoSlideWidth()
         {
-            double width = ChatDetailInfoPanel.ActualWidth;
+            double width = ChatDetailInfoPaneHost != null ? ChatDetailInfoPaneHost.ActualWidth : 0;
+            if (width <= 1 && ChatDetailInfoPanel != null)
+            {
+                width = ChatDetailInfoPanel.ActualWidth;
+            }
+
+            if (width <= 1 && ChatDetailMemberInfoPanel != null)
+            {
+                width = ChatDetailMemberInfoPanel.ActualWidth;
+            }
+
             if (width > 1)
             {
                 return width;
             }
 
-            if (IsMinimalLayout())
+            if (ShouldUseFullScreenChatInfo())
             {
-                return Math.Max(ActualWidth, 320);
+                return Math.Max(ActualWidth, ChatPaneLayoutConstants.ChatDetailInfoPaneWidth);
             }
 
-            return 400;
+            return ChatPaneLayoutConstants.ChatDetailInfoPaneWidth;
         }
 
         private void AnimateChatDetailInfoSlideIn()
@@ -614,14 +696,21 @@ namespace Unison.Uwp.UI.Views
             sb.Begin();
         }
 
-        private bool IsMinimalLayout()
+        /// <summary>
+        /// Info needs <see cref="ChatPaneLayoutConstants.ChatDetailInfoPaneWidth"/> beside the
+        /// conversation. When this surface is narrower than twice that, info covers the pane.
+        /// Measured on ChatDetail, not the window (list + detail can be wide while detail is not).
+        /// </summary>
+        private bool ShouldUseFullScreenChatInfo()
         {
-            if (LayoutStates?.CurrentState != null)
+            double width = ActualWidth;
+            if (width <= 0 && ChatDetailGrid != null)
             {
-                return string.Equals(LayoutStates.CurrentState.Name, "Minimal", StringComparison.Ordinal);
+                width = ChatDetailGrid.ActualWidth;
             }
 
-            return ActualWidth > 0 && ActualWidth < 720;
+            return width > 0 &&
+                   width < ChatPaneLayoutConstants.ChatDetailInfoFullScreenBelowWidth;
         }
 
         /// <summary>Closes fullscreen media or the info pane; returns true if consumed.</summary>
@@ -683,19 +772,22 @@ namespace Unison.Uwp.UI.Views
         {
             UpdateScrollToBottomButton();
 
-            if (_scrollViewer == null || _isLoadingMore || _hasReachedStart || _activeChat == null) return;
+            if (_scrollViewer == null || ViewModel == null || _activeChat == null) return;
+
+            // Wait for the gesture to settle. Firing while e.IsIntermediate is true means the
+            // load-more (and its ChangeView) lands on top of an active manipulation/fling, which
+            // the platform discards - the viewport then ends the scroll at the top anyway.
+            if (e.IsIntermediate) return;
             if (DateTime.UtcNow < _suppressLoadMoreUntilUtc) return;
 
-            // Debug log every 500ms or so to avoid spamming too much, but for now let's see more
-            // Debug.WriteLine($"[ChatDetailView] Scroll: Offset={_scrollViewer.VerticalOffset}, Extent={_scrollViewer.ExtentHeight}, Viewport={_scrollViewer.ViewportHeight}");
-
-            // When user scrolls near top
             // Exige conteudo realmente rolavel. Sem isso, uma conversa curta abre com
             // offset baixo, dispara "carregar mais" imediatamente, prepende mensagens
             // antigas e a tela nunca assenta no fim.
             bool temConteudoRolavel = _scrollViewer.ExtentHeight > (_scrollViewer.ViewportHeight * 1.5);
 
-            if (temConteudoRolavel && _scrollViewer.VerticalOffset < 300)
+            if (temConteudoRolavel &&
+                _scrollViewer.VerticalOffset < 300 &&
+                ViewModel.CanLoadMore)
             {
                 Debug.WriteLine($"[ChatDetailView] TRIGGER HIT: Offset={_scrollViewer.VerticalOffset} < 300. Loading more...");
                 await LoadMoreMessagesAsync();
@@ -704,84 +796,188 @@ namespace Unison.Uwp.UI.Views
 
         private async Task LoadMoreMessagesAsync()
         {
-            if (_isLoadingMore || _activeChat == null) return;
-            _isLoadingMore = true;
+            if (ViewModel == null || _activeChat == null || !ViewModel.CanLoadMore)
+            {
+                return;
+            }
+
+            // Arm before the await: near-top offset stays low during the fetch, and without this
+            // a settled ViewChanged can start a second load-more on top of the first.
+            _suppressLoadMoreUntilUtc = DateTime.UtcNow.AddMilliseconds(1500);
 
             try
             {
                 string requestedJid = WhatsApp.GetCanonicalJid(_activeChat.JID);
                 Debug.WriteLine($"[ChatDetailView] Loading more messages for {requestedJid}. Current: {_messages.Count}");
 
-                double oldExtentHeight = _scrollViewer?.ExtentHeight ?? 0;
+                // KeepItemsInView alone does not hold position here (variable bubble heights + many
+                // Inserts + offset already near 0). Capture the first visible bubble and put it
+                // back after layout.
+                object anchor = CaptureTopVisibleMessage(out double anchorTopInViewport);
+                double oldExtent = _scrollViewer?.ExtentHeight ?? 0;
                 double oldOffset = _scrollViewer?.VerticalOffset ?? 0;
 
-                var moreMessages = await WhatsApp.LoadMoreMessagesAsync(requestedJid);
+                ChatTimelineLoadMoreResult result = await ViewModel.LoadMoreMessagesAsync();
                 if (_activeChat == null ||
                     !string.Equals(WhatsApp.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
                 {
                     return;
                 }
 
-                if (moreMessages != null && moreMessages.Count > 0)
+                if (result != null && result.PrependedCount > 0)
                 {
-                    Debug.WriteLine($"[ChatDetailView] Received {moreMessages.Count} messages to prepend.");
-                    _emptyLoadAttempts = 0;
-                    RemovePreviewFallbackMessages(_messages);
+                    Debug.WriteLine($"[ChatDetailView] Prepended {result.PrependedCount} bubble VMs.");
                     bool isGroup = _activeChat.IsGroup ||
                         requestedJid.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
-                    // Insert by timestamp so a late history page lands in chronological order.
-                    for (int i = 0; i < moreMessages.Count; i++)
-                    {
-                        var more = moreMessages[i];
-                        if (more != null && isGroup &&
-                            (string.IsNullOrEmpty(more.RemoteJid) ||
-                             !more.RemoteJid.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase)))
-                        {
-                            more.RemoteJid = requestedJid;
-                        }
-                        InsertTimelineMessage(more);
-                    }
                     RecomputeMessageRuns(_messages, isGroup);
 
-                    // Force layout update to get new extent height
-                    MessageListView.UpdateLayout();
-
-                    // Adjust scroll position so it doesn't jump
-                    double newExtentHeight = _scrollViewer?.ExtentHeight ?? oldExtentHeight;
-                    double heightDiff = newExtentHeight - oldExtentHeight;
-                    
-                    Debug.WriteLine($"[ChatDetailView] Scroll stabilization: OldOffset={oldOffset}, HeightDiff={heightDiff}, NewTarget={oldOffset + heightDiff}");
-                    
-                    _scrollViewer?.ChangeView(null, oldOffset + heightDiff, null, true);
+                    await RestoreScrollAfterPrependAsync(anchor, anchorTopInViewport, oldExtent, oldOffset);
+                    _suppressLoadMoreUntilUtc = DateTime.UtcNow.AddMilliseconds(800);
                 }
-                else
+                else if (result != null && result.WaitingForOnDemand)
                 {
-                    bool requestedOnDemand = await WhatsApp.EnsureHistoryOnDemandAsync(requestedJid, 80);
-                    bool pendingOnDemand = WhatsApp.IsHistoryOnDemandPending(requestedJid);
-
-                    if (requestedOnDemand || pendingOnDemand)
-                    {
-                        _emptyLoadAttempts = 0;
-                        _hasReachedStart = false;
-                        Debug.WriteLine($"[ChatDetailView] Waiting for on-demand history for {_activeChat.JID} (requested={requestedOnDemand}, pending={pendingOnDemand})");
-                    }
-                    else
-                    {
-                        _emptyLoadAttempts++;
-                        _hasReachedStart = _emptyLoadAttempts >= 2;
-                        Debug.WriteLine($"[ChatDetailView] No more messages to load for {_activeChat.JID} (attempt={_emptyLoadAttempts}, reachedStart={_hasReachedStart})");
-                    }
+                    Debug.WriteLine($"[ChatDetailView] Waiting for on-demand history for {_activeChat.JID}");
+                }
+                else if (result != null && result.ReachedStart)
+                {
+                    Debug.WriteLine($"[ChatDetailView] Reached start of history for {_activeChat.JID}");
                 }
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[ChatDetailView] Error loading more messages: {ex.Message}");
             }
-            finally
+        }
+
+        /// <summary>
+        /// First realized timeline row that intersects the viewport, plus its Y relative to the
+        /// ScrollViewer top. Null when virtualization has not generated any container yet.
+        /// </summary>
+        private object CaptureTopVisibleMessage(out double topInViewport)
+        {
+            topInViewport = 0;
+            if (MessageListView == null || _scrollViewer == null || _messages == null)
             {
-                _isLoadingMore = false;
+                return null;
             }
 
+            int count = MessageListView.Items?.Count ?? 0;
+            for (int i = 0; i < count; i++)
+            {
+                var container = MessageListView.ContainerFromIndex(i) as FrameworkElement;
+                if (container == null || container.ActualHeight <= 0)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    GeneralTransform transform = container.TransformToVisual(_scrollViewer);
+                    double top = transform.TransformPoint(new Point(0, 0)).Y;
+                    if (top + container.ActualHeight <= 0)
+                    {
+                        continue;
+                    }
+
+                    if (top >= _scrollViewer.ViewportHeight)
+                    {
+                        break;
+                    }
+
+                    topInViewport = top;
+                    return MessageListView.Items[i];
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[ChatDetailView] CaptureTopVisibleMessage: " + ex.Message);
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// After older rows are prepended, bring the pre-load anchor back to the same viewport
+        /// position. ScrollIntoView gets the item on screen; a second pass with TransformToVisual
+        /// (or extent delta) fine-tunes once containers exist.
+        /// </summary>
+        private async Task RestoreScrollAfterPrependAsync(
+            object anchor,
+            double anchorTopInViewport,
+            double oldExtent,
+            double oldOffset)
+        {
+            EnsureMessageListScrollViewer();
+            if (_scrollViewer == null)
+            {
+                return;
+            }
+
+            // Let ItemsStackPanel realize the new leading rows before we ask for containers.
+            await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () => { });
+            await Task.Delay(16);
+
+            if (anchor != null)
+            {
+                TryScrollIntoView(anchor, ScrollIntoViewAlignment.Leading);
+
+                await Dispatcher.RunAsync(CoreDispatcherPriority.Low, () =>
+                {
+                    if (_scrollViewer == null)
+                    {
+                        return;
+                    }
+
+                    var container = MessageListView.ContainerFromItem(anchor) as FrameworkElement;
+                    if (container != null)
+                    {
+                        try
+                        {
+                            double top = container.TransformToVisual(_scrollViewer)
+                                .TransformPoint(new Point(0, 0)).Y;
+                            double delta = top - anchorTopInViewport;
+                            if (Math.Abs(delta) > 1)
+                            {
+                                double target = Math.Max(0, _scrollViewer.VerticalOffset + delta);
+                                _scrollViewer.ChangeView(null, target, null, true);
+                                Debug.WriteLine(
+                                    $"[ChatDetailView] Restored scroll via anchor delta={delta:0.#} -> {target:0.#}");
+                                return;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine("[ChatDetailView] Anchor fine-tune failed: " + ex.Message);
+                        }
+                    }
+
+                    ApplyExtentDeltaScroll(oldExtent, oldOffset);
+                });
+            }
+            else
+            {
+                await Dispatcher.RunAsync(CoreDispatcherPriority.Low, () =>
+                    ApplyExtentDeltaScroll(oldExtent, oldOffset));
+            }
+        }
+
+        private void ApplyExtentDeltaScroll(double oldExtent, double oldOffset)
+        {
+            if (_scrollViewer == null)
+            {
+                return;
+            }
+
+            double deltaExtent = _scrollViewer.ExtentHeight - oldExtent;
+            if (deltaExtent <= 0.5)
+            {
+                return;
+            }
+
+            double target = Math.Max(0, oldOffset + deltaExtent);
+            _scrollViewer.ChangeView(null, target, null, true);
+            Debug.WriteLine(
+                $"[ChatDetailView] Restored scroll via extent delta={deltaExtent:0.#} -> {target:0.#}");
         }
 
         private void BackButton_Click(object sender, RoutedEventArgs e)
@@ -878,6 +1074,13 @@ namespace Unison.Uwp.UI.Views
                 else if (string.Equals(tag, "widgetPin", StringComparison.Ordinal) && menuItem != null)
                 {
                     menuItem.Text = ViewModel.LiveTilePinMenuLabel;
+                }
+                else if (string.Equals(tag, "addContact", StringComparison.Ordinal) && menuItem != null)
+                {
+                    menuItem.Text = ViewModel.AddContactLabel;
+                    menuItem.Visibility = ViewModel.CanAddToAddressBook
+                        ? Visibility.Visible
+                        : Visibility.Collapsed;
                 }
             }
         }
@@ -1109,7 +1312,25 @@ namespace Unison.Uwp.UI.Views
         /// <summary>Chat currently shown in the detail surface (may lag list selection during refresh).</summary>
         public ChatItem ActiveChatItem => _activeChat;
 
+        /// <summary>
+        /// Shows header/composer immediately, then loads bubbles. Prefer
+        /// <see cref="PrepareActiveChatAsync"/> + <see cref="CompleteActiveChatLoadAsync"/> when
+        /// the host must switch VisualState (NarrowDetail) before SQLite work.
+        /// </summary>
         public async Task SetActiveChatAsync(ChatItem chat)
+        {
+            await PrepareActiveChatAsync(chat);
+            if (chat != null && HasActiveChat)
+            {
+                await CompleteActiveChatLoadAsync();
+            }
+        }
+
+        /// <summary>
+        /// Binds title/avatar and makes the detail surface visible without waiting for messages.
+        /// The host should then switch pane state and call <see cref="CompleteActiveChatLoadAsync"/>.
+        /// </summary>
+        public Task PrepareActiveChatAsync(ChatItem chat)
         {
             TryCloseVideoViewer();
             TryCloseImageViewer();
@@ -1158,14 +1379,13 @@ namespace Unison.Uwp.UI.Views
                         }
                     }
 
-                    return;
+                    return Task.CompletedTask;
                 }
             }
 
             _chatLoadCts?.Cancel();
             _chatLoadCts?.Dispose();
             _chatLoadCts = new CancellationTokenSource();
-            var token = _chatLoadCts.Token;
 
             if (_activeChat != null)
             {
@@ -1180,23 +1400,13 @@ namespace Unison.Uwp.UI.Views
             // takes it down with everything else that was on screen.
             SetAttachMenuOpen(false);
 
-            if (chat != null && ViewModel != null)
-            {
-                // Opening a chat is what makes it read, everywhere - the badge here, the badge on
-                // the phone, and the ticks on the sender's screen. The view only reports that it
-                // happened.
-                await ViewModel.MarkChatOpenedAsync(chat);
-            }
-
-            _hasReachedStart = false;
-            _emptyLoadAttempts = 0;
-            _isLoadingMore = false;
+            ViewModel?.ResetTimelinePaging();
             CancelPresenceAnimation();
 
             if (chat == null)
             {
                 ClearMessageHighlight();
-                _messages.Clear();
+                ClearTimelineMessages();
                 ActiveChatGrid.Visibility = Visibility.Collapsed;
                 EmptyStateGrid.Visibility = Visibility.Visible;
                 UpdateEmptyBackButtonVisibility();
@@ -1210,7 +1420,7 @@ namespace Unison.Uwp.UI.Views
                     HeaderAvatar.IsGroup = false;
                 }
                 ApplyHeaderActions(isGroup: false, visible: false);
-                return;
+                return Task.CompletedTask;
             }
 
             _activeChat.PropertyChanged += ActiveChat_PropertyChanged;
@@ -1240,10 +1450,60 @@ namespace Unison.Uwp.UI.Views
             }
 
             ClearMessageHighlight();
-            _messages.Clear();
+            ClearTimelineMessages();
+            // Same ListView/ScrollViewer across chats: VerticalOffset survives Clear+Replace.
+            ResetMessageListScrollOffset();
+            _stickToBottomUntilUtc = DateTime.UtcNow.AddSeconds(2.5);
+            _suppressLoadMoreUntilUtc = DateTime.UtcNow.AddSeconds(2.5);
+
+            // Mark-read is I/O; do not hold the first paint for it.
+            if (ViewModel != null)
+            {
+                _ = ViewModel.MarkChatOpenedAsync(chat);
+            }
+
+            return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Loads the UI message window for the chat <see cref="PrepareActiveChatAsync"/> just showed.
+        /// Yields one frame (a short extra wait on Mobile) so the detail pane can paint first.
+        /// </summary>
+        public async Task CompleteActiveChatLoadAsync()
+        {
+            ChatItem chat = _activeChat;
+            if (chat == null || ViewModel == null)
+            {
+                return;
+            }
+
+            CancellationToken token = _chatLoadCts?.Token ?? CancellationToken.None;
+            if (token.IsCancellationRequested)
+            {
+                return;
+            }
+
+            await YieldForChatSurfacePaintAsync();
+            if (token.IsCancellationRequested || _activeChat == null ||
+                !ReferenceEquals(_activeChat, chat))
+            {
+                return;
+            }
+
+            var service = WhatsApp;
             string requestedJid = service.GetCanonicalJid(chat.JID);
             Debug.WriteLine($"[ChatDetailView] Loading messages for {requestedJid}");
-            var messages = await service.LoadMessagesForChatAsync(requestedJid);
+
+            List<ChatMessage> messages;
+            try
+            {
+                messages = await MessagesFacade.LoadMessagesForChatAsync(requestedJid);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[ChatDetailView] LoadMessagesForChatAsync failed: {ex.Message}");
+                return;
+            }
 
             if (token.IsCancellationRequested || _activeChat == null ||
                 !string.Equals(service.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
@@ -1251,37 +1511,27 @@ namespace Unison.Uwp.UI.Views
                 return;
             }
 
-            var visibleMessages = (messages ?? new List<ChatMessage>())
-                .Where(m => m != null)
-                .Skip(Math.Max(0, (messages?.Count ?? 0) - MaxUiMessages))
-                .ToList();
+            var visibleMessages = ChatDetailViewModel.TakeLastWindow(
+                messages,
+                ChatDetailViewModel.InitialUiMessageWindow);
 
-            // Ensure group JID is stamped so ShowGroupSenderName works for older persisted rows.
             bool activeIsGroup = chat.IsGroup ||
                 requestedJid.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
-            if (activeIsGroup)
-            {
-                foreach (var msg in visibleMessages)
-                {
-                    if (msg == null) continue;
-                    if (string.IsNullOrEmpty(msg.RemoteJid) ||
-                        !msg.RemoteJid.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase))
-                    {
-                        msg.RemoteJid = requestedJid;
-                    }
-                }
-            }
+            ViewModel.StampGroupRemoteJid(visibleMessages, requestedJid);
 
             RecomputeMessageRuns(visibleMessages, activeIsGroup);
-            foreach (var msg in visibleMessages)
-            {
-                _messages.Add(ToVm(msg));
-            }
+            ViewModel.ReplaceTimelineWindow(visibleMessages);
             UpdatePinnedBanner();
 
             if (visibleMessages.Count == 0)
             {
-                TryApplyPreviewFallback(chat, requestedJid, activeIsGroup, service);
+                ChatMessage fallback = ViewModel.ApplyPreviewFallback(chat, requestedJid, activeIsGroup);
+                if (fallback != null)
+                {
+                    RecomputeMessageRuns(new List<ChatMessage> { fallback }, activeIsGroup);
+                    UpdatePinnedBanner();
+                    Debug.WriteLine($"[ChatDetailView] Applied preview fallback for {requestedJid}");
+                }
             }
             else
             {
@@ -1329,73 +1579,104 @@ namespace Unison.Uwp.UI.Views
             }
 
             ScrollToBottom();
+            _ = StickScrollToBottomOnOpenAsync(token);
+
             if (chat.IsPersonal)
             {
-                ViewModel?.StopPresenceWatch();
+                ViewModel.StopPresenceWatch();
             }
-            else if (!_isWindowsMobile && ViewModel != null)
+            else if (!_isWindowsMobile)
             {
                 ViewModel.StartPresenceWatch(chat.JID);
             }
         }
 
         /// <summary>
-        /// When the store has no messages but the chat list already shows a preview,
-        /// surface that preview as an ephemeral bubble and ask WhatsApp for history.
+        /// Lets the detail VisualState and header layout paint before SQLite / VM materialization.
+        /// Mobile needs a real delay: one dispatcher turn is not enough for NarrowDetail to appear.
         /// </summary>
-        private void TryApplyPreviewFallback(ChatItem chat, string requestedJid, bool isGroup, IWhatsAppService service)
+        private async Task YieldForChatSurfacePaintAsync()
         {
-            if (chat == null || service == null)
+            await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () => { });
+            if (_isWindowsMobile)
             {
-                return;
+                await Task.Delay(48);
             }
-
-            string selfName = _strings?.Get("Chat_SelfFallbackName", "You") ?? "You";
-            ChatMessage fallback = ChatPreviewMessageFactory.TryCreate(chat, selfName);
-            if (fallback == null)
-            {
-                // Still try history-on-demand when the timeline is empty.
-                _ = service.EnsureHistoryOnDemandAsync(requestedJid, 80);
-                return;
-            }
-
-            if (isGroup &&
-                (string.IsNullOrEmpty(fallback.RemoteJid) ||
-                 !fallback.RemoteJid.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase)))
-            {
-                fallback.RemoteJid = requestedJid;
-            }
-
-            var visible = new List<ChatMessage> { fallback };
-            RecomputeMessageRuns(visible, isGroup);
-            _messages.Add(ToVm(fallback));
-            UpdatePinnedBanner();
-            Debug.WriteLine($"[ChatDetailView] Applied preview fallback for {requestedJid}");
-
-            _ = service.EnsureHistoryOnDemandAsync(requestedJid, 80);
         }
 
-        private static void RemovePreviewFallbackMessages(ObservableCollection<ChatMessageViewModel> messages)
+        /// <summary>
+        /// Drops a leftover VerticalOffset from the previous chat. Without this, opening another
+        /// conversation reuses the same absolute offset and looks "stuck" mid-timeline.
+        /// </summary>
+        private void ResetMessageListScrollOffset()
         {
-            if (messages == null || messages.Count == 0)
+            EnsureMessageListScrollViewer();
+            if (_scrollViewer == null)
             {
                 return;
             }
 
-            for (int i = messages.Count - 1; i >= 0; i--)
+            try
             {
-                var vm = messages[i];
-                if (vm?.Model == null)
-                {
-                    continue;
-                }
+                _scrollViewer.ChangeView(null, 0, null, true);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatDetailView] ResetMessageListScrollOffset: " + ex.Message);
+            }
+        }
 
-                if (vm.Model.IsPreviewFallback ||
-                    ChatPreviewMessageFactory.IsPreviewFallbackId(vm.Model.Id))
+        /// <summary>
+        /// Opening a chat must land on the newest bubble. One ScrollToBottom is not enough:
+        /// virtualization realizes heights after the first ChangeView, and KeepItemsInView can
+        /// leave the viewport where the previous chat was. Retry until near-bottom or cancelled.
+        /// </summary>
+        private async Task StickScrollToBottomOnOpenAsync(CancellationToken token)
+        {
+            try
+            {
+                int[] delaysMs = { 50, 120, 200, 350 };
+                for (int i = 0; i < delaysMs.Length; i++)
                 {
-                    messages.RemoveAt(i);
+                    await Task.Delay(delaysMs[i]);
+                    if (token.IsCancellationRequested || _activeChat == null || _messages == null ||
+                        _messages.Count == 0)
+                    {
+                        return;
+                    }
+
+                    ScrollToBottom();
+                    if (IsNearBottom())
+                    {
+                        return;
+                    }
                 }
             }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatDetailView] StickScrollToBottomOnOpenAsync: " + ex.Message);
+            }
+        }
+
+        private void ClearTimelineMessages()
+        {
+            if (ViewModel != null)
+            {
+                ViewModel.ClearTimeline();
+                return;
+            }
+
+            if (_messages == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < _messages.Count; i++)
+            {
+                _messages[i]?.Detach();
+            }
+
+            _messages.Clear();
         }
 
         private void ActiveChat_PropertyChanged(object sender, PropertyChangedEventArgs e)
@@ -1410,6 +1691,29 @@ namespace Unison.Uwp.UI.Views
                 _ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
                 {
                     ApplyChatTitle(_activeChat, WhatsApp);
+                });
+            }
+            else if (e.PropertyName == nameof(ChatItem.GroupMembers) ||
+                     e.PropertyName == nameof(ChatItem.HasGroupMembers))
+            {
+                _ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
+                {
+                    if (_messages == null || _messages.Count == 0 || _activeChat == null)
+                    {
+                        return;
+                    }
+
+                    bool isGroup = _activeChat.IsGroup ||
+                        (!string.IsNullOrWhiteSpace(_activeChat.JID) &&
+                         _activeChat.JID.IndexOf("@g.us", StringComparison.OrdinalIgnoreCase) >= 0);
+                    if (isGroup)
+                    {
+                        RecomputeMessageRuns(_messages, isGroup: true);
+                        if (!_isWindowsMobile && ViewModel != null && !_activeChat.IsPersonal)
+                        {
+                            ViewModel.StartPresenceWatch(_activeChat.JID);
+                        }
+                    }
                 });
             }
             else if (e.PropertyName == nameof(ChatItem.AvatarUrl) ||
@@ -1687,28 +1991,6 @@ namespace Unison.Uwp.UI.Views
             }
         }
 
-        private void InsertTimelineMessage(ChatMessage message)
-        {
-            if (message == null)
-            {
-                return;
-            }
-
-            var vm = ToVm(message);
-            if (vm == null)
-            {
-                return;
-            }
-
-            int index = ChatMessageOrder.FindInsertIndex(
-                _messages.Count,
-                i => _messages[i]?.Timestamp ?? DateTime.MinValue,
-                i => _messages[i]?.Id,
-                message.Timestamp,
-                message.Id);
-            _messages.Insert(index, vm);
-        }
-
         private ChatMessageViewModel ToVm(ChatMessage message)
         {
             if (message == null) return null;
@@ -1742,152 +2024,46 @@ namespace Unison.Uwp.UI.Views
 
         private void RecomputeMessageRuns(IList<ChatMessage> messages, bool isGroup = false)
         {
-            if (messages == null || messages.Count == 0)
+            if (ViewModel == null)
             {
                 return;
             }
 
-            var service = WhatsApp;
-
-            for (int i = 0; i < messages.Count; i++)
-            {
-                var current = messages[i];
-                if (current == null) continue;
-
-                if (isGroup)
-                {
-                    EnsureGroupSenderName(current, service);
-                }
-
-                bool isRunStart = i == 0;
-                bool isRunEnd = i == messages.Count - 1;
-
-                if (!isRunStart)
-                {
-                    var prev = messages[i - 1];
-                    isRunStart = !IsSameMessageRun(prev, current);
-                }
-
-                if (!isRunEnd)
-                {
-                    var next = messages[i + 1];
-                    isRunEnd = !IsSameMessageRun(current, next);
-                }
-
-                current.IsRunStart = isRunStart;
-                current.IsRunEnd = isRunEnd;
-                current.ShowGroupSenderName =
-                    isGroup &&
-                    isRunStart &&
-                    !current.IsFromMe &&
-                    !string.IsNullOrWhiteSpace(current.SenderName) &&
-                    !string.Equals(current.SenderName, "Me", StringComparison.OrdinalIgnoreCase) &&
-                    !string.Equals(current.SenderName, "You", StringComparison.OrdinalIgnoreCase);
-
-                bool contactSlot = isGroup && !current.IsFromMe;
-                current.ShowContactSlot = contactSlot;
-                // Avatar on the first bubble of a participant run.
-                current.ShowContact = contactSlot && isRunStart;
-                current.ContactUri = contactSlot
-                    ? ResolveParticipantContactUri(current.ParticipantJid, service)
-                    : null;
-            }
+            ViewModel.ApplyMessageRunLayout(messages, isGroup, _activeChat ?? ViewModel.ActiveChat);
         }
 
-        private static string ResolveParticipantContactUri(string participantJid, IWhatsAppService service)
+        /// <summary>
+        /// Relabels Hoje/Ontem after local midnight. Timer lives here (WinRT); Core stays clock-free.
+        /// </summary>
+        private void StartDateSeparatorTimer()
         {
-            if (service == null || string.IsNullOrWhiteSpace(participantJid))
+            if (_dateSeparatorTimer == null)
             {
-                return null;
+                _dateSeparatorTimer = new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMinutes(1)
+                };
+                _dateSeparatorTimer.Tick += DateSeparatorTimer_Tick;
             }
 
-            string normalized = NormalizeJidForMatch(participantJid);
-            foreach (var chat in service.Chats)
-            {
-                if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
-                {
-                    continue;
-                }
-
-                if (string.Equals(NormalizeJidForMatch(chat.JID), normalized, StringComparison.OrdinalIgnoreCase))
-                {
-                    return chat.GetAvatarUrl(preferHigh: false);
-                }
-            }
-
-            return null;
+            _dateSeparatorTimerDay = DateTime.Today;
+            _dateSeparatorTimer.Start();
         }
 
-        private static string NormalizeJidForMatch(string jid)
+        private void StopDateSeparatorTimer()
         {
-            if (string.IsNullOrWhiteSpace(jid))
-            {
-                return string.Empty;
-            }
-
-            string value = jid.Trim();
-            int slash = value.IndexOf('/');
-            if (slash >= 0)
-            {
-                value = value.Substring(0, slash);
-            }
-
-            return value;
+            _dateSeparatorTimer?.Stop();
         }
 
-        private static void EnsureGroupSenderName(ChatMessage message, IWhatsAppService service)
+        private void DateSeparatorTimer_Tick(object sender, object e)
         {
-            if (message == null || message.IsFromMe)
+            if (DateTime.Today == _dateSeparatorTimerDay)
             {
                 return;
             }
 
-            if (!string.IsNullOrWhiteSpace(message.SenderName) &&
-                !string.Equals(message.SenderName, "Me", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(message.SenderName, "You", StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-
-            string participant = message.ParticipantJid;
-            if (string.IsNullOrWhiteSpace(participant))
-            {
-                return;
-            }
-
-            string resolved = service?.ResolveDisplayName(participant, "sender");
-            if (!string.IsNullOrWhiteSpace(resolved))
-            {
-                message.SenderName = resolved;
-            }
-        }
-
-        private static bool IsSameMessageRun(ChatMessage left, ChatMessage right)
-        {
-            if (left == null || right == null)
-            {
-                return false;
-            }
-
-            if (left.IsFromMe != right.IsFromMe)
-            {
-                return false;
-            }
-
-            // Own bubbles stay grouped; received group bubbles break when the participant changes.
-            if (left.IsFromMe)
-            {
-                return true;
-            }
-
-            string leftParticipant = left.ParticipantJid ?? string.Empty;
-            string rightParticipant = right.ParticipantJid ?? string.Empty;
-            if (!string.IsNullOrEmpty(leftParticipant) && !string.IsNullOrEmpty(rightParticipant))
-            {
-                return string.Equals(leftParticipant, rightParticipant, StringComparison.OrdinalIgnoreCase);
-            }
-
-            return string.Equals(left.SenderName ?? string.Empty, right.SenderName ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+            _dateSeparatorTimerDay = DateTime.Today;
+            ViewModel?.RefreshDateSeparators();
         }
 
         private void MessageService_ChatMessagesChanged(object sender, string updatedJid)
@@ -1972,7 +2148,7 @@ namespace Unison.Uwp.UI.Views
             try
             {
                 bool stickToBottom = ShouldStickScrollToBottom();
-                var serviceMessages = await service.LoadMessagesForChatAsync(requestedJid);
+                List<ChatMessage> serviceMessages = await MessagesFacade.LoadMessagesForChatAsync(requestedJid);
                 if (_activeChat == null ||
                     !string.Equals(service.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase) ||
                     serviceMessages == null || serviceMessages.Count == 0)
@@ -1988,84 +2164,8 @@ namespace Unison.Uwp.UI.Views
                         return;
                     }
 
-                    bool changed = false;
-                    int countBeforeFallbackStrip = _messages.Count;
-                    RemovePreviewFallbackMessages(_messages);
-                    if (_messages.Count != countBeforeFallbackStrip)
-                    {
-                        changed = true;
-                    }
-
-                    var existingIds = new HashSet<string>(_messages
-                        .Where(m => m != null && !string.IsNullOrWhiteSpace(m.Id))
-                        .Select(m => m.Id));
-
-                    for (int i = 0; i < serviceMessages.Count; i++)
-                    {
-                        var msg = serviceMessages[i];
-                        if (msg == null)
-                        {
-                            continue;
-                        }
-
-                        bool alreadyExists = !string.IsNullOrWhiteSpace(msg.Id)
-                            ? existingIds.Contains(msg.Id)
-                            : _messages.Any(m =>
-                                m != null &&
-                                string.IsNullOrWhiteSpace(m.Id) &&
-                                m.Timestamp == msg.Timestamp &&
-                                m.IsFromMe == msg.IsFromMe &&
-                                string.Equals(m.Content, msg.Content, StringComparison.Ordinal));
-
-                        if (alreadyExists)
-                        {
-                            var existing = !string.IsNullOrWhiteSpace(msg.Id)
-                                ? _messages.FirstOrDefault(m => string.Equals(m?.Id, msg.Id, StringComparison.Ordinal))
-                                : null;
-                            if (existing?.Model != null)
-                            {
-                                existing.Model.Status = msg.Status;
-                                existing.Model.IsPinned = msg.IsPinned;
-                                existing.Model.PinnedAtUtc = msg.PinnedAtUtc;
-                                existing.Model.PinExpiresAtUtc = msg.PinExpiresAtUtc;
-                                existing.Model.RemoteJid = msg.RemoteJid;
-                                existing.Model.ParticipantJid = msg.ParticipantJid;
-                                existing.Model.Reactions = msg.Reactions;
-                                if (!string.IsNullOrWhiteSpace(msg.ImageUri))
-                                {
-                                    existing.Model.ImageUri = msg.ImageUri;
-                                }
-                                if (!string.IsNullOrWhiteSpace(msg.AudioUri))
-                                {
-                                    existing.Model.AudioUri = msg.AudioUri;
-                                }
-                            }
-                            continue;
-                        }
-
-                        if (_activeChat != null &&
-                            (_activeChat.IsGroup || requestedJid.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase)) &&
-                            (string.IsNullOrEmpty(msg.RemoteJid) ||
-                             !msg.RemoteJid.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase)))
-                        {
-                            msg.RemoteJid = requestedJid;
-                        }
-
-                        InsertTimelineMessage(msg);
-
-                        if (!string.IsNullOrWhiteSpace(msg.Id))
-                        {
-                            existingIds.Add(msg.Id);
-                        }
-                        changed = true;
-                    }
-
+                    bool changed = ViewModel.MergeTimelineFromService(serviceMessages, requestedJid);
                     UpdatePinnedBanner();
-
-                    while (_messages.Count > MaxUiMessages)
-                    {
-                        _messages.RemoveAt(0);
-                    }
 
                     if (changed)
                     {
@@ -2172,6 +2272,20 @@ namespace Unison.Uwp.UI.Views
                 _displayedPinnedIndex = (_displayedPinnedIndex + 1) % _activePinnedMessages.Count;
                 ShowPinnedBannerItem();
             }
+        }
+
+        /// <summary>Invoked from <see cref="Templates.MessageTemplates"/> when group author name/avatar is tapped.</summary>
+        internal void OnGroupParticipantTapped(object sender, TappedRoutedEventArgs e)
+        {
+            var sourceVm = (sender as FrameworkElement)?.DataContext as ChatMessageViewModel;
+            string jid = sourceVm?.ParticipantJid;
+            if (string.IsNullOrWhiteSpace(jid) || ViewModel == null)
+            {
+                return;
+            }
+
+            ViewModel.OpenGroupMemberInfoByJid(jid);
+            e.Handled = true;
         }
 
         /// <summary>Invoked from <see cref="Templates.MessageTemplates"/> when the quote/reply block is tapped.</summary>
@@ -2669,8 +2783,6 @@ namespace Unison.Uwp.UI.Views
                     : "You";
             }
 
-            EnsureGroupSenderName(message, WhatsApp);
-
             if (!string.IsNullOrWhiteSpace(message.SenderName) &&
                 !string.Equals(message.SenderName, "Me", StringComparison.OrdinalIgnoreCase) &&
                 !string.Equals(message.SenderName, "You", StringComparison.OrdinalIgnoreCase))
@@ -3034,13 +3146,33 @@ namespace Unison.Uwp.UI.Views
                 _presenceAnimationCts = new CancellationTokenSource();
                 var ct = _presenceAnimationCts.Token;
 
-                if (!string.IsNullOrEmpty(statusText))
+                bool isGroup = _activeChat != null &&
+                    (_activeChat.IsGroup ||
+                     (!string.IsNullOrWhiteSpace(_activeChat.JID) &&
+                      _activeChat.JID.IndexOf("@g.us", StringComparison.OrdinalIgnoreCase) >= 0));
+
+                // Loop every ~90s while this chat stays open (cancel on leave / Unloaded).
+                while (!ct.IsCancellationRequested)
                 {
-                    await AnimateStatusSequenceAsync(statusText, ct);
-                }
-                else
-                {
-                    await AnimateFallbackOnlyAsync(ct);
+                    if (isGroup)
+                    {
+                        await AnimateGroupStatusSequenceAsync(statusText, ct);
+                    }
+                    else if (!string.IsNullOrEmpty(statusText))
+                    {
+                        await AnimateStatusSequenceAsync(statusText, ct);
+                    }
+                    else
+                    {
+                        await AnimateFallbackOnlyAsync(ct);
+                    }
+
+                    if (ct.IsCancellationRequested)
+                    {
+                        return;
+                    }
+
+                    await Task.Delay(TimeSpan.FromSeconds(90), ct);
                 }
             }
             catch (OperationCanceledException)
@@ -3053,7 +3185,69 @@ namespace Unison.Uwp.UI.Views
         }
 
         /// <summary>
-        /// Full sequence: show presence status 5s â†’ crossfade to "select for contact info" 5s â†’ fade out â†’ slide back
+        /// Group: hint → alphabetical member names → fade out (then the outer loop waits ~90s).
+        /// </summary>
+        private async Task AnimateGroupStatusSequenceAsync(string statusText, CancellationToken ct)
+        {
+            try
+            {
+                if (ct.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                string hint = !string.IsNullOrWhiteSpace(statusText)
+                    ? statusText
+                    : (_strings != null
+                        ? _strings.Get("ChatDetail_SelectForGroupInfo", "tap here for group info")
+                        : "tap here for group info");
+
+                ChatStatusText.Text = hint;
+                AnimateSlideUp();
+                AnimateFadeIn(ChatStatusText);
+
+                await Task.Delay(5000, ct);
+                if (ct.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                AnimateFadeOut(ChatStatusText);
+                await Task.Delay(250, ct);
+                if (ct.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                string members = ViewModel?.FormatGroupMemberNamesSummary(_activeChat);
+                if (!string.IsNullOrWhiteSpace(members))
+                {
+                    ChatStatusText.Text = members;
+                    AnimateFadeIn(ChatStatusText);
+
+                    await Task.Delay(6000, ct);
+                    if (ct.IsCancellationRequested)
+                    {
+                        return;
+                    }
+
+                    AnimateFadeOut(ChatStatusText);
+                    await Task.Delay(250, ct);
+                    if (ct.IsCancellationRequested)
+                    {
+                        return;
+                    }
+                }
+
+                AnimateSlideBack();
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+
+        /// <summary>
+        /// Full sequence: show presence status 5s → crossfade to "select for contact info" 5s → fade out → slide back
         /// </summary>
         private async Task AnimateStatusSequenceAsync(string statusText, CancellationToken ct)
         {

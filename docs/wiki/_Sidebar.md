@@ -9,4 +9,5 @@
 * [Coding standards](Coding-Standards)
 * [Adding languages](Adding-Languages)
 * [Migration](Migration)
+* [WhatsAppService extraction](WhatsAppService-Extraction)
 * [Changelog](Changelog)

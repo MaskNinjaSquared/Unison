@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Proto;
@@ -33,6 +34,33 @@ namespace Unison.Core.Contracts.WhatsApp
         /// Persists people from the payload (UpsertIfChanged), then applies history sync.
         /// </summary>
         Task SyncMessageHistoryAsync(HistorySync sync);
+
+        /// <summary>
+        /// Loads messages for an open chat: SQLite <c>history_message</c> plus live RAM overlay.
+        /// </summary>
+        Task<System.Collections.Generic.List<ChatMessage>> LoadMessagesForChatAsync(string jid);
+
+        /// <summary>
+        /// Older page from SQLite <c>history_message</c> (then prefer <see cref="EnsureHistoryOnDemandAsync"/>).
+        /// Pass the oldest visible bubble as the cursor.
+        /// </summary>
+        Task<System.Collections.Generic.List<ChatMessage>> LoadMoreMessagesAsync(
+            string jid,
+            DateTime? beforeUtc = null,
+            string beforeMessageId = null);
+
+        /// <summary>
+        /// Media + document rows for the chat-info Media / Files panes, newest first: SQLite
+        /// <c>history_message</c> media rows merged with the live/JSON cache. Timeline paging is
+        /// separate — this never seeds the timeline cache nor asks the phone for history.
+        /// </summary>
+        Task<System.Collections.Generic.List<ChatMessage>> LoadChatMediaIndexAsync(string jid, int limit = 400);
+
+        /// <summary>Asks the phone for older messages for an open chat.</summary>
+        Task<bool> EnsureHistoryOnDemandAsync(string jid, int count);
+
+        /// <summary>True while an on-demand history request is in flight for <paramref name="jid"/>.</summary>
+        bool IsHistoryOnDemandPending(string jid);
 
         Task<ChatMessage> SendTextMessageAsync(string jid, string text);
 

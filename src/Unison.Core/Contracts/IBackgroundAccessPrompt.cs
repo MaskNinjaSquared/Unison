@@ -4,7 +4,8 @@ namespace Unison.Core.Contracts
 {
     /// <summary>
     /// Boot-time gate: WhatsApp socket needs OS background-apps permission.
-    /// Cancel exits the process; OK re-checks before opening Settings.
+    /// Cancel exits. OK continues only after a fresh check succeeds; otherwise
+    /// Settings opens and the same prompt comes back when the app resumes.
     /// </summary>
     public interface IBackgroundAccessPrompt
     {

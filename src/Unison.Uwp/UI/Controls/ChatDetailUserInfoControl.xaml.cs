@@ -48,12 +48,32 @@ namespace Unison.Uwp.UI.Controls
                 _boundInfo.PropertyChanged += Info_PropertyChanged;
             }
 
+            if (newVm != null)
+            {
+                ChatDetailInfoPivotHelper.ResetToRoot(InfoPivot);
+            }
+
             ApplyInfoViewModel();
         }
 
         private void Info_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
+            if (ChatDetailInfoPivotHelper.IsMediaPaneProperty(e.PropertyName))
+            {
+                BindMediaPanes();
+                return;
+            }
+
             ApplyInfoViewModel();
+        }
+
+        private void InfoPivot_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            ChatDetailInfoPivotHelper.RequestMediaIndexIfSelected(
+                InfoPivot,
+                InfoViewModel,
+                MediaPivotItem,
+                FilesPivotItem);
         }
 
         private void NotificationsToggle_Toggled(object sender, RoutedEventArgs e)
@@ -93,8 +113,9 @@ namespace Unison.Uwp.UI.Controls
                 CallsEmptyText.Text = vm.CallsEmptyText ?? string.Empty;
             }
 
-            MediaPane?.Bind(vm.MediaItems, vm.HasMedia, vm.MediaEmptyText);
-            FilesPane?.Bind(vm.FileItems, vm.HasFiles, vm.FilesEmptyText);
+            MediaPane?.AttachPaging(vm, isFilesPane: false);
+            FilesPane?.AttachPaging(vm);
+            BindMediaPanes();
 
             if (InfoAvatar != null)
             {
@@ -112,6 +133,13 @@ namespace Unison.Uwp.UI.Controls
                 NameValue.Text = vm.DisplayName ?? string.Empty;
             }
 
+            if (PhoneSection != null)
+            {
+                PhoneSection.Visibility = (vm.HasPhone || vm.CanAddToAddressBook)
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+            }
+
             if (PhoneLabel != null)
             {
                 PhoneLabel.Text = ChatDetailInfoPivotHelper.Upper(vm.PhoneSectionLabel);
@@ -120,6 +148,15 @@ namespace Unison.Uwp.UI.Controls
             if (PhoneValue != null)
             {
                 PhoneValue.Text = string.IsNullOrWhiteSpace(vm.PhoneValue) ? "—" : vm.PhoneValue;
+            }
+
+            if (AddContactButton != null)
+            {
+                AddContactButton.Content = vm.AddContactLabel;
+                AddContactButton.Command = vm.AddContactCommand;
+                AddContactButton.Visibility = vm.CanAddToAddressBook
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
             }
 
             if (StatusLabel != null)
@@ -141,6 +178,19 @@ namespace Unison.Uwp.UI.Controls
                 NotificationsToggle,
                 vm,
                 ref _notificationsToggleQuiet);
+        }
+
+        private void BindMediaPanes()
+        {
+            var vm = InfoViewModel;
+            if (vm == null)
+            {
+                return;
+            }
+
+            bool loading = vm.IsMediaIndexLoading;
+            MediaPane?.Bind(vm.MediaItems, vm.HasMedia, vm.MediaEmptyText, loading);
+            FilesPane?.Bind(vm.FileItems, vm.HasFiles, vm.FilesEmptyText, loading);
         }
     }
 }

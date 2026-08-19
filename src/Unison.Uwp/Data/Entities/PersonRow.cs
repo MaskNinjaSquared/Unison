@@ -16,7 +16,11 @@ namespace Unison.Uwp.Data.Entities
 
         public string AvatarUrl { get; set; }
 
+        [Indexed(Name = "IX_Person_Phone")]
         public string Phone { get; set; }
+
+        /// <summary><see cref="Unison.Core.Models.PersonSource"/> as INTEGER. 0 = Unknown.</summary>
+        public int Source { get; set; }
 
         public DateTime UpdatedAtUtc { get; set; }
     }

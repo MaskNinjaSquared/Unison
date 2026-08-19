@@ -53,7 +53,6 @@ namespace Unison.Uwp.Services
 
                 if (leftForeground)
                 {
-                    window.Activated -= handler;
                     resumed.TrySetResult(true);
                 }
             };
@@ -61,13 +60,21 @@ namespace Unison.Uwp.Services
             window.Activated += handler;
             try
             {
-                Task winner = await Task.WhenAny(resumed.Task, Task.Delay(TimeSpan.FromMinutes(10)));
-                if (winner != resumed.Task)
+                if (!leftForeground)
                 {
-                    window.Activated -= handler;
+                    Task first = await Task.WhenAny(resumed.Task, Task.Delay(1500));
+                    if (first == resumed.Task || !leftForeground)
+                    {
+                        return;
+                    }
                 }
+
+                await Task.WhenAny(resumed.Task, Task.Delay(TimeSpan.FromMinutes(10)));
             }
             catch
+            {
+            }
+            finally
             {
                 window.Activated -= handler;
             }

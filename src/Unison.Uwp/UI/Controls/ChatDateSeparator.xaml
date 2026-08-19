@@ -1,0 +1,16 @@
+<UserControl
+    x:Class="Unison.Uwp.UI.Controls.ChatDateSeparator"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    HorizontalAlignment="Stretch">
+
+    <!-- CornerRadius on Border is API 1 (W10 Mobile). Fill matches wallpaper underfill. -->
+    <Border HorizontalAlignment="Center"
+            Background="{ThemeResource ChatDetailDateSeparatorBackgroundBrush}"
+            CornerRadius="8"
+            Padding="12,4"
+            Margin="0,8,0,4">
+        <TextBlock x:Name="LabelText"
+                   Style="{ThemeResource ChatDetailDateSeparatorTextStyle}"/>
+    </Border>
+</UserControl>

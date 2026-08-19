@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using Unison.Core.Contracts;
 using Unison.Core.ViewModels;
 using Unison.Uwp.Helpers;
@@ -22,6 +23,20 @@ namespace Unison.Uwp.Services
             string primaryButtonText,
             string closeButtonText)
         {
+            ConfirmPromptResult result = await ShowConfirmResultAsync(
+                title,
+                content,
+                primaryButtonText,
+                closeButtonText);
+            return result == ConfirmPromptResult.Primary;
+        }
+
+        public async Task<ConfirmPromptResult> ShowConfirmResultAsync(
+            string title,
+            string content,
+            string primaryButtonText,
+            string closeButtonText)
+        {
             try
             {
                 var dialog = new ContentDialog
@@ -33,14 +48,24 @@ namespace Unison.Uwp.Services
                 };
 
                 var result = await dialog.ShowAsync();
-                return result == ContentDialogResult.Primary;
+                if (result == ContentDialogResult.Primary)
+                {
+                    return ConfirmPromptResult.Primary;
+                }
+
+                if (result == ContentDialogResult.None)
+                {
+                    return ConfirmPromptResult.Dismissed;
+                }
+
+                return ConfirmPromptResult.Cancel;
             }
             catch (System.Runtime.InteropServices.COMException ex)
                 when (ex.Message.Contains("single ContentDialog") ||
                       ex.HResult == unchecked((int)0x80070057))
             {
                 System.Diagnostics.Debug.WriteLine("[DialogService] Another dialog is already open.");
-                return false;
+                return ConfirmPromptResult.Dismissed;
             }
         }
 
@@ -165,6 +190,34 @@ namespace Unison.Uwp.Services
             {
                 System.Diagnostics.Debug.WriteLine("[DialogService] ShowImageSendPreviewAsync: " + ex.Message);
                 return false;
+            }
+        }
+
+        public async Task ShowReactionsDialogAsync(ChatMessageViewModel messageVm)
+        {
+            if (messageVm == null || !messageVm.HasReactions || App.Services == null)
+            {
+                return;
+            }
+
+            try
+            {
+                var viewModel = App.Services.GetRequiredService<MessageReactionsViewModel>();
+                await viewModel.LoadAsync(messageVm);
+
+                var dialog = new ReactionsDialog();
+                dialog.Bind(viewModel);
+                await dialog.ShowAsync();
+            }
+            catch (System.Runtime.InteropServices.COMException ex)
+                when (ex.Message.Contains("single ContentDialog") ||
+                      ex.HResult == unchecked((int)0x80070057))
+            {
+                System.Diagnostics.Debug.WriteLine("[DialogService] Another dialog is already open (reactions).");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[DialogService] ShowReactionsDialogAsync: " + ex.Message);
             }
         }
 

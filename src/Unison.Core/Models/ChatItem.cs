@@ -54,6 +54,19 @@ namespace Unison.Core.Models
 
         public bool HasLastMessageAuthor => !string.IsNullOrEmpty(_lastMessageAuthor);
 
+        /// <summary>
+        /// Who wrote <see cref="LastMessage"/> in a group, kept so the strip can be recomposed when
+        /// the name behind a LID/phone arrives later (history sync names the sender long after the
+        /// message). Not the display text — that is <see cref="LastMessageAuthor"/>.
+        /// </summary>
+        public string LastMessageParticipantJid { get; set; }
+
+        /// <summary>Best name known for <see cref="LastMessageParticipantJid"/> when the strip was built.</summary>
+        public string LastMessageSenderName { get; set; }
+
+        /// <summary>Newest message was ours, so the strip uses the localized "You" label.</summary>
+        public bool LastMessageIsFromMe { get; set; }
+
         private System.Collections.Generic.List<string> _lastMessageMentionedJids;
         /// <summary>JIDs mentioned in <see cref="LastMessage"/> (for @alias resolution in the list strip).</summary>
         public System.Collections.Generic.List<string> LastMessageMentionedJids
@@ -177,6 +190,40 @@ namespace Unison.Core.Models
                 OnPropertyChanged();
             }
         }
+
+        private System.Collections.Generic.List<GroupMember> _groupMembers;
+        private System.Collections.Generic.IReadOnlyDictionary<string, string> _mentionLookup =
+            MentionLookupBuilder.Empty;
+
+        /// <summary>
+        /// Roster from the last group metadata/listing. Null/empty until a query returns participants.
+        /// Chat-info Members binds this list; bubbles/strip use <see cref="MentionLookup"/>.
+        /// </summary>
+        [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public System.Collections.Generic.List<GroupMember> GroupMembers
+        {
+            get => _groupMembers;
+            set
+            {
+                _groupMembers = (value != null && value.Count > 0)
+                    ? value
+                    : null;
+                _mentionLookup = MentionLookupBuilder.FromRoster(_groupMembers);
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasGroupMembers));
+                OnPropertyChanged(nameof(MentionLookup));
+            }
+        }
+
+        [Newtonsoft.Json.JsonIgnore]
+        public bool HasGroupMembers => _groupMembers != null && _groupMembers.Count > 0;
+
+        /// <summary>
+        /// Digit → name map from <see cref="GroupMembers"/>, rebuilt when the roster is replaced.
+        /// </summary>
+        [Newtonsoft.Json.JsonIgnore]
+        public System.Collections.Generic.IReadOnlyDictionary<string, string> MentionLookup =>
+            _mentionLookup ?? MentionLookupBuilder.Empty;
 
         private DateTime? _avatarFetchedAtUtc;
         public DateTime? AvatarFetchedAtUtc

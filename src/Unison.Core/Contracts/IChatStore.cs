@@ -52,22 +52,6 @@ namespace Unison.Core.Contracts
 
 
 
-        Task<ChatLocalState> SetWidgetPinnedAsync(string jid, bool isWidgetPinned);
-
-
-
-        Task<ChatLocalState> SetChatPinnedAsync(string jid, bool isChatPinned);
-
-
-
-        Task<ChatLocalState> SetMutedUntilAsync(string jid, long? mutedUntil);
-
-
-
-        Task<ChatLocalState> SetStatusAsync(string jid, ChatLocalStatus status);
-
-
-
         /// <summary>
 
         /// Applies SQLite local fields onto a chat model.

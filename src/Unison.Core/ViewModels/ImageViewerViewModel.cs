@@ -2,6 +2,7 @@ using System;
 using System.Windows.Input;
 using Unison.Core.Contracts;
 using Unison.Core.Helpers;
+using Unison.Core.Mappers;
 
 namespace Unison.Core.ViewModels
 {
@@ -89,13 +90,7 @@ namespace Unison.Core.ViewModels
         {
             get
             {
-                DateTime ts = Message.Timestamp;
-                if (ts == DateTime.MinValue)
-                {
-                    return string.Empty;
-                }
-
-                return ts.ToString("dd/MM/yyyy HH:mm");
+                return WhatsAppMapper.FormatLocalDateTime(Message.Timestamp);
             }
         }
 

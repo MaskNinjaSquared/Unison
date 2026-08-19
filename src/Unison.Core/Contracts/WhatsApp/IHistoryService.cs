@@ -32,6 +32,44 @@ namespace Unison.Core.Contracts.WhatsApp
         event EventHandler<InitialSyncProgressEventArgs> InitialSyncProgress;
 
         /// <summary>
+        /// List-preview rows were committed to SQLite for a history chunk (phase 2 hydrate).
+        /// </summary>
+        event EventHandler<HistoryChatPreviewChunkEventArgs> ChatPreviewChunkPersisted;
+
+        /// <summary>
+        /// Marks the history→SQLite gate InProgress for a non-on-demand chunk.
+        /// Owned by <c>HistoryFacade</c>; called from chunk persist.
+        /// </summary>
+        Task TrackHistoryChunkStartedAsync(string syncType);
+
+        /// <summary>
+        /// Marks the gate Succeeded after a meaningful non-on-demand history batch.
+        /// </summary>
+        Task TrackHistoryChunkCompletedAsync(string syncType, int conversationCount);
+
+        /// <summary>
+        /// Resets <c>history_migration</c> and clears preview / message / status SQLite tables.
+        /// </summary>
+        Task ResetHistorySqliteAsync(string reason = null);
+
+        /// <summary>
+        /// Applies LID↔PN from the chunk, writes previews + messages to SQLite, completes
+        /// resync/progress notify. Returns chat JIDs that got message rows (detail hydrate).
+        /// </summary>
+        Task<HistorySqliteChunkResult> PersistHistorySqliteChunkAsync(HistorySync sync);
+
+        /// <summary>
+        /// Completes initial-sync progress / resync wait after SQLite applied a chunk
+        /// (forwards to the compatibility client). Prefer <see cref="PersistHistorySqliteChunkAsync"/>.
+        /// </summary>
+        void NotifySqliteHistoryChunkApplied(string syncType, int conversationCount);
+
+        /// <summary>
+        /// History message rows were committed to SQLite for a chunk (open detail may hydrate).
+        /// </summary>
+        event EventHandler<HistoryMessageChunkEventArgs> HistoryMessageChunkPersisted;
+
+        /// <summary>
         /// Wipes the local conversations and asks the phone to send them again. The account
         /// stays linked; only what we hold locally is thrown away.
         /// </summary>

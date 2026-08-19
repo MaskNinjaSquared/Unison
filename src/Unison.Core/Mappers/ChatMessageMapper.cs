@@ -93,33 +93,7 @@ namespace Unison.Core.Mappers
 
         private static Message UnwrapMessage(Message msg)
         {
-            var current = msg;
-            while (current != null)
-            {
-                if (current.ViewOnceMessage?.Message != null)
-                {
-                    current = current.ViewOnceMessage.Message;
-                    continue;
-                }
-                if (current.ViewOnceMessageV2?.Message != null)
-                {
-                    current = current.ViewOnceMessageV2.Message;
-                    continue;
-                }
-                if (current.EphemeralMessage?.Message != null)
-                {
-                    current = current.EphemeralMessage.Message;
-                    continue;
-                }
-                if (current.DocumentWithCaptionMessage?.Message != null)
-                {
-                    current = current.DocumentWithCaptionMessage.Message;
-                    continue;
-                }
-                break;
-            }
-
-            return current;
+            return HistorySyncContentFilter.Unwrap(msg);
         }
     }
 }

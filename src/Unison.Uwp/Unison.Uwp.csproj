@@ -143,10 +143,12 @@
     <Compile Include="Services\WhatsApp\Contacts\ContactFacade.cs" />
     <Compile Include="Services\WhatsApp\Contacts\AddressBookOverlay.cs" />
     <Compile Include="Services\WhatsApp\Contacts\ChatAvatarPolicy.cs" />
+    <Compile Include="Services\WhatsApp\Contacts\GroupRosterPolicy.cs" />
     <Compile Include="Services\WhatsApp\Contacts\ContactDirectory.cs" />
     <Compile Include="Services\WhatsApp\Contacts\ContactNameResolver.cs" />
     <Compile Include="Services\WhatsApp\Chats\ChatFacade.cs" />
     <Compile Include="Services\WhatsApp\History\HistoryFacade.cs" />
+    <Compile Include="Services\WhatsApp\Status\StatusFacade.cs" />
     <Compile Include="Services\WhatsApp\Messages\MessageFacade.cs" />
     <Compile Include="Services\WhatsApp\Profiles\ProfileFacade.cs" />
     <Compile Include="Services\Socket\DelegateSocketLog.cs" />
@@ -191,8 +193,18 @@
     <Compile Include="Services\AudioRecordingService.cs" />
     <Compile Include="Services\VoicePlaybackRoutingService.cs" />
     <Compile Include="Services\WhatsApp\WhatsAppService.cs" />
+    <Compile Include="Services\WhatsApp\WhatsAppService.Connection.cs" />
+    <Compile Include="Services\WhatsApp\WhatsAppService.Media.cs" />
+    <Compile Include="Services\WhatsApp\WhatsAppService.Groups.cs" />
+    <Compile Include="Services\WhatsApp\WhatsAppService.Avatars.cs" />
+    <Compile Include="Services\WhatsApp\WhatsAppService.Identity.cs" />
+    <Compile Include="Services\WhatsApp\WhatsAppService.AppState.cs" />
+    <Compile Include="Services\WhatsApp\WhatsAppService.Persistence.cs" />
+    <Compile Include="Services\WhatsApp\WhatsAppService.Receipts.cs" />
+    <Compile Include="Services\WhatsApp\WhatsAppService.IncomingPump.cs" />
     <Compile Include="Services\WhatsApp\Diagnostics\DebugSendService.cs" />
     <Compile Include="Services\LocalContactsService.cs" />
+    <Compile Include="Services\WindowsContactListPublisher.cs" />
     <Compile Include="Services\NotificationService.cs" />
     <Compile Include="Services\LiveTilesService.cs" />
     <Compile Include="Services\ShortcutService.cs" />
@@ -200,9 +212,19 @@
     <Compile Include="Data\MessageStore.cs" />
     <Compile Include="Data\PersonStore.cs" />
     <Compile Include="Data\ChatStore.cs" />
+    <Compile Include="Data\HistoryMigrationStore.cs" />
+    <Compile Include="Data\HistoryChatPreviewStore.cs" />
+    <Compile Include="Data\HistoryMessageStore.cs" />
+    <Compile Include="Data\HistoryStatusStore.cs" />
     <Compile Include="Data\SqliteLidMappingStorage.cs" />
     <Compile Include="Data\Entities\PersonRow.cs" />
+    <Compile Include="Data\Entities\PersonGroupRow.cs" />
     <Compile Include="Data\Entities\ChatRow.cs" />
+    <Compile Include="Data\Entities\HistoryMigrationRow.cs" />
+    <Compile Include="Data\Entities\HistoryChatPreviewRow.cs" />
+    <Compile Include="Data\Entities\HistoryMessageRow.cs" />
+    <Compile Include="Data\Entities\HistoryMessageReactionRow.cs" />
+    <Compile Include="Data\Entities\HistoryStatusRow.cs" />
     <Compile Include="Data\Entities\LidMappingRow.cs" />
     <Compile Include="UI\Controls\LoginInstructionHeader.xaml.cs">
       <DependentUpon>LoginInstructionHeader.xaml</DependentUpon>
@@ -258,6 +280,15 @@
     <Compile Include="UI\Views\ChatDetailView.xaml.cs">
       <DependentUpon>ChatDetailView.xaml</DependentUpon>
     </Compile>
+    <Compile Include="UI\Views\StatusView.xaml.cs">
+      <DependentUpon>StatusView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Views\StatusListView.xaml.cs">
+      <DependentUpon>StatusListView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Views\StatusDetailView.xaml.cs">
+      <DependentUpon>StatusDetailView.xaml</DependentUpon>
+    </Compile>
     <Compile Include="UI\Views\ImageViewerView.xaml.cs">
       <DependentUpon>ImageViewerView.xaml</DependentUpon>
     </Compile>
@@ -282,12 +313,16 @@
     <Compile Include="UI\Converters\InvertedStringToVisibilityConverter.cs" />
     <Compile Include="UI\Converters\ChatPreviewKindConverters.cs" />
     <Compile Include="UI\Converters\RelativeTimestampConverter.cs" />
+    <Compile Include="UI\Converters\LocalTimeConverter.cs" />
     <Compile Include="UI\Converters\ByteSizeConverter.cs" />
     <Compile Include="UI\Controls\ChatListPreviewStrip.xaml.cs">
       <DependentUpon>ChatListPreviewStrip.xaml</DependentUpon>
     </Compile>
     <Compile Include="UI\Controls\ChatAvatarControl.xaml.cs">
       <DependentUpon>ChatAvatarControl.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Controls\ChatDateSeparator.xaml.cs">
+      <DependentUpon>ChatDateSeparator.xaml</DependentUpon>
     </Compile>
     <Compile Include="UI\Controls\ChatAudioBubbleBar.xaml.cs">
       <DependentUpon>ChatAudioBubbleBar.xaml</DependentUpon>
@@ -300,6 +335,12 @@
     </Compile>
     <Compile Include="UI\Controls\ChatDetailGroupInfoControl.xaml.cs">
       <DependentUpon>ChatDetailGroupInfoControl.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Controls\ChatDetailGroupMemberInfoControl.xaml.cs">
+      <DependentUpon>ChatDetailGroupMemberInfoControl.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Controls\ChatDetailGroupMemberInfoPane.xaml.cs">
+      <DependentUpon>ChatDetailGroupMemberInfoPane.xaml</DependentUpon>
     </Compile>
     <Compile Include="UI\Controls\ChatInfoMediaPane.xaml.cs">
       <DependentUpon>ChatInfoMediaPane.xaml</DependentUpon>
@@ -328,6 +369,9 @@
     <Compile Include="UI\Dialogs\ImageSendPreviewDialog.xaml.cs">
       <DependentUpon>ImageSendPreviewDialog.xaml</DependentUpon>
     </Compile>
+    <Compile Include="UI\Dialogs\ReactionsDialog.xaml.cs">
+      <DependentUpon>ReactionsDialog.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Client\MediaUtils.cs" />
     <Compile Include="Client\OggOpusHandlerService.cs" />
   </ItemGroup>
@@ -343,6 +387,8 @@
     <Content Include="Assets\Attach\inline-location.png" />
     <Content Include="Assets\Attach\inline-picture.png" />
     <Content Include="Assets\Attach\inline-video.png" />
+    <Content Include="Assets\Media\wallpaper-placeholder-white.png" />
+    <Content Include="Assets\Media\wallpaper-placeholder-black.png" />
     <Content Include="Assets\Backgrounds\tos-update.png" />
     <Content Include="Assets\Checkmarks\delivered_message.png" />
     <Content Include="Assets\Checkmarks\read_message.png" />
@@ -463,6 +509,10 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
+    <Page Include="UI\Controls\ChatDateSeparator.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
     <Page Include="UI\Controls\ChatAudioBubbleBar.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -476,6 +526,14 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="UI\Controls\ChatDetailGroupInfoControl.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Controls\ChatDetailGroupMemberInfoControl.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Controls\ChatDetailGroupMemberInfoPane.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
@@ -551,6 +609,18 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
+    <Page Include="UI\Views\StatusView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Views\StatusListView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Views\StatusDetailView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
     <Page Include="UI\Views\ImageViewerView.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -568,6 +638,10 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="UI\Dialogs\ImageSendPreviewDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Dialogs\ReactionsDialog.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

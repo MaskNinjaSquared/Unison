@@ -105,6 +105,28 @@
                 </VisualState>
             </VisualStateGroup>
 
+            <VisualStateGroup x:Name="ChatDetailInfoStates">
+                <VisualState x:Name="InfoClosed">
+                    <VisualState.Setters>
+                        <Setter Target="ChatColumn.Width" Value="*"/>
+                        <Setter Target="InfoColumn.Width" Value="0"/>
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="InfoDocked">
+                    <VisualState.Setters>
+                        <Setter Target="ChatColumn.Width" Value="*"/>
+                        <!-- ChatPaneLayoutConstants.ChatDetailInfoPaneWidth -->
+                        <Setter Target="InfoColumn.Width" Value="400"/>
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="InfoFullScreen">
+                    <VisualState.Setters>
+                        <Setter Target="ChatColumn.Width" Value="0"/>
+                        <Setter Target="InfoColumn.Width" Value="*"/>
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+
             <!--
                 Everything that happens around the attachment bar arriving and leaving: the
                 conversation dimming behind it, and the composer trading places with it. Neither
@@ -265,6 +287,12 @@
                                     <MenuFlyoutItem x:Uid="ChatDetail_ShowContact" Text="View contact"
                                                     Command="{Binding OpenChatDetailInfoCommand}"
                                                     Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
+                                    <MenuFlyoutItem Tag="addContact"
+                                                    x:Uid="ChatDetail_AddContact"
+                                                    Text="Add contact"
+                                                    Command="{Binding AddContactCommand}"
+                                                    Visibility="Collapsed"
+                                                    Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
                                     <MenuFlyoutItem x:Uid="ChatDetail_Search" Text="Search" IsEnabled="False"
                                                     Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
                                     <MenuFlyoutItem x:Uid="ChatDetail_MediaLinksDocs" Text="Media, links, and docs" IsEnabled="False"
@@ -408,6 +436,14 @@
                         <Setter Property="Margin" Value="0"/>
                     </Style>
                 </ListView.ItemContainerStyle>
+                <ListView.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <!-- Prefer KeepItemsInView as a first pass; ChatDetailView still restores
+                             scroll explicitly after load-more because variable bubble heights and
+                             near-zero offsets make the panel alone unreliable. -->
+                        <ItemsStackPanel ItemsUpdatingScrollMode="KeepItemsInView"/>
+                    </ItemsPanelTemplate>
+                </ListView.ItemsPanel>
             </ListView>
 
             <Button x:Name="ScrollToBottomButton"
@@ -769,14 +805,19 @@
             </Grid>
             </Grid><!-- ChatSurface -->
 
-            <controls:ChatDetailInfoControl x:Name="ChatDetailInfoPanel"
-                                            Grid.Column="1"
-                                            Visibility="Collapsed"
-                                            CloseCommand="{Binding CloseChatDetailInfoCommand}">
-                <controls:ChatDetailInfoControl.RenderTransform>
+            <Grid x:Name="ChatDetailInfoPaneHost"
+                  Grid.Column="1"
+                  Visibility="Collapsed">
+                <Grid.RenderTransform>
                     <TranslateTransform x:Name="ChatDetailInfoSlideTransform" X="0"/>
-                </controls:ChatDetailInfoControl.RenderTransform>
-            </controls:ChatDetailInfoControl>
+                </Grid.RenderTransform>
+                <controls:ChatDetailInfoControl x:Name="ChatDetailInfoPanel"
+                                                Visibility="Collapsed"
+                                                CloseCommand="{Binding CloseChatDetailInfoCommand}"/>
+                <controls:ChatDetailGroupMemberInfoPane x:Name="ChatDetailMemberInfoPanel"
+                                                        Visibility="Collapsed"
+                                                        CloseCommand="{Binding CloseChatDetailInfoCommand}"/>
+            </Grid>
         </Grid>
 
         <!-- Empty State -->

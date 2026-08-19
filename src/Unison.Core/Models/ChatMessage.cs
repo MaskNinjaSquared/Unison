@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using Newtonsoft.Json;
 using Unison.Core.Helpers;
+using Unison.Core.Mappers;
 
 namespace Unison.Core.Models
 {
@@ -632,6 +633,18 @@ namespace Unison.Core.Models
             set { _participantJid = value; OnPropertyChanged(); }
         }
 
+        private bool _isRevoked;
+        public bool IsRevoked
+        {
+            get => _isRevoked;
+            set
+            {
+                if (_isRevoked == value) return;
+                _isRevoked = value;
+                OnPropertyChanged();
+            }
+        }
+
         private bool _isPinned;
         public bool IsPinned
         {
@@ -660,7 +673,7 @@ namespace Unison.Core.Models
 
         private List<MessageReaction> _reactions;
         /// <summary>
-        /// Reactions attached to this message (not timeline rows). Persisted in JSON.
+        /// Reactions attached to this message (not timeline rows). SQLite <c>history_message_reaction</c>.
         /// </summary>
         public List<MessageReaction> Reactions
         {
@@ -738,6 +751,34 @@ namespace Unison.Core.Models
         public bool HasImage => !string.IsNullOrWhiteSpace(ImageUri);
         public bool HasCaption => !string.IsNullOrWhiteSpace(Caption);
         public bool ShowTail => IsRunStart;
+
+        private bool _isFirstOfDay;
+        /// <summary>First visible bubble on this local calendar day — date chip above the row.</summary>
+        [JsonIgnore]
+        public bool IsFirstOfDay
+        {
+            get => _isFirstOfDay;
+            set
+            {
+                if (_isFirstOfDay == value) return;
+                _isFirstOfDay = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private string _dateSeparatorText;
+        /// <summary>Hoje / Ontem / short date for the chip. Layout-only; not persisted.</summary>
+        [JsonIgnore]
+        public string DateSeparatorText
+        {
+            get => _dateSeparatorText;
+            set
+            {
+                if (_dateSeparatorText == value) return;
+                _dateSeparatorText = value;
+                OnPropertyChanged();
+            }
+        }
 
         private string _quotedText;
         public string QuotedText
@@ -879,9 +920,9 @@ namespace Unison.Core.Models
             }
         }
 
-        public string FormattedTime => Timestamp == DateTime.MinValue ? string.Empty : Timestamp.ToString("HH:mm");
+        public string FormattedTime => WhatsAppMapper.FormatLocalTime(Timestamp);
 
-        public string FormattedDate => Timestamp == DateTime.MinValue ? string.Empty : Timestamp.ToString("d");
+        public string FormattedDate => WhatsAppMapper.FormatLocalDate(Timestamp);
 
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
         {

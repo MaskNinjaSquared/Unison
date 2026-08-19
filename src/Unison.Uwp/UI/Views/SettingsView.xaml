@@ -199,6 +199,16 @@
                             </controls:SettingBox.Control>
                         </controls:SettingBox>
 
+                        <controls:SettingBox LocalizationUid="Settings_PublishWindowsContacts"
+                                             Margin="5"
+                                             Header="Show Unison contacts in Windows"
+                                             Text="Adds your 1:1 chats to a separate Unison list in the People app. Off by default.">
+                            <controls:SettingBox.Control>
+                                <ToggleSwitch OnContent="" OffContent="" MinWidth="0" Margin="0"
+                                              IsOn="{Binding PublishContactsToWindowsEnabled, Mode=TwoWay}"/>
+                            </controls:SettingBox.Control>
+                        </controls:SettingBox>
+
                         <controls:SettingsSectionHeader Glyph="&#xE790;"
                                                         Title="Personalização"
                                                         LocalizationUid="Settings_Customization"/>

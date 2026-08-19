@@ -7,9 +7,26 @@ namespace Unison.Core.Contracts
     /// Platform dialogs. Methods that need form state receive the target ViewModel
     /// (Imgur pattern: ShowCustomApiKeyDialog(SettingsViewModel)).
     /// </summary>
+    public enum ConfirmPromptResult
+    {
+        Primary,
+        Cancel,
+        Dismissed
+    }
+
     public interface IDialogService
     {
         Task<bool> ShowConfirmAsync(
+            string title,
+            string content,
+            string primaryButtonText,
+            string closeButtonText);
+
+        /// <summary>
+        /// Same buttons as <see cref="ShowConfirmAsync"/>, but leaving the app
+        /// (Back / suspend) is <see cref="ConfirmPromptResult.Dismissed"/>, not cancel.
+        /// </summary>
+        Task<ConfirmPromptResult> ShowConfirmResultAsync(
             string title,
             string content,
             string primaryButtonText,
@@ -40,5 +57,11 @@ namespace Unison.Core.Contracts
 
         /// <summary>Fullscreen pairing QR preview (tap on login QR). No-op if payload empty.</summary>
         Task ShowQrFullscreenAsync(string qrData);
+
+        /// <summary>
+        /// Read-only list of who reacted to <paramref name="messageVm"/>. No-op when the bubble has
+        /// no reactions.
+        /// </summary>
+        Task ShowReactionsDialogAsync(ChatMessageViewModel messageVm);
     }
 }

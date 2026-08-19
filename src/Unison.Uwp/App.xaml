@@ -42,6 +42,7 @@
             <converters:ChatPreviewKindToLabelConverter x:Key="ChatPreviewKindToLabelConverter"/>
             <converters:ChatPreviewKindToBrushConverter x:Key="ChatPreviewKindToBrushConverter"/>
             <converters:RelativeTimestampConverter x:Key="RelativeTimestampConverter"/>
+            <converters:LocalTimeConverter x:Key="LocalTimeConverter"/>
             <converters:ByteSizeConverter x:Key="ByteSizeConverter"/>
             
             <!-- Custom Fonts -->

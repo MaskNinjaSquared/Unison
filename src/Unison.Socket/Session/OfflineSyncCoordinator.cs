@@ -128,6 +128,18 @@ namespace Unison.Socket.Session
 
             await _events.FlushAsync().ConfigureAwait(false);
             _log.Debug("[Offline] Flushed the initial buffer (" + reason + ")");
+
+            // Timeout must still tell the host the replay window is over. Without this,
+            // the chat-list header stays on "Updating..." forever (it only clears on "synced").
+            if (string.Equals(reason, "timed out", StringComparison.Ordinal) &&
+                !ReceivedPendingNotifications)
+            {
+                ReceivedPendingNotifications = true;
+                _log.Info("[Offline] Safety timeout: treating pending notifications as received");
+                await _events.EmitAsync(
+                    WaEventKind.ConnectionUpdate,
+                    new ConnectionUpdate { ReceivedPendingNotifications = true }).ConfigureAwait(false);
+            }
         }
 
         /// <summary>The server is offering a backlog; ask for the first batch.</summary>

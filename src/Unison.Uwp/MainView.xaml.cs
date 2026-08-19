@@ -18,7 +18,7 @@ using Unison.Uwp.UI.Views;
 namespace Unison.Uwp
 {
     /// <summary>
-    /// AppShell: SplitView chrome + content Frame (Chats / Settings / Debug).
+    /// AppShell: SplitView chrome + content Frame (Chats / Status / Settings / Debug).
     /// Start / Login are root pages (see <see cref="INavigator"/>).
     /// </summary>
     public sealed partial class MainView : Page
@@ -126,10 +126,12 @@ namespace Unison.Uwp
         private void Navigator_ShellNavigated(object sender, string route)
         {
             var chats = ShellContentFrame?.Content as ChatsView;
+            var status = ShellContentFrame?.Content as StatusView;
             Debug.WriteLine(
                 "[MainView] ShellNavigated route=" + (route ?? "?") +
                 " content=" + (ShellContentFrame?.Content?.GetType().Name ?? "null"));
             WireChatsViewMenu(chats);
+            WireStatusViewMenu(status);
         }
 
         private void ShellViewModel_SessionUiResetRequested(object sender, EventArgs e)
@@ -213,15 +215,18 @@ namespace Unison.Uwp
             if (ShellContentFrame.Content != null)
             {
                 WireChatsViewMenu(ShellContentFrame.Content as ChatsView);
+                WireStatusViewMenu(ShellContentFrame.Content as StatusView);
                 return;
             }
 
             string section = ViewModel?.ActiveSection ?? NavigationRoutes.Chats;
             ViewModel?.NavigateToSectionCommand.Execute(section);
             WireChatsViewMenu(ShellContentFrame.Content as ChatsView);
+            WireStatusViewMenu(ShellContentFrame.Content as StatusView);
         }
 
         private ChatsView _wiredChatsMenu;
+        private StatusView _wiredStatusMenu;
 
         private void WireChatsViewMenu(ChatsView chats)
         {
@@ -239,6 +244,24 @@ namespace Unison.Uwp
             chats.MenuClicked += ChatsView_MenuClicked;
             _wiredChatsMenu = chats;
             Debug.WriteLine("[MainView] WireChatsViewMenu attached");
+        }
+
+        private void WireStatusViewMenu(StatusView status)
+        {
+            if (_wiredStatusMenu != null)
+            {
+                _wiredStatusMenu.MenuClicked -= ChatsView_MenuClicked;
+                _wiredStatusMenu = null;
+            }
+
+            if (status == null)
+            {
+                return;
+            }
+
+            status.MenuClicked += ChatsView_MenuClicked;
+            _wiredStatusMenu = status;
+            Debug.WriteLine("[MainView] WireStatusViewMenu attached");
         }
 
         private void ShellViewModel_PropertyChanged(object sender, PropertyChangedEventArgs e)
@@ -268,6 +291,7 @@ namespace Unison.Uwp
                 // after Settings, and SyncInlineSidebar would immediately close an open pane.
                 EnsurePhoneHandsetOverlayMode();
                 WireChatsViewMenu(ShellContentFrame.Content as ChatsView);
+                WireStatusViewMenu(ShellContentFrame.Content as StatusView);
                 if (!IsPhoneHandset())
                 {
                     SyncInlineSidebarForWindowWidth();
@@ -383,9 +407,16 @@ namespace Unison.Uwp
                 return;
             }
 
-            // Chat detail / list chrome first.
+            // Chat / Status detail chrome first.
             var chats = ShellContentFrame.Content as ChatsView;
             if (chats != null && chats.TryHandleBack())
+            {
+                e.Handled = true;
+                return;
+            }
+
+            var status = ShellContentFrame.Content as StatusView;
+            if (status != null && status.TryHandleBack())
             {
                 e.Handled = true;
                 return;

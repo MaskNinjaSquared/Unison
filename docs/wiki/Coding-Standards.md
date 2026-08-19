@@ -36,6 +36,8 @@ Agents: read this before adding a view, service, façade, or socket use case.
 | `MainView` (AppShell) | `ShellViewModel` |
 | `ChatsView` / `ChatListView` | `ChatListViewModel` |
 | `ChatDetailView` | `ChatDetailViewModel` |
+| `StatusView` / `StatusListView` | `StatusListViewModel` |
+| `StatusDetailView` | `StatusDetailViewModel` |
 | Chat info pane | `ChatDetailInfoViewModel` |
 | `SettingsView` | `SettingsViewModel` |
 | `DebugView` | `DebugViewModel` |
@@ -53,11 +55,16 @@ A row/bubble that can be tapped, downloaded, pinned, or played is **not** bound 
 
 | Item | ViewModel | Created by |
 |---|---|---|
-| Chat list row | `ChatItemViewModel` | `IChatItemVmFactory` |
 | Timeline bubble | `ChatMessageViewModel` | `IChatMessageVmFactory` |
 | Chat info (user/group) | `ChatDetailInfoViewModel` | `IChatDetailInfoViewModelFactory` |
 
+Chat list rows are the exception: they bind `ChatItem` directly and read local state through `IChatStore.ApplyTo`, so there is no row ViewModel.
+
 Do not `new ChatMessageViewModel(...)` from a view. Use the factory from DI.
+Before dropping a bubble from a collection, call `Detach()` (via `ChatDetailViewModel.ClearTimeline` / `RemoveTimelineAt`) so `Model.PropertyChanged` does not keep the VM alive.
+Open only a small UI window (`InitialUiMessageWindow` 50); SQLite open page is 100 (`MessageFacade.SqlOpenPageSize`). Grow via top-scroll when `CanLoadMore` (code-behind checks scroll offset ≈ 0, ViewModel owns load-more / paging). Cap with `MaxUiMessageWindow`.
+
+Whoever mutates `ChatDetailViewModel.Messages` is the ViewModel — merge, dedupe, ordered insert, group-JID stamp, preview fallback and trim are its methods (`MergeTimelineFromService`, `InsertTimelineMessage`, `ApplyPreviewFallback`, `StampGroupRemoteJid`). Code-behind may read the collection and drive scroll, run layout and the pinned banner, but must not insert or remove rows itself.
 
 ### Bindings always; code-behind only what XAML cannot do
 
@@ -68,6 +75,7 @@ Do not `new ChatMessageViewModel(...)` from a view. Use the factory from DI.
 - `InitializeComponent`, `OnNavigatedTo` / `From`, system Back
 - Resolve VM from `App.Services` and set `DataContext`
 - `Loaded` → `InitializeAsync`; `Unloaded` → `UninitializeAsync`
+- Subscribe ViewModel events in `Loaded` and unsubscribe the same handlers in `Unloaded` — never in the constructor, and use named methods so the `-=` can find them. A ViewModel that outlives the view (any VM reachable from `ChatItem`) otherwise keeps the whole visual tree alive
 - Storyboards, `MediaElement` / `MediaPlayer`, `ScrollViewer` snap
 - Control-to-control focus, visual states, pointer capture
 - `Microsoft.Xaml.Interactivity` `EventTriggerBehavior` → `InvokeCommandAction`
@@ -80,7 +88,7 @@ Prefer Behaviors over `Click=` handlers.
 
 A screen is one **page** (`*View` : `Page`) with its layout and code-behind in that file. Do not wrap a page in a same-surface `*Control` UserControl (Login/Settings/Debug used to do this — they are pages now).
 
-Host a **control** (`*Control` : `UserControl`) only when it is reused or is a real child surface — e.g. `ChatsView` hosts `ChatListView` + `ChatDetailView`, and `UI/Controls/` pieces (avatar, setting box, QR). The page owns navigation; reusable controls own their bound layout.
+Host a **control** (`*Control` : `UserControl`) only when it is reused or is a real child surface — e.g. `ChatsView` hosts `ChatListView` + `ChatDetailView`, `StatusView` hosts `StatusListView` + `StatusDetailView`, and `UI/Controls/` pieces (avatar, setting box, QR). The page owns navigation; reusable controls own their bound layout.
 
 ---
 
@@ -89,7 +97,9 @@ Host a **control** (`*Control` : `UserControl`) only when it is reused or is a r
 ```
 src/Unison.Uwp/UI/
   Views/              pages (`*View`) and nested surfaces that are real child views (chat list/detail)
-  Controls/           reusable pieces (avatar, setting box, bubbles chrome, chat-info panes)
+  Controls/           reusable pieces (avatar, setting box, bubbles chrome, chat-info panes:
+                      ChatDetailInfoControl, ChatDetailUserInfoControl, ChatDetailGroupInfoControl,
+                      ChatDetailGroupMemberInfoPane, ChatDetailGroupMemberInfoControl, ChatInfoMedia*)
   Dialogs/            ContentDialog XAML only
   Converters/         IValueConverter
   Templates/          DataTemplates (messages, chat items, preview kinds)
@@ -140,7 +150,7 @@ Composition root: `App.ConfigureServices` in `Unison.Uwp/App.xaml.cs`.
 **Forbidden:**
 
 - New `Foo.Instance` / service locator except `App.Services` and `App.GetWhatsAppService()` at the existing composition edges.
-- Registering leftover `MessageService` / `ContactService` / `ConnectionService` / `ProfileService` under `Services/WhatsApp/` (not façades). Those files are dead.
+- Registering leftover `MessageService` / `ContactService` / `ConnectionService` / `ProfileService` under `Services/WhatsApp/` (not façades). Those files were deleted; do not recreate them.
 - `WhatsAppService.Instance` in new code. Use `IWhatsAppService` from DI, and prefer the façade that owns the subject.
 
 Existing singletons (`SocketBrokerCoordinator.Instance`, `RuntimeDiagnosticsService.Instance`, `LiveTilesService.Instance`) are **legacy**. New code takes the interface (`ISocketBrokerService`, `IRuntimeDiagnostics`, `ILiveTilesService`). Do not add more `.Instance` services.
@@ -151,17 +161,21 @@ Existing singletons (`SocketBrokerCoordinator.Instance`, `RuntimeDiagnosticsServ
 
 Screens and ViewModels use:
 
-`IConnectionService`, `IMessageService`, `IChatService`, `IContactService`, `IProfileService`, `IHistoryService`.
+`IConnectionService`, `IMessageService`, `IChatService`, `IContactService`, `IProfileService`, `IHistoryService`, `IStatusService`.
 
 They do **not** subscribe to raw `IWhatsAppService` events. Those events are for façades only.
+
+The Windows People “add contact” card is WinRT: `ILocalContactsService.ShowSystemContactCardAsync` (full card on desktop; mini-card on Mobile after UI idle). The optional **Unison People export** is `PublishAppContactsAsync` / `ClearPublishedAppContactsAsync`: a `UserDataAccount` plus a contact list and annotations on that account (Unigram Mobile shape) — not a bare app `ContactList`, not the user agenda. ViewModels go through `IContactService` — do not add a second contact service. Do not refresh the address-book overlay in the same turn as showing the card.
 
 Need a live `WhatsAppSession`? `IWhatsAppSessionProvider` — do not cache the session across reconnects.
 
 `LoginViewModel` talks **only** to `IConnectionService`.
 
-Do not grow `IWhatsAppService` for UI features. Add the member on the façade that owns the subject.
+Do not grow `IWhatsAppService` for UI features. Add the member on the façade that owns the subject. The step-by-step move off the client is [WhatsAppService extraction](WhatsAppService-Extraction).
 
 `SocketBridge` implements `IWhatsAppSocket` so the client can keep working. New protocol features go on Socket use cases / modules, then a façade — not on `IWhatsAppSocket` unless the client still must see them.
+
+Text normalization: `ChatPreviewNormalizer.Normalize` is the **chat-list preview** (one line, 50-char cap). Message bodies and media captions — anything persisted or shown in a bubble — use `NormalizeBody`, which keeps the text whole and keeps line breaks.
 
 ---
 
@@ -170,7 +184,7 @@ Do not grow `IWhatsAppService` for UI features. Add the member on the façade th
 - Route **keys** in `Unison.Core/Constants/NavigationRoutes.cs`.
 - Page **types** only in `NavigatorService`. Core never names a view type.
 - Auth boundaries: `NavigateAndClear` (Boot / Start / Login / AppShell). No back stack into login.
-- Master-detail stays on `ChatsView` (not a Frame push list → detail).
+- Master-detail stays on `ChatsView` / `StatusView` (not a Frame push list → detail).
 - Settings keys and defaults: `LocalSettingsConstants`. Do not invent a parallel key string; Background toasts that share a key must keep the **same literal**.
 - UI strings: `Strings/{tag}/Resources.resw` + `x:Uid` and/or `IStringResources`. English fallback for missing keys.
 - Shipped languages: `en-US`, `pt-BR`, `es-ES`, `it-IT`, `nl-NL`, `id-ID`, `pl-PL`, `uk-UA`. Add the key to **all** packs, or English-only with fallback — never a hardcoded sentence in a ViewModel.
@@ -224,7 +238,7 @@ SendMessageCommand = new RelayCommand(async () => await _messages.SendTextMessag
 These are hybrid **on purpose** until [Migration](Migration) says otherwise:
 
 - `WhatsAppService` still owns in-memory chats, history body, send transport, persist.
-- `ChatDetailView` code-behind still owns the message list, scroll, `MediaElement` chrome.
+- `ChatDetailView` code-behind still owns the message list host, scroll, and `MediaElement` chrome. Group run layout / date chips / author-avatar **resolve** lives on `ChatDetailViewModel.ApplyMessageRunLayout` (bubble only binds `ContactUri`). Midnight date-chip refresh is a view `DispatcherTimer`.
 - `ChatListView` may still mirror `VisibleChats` during initial-sync safe mode.
 - `SocketBridge` broker transfer / reclaim / cold restore return false / unused.
 - `ChatsModule` in Socket is not instantiated by the bridge yet.

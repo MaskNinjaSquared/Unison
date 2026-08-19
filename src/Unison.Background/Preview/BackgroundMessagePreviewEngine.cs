@@ -346,6 +346,8 @@ namespace Unison.Background
             if (!string.IsNullOrWhiteSpace(
                     value.ExtendedTextMessage?.Text))
                 return value.ExtendedTextMessage.Text;
+            if (value.StickerMessage != null)
+                return "[Sticker]";
             if (value.ImageMessage != null)
                 return WithCaption(
                     "[Image]",
@@ -362,8 +364,6 @@ namespace Unison.Background
                 return value.AudioMessage.Ptt
                     ? "[Voice Message]"
                     : "[Audio]";
-            if (value.StickerMessage != null)
-                return "[Sticker]";
             if (value.ContactMessage != null)
                 return WithCaption(
                     "[Contact]",
@@ -405,36 +405,26 @@ namespace Unison.Background
         private static Message Unwrap(Message message)
         {
             Message current = message;
-            while (current != null)
+            for (int i = 0; i < 5 && current != null; i++)
             {
-                if (current.ViewOnceMessage?.Message != null)
+                Message inner = current.DeviceSentMessage?.Message
+                    ?? current.EphemeralMessage?.Message
+                    ?? current.ViewOnceMessage?.Message
+                    ?? current.DocumentWithCaptionMessage?.Message
+                    ?? current.ViewOnceMessageV2?.Message
+                    ?? current.ViewOnceMessageV2Extension?.Message
+                    ?? current.EditedMessage?.Message
+                    ?? current.AssociatedChildMessage?.Message
+                    ?? current.GroupStatusMessage?.Message
+                    ?? current.GroupStatusMessageV2?.Message;
+                if (inner == null)
                 {
-                    current = current.ViewOnceMessage.Message;
-                    continue;
+                    break;
                 }
-                if (current.ViewOnceMessageV2?.Message != null)
-                {
-                    current = current.ViewOnceMessageV2.Message;
-                    continue;
-                }
-                if (current.EphemeralMessage?.Message != null)
-                {
-                    current = current.EphemeralMessage.Message;
-                    continue;
-                }
-                if (current.DocumentWithCaptionMessage?.Message != null)
-                {
-                    current =
-                        current.DocumentWithCaptionMessage.Message;
-                    continue;
-                }
-                if (current.EditedMessage?.Message != null)
-                {
-                    current = current.EditedMessage.Message;
-                    continue;
-                }
-                break;
+
+                current = inner;
             }
+
             return current;
         }
 

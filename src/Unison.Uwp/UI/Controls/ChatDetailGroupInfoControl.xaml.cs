@@ -1,7 +1,9 @@
 using System.ComponentModel;
+using Unison.Core.Models;
 using Unison.Core.ViewModels;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Media;
 
 namespace Unison.Uwp.UI.Controls
 {
@@ -48,12 +50,32 @@ namespace Unison.Uwp.UI.Controls
                 _boundInfo.PropertyChanged += Info_PropertyChanged;
             }
 
+            if (newVm != null)
+            {
+                ChatDetailInfoPivotHelper.ResetToRoot(InfoPivot);
+            }
+
             ApplyInfoViewModel();
         }
 
         private void Info_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
+            if (ChatDetailInfoPivotHelper.IsMediaPaneProperty(e.PropertyName))
+            {
+                BindMediaPanes();
+                return;
+            }
+
             ApplyInfoViewModel();
+        }
+
+        private void InfoPivot_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            ChatDetailInfoPivotHelper.RequestMediaIndexIfSelected(
+                InfoPivot,
+                InfoViewModel,
+                MediaPivotItem,
+                FilesPivotItem);
         }
 
         private void NotificationsToggle_Toggled(object sender, RoutedEventArgs e)
@@ -62,6 +84,30 @@ namespace Unison.Uwp.UI.Controls
                 NotificationsToggle,
                 InfoViewModel,
                 _notificationsToggleQuiet);
+        }
+
+        private void MembersList_ItemClick(object sender, ItemClickEventArgs e)
+        {
+            var member = e.ClickedItem as GroupMember;
+            if (member == null)
+            {
+                return;
+            }
+
+            // Prefer walking to ChatDetailViewModel without referencing the view type (XamlPreCompile cycle).
+            DependencyObject current = this;
+            while (current != null)
+            {
+                var fe = current as FrameworkElement;
+                var detailVm = fe?.DataContext as ChatDetailViewModel;
+                if (detailVm != null)
+                {
+                    detailVm.OpenGroupMemberInfo(member);
+                    return;
+                }
+
+                current = VisualTreeHelper.GetParent(current);
+            }
         }
 
         private void ApplyInfoViewModel()
@@ -91,10 +137,18 @@ namespace Unison.Uwp.UI.Controls
             if (MembersEmptyText != null)
             {
                 MembersEmptyText.Text = vm.MembersEmptyText ?? string.Empty;
+                MembersEmptyText.Visibility = vm.HasMembers ? Visibility.Collapsed : Visibility.Visible;
             }
 
-            MediaPane?.Bind(vm.MediaItems, vm.HasMedia, vm.MediaEmptyText);
-            FilesPane?.Bind(vm.FileItems, vm.HasFiles, vm.FilesEmptyText);
+            if (MembersList != null)
+            {
+                MembersList.ItemsSource = vm.HasMembers ? vm.Members : null;
+                MembersList.Visibility = vm.HasMembers ? Visibility.Visible : Visibility.Collapsed;
+            }
+
+            MediaPane?.AttachPaging(vm, isFilesPane: false);
+            FilesPane?.AttachPaging(vm);
+            BindMediaPanes();
 
             if (InfoAvatar != null)
             {
@@ -141,6 +195,19 @@ namespace Unison.Uwp.UI.Controls
             {
                 MembersValue.Text = vm.MembersCountText ?? "—";
             }
+        }
+
+        private void BindMediaPanes()
+        {
+            var vm = InfoViewModel;
+            if (vm == null)
+            {
+                return;
+            }
+
+            bool loading = vm.IsMediaIndexLoading;
+            MediaPane?.Bind(vm.MediaItems, vm.HasMedia, vm.MediaEmptyText, loading);
+            FilesPane?.Bind(vm.FileItems, vm.HasFiles, vm.FilesEmptyText, loading);
         }
     }
 }

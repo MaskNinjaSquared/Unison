@@ -36,10 +36,19 @@
             <TextBlock Text="&#xE91B;"
                        FontFamily="{StaticResource IconFont}"
                        Style="{StaticResource ChatDetailInfoEmptyIconStyle}"/>
-            <TextBlock x:Name="MediaEmptyText"
+                    <TextBlock x:Name="MediaEmptyText"
                        Style="{StaticResource ChatDetailInfoEmptyTextStyle}"
                        Margin="24,16,24,24"/>
         </StackPanel>
+        <ProgressRing x:Name="MediaLoadingRing"
+                      Width="48"
+                      Height="48"
+                      HorizontalAlignment="Center"
+                      VerticalAlignment="Center"
+                      Foreground="White"
+                      IsActive="False"
+                      Visibility="Collapsed"
+                      IsHitTestVisible="False"/>
         <toolkit:AdaptiveGridView
             x:Name="MediaGrid"
             DesiredWidth="104"
@@ -84,6 +93,8 @@
             </toolkit:AdaptiveGridView.ItemContainerStyle>
             <toolkit:AdaptiveGridView.ItemTemplate>
                 <DataTemplate>
+                    <!-- Do not set CornerRadius on ChatInfoMediaTile: Control.CornerRadius is
+                         1809-only and XAML-parses the whole Media pivot crash on Creators Update. -->
                     <controls:ChatInfoMediaTile HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
                 </DataTemplate>
             </toolkit:AdaptiveGridView.ItemTemplate>

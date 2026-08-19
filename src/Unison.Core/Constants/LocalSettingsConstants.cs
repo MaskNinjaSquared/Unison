@@ -74,6 +74,21 @@ namespace Unison.Core.Constants
         /// </summary>
         public const string ChatListPaneWidth = "ChatListPaneWidth";
 
+        /// <summary>
+        /// When true, 1:1 Unison chats are written to an app-owned Windows People list.
+        /// Off by default — it copies phone numbers into the system contact store.
+        /// </summary>
+        public const string PublishContactsToWindowsEnabled = "PublishContactsToWindowsEnabled";
+
+        /// <summary>WinRT <c>UserDataAccount.Id</c> for the Unison People export (Unigram x_user_data_account).</summary>
+        public const string PublishWindowsUserDataAccountId = "PublishWindowsUserDataAccountId";
+
+        /// <summary>WinRT contact list id on that account (Unigram x_contact_list).</summary>
+        public const string PublishWindowsContactListId = "PublishWindowsContactListId";
+
+        /// <summary>WinRT annotation list id on that account (Unigram x_annotation_list).</summary>
+        public const string PublishWindowsAnnotationListId = "PublishWindowsAnnotationListId";
+
         public static IReadOnlyDictionary<string, object> Defaults { get; } =
             new Dictionary<string, object>
             {
@@ -94,7 +109,11 @@ namespace Unison.Core.Constants
                 { PendingShellAppliedToast, false },
                 { MessageStoreSyncId, "" },
                 { MessageStoreForceHistoryRepair, false },
-                { ChatListPaneWidth, ChatPaneLayoutConstants.DefaultListWidth }
+                { ChatListPaneWidth, ChatPaneLayoutConstants.DefaultListWidth },
+                { PublishContactsToWindowsEnabled, false },
+                { PublishWindowsUserDataAccountId, "" },
+                { PublishWindowsContactListId, "" },
+                { PublishWindowsAnnotationListId, "" }
             };
     }
 }

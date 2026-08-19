@@ -642,7 +642,11 @@ namespace Unison.Socket.Session
                 var triggered = await Dispatcher.DispatchAsync(node).ConfigureAwait(false);
                 if (!triggered && !answeredAQuery)
                 {
-                    _log.Debug("Unhandled node: " + node.Tag);
+                    var children = node.GetAllChildren();
+                    string child = children.Count > 0 ? (children[0].Tag ?? string.Empty) : string.Empty;
+                    _log.Debug(
+                        "Unhandled node: " + node.Tag +
+                        (string.IsNullOrEmpty(child) ? string.Empty : " child=" + child));
                 }
             }
             catch (Exception ex)

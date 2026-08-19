@@ -55,6 +55,7 @@ flowchart TB
         Contact[ContactFacade]
         Profile[ProfileFacade]
         History[HistoryFacade]
+        Status[StatusFacade]
     end
 
     subgraph client [Compatibility client]
@@ -129,10 +130,12 @@ Still the singleton `IWhatsAppService` registered in `App.ConfigureServices`. It
 
 - Connect / resume / persist
 - In-memory `Chats` collection and message caches
-- History-sync body and outbox/send transport
+- Outbox/send transport (history apply is SQLite on `HistoryFacade`)
 - Avatar apply + group fallbacks
 - Presence subscribe
 - Memory-pressure and suspend hooks
+
+The type is `partial` (`WhatsAppService.Connection.cs`, `.Media.cs`, `.Groups.cs`, …) so cluster extractions stay reviewable. **Partials are the same class** — façades still inject `IWhatsAppService`. Moving a cluster means cutting methods onto a façade, not calling the partial file. Plan and leftover UI leaks: [WhatsAppService extraction](WhatsAppService-Extraction).
 
 Facades extracted **policy** around it (pairing/logout, pin/mark-read, contact overlay, profile picture IQ, history resync that waits for the phone). Screens should not subscribe to its raw events; those are for facades only (stated on `IWhatsAppService`).
 
@@ -143,7 +146,11 @@ Facades extracted **policy** around it (pairing/logout, pin/mark-read, contact o
 | `AuthStore` | `LocalSettings` container `WhatsAppAuth` | Credentials (`AuthState` JSON) |
 | `FileKeyStore` | `SignalKeys\` | Sessions, prekeys, sender keys, app-state keys |
 | `SqliteLidMappingStorage` | SQLite | PN ↔ LID map for the rc14 addressing model |
-| `ChatStore` / `PersonStore` / `MessageStore` | App data | Chat list, people, messages |
+| `ChatStore` / `PersonStore` | SQLite | Local chat flags (mute/pin) and people |
+| `MessageStore` | App data JSON | Leftover identity sidecars (contact names / aliases); chat/message JSON no longer the live path |
+| `HistoryChatPreviewStore` | SQLite `history_chat_preview` | List catalog (history chunks + live persist); UI hydrates via `ChatPreviewChunkPersisted` |
+| `HistoryMigrationStore` | SQLite `history_migration` | Gate: history batch landed for current MessageStore epoch |
+| `HistoryMessageStore` | SQLite `history_message` + `history_message_reaction` | Timeline bodies, quote/pin/revoke, reactions; schema 5 |
 | Broker journal | `broker-frame-*.bin` (UBJ2 / UBD3) | Ordered frames + Noise checkpoint while backgrounded |
 
 ## Where to go next
@@ -154,3 +161,4 @@ Facades extracted **policy** around it (pairing/logout, pin/mark-read, contact o
 - Suspended socket and toasts → [Background broker](Background-Broker)
 - Shell, chat UI, i18n → [UI and shell](UI-and-Shell)
 - Remaining work → [Migration](Migration)
+- Client → façades (phases 0–4) → [WhatsAppService extraction](WhatsAppService-Extraction)
