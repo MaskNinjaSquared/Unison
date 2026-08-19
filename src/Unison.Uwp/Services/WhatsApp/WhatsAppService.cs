@@ -40,7 +40,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public class WhatsAppService : INotifyPropertyChanged, IWhatsAppService
+    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -245,7 +245,10 @@ namespace Unison.Uwp.Services.WhatsApp
         private IWhatsAppSocket _socket;
         private AuthStore _authStore = new AuthStore();
         private IMessageStore _messageStore = new MessageStore();
+        private readonly IHistoryMessageStore _historyMessages;
+        private readonly IHistoryChatPreviewStore _chatPreviews;
         private IMessageService _messageService;
+        private IStatusService _statusService;
         private IContactService _contactService;
         private IConnectionService _connectionService;
         private IPersonStore _personStore;
@@ -261,6 +264,14 @@ namespace Unison.Uwp.Services.WhatsApp
         public void AttachMessageService(IMessageService messageService)
         {
             _messageService = messageService;
+        }
+
+        /// <summary>
+        /// Wired from App DI so live status@broadcast items skip the chat list.
+        /// </summary>
+        public void AttachStatusService(IStatusService statusService)
+        {
+            _statusService = statusService;
         }
 
         /// <summary>
@@ -388,28 +399,22 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 _messageStore?.ClearMemoryCache();
 
-                // Durante o processamento do HistorySync as listas estao sendo usadas em
-                // blocos cooperativos na UI thread. O proprio processamento ja descarrega
-                // cada conversa ao concluir, portanto evitamos interferir no meio do lote.
-                if (!_historySyncProcessing)
+                await RunOnUiThreadAsync(() =>
                 {
-                    await RunOnUiThreadAsync(() =>
+                    var active = _activeChatJid;
+                    var keys = MessagesByChat.Keys.ToList();
+                    foreach (var key in keys)
                     {
-                        var active = _activeChatJid;
-                        var keys = MessagesByChat.Keys.ToList();
-                        foreach (var key in keys)
+                        if (!string.IsNullOrWhiteSpace(active) &&
+                            string.Equals(GetCanonicalJid(key), active, StringComparison.OrdinalIgnoreCase))
                         {
-                            if (!string.IsNullOrWhiteSpace(active) &&
-                                string.Equals(GetCanonicalJid(key), active, StringComparison.OrdinalIgnoreCase))
-                            {
-                                continue;
-                            }
-
-                            MessagesByChat.Remove(key);
-                            _messageIdIndexByChat.Remove(NormalizeJid(key));
+                            continue;
                         }
-                    });
-                }
+
+                        MessagesByChat.Remove(key);
+                        _messageIdIndexByChat.Remove(NormalizeJid(key));
+                    }
+                });
 
                 Debug.WriteLine("[Memoria] Caches inativos de mensagens liberados");
             }
@@ -661,6 +666,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         private volatile bool _qrDeliveredThisConnection = false;
         private volatile bool _deferReconnectWorkUntilReplayDrain = false;
+        private int _offlineReplayReleased;
         private CancellationTokenSource _resolutionCts;
         private CancellationTokenSource _deferredProfilePictureResolutionCts;
         private DateTime _lastFreshnessReconnectFallbackUtc = DateTime.MinValue;
@@ -678,7 +684,7 @@ namespace Unison.Uwp.Services.WhatsApp
             TimeSpan.FromSeconds(120),
             TimeSpan.FromSeconds(240)
         };
-        
+
         // Debounce timer for persisting data (5 seconds)
         private System.Threading.Timer _persistTimer;
         private bool _persistPending = false;
@@ -708,6 +714,7 @@ namespace Unison.Uwp.Services.WhatsApp
             public DateTime Timestamp { get; set; }
             public bool IsGroup { get; set; }
             public int UnreadDelta { get; set; }
+            public ChatPreviewKind Kind { get; set; }
         }
 
         private readonly object _offlineReplayUiLock = new object();
@@ -720,15 +727,20 @@ namespace Unison.Uwp.Services.WhatsApp
         // Somente a conversa aberta deve manter uma janela grande de mensagens em RAM.
         // O historico completo continua no MessageStore.
         private volatile string _activeChatJid;
-        private volatile bool _historySyncProcessing;
-        private readonly SemaphoreSlim _historySyncProcessingLock = new SemaphoreSlim(1, 1);
         private const int MaxActiveChatMessagesInMemory = 300;
-        private const int MaxHistoryMessagesPerConversation = 1500;
-        private const int InitialSyncMaxMessagesPerConversation = 250;
-        private const int InitialSyncConversationThreshold = 40;
         private volatile bool _initialSyncSafeModeActive;
         private int _initialSyncProcessedConversations;
         private int _initialSyncTotalConversations;
+
+        /// <summary>
+        /// SQLite history arrives in several chunks. We accumulate conversation counts and only
+        /// leave safe-mode after a quiet period (or a Full chunk), so the list banner can show
+        /// progress instead of flashing complete on every write.
+        /// </summary>
+        private int _sqliteHistoryConversationsAccumulated;
+        private int _sqliteHistoryFinalizeGeneration;
+        private const int SqliteHistoryFinalizeQuietMs = 2800;
+        private const int SqliteHistoryFullFinalizeDelayMs = 900;
 
         public bool IsInitialSyncSafeMode => _initialSyncSafeModeActive;
         public int InitialSyncProcessedConversations => _initialSyncProcessedConversations;
@@ -778,21 +790,8 @@ namespace Unison.Uwp.Services.WhatsApp
 
         Task IWhatsAppService.RunOnUiThreadAsync(Action action) => RunOnUiThreadAsync(action);
 
-        /// <summary>True when a JID already has a resolved display name in the local name cache.</summary>
-        public bool HasResolvedContactName(string jid) => !string.IsNullOrWhiteSpace(GetBestWhatsAppName(jid, GetCanonicalJid(jid)));
-
-        /// <summary>Re-applies <see cref="ResolveDisplayName"/> to each chat's Name where it changed.</summary>
-        public Task ApplyResolvedDisplayNamesToChatsAsync() => ApplyResolvedNamesToChatsAsync();
-
         /// <summary>Publishes a transient status string through <see cref="OnSyncStatus"/>.</summary>
         public void RaiseSyncStatus(string status) => OnSyncStatus?.Invoke(this, status);
-
-        /// <summary>Raises <see cref="OnDisplayNamesUpdated"/>, and the store's equivalent.</summary>
-        public void RaiseDisplayNamesUpdated()
-        {
-            OnDisplayNamesUpdated?.Invoke(this, EventArgs.Empty);
-            _chatState.NotifyChangedExternally(null);
-        }
 
         bool IWhatsAppService.ShouldDeferAvatarFetch(out string reason) => ShouldDeferProfilePictureFetch(out reason);
 
@@ -801,116 +800,6 @@ namespace Unison.Uwp.Services.WhatsApp
         void IWhatsAppService.CancelDeferredAvatarResolution() => CancelDeferredProfilePictureResolution();
 
         Task IWhatsAppService.HydrateCachedAvatarUrisAsync(string reason) => HydrateCachedAvatarUrisAsync(reason);
-
-        /// <summary>Fetches the best available profile picture for a chat (incl. group-avatar fallback) and applies it.</summary>
-        public async Task FetchAndApplyAvatarAsync(ChatItem chat, CancellationToken token)
-        {
-            if (chat == null)
-            {
-                return;
-            }
-
-            var lookupCandidates = GetAvatarLookupCandidates(chat);
-            var result = await FetchBestProfilePictureResultAsync(chat, lookupCandidates, token);
-            await ApplyAvatarResultAsync(chat, result, token);
-            _ = EnsureHighQualityGroupAvatarAsync(chat);
-        }
-
-        public Task EnsureHighQualityGroupAvatarAsync(ChatItem chat)
-        {
-            return EnsureHighQualityGroupAvatarCoreAsync(chat);
-        }
-
-        private async Task EnsureHighQualityGroupAvatarCoreAsync(ChatItem chat)
-        {
-            if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
-            {
-                return;
-            }
-
-            if (!string.IsNullOrWhiteSpace(chat.AvatarHighUrl))
-            {
-                return;
-            }
-
-            string cached;
-            DateTime fetchedAtUtc;
-            if (TryGetCachedAvatarUri(chat.JID, out cached, out fetchedAtUtc, "_high"))
-            {
-                await RunOnUiThreadAsync(() => chat.AvatarHighUrl = cached);
-                return;
-            }
-
-            var socket = _socket;
-            if (socket == null || !socket.IsHandshakeComplete)
-            {
-                return;
-            }
-
-            foreach (var candidate in GetAvatarLookupCandidates(chat) ?? Enumerable.Empty<string>())
-            {
-                if (string.IsNullOrWhiteSpace(candidate))
-                {
-                    continue;
-                }
-
-                ProfilePictureResult result;
-                await _usyncLock.WaitAsync();
-                try
-                {
-                    result = await socket.GetProfilePictureUrlResultAsync(candidate, "image");
-                }
-                finally
-                {
-                    _usyncLock.Release();
-                }
-
-                if (string.IsNullOrWhiteSpace(result?.Url))
-                {
-                    continue;
-                }
-
-                try
-                {
-                    string localUri = await DownloadAndCacheAvatarAsync(
-                        chat.JID,
-                        result.Url,
-                        CancellationToken.None,
-                        "_high");
-                    if (string.IsNullOrWhiteSpace(localUri))
-                    {
-                        continue;
-                    }
-
-                    await RunOnUiThreadAsync(() => chat.AvatarHighUrl = localUri);
-                    Debug.WriteLine($"[WhatsAppService] Cached high-res group avatar for {chat.JID}");
-                    return;
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[WhatsAppService] High-res group avatar failed for {chat.JID}: {ex.Message}");
-                }
-            }
-        }
-
-        public async Task<string> GetProfilePictureUrlAsync(string jid, string type = "preview")
-        {
-            if (string.IsNullOrWhiteSpace(jid) || _socket == null || !_socket.IsHandshakeComplete)
-            {
-                return null;
-            }
-
-            try
-            {
-                var result = await _socket.GetProfilePictureUrlResultAsync(jid, type).ConfigureAwait(false);
-                return string.IsNullOrWhiteSpace(result?.Url) ? null : result.Url;
-            }
-            catch (Exception ex)
-            {
-                Log($"[WhatsAppService] GetProfilePictureUrlAsync failed for {jid}: {ex.Message}");
-                return null;
-            }
-        }
 
         public RuntimeDiagnosticsSnapshot GetRuntimeDiagnosticsSnapshot()
         {
@@ -921,7 +810,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 IsServiceConnected = IsConnected,
                 IsConnecting = _isConnecting,
                 SuppressReconnect = _suppressReconnect || _fatalSessionEnded,
-                HistorySyncProcessing = _historySyncProcessing,
+                HistorySyncProcessing = false,
                 DecryptedEventCount = Interlocked.Read(ref _diagnosticsDecryptedEventCount),
                 AppliedMessageCount = Interlocked.Read(ref _diagnosticsAppliedMessageCount),
                 SendAttemptCount = Interlocked.Read(ref _diagnosticsSendAttemptCount),
@@ -1060,6 +949,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </remarks>
         public sealed class NotifyingJidAliasMap : IDictionary<string, string>, IReadOnlyDictionary<string, string>
         {
+            private readonly object _sync = new object();
             private readonly Dictionary<string, string> _inner = new Dictionary<string, string>();
             private readonly Action _changed;
 
@@ -1068,45 +958,116 @@ namespace Unison.Uwp.Services.WhatsApp
                 _changed = changed;
             }
 
-            public string this[string key]
+            /// <summary>Thread-safe copy for persist / socket handoff.</summary>
+            public Dictionary<string, string> Snapshot()
             {
-                get { return _inner[key]; }
-                set
+                lock (_sync)
                 {
-                    string existing;
-                    if (_inner.TryGetValue(key, out existing) &&
-                        string.Equals(existing, value, StringComparison.Ordinal))
-                    {
-                        return;
-                    }
-
-                    _inner[key] = value;
-                    _changed();
+                    return new Dictionary<string, string>(_inner, StringComparer.OrdinalIgnoreCase);
                 }
             }
 
-            public int Count => _inner.Count;
+            public string this[string key]
+            {
+                get
+                {
+                    lock (_sync)
+                    {
+                        return _inner[key];
+                    }
+                }
+                set
+                {
+                    bool notify = false;
+                    lock (_sync)
+                    {
+                        string existing;
+                        if (_inner.TryGetValue(key, out existing) &&
+                            string.Equals(existing, value, StringComparison.Ordinal))
+                        {
+                            return;
+                        }
+
+                        _inner[key] = value;
+                        notify = true;
+                    }
+
+                    if (notify)
+                    {
+                        _changed();
+                    }
+                }
+            }
+
+            public int Count
+            {
+                get { lock (_sync) { return _inner.Count; } }
+            }
+
             public bool IsReadOnly => false;
-            public ICollection<string> Keys => _inner.Keys;
-            public ICollection<string> Values => _inner.Values;
 
-            IEnumerable<string> IReadOnlyDictionary<string, string>.Keys => _inner.Keys;
-            IEnumerable<string> IReadOnlyDictionary<string, string>.Values => _inner.Values;
+            public ICollection<string> Keys
+            {
+                get { lock (_sync) { return _inner.Keys.ToList(); } }
+            }
 
-            public bool ContainsKey(string key) => _inner.ContainsKey(key);
-            public bool TryGetValue(string key, out string value) => _inner.TryGetValue(key, out value);
-            public bool Contains(KeyValuePair<string, string> item) =>
-                ((ICollection<KeyValuePair<string, string>>)_inner).Contains(item);
+            public ICollection<string> Values
+            {
+                get { lock (_sync) { return _inner.Values.ToList(); } }
+            }
 
-            public void CopyTo(KeyValuePair<string, string>[] array, int arrayIndex) =>
-                ((ICollection<KeyValuePair<string, string>>)_inner).CopyTo(array, arrayIndex);
+            IEnumerable<string> IReadOnlyDictionary<string, string>.Keys => Keys;
+            IEnumerable<string> IReadOnlyDictionary<string, string>.Values => Values;
 
-            public IEnumerator<KeyValuePair<string, string>> GetEnumerator() => _inner.GetEnumerator();
-            System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => _inner.GetEnumerator();
+            public bool ContainsKey(string key)
+            {
+                lock (_sync)
+                {
+                    return _inner.ContainsKey(key);
+                }
+            }
+
+            public bool TryGetValue(string key, out string value)
+            {
+                lock (_sync)
+                {
+                    return _inner.TryGetValue(key, out value);
+                }
+            }
+
+            public bool Contains(KeyValuePair<string, string> item)
+            {
+                lock (_sync)
+                {
+                    return ((ICollection<KeyValuePair<string, string>>)_inner).Contains(item);
+                }
+            }
+
+            public void CopyTo(KeyValuePair<string, string>[] array, int arrayIndex)
+            {
+                lock (_sync)
+                {
+                    ((ICollection<KeyValuePair<string, string>>)_inner).CopyTo(array, arrayIndex);
+                }
+            }
+
+            public IEnumerator<KeyValuePair<string, string>> GetEnumerator()
+            {
+                return Snapshot().GetEnumerator();
+            }
+
+            System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
+            {
+                return GetEnumerator();
+            }
 
             public void Add(string key, string value)
             {
-                _inner.Add(key, value);
+                lock (_sync)
+                {
+                    _inner.Add(key, value);
+                }
+
                 _changed();
             }
 
@@ -1114,7 +1075,13 @@ namespace Unison.Uwp.Services.WhatsApp
 
             public bool Remove(string key)
             {
-                if (!_inner.Remove(key))
+                bool removed;
+                lock (_sync)
+                {
+                    removed = _inner.Remove(key);
+                }
+
+                if (!removed)
                 {
                     return false;
                 }
@@ -1125,7 +1092,13 @@ namespace Unison.Uwp.Services.WhatsApp
 
             public bool Remove(KeyValuePair<string, string> item)
             {
-                if (!((ICollection<KeyValuePair<string, string>>)_inner).Remove(item))
+                bool removed;
+                lock (_sync)
+                {
+                    removed = ((ICollection<KeyValuePair<string, string>>)_inner).Remove(item);
+                }
+
+                if (!removed)
                 {
                     return false;
                 }
@@ -1136,13 +1109,20 @@ namespace Unison.Uwp.Services.WhatsApp
 
             public void Clear()
             {
-                if (_inner.Count == 0)
+                bool hadItems;
+                lock (_sync)
                 {
-                    return;
+                    hadItems = _inner.Count > 0;
+                    if (hadItems)
+                    {
+                        _inner.Clear();
+                    }
                 }
 
-                _inner.Clear();
-                _changed();
+                if (hadItems)
+                {
+                    _changed();
+                }
             }
         }
 
@@ -1159,17 +1139,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private CancellationTokenSource _aliasFollowUpCts;
         private int _aliasFollowUpRunning;
         IReadOnlyDictionary<string, string> IWhatsAppService.JidAlias => JidAlias;
-
-        private void RegisterSocketAlias(string jidA, string jidB, string source)
-        {
-            _socket?.RegisterJidAlias(jidA, jidB, source);
-        }
-
-        private void RegisterSocketAliases(string source)
-        {
-            var aliases = JidAlias.ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase);
-            _socket?.RegisterJidAliases(aliases, source);
-        }
         private sealed class HistoryOnDemandRequestState
         {
             public string RequestId { get; set; }
@@ -1271,133 +1240,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly Dictionary<string, GroupRecipientCountCacheEntry> _groupRecipientCountByChat =
             new Dictionary<string, GroupRecipientCountCacheEntry>(StringComparer.OrdinalIgnoreCase);
 
-        private static TaskCompletionSource<bool> CreateSessionEstablishedTcs()
-        {
-            return new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        }
-
-        private async Task PersistJidAliasesAsync(string reason)
-        {
-            try
-            {
-                List<string> chatJids = null;
-                await RunOnUiThreadAsync(() =>
-                    {
-                        chatJids = Chats
-                            .Where(c => c != null && !string.IsNullOrWhiteSpace(c.JID))
-                            .Select(c => NormalizeJid(c.JID))
-                            .Where(j => !string.IsNullOrWhiteSpace(j))
-                            .Distinct(StringComparer.OrdinalIgnoreCase)
-                            .ToList();
-                    });
-
-                if (chatJids == null || chatJids.Count == 0)
-                {
-                    return;
-                }
-
-                var aliasSnapshot = new Dictionary<string, string>(JidAlias, StringComparer.OrdinalIgnoreCase);
-                await _messageStore.SaveJidAliasesAsync(aliasSnapshot, chatJids);
-                Debug.WriteLine($"[WhatsAppService] Persisted {aliasSnapshot.Count} alias entries immediately ({reason})");
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WhatsAppService] Failed to persist aliases immediately ({reason}): {ex.Message}");
-            }
-        }
-
-        private async Task PersistChatIdentityStateAsync(string reason)
-        {
-            try
-            {
-                List<ChatItem> chatSnapshot = null;
-                Dictionary<string, string> contactSnapshot = null;
-                Dictionary<string, string> phoneSnapshot = null;
-                Dictionary<string, string> aliasSnapshot = null;
-
-                await RunOnUiThreadAsync(() =>
-                    {
-                        chatSnapshot = Chats
-                            .Where(c => c != null && !string.IsNullOrWhiteSpace(c.JID))
-                            .Select(c => new ChatItem
-                            {
-                                Id = c.Id,
-                                JID = NormalizeJid(c.JID),
-                                Name = c.Name,
-                                LastMessage = c.LastMessage,
-                                LastMessageKind = c.LastMessageKind,
-                                Timestamp = c.Timestamp,
-                                LastMessageTimestampUtc = c.LastMessageTimestampUtc,
-                                UnreadCount = c.UnreadCount,
-                                AvatarUrl = c.AvatarUrl,
-                                AvatarHighUrl = c.AvatarHighUrl,
-                                AvatarFetchedAtUtc = c.AvatarFetchedAtUtc,
-                                AvatarFetchFailedAtUtc = c.AvatarFetchFailedAtUtc,
-                                AvatarFetchFailureReason = c.AvatarFetchFailureReason,
-                                Kind = c.Kind,
-                                IsArchived = c.IsArchived,
-                                IsChatPinned = c.IsChatPinned,
-                                MutedUntil = c.MutedUntil
-                            })
-                            .ToList();
-
-                        contactSnapshot = new Dictionary<string, string>(ContactNames, StringComparer.OrdinalIgnoreCase);
-                        phoneSnapshot = new Dictionary<string, string>(PhoneContactNamesByJid, StringComparer.OrdinalIgnoreCase);
-                        aliasSnapshot = new Dictionary<string, string>(JidAlias, StringComparer.OrdinalIgnoreCase);
-                    });
-
-                if (chatSnapshot == null || chatSnapshot.Count == 0)
-                {
-                    return;
-                }
-
-                var chatJids = chatSnapshot
-                    .Select(c => NormalizeJid(c.JID))
-                    .Where(j => !string.IsNullOrWhiteSpace(j))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToList();
-
-                await _messageStore.SaveChatsAsync(chatSnapshot);
-                await _messageStore.SaveContactNamesAsync(contactSnapshot ?? new Dictionary<string, string>(), chatJids);
-                await _messageStore.SavePhoneContactNamesAsync(phoneSnapshot ?? new Dictionary<string, string>(), chatJids);
-                await _messageStore.SaveJidAliasesAsync(aliasSnapshot ?? new Dictionary<string, string>(), chatJids);
-                Debug.WriteLine($"[WhatsAppService] Persisted chat identity state immediately ({reason})");
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WhatsAppService] Failed to persist chat identity state immediately ({reason}): {ex.Message}");
-            }
-        }
-
-        private async Task PersistAuthStateAsync(IWhatsAppSocket sourceSocket, string reason)
-        {
-            var authToSave = sourceSocket?.Auth ?? _socket?.Auth ?? _authState;
-            if (authToSave == null)
-            {
-                Debug.WriteLine($"[WhatsAppService] Skipping auth-state save for {reason}: no live auth state");
-                return;
-            }
-
-            _authState = authToSave;
-            await _authStore.SaveAsync(authToSave);
-        }
-
-        private async Task WaitForSessionEstablishedAsync(string reason)
-        {
-            var gate = _sessionEstablishedTcs;
-            Log($"[WhatsAppService] Waiting for session establishment before processing {reason}.");
-
-            try
-            {
-                await gate.Task;
-            }
-            catch (Exception ex)
-            {
-                Log($"[WhatsAppService] Startup gate completed abnormally while waiting to process {reason}; aborting gated work. {ex.Message}");
-                throw;
-            }
-        }
-
         private bool ShouldDeferReconnectReplayWork()
         {
             return _deferReconnectWorkUntilReplayDrain || (_socket?.IsAwaitingInitialSync ?? false);
@@ -1420,76 +1262,9 @@ namespace Unison.Uwp.Services.WhatsApp
                    trigger.IndexOf("socket:decrypt-failed", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
-        private void LoadHistoryFreshnessRepairState()
-        {
-            try
-            {
-                var settings = LocalSettingsAccess.Current;
-                string rawText = settings.Get<string>(LocalSettingsConstants.LastFullHistoryRepairCompletedUtc);
-                if (!string.IsNullOrEmpty(rawText) &&
-                    DateTime.TryParse(rawText, null, System.Globalization.DateTimeStyles.RoundtripKind, out var parsed))
-                {
-                    _lastFullHistoryRepairCompletedUtc = parsed.Kind == DateTimeKind.Utc ? parsed : parsed.ToUniversalTime();
-                    Debug.WriteLine($"[WhatsAppService] Loaded full-history repair completed timestamp: {_lastFullHistoryRepairCompletedUtc:O}");
-                }
-
-                string reconnectRawText = settings.Get<string>(LocalSettingsConstants.LastFreshnessReconnectFallbackUtc);
-                if (!string.IsNullOrEmpty(reconnectRawText) &&
-                    DateTime.TryParse(reconnectRawText, null, System.Globalization.DateTimeStyles.RoundtripKind, out var reconnectParsed))
-                {
-                    _lastFreshnessReconnectFallbackUtc = reconnectParsed.Kind == DateTimeKind.Utc ? reconnectParsed : reconnectParsed.ToUniversalTime();
-                    Debug.WriteLine($"[WhatsAppService] Loaded freshness reconnect fallback timestamp: {_lastFreshnessReconnectFallbackUtc:O}");
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WhatsAppService] Failed to load history freshness repair state: {ex.Message}");
-            }
-        }
-
-        private void PersistFullHistoryRepairCompletedUtc(DateTime timestampUtc)
-        {
-            _lastFullHistoryRepairCompletedUtc = timestampUtc;
-            try
-            {
-                LocalSettingsAccess.Current.Set(
-                    LocalSettingsConstants.LastFullHistoryRepairCompletedUtc,
-                    timestampUtc.ToString("O"));
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WhatsAppService] Failed to persist full-history repair completed timestamp: {ex.Message}");
-            }
-        }
-
-        private void PersistFreshnessReconnectFallbackUtc(DateTime timestampUtc)
-        {
-            _lastFreshnessReconnectFallbackUtc = timestampUtc;
-            try
-            {
-                LocalSettingsAccess.Current.Set(
-                    LocalSettingsConstants.LastFreshnessReconnectFallbackUtc,
-                    timestampUtc.ToString("O"));
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WhatsAppService] Failed to persist freshness reconnect fallback timestamp: {ex.Message}");
-            }
-        }
-
         private static DateTime ToComparableUtc(DateTime timestamp)
         {
-            if (timestamp == DateTime.MinValue || timestamp == DateTime.MaxValue)
-            {
-                return timestamp;
-            }
-
-            if (timestamp.Kind == DateTimeKind.Utc)
-            {
-                return timestamp;
-            }
-
-            return timestamp.ToUniversalTime();
+            return ChatMessageOrder.ToComparableUtc(timestamp);
         }
 
         /// <summary>
@@ -1798,17 +1573,6 @@ namespace Unison.Uwp.Services.WhatsApp
             return newest;
         }
 
-        private bool HasGroupChats()
-        {
-            return Chats.Any(c => c != null && (c.IsGroup || IsGroupJid(c.JID)));
-        }
-
-        private bool IsGroupJid(string jid)
-        {
-            return !string.IsNullOrWhiteSpace(jid) &&
-                   NormalizeJid(jid).EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
-        }
-
         private static string FormatFreshnessTimestamp(DateTime timestamp)
         {
             return timestamp == DateTime.MinValue ? "<none>" : timestamp.ToString("O");
@@ -1927,7 +1691,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 ? CurrentUserAvatar
                 : _authState?.Me?.AvatarUrl
         };
-
         private string _currentUserName;
         public string CurrentUserName
         {
@@ -1969,8 +1732,7 @@ namespace Unison.Uwp.Services.WhatsApp
         public event EventHandler OnDisplayNamesUpdated;
         public event EventHandler<string> OnChatMessagesChanged;
         public event EventHandler<PresenceUpdateEventArgs> OnPresenceUpdate;
-        public string CurrentConnectionStatus { get; private set; } = "close";
-
+        public string CurrentConnectionStatus { get; private set; }
         private void PublishInitialSyncProgress(bool active, bool completed, int processed, int total, string stage)
         {
             _initialSyncSafeModeActive = active;
@@ -1996,998 +1758,13 @@ namespace Unison.Uwp.Services.WhatsApp
             });
         }
 
-        private void PublishConnectionUpdate(string status)
-        {
-            CurrentConnectionStatus = status ?? string.Empty;
-            if (string.Equals(
-                    CurrentConnectionStatus,
-                    "connected",
-                    StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(
-                    CurrentConnectionStatus,
-                    "synced",
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                SetSuppressReconnectToast(false);
-                string clearError;
-                bool cleared =
-                    BackgroundToastPresenter.ClearReconnectRequired(
-                        out clearError);
-                RuntimeDiagnosticsService.Instance.Write(
-                    "notifications",
-                    "reconnect-required-toast-cleared",
-                    "status=" + CurrentConnectionStatus +
-                    "; succeeded=" + cleared +
-                    "; error=" + (clearError ?? string.Empty));
-            }
-            Interlocked.Exchange(ref _diagnosticsLastConnectionEventUtcTicks, DateTime.UtcNow.Ticks);
-            RuntimeDiagnosticsService.Instance.Write(
-                "connection",
-                "status",
-                "value=" + CurrentConnectionStatus + "; serviceReady=" + IsConnected);
-            Debug.WriteLine($"[WhatsAppService] Connection status -> {CurrentConnectionStatus}");
-            OnConnectionUpdate?.Invoke(this, CurrentConnectionStatus);
-        }
-
-        /// <summary>
-        /// Writes the suppress flag used by the background toast presenter (winmd cannot
-        /// expose new helpers on the internal presenter to this project).
-        /// </summary>
-        private static void SetSuppressReconnectToast(bool suppress)
-        {
-            try
-            {
-                ApplicationData.Current.LocalSettings.Values[
-                    LocalSettingsConstants.SuppressReconnectToast] = suppress;
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[WhatsAppService] SetSuppressReconnectToast failed: " + ex.Message);
-            }
-        }
-
-        private bool IsCurrentSocket(object sender)
-        {
-            return sender != null && ReferenceEquals(_socket, sender);
-        }
-
-        private void StopConnectionHealthMonitor(string reason)
-        {
-            var cts = _connectionHealthCts;
-            _connectionHealthCts = null;
-            if (cts == null)
-            {
-                return;
-            }
-
-            try
-            {
-                cts.Cancel();
-                cts.Dispose();
-            }
-            catch
-            {
-            }
-
-            Debug.WriteLine($"[WhatsAppService] Connection health monitor stopped: {reason}");
-        }
-
-        private void StartConnectionHealthMonitor(IWhatsAppSocket socket)
-        {
-            StopConnectionHealthMonitor("restart");
-            if (socket == null)
-            {
-                return;
-            }
-
-            var cts = new CancellationTokenSource();
-            _connectionHealthCts = cts;
-            _connectionHealthTask = Task.Run(() => ConnectionHealthLoopAsync(socket, cts.Token));
-        }
-
-        private async Task ConnectionHealthLoopAsync(IWhatsAppSocket socket, CancellationToken token)
-        {
-            try
-            {
-                while (!token.IsCancellationRequested && !_suppressReconnect && !_fatalSessionEnded)
-                {
-                    await Task.Delay(ConnectionHealthInterval, token);
-                    if (token.IsCancellationRequested || _suppressReconnect || _fatalSessionEnded || !ReferenceEquals(_socket, socket))
-                    {
-                        return;
-                    }
-
-                    if (!socket.IsConnected || !socket.IsHandshakeComplete)
-                    {
-                        // The close / stream:error path owns reconnect. Doing it here races a
-                        // 401 that is still queued behind history or app-state dispatch.
-                        Debug.WriteLine("[WhatsAppService] Health monitor found a disconnected socket; deferring to close handler");
-                        return;
-                    }
-
-                    // The application-level message pump can stall even while frames,
-                    // decryption and IQ traffic continue normally. Recover that queue
-                    // independently instead of tearing down a healthy WhatsApp socket.
-                    if (IsIncomingMessagePumpStalled(TimeSpan.FromSeconds(18)))
-                    {
-                        RuntimeDiagnosticsService.Instance.Write(
-                            "messages",
-                            "incoming-pump-health-restart",
-                            "stage=" + _incomingMessagePumpStage);
-                        ResetIncomingMessagePump("health-stall", requeueCurrent: true);
-                        RestartIncomingMessagePumpIfNeeded();
-                    }
-
-                    bool stalled = socket.HasStalledNodeProcessing(NodeProcessingStallLimit);
-                    if (!stalled && socket.HasFreshConnection(ConnectionFreshnessLimit))
-                    {
-                        continue;
-                    }
-
-                    bool healthy = false;
-                    if (!stalled)
-                    {
-                        healthy = await socket.ProbeConnectionAsync(9000);
-                    }
-
-                    if (healthy)
-                    {
-                        continue;
-                    }
-
-                    if (_fatalSessionEnded || _suppressReconnect)
-                    {
-                        return;
-                    }
-
-                    if (!socket.IsConnected || !socket.IsHandshakeComplete)
-                    {
-                        Debug.WriteLine("[WhatsAppService] Health probe failed on a closed socket; deferring to close handler");
-                        return;
-                    }
-
-                    string reason = stalled
-                        ? $"node-queue-stalled:{socket.QueuedNodeProcessingCount}"
-                        : "socket-no-inbound-response";
-                    Debug.WriteLine($"[WhatsAppService] Health monitor forcing reconnect: {reason}");
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "connection",
-                        "health-force-reconnect",
-                        reason + "; nodeQueue=" + socket.QueuedNodeProcessingCount + "; pendingIq=" + socket.PendingQueryCount);
-
-                    if (ReferenceEquals(_socket, socket))
-                    {
-                        try { socket.Disconnect(); } catch { }
-                        if (ReferenceEquals(_socket, socket))
-                        {
-                            _socket = null;
-                        }
-                    }
-
-                    if (!_fatalSessionEnded && !_suppressReconnect)
-                    {
-                        ScheduleAutoReconnect(reason);
-                    }
-                    return;
-                }
-            }
-            catch (TaskCanceledException)
-            {
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WhatsAppService] Connection health monitor failed: {ex.Message}");
-                RuntimeDiagnosticsService.Instance.RecordException("connection", "health-monitor-failed", ex);
-
-                string fatalCode = TryExtractFatalStreamCodeFromException(ex);
-                if (IsExplicitLogoutStreamCode(fatalCode))
-                {
-                    LatchFatalSession("health-" + fatalCode);
-                    if (_connectionService != null)
-                    {
-                        _connectionService.NotifyStreamError(fatalCode);
-                    }
-
-                    return;
-                }
-
-                if (!_suppressReconnect && !_fatalSessionEnded && ReferenceEquals(_socket, socket) &&
-                    socket.IsConnected)
-                {
-                    ScheduleAutoReconnect("health-monitor-error");
-                }
-            }
-        }
-
-        private void PairingTrace(string message)
-        {
-            string line = "[Pairing/WA] " + (message ?? string.Empty);
-            try
-            {
-                SessionLogger.Instance.WriteAlways(line);
-            }
-            catch
-            {
-            }
-
-            Debug.WriteLine(line);
-        }
-
-        /// <summary>
-        /// Marks the 515 pairing-restart window. Must run as early as possible â€” on Mobile the
-        /// transport often closes with 1006 BEFORE the "restart" status is published, and that
-        /// premature close must not schedule the generic AutoReconnect loop.
-        /// </summary>
-        private void MarkPairingRestartPending(string reason)
-        {
-            bool wasPending = _pairingRestartPending;
-            _pairingRestartPending = true;
-            _countPreSessionCloseAsFatal = false;
-            Interlocked.Exchange(ref _preSessionCloseStreak, 0);
-            if (!wasPending)
-            {
-                PairingTrace("pairingRestartPending=true reason=" + (reason ?? string.Empty));
-            }
-        }
-
-        /// <summary>
-        /// Owns stage-2 reconnect after pair-success / 515. Idempotent under <see cref="_isReconnecting"/>.
-        /// </summary>
-        private void TryStartPairingStage2Reconnect(string reason)
-        {
-            if (_suppressReconnect || _fatalSessionEnded)
-            {
-                PairingTrace("stage2-reconnect skipped (suppress/fatal) reason=" + (reason ?? string.Empty));
-                return;
-            }
-
-            MarkPairingRestartPending(reason);
-
-            bool start = false;
-            lock (_reconnectStateLock)
-            {
-                if (!_isReconnecting)
-                {
-                    _isReconnecting = true;
-                    start = true;
-                }
-            }
-
-            if (!start)
-            {
-                PairingTrace(
-                    "stage2-reconnect already in-flight reason=" + (reason ?? string.Empty) +
-                    " â€” leaving ownership to current reconnect (pairingRestartPending=true blocks generic loop)");
-                return;
-            }
-
-            StopConnectionHealthMonitor("pairing-restart");
-            PairingTrace("stage2-reconnect START reason=" + (reason ?? string.Empty));
-            _ = ReconnectForPairingAsync();
-        }
-
-        private void ScheduleAutoReconnect(string reason)
-        {
-            lock (_reconnectStateLock)
-            {
-                if (_suppressReconnect || _fatalSessionEnded || _isReconnecting || _pairingRestartPending)
-                {
-                    if (_pairingRestartPending)
-                    {
-                        PairingTrace(
-                            "ScheduleAutoReconnect SKIPPED (pairingRestartPending) reason=" +
-                            (reason ?? string.Empty));
-                    }
-                    return;
-                }
-                _isReconnecting = true;
-            }
-
-            Debug.WriteLine($"[WhatsAppService] Scheduling persistent reconnect: {reason}");
-            RuntimeDiagnosticsService.Instance.Write("connection", "reconnect-scheduled", reason);
-            try
-            {
-                if (SessionLogger.Instance.PairingTraceActive)
-                {
-                    SessionLogger.Instance.WriteAlways(
-                        "[Pairing/WA] ScheduleAutoReconnect reason=" + (reason ?? string.Empty));
-                }
-            }
-            catch
-            {
-            }
-
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await AutoReconnectLoopAsync(reason);
-                }
-                finally
-                {
-                    bool restartNeeded;
-                    lock (_reconnectStateLock)
-                    {
-                        _isReconnecting = false;
-                        restartNeeded = !_suppressReconnect &&
-                                        !_fatalSessionEnded &&
-                                        !_pairingRestartPending &&
-                                        _authState != null &&
-                                        _authState.Registered &&
-                                        !IsConnected;
-                    }
-
-                    if (restartNeeded)
-                    {
-                        ScheduleAutoReconnect("post-loop-disconnected");
-                    }
-                    else if (_pairingRestartPending && !IsConnected)
-                    {
-                        // Generic loop exited / was racing â€” ensure stage-2 still runs.
-                        TryStartPairingStage2Reconnect("post-generic-loop-pairing-pending");
-                    }
-                }
-            });
-        }
-
-        private HashSet<string> GetOrBuildMessageIdIndex(string chatJid)
-        {
-            string normJid = NormalizeJid(chatJid);
-            if (!_messageIdIndexByChat.TryGetValue(normJid, out var idSet))
-            {
-                if (MessagesByChat.TryGetValue(normJid, out var list))
-                {
-                    idSet = new HashSet<string>(
-                        list.Where(m => m != null && !string.IsNullOrEmpty(m.Id)).Select(m => m.Id));
-                }
-                else
-                {
-                    idSet = new HashSet<string>();
-                }
-
-                _messageIdIndexByChat[normJid] = idSet;
-            }
-
-            return idSet;
-        }
-
-        private bool HasMessageId(string chatJid, string messageId)
-        {
-            if (string.IsNullOrEmpty(chatJid) || string.IsNullOrEmpty(messageId))
-            {
-                return false;
-            }
-
-            return GetOrBuildMessageIdIndex(chatJid).Contains(messageId);
-        }
-
-        private IReadOnlyList<string> GetAliasLinkedDirectChatJids(string chatJid)
-        {
-            var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var candidate in ExpandNameLookupCandidates(chatJid))
-            {
-                string normalized = NormalizeJid(candidate);
-                if (string.IsNullOrWhiteSpace(normalized) || normalized.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                candidates.Add(normalized);
-                candidates.Add(GetCanonicalJid(normalized));
-            }
-
-            return candidates
-                .Where(c => !string.IsNullOrWhiteSpace(c))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-        }
-
-        private bool TryFindAliasLinkedMessage(string chatJid, string messageId, out string existingChatJid, out ChatMessage existingMessage)
-        {
-            existingChatJid = null;
-            existingMessage = null;
-            if (string.IsNullOrWhiteSpace(chatJid) || string.IsNullOrWhiteSpace(messageId))
-            {
-                return false;
-            }
-
-            foreach (var candidate in GetAliasLinkedDirectChatJids(chatJid))
-            {
-                if (!MessagesByChat.TryGetValue(candidate, out var messages) || messages == null)
-                {
-                    continue;
-                }
-
-                var match = messages.FirstOrDefault(m => string.Equals(m?.Id, messageId, StringComparison.Ordinal));
-                if (match != null)
-                {
-                    existingChatJid = candidate;
-                    existingMessage = match;
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        private void RegisterMessageId(string chatJid, string messageId)
-        {
-            if (string.IsNullOrEmpty(chatJid) || string.IsNullOrEmpty(messageId))
-            {
-                return;
-            }
-
-            GetOrBuildMessageIdIndex(chatJid).Add(messageId);
-        }
-
-        /// <summary>
-        /// Checks whether a message ID exists in any alias-linked chat bucket.
-        /// Used by the offline fast-path to avoid the heavier TryFindAliasLinkedMessage.
-        /// </summary>
-        private bool HasMessageIdInAnyAlias(string chatJid, string messageId)
-        {
-            if (string.IsNullOrWhiteSpace(chatJid) || string.IsNullOrWhiteSpace(messageId))
-            {
-                return false;
-            }
-
-            foreach (var candidate in GetAliasLinkedDirectChatJids(chatJid))
-            {
-                if (HasMessageId(candidate, messageId))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        private bool TryConsolidateAliasDuplicateMessage(string targetChatJid, string sourceChatJid, string messageId, out ChatMessage consolidatedMessage)
-        {
-            consolidatedMessage = null;
-            string normalizedTarget = NormalizeJid(targetChatJid);
-            string normalizedSource = NormalizeJid(sourceChatJid);
-            if (string.IsNullOrWhiteSpace(normalizedTarget) ||
-                string.IsNullOrWhiteSpace(normalizedSource) ||
-                string.IsNullOrWhiteSpace(messageId) ||
-                string.Equals(normalizedTarget, normalizedSource, StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-
-            if (!MessagesByChat.TryGetValue(normalizedSource, out var sourceMessages) || sourceMessages == null)
-            {
-                return false;
-            }
-
-            var existingMessage = sourceMessages.FirstOrDefault(m => string.Equals(m?.Id, messageId, StringComparison.Ordinal));
-            if (existingMessage == null)
-            {
-                return false;
-            }
-
-            consolidatedMessage = existingMessage;
-            if (!MessagesByChat.TryGetValue(normalizedTarget, out var targetMessages) || targetMessages == null)
-            {
-                targetMessages = new List<ChatMessage>();
-                MessagesByChat[normalizedTarget] = targetMessages;
-            }
-
-            if (!HasMessageId(normalizedTarget, messageId))
-            {
-                targetMessages.Add(existingMessage);
-                targetMessages.Sort((a, b) => a.Timestamp.CompareTo(b.Timestamp));
-                RegisterMessageId(normalizedTarget, messageId);
-            }
-
-            sourceMessages.Remove(existingMessage);
-            if (_messageIdIndexByChat.TryGetValue(normalizedSource, out var sourceIndex))
-            {
-                sourceIndex.Remove(messageId);
-            }
-
-            return true;
-        }
-
-        private void RegisterMissingMessage(string chatJid, string participant, string messageId, bool isFromMe, DateTime timestamp, string reason)
-        {
-            string normJid = NormalizeJid(chatJid);
-            if (string.IsNullOrWhiteSpace(normJid) || string.IsNullOrWhiteSpace(messageId))
-            {
-                return;
-            }
-
-            lock (_missingMessageLock)
-            {
-                if (!_pendingMissingMessagesByChat.TryGetValue(normJid, out var byMessageId))
-                {
-                    byMessageId = new Dictionary<string, MissingMessageCandidate>(StringComparer.Ordinal);
-                    _pendingMissingMessagesByChat[normJid] = byMessageId;
-                }
-
-                if (!byMessageId.TryGetValue(messageId, out var candidate))
-                {
-                    candidate = new MissingMessageCandidate
-                    {
-                        ChatJid = normJid,
-                        MessageId = messageId,
-                        FirstSeenUtc = DateTime.UtcNow
-                    };
-                    byMessageId[messageId] = candidate;
-                }
-
-                candidate.Participant = participant;
-                candidate.IsFromMe = isFromMe;
-                candidate.MessageTimestamp = timestamp;
-                candidate.Reason = reason;
-                candidate.LastSeenUtc = DateTime.UtcNow;
-            }
-
-            if (!ShouldDeferReconnectReplayWork())
-            {
-                Debug.WriteLine($"[WhatsAppService] Queued missing-message recovery for {messageId} in {normJid} (reason={reason})");
-            }
-        }
-
-        private void ResolveMissingMessage(string chatJid, string messageId, string source)
-        {
-            string normJid = NormalizeJid(chatJid);
-            if (string.IsNullOrWhiteSpace(normJid) || string.IsNullOrWhiteSpace(messageId))
-            {
-                return;
-            }
-
-            CancellationTokenSource scheduledCts = null;
-            string pendingRequestId = null;
-
-            lock (_missingMessageLock)
-            {
-                if (_pendingMissingMessagesByChat.TryGetValue(normJid, out var byMessageId))
-                {
-                    if (byMessageId.TryGetValue(messageId, out var candidate))
-                    {
-                        scheduledCts = candidate.PlaceholderScheduleCts;
-                        pendingRequestId = candidate.LastPlaceholderRequestId;
-                    }
-
-                    byMessageId.Remove(messageId);
-                    if (byMessageId.Count == 0)
-                    {
-                        _pendingMissingMessagesByChat.Remove(normJid);
-                    }
-                }
-
-                if (!string.IsNullOrWhiteSpace(pendingRequestId))
-                {
-                    _placeholderResendRequestsByStanzaId.Remove(pendingRequestId);
-                }
-            }
-
-            if (scheduledCts != null)
-            {
-                try
-                {
-                    scheduledCts.Cancel();
-                    scheduledCts.Dispose();
-                    if (!ShouldDeferReconnectReplayWork())
-                    {
-                        Debug.WriteLine($"[WhatsAppService] placeholder resend cancelled for {messageId} in {normJid} ({source})");
-                    }
-                }
-                catch
-                {
-                }
-            }
-
-            if (!ShouldDeferReconnectReplayWork())
-            {
-                Debug.WriteLine($"[WhatsAppService] Resolved missing-message recovery for {messageId} in {normJid} via {source}");
-            }
-        }
-
-        private bool TryGetMissingMessage(string chatJid, string messageId, out MissingMessageCandidate candidate)
-        {
-            candidate = null;
-            string normJid = NormalizeJid(chatJid);
-            if (string.IsNullOrWhiteSpace(normJid) || string.IsNullOrWhiteSpace(messageId))
-            {
-                return false;
-            }
-
-            lock (_missingMessageLock)
-            {
-                return _pendingMissingMessagesByChat.TryGetValue(normJid, out var byMessageId) &&
-                       byMessageId.TryGetValue(messageId, out candidate);
-            }
-        }
-
-        private Task<bool> TryRequestPlaceholderResendAsync(string chatJid, string messageId, string trigger)
-        {
-            if (_socket == null || !_socket.IsHandshakeComplete)
-            {
-                return Task.FromResult(false);
-            }
-
-            if (!TryGetMissingMessage(chatJid, messageId, out var candidate))
-            {
-                return Task.FromResult(false);
-            }
-
-            if (ShouldDeferPlaceholderResend(trigger, out var deferReason))
-            {
-                if (!ShouldDeferReconnectReplayWork())
-                {
-                    Debug.WriteLine($"[WhatsAppService] Deferring placeholder resend for {candidate.MessageId} in {candidate.ChatJid} (trigger={trigger}, reason={deferReason})");
-                }
-                return Task.FromResult(false);
-            }
-
-            DateTime utcNow = DateTime.UtcNow;
-            CancellationTokenSource scheduleCts = null;
-            lock (_missingMessageLock)
-            {
-                if (candidate.PlaceholderRequestCount >= 2 ||
-                    candidate.PlaceholderRequestInFlight ||
-                    candidate.PlaceholderScheduleCts != null)
-                {
-                    return Task.FromResult(false);
-                }
-
-                if (candidate.LastPlaceholderRequestUtc != DateTime.MinValue &&
-                    utcNow - candidate.LastPlaceholderRequestUtc < PlaceholderResendResponseTimeout)
-                {
-                    return Task.FromResult(false);
-                }
-
-                scheduleCts = new CancellationTokenSource();
-                candidate.PlaceholderScheduleCts = scheduleCts;
-                candidate.PlaceholderScheduledForUtc = utcNow.Add(PlaceholderResendDispatchDelay);
-            }
-
-            Debug.WriteLine($"[WhatsAppService] placeholder resend scheduled for {candidate.MessageId} in {candidate.ChatJid} (trigger={trigger}, dueInMs={(int)PlaceholderResendDispatchDelay.TotalMilliseconds})");
-
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await Task.Delay(PlaceholderResendDispatchDelay, scheduleCts.Token);
-                }
-                catch (TaskCanceledException)
-                {
-                    Debug.WriteLine($"[WhatsAppService] placeholder resend cancelled before send for {messageId} in {chatJid} (trigger={trigger})");
-                    return;
-                }
-
-                MissingMessageCandidate currentCandidate;
-                lock (_missingMessageLock)
-                {
-                    if (!TryGetMissingMessage(chatJid, messageId, out currentCandidate) ||
-                        currentCandidate.PlaceholderScheduleCts != scheduleCts)
-                    {
-                        return;
-                    }
-
-                    currentCandidate.PlaceholderScheduleCts = null;
-                    currentCandidate.PlaceholderScheduledForUtc = DateTime.MinValue;
-                    currentCandidate.PlaceholderRequestInFlight = true;
-                }
-
-                string stanzaId = null;
-                try
-                {
-                    var key = new Proto.MessageKey
-                    {
-                        RemoteJid = currentCandidate.ChatJid,
-                        Id = currentCandidate.MessageId,
-                        FromMe = currentCandidate.IsFromMe,
-                        Participant = currentCandidate.Participant ?? string.Empty
-                    };
-
-                    stanzaId = _socket.GenerateMessageId();
-                    lock (_missingMessageLock)
-                    {
-                        if (!TryGetMissingMessage(chatJid, messageId, out currentCandidate))
-                        {
-                            return;
-                        }
-
-                        currentCandidate.LastPlaceholderRequestUtc = DateTime.UtcNow;
-                        currentCandidate.PlaceholderRequestCount++;
-                        currentCandidate.LastPlaceholderRequestId = stanzaId;
-                        _placeholderResendRequestsByStanzaId[stanzaId] = new PlaceholderResendRequestState
-                        {
-                            ChatJid = currentCandidate.ChatJid,
-                            MessageId = currentCandidate.MessageId,
-                            RequestedAtUtc = DateTime.UtcNow,
-                            Trigger = trigger
-                        };
-                    }
-
-                    string sentStanzaId = await _socket.RequestPlaceholderResendAsync(key, stanzaId);
-                    if (!string.Equals(sentStanzaId, stanzaId, StringComparison.Ordinal))
-                    {
-                        Debug.WriteLine($"[WhatsAppService] PLACEHOLDER_MESSAGE_RESEND stanza id changed unexpectedly: tracked={stanzaId}, sent={sentStanzaId}");
-                    }
-
-                    Debug.WriteLine($"[WhatsAppService] placeholder resend sent for {messageId} in {chatJid} (trigger={trigger}, stanzaId={stanzaId})");
-
-                    _ = Task.Run(async () =>
-                    {
-                        await Task.Delay(PlaceholderResendResponseTimeout);
-
-                        PlaceholderResendRequestState timedOutState = null;
-                        lock (_missingMessageLock)
-                        {
-                            if (_placeholderResendRequestsByStanzaId.TryGetValue(stanzaId, out timedOutState))
-                            {
-                                _placeholderResendRequestsByStanzaId.Remove(stanzaId);
-                                if (TryGetMissingMessage(timedOutState.ChatJid, timedOutState.MessageId, out var timedOutCandidate) &&
-                                    string.Equals(timedOutCandidate.LastPlaceholderRequestId, stanzaId, StringComparison.Ordinal))
-                                {
-                                    timedOutCandidate.PlaceholderRequestInFlight = false;
-                                }
-                            }
-                        }
-
-                        if (timedOutState != null)
-                        {
-                            string timeoutKind = timedOutState.AckAccepted ? $"accepted/no-payload, ackAt={timedOutState.AckAcceptedUtc:O}" : "no-ack";
-                            Debug.WriteLine($"[WhatsAppService] placeholder resend timed out for {timedOutState.MessageId} in {timedOutState.ChatJid} (stanzaId={stanzaId}, {timeoutKind})");
-                        }
-                    });
-                }
-                catch (Exception ex)
-                {
-                    lock (_missingMessageLock)
-                    {
-                        if (!string.IsNullOrWhiteSpace(stanzaId))
-                        {
-                            _placeholderResendRequestsByStanzaId.Remove(stanzaId);
-                        }
-                        if (TryGetMissingMessage(chatJid, messageId, out currentCandidate))
-                        {
-                            currentCandidate.PlaceholderRequestInFlight = false;
-                            if (string.Equals(currentCandidate.LastPlaceholderRequestId, stanzaId, StringComparison.Ordinal))
-                            {
-                                currentCandidate.LastPlaceholderRequestId = null;
-                                currentCandidate.PlaceholderRequestCount = Math.Max(0, currentCandidate.PlaceholderRequestCount - 1);
-                            }
-                        }
-                    }
-
-                    Debug.WriteLine($"[WhatsAppService] PLACEHOLDER_MESSAGE_RESEND send failed for {messageId} in {chatJid}: {ex.Message}");
-                }
-                finally
-                {
-                    scheduleCts.Dispose();
-                }
-            });
-
-            return Task.FromResult(true);
-        }
-
-        private bool ShouldDeferPlaceholderResend(string trigger, out string reason)
-        {
-            reason = null;
-
-            if (_socket == null || !_socket.IsHandshakeComplete)
-            {
-                return false;
-            }
-
-            if (ShouldDeferReconnectReplayWork())
-            {
-                reason = "reconnect-replay-active";
-                return true;
-            }
-
-            if (_socket.IsAwaitingInitialSync)
-            {
-                reason = "awaiting-initial-sync";
-                return true;
-            }
-
-                if (_historyBackfillActive)
-                {
-                    reason = "history-backfill-active";
-                    return true;
-                }
-
-            lock (_historyOnDemandLock)
-            {
-                if (_historyOnDemandInFlight.Count > 0)
-                {
-                    reason = "history-on-demand-in-flight";
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        private static bool IsPeerOrSelfMissingMessage(MissingMessageCandidate candidate)
-        {
-            if (candidate == null)
-            {
-                return false;
-            }
-
-            if (candidate.IsFromMe)
-            {
-                return true;
-            }
-
-            string chatJid = candidate.ChatJid ?? string.Empty;
-            return chatJid.EndsWith("@s.whatsapp.net", StringComparison.OrdinalIgnoreCase) ||
-                   chatJid.EndsWith("@lid", StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static string DescribeMissingMessageCandidate(MissingMessageCandidate candidate)
-        {
-            if (candidate == null)
-            {
-                return "<null>";
-            }
-
-            return $"{candidate.MessageId}@{candidate.ChatJid}:fromMe={candidate.IsFromMe},requests={candidate.PlaceholderRequestCount},ts={candidate.MessageTimestamp:O},reason={candidate.Reason}";
-        }
-
-        private async Task TryDrainPendingPlaceholderResendsAsync(string trigger, int maxRequests = 4)
-        {
-            if (_socket == null || !_socket.IsHandshakeComplete)
-            {
-                return;
-            }
-
-            if (ShouldDeferPlaceholderResend(trigger, out var deferReason))
-            {
-                Debug.WriteLine($"[WhatsAppService] Skipping deferred placeholder resend drain ({trigger}) because {deferReason}");
-                return;
-            }
-
-            List<MissingMessageCandidate> pending;
-            int totalEligible;
-            lock (_missingMessageLock)
-            {
-                pending = _pendingMissingMessagesByChat
-                    .Values
-                    .SelectMany(byMessageId => byMessageId.Values)
-                    .Where(candidate =>
-                        candidate != null &&
-                        !candidate.PlaceholderRequestInFlight &&
-                        candidate.PlaceholderScheduleCts == null &&
-                        candidate.PlaceholderRequestCount < 2)
-                    .Select(candidate => new MissingMessageCandidate
-                    {
-                        ChatJid = candidate.ChatJid,
-                        Participant = candidate.Participant,
-                        MessageId = candidate.MessageId,
-                        IsFromMe = candidate.IsFromMe,
-                        MessageTimestamp = candidate.MessageTimestamp,
-                        Reason = candidate.Reason,
-                        FirstSeenUtc = candidate.FirstSeenUtc,
-                        LastSeenUtc = candidate.LastSeenUtc,
-                        PlaceholderRequestCount = candidate.PlaceholderRequestCount
-                    })
-                    .OrderBy(candidate => candidate.PlaceholderRequestCount)
-                    .ThenByDescending(IsPeerOrSelfMissingMessage)
-                    .ThenByDescending(candidate => candidate.MessageTimestamp)
-                    .ThenByDescending(candidate => candidate.LastSeenUtc)
-                    .ToList();
-
-                totalEligible = pending.Count;
-                pending = pending
-                    .Take(maxRequests)
-                    .ToList();
-            }
-
-            if (pending.Count == 0)
-            {
-                Debug.WriteLine($"[WhatsAppService] Deferred placeholder resend drain found no pending messages ({trigger})");
-                return;
-            }
-
-            Debug.WriteLine($"[WhatsAppService] Deferred placeholder resend drain selected {pending.Count}/{totalEligible} eligible message(s) ({trigger}): {string.Join(" | ", pending.Select(DescribeMissingMessageCandidate))}");
-
-            int requested = 0;
-            foreach (var candidate in pending)
-            {
-                if (ShouldDeferPlaceholderResend(trigger, out deferReason))
-                {
-                    Debug.WriteLine($"[WhatsAppService] Stopping deferred placeholder resend drain ({trigger}) because {deferReason}");
-                    break;
-                }
-
-                if (await TryRequestPlaceholderResendAsync(candidate.ChatJid, candidate.MessageId, $"deferred-drain:{trigger}"))
-                {
-                    requested++;
-                }
-            }
-
-            Debug.WriteLine($"[WhatsAppService] Deferred placeholder resend drain requested {requested}/{pending.Count} message(s) ({trigger})");
-
-            if (totalEligible > pending.Count)
-            {
-                SchedulePendingPlaceholderResendDrain($"follow-up:{trigger}", maxRequests, PlaceholderResendFollowUpDrainDelay);
-            }
-        }
-
-        private void SchedulePendingPlaceholderResendDrain(string trigger, int maxRequests = 4)
-        {
-            SchedulePendingPlaceholderResendDrain(trigger, maxRequests, PlaceholderResendDrainDelay);
-        }
-
-        private void SchedulePendingPlaceholderResendDrain(string trigger, int maxRequests, TimeSpan delay)
-        {
-            Task.Run(async () =>
-            {
-                try
-                {
-                    await Task.Delay(delay);
-                    await TryDrainPendingPlaceholderResendsAsync(trigger, maxRequests);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[WhatsAppService] Deferred placeholder resend drain failed ({trigger}): {ex.Message}");
-                }
-            });
-        }
-
-        public async Task<bool> EnsureActiveChatReconciledAsync(string chatJid, int maxRequests = 6)
-        {
-            string normJid = NormalizeJid(chatJid);
-            if (string.IsNullOrWhiteSpace(normJid) || _socket == null || !_socket.IsHandshakeComplete)
-            {
-                return false;
-            }
-
-            DateTime utcNow = DateTime.UtcNow;
-            lock (_missingMessageLock)
-            {
-                if (_activeChatReconcileCooldownByChat.TryGetValue(normJid, out var cooldownUntil) &&
-                    cooldownUntil > utcNow)
-                {
-                    return false;
-                }
-                _activeChatReconcileCooldownByChat[normJid] = utcNow.Add(ActiveChatReconcileCooldown);
-            }
-
-            List<string> pendingIds;
-            lock (_missingMessageLock)
-            {
-                pendingIds = _pendingMissingMessagesByChat.TryGetValue(normJid, out var byMessageId)
-                    ? byMessageId.Keys.Take(maxRequests).ToList()
-                    : new List<string>();
-            }
-
-            if (pendingIds.Count == 0)
-            {
-                Debug.WriteLine($"[WhatsAppService] Active chat reconcile found no pending missing-message repairs for {normJid}");
-                return false;
-            }
-
-            bool requestedAny = false;
-            foreach (var pendingId in pendingIds)
-            {
-                requestedAny |= await TryRequestPlaceholderResendAsync(normJid, pendingId, "active-chat");
-            }
-
-            if (requestedAny)
-            {
-                Debug.WriteLine($"[WhatsAppService] Active chat reconcile scheduled placeholder resend for {pendingIds.Count} message(s) in {normJid}");
-            }
-            else if (pendingIds.Count > 0)
-            {
-                Debug.WriteLine($"[WhatsAppService] Active chat reconcile deferred placeholder resend pressure for {normJid}");
-            }
-
-            return requestedAny;
-        }
-
         public event EventHandler<BinaryNode> OnLinkCodeCompanionReg;
         public event EventHandler<BinaryNode> OnMessage;
 
-        private WhatsAppService(ChatStateStore chatState)
+        private WhatsAppService(
+            ChatStateStore chatState,
+            IHistoryMessageStore historyMessages,
+            IHistoryChatPreviewStore chatPreviews)
         {
             if (chatState == null)
             {
@@ -2995,6 +1772,8 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             _chatState = chatState;
+            _historyMessages = historyMessages ?? throw new ArgumentNullException(nameof(historyMessages));
+            _chatPreviews = chatPreviews ?? throw new ArgumentNullException(nameof(chatPreviews));
             _chatState.Chats.CollectionChanged += (s, e) => InvalidateChatRowIndex();
             JidAlias = new NotifyingJidAliasMap(InvalidateChatRowIndex);
         }
@@ -3003,105 +1782,12 @@ namespace Unison.Uwp.Services.WhatsApp
         /// Builds the singleton around the store the container owns, or returns the one already
         /// built. Called only from composition; everything else reads <see cref="Instance"/>.
         /// </summary>
-        internal static WhatsAppService Create(ChatStateStore chatState)
+        internal static WhatsAppService Create(
+            ChatStateStore chatState,
+            IHistoryMessageStore historyMessages,
+            IHistoryChatPreviewStore chatPreviews)
         {
-            return _instance ?? (_instance = new WhatsAppService(chatState));
-        }
-
-        private void EnableScheduledPersist(string reason)
-        {
-            bool shouldFlushPendingPersist = false;
-            if (_suppressStartupScheduledPersist)
-            {
-                _suppressStartupScheduledPersist = false;
-                lock (_persistLock)
-                {
-                    shouldFlushPendingPersist = _persistPending;
-                }
-                Debug.WriteLine($"[WhatsAppService] Startup persist suppression lifted: {reason}");
-            }
-
-            if (shouldFlushPendingPersist)
-            {
-                Debug.WriteLine($"[WhatsAppService] Flushing deferred persist after startup warm-up: {reason}");
-                SchedulePersist();
-            }
-        }
-
-
-
-        /// <summary>
-        /// Loads only the durable session and the storage roots required to connect.
-        /// Chat rows are deliberately excluded so a cold launch can start Noise/Signal
-        /// while the local conversation list is read in parallel.
-        /// </summary>
-        public async Task InitializeConnectionStateAsync()
-        {
-            await _initLock.WaitAsync();
-            try
-            {
-                if (_authState != null) return;
-
-                await _messageStore.InitializeAsync();
-                LoadHistoryFreshnessRepairState();
-
-                // Recover the compact incoming journal before a new socket starts. This
-                // is a single small file and does not block on rewriting any chat JSON.
-                // Recovered items remain visible to LoadChatMessagesAsync through the
-                // pending-persist snapshot until the delayed merge completes.
-                await RecoverPendingIncomingJournalAsync();
-
-                _authState = await _authStore.LoadAsync();
-                if (_authState == null)
-                {
-                    _authState = AuthState.Create();
-                    Debug.WriteLine($"[WhatsAppService] Created NEW AuthState (ObjID: {_authState.GetHashCode()})");
-                }
-                else
-                {
-                    Debug.WriteLine($"[WhatsAppService] Loaded EXISTING AuthState (ObjID: {_authState.GetHashCode()}), registered: {_authState.Registered}");
-                }
-
-                // No linked account â‡’ never toast â€œUnison desconectadoâ€ from orphaned broker closes.
-                bool hasActiveAccount =
-                    _authState.Registered &&
-                    _authState.Me != null &&
-                    !string.IsNullOrWhiteSpace(_authState.Me.Id);
-                SetSuppressReconnectToast(!hasActiveAccount);
-
-                // PN/LID aliases are compact protocol state, not optional UI data. Load
-                // them before ConnectAsync snapshots the alias map for SocketClient.
-                var storedAliases = await _messageStore.LoadJidAliasesAsync();
-                foreach (var kvp in storedAliases)
-                {
-                    string aliasKey = NormalizeJid(kvp.Key);
-                    string aliasValue = NormalizeJid(kvp.Value);
-                    if (!string.IsNullOrWhiteSpace(aliasKey) && !string.IsNullOrWhiteSpace(aliasValue))
-                    {
-                        JidAlias[aliasKey] = aliasValue;
-                    }
-                }
-
-                // The own PN/LID pair is tiny and required before the socket starts.
-                if (_authState?.Me != null && !string.IsNullOrEmpty(_authState.Me.Id) && !string.IsNullOrEmpty(_authState.Me.Lid))
-                {
-                    string id = NormalizeJid(_authState.Me.Id);
-                    string lid = NormalizeJid(_authState.Me.Lid);
-                    if (id != lid)
-                    {
-                        JidAlias[id] = lid;
-                        JidAlias[lid] = id;
-                        RegisterSocketAlias(id, lid, "initialize-identity");
-                    }
-                }
-
-                // Seed sidebar profile from persisted Me (name may exist before avatar fetch).
-                SyncSelfProfileFromAuth();
-            }
-            finally
-            {
-                _initLock.Release();
-            }
+            return _instance ?? (_instance = new WhatsAppService(chatState, historyMessages, chatPreviews));
         }
 
         /// <summary>
@@ -3213,298 +1899,6 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-
-        private async Task RecoverPendingIncomingJournalAsync()
-        {
-            try
-            {
-                var pending = await _messageStore.LoadPendingIncomingAsync();
-                if (pending == null || pending.Count == 0)
-                {
-                    return;
-                }
-
-                int recovered = 0;
-                var latestByChat = new List<KeyValuePair<string, ChatMessage>>();
-                foreach (var group in pending
-                    .Where(item => item?.Message != null && !string.IsNullOrWhiteSpace(item.ChatJid))
-                    .GroupBy(item => NormalizeJid(item.ChatJid), StringComparer.OrdinalIgnoreCase))
-                {
-                    var messages = group
-                        .Select(item => item.Message)
-                        .Where(message => message != null)
-                        .OrderBy(message => message.Timestamp)
-                        .ToList();
-                    if (messages.Count == 0)
-                    {
-                        continue;
-                    }
-
-                    QueueMessagesForPersist(
-                        group.Key,
-                        messages,
-                        queueIncomingJournal: false,
-                        scheduleFlush: false);
-                    latestByChat.Add(new KeyValuePair<string, ChatMessage>(
-                        group.Key,
-                        messages[messages.Count - 1]));
-                    recovered += messages.Count;
-                }
-
-                RuntimeDiagnosticsService.Instance.Write(
-                    "messages",
-                    "incoming-journal-recovered",
-                    "count=" + recovered + "; chats=" + latestByChat.Count);
-
-                // Let the socket acquire storage first. The pending snapshot already
-                // makes these messages available if a conversation is opened.
-                _ = Task.Run(async () =>
-                {
-                    await Task.Delay(5000);
-                    try
-                    {
-                        await FlushOfflineReplayMessagesAsync("incoming-journal-recovery");
-
-                        // Update only affected rows; never scan all 300+ chat files.
-                        foreach (var item in latestByChat)
-                        {
-                            var message = item.Value;
-                            string preview = message?.Content;
-                            if (string.IsNullOrWhiteSpace(preview))
-                            {
-                                preview = message?.IsImage == true ? "[Image]" : "[Message]";
-                            }
-
-                            await RefreshChatPreviewFromReplayAsync(
-                                item.Key,
-                                preview,
-                                message?.Timestamp ?? DateTime.MinValue,
-                                item.Key.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase),
-                                message?.IsFromMe == true);
-                        }
-
-                        RuntimeDiagnosticsService.Instance.Write(
-                            "messages",
-                            "incoming-journal-recovery-applied",
-                            "count=" + recovered + "; chats=" + latestByChat.Count);
-                    }
-                    catch (Exception ex)
-                    {
-                        RuntimeDiagnosticsService.Instance.RecordException(
-                            "messages",
-                            "incoming-journal-recovery-flush-failed",
-                            ex);
-                    }
-                });
-            }
-            catch (Exception ex)
-            {
-                RuntimeDiagnosticsService.Instance.RecordException(
-                    "messages",
-                    "incoming-journal-recovery-failed",
-                    ex);
-            }
-        }
-
-        /// <summary>
-        /// Loads compact chat metadata for the UI. Safe to run after the connection has
-        /// already started; only one caller performs the disk read.
-        /// </summary>
-        public async Task LoadPersistedUiStateAsync()
-        {
-            await InitializeConnectionStateAsync();
-            if (_persistedUiStateLoaded || _authState?.Registered != true)
-            {
-                return;
-            }
-
-            await _persistedUiLoadLock.WaitAsync();
-            try
-            {
-                if (_persistedUiStateLoaded) return;
-                await LoadPersistedChatsAsync();
-                _persistedUiStateLoaded = true;
-                RuntimeDiagnosticsService.Instance.Write(
-                    "startup",
-                    "persisted-ui-loaded",
-                    "chatRows=" + Chats.Count);
-            }
-            finally
-            {
-                _persistedUiLoadLock.Release();
-            }
-        }
-
-        /// <summary>
-        /// Compatibility path for callers that genuinely need both connection state and
-        /// the local chat list before continuing. MainView uses the two fast-path methods
-        /// separately.
-        /// </summary>
-        public async Task InitializeAsync()
-        {
-            await InitializeConnectionStateAsync();
-            if (_authState?.Registered == true)
-            {
-                await LoadPersistedUiStateAsync();
-            }
-        }
-
-        public async Task<bool> IsRegisteredAsync()
-        {
-            if (_authState == null) await InitializeConnectionStateAsync();
-            return _authState != null && _authState.Registered && _authState.Me != null;
-        }
-
-        /// <summary>
-        /// Sends the unlink notice while the socket is still up. Silent when there is nothing to
-        /// unlink from: an unregistered or already-closed session has nobody to tell.
-        /// </summary>
-        public async Task NotifyServerLogoutAsync(string reason = null)
-        {
-            var socket = _socket;
-            if (socket == null)
-            {
-                return;
-            }
-
-            // The close this produces is the one we asked for, so the reconnect machinery must
-            // not read it as the connection dropping under us.
-            _suppressReconnect = true;
-            _fatalSessionEnded = true;
-            StopConnectionHealthMonitor("logout");
-
-            try
-            {
-                await socket.LogoutAsync(reason ?? "user-initiated").ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                RuntimeDiagnosticsService.Instance.RecordException("connection", "logout-notice-failed", ex);
-            }
-        }
-
-        public async Task ClearSessionAsync()
-        {
-            Log("[WhatsAppService] Hardening session wipe...");
-            var keyStore = _socket?.KeyStore;
-            _debugSendService?.Stop("clear-session");
-
-            // Block â€œUnison desconectadoâ€ before tearing the socket down â€” otherwise the
-            // background broker sees close while AuthStore still says Registered+MeId.
-            SetSuppressReconnectToast(true);
-            string clearToastError;
-            BackgroundToastPresenter.ClearReconnectRequired(out clearToastError);
-
-            try
-            {
-                await _authStore.ClearAsync().ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                Log($"[WhatsAppService] Warning: early AuthStore clear failed: {ex.Message}");
-            }
-
-            _authState = null;
-
-            // 1. Stop traffic quickly (sync) so UI can leave Connected without waiting on disk.
-            _suppressReconnect = true;
-            _fatalSessionEnded = true;
-            _pairingRestartPending = false;
-            _countPreSessionCloseAsFatal = false;
-            Interlocked.Exchange(ref _preSessionCloseStreak, 0);
-            _sessionEstablishedThisConnection = false;
-            StopConnectionHealthMonitor("clear-session");
-            if (_socket != null)
-            {
-                var socket = _socket;
-                _socket = null;
-                try { socket.Disconnect(); } catch { /* ignore */ }
-                try { socket.Dispose(); } catch { /* ignore */ }
-            }
-            _sessionEstablishedTcs.TrySetCanceled();
-            _sessionEstablishedTcs = CreateSessionEstablishedTcs();
-
-            // Show Login surface immediately Ã¢â‚¬â€ do NOT start Connect/QR until keys are gone.
-            Log("[WhatsAppService] Switching UI to Login before auth wipe.");
-            await RaiseSessionClearedAsync(startPairing: false).ConfigureAwait(false);
-            await Task.Yield();
-
-            // 2. Clear the FileKeyStore so reset is a true zero-state wipe.
-            try
-            {
-                keyStore = keyStore ?? new FileKeyStore();
-                await keyStore.InitializeAsync();
-                await keyStore.ClearAllAsync();
-                Log("[WhatsAppService] Cleared FileKeyStore / SignalKeys.");
-            }
-            catch (Exception ex)
-            {
-                Log($"[WhatsAppService] Warning: failed to clear FileKeyStore / SignalKeys: {ex.Message}");
-            }
-
-            // 3. AuthStore already cleared above (before disconnect); keep idempotent clear.
-            await _authStore.ClearAsync();
-
-            // 4. The auth state was already dropped before the socket came down. It is
-            // deliberately not nulled again here: switching the UI to Login above starts a
-            // pairing attempt, and that attempt builds a fresh state to show a QR with. A
-            // second null at this point lands in the middle of it and is what the connect
-            // then dereferences.
-            _sharedKeyStore = null;
-            _persistedUiStateLoaded = false;
-            Interlocked.Exchange(ref _forceFreshConnectOnResume, 0);
-
-            // 5. Drop Noise session material before pairing so Connect is a clean path.
-            try
-            {
-                await NoiseSessionStore.ClearAsync();
-            }
-            catch (Exception ex)
-            {
-                Log($"[WhatsAppService] Warning: failed to clear NoiseSessionStore: {ex.Message}");
-            }
-
-            // Auth gone â€” restart pairing / QR now.
-            // Clear the fatal latch so ConnectAsync for QR is allowed.
-            _fatalSessionEnded = false;
-            _suppressReconnect = false;
-            Log("[WhatsAppService] Auth wiped; starting pairing/QR.");
-            await RaiseSessionClearedAsync(startPairing: true).ConfigureAwait(false);
-            await Task.Yield();
-
-            // 6. Wipe messages, chats, and contact names from disk (epoch rotate Ã¢â‚¬â€ non-blocking for QR).
-            await _messageStore.WipeAllDataAsync();
-
-            // 7. Clear in-memory state
-            await RunOnUiThreadAsync(() =>
-            {
-                Chats.Clear();
-                MessagesByChat.Clear();
-                _messageIdIndexByChat.Clear();
-                lock (_historyOnDemandLock)
-                {
-                    _historyOnDemandMarkerByChat.Clear();
-                    _historyOnDemandInFlight.Clear();
-                    _historyOnDemandRequestById.Clear();
-                    _historyOnDemandLastRequestIdByChat.Clear();
-                }
-                ContactNames.Clear();
-                PhoneContactNamesByJid.Clear();
-                JidAlias.Clear();
-            });
-
-            try
-            {
-                NotificationService.Instance.ClearAll();
-            }
-            catch (Exception ex)
-            {
-                Log($"[WhatsAppService] Warning: failed to clear notifications/tiles: {ex.Message}");
-            }
-
-            Log("[WhatsAppService] Session wipe complete.");
-        }
-
         /// <summary>
         /// Clears local chats/messages and asks WhatsApp for a fresh history sync.
         /// Auth / Noise session stay intact (unlike <see cref="ClearSessionAsync"/>).
@@ -3519,12 +1913,13 @@ namespace Unison.Uwp.Services.WhatsApp
             progress?.Report(ConversationResyncPhase.CleaningHistory);
 
             await _messageStore.WipeChatsAndMessagesAsync().ConfigureAwait(false);
+            // SQLite history gate/preview reset: prefer HistoryFacade.Resync / ResetHistorySqliteAsync.
 
             await ClearConversationCachesAsync().ConfigureAwait(false);
 
             try
             {
-                await _messageStore.SaveChatsAsync(Array.Empty<ChatItem>()).ConfigureAwait(false);
+                await PersistChatCatalogAsync(Array.Empty<ChatItem>()).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -3715,440 +2110,6 @@ namespace Unison.Uwp.Services.WhatsApp
             return Interlocked.CompareExchange(ref _userResyncHistoryTcs, null, null) != null;
         }
 
-        private async Task RaiseSessionClearedAsync(bool startPairing)
-        {
-            var args = new SessionClearedEventArgs(startPairing);
-            await RunOnUiThreadAsync(() =>
-            {
-                try
-                {
-                    OnSessionCleared?.Invoke(this, args);
-                }
-                catch (Exception ex)
-                {
-                    Log($"[WhatsAppService] OnSessionCleared handler failed: {ex.Message}");
-                }
-            }).ConfigureAwait(false);
-        }
-
-        public async Task ResumeAsync()
-        {
-            if (!await IsRegisteredAsync())
-            {
-                return;
-            }
-
-            if (_fatalSessionEnded)
-            {
-                RuntimeDiagnosticsService.Instance.Write(
-                    "connection",
-                    "resume-blocked",
-                    "reason=fatal-session-ended");
-                return;
-            }
-
-            _suppressReconnect = false;
-
-            if (await ConsumeBrokerReconnectRequestAsync())
-            {
-                Interlocked.Exchange(ref _forceFreshConnectOnResume, 1);
-            }
-
-            var brokerSocket = _socket;
-            if (brokerSocket != null && brokerSocket.IsSocketOwnedByBroker)
-            {
-                RuntimeDiagnosticsService.Instance.Write(
-                    "socket-broker",
-                    "resume-reclaim-start",
-                    "transport=" + brokerSocket.TransportName);
-                try
-                {
-                    if (await brokerSocket.ReclaimSocketFromBrokerAsync())
-                    {
-                        Interlocked.Exchange(ref _forceFreshConnectOnResume, 0);
-                        StartConnectionHealthMonitor(brokerSocket);
-                        RestartIncomingMessagePumpIfNeeded();
-                        PublishConnectionUpdate("connected");
-                        RuntimeDiagnosticsService.Instance.Write(
-                            "socket-broker",
-                            "resume-reclaim-complete",
-                            "transport=" + brokerSocket.TransportName);
-                        return;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    RuntimeDiagnosticsService.Instance.RecordException(
-                        "socket-broker",
-                        "resume-reclaim-failed",
-                        ex);
-                }
-
-                Interlocked.Exchange(ref _forceFreshConnectOnResume, 1);
-            }
-
-            bool fastResume = Interlocked.Exchange(ref _forceFreshConnectOnResume, 0) == 1;
-            RuntimeDiagnosticsService.Instance.Write(
-                "connection",
-                "fast-resume-start",
-                "freshTransport=" + fastResume + "; sharedKeyStore=" + (_sharedKeyStore != null));
-            try
-            {
-                await EnsureConnectedAsync(fastResume ? 22000 : 35000, fastResume);
-                RestartIncomingMessagePumpIfNeeded();
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WhatsAppService] Immediate resume reconnect failed: {ex.Message}");
-                ScheduleAutoReconnect("resume-fallback");
-            }
-        }
-
-        private async Task<bool> ConsumeBrokerReconnectRequestAsync()
-        {
-            BrokerInterprocessLease lease = null;
-            try
-            {
-                lease = await BrokerInterprocessLock.AcquireAsync(
-                    "foreground:consume-reconnect",
-                    TimeSpan.FromSeconds(8),
-                    CancellationToken.None);
-                if (lease == null)
-                {
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "socket-broker",
-                        "reconnect-request-lock-timeout");
-                    return false;
-                }
-
-                BrokerOwnershipState state = await BrokerOwnershipStore.LoadAsync();
-                if (state == null)
-                {
-                    return false;
-                }
-
-                bool brokerEntryMissing =
-                    string.Equals(state.Owner, "broker", StringComparison.Ordinal) &&
-                    DateTime.UtcNow - state.UpdatedUtc > TimeSpan.FromSeconds(3) &&
-                    !SocketActivityInformation.AllSockets.ContainsKey(state.SocketId);
-                if (!state.ReconnectRequired && !brokerEntryMissing)
-                {
-                    return false;
-                }
-
-                RuntimeDiagnosticsService.Instance.Write(
-                    "socket-broker",
-                    "reconnect-request-consumed",
-                    "id=" + state.SocketId +
-                    "; closeCount=" + state.SocketClosedCount +
-                    "; reason=" + state.LastReason +
-                    "; brokerEntryMissing=" + brokerEntryMissing);
-
-                StopConnectionHealthMonitor("broker-reconnect-request");
-                await SocketBrokerCoordinator.DisposeBrokerSocketAsync(state.SocketId);
-
-                IWhatsAppSocket staleSocket = _socket;
-                _socket = null;
-                if (staleSocket != null)
-                {
-                    try { staleSocket.Disconnect(); } catch { }
-                    try { staleSocket.Dispose(); } catch { }
-                }
-
-                await NoiseSessionStore.ClearAsync();
-                return true;
-            }
-            catch (Exception ex)
-            {
-                RuntimeDiagnosticsService.Instance.RecordException(
-                    "socket-broker",
-                    "reconnect-request-consume-failed",
-                    ex);
-                return false;
-            }
-            finally
-            {
-                if (lease != null)
-                {
-                    await lease.ReleaseAsync();
-                }
-            }
-        }
-
-        public async Task<bool> TransferActiveSocketToBrokerAsync(string reason)
-        {
-            var socket = _socket;
-            if (socket == null || !socket.IsConnected || !socket.IsHandshakeComplete)
-            {
-                RuntimeDiagnosticsService.Instance.Write(
-                    "socket-broker",
-                    "transfer-skipped",
-                    "reason=no-ready-socket; trigger=" + (reason ?? string.Empty));
-                return false;
-            }
-
-            if (socket.IsSocketOwnedByBroker)
-            {
-                return true;
-            }
-
-            StopConnectionHealthMonitor("socket-broker-transfer");
-            try
-            {
-                Task displayNameSnapshotTask =
-                    PersistBackgroundDisplayNamesAsync();
-                await PrepareForSuspendAsync();
-                await displayNameSnapshotTask;
-
-                bool transferred = await socket.TransferSocketToBrokerAsync(reason);
-                if (transferred)
-                {
-                    PublishConnectionUpdate("background");
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "socket-broker",
-                        "service-transfer-complete",
-                        "transport=" + socket.TransportName + "; reason=" + reason);
-                    return true;
-                }
-            }
-            catch (Exception ex)
-            {
-                RuntimeDiagnosticsService.Instance.RecordException(
-                    "socket-broker",
-                    "service-transfer-failed",
-                    ex);
-            }
-
-            StartConnectionHealthMonitor(socket);
-            return false;
-        }
-
-        private async Task PersistBackgroundDisplayNamesAsync()
-        {
-            try
-            {
-                var displayNames =
-                    new Dictionary<string, string>(
-                        StringComparer.OrdinalIgnoreCase);
-                foreach (ChatItem chat in Chats.ToList())
-                {
-                    if (chat == null ||
-                        string.IsNullOrWhiteSpace(chat.JID) ||
-                        string.IsNullOrWhiteSpace(chat.Name))
-                    {
-                        continue;
-                    }
-                    displayNames[chat.JID] = chat.Name;
-                }
-
-                // Group participants are not necessarily present as chat rows.
-                // Include names learned from WhatsApp and prefer the user's local
-                // address-book label when both are available.
-                foreach (var pair in ContactNames.ToList())
-                {
-                    if (!string.IsNullOrWhiteSpace(pair.Key) &&
-                        !string.IsNullOrWhiteSpace(pair.Value) &&
-                        !displayNames.ContainsKey(pair.Key))
-                    {
-                        displayNames[pair.Key] = pair.Value;
-                    }
-                }
-                foreach (var pair in PhoneContactNamesByJid.ToList())
-                {
-                    if (!string.IsNullOrWhiteSpace(pair.Key) &&
-                        !string.IsNullOrWhiteSpace(pair.Value))
-                    {
-                        displayNames[pair.Key] = pair.Value;
-                    }
-                }
-
-                // Mirror known PN/LID aliases so the external envelope can resolve
-                // whichever identity form the server used for this message.
-                foreach (var alias in JidAlias.ToList())
-                {
-                    if (string.IsNullOrWhiteSpace(alias.Key) ||
-                        string.IsNullOrWhiteSpace(alias.Value))
-                    {
-                        continue;
-                    }
-
-                    string name;
-                    if (displayNames.TryGetValue(alias.Key, out name) &&
-                        !displayNames.ContainsKey(alias.Value))
-                    {
-                        displayNames[alias.Value] = name;
-                    }
-                    else if (displayNames.TryGetValue(alias.Value, out name) &&
-                             !displayNames.ContainsKey(alias.Key))
-                    {
-                        displayNames[alias.Key] = name;
-                    }
-                }
-
-                await BackgroundDisplayNameStore.SaveAsync(
-                    displayNames,
-                    _authState?.Me?.Id,
-                    _authState?.Me?.Lid);
-                RuntimeDiagnosticsService.Instance.Write(
-                    "socket-broker",
-                    "display-name-snapshot-persisted",
-                    "count=" + displayNames.Count);
-            }
-            catch (Exception nameSnapshotError)
-            {
-                RuntimeDiagnosticsService.Instance.RecordException(
-                    "socket-broker",
-                    "display-name-snapshot-failed",
-                    nameSnapshotError);
-            }
-        }
-
-        private async Task<bool> IsCurrentSocketHealthyAsync()
-        {
-            var socket = _socket;
-            if (socket == null || !socket.IsConnected || !socket.IsHandshakeComplete)
-            {
-                return false;
-            }
-
-            // The verified keep-alive normally produces an inbound IQ result every
-            // twenty seconds. Fresh frames alone are not sufficient when the ordered
-            // protocol queue stopped making progress: in that state the socket can
-            // answer pings while user messages never reach the application.
-            if (socket.HasStalledNodeProcessing(NodeProcessingStallLimit))
-            {
-                Debug.WriteLine($"[WhatsAppService] Socket node queue is stalled (depth={socket.QueuedNodeProcessingCount})");
-            }
-            else if (socket.HasFreshConnection(TimeSpan.FromSeconds(45)))
-            {
-                return true;
-            }
-
-            bool healthy = !socket.HasStalledNodeProcessing(NodeProcessingStallLimit) &&
-                           await socket.ProbeConnectionAsync(10000);
-            if (healthy)
-            {
-                return true;
-            }
-
-            bool previousSuppressReconnect = _suppressReconnect;
-            _suppressReconnect = true;
-            try
-            {
-                socket.Disconnect();
-            }
-            catch
-            {
-            }
-            finally
-            {
-                _suppressReconnect = previousSuppressReconnect;
-            }
-
-            if (ReferenceEquals(_socket, socket))
-            {
-                _socket = null;
-            }
-            return false;
-        }
-
-        /// <summary>
-        /// Ensures that the socket is usable before an operation that requires the
-        /// network. This is needed after Windows resumes a suspended UWP process:
-        /// the UI survives, but the WebSocket was intentionally closed on suspend.
-        /// </summary>
-        public async Task EnsureConnectedAsync(int timeoutMs = 35000, bool forceFreshTransport = false)
-        {
-            // A known UWP suspension always closes the transport. Probing that dead
-            // MessageWebSocket used to consume a fixed ten-second timeout on every resume.
-            if (!forceFreshTransport && await IsCurrentSocketHealthyAsync())
-            {
-                return;
-            }
-
-            await _resumeConnectionLock.WaitAsync();
-            try
-            {
-                if (!forceFreshTransport && await IsCurrentSocketHealthyAsync())
-                {
-                    return;
-                }
-
-                if (forceFreshTransport)
-                {
-                    DropCurrentSocketForFastResume();
-                }
-
-                if (!await IsRegisteredAsync())
-                {
-                    throw new InvalidOperationException("WhatsApp session is not registered");
-                }
-
-                var connectTask = ConnectAsync();
-                var connectCompleted = await Task.WhenAny(connectTask, Task.Delay(timeoutMs));
-                if (connectCompleted != connectTask)
-                {
-                    throw new TimeoutException("Timed out reconnecting to WhatsApp");
-                }
-
-                await connectTask;
-
-                // A duplicate ConnectAsync call can return while another connection
-                // attempt owns the socket. In that case wait for the shared session
-                // gate instead of failing the user's send immediately.
-                if (!IsConnected)
-                {
-                    var gate = _sessionEstablishedTcs.Task;
-                    var gateCompleted = await Task.WhenAny(gate, Task.Delay(timeoutMs));
-                    if (gateCompleted == gate)
-                    {
-                        try
-                        {
-                            await gate;
-                        }
-                        catch
-                        {
-                            // The connection check below provides the user-facing error.
-                        }
-                    }
-                }
-
-                if (!IsConnected)
-                {
-                    throw new InvalidOperationException("WhatsApp connection is not ready");
-                }
-            }
-            finally
-            {
-                _resumeConnectionLock.Release();
-            }
-        }
-
-        private void DropCurrentSocketForFastResume()
-        {
-            var socket = _socket;
-            if (socket == null)
-            {
-                return;
-            }
-
-            bool previousSuppress = _suppressReconnect;
-            _suppressReconnect = true;
-            try
-            {
-                _socket = null;
-                socket.Disconnect();
-                socket.Dispose();
-            }
-            catch
-            {
-            }
-            finally
-            {
-                _suppressReconnect = previousSuppress;
-            }
-        }
-
         private static string GenerateOutgoingMessageId()
         {
             var randomBytes = CryptoUtils.RandomBytes(10);
@@ -4258,3940 +2219,24 @@ namespace Unison.Uwp.Services.WhatsApp
             });
         }
 
-        public async Task ConnectAsync()
-        {
-            // Serialize connection attempts. More than one lifecycle callback can fire
-            // during launch/resume on Windows 10 Mobile. The old implementation let each
-            // caller replace a socket that had just become healthy, producing connection
-            // storms and stale send/receive tasks.
-            await _connectLock.WaitAsync();
-            try
-            {
-                var current = _socket;
-                // Sessao registrada: reutiliza socket saudavel.
-                // Sem registro (tela de QR): NAO pular ? pair-device/QR so chega em
-                // conexao nova; Reload QR precisa forcar reconnect.
-                if (current != null &&
-                    current.IsConnected &&
-                    current.IsHandshakeComplete &&
-                    _authState != null &&
-                    _authState.Registered)
-                {
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "connection",
-                        "connect-skipped",
-                        "reason=already-healthy");
-                    return;
-                }
-
-                if (current != null &&
-                    current.IsConnected &&
-                    current.IsHandshakeComplete &&
-                    (_authState == null || !_authState.Registered))
-                {
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "connection",
-                        "connect-force-fresh-for-qr",
-                        "reason=unregistered-reconnect");
-                    try
-                    {
-                        SessionLogger.Instance.WriteAlways(
-                            "[Pairing] ConnectAsync forcing fresh socket for QR refresh");
-                    }
-                    catch { }
-                }
-
-                // Registered session marked dead (401/revoked), or a wipe already dropped auth:
-                // do not clear suppress or open another socket. Unregistered QR after wipe
-                // clears the latch before pairing starts, so that path still gets through.
-                if (ShouldRefuseConnectBecauseSessionDied())
-                {
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "connection",
-                        "connect-aborted",
-                        "reason=fatal-session-ended");
-                    return;
-                }
-
-                // Only reset per-connection gates when a new transport will actually
-                // be created. Resetting them before waiting on the lock allowed a second
-                // caller to invalidate the first caller's successful session gate.
-                if (!_fatalSessionEnded)
-                {
-                    _suppressReconnect = false;
-                }
-                _sessionEstablishedThisConnection = false;
-                _sessionEstablishedTcs = CreateSessionEstablishedTcs();
-                _historyIdentityRefreshTriggeredThisSession = false;
-                _qrDeliveredThisConnection = false;
-
-                _isConnecting = true;
-                
-                StopConnectionHealthMonitor("connect-replace-socket");
-                if (_socket != null)
-                {
-                    _debugSendService?.Stop("reconnect");
-                    var previousSocket = _socket;
-                    _socket = null;
-                    previousSocket.Disconnect();
-                    previousSocket.Dispose();
-                }
-
-                CancelDeferredProfilePictureResolution();
-
-                if (_authState == null) await InitializeConnectionStateAsync();
-
-                // A session wipe running alongside this drops the state, and the login surface
-                // it raises is what started this attempt in the first place. There is nothing to
-                // connect with, and the wipe starts pairing again when it finishes, so standing
-                // down is the entire response.
-                var auth = _authState;
-                if (auth == null)
-                {
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "connection",
-                        "connect-aborted",
-                        "reason=session-wipe-in-flight");
-                    return;
-                }
-
-                if (ShouldRefuseConnectBecauseSessionDied())
-                {
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "connection",
-                        "connect-aborted",
-                        "reason=fatal-session-ended-after-auth-load");
-                    return;
-                }
-
-                _deferReconnectWorkUntilReplayDrain = auth.Registered;
-                if (!_fatalSessionEnded)
-                {
-                    _suppressReconnect = false;
-                }
-
-                // Pre-session-close â†’ logout only for returning registered companions.
-                // Fresh QR (unregistered) and 515 pairing stage-2 must not escalate closes.
-                _countPreSessionCloseAsFatal = auth.Registered && !_pairingRestartPending;
-                if (!_countPreSessionCloseAsFatal)
-                {
-                    Interlocked.Exchange(ref _preSessionCloseStreak, 0);
-                }
-
-                Debug.WriteLine($"[WhatsAppService] ConnectAsync using AuthState (ObjID: {auth.GetHashCode()}), Registered: {auth.Registered}, Me: {auth.Me?.Id}");
-                _fullHistoryOnDemandRequestedThisSession = false;
-                _fullHistoryOnDemandRequestId = null;
-                _fullHistoryRepairRequestId = null;
-                _lastHistorySyncReceivedUtc = DateTime.MinValue;
-                _lastHistorySyncTypeReceived = null;
-                lock (_historyOnDemandLock)
-                {
-                    _historyOnDemandMarkerByChat.Clear();
-                    _historyOnDemandInFlight.Clear();
-                    _historyOnDemandRequestById.Clear();
-                    _historyOnDemandLastRequestIdByChat.Clear();
-                    _historyOnDemandAttemptsByChat.Clear();
-                    _historyOnDemandRejectedUntilUtcByChat.Clear();
-                }
-                
-                bool reuseLoadedKeyState = _sharedKeyStore != null &&
-                                           (auth.Sessions.Count > 0 || auth.PreKeys.Count > 0);
-
-                IWhatsAppSocket socket = BuildSocketBridge(reuseLoadedKeyState);
-
-                _socket = socket;
-                socket.OnQRCodeReceived += (s, qr) =>
-                {
-                    if (!IsCurrentSocket(s))
-                    {
-                        try
-                        {
-                            SessionLogger.Instance.WriteAlways(
-                                "[Pairing] Ignoring QR from stale socket");
-                        }
-                        catch { }
-                        return;
-                    }
-
-                    try
-                    {
-                        SessionLogger.Instance.WriteAlways(
-                            "[Pairing] WhatsAppService raising OnQRCodeReceived len=" +
-                            (qr?.Length ?? 0));
-                    }
-                    catch { }
-
-                    _qrDeliveredThisConnection = true;
-                    OnQRCodeReceived?.Invoke(this, qr);
-                };
-                socket.OnPresenceUpdate += (s, e) =>
-                {
-                    if (!IsCurrentSocket(s)) return;
-                    OnPresenceUpdate?.Invoke(this, e);
-                };
-                RegisterSocketAliases("service-known-aliases");
-
-            
-            // Initialize KeyStore and load persisted sessions/account. On same-process
-            // resume this reuses the already-populated cache instead of rereading every file.
-            await socket.InitializeKeyStoreAsync();
-            _sharedKeyStore = socket.PersistentKeyStore;
-            RuntimeDiagnosticsService.Instance.Write(
-                "connection",
-                reuseLoadedKeyState ? "fast-resume-key-store-reused" : "key-store-cold-loaded",
-                "sessions=" + _authState.Sessions.Count + "; prekeys=" + _authState.PreKeys.Count);
-            socket.OnAuthStateUpdate += async (s, e) =>
-            {
-                if (!IsCurrentSocket(s)) return;
-                Debug.WriteLine("[WhatsAppService] Auth state updated, saving...");
-                if (_authState?.Me != null && !string.IsNullOrEmpty(_authState.Me.Id) && !string.IsNullOrEmpty(_authState.Me.Lid))
-                {
-                    string id = NormalizeJid(_authState.Me.Id);
-                    string lid = NormalizeJid(_authState.Me.Lid);
-                    if (!string.IsNullOrEmpty(id) && !string.IsNullOrEmpty(lid) && id != lid)
-                    {
-                        JidAlias[id] = lid;
-                        JidAlias[lid] = id;
-                        RegisterSocketAlias(id, lid, "auth-update-identity");
-                        Debug.WriteLine($"[WhatsAppService] Auth update identity alias: {id} <-> {lid}");
-                    }
-                }
-                await PersistAuthStateAsync(s as IWhatsAppSocket, "socket-auth-update");
-            };
-            
-            socket.OnConnectionUpdate += (s, status) => 
-            {
-                if (!IsCurrentSocket(s))
-                {
-                    Debug.WriteLine($"[WhatsAppService] Ignoring stale socket status: {status}");
-                    return;
-                }
-
-                if (_suppressReconnect || _fatalSessionEnded)
-                {
-                    Debug.WriteLine($"[WhatsAppService] Connection update '{status}' ignored during intentional shutdown");
-                    PublishConnectionUpdate(status);
-                    return;
-                }
-
-                if (status == "restart")
-                {
-                    // pair-success already set Registered=true; 515 close is expected.
-                    // Do not let pre-session-close streak treat this as a revoked logout.
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "connection",
-                        "pairing-restart",
-                        "code=515");
-
-                    PairingTrace("connection status=restart â†’ stage2");
-                    TryStartPairingStage2Reconnect("connection-update-restart");
-                }
-                else if (status == "close" && _authState != null && _authState.Registered)
-                {
-                    StopConnectionHealthMonitor("socket-close");
-
-                    if (_pairingRestartPending)
-                    {
-                        // Stage-2 already owns the window (ReconnectForPairingAsync / stream 515).
-                        // Do NOT ScheduleAutoReconnect and do NOT restart Connect here â€”
-                        // _isReconnecting is cleared as soon as ConnectAsync() returns, while
-                        // OnSessionInitialized may still be outstanding.
-                        RuntimeDiagnosticsService.Instance.Write(
-                            "connection",
-                            "pairing-restart-close",
-                            "ignored-pre-session-streak=true");
-                        PairingTrace(
-                            "close while pairingRestartPending â†’ SKIP ScheduleAutoReconnect " +
-                            "(stage2 owner)");
-                        PublishConnectionUpdate(status);
-                        return;
-                    }
-
-                    // Mobile often delivers close(1006) milliseconds BEFORE status=restart /
-                    // before OnStreamError finishes. Registered is already true from
-                    // pair-success, session not established, pre-session-fatal off (QR) â€”
-                    // claim stage-2 now so generic AutoReconnect cannot win the race.
-                    if (!_sessionEstablishedThisConnection && !_countPreSessionCloseAsFatal)
-                    {
-                        RuntimeDiagnosticsService.Instance.Write(
-                            "connection",
-                            "pairing-close-before-restart",
-                            "claiming-stage2=true");
-                        PairingTrace(
-                            "close BEFORE restart flag â†’ claim stage2 (close-before-restart race)");
-                        TryStartPairingStage2Reconnect("close-before-restart");
-                        PublishConnectionUpdate(status);
-                        return;
-                    }
-
-                    if (!_sessionEstablishedThisConnection && _countPreSessionCloseAsFatal)
-                    {
-                        int streak = Interlocked.Increment(ref _preSessionCloseStreak);
-                        RuntimeDiagnosticsService.Instance.Write(
-                            "connection",
-                            "pre-session-close",
-                            "streak=" + streak + "; threshold=" + PreSessionCloseFatalThreshold);
-                        if (streak >= PreSessionCloseFatalThreshold)
-                        {
-                            // Report only â€” ConnectionFacade decides auto-unlink policy.
-                            if (_connectionService != null)
-                            {
-                                _connectionService.NotifySuspectedInvalidSession("pre-session-close-streak");
-                            }
-
-                            if (_fatalSessionEnded)
-                            {
-                                PublishConnectionUpdate(status);
-                                return;
-                            }
-
-                            // Policy skipped (offline / setting off): keep reconnecting.
-                        }
-                    }
-                    else if (_sessionEstablishedThisConnection)
-                    {
-                        Interlocked.Exchange(ref _preSessionCloseStreak, 0);
-                    }
-
-                    ScheduleAutoReconnect("socket-close");
-                }
-                else if (status == "close" &&
-                         _qrDeliveredThisConnection &&
-                         !_pairingRestartPending &&
-                         (_authState == null || !_authState.Registered))
-                {
-                    // Nothing brings a pairing session back: the reconnect loop stands down while
-                    // the account is unregistered, deliberately. So this close is the end of the
-                    // QR on screen - the refs the server handed out ran out, or the socket
-                    // dropped - and saying nothing leaves the login surface showing a code the
-                    // phone has already stopped accepting, with no way to ask for another.
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "connection",
-                        "qr-expired",
-                        "trigger=socket-close");
-                    PairingTrace("socket closed while unregistered; QR expired");
-                    OnQrExpired?.Invoke(this, EventArgs.Empty);
-                }
-
-                PublishConnectionUpdate(status);
-            };
-
-            socket.OnSessionInitialized += async (s, e) => 
-            {
-                if (!IsCurrentSocket(s))
-                {
-                    PairingTrace("OnSessionInitialized IGNORED (stale socket)");
-                    return;
-                }
-
-                if (_fatalSessionEnded)
-                {
-                    PairingTrace("OnSessionInitialized IGNORED (fatal session ended)");
-                    return;
-                }
-
-                PairingTrace("OnSessionInitialized â†’ raising UI event");
-                Debug.WriteLine("[WhatsAppService] Session initialized - triggering missing name resolution");
-                _sessionEstablishedThisConnection = true;
-                _pairingRestartPending = false;
-                _countPreSessionCloseAsFatal = true;
-                Interlocked.Exchange(ref _preSessionCloseStreak, 0);
-                _sessionEstablishedTcs.TrySetResult(true);
-                EnsureSelfPhonePersisted();
-                await PersistAuthStateAsync(s as IWhatsAppSocket, "session-initialized");
-
-                bool deferReplayWork = ShouldDeferReconnectReplayWork();
-
-                if (deferReplayWork)
-                {
-                    Debug.WriteLine("[WhatsAppService] Deferring reconnect name/group work until replay drain completes.");
-                }
-                else
-                {
-                    // Names and avatars are enrichment, not connection prerequisites.
-                    // Schedule them after the first messages and input are responsive.
-                    SchedulePostReplayMaintenance(0);
-                    _ = TryConsumeMessageStoreForceHistoryRepairAsync("session-initialized");
-                }
-                 
-                OnSessionInitialized?.Invoke(this, EventArgs.Empty);
-                PairingTrace("OnSessionInitialized UI event raised");
-            };
-
-            socket.OnStreamError += (s, code) =>
-            {
-                bool current = IsCurrentSocket(s);
-                bool explicitLogout = IsExplicitLogoutStreamCode(code);
-
-                // A 401/device_removed on the socket we just replaced is still the
-                // account being revoked — the reconnect loop made this sender "stale"
-                // before the close reason finished dispatching.
-                if (!current && !explicitLogout)
-                {
-                    return;
-                }
-
-                if (string.Equals(code, "515", StringComparison.Ordinal))
-                {
-                    if (!current)
-                    {
-                        return;
-                    }
-
-                    MarkPairingRestartPending("stream-error-515");
-                    TryStartPairingStage2Reconnect("stream-error-515");
-                }
-                else if (explicitLogout)
-                {
-                    LatchFatalSession("stream-" + (code ?? "logout"));
-                }
-
-                if (_connectionService != null)
-                {
-                    _connectionService.NotifyStreamError(code);
-                }
-                else
-                {
-                    Debug.WriteLine("[WhatsAppService] stream:error " + code + " (no IConnectionService)");
-                }
-            };
-
-            socket.OnError += async (s, ex) => 
-            {
-                string fatalCode = TryExtractFatalStreamCodeFromException(ex);
-                bool explicitLogout = IsExplicitLogoutStreamCode(fatalCode);
-                bool current = IsCurrentSocket(s);
-
-                if (!current && !explicitLogout)
-                {
-                    return;
-                }
-
-                Debug.WriteLine($"[WhatsAppService] Socket error: {ex.Message}");
-                RuntimeDiagnosticsService.Instance.RecordException(
-                    "connection",
-                    "socket-error",
-                    ex,
-                    "socketConnected=" + socket.IsConnected + "; handshake=" + socket.IsHandshakeComplete);
-
-                if (explicitLogout)
-                {
-                    LatchFatalSession("error-" + fatalCode);
-                }
-
-                if (fatalCode != null && _connectionService != null)
-                {
-                    _connectionService.NotifyStreamError(fatalCode);
-                }
-
-                if (_suppressReconnect || _fatalSessionEnded)
-                {
-                    OnError?.Invoke(this, ex);
-                    return;
-                }
-
-                if (!current)
-                {
-                    return;
-                }
-
-                bool transportFailure =
-                    ex is TimeoutException ||
-                    ex is IOException ||
-                    !socket.IsConnected ||
-                    !socket.IsHandshakeComplete ||
-                    ex.Message.Contains("0x80072F7D") ||
-                    ex.Message.Contains("Secure Channel Failure") ||
-                    ex.Message.Contains("keep-alive");
-
-                if (transportFailure)
-                {
-                    if (_pairingRestartPending)
-                    {
-                        PairingTrace("transport failure during pairing stage2 â†’ defer to ReconnectForPairingAsync");
-                    }
-                    else
-                    {
-                        Debug.WriteLine("[WhatsAppService] Transport failure detected; persistent reconnect scheduled");
-                        await Task.Delay(250);
-                        if (!_fatalSessionEnded && !_suppressReconnect)
-                        {
-                            ScheduleAutoReconnect("socket-error");
-                        }
-                    }
-                }
-
-                OnError?.Invoke(this, ex);
-            };
-
-            socket.OnMessage += (s, node) => 
-            {
-                if (!IsCurrentSocket(s)) return;
-                if (node != null && string.Equals(node.Tag, "ack", StringComparison.OrdinalIgnoreCase))
-                {
-                    HandlePlaceholderResendAckNode(node);
-                    HandleHistoryOnDemandAckNode(node);
-                }
-
-                // Collect pushname from notify attribute on incoming messages
-                if (node != null && node.Attrs.TryGetValue("from", out var from) && node.Attrs.TryGetValue("notify", out var notify))
-                {
-                    if (!string.IsNullOrEmpty(from) && !string.IsNullOrEmpty(notify))
-                    {
-                        node.Attrs.TryGetValue("participant", out var participantFromNode);
-                        string targetNotifyJid = from;
-                        if (!string.IsNullOrEmpty(participantFromNode) &&
-                            from.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase))
-                        {
-                            // For group traffic, notify usually belongs to participant, not the group chat JID.
-                            targetNotifyJid = participantFromNode;
-                        }
-
-                        string normalizedNotifyTarget = NormalizeJid(targetNotifyJid);
-                        string sanitizedNotify = SanitizeContactLabel(notify, normalizedNotifyTarget);
-                        if (!string.IsNullOrEmpty(sanitizedNotify))
-                        {
-                            bool changed = !ContactNames.TryGetValue(normalizedNotifyTarget, out var existingNotifyName) ||
-                                           !string.Equals(existingNotifyName, sanitizedNotify, StringComparison.Ordinal);
-                            if (changed)
-                            {
-                                RememberPersonName(normalizedNotifyTarget, sanitizedNotify);
-                                Debug.WriteLine($"[WhatsAppService] Captured pushname from notify: {targetNotifyJid} -> {sanitizedNotify}");
-                            }
-                        }
-                        else
-                        {
-                            Debug.WriteLine($"[WhatsAppService] Ignored notify pushname '{notify}' for {normalizedNotifyTarget}");
-                        }
-
-                        // Our own name, when the stanza is one of ours. The test used to be an
-                        // exact match against Me.Id, which is the account's phone-number JID -
-                        // and the server now addresses us by LID as often as not, so the one
-                        // stanza that carries the user's own name was the one it turned away.
-                        // IsSelfLinkedJid knows about both addresses and the aliases between them.
-                        if (!string.IsNullOrEmpty(sanitizedNotify) &&
-                            IsSelfLinkedJid(normalizedNotifyTarget))
-                        {
-                            CaptureSelfPushName(sanitizedNotify, "stanza-notify");
-                        }
-
-                        // Proactively update any matching chat on the captured UI
-                        // dispatcher. Enumerating and mutating bound chat rows from the
-                        // socket thread caused RPC_E_WRONG_THREAD after reconnect.
-                        _ = RunOnUiThreadAsync(() =>
-                        {
-                            foreach (var chat in Chats)
-                            {
-                                if (NormalizeJid(chat.JID) == normalizedNotifyTarget)
-                                {
-                                    string bareJid = chat.JID.Split('@')[0];
-                                    if (chat.Name == bareJid || chat.Name.Contains("@") || string.IsNullOrEmpty(chat.Name) || IsSelfMarkerLabel(chat.Name))
-                                    {
-                                        chat.Name = sanitizedNotify ?? bareJid;
-                                    }
-                                    break;
-                                }
-                            }
-                        });
-                    }
-                }
-
-                OnMessage?.Invoke(this, node);
-            };
-
-            socket.OnHistorySyncReceived += (s, sync) => 
-            {
-                // Not gated on the socket still being the current one, unlike everything else
-                // here. A history chunk is the account's past: it was downloaded and decrypted
-                // before the connection was replaced, it says nothing about the connection, and
-                // the phone will not offer it again. Turning it away because a reconnect happened
-                // mid-sync is how an account that synced hundreds of chats ended up showing a few
-                // dozen, most of them still labelled with a phone number. A wiped session is the
-                // one case where there is nothing left to merge into.
-                if (_fatalSessionEnded || _authState == null)
-                {
-                    return;
-                }
-
-                bool hasContent = sync != null &&
-                                  ((sync.Conversations?.Count ?? 0) > 0 ||
-                                   sync.Pushnames?.Count > 0);
-
-                // SocketClient raises this event from its dedicated history pipeline,
-                // never from the UI thread. Wait for the current payload to be consumed
-                // before allowing the next large protobuf object into memory.
-                // Prefer MessageFacade so Person upserts run before core history apply.
-                if (_messageService != null)
-                {
-                    _messageService.SyncMessageHistoryAsync(sync).GetAwaiter().GetResult();
-                }
-                else
-                {
-                    ProcessHistorySyncCoreAsync(sync).GetAwaiter().GetResult();
-                }
-                EnableScheduledPersist("history sync received");
-                if (hasContent && !_historyIdentityRefreshTriggeredThisSession)
-                {
-                    if (ShouldDeferReconnectReplayWork())
-                    {
-                        Debug.WriteLine("[WhatsAppService] Deferring one-shot identity refresh until replay drain completes.");
-                    }
-                    else
-                    {
-                        _historyIdentityRefreshTriggeredThisSession = true;
-                        Debug.WriteLine("[WhatsAppService] Scheduling one-shot identity refresh after first non-empty history sync.");
-                        SchedulePostReplayMaintenance(0);
-                    }
-                }
-                OnHistorySyncReceived?.Invoke(this, sync);
-            };
-
-            // Handle real-time decrypted messages (not history sync)
-            socket.OnDecryptedMessageReceived += (s, e) =>
-            {
-                if (!IsCurrentSocket(s)) return Task.CompletedTask;
-                Interlocked.Increment(ref _diagnosticsDecryptedEventCount);
-                Interlocked.Exchange(ref _diagnosticsLastDecryptedEventUtcTicks, DateTime.UtcNow.Ticks);
-                EnqueueDecryptedMessage(e);
-                return Task.CompletedTask;
-            };
-
-            socket.OnMissingMessageDetected += (s, e) =>
-            {
-                if (!IsCurrentSocket(s)) return;
-                RegisterMissingMessage(e.ChatJid, e.Participant, e.MessageId, e.IsFromMe, e.Timestamp, e.Reason);
-                _ = TryRequestPlaceholderResendAsync(e.ChatJid, e.MessageId, $"socket:{e.Reason}");
-            };
-
-            socket.OnOutgoingMessageStatusChanged += (s, e) =>
-            {
-                if (!IsCurrentSocket(s)) return;
-                _ = UpdateOutgoingMessageStatusSafelyAsync(e?.MessageId, e?.Status, e?.Error);
-            };
-
-            socket.OnReceiptReceived += (s, node) =>
-            {
-                if (!IsCurrentSocket(s)) return;
-                _ = HandleMessageReceiptSafelyAsync(node);
-            };
-
-            socket.OnLinkCodeCompanionReg += (s, node) =>
-            {
-                if (IsCurrentSocket(s)) OnLinkCodeCompanionReg?.Invoke(this, node);
-            };
-
-            // Handle replay release after server offline completion or the long safety timeout.
-            socket.OnReceivedPendingNotifications += async (s, offlineCount) =>
-            {
-                if (!IsCurrentSocket(s)) return;
-                Debug.WriteLine($"[WhatsAppService] Received pending-notification replay release ({offlineCount} messages)");
-                _deferReconnectWorkUntilReplayDrain = false;
-                try
-                {
-                    await FlushOfflineReplayMessagesAsync($"offline-complete:{offlineCount}");
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[WhatsAppService] Non-fatal offline replay message flush failure after offline drain: {ex.Message}");
-                }
-                try
-                {
-                    await ApplyOfflineReplayChatSummariesAsync($"offline-complete:{offlineCount}");
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[WhatsAppService] Non-fatal offline replay UI summary failure after offline drain: {ex.Message}");
-                }
-                // The per-chat replay summaries already updated the affected rows.
-                // Global scans of every chat file used to run here on the critical
-                // startup path, competing with input, key storage and replay persistence.
-                // Schedule optional repair/enrichment only after the app is settled.
-                SchedulePostReplayMaintenance(offlineCount);
-
-                PublishConnectionUpdate("synced");
-                EnableScheduledPersist($"offline completion ({offlineCount} messages)");
-                LogHistoryFreshnessAfterOfflineDrain(offlineCount);
-                _ = TryConsumeMessageStoreForceHistoryRepairAsync($"offline-complete:{offlineCount}");
-                SchedulePendingPlaceholderResendDrain($"offline-complete:{offlineCount}", maxRequests: 8);
-
-                // Name/contact/avatar work is part of the delayed maintenance job.
-                // It must never contend with the first visible messages after launch.
-            };
-
-            // Dirty bits and server_sync are answered inside the session now: the socket layer
-            // clears the flag and its own app state module runs the resync, so there is nothing
-            // for the service to coordinate.
-
-            _debugSendService?.Start();
-            try
-            {
-                if (ShouldRefuseConnectBecauseSessionDied())
-                {
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "connection",
-                        "connect-aborted",
-                        "reason=fatal-session-ended-before-socket");
-                    try { socket.Dispose(); } catch { }
-                    if (ReferenceEquals(_socket, socket))
-                    {
-                        _socket = null;
-                    }
-                    return;
-                }
-
-                await socket.ConnectAsync();
-                if (ReferenceEquals(_socket, socket))
-                {
-                    StartConnectionHealthMonitor(socket);
-                }
-            }
-            catch
-            {
-                if (ReferenceEquals(_socket, socket))
-                {
-                    _socket = null;
-                }
-                try { socket.Dispose(); } catch { }
-                throw;
-            }
-            }
-            finally
-            {
-                _isConnecting = false;
-                _connectLock.Release();
-            }
-        }
-
-        public Task AutoReconnectAsync()
-        {
-            ScheduleAutoReconnect("explicit-auto-reconnect");
-            return Task.CompletedTask;
-        }
-
-        private async Task AutoReconnectLoopAsync(string trigger)
-        {
-            int attempt = 0;
-            Exception lastError = null;
-
-            while (!_suppressReconnect && !_fatalSessionEnded)
-            {
-                if (_pairingRestartPending)
-                {
-                    PairingTrace(
-                        "AutoReconnectLoop EXIT â€” pairingRestartPending (trigger=" +
-                        (trigger ?? string.Empty) + ")");
-                    return;
-                }
-
-                try
-                {
-                    if (await IsCurrentSocketHealthyAsync())
-                    {
-                        Debug.WriteLine($"[WhatsAppService] Reconnect loop found a healthy socket ({trigger})");
-                        return;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    lastError = ex;
-                }
-
-                await InitializeAsync();
-                if (_authState == null || !_authState.Registered || _fatalSessionEnded)
-                {
-                    Debug.WriteLine("[WhatsAppService] Reconnect loop stopped because the session is not registered");
-                    return;
-                }
-
-                if (_pairingRestartPending)
-                {
-                    PairingTrace("AutoReconnectLoop EXIT before delay â€” pairing claimed stage2");
-                    return;
-                }
-
-                TimeSpan delay = ReconnectBackoff[Math.Min(attempt, ReconnectBackoff.Length - 1)];
-                PublishConnectionUpdate("reconnecting");
-                Debug.WriteLine($"[WhatsAppService] Reconnect attempt {attempt + 1} in {delay.TotalSeconds:F0}s (trigger={trigger})");
-
-                try
-                {
-                    await Task.Delay(delay);
-                    if (_suppressReconnect || _fatalSessionEnded || _pairingRestartPending)
-                    {
-                        if (_pairingRestartPending)
-                        {
-                            PairingTrace("AutoReconnectLoop EXIT after delay â€” pairing claimed stage2");
-                        }
-                        return;
-                    }
-
-                    await ConnectAsync();
-                    if (_fatalSessionEnded)
-                    {
-                        return;
-                    }
-                    if (await IsCurrentSocketHealthyAsync())
-                    {
-                        Debug.WriteLine($"[WhatsAppService] Reconnect succeeded on attempt {attempt + 1}");
-                        return;
-                    }
-
-                    lastError = new InvalidOperationException("Connection completed without a healthy WhatsApp socket");
-                }
-                catch (Exception ex)
-                {
-                    lastError = ex;
-                    Debug.WriteLine($"[WhatsAppService] Reconnect attempt {attempt + 1} failed: {ex.Message}");
-                }
-
-                attempt++;
-            }
-
-            if (lastError != null && !_suppressReconnect && !_fatalSessionEnded)
-            {
-                OnError?.Invoke(this, lastError);
-            }
-        }
-
-        /// <summary>
-        /// Reconnects after close code 515 to complete pairing stage 2
-        /// </summary>
-        private async Task ReconnectForPairingAsync()
-        {
-            bool needsPersistentRetry = false;
-            if (_suppressReconnect || _fatalSessionEnded)
-            {
-                _pairingRestartPending = false;
-                lock (_reconnectStateLock) { _isReconnecting = false; }
-                PairingTrace("ReconnectForPairingAsync aborted (suppress/fatal)");
-                return;
-            }
-
-            try
-            {
-                PairingTrace("ReconnectForPairingAsync waiting 1s then ConnectAsyncâ€¦");
-                Log($"[WhatsAppService] Resetting session and deleting local data...");
-                await Task.Delay(1000); // Wait for the stage 1 socket to fully close
-                await ConnectAsync();
-                PairingTrace(
-                    "ReconnectForPairingAsync ConnectAsync returned status=" +
-                    (CurrentConnectionStatus ?? "(null)") +
-                    " registered=" + (_authState?.Registered == true));
-                Debug.WriteLine("[WhatsAppService] Pairing stage 2 connection established");
-            }
-            catch (Exception ex)
-            {
-                PairingTrace("ReconnectForPairingAsync FAILED: " + ex.Message);
-                Debug.WriteLine($"[WhatsAppService] Pairing stage 2 reconnect failed: {ex.Message}");
-                OnError?.Invoke(this, ex);
-                needsPersistentRetry = _authState != null && _authState.Registered;
-                // Stage 2 failed â€” allow normal reconnect / revoked detection again.
-                _pairingRestartPending = false;
-            }
-            finally
-            {
-                lock (_reconnectStateLock) { _isReconnecting = false; }
-            }
-
-            if (needsPersistentRetry && !_suppressReconnect && !_fatalSessionEnded)
-            {
-                ScheduleAutoReconnect("pairing-stage2-failed");
-            }
-        }
-
-        private sealed class MessageRenderInfo
-        {
-            public string Content { get; set; }
-            public bool IsImage { get; set; }
-            public bool IsVideo { get; set; }
-            public bool IsSticker { get; set; }
-            public string Caption { get; set; }
-            public Proto.Message.Types.ImageMessage ImageMessage { get; set; }
-            public Proto.Message.Types.StickerMessage StickerMessage { get; set; }
-            public Proto.Message.Types.VideoMessage VideoMessage { get; set; }
-            public bool IsAudio { get; set; }
-            public bool IsVoice { get; set; }
-            public bool IsDocument { get; set; }
-            public Proto.Message.Types.DocumentMessage DocumentMessage { get; set; }
-            public Proto.Message.Types.AudioMessage AudioMessage { get; set; }
-            public string QuotedText { get; set; }
-            public string QuotedSenderName { get; set; }
-            public System.Collections.Generic.List<string> MentionedJids { get; set; }
-
-            public ChatPreviewKind PreviewKind
-            {
-                get
-                {
-                    if (IsImage) return ChatPreviewKind.Image;
-                    if (IsVideo) return ChatPreviewKind.Video;
-                    if (IsSticker) return ChatPreviewKind.Sticker;
-                    if (IsDocument) return ChatPreviewKind.Document;
-                    if (IsVoice || IsAudio) return ChatPreviewKind.Voice;
-                    return ChatPreviewKind.Text;
-                }
-            }
-        }
-
-        private Proto.Message UnwrapMessage(Proto.Message msg)
-        {
-            var current = msg;
-            while (current != null)
-            {
-                if (current.ViewOnceMessage?.Message != null)
-                {
-                    current = current.ViewOnceMessage.Message;
-                    continue;
-                }
-                if (current.ViewOnceMessageV2?.Message != null)
-                {
-                    current = current.ViewOnceMessageV2.Message;
-                    continue;
-                }
-                if (current.EphemeralMessage?.Message != null)
-                {
-                    current = current.EphemeralMessage.Message;
-                    continue;
-                }
-                if (current.DocumentWithCaptionMessage?.Message != null)
-                {
-                    current = current.DocumentWithCaptionMessage.Message;
-                    continue;
-                }
-                break;
-            }
-            return current;
-        }
-
-        private static Proto.ContextInfo GetContextInfo(Proto.Message unwrapped)
-        {
-            if (unwrapped == null)
-            {
-                return null;
-            }
-
-            return unwrapped.ExtendedTextMessage?.ContextInfo
-                ?? unwrapped.ImageMessage?.ContextInfo
-                ?? unwrapped.VideoMessage?.ContextInfo
-                ?? unwrapped.AudioMessage?.ContextInfo
-                ?? unwrapped.DocumentMessage?.ContextInfo
-                ?? unwrapped.StickerMessage?.ContextInfo
-                ?? unwrapped.ButtonsMessage?.ContextInfo
-                ?? unwrapped.ButtonsResponseMessage?.ContextInfo
-                ?? unwrapped.TemplateButtonReplyMessage?.ContextInfo
-                ?? unwrapped.ListMessage?.ContextInfo
-                ?? unwrapped.ListResponseMessage?.ContextInfo
-                ?? unwrapped.InteractiveMessage?.ContextInfo
-                ?? unwrapped.ContactMessage?.ContextInfo
-                ?? unwrapped.LocationMessage?.ContextInfo
-                ?? unwrapped.LiveLocationMessage?.ContextInfo;
-        }
-
-        private void ApplyContextInfoExtras(
-            Proto.Message msg,
-            out string quotedText,
-            out string quotedSender,
-            out string quotedMessageId,
-            out ChatPreviewKind quotedKind,
-            out List<string> mentionedJids)
-        {
-            quotedText = null;
-            quotedSender = null;
-            quotedMessageId = null;
-            quotedKind = ChatPreviewKind.Text;
-            mentionedJids = null;
-
-            Proto.Message unwrapped = UnwrapMessage(msg);
-            Proto.ContextInfo ctx = GetContextInfo(unwrapped);
-            if (ctx == null)
-            {
-                return;
-            }
-
-            if (ctx.MentionedJid != null && ctx.MentionedJid.Count > 0)
-            {
-                mentionedJids = new List<string>();
-                for (int i = 0; i < ctx.MentionedJid.Count; i++)
-                {
-                    string norm = NormalizeJid(ctx.MentionedJid[i]);
-                    if (!string.IsNullOrEmpty(norm) && !mentionedJids.Contains(norm))
-                    {
-                        mentionedJids.Add(norm);
-                    }
-                }
-
-                if (mentionedJids.Count == 0)
-                {
-                    mentionedJids = null;
-                }
-            }
-
-            if (ctx.QuotedMessage == null)
-            {
-                return;
-            }
-
-            if (ctx.HasStanzaId && !string.IsNullOrWhiteSpace(ctx.StanzaId))
-            {
-                quotedMessageId = ctx.StanzaId;
-            }
-
-            MessageRenderInfo quotedInfo = ExtractMessageRenderInfo(ctx.QuotedMessage);
-            if (quotedInfo != null)
-            {
-                quotedKind = quotedInfo.PreviewKind;
-                string raw = quotedInfo.Content ?? string.Empty;
-                ChatPreviewKind? hint = quotedKind == ChatPreviewKind.Text
-                    ? null
-                    : (ChatPreviewKind?)quotedKind;
-                ChatPreviewNormalizer.Normalize(raw, hint, out _, out quotedText);
-                if (string.IsNullOrWhiteSpace(quotedText) &&
-                    !string.IsNullOrWhiteSpace(quotedInfo.Caption))
-                {
-                    quotedText = quotedInfo.Caption;
-                }
-
-                // Media quotes with no caption: keep QuotedText empty â€” the bubble strip
-                // shows icon + localized label from QuotedKind (not legacy [Image] tags).
-            }
-
-            string participant = NormalizeJid(ctx.Participant);
-            if (!string.IsNullOrEmpty(participant))
-            {
-                quotedSender = ResolveDisplayName(participant, "quote");
-                if (string.IsNullOrWhiteSpace(quotedSender) ||
-                    quotedSender.IndexOf('@') >= 0)
-                {
-                    quotedSender = GetResolvedName(participant);
-                }
-            }
-        }
-
-        private static bool IsValidMessageTimestamp(DateTime timestamp)
-        {
-            return timestamp != DateTime.MinValue &&
-                   timestamp.Year >= 2009 &&
-                   timestamp <= DateTime.Now.AddDays(2);
-        }
-
-        private static DateTime NormalizeIncomingTimestamp(DateTime timestamp, bool isOffline)
-        {
-            if (IsValidMessageTimestamp(timestamp)) return timestamp;
-            // Never turn a replayed server event without a timestamp into a new message.
-            // Local sends assign DateTime.Now before entering this path.
-            return DateTime.MinValue;
-        }
-
-        private static byte[] DecodeBase64Safe(string value)
-        {
-            if (string.IsNullOrWhiteSpace(value)) return null;
-            try { return Convert.FromBase64String(value); }
-            catch { return null; }
-        }
-
-        private static void ApplyAudioMetadata(ChatMessage target, Proto.Message.Types.AudioMessage audio)
-        {
-            if (target == null || audio == null) return;
-            target.IsAudio = true;
-            target.IsVoiceMessage = audio.Ptt;
-            target.AudioDurationSeconds = audio.Seconds;
-            target.AudioMimeType = audio.Mimetype;
-            target.AudioUrl = audio.Url;
-            target.AudioDirectPath = audio.DirectPath;
-            target.AudioMediaKeyBase64 = audio.MediaKey != null && audio.MediaKey.Length > 0
-                ? Convert.ToBase64String(audio.MediaKey.ToByteArray())
-                : null;
-            target.AudioFileEncSha256Base64 = audio.FileEncSha256 != null && audio.FileEncSha256.Length > 0
-                ? Convert.ToBase64String(audio.FileEncSha256.ToByteArray())
-                : null;
-            target.NotifyAudioDownloadStateChanged();
-        }
-
-        private static void ApplyDocumentMetadata(ChatMessage target, Proto.Message.Types.DocumentMessage document)
-        {
-            if (target == null || document == null) return;
-            target.Kind = ChatMessageKind.Document;
-            target.DocumentFileName = document.FileName;
-            target.DocumentMimeType = document.Mimetype;
-            target.DocumentUrl = document.Url;
-            target.DocumentDirectPath = document.DirectPath;
-            target.DocumentMediaKeyBase64 = document.MediaKey != null && document.MediaKey.Length > 0
-                ? Convert.ToBase64String(document.MediaKey.ToByteArray())
-                : null;
-            target.DocumentFileEncSha256Base64 = document.FileEncSha256 != null && document.FileEncSha256.Length > 0
-                ? Convert.ToBase64String(document.FileEncSha256.ToByteArray())
-                : null;
-            if (document.HasFileLength && document.FileLength > 0)
-            {
-                target.DocumentFileLengthBytes = document.FileLength > long.MaxValue
-                    ? long.MaxValue
-                    : (long)document.FileLength;
-            }
-            target.NotifyDocumentDownloadStateChanged();
-        }
-
-        private static void ApplyImageMetadata(ChatMessage target, Proto.Message.Types.ImageMessage image)
-        {
-            if (target == null || image == null) return;
-            target.Kind = ChatMessageKind.Image;
-            target.ImageMimeType = image.Mimetype;
-            target.ImageUrl = image.Url;
-            target.ImageDirectPath = image.DirectPath;
-            target.ImageMediaKeyBase64 = image.MediaKey != null && image.MediaKey.Length > 0
-                ? Convert.ToBase64String(image.MediaKey.ToByteArray())
-                : null;
-            target.ImageFileEncSha256Base64 = image.FileEncSha256 != null && image.FileEncSha256.Length > 0
-                ? Convert.ToBase64String(image.FileEncSha256.ToByteArray())
-                : null;
-            if (!string.IsNullOrWhiteSpace(image.Caption))
-            {
-                target.Caption = image.Caption;
-            }
-
-            if (image.JpegThumbnail != null && image.JpegThumbnail.Length > 0)
-            {
-                target.MediaThumbnailBase64 = Convert.ToBase64String(image.JpegThumbnail.ToByteArray());
-            }
-
-            // Plain auto-props above; nudge bindings for download affordance.
-            target.NotifyImageDownloadStateChanged();
-        }
-
-        private static void ApplyStickerMetadata(ChatMessage target, Proto.Message.Types.StickerMessage sticker)
-        {
-            if (target == null || sticker == null) return;
-            target.Kind = ChatMessageKind.Sticker;
-            target.IsStickerFailed = false;
-            target.ImageMimeType = sticker.Mimetype;
-            target.ImageUrl = sticker.Url;
-            target.ImageDirectPath = sticker.DirectPath;
-            target.ImageMediaKeyBase64 = sticker.MediaKey != null && sticker.MediaKey.Length > 0
-                ? Convert.ToBase64String(sticker.MediaKey.ToByteArray())
-                : null;
-            target.ImageFileEncSha256Base64 = sticker.FileEncSha256 != null && sticker.FileEncSha256.Length > 0
-                ? Convert.ToBase64String(sticker.FileEncSha256.ToByteArray())
-                : null;
-            target.NotifyImageDownloadStateChanged();
-        }
-
-        private static void ApplyVideoMetadata(ChatMessage target, Proto.Message.Types.VideoMessage video)
-        {
-            if (target == null || video == null) return;
-            target.Kind = ChatMessageKind.Video;
-            target.VideoDurationSeconds = video.Seconds;
-            target.VideoMimeType = video.Mimetype;
-            target.VideoUrl = video.Url;
-            target.VideoDirectPath = video.DirectPath;
-            target.VideoMediaKeyBase64 = video.MediaKey != null && video.MediaKey.Length > 0
-                ? Convert.ToBase64String(video.MediaKey.ToByteArray())
-                : null;
-            target.VideoFileEncSha256Base64 = video.FileEncSha256 != null && video.FileEncSha256.Length > 0
-                ? Convert.ToBase64String(video.FileEncSha256.ToByteArray())
-                : null;
-            if (!string.IsNullOrWhiteSpace(video.Caption))
-            {
-                target.Caption = video.Caption;
-            }
-
-            if (video.JpegThumbnail != null && video.JpegThumbnail.Length > 0)
-            {
-                target.MediaThumbnailBase64 = Convert.ToBase64String(video.JpegThumbnail.ToByteArray());
-            }
-
-            target.NotifyVideoDownloadStateChanged();
-        }
-
-        private async Task HandleMessageRevocationAsync(string chatJid, Proto.Message.Types.ProtocolMessage protocol, string envelopeMessageId = null)
-        {
-            string targetId = protocol?.Key?.Id;
-            if (string.IsNullOrWhiteSpace(chatJid) || string.IsNullOrWhiteSpace(targetId)) return;
-
-            string canonical = GetCanonicalJid(chatJid);
-
-            // Older builds stored the revoke envelope itself as a fresh
-            // "[Message Deleted]" item. Remove that synthetic row when the same
-            // event is replayed; the real target below keeps its original timestamp.
-            if (!string.IsNullOrWhiteSpace(envelopeMessageId) &&
-                !string.Equals(envelopeMessageId, targetId, StringComparison.Ordinal))
-            {
-                foreach (var pair in MessagesByChat.ToList())
-                {
-                    if (!string.Equals(GetCanonicalJid(pair.Key), canonical, StringComparison.OrdinalIgnoreCase)) continue;
-                    var synthetic = pair.Value?.FirstOrDefault(m => string.Equals(m?.Id, envelopeMessageId, StringComparison.Ordinal));
-                    if (synthetic != null) pair.Value.Remove(synthetic);
-                }
-                if (_messageStore != null)
-                {
-                    try { await _messageStore.DeleteMessageAsync(canonical, envelopeMessageId); } catch { }
-                }
-            }
-
-            ChatMessage target = null;
-            foreach (var pair in MessagesByChat.ToList())
-            {
-                if (!string.Equals(GetCanonicalJid(pair.Key), canonical, StringComparison.OrdinalIgnoreCase)) continue;
-                target = pair.Value?.FirstOrDefault(m => string.Equals(m?.Id, targetId, StringComparison.Ordinal));
-                if (target != null) break;
-            }
-
-            // If the chat is not resident, read the retained local window once. A revoke is
-            // an update to an existing message; it must never be inserted as a new "current" item.
-            if (target == null && _messageStore != null)
-            {
-                try
-                {
-                    var stored = await _messageStore.LoadMessagesPagedAsync(canonical, 0, 1500);
-                    target = stored?.FirstOrDefault(m => string.Equals(m?.Id, targetId, StringComparison.Ordinal));
-                }
-                catch { }
-            }
-
-            if (target == null) return;
-            target.Content = "[Message Deleted]";
-            target.Caption = string.Empty;
-            target.Kind = ChatMessageKind.Text;
-            target.IsImage = false;
-            target.ImageUri = null;
-            target.ImageUrl = null;
-            target.ImageDirectPath = null;
-            target.ImageMediaKeyBase64 = null;
-            target.ImageFileEncSha256Base64 = null;
-            target.ImageMimeType = null;
-            target.VideoUri = null;
-            target.VideoPosterUri = null;
-            target.VideoUrl = null;
-            target.VideoDirectPath = null;
-            target.VideoMediaKeyBase64 = null;
-            target.VideoFileEncSha256Base64 = null;
-            target.VideoMimeType = null;
-            target.VideoDurationSeconds = 0;
-            target.IsAudio = false;
-            target.AudioUri = null;
-            target.AudioUrl = null;
-            target.AudioDirectPath = null;
-            target.AudioMediaKeyBase64 = null;
-            target.AudioFileEncSha256Base64 = null;
-            await SaveMessageAsync(canonical, target);
-
-            if (IsActiveChatJid(canonical)) QueueChatMessagesChanged(canonical);
-            var latest = MessagesByChat.ContainsKey(canonical)
-                ? MessagesByChat[canonical].Where(m => m != null).OrderBy(m => m.Timestamp).LastOrDefault()
-                : null;
-            if (latest != null && string.Equals(latest.Id, target.Id, StringComparison.Ordinal))
-            {
-                await RefreshChatPreviewFromReplayAsync(canonical, target.Content, target.Timestamp, canonical.EndsWith("@g.us"), target.IsFromMe);
-            }
-        }
-
-        private MessageRenderInfo ExtractMessageRenderInfo(Proto.Message msg)
-        {
-            var unwrapped = UnwrapMessage(msg);
-            if (unwrapped == null) return null;
-
-            // Simple text message (Conversation)
-            if (!string.IsNullOrEmpty(unwrapped.Conversation))
-            {
-                return new MessageRenderInfo { Content = unwrapped.Conversation };
-            }
-
-            // Extended text message
-            if (unwrapped.ExtendedTextMessage != null && !string.IsNullOrEmpty(unwrapped.ExtendedTextMessage.Text))
-            {
-                return new MessageRenderInfo { Content = unwrapped.ExtendedTextMessage.Text };
-            }
-
-            // Image message (caption optional)
-            if (unwrapped.ImageMessage != null)
-            {
-                string caption = unwrapped.ImageMessage.Caption ?? "";
-                string preview = string.IsNullOrWhiteSpace(caption) ? "[Image]" : $"[Image] {caption}";
-                return new MessageRenderInfo
-                {
-                    Content = preview,
-                    IsImage = true,
-                    Caption = caption,
-                    ImageMessage = unwrapped.ImageMessage
-                };
-            }
-
-            // Video message with caption
-            if (unwrapped.VideoMessage != null)
-            {
-                return new MessageRenderInfo
-                {
-                    Content = !string.IsNullOrEmpty(unwrapped.VideoMessage.Caption)
-                        ? $"[Video] {unwrapped.VideoMessage.Caption}"
-                        : "[Video]",
-                    IsVideo = true,
-                    Caption = unwrapped.VideoMessage.Caption ?? "",
-                    VideoMessage = unwrapped.VideoMessage
-                };
-            }
-
-            // Document message
-            if (unwrapped.DocumentMessage != null)
-            {
-                return new MessageRenderInfo
-                {
-                    Content = !string.IsNullOrEmpty(unwrapped.DocumentMessage.FileName)
-                        ? $"[Document] {unwrapped.DocumentMessage.FileName}"
-                        : "[Document]",
-                    IsDocument = true,
-                    DocumentMessage = unwrapped.DocumentMessage
-                };
-            }
-
-            // Audio/Voice message
-            if (unwrapped.AudioMessage != null)
-            {
-                bool isVoice = unwrapped.AudioMessage.Ptt == true;
-                return new MessageRenderInfo
-                {
-                    Content = isVoice ? "[Voice Message]" : "[Audio]",
-                    IsAudio = true,
-                    IsVoice = isVoice,
-                    AudioMessage = unwrapped.AudioMessage
-                };
-            }
-
-            // Reaction envelopes are handled by IChatMessageMapper / IReactionMapper (not timeline rows).
-            if (unwrapped.ReactionMessage != null)
-            {
-                return null;
-            }
-
-            // Poll creation
-            if (unwrapped.PollCreationMessage != null)
-            {
-                return new MessageRenderInfo { Content = $"[Poll] {unwrapped.PollCreationMessage.Name}" };
-            }
-
-            // Protocol message (e.g. delete)
-            if (unwrapped.ProtocolMessage != null)
-            {
-                if ((int)unwrapped.ProtocolMessage.Type == 0)
-                    return null; // handled as an update to the original message
-                if (unwrapped.ProtocolMessage.HistorySyncNotification != null)
-                    return null;
-                if (unwrapped.ProtocolMessage.PeerDataOperationRequestResponseMessage != null)
-                {
-                    var resp = unwrapped.ProtocolMessage.PeerDataOperationRequestResponseMessage;
-                    var result = resp.PeerDataOperationResult?.FirstOrDefault();
-                    string fullCode = result?.FullHistorySyncOnDemandRequestResponse?.ResponseCode.ToString() ?? "";
-                    string chunkCode = result?.HistorySyncChunkRetryResponse?.ResponseCode.ToString() ?? "";
-                    Log($"[WhatsAppService] PeerDataOperationResponse message observed: type={resp.PeerDataOperationRequestType}, stanzaId={resp.StanzaId}, fullHistoryCode={fullCode}, chunkRetryCode={chunkCode}");
-                    return null;
-                }
-            }
-
-            if (unwrapped.StickerMessage != null)
-            {
-                return new MessageRenderInfo
-                {
-                    Content = "[Sticker]",
-                    IsSticker = true,
-                    StickerMessage = unwrapped.StickerMessage
-                };
-            }
-            if (unwrapped.ContactMessage != null) return new MessageRenderInfo { Content = $"[Contact] {unwrapped.ContactMessage.DisplayName}" };
-            if (unwrapped.LocationMessage != null) return new MessageRenderInfo { Content = "[Location]" };
-
-            // Call logs
-            if (unwrapped.CallLogMesssage != null)
-            {
-                string outcome = unwrapped.CallLogMesssage.CallOutcome.ToString();
-                string duration = unwrapped.CallLogMesssage.DurationSecs > 0 ? $" ({unwrapped.CallLogMesssage.DurationSecs}s)" : "";
-                return new MessageRenderInfo { Content = $"[Call] {outcome}{duration}" };
-            }
-            if (unwrapped.ScheduledCallCreationMessage != null)
-            {
-                return new MessageRenderInfo { Content = $"[Scheduled Call] {unwrapped.ScheduledCallCreationMessage.Title}" };
-            }
-            if (unwrapped.Call != null)
-            {
-                return new MessageRenderInfo { Content = "[Call]" };
-            }
-
-            Debug.WriteLine($"[WhatsAppService] Unknown message type (Proto Msg IDs: {string.Join(", ", unwrapped.GetType().GetProperties().Where(p => p.PropertyType == typeof(object) || p.PropertyType.GetTypeInfo().IsClass).Where(p => p.GetValue(unwrapped) != null).Select(p => p.Name))}), no content extracted");
-            return null;
-        }
-
-        /// <summary>
-        /// Extracts user-visible preview text from a Proto.Message.
-        /// </summary>
-        private string ExtractMessageContent(Proto.Message msg)
-        {
-            return ExtractMessageRenderInfo(msg)?.Content;
-        }
-
-        private async Task ProcessPeerDataOperationResponseAsync(Proto.Message.Types.PeerDataOperationRequestResponseMessage response)
-        {
-            if (response == null)
-            {
-                return;
-            }
-
-            Debug.WriteLine($"[WhatsAppService] PeerDataOperationResponse received: stanzaId={response.StanzaId}, requestType={response.PeerDataOperationRequestType}, resultCount={response.PeerDataOperationResult?.Count ?? 0}");
-
-            PlaceholderResendRequestState requestState = null;
-            lock (_missingMessageLock)
-            {
-                if (!string.IsNullOrWhiteSpace(response.StanzaId))
-                {
-                    _placeholderResendRequestsByStanzaId.TryGetValue(response.StanzaId, out requestState);
-                    _placeholderResendRequestsByStanzaId.Remove(response.StanzaId);
-                    if (requestState != null &&
-                        TryGetMissingMessage(requestState.ChatJid, requestState.MessageId, out var candidate) &&
-                        string.Equals(candidate.LastPlaceholderRequestId, response.StanzaId, StringComparison.Ordinal))
-                    {
-                        candidate.PlaceholderRequestInFlight = false;
-                    }
-                }
-            }
-
-            HistoryOnDemandRequestState historyRequestState = null;
-            lock (_historyOnDemandLock)
-            {
-                if (!string.IsNullOrWhiteSpace(response.StanzaId))
-                {
-                    _historyOnDemandRequestById.TryGetValue(response.StanzaId, out historyRequestState);
-                }
-            }
-
-            foreach (var result in response.PeerDataOperationResult ?? Enumerable.Empty<Proto.Message.Types.PeerDataOperationRequestResponseMessage.Types.PeerDataOperationResult>())
-            {
-                if (result.FullHistorySyncOnDemandRequestResponse != null)
-                {
-                    Debug.WriteLine($"[WhatsAppService] FullHistorySyncOnDemand response observed: stanzaId={response.StanzaId}, responseCode={result.FullHistorySyncOnDemandRequestResponse.ResponseCode}, requestMetadataId={result.FullHistorySyncOnDemandRequestResponse.RequestMetadata?.RequestId}");
-                }
-
-                if (result.HistorySyncChunkRetryResponse != null)
-                {
-                    Debug.WriteLine($"[WhatsAppService] HistorySyncChunkRetry response observed: stanzaId={response.StanzaId}, responseCode={result.HistorySyncChunkRetryResponse.ResponseCode}, canRecover={result.HistorySyncChunkRetryResponse.CanRecover}, requestId={result.HistorySyncChunkRetryResponse.RequestId}");
-                }
-
-                if (result.SyncdSnapshotFatalRecoveryResponse != null)
-                {
-                    Debug.WriteLine($"[WhatsAppService] SyncD fatal recovery response observed: stanzaId={response.StanzaId}, compressed={result.SyncdSnapshotFatalRecoveryResponse.IsCompressed}, bytes={result.SyncdSnapshotFatalRecoveryResponse.CollectionSnapshot?.Length ?? 0}");
-                }
-
-                var retryResponse = result.PlaceholderMessageResendResponse;
-                if (retryResponse?.HasWebMessageInfoBytes == true && retryResponse.WebMessageInfoBytes != null)
-                {
-                    try
-                    {
-                        var webMessage = Proto.WebMessageInfo.Parser.ParseFrom(retryResponse.WebMessageInfoBytes);
-                        await Task.Delay(500);
-                        await UpsertRecoveredWebMessageInfoAsync(webMessage, requestState, "placeholder-resend-response");
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine($"[WhatsAppService] Failed to decode placeholder resend response for stanza {response.StanzaId}: {ex.Message}");
-                    }
-                }
-            }
-
-            if (historyRequestState != null &&
-                (response.PeerDataOperationRequestType == Proto.Message.Types.PeerDataOperationRequestType.FullHistorySyncOnDemand ||
-                 response.PeerDataOperationRequestType == Proto.Message.Types.PeerDataOperationRequestType.HistorySyncOnDemand))
-            {
-                Debug.WriteLine($"[WhatsAppService] PeerDataOperationResponse completed without immediate history payload: requestType={historyRequestState.RequestType}, stanzaId={response.StanzaId}, chat={historyRequestState.ChatJid ?? "<full-history>"}, baseline={historyRequestState.BaselineMessageCount}, trigger={historyRequestState.TriggerReason ?? "unspecified"}");
-            }
-        }
-
-        private void HandlePlaceholderResendAckNode(BinaryNode node)
-        {
-            if (node?.Attrs == null)
-            {
-                return;
-            }
-
-            node.Attrs.TryGetValue("class", out var ackClass);
-            node.Attrs.TryGetValue("id", out var ackId);
-            node.Attrs.TryGetValue("error", out var ackError);
-
-            if (!string.Equals(ackClass, "message", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(ackId))
-            {
-                return;
-            }
-
-            PlaceholderResendRequestState requestState = null;
-            bool rejected = !string.IsNullOrWhiteSpace(ackError);
-
-            lock (_missingMessageLock)
-            {
-                if (!_placeholderResendRequestsByStanzaId.TryGetValue(ackId, out requestState))
-                {
-                    return;
-                }
-
-                if (rejected)
-                {
-                    _placeholderResendRequestsByStanzaId.Remove(ackId);
-                    if (TryGetMissingMessage(requestState.ChatJid, requestState.MessageId, out var candidate) &&
-                        string.Equals(candidate.LastPlaceholderRequestId, ackId, StringComparison.Ordinal))
-                    {
-                        candidate.PlaceholderRequestInFlight = false;
-                    }
-                }
-                else
-                {
-                    requestState.AckAccepted = true;
-                    requestState.AckAcceptedUtc = DateTime.UtcNow;
-                }
-            }
-
-            if (requestState == null)
-            {
-                return;
-            }
-
-            if (rejected)
-            {
-                Debug.WriteLine($"[WhatsAppService] placeholder resend ack rejected for {requestState.MessageId} in {requestState.ChatJid}: stanzaId={ackId}, error={ackError}");
-            }
-            else
-            {
-                Debug.WriteLine($"[WhatsAppService] placeholder resend ack accepted for {requestState.MessageId} in {requestState.ChatJid}: stanzaId={ackId}");
-            }
-        }
-
-        private Task UpsertRecoveredWebMessageInfoAsync(Proto.WebMessageInfo webMessage, PlaceholderResendRequestState requestState, string source)
-        {
-            if (webMessage?.Message == null)
-            {
-                return Task.CompletedTask;
-            }
-
-            string remoteJid = webMessage.Key?.RemoteJid;
-            if (string.IsNullOrWhiteSpace(remoteJid))
-            {
-                remoteJid = requestState?.ChatJid;
-            }
-
-            if (string.IsNullOrWhiteSpace(remoteJid) || string.IsNullOrWhiteSpace(webMessage.Key?.Id))
-            {
-                return Task.CompletedTask;
-            }
-
-            // Never call HandleDecryptedMessageAsync recursively here. This method is
-            // reached from ProcessPeerDataOperationResponseAsync while the single
-            // _messageIngestLock is already held. The old recursive await permanently
-            // deadlocked the ingest pump as soon as a placeholder-resend response was
-            // received; from that moment the socket still looked connected, but no
-            // person or group message could update the UI.
-            EnqueueDecryptedMessage(new DecryptedMessageEventArgs
-            {
-                FromJid = remoteJid,
-                Participant = ResolveHistoryParticipantJid(webMessage),
-                MessageId = webMessage.Key?.Id,
-                Message = webMessage.Message,
-                Timestamp = webMessage.MessageTimestamp > 0
-                    ? DateTimeOffset.FromUnixTimeSeconds((long)webMessage.MessageTimestamp).LocalDateTime
-                    : DateTime.MinValue,
-                IsFromMe = webMessage.Key?.FromMe ?? false,
-                PushName = webMessage.PushName,
-                VerifiedName = null
-            });
-
-            Debug.WriteLine($"[WhatsAppService] Queued recovered message {webMessage.Key.Id} from {source}");
-            return Task.CompletedTask;
-        }
-
-        private async Task<string> SaveImageBytesToCacheAsync(byte[] imageBytes, string fileBase, string mimeType)
-        {
-            if (imageBytes == null || imageBytes.Length == 0) return null;
-
-            var local = ApplicationData.Current.LocalFolder;
-            var mediaFolder = await local.CreateFolderAsync("MediaCache", CreationCollisionOption.OpenIfExists);
-            var imageFolder = await mediaFolder.CreateFolderAsync("Images", CreationCollisionOption.OpenIfExists);
-
-            string ext = GetImageFileExtension(mimeType);
-            string safeBase = string.IsNullOrWhiteSpace(fileBase) ? Guid.NewGuid().ToString("N") : fileBase;
-            // Base64url / path chars are unsafe in StorageFile names.
-            safeBase = SanitizeCacheFileBase(safeBase);
-            string fileName = $"{safeBase}{ext}";
-
-            var existing = await imageFolder.TryGetItemAsync(fileName) as StorageFile;
-            if (existing == null)
-            {
-                var file = await imageFolder.CreateFileAsync(fileName, CreationCollisionOption.ReplaceExisting);
-                await FileIO.WriteBytesAsync(file, imageBytes);
-            }
-
-            return $"ms-appdata:///local/MediaCache/Images/{fileName}";
-        }
-
-        private static string SanitizeCacheFileBase(string fileBase)
-        {
-            if (string.IsNullOrWhiteSpace(fileBase))
-            {
-                return Guid.NewGuid().ToString("N");
-            }
-
-            var chars = fileBase.ToCharArray();
-            for (int i = 0; i < chars.Length; i++)
-            {
-                char c = chars[i];
-                if (!(char.IsLetterOrDigit(c) || c == '-' || c == '_'))
-                {
-                    chars[i] = '_';
-                }
-            }
-
-            string sanitized = new string(chars);
-            return sanitized.Length > 80 ? sanitized.Substring(0, 80) : sanitized;
-        }
-
-        /// <summary>
-        /// Stickers are often WebP; BitmapImage on older UWP builds may fail silently.
-        /// Re-encode to PNG when the platform decoder can read the payload.
-        /// </summary>
-        private static async Task<byte[]> TryEncodeImageBytesAsPngAsync(byte[] imageBytes)
-        {
-            if (imageBytes == null || imageBytes.Length == 0)
-            {
-                return null;
-            }
-
-            try
-            {
-                using (var input = new Windows.Storage.Streams.InMemoryRandomAccessStream())
-                {
-                    await input.WriteAsync(imageBytes.AsBuffer());
-                    input.Seek(0);
-                    var decoder = await Windows.Graphics.Imaging.BitmapDecoder.CreateAsync(input);
-                    using (var output = new Windows.Storage.Streams.InMemoryRandomAccessStream())
-                    {
-                        var encoder = await Windows.Graphics.Imaging.BitmapEncoder.CreateAsync(
-                            Windows.Graphics.Imaging.BitmapEncoder.PngEncoderId,
-                            output);
-                        var pixelData = await decoder.GetPixelDataAsync();
-                        encoder.SetPixelData(
-                            decoder.BitmapPixelFormat,
-                            decoder.BitmapAlphaMode,
-                            decoder.OrientedPixelWidth,
-                            decoder.OrientedPixelHeight,
-                            decoder.DpiX,
-                            decoder.DpiY,
-                            pixelData.DetachPixelData());
-                        await encoder.FlushAsync();
-                        output.Seek(0);
-                        var reader = new Windows.Storage.Streams.DataReader(output.GetInputStreamAt(0));
-                        await reader.LoadAsync((uint)output.Size);
-                        byte[] png = new byte[output.Size];
-                        reader.ReadBytes(png);
-                        return png;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[WhatsAppService] PNG re-encode failed: " + ex.Message);
-                return null;
-            }
-        }
-
-        private async Task<string> SaveStickerBytesToCacheAsync(byte[] imageBytes, string fileBase, string mimeType)
-        {
-            byte[] png = await TryEncodeImageBytesAsPngAsync(imageBytes);
-            if (png != null && png.Length > 0)
-            {
-                return await SaveImageBytesToCacheAsync(png, fileBase + "_png", "image/png");
-            }
-
-            // Fall back to original bytes (may still render on newer OS builds).
-            return await SaveImageBytesToCacheAsync(imageBytes, fileBase, mimeType ?? "image/webp");
-        }
-
-        private static string GetAudioFileExtension(string mimeType)
-        {
-            string mime = (mimeType ?? string.Empty).ToLowerInvariant();
-            if (mime.Contains("ogg") || mime.Contains("opus")) return ".ogg";
-            if (mime.Contains("mpeg") || mime.Contains("mp3")) return ".mp3";
-            if (mime.Contains("wav")) return ".wav";
-            if (mime.Contains("amr")) return ".amr";
-            if (mime.Contains("aac")) return ".aac";
-            return ".m4a";
-        }
-
-        private static bool IsOggOpusMime(string mimeType)
-        {
-            string mime = (mimeType ?? string.Empty).ToLowerInvariant();
-            return mime.Contains("ogg") || mime.Contains("opus");
-        }
-
-        private static bool LooksLikeOggUri(string uri)
-        {
-            if (string.IsNullOrWhiteSpace(uri)) return false;
-            return uri.EndsWith(".ogg", StringComparison.OrdinalIgnoreCase) ||
-                   uri.EndsWith(".opus", StringComparison.OrdinalIgnoreCase);
-        }
-
-        private async Task<string> SaveAudioBytesToCacheAsync(byte[] audioBytes, string fileBase, string mimeType)
-        {
-            if (audioBytes == null || audioBytes.Length == 0) return null;
-            var local = ApplicationData.Current.LocalFolder;
-            var mediaFolder = await local.CreateFolderAsync("MediaCache", CreationCollisionOption.OpenIfExists);
-            var audioFolder = await mediaFolder.CreateFolderAsync("Audio", CreationCollisionOption.OpenIfExists);
-            string safeBase = SanitizeCacheFileBase(
-                string.IsNullOrWhiteSpace(fileBase) ? Guid.NewGuid().ToString("N") : fileBase);
-            string fileName = safeBase + GetAudioFileExtension(mimeType);
-            var file = await audioFolder.CreateFileAsync(fileName, CreationCollisionOption.ReplaceExisting);
-            await FileIO.WriteBytesAsync(file, audioBytes);
-            return "ms-appdata:///local/MediaCache/Audio/" + fileName;
-        }
-
-        /// <summary>
-        /// WhatsApp voice notes are often Ogg/Opus â€” fine on desktop MediaPlayer, often fails on W10 Mobile.
-        /// Renaming the extension alone does not change the codec; re-encode to AAC/.m4a when possible.
-        /// </summary>
-        private async Task<string> TryTranscodeOggOpusToM4aAsync(string sourceUri, string fileBase)
-        {
-            if (string.IsNullOrWhiteSpace(sourceUri)) return null;
-
-            StorageFile sourceFile = null;
-            try
-            {
-                if (sourceUri.StartsWith("ms-appdata:", StringComparison.OrdinalIgnoreCase))
-                {
-                    sourceFile = await StorageFile.GetFileFromApplicationUriAsync(new Uri(sourceUri));
-                }
-                else if (File.Exists(sourceUri))
-                {
-                    sourceFile = await StorageFile.GetFileFromPathAsync(sourceUri);
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[WhatsAppService] Open ogg for transcode failed: " + ex.Message);
-                return null;
-            }
-
-            if (sourceFile == null) return null;
-
-            try
-            {
-                var local = ApplicationData.Current.LocalFolder;
-                var mediaFolder = await local.CreateFolderAsync("MediaCache", CreationCollisionOption.OpenIfExists);
-                var audioFolder = await mediaFolder.CreateFolderAsync("Audio", CreationCollisionOption.OpenIfExists);
-                string safeBase = SanitizeCacheFileBase(
-                    string.IsNullOrWhiteSpace(fileBase) ? Guid.NewGuid().ToString("N") : fileBase + "_play");
-                string destName = safeBase + ".m4a";
-                var destFile = await audioFolder.CreateFileAsync(destName, CreationCollisionOption.ReplaceExisting);
-
-                var transcoder = new Windows.Media.Transcoding.MediaTranscoder();
-                var profile = Windows.Media.MediaProperties.MediaEncodingProfile.CreateM4a(
-                    Windows.Media.MediaProperties.AudioEncodingQuality.Auto);
-                if (profile == null)
-                {
-                    SessionLogger.Instance.WriteAlways("[Audio/transcode] CreateM4a returned null src=" + sourceUri);
-                    try { await destFile.DeleteAsync(); } catch { }
-                    return null;
-                }
-
-                var prepared = await transcoder.PrepareFileTranscodeAsync(sourceFile, destFile, profile);
-                if (prepared == null)
-                {
-                    SessionLogger.Instance.WriteAlways("[Audio/transcode] PrepareFileTranscodeAsync returned null src=" + sourceUri);
-                    try { await destFile.DeleteAsync(); } catch { }
-                    return null;
-                }
-
-                if (!prepared.CanTranscode)
-                {
-                    SessionLogger.Instance.WriteAlways(
-                        "[Audio/transcode] CanTranscode=false reason=" + prepared.FailureReason +
-                        " src=" + sourceUri);
-                    try { await destFile.DeleteAsync(); } catch { }
-                    return null;
-                }
-
-                await prepared.TranscodeAsync();
-                string uri = "ms-appdata:///local/MediaCache/Audio/" + destName;
-                SessionLogger.Instance.WriteAlways(
-                    "[Audio/transcode] ok src=" + sourceUri + " dest=" + uri);
-                return uri;
-            }
-            catch (Exception ex)
-            {
-                try
-                {
-                    SessionLogger.Instance.WriteErrorAlways("[Audio/transcode] failed src=" + sourceUri, ex);
-                }
-                catch
-                {
-                }
-
-                Debug.WriteLine("[WhatsAppService] Audio transcode failed: " + ex.Message);
-                return null;
-            }
-        }
-
-        /// <summary>If source is ogg/opus, prefer m4a (MF) then WAV (Concentus) for Mobile playback.</summary>
-        private async Task<string> EnsurePlayableAudioUriAsync(ChatMessage message, string sourceUri)
-        {
-            if (message == null || string.IsNullOrWhiteSpace(sourceUri))
-            {
-                return sourceUri;
-            }
-
-            bool needsTranscode = IsOggOpusMime(message.AudioMimeType) || LooksLikeOggUri(sourceUri);
-            if (!needsTranscode)
-            {
-                return sourceUri;
-            }
-
-            // Already on a playable container.
-            if (sourceUri.EndsWith(".m4a", StringComparison.OrdinalIgnoreCase) ||
-                sourceUri.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase) ||
-                sourceUri.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase) ||
-                sourceUri.EndsWith(".wav", StringComparison.OrdinalIgnoreCase))
-            {
-                return sourceUri;
-            }
-
-            // 1) Platform transcoder (works on desktop when Opus MF codec exists).
-            string playable = await TryTranscodeOggOpusToM4aAsync(sourceUri, message.Id);
-            string playMime = "audio/mp4";
-
-            // 2) Mobile has no Opus MF decoder â€” Concentus â†’ PCM WAV (MediaPlayer always accepts WAV).
-            if (string.IsNullOrWhiteSpace(playable))
-            {
-                SessionLogger.Instance.WriteAlways(
-                    "[Audio/ogg-wav] trying Concentus decode id=" + (message.Id ?? "?"));
-                playable = await OggOpusHandlerService.DecodeUriToWavFileAsync(sourceUri, message.Id);
-                playMime = "audio/wav";
-            }
-
-            if (string.IsNullOrWhiteSpace(playable))
-            {
-                SessionLogger.Instance.WriteAlways(
-                    "[Audio/playable] fell back to original ogg id=" + (message.Id ?? "?"));
-                return sourceUri;
-            }
-
-            message.AudioUri = playable;
-            message.AudioMimeType = playMime;
-            string chatJid = GetCanonicalJid(message.RemoteJid);
-            if (!string.IsNullOrWhiteSpace(chatJid))
-            {
-                try
-                {
-                    await SaveMessageAsync(chatJid, message);
-                    QueueChatMessagesChanged(chatJid);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine("[WhatsAppService] Persist playable uri failed: " + ex.Message);
-                }
-            }
-
-            SessionLogger.Instance.WriteAlways(
-                "[Audio/playable] ok id=" + (message.Id ?? "?") + " uri=" + playable + " mime=" + playMime);
-            return playable;
-        }
-
-        public async Task<string> EnsureAudioAvailableAsync(ChatMessage message)
-        {
-            if (message == null || !message.IsAudio) return null;
-            if (!string.IsNullOrWhiteSpace(message.AudioUri))
-            {
-                try
-                {
-                    SessionLogger.Instance.WriteAlways(
-                        "[Audio/ensure] cache-hit id=" + (message.Id ?? "?") + " uri=" + message.AudioUri);
-                }
-                catch
-                {
-                }
-
-                // Cached .ogg from older builds â€” try m4a once so Mobile can play.
-                return await EnsurePlayableAudioUriAsync(message, message.AudioUri);
-            }
-
-            await EnsureConnectedAsync();
-
-            byte[] mediaKey = DecodeBase64Safe(message.AudioMediaKeyBase64);
-            if (mediaKey == null || mediaKey.Length == 0) throw new InvalidOperationException("A chave do Ã¡udio nÃ£o estÃ¡ disponÃ­vel.");
-            byte[] expected = DecodeBase64Safe(message.AudioFileEncSha256Base64);
-
-            try
-            {
-                SessionLogger.Instance.WriteAlways(string.Format(
-                    "[Audio/ensure] download-start id={0} mime={1} hasUrl={2} hasPath={3} keyLen={4}",
-                    message.Id ?? "?",
-                    message.AudioMimeType ?? "?",
-                    !string.IsNullOrWhiteSpace(message.AudioUrl),
-                    !string.IsNullOrWhiteSpace(message.AudioDirectPath),
-                    mediaKey.Length));
-            }
-            catch
-            {
-            }
-
-            await MediaDownloadLock.WaitAsync();
-            try
-            {
-                if (!string.IsNullOrWhiteSpace(message.AudioUri))
-                {
-                    return await EnsurePlayableAudioUriAsync(message, message.AudioUri);
-                }
-
-                var bytes = await _socket.DownloadAndDecryptMediaAsync(
-                    message.AudioUrl,
-                    message.AudioDirectPath,
-                    mediaKey,
-                    "audio",
-                    expected);
-                string uri = await SaveAudioBytesToCacheAsync(
-                    bytes,
-                    message.Id ?? Guid.NewGuid().ToString("N"),
-                    message.AudioMimeType);
-                message.AudioUri = uri;
-                try
-                {
-                    SessionLogger.Instance.WriteAlways(string.Format(
-                        "[Audio/ensure] download-ok id={0} bytes={1} uri={2}",
-                        message.Id ?? "?",
-                        bytes != null ? bytes.Length : 0,
-                        uri ?? "?"));
-                }
-                catch
-                {
-                }
-
-                uri = await EnsurePlayableAudioUriAsync(message, uri);
-
-                string chatJid = GetCanonicalJid(message.RemoteJid);
-                if (!string.IsNullOrWhiteSpace(chatJid))
-                {
-                    await SaveMessageAsync(chatJid, message);
-                    QueueChatMessagesChanged(chatJid);
-                }
-                return uri;
-            }
-            catch (Exception ex)
-            {
-                try
-                {
-                    SessionLogger.Instance.WriteErrorAlways(
-                        "[Audio/ensure] download-fail id=" + (message.Id ?? "?"),
-                        ex);
-                }
-                catch
-                {
-                }
-
-                throw;
-            }
-            finally
-            {
-                MediaDownloadLock.Release();
-            }
-        }
-
-        public async Task<string> EnsureImageAvailableAsync(ChatMessage message)
-        {
-            if (message == null) return null;
-            bool isSticker = message.Kind == ChatMessageKind.Sticker;
-            if (!message.IsImage && !isSticker) return null;
-            if (!string.IsNullOrWhiteSpace(message.ImageUri)) return message.ImageUri;
-            await EnsureConnectedAsync();
-
-            byte[] mediaKey = DecodeBase64Safe(message.ImageMediaKeyBase64);
-            if (mediaKey == null || mediaKey.Length == 0)
-            {
-                if (isSticker)
-                {
-                    message.IsStickerFailed = true;
-                    return null;
-                }
-
-                throw new InvalidOperationException("A chave da imagem nÃ£o estÃ¡ disponÃ­vel.");
-            }
-
-            byte[] expected = DecodeBase64Safe(message.ImageFileEncSha256Base64);
-            string mediaKeyId = (expected != null && expected.Length > 0)
-                ? ToBase64Url(expected)
-                : (message.Id ?? Guid.NewGuid().ToString("N"));
-            string mediaType = "image";
-            string defaultMime = isSticker ? "image/webp" : "image/jpeg";
-
-            await MediaDownloadLock.WaitAsync();
-            try
-            {
-                if (!string.IsNullOrWhiteSpace(message.ImageUri)) return message.ImageUri;
-
-                var bytes = await _socket.DownloadAndDecryptMediaAsync(
-                    message.ImageUrl,
-                    message.ImageDirectPath,
-                    mediaKey,
-                    mediaType,
-                    expected);
-                string uri = isSticker
-                    ? await SaveStickerBytesToCacheAsync(bytes, mediaKeyId, message.ImageMimeType ?? defaultMime)
-                    : await SaveImageBytesToCacheAsync(bytes, mediaKeyId, message.ImageMimeType ?? defaultMime);
-                if (string.IsNullOrWhiteSpace(uri))
-                {
-                    if (isSticker)
-                    {
-                        message.IsStickerFailed = true;
-                        return null;
-                    }
-
-                    throw new InvalidOperationException("Falha ao guardar a imagem.");
-                }
-
-                message.ImageUri = uri;
-                if (isSticker)
-                {
-                    message.IsStickerFailed = false;
-                }
-
-                string chatJid = GetCanonicalJid(message.RemoteJid);
-                if (!string.IsNullOrWhiteSpace(chatJid))
-                {
-                    await SaveMessageAsync(chatJid, message);
-                    QueueChatMessagesChanged(chatJid);
-                }
-
-                return uri;
-            }
-            catch (Exception)
-            {
-                if (isSticker)
-                {
-                    message.IsStickerFailed = true;
-                    return null;
-                }
-
-                throw;
-            }
-            finally
-            {
-                MediaDownloadLock.Release();
-            }
-        }
-
-        public async Task<string> EnsureVideoAvailableAsync(ChatMessage message)
-        {
-            if (message == null || !message.IsVideo) return null;
-            if (!string.IsNullOrWhiteSpace(message.VideoUri))
-            {
-                if (string.IsNullOrWhiteSpace(message.VideoPosterUri))
-                {
-                    try
-                    {
-                        message.VideoPosterUri = await TryCreateVideoPosterAsync(message.VideoUri, message.Id);
-                        string chatJidPoster = GetCanonicalJid(message.RemoteJid);
-                        if (!string.IsNullOrWhiteSpace(chatJidPoster) &&
-                            !string.IsNullOrWhiteSpace(message.VideoPosterUri))
-                        {
-                            await SaveMessageAsync(chatJidPoster, message);
-                            QueueChatMessagesChanged(chatJidPoster);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine("[WhatsAppService] Video poster failed: " + ex.Message);
-                    }
-                }
-
-                return message.VideoUri;
-            }
-
-            await EnsureConnectedAsync();
-
-            byte[] mediaKey = DecodeBase64Safe(message.VideoMediaKeyBase64);
-            if (mediaKey == null || mediaKey.Length == 0)
-            {
-                throw new InvalidOperationException("A chave do vÃ­deo nÃ£o estÃ¡ disponÃ­vel.");
-            }
-
-            byte[] expected = DecodeBase64Safe(message.VideoFileEncSha256Base64);
-            string mediaKeyId = (expected != null && expected.Length > 0)
-                ? ToBase64Url(expected)
-                : (message.Id ?? Guid.NewGuid().ToString("N"));
-
-            await MediaDownloadLock.WaitAsync();
-            try
-            {
-                if (!string.IsNullOrWhiteSpace(message.VideoUri)) return message.VideoUri;
-
-                var bytes = await _socket.DownloadAndDecryptMediaAsync(
-                    message.VideoUrl,
-                    message.VideoDirectPath,
-                    mediaKey,
-                    "video",
-                    expected);
-                string uri = await SaveVideoBytesToCacheAsync(
-                    bytes,
-                    mediaKeyId,
-                    message.VideoMimeType ?? "video/mp4");
-                if (string.IsNullOrWhiteSpace(uri))
-                {
-                    throw new InvalidOperationException("Falha ao guardar o vÃ­deo.");
-                }
-
-                message.VideoUri = uri;
-                try
-                {
-                    message.VideoPosterUri = await TryCreateVideoPosterAsync(uri, message.Id ?? mediaKeyId);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine("[WhatsAppService] Video poster failed: " + ex.Message);
-                }
-
-                string chatJid = GetCanonicalJid(message.RemoteJid);
-                if (!string.IsNullOrWhiteSpace(chatJid))
-                {
-                    await SaveMessageAsync(chatJid, message);
-                    QueueChatMessagesChanged(chatJid);
-                }
-
-                return uri;
-            }
-            finally
-            {
-                MediaDownloadLock.Release();
-            }
-        }
-
-        public async Task<string> EnsureDocumentAvailableAsync(ChatMessage message)
-        {
-            if (message == null || !message.IsDocument)
-            {
-                return null;
-            }
-
-            if (!string.IsNullOrWhiteSpace(message.DocumentUri))
-            {
-                await TryFillDocumentFileLengthFromLocalAsync(message);
-                return message.DocumentUri;
-            }
-
-            await EnsureConnectedAsync();
-
-            byte[] mediaKey = DecodeBase64Safe(message.DocumentMediaKeyBase64);
-            if (mediaKey == null || mediaKey.Length == 0)
-            {
-                throw new InvalidOperationException("A chave do documento nÃ£o estÃ¡ disponÃ­vel.");
-            }
-
-            byte[] expected = DecodeBase64Safe(message.DocumentFileEncSha256Base64);
-            string mediaKeyId = (expected != null && expected.Length > 0)
-                ? ToBase64Url(expected)
-                : (message.Id ?? Guid.NewGuid().ToString("N"));
-
-            await MediaDownloadLock.WaitAsync();
-            try
-            {
-                if (!string.IsNullOrWhiteSpace(message.DocumentUri))
-                {
-                    return message.DocumentUri;
-                }
-
-                var bytes = await _socket.DownloadAndDecryptMediaAsync(
-                    message.DocumentUrl,
-                    message.DocumentDirectPath,
-                    mediaKey,
-                    "document",
-                    expected);
-                string uri = await SaveDocumentBytesToCacheAsync(
-                    bytes,
-                    mediaKeyId,
-                    message.DocumentFileName,
-                    message.DocumentMimeType);
-                if (string.IsNullOrWhiteSpace(uri))
-                {
-                    throw new InvalidOperationException("Falha ao guardar o documento.");
-                }
-
-                message.DocumentUri = uri;
-                if (message.DocumentFileLengthBytes <= 0 && bytes != null && bytes.Length > 0)
-                {
-                    message.DocumentFileLengthBytes = bytes.Length;
-                }
-
-                string chatJid = GetCanonicalJid(message.RemoteJid);
-                if (!string.IsNullOrWhiteSpace(chatJid))
-                {
-                    await SaveMessageAsync(chatJid, message);
-                    QueueChatMessagesChanged(chatJid);
-                }
-
-                return uri;
-            }
-            finally
-            {
-                MediaDownloadLock.Release();
-            }
-        }
-
-        private async Task TryFillDocumentFileLengthFromLocalAsync(ChatMessage message)
-        {
-            if (message == null ||
-                message.DocumentFileLengthBytes > 0 ||
-                string.IsNullOrWhiteSpace(message.DocumentUri))
-            {
-                return;
-            }
-
-            try
-            {
-                StorageFile file = null;
-                string uri = message.DocumentUri.Trim();
-                if (uri.StartsWith("ms-appdata:", StringComparison.OrdinalIgnoreCase))
-                {
-                    file = await StorageFile.GetFileFromApplicationUriAsync(new Uri(uri));
-                }
-                else if (uri.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
-                {
-                    file = await StorageFile.GetFileFromPathAsync(new Uri(uri).LocalPath);
-                }
-                else if (System.IO.Path.IsPathRooted(uri))
-                {
-                    file = await StorageFile.GetFileFromPathAsync(uri);
-                }
-
-                if (file == null)
-                {
-                    return;
-                }
-
-                var props = await file.GetBasicPropertiesAsync();
-                if (props != null && props.Size > 0)
-                {
-                    message.DocumentFileLengthBytes = props.Size > long.MaxValue
-                        ? long.MaxValue
-                        : (long)props.Size;
-
-                    string chatJid = GetCanonicalJid(message.RemoteJid);
-                    if (!string.IsNullOrWhiteSpace(chatJid))
-                    {
-                        await SaveMessageAsync(chatJid, message);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[WhatsAppService] Document size fill failed: " + ex.Message);
-            }
-        }
-
-        private static string GetDocumentFileExtension(string fileName, string mimeType)
-        {
-            if (!string.IsNullOrWhiteSpace(fileName))
-            {
-                string name = fileName.Trim();
-                int dot = name.LastIndexOf('.');
-                if (dot > 0 && dot < name.Length - 1)
-                {
-                    string ext = name.Substring(dot);
-                    if (ext.Length <= 12)
-                    {
-                        return ext.ToLowerInvariant();
-                    }
-                }
-            }
-
-            string mime = (mimeType ?? string.Empty).ToLowerInvariant();
-            if (mime.Contains("pdf")) return ".pdf";
-            if (mime.Contains("msword") || mime.Contains("wordprocessingml")) return ".docx";
-            if (mime.Contains("vnd.ms-excel") || mime.Contains("spreadsheetml")) return ".xlsx";
-            if (mime.Contains("vnd.ms-powerpoint") || mime.Contains("presentationml")) return ".pptx";
-            if (mime.Contains("zip")) return ".zip";
-            if (mime.Contains("rar")) return ".rar";
-            if (mime.Contains("text/plain")) return ".txt";
-            if (mime.Contains("json")) return ".json";
-            if (mime.Contains("xml")) return ".xml";
-            if (mime.StartsWith("image/")) return GetImageFileExtension(mime);
-            if (mime.StartsWith("audio/")) return GetAudioFileExtension(mime);
-            if (mime.StartsWith("video/")) return GetVideoFileExtension(mime);
-            return ".bin";
-        }
-
-        private async Task<string> SaveDocumentBytesToCacheAsync(
-            byte[] documentBytes,
-            string fileBase,
-            string originalFileName,
-            string mimeType)
-        {
-            if (documentBytes == null || documentBytes.Length == 0)
-            {
-                return null;
-            }
-
-            var local = ApplicationData.Current.LocalFolder;
-            var mediaFolder = await local.CreateFolderAsync("MediaCache", CreationCollisionOption.OpenIfExists);
-            var docFolder = await mediaFolder.CreateFolderAsync("Documents", CreationCollisionOption.OpenIfExists);
-            string safeBase = SanitizeCacheFileBase(
-                string.IsNullOrWhiteSpace(fileBase) ? Guid.NewGuid().ToString("N") : fileBase);
-            string extension = GetDocumentFileExtension(originalFileName, mimeType);
-            string fileName = safeBase + extension;
-            var file = await docFolder.CreateFileAsync(fileName, CreationCollisionOption.ReplaceExisting);
-            await FileIO.WriteBytesAsync(file, documentBytes);
-            return "ms-appdata:///local/MediaCache/Documents/" + fileName;
-        }
-
-        private static string GetVideoFileExtension(string mimeType)
-        {
-            string mime = (mimeType ?? string.Empty).ToLowerInvariant();
-            if (mime.Contains("webm")) return ".webm";
-            if (mime.Contains("3gpp") || mime.Contains("3gp")) return ".3gp";
-            if (mime.Contains("quicktime") || mime.Contains("mov")) return ".mov";
-            return ".mp4";
-        }
-
-        private async Task<string> SaveVideoBytesToCacheAsync(byte[] videoBytes, string fileBase, string mimeType)
-        {
-            if (videoBytes == null || videoBytes.Length == 0) return null;
-            var local = ApplicationData.Current.LocalFolder;
-            var mediaFolder = await local.CreateFolderAsync("MediaCache", CreationCollisionOption.OpenIfExists);
-            var videoFolder = await mediaFolder.CreateFolderAsync("Video", CreationCollisionOption.OpenIfExists);
-            string safeBase = SanitizeCacheFileBase(
-                string.IsNullOrWhiteSpace(fileBase) ? Guid.NewGuid().ToString("N") : fileBase);
-            string fileName = safeBase + GetVideoFileExtension(mimeType);
-            var existing = await videoFolder.TryGetItemAsync(fileName) as StorageFile;
-            if (existing == null)
-            {
-                var file = await videoFolder.CreateFileAsync(fileName, CreationCollisionOption.ReplaceExisting);
-                await FileIO.WriteBytesAsync(file, videoBytes);
-            }
-
-            return "ms-appdata:///local/MediaCache/Video/" + fileName;
-        }
-
-        /// <summary>First-frame JPEG via MediaComposition (bubble poster after download).</summary>
-        private async Task<string> TryCreateVideoPosterAsync(string videoUri, string fileBase)
-        {
-            if (string.IsNullOrWhiteSpace(videoUri)) return null;
-
-            StorageFile videoFile = null;
-            try
-            {
-                if (videoUri.StartsWith("ms-appdata:", StringComparison.OrdinalIgnoreCase))
-                {
-                    videoFile = await StorageFile.GetFileFromApplicationUriAsync(new Uri(videoUri));
-                }
-                else if (File.Exists(videoUri))
-                {
-                    videoFile = await StorageFile.GetFileFromPathAsync(videoUri);
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[WhatsAppService] Open video for poster failed: " + ex.Message);
-                return null;
-            }
-
-            if (videoFile == null) return null;
-
-            try
-            {
-                var clip = await Windows.Media.Editing.MediaClip.CreateFromFileAsync(videoFile);
-                var composition = new Windows.Media.Editing.MediaComposition();
-                composition.Clips.Add(clip);
-                using (var thumbStream = await composition.GetThumbnailAsync(
-                    TimeSpan.Zero,
-                    640,
-                    640,
-                    Windows.Media.Editing.VideoFramePrecision.NearestFrame))
-                {
-                    if (thumbStream == null || thumbStream.Size == 0) return null;
-
-                    thumbStream.Seek(0);
-                    var reader = new Windows.Storage.Streams.DataReader(thumbStream.GetInputStreamAt(0));
-                    await reader.LoadAsync((uint)thumbStream.Size);
-                    byte[] jpeg = new byte[thumbStream.Size];
-                    reader.ReadBytes(jpeg);
-                    reader.Dispose();
-
-                    var local = ApplicationData.Current.LocalFolder;
-                    var mediaFolder = await local.CreateFolderAsync("MediaCache", CreationCollisionOption.OpenIfExists);
-                    var posterFolder = await mediaFolder.CreateFolderAsync("VideoPosters", CreationCollisionOption.OpenIfExists);
-                    string safeBase = SanitizeCacheFileBase(
-                        string.IsNullOrWhiteSpace(fileBase) ? Guid.NewGuid().ToString("N") : fileBase + "_poster");
-                    string fileName = safeBase + ".jpg";
-                    var posterFile = await posterFolder.CreateFileAsync(fileName, CreationCollisionOption.ReplaceExisting);
-                    await FileIO.WriteBytesAsync(posterFile, jpeg);
-                    return "ms-appdata:///local/MediaCache/VideoPosters/" + fileName;
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[WhatsAppService] Create video poster failed: " + ex.Message);
-                return null;
-            }
-        }
-
-        private async Task HydrateImageForMessageAsync(ChatMessage chatMessage, Proto.Message.Types.ImageMessage imageMessage, string messageId, string chatJid)
-        {
-            if (chatMessage == null || imageMessage == null || _socket == null) return;
-            ApplyImageMetadata(chatMessage, imageMessage);
-
-            string mediaKeyId = (imageMessage.FileEncSha256 != null && imageMessage.FileEncSha256.Length > 0)
-                ? ToBase64Url(imageMessage.FileEncSha256.ToByteArray())
-                : (messageId ?? Guid.NewGuid().ToString("N"));
-
-            if (imageMessage.JpegThumbnail != null &&
-                imageMessage.JpegThumbnail.Length > 0 &&
-                string.IsNullOrWhiteSpace(chatMessage.ThumbnailUri))
-            {
-                try
-                {
-                    string thumbUri = await SaveImageBytesToCacheAsync(
-                        imageMessage.JpegThumbnail.ToByteArray(),
-                        mediaKeyId + "_thumb",
-                        "image/jpeg");
-                    if (!string.IsNullOrWhiteSpace(thumbUri))
-                    {
-                        chatMessage.ThumbnailUri = thumbUri;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Log($"[WhatsAppService] Image jpegThumbnail save failed for {messageId}: {ex.Message}");
-                }
-            }
-
-            if (!string.IsNullOrWhiteSpace(chatMessage.ImageUri)) return;
-
-            await MediaDownloadLock.WaitAsync();
-            try
-            {
-                byte[] mediaKey = imageMessage.MediaKey?.ToByteArray();
-                byte[] expectedEncSha = imageMessage.FileEncSha256?.ToByteArray();
-
-                if (mediaKey != null && mediaKey.Length > 0)
-                {
-                    try
-                    {
-                        var decryptedBytes = await _socket.DownloadAndDecryptMediaAsync(
-                            imageMessage.Url,
-                            imageMessage.DirectPath,
-                            mediaKey,
-                            "image",
-                            expectedEncSha);
-
-                        var uri = await SaveImageBytesToCacheAsync(decryptedBytes, mediaKeyId, imageMessage.Mimetype);
-                        if (!string.IsNullOrWhiteSpace(uri))
-                        {
-                            chatMessage.ImageUri = uri;
-                            await SaveMessageAsync(chatJid, chatMessage);
-                            SchedulePersist();
-                            QueueChatMessagesChanged(chatJid);
-                            return;
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Log($"[WhatsAppService] Image decrypt/download failed for {messageId}: {ex.Message}");
-                    }
-                }
-
-                // Fallback to embedded thumbnail if full media fetch fails.
-                if (imageMessage.JpegThumbnail != null && imageMessage.JpegThumbnail.Length > 0)
-                {
-                    var thumbUri = await SaveImageBytesToCacheAsync(imageMessage.JpegThumbnail.ToByteArray(), mediaKeyId + "_thumb", "image/jpeg");
-                    if (!string.IsNullOrWhiteSpace(thumbUri))
-                    {
-                        chatMessage.ImageUri = thumbUri;
-                        await SaveMessageAsync(chatJid, chatMessage);
-                        SchedulePersist();
-                        QueueChatMessagesChanged(chatJid);
-                    }
-                }
-                else
-                {
-                    // Persist keys so the bubble can offer on-demand download.
-                    await SaveMessageAsync(chatJid, chatMessage);
-                    SchedulePersist();
-                    QueueChatMessagesChanged(chatJid);
-                }
-            }
-            finally
-            {
-                MediaDownloadLock.Release();
-            }
-        }
-
-        private async Task HydrateStickerForMessageAsync(
-            ChatMessage chatMessage,
-            Proto.Message.Types.StickerMessage stickerMessage,
-            string messageId,
-            string chatJid)
-        {
-            if (chatMessage == null || stickerMessage == null || _socket == null) return;
-            ApplyStickerMetadata(chatMessage, stickerMessage);
-            if (!string.IsNullOrWhiteSpace(chatMessage.ImageUri)) return;
-
-            if (stickerMessage.IsLottie)
-            {
-                chatMessage.IsStickerFailed = true;
-                await SaveMessageAsync(chatJid, chatMessage);
-                SchedulePersist();
-                QueueChatMessagesChanged(chatJid);
-                return;
-            }
-
-            string mediaKeyId = (stickerMessage.FileEncSha256 != null && stickerMessage.FileEncSha256.Length > 0)
-                ? ToBase64Url(stickerMessage.FileEncSha256.ToByteArray())
-                : (messageId ?? Guid.NewGuid().ToString("N"));
-
-            // Prefer embedded PNG thumbnail first so the bubble isn't empty while CDN download runs.
-            if (stickerMessage.PngThumbnail != null && stickerMessage.PngThumbnail.Length > 0)
-            {
-                try
-                {
-                    var thumbUri = await SaveImageBytesToCacheAsync(
-                        stickerMessage.PngThumbnail.ToByteArray(),
-                        mediaKeyId + "_thumb",
-                        "image/png");
-                    if (!string.IsNullOrWhiteSpace(thumbUri))
-                    {
-                        chatMessage.ImageUri = thumbUri;
-                        chatMessage.IsStickerFailed = false;
-                        await SaveMessageAsync(chatJid, chatMessage);
-                        SchedulePersist();
-                        QueueChatMessagesChanged(chatJid);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Log($"[WhatsAppService] Sticker thumbnail save failed for {messageId}: {ex.Message}");
-                }
-            }
-
-            await MediaDownloadLock.WaitAsync();
-            try
-            {
-                byte[] mediaKey = stickerMessage.MediaKey?.ToByteArray();
-                byte[] expectedEncSha = stickerMessage.FileEncSha256?.ToByteArray();
-
-                if (mediaKey != null && mediaKey.Length > 0)
-                {
-                    try
-                    {
-                        var decryptedBytes = await _socket.DownloadAndDecryptMediaAsync(
-                            stickerMessage.Url,
-                            stickerMessage.DirectPath,
-                            mediaKey,
-                            "image",
-                            expectedEncSha);
-
-                        var uri = await SaveStickerBytesToCacheAsync(
-                            decryptedBytes,
-                            mediaKeyId,
-                            stickerMessage.Mimetype ?? "image/webp");
-                        if (!string.IsNullOrWhiteSpace(uri))
-                        {
-                            chatMessage.ImageUri = uri;
-                            chatMessage.IsStickerFailed = false;
-                            await SaveMessageAsync(chatJid, chatMessage);
-                            SchedulePersist();
-                            QueueChatMessagesChanged(chatJid);
-                            return;
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Log($"[WhatsAppService] Sticker decrypt/download failed for {messageId}: {ex.Message}");
-                    }
-                }
-
-                if (!string.IsNullOrWhiteSpace(chatMessage.ImageUri))
-                {
-                    // Keep thumbnail already shown.
-                    return;
-                }
-
-                chatMessage.IsStickerFailed = true;
-                await SaveMessageAsync(chatJid, chatMessage);
-                SchedulePersist();
-                QueueChatMessagesChanged(chatJid);
-            }
-            finally
-            {
-                MediaDownloadLock.Release();
-            }
-        }
-
-        private static string GetImageFileExtension(string mimeType)
-        {
-            if (string.IsNullOrWhiteSpace(mimeType)) return ".jpg";
-            string lower = mimeType.ToLowerInvariant();
-            if (lower.Contains("png")) return ".png";
-            if (lower.Contains("webp")) return ".webp";
-            if (lower.Contains("gif")) return ".gif";
-            if (lower.Contains("bmp")) return ".bmp";
-            return ".jpg";
-        }
-
         private static string ToBase64Url(byte[] data)
         {
             if (data == null || data.Length == 0) return Guid.NewGuid().ToString("N");
             return Convert.ToBase64String(data).Replace("+", "-").Replace("/", "_").TrimEnd('=');
         }
 
-        private void EnqueueDecryptedMessage(Client.DecryptedMessageEventArgs message)
+        private static ChatPreviewKind ResolvePreviewKind(ChatMessage message, MessageRenderInfo renderInfo)
         {
-            if (message == null)
+            if (renderInfo != null)
             {
-                return;
-            }
-
-            lock (_incomingMessageQueueLock)
-            {
-                if (message.IsOffline)
+                ChatPreviewKind fromRender = renderInfo.PreviewKind;
+                if (fromRender != ChatPreviewKind.Text)
                 {
-                    _offlineIncomingMessageQueue.Enqueue(message);
-                }
-                else
-                {
-                    _liveIncomingMessageQueue.Enqueue(message);
+                    return fromRender;
                 }
             }
 
-            RestartIncomingMessagePumpIfNeeded();
-        }
-
-        private void RestartIncomingMessagePumpIfNeeded()
-        {
-            int generation;
-            lock (_incomingMessageQueueLock)
-            {
-                if (_incomingMessagePumpRunning ||
-                    (_liveIncomingMessageQueue.Count == 0 && _offlineIncomingMessageQueue.Count == 0))
-                {
-                    return;
-                }
-
-                _incomingMessagePumpRunning = true;
-                generation = _incomingMessagePumpGeneration;
-                _incomingMessagePumpStage = "starting";
-                _incomingMessagePumpStageUtcTicks = DateTime.UtcNow.Ticks;
-                _incomingMessagePumpTask = Task.Run(() => ProcessIncomingMessageQueueAsync(generation));
-            }
-
-            RuntimeDiagnosticsService.Instance.Write(
-                "messages",
-                "incoming-pump-start",
-                "generation=" + generation);
-        }
-
-        private void SetIncomingMessagePumpStage(string stage, Client.DecryptedMessageEventArgs message = null)
-        {
-            lock (_incomingMessageQueueLock)
-            {
-                _incomingMessagePumpStage = string.IsNullOrWhiteSpace(stage) ? "unknown" : stage;
-                _incomingMessagePumpCurrent = message ?? _incomingMessagePumpCurrent;
-                _incomingMessagePumpStageUtcTicks = DateTime.UtcNow.Ticks;
-            }
-        }
-
-        private void ResetIncomingMessagePump(string reason, bool requeueCurrent)
-        {
-            int generation;
-            int liveDepth;
-            int offlineDepth;
-            lock (_incomingMessageQueueLock)
-            {
-                var current = _incomingMessagePumpCurrent;
-                _incomingMessagePumpGeneration++;
-                generation = _incomingMessagePumpGeneration;
-
-                if (requeueCurrent && current != null)
-                {
-                    if (current.IsOffline)
-                    {
-                        _offlineIncomingMessageQueue.Enqueue(current);
-                    }
-                    else
-                    {
-                        _liveIncomingMessageQueue.Enqueue(current);
-                    }
-                }
-
-                _incomingMessagePumpCurrent = null;
-                _incomingMessagePumpRunning = false;
-                _incomingMessagePumpTask = Task.CompletedTask;
-                _incomingMessagePumpStage = "reset:" + reason;
-                _incomingMessagePumpStageUtcTicks = DateTime.UtcNow.Ticks;
-                liveDepth = _liveIncomingMessageQueue.Count;
-                offlineDepth = _offlineIncomingMessageQueue.Count;
-            }
-
-            RuntimeDiagnosticsService.Instance.Write(
-                "messages",
-                "incoming-pump-reset",
-                "reason=" + reason + "; generation=" + generation +
-                "; requeued=" + requeueCurrent + "; qLive=" + liveDepth + "; qOffline=" + offlineDepth);
-        }
-
-        private bool IsIncomingMessagePumpStalled(TimeSpan limit)
-        {
-            lock (_incomingMessageQueueLock)
-            {
-                if (!_incomingMessagePumpRunning || _incomingMessagePumpStageUtcTicks <= 0)
-                {
-                    return false;
-                }
-
-                bool hasWork = _incomingMessagePumpCurrent != null ||
-                               _liveIncomingMessageQueue.Count > 0 ||
-                               _offlineIncomingMessageQueue.Count > 0;
-                if (!hasWork)
-                {
-                    return false;
-                }
-
-                var stageUtc = new DateTime(_incomingMessagePumpStageUtcTicks, DateTimeKind.Utc);
-                return DateTime.UtcNow - stageUtc > limit;
-            }
-        }
-
-        private async Task ProcessIncomingMessageQueueAsync(int generation)
-        {
-            while (true)
-            {
-                Client.DecryptedMessageEventArgs next = null;
-                lock (_incomingMessageQueueLock)
-                {
-                    if (generation != _incomingMessagePumpGeneration)
-                    {
-                        return;
-                    }
-
-                    // Always service real-time traffic first. Offline replay records are
-                    // timestamp-guarded, so processing them later cannot overwrite a
-                    // newer preview.
-                    if (_liveIncomingMessageQueue.Count > 0)
-                    {
-                        next = _liveIncomingMessageQueue.Dequeue();
-                    }
-                    else if (_offlineIncomingMessageQueue.Count > 0)
-                    {
-                        next = _offlineIncomingMessageQueue.Dequeue();
-                    }
-                    else
-                    {
-                        _incomingMessagePumpCurrent = null;
-                        _incomingMessagePumpRunning = false;
-                        _incomingMessagePumpStage = "idle";
-                        _incomingMessagePumpStageUtcTicks = DateTime.UtcNow.Ticks;
-                        return;
-                    }
-
-                    _incomingMessagePumpCurrent = next;
-                    _incomingMessagePumpStage = "handle";
-                    _incomingMessagePumpStageUtcTicks = DateTime.UtcNow.Ticks;
-                }
-
-                try
-                {
-                    Task handleTask = HandleDecryptedMessageAsync(next);
-                    if (!next.IsOffline)
-                    {
-                        Task completed = await Task.WhenAny(handleTask, Task.Delay(LiveIncomingMessageTimeoutMs));
-                        if (completed != handleTask)
-                        {
-                            RuntimeDiagnosticsService.Instance.Write(
-                                "messages",
-                                "incoming-message-timeout",
-                                "id=" + (next.MessageId ?? "<none>") +
-                                "; stage=" + _incomingMessagePumpStage +
-                                "; timeoutMs=" + LiveIncomingMessageTimeoutMs);
-
-                            _ = handleTask.ContinueWith(
-                                t =>
-                                {
-                                    if (t.IsFaulted)
-                                    {
-                                        RuntimeDiagnosticsService.Instance.RecordException(
-                                            "messages",
-                                            "late-message-fault",
-                                            t.Exception,
-                                            "id=" + (next.MessageId ?? "<none>"));
-                                    }
-                                },
-                                TaskScheduler.Default);
-
-                            bool requeueTimedOutMessage = true;
-                            lock (_incomingMessageQueueLock)
-                            {
-                                if (!string.IsNullOrWhiteSpace(next.MessageId))
-                                {
-                                    // Requeue once. If the same message blocks again,
-                                    // skip that one item so the rest of the conversation
-                                    // and all other chats can continue updating.
-                                    requeueTimedOutMessage = _incomingMessageTimeoutIds.Add(next.MessageId);
-                                }
-                            }
-
-                            ResetIncomingMessagePump(
-                                requeueTimedOutMessage ? "message-timeout-retry" : "message-timeout-skip",
-                                requeueCurrent: requeueTimedOutMessage);
-                            RestartIncomingMessagePumpIfNeeded();
-                            return;
-                        }
-                    }
-
-                    await handleTask;
-                    if (!string.IsNullOrWhiteSpace(next.MessageId))
-                    {
-                        lock (_incomingMessageQueueLock)
-                        {
-                            _incomingMessageTimeoutIds.Remove(next.MessageId);
-                        }
-                    }
-                    Interlocked.Increment(ref _diagnosticsAppliedMessageCount);
-                    Interlocked.Exchange(ref _diagnosticsLastAppliedMessageUtcTicks, DateTime.UtcNow.Ticks);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[WhatsAppService] Incoming message pump error: {ex.Message}");
-                    RuntimeDiagnosticsService.Instance.RecordException(
-                        "messages",
-                        "incoming-pump-error",
-                        ex,
-                        "offline=" + (next != null && next.IsOffline) +
-                        "; id=" + (next?.MessageId ?? "<none>") +
-                        "; stage=" + _incomingMessagePumpStage);
-                }
-                finally
-                {
-                    lock (_incomingMessageQueueLock)
-                    {
-                        if (generation == _incomingMessagePumpGeneration &&
-                            ReferenceEquals(_incomingMessagePumpCurrent, next))
-                        {
-                            _incomingMessagePumpCurrent = null;
-                            _incomingMessagePumpStage = "next";
-                            _incomingMessagePumpStageUtcTicks = DateTime.UtcNow.Ticks;
-                        }
-                    }
-                }
-            }
-        }
-
-        private async Task WaitForIncomingMessageQueueDrainAsync(int timeoutMs)
-        {
-            Task pump;
-            lock (_incomingMessageQueueLock)
-            {
-                pump = _incomingMessagePumpTask ?? Task.CompletedTask;
-            }
-
-            if (pump.IsCompleted)
-            {
-                return;
-            }
-
-            await Task.WhenAny(pump, Task.Delay(timeoutMs));
-        }
-
-        private void QueueMessageControlWork(string reason, Func<Task> work)
-        {
-            if (work == null)
-            {
-                return;
-            }
-
-            lock (_messageControlQueueLock)
-            {
-                Task previous = _messageControlQueueTail ?? Task.CompletedTask;
-                _messageControlQueueTail = previous.ContinueWith(
-                    async completedPrevious =>
-                    {
-                        // Observe a previous failure so the serial control queue is not
-                        // torn down by one malformed App State or placeholder event.
-                        if (completedPrevious.IsFaulted)
-                        {
-                            var ignored = completedPrevious.Exception;
-                        }
-
-                        try
-                        {
-                            await work();
-                        }
-                        catch (Exception ex)
-                        {
-                            Debug.WriteLine($"[WhatsAppService] Background control message failed ({reason}): {ex.Message}");
-                            RuntimeDiagnosticsService.Instance.RecordException(
-                                "messages",
-                                "control-work-failed",
-                                ex,
-                                "reason=" + reason);
-                        }
-                    },
-                    CancellationToken.None,
-                    TaskContinuationOptions.ExecuteSynchronously,
-                    TaskScheduler.Default).Unwrap();
-            }
-        }
-
-        /// <summary>
-        /// Handles real-time decrypted messages from SocketClient
-        /// </summary>
-        private async Task HandleDecryptedMessageAsync(Client.DecryptedMessageEventArgs e)
-        {
-            // ProcessIncomingMessageQueueAsync is the sole caller and already guarantees
-            // one-at-a-time ingestion. A second non-reentrant semaphore here caused a
-            // permanent self-deadlock when recovered messages re-entered the pipeline.
-            try
-            {
-                SetIncomingMessagePumpStage("routing", e);
-                if (!e.IsOffline)
-                {
-                    Log($"[WhatsAppService] HandleDecryptedMessageAsync from {e.FromJid}, participant={e.Participant}, id={e.MessageId}");
-                }
-
-                if (e.Message?.ProtocolMessage?.PeerDataOperationRequestResponseMessage != null)
-                {
-                    var response = e.Message.ProtocolMessage.PeerDataOperationRequestResponseMessage;
-                    QueueMessageControlWork($"peer-response:{e.MessageId}", () => ProcessPeerDataOperationResponseAsync(response));
-                    return;
-                }
-
-                // Both of these are the session's business now: the app state module inside
-                // Unison.Socket takes the key share and recovers from a fatal sync itself.
-                if (e.Message?.ProtocolMessage?.AppStateFatalExceptionNotification != null ||
-                    e.Message?.ProtocolMessage?.AppStateSyncKeyShare != null)
-                {
-                    return;
-                }
-
-                if (e.Message?.PlaceholderMessage != null)
-                {
-                    RegisterMissingMessage(e.FromJid, e.Participant, e.MessageId, e.IsFromMe, e.Timestamp, $"placeholder:{e.Message.PlaceholderMessage.Type}");
-                    QueueMessageControlWork(
-                        $"placeholder-resend:{e.MessageId}",
-                        () => TryRequestPlaceholderResendAsync(e.FromJid, e.MessageId, "placeholder-message"));
-                    return;
-                }
-
-                // Build PN/LID alias from message metadata immediately (works even when usync times out).
-                if (!string.IsNullOrEmpty(e.SenderLid) && !string.IsNullOrEmpty(e.FromJid) && e.FromJid.EndsWith("@s.whatsapp.net"))
-                {
-                    RegisterAliasMapping(e.SenderLid, e.FromJid, "sender_lid");
-                }
-                if (!string.IsNullOrEmpty(e.PeerRecipientPn) && !string.IsNullOrEmpty(e.FromJid) && e.FromJid.EndsWith("@lid"))
-                {
-                    RegisterAliasMapping(e.FromJid, e.PeerRecipientPn, "peer_recipient_pn");
-                }
-                if (!string.IsNullOrEmpty(e.PeerRecipientLid) && !string.IsNullOrEmpty(e.RecipientJid) && e.RecipientJid.EndsWith("@s.whatsapp.net"))
-                {
-                    RegisterAliasMapping(e.PeerRecipientLid, e.RecipientJid, "peer_recipient_lid");
-                }
-                if (!string.IsNullOrEmpty(e.Participant) && !string.IsNullOrEmpty(e.ParticipantAlt))
-                {
-                    string participant = NormalizeJid(e.Participant);
-                    string alternate = NormalizeJid(e.ParticipantAlt);
-                    if (participant.EndsWith("@lid", StringComparison.OrdinalIgnoreCase))
-                        RegisterAliasMapping(participant, alternate, "group-participant-alt");
-                    else if (alternate.EndsWith("@lid", StringComparison.OrdinalIgnoreCase))
-                        RegisterAliasMapping(alternate, participant, "group-participant-alt");
-                }
-
-                string normalizedFromJid = NormalizeJid(e.FromJid);
-                bool isGroup = normalizedFromJid.EndsWith("@g.us");
-
-                // -- FAST PATH: offline replay duplicate detection --
-                // When draining the offline batch (1000+ messages), skip the expensive
-                // content extraction, alias resolution, and UI dispatches for messages
-                // we already have on disk. Pushname capture from the raw 'notify' attr
-                // is already handled independently in the OnMessage handler.
-                if (e.IsOffline && !string.IsNullOrEmpty(e.MessageId))
-                {
-                    if (isGroup)
-                    {
-                        string fastGroupJid = GetCanonicalJid(normalizedFromJid);
-                        if (HasMessageId(fastGroupJid, e.MessageId))
-                        {
-                            ResolveMissingMessage(fastGroupJid, e.MessageId, "offline-duplicate-fast");
-                            return;
-                        }
-                    }
-                    else
-                    {
-                        // For DMs, check the from JID and all known alias buckets
-                        string fastDmJid = GetCanonicalJid(normalizedFromJid);
-                        if (HasMessageId(fastDmJid, e.MessageId) ||
-                            HasMessageIdInAnyAlias(normalizedFromJid, e.MessageId))
-                        {
-                            ResolveMissingMessage(fastDmJid, e.MessageId, "offline-duplicate-fast");
-                            return;
-                        }
-                    }
-                    // Not a known duplicate ? fall through to full pipeline
-                }
-
-                string routingReason = isGroup ? "group-from" : null;
-                string jid = isGroup ? GetCanonicalJid(normalizedFromJid) : ResolveLiveDirectChatJid(e, out routingReason);
-                if (string.IsNullOrWhiteSpace(jid))
-                {
-                    jid = GetCanonicalJid(e.FromJid);
-                    routingReason = routingReason ?? "fallback-from";
-                }
-                isGroup = jid.EndsWith("@g.us");
-
-                if (!isGroup)
-                {
-                    string normalizedRecipient = NormalizeJid(e.RecipientJid);
-                    string normalizedPeerRecipientPn = NormalizeJid(e.PeerRecipientPn);
-                    string normalizedPeerRecipientLid = NormalizeJid(e.PeerRecipientLid);
-                    string normalizedSenderLid = NormalizeJid(e.SenderLid);
-                    Debug.WriteLine(
-                        $"[WhatsAppService] Direct live routing: id={e.MessageId}, from={normalizedFromJid} (self={IsSelfJid(normalizedFromJid)}), recipient={normalizedRecipient} (self={IsSelfJid(normalizedRecipient)}), peerRecipientPn={normalizedPeerRecipientPn} (self={IsSelfJid(normalizedPeerRecipientPn)}), peerRecipientLid={normalizedPeerRecipientLid} (self={IsSelfJid(normalizedPeerRecipientLid)}), senderLid={normalizedSenderLid} (self={IsSelfJid(normalizedSenderLid)}), isFromMe={e.IsFromMe}, finalChat={jid}, reason={routingReason}");
-
-                    if (string.Equals(routingReason, "self-chat", StringComparison.OrdinalIgnoreCase) &&
-                        !string.IsNullOrWhiteSpace(normalizedPeerRecipientLid) &&
-                        !string.Equals(normalizedPeerRecipientLid, jid, StringComparison.OrdinalIgnoreCase))
-                    {
-                        QueueMessageControlWork(
-                            "live-self-chat-collapse:" + e.MessageId,
-                            () => MergeTransientDirectChatIntoCanonicalAsync(
-                                normalizedPeerRecipientLid,
-                                jid,
-                                "live-self-chat-collapse"));
-                    }
-                }
-
-                if (e.Message?.ProtocolMessage != null && (int)e.Message.ProtocolMessage.Type == 0)
-                {
-                    QueueMessageControlWork(
-                        "message-revoke:" + e.MessageId,
-                        () => HandleMessageRevocationAsync(jid, e.Message.ProtocolMessage, e.MessageId));
-                    return;
-                }
-
-                if (e.Message?.PinInChatMessage != null)
-                {
-                    uint duration = e.Message.MessageContextInfo?.MessageAddOnDurationInSecs ?? 0;
-                    QueueMessageControlWork(
-                        "message-pin:" + e.MessageId,
-                        () => HandlePinInChatMessageAsync(jid, e.Message.PinInChatMessage, duration));
-                    return;
-                }
-
-                // Reactions: MessageFacade maps onto parent; WA only persists / notifies.
-                if (_messageService != null)
-                {
-                    string reactionParticipant = NormalizeJid(e.Participant);
-                    string reactionSenderName = e.IsFromMe
-                        ? (_authState?.Me?.Name ?? SelfListDisplayName())
-                        : (isGroup
-                            ? GetResolvedName(!string.IsNullOrEmpty(reactionParticipant) ? reactionParticipant : jid)
-                            : GetResolvedName(jid));
-
-                    if (!MessagesByChat.ContainsKey(jid))
-                    {
-                        MessagesByChat[jid] = new List<ChatMessage>();
-                    }
-
-                    var reactionContext = new ChatMessageMapContext
-                    {
-                        MessageId = e.MessageId,
-                        ChatJid = jid,
-                        RemoteJid = jid,
-                        ParticipantJid = reactionParticipant,
-                        SenderName = reactionSenderName,
-                        IsFromMe = e.IsFromMe,
-                        Timestamp = NormalizeIncomingTimestamp(e.Timestamp, e.IsOffline)
-                    };
-
-                    ChatMessage reactionParent;
-                    if (_messageService.TryHandleReaction(e.Message, reactionContext, MessagesByChat[jid], out reactionParent))
-                    {
-                        SetIncomingMessagePumpStage("reaction", e);
-                        if (reactionParent != null)
-                        {
-                            await SaveMessageAsync(jid, reactionParent).ConfigureAwait(false);
-                            if (IsActiveChatJid(jid))
-                            {
-                                QueueChatMessagesChanged(jid);
-                            }
-                        }
-                        else
-                        {
-                            Log($"[WhatsAppService] Reaction target not found yet: chat={jid}, id={e.MessageId}");
-                        }
-                        return;
-                    }
-                }
-
-                SetIncomingMessagePumpStage("render", e);
-                // Extract message render payload
-                var renderInfo = ExtractMessageRenderInfo(e.Message);
-                string content = renderInfo?.Content;
-                if (string.IsNullOrEmpty(content))
-                {
-                    // SenderKeyDistributionMessage-only payloads have no user-facing content
-                    // They were already processed in SocketClient ? just skip silently
-                    if (e.Message?.SenderKeyDistributionMessage != null)
-                    {
-                        Log("[WhatsAppService] SenderKeyDistribution-only message, no content to display");
-                    }
-                    else
-                    {
-                        Log("[WhatsAppService] No text content in message, skipping");
-                    }
-                    return;
-                }
-
-
-                // Update contact name cache if a pushName or verifiedName is provided
-                string nameFromMsg = e.VerifiedName ?? e.PushName;
-                if (!string.IsNullOrEmpty(nameFromMsg))
-                {
-                    // The push name on a message we sent is our own, whoever the message went to.
-                    // Attributing it to the conversation instead - which is what happens when the
-                    // sender is read as "participant or chat" - writes the user's name over their
-                    // contact's, and leaves the user themselves nameless.
-                    string senderJid = e.IsFromMe
-                        ? NormalizeJid(_authState?.Me?.Id)
-                        : NormalizeJid(e.Participant ?? e.FromJid);
-                    if (e.IsFromMe)
-                    {
-                        CaptureSelfPushName(nameFromMsg, "message-echo");
-                    }
-
-                    if (string.IsNullOrEmpty(senderJid))
-                    {
-                        senderJid = NormalizeJid(e.Participant ?? e.FromJid);
-                    }
-
-                    // Update if we don't have a name, or if the current name is just the JID/number
-                    if (!ContactNames.TryGetValue(senderJid, out var existingName) || existingName.Contains("@") || existingName == senderJid.Split('@')[0])
-                    {
-                        string sanitized = SanitizeContactLabel(nameFromMsg, senderJid);
-                        if (string.IsNullOrEmpty(sanitized))
-                        {
-                            if (IsSelfJid(senderJid))
-                            {
-                                Log($"[WhatsAppService] Explicit 'You' label observed for SELF JID {senderJid}. Ignoring and keeping numeric identity.");
-                            }
-                            else
-                            {
-                                Log($"[WhatsAppService] Ignoring PushName 'You' for NON-SELF JID {senderJid} (spoof prevention).");
-                            }
-                            Log($"[WhatsAppService] Ignoring PushName 'You' for {senderJid} to prevent spoofing");
-                        }
-                        else
-                        {
-                            ContactNames[senderJid] = sanitized;
-                            RememberPersonName(senderJid, sanitized);
-                            if (!e.IsOffline)
-                            {
-                                Log($"[WhatsAppService] Updated contact name for {senderJid} from message metadata: {sanitized}");
-                            }
-                        }
-                    }
-                }
-
-                // Resolve sender name and true 'IsFromMe' status:
-                
-                string senderName;
-                bool isActuallyFromMe = e.IsFromMe;
-
-                if (isGroup)
-                {
-                    if (e.IsFromMe)
-                    {
-                        senderName = _authState?.Me?.Name ?? SelfListDisplayName();
-                    }
-                    else if (!string.IsNullOrEmpty(e.Participant))
-                    {
-                        string participantJid = NormalizeJid(e.Participant);
-                        senderName = GetResolvedName(participantJid);
-                    }
-                    else
-                    {
-                        senderName = GetResolvedName(jid);
-                    }
-                }
-                else
-                {
-                    // 1-on-1 Chat
-                    if (e.IsFromMe)
-                    {
-                        // If it's from me, it could be a message I sent from this device (Local)
-                        // OR a message I sent from my phone (Synced).
-                        // In Unison, we want to know if 'I' am the author or if the 'Other Person' is.
-                        senderName = _authState?.Me?.Name ?? SelfListDisplayName();
-                        isActuallyFromMe = true;
-                    }
-                    else
-                    {
-                        // Message from the other person
-                        senderName = GetResolvedName(jid);
-                        isActuallyFromMe = false;
-                    }
-                }
-                
-                // List preview body is unprefixed; group author is applied via LastMessageAuthor.
-                string displayContent = content;
-                string listAuthorPrefix = isGroup
-                    ? ChatPreviewNormalizer.FormatListAuthorPrefix(
-                        new ChatMessage { SenderName = senderName, IsFromMe = isActuallyFromMe },
-                        true,
-                        SelfListDisplayName())
-                    : string.Empty;
-
-                SetIncomingMessagePumpStage("model", e);
-                // Domain ChatMessage via the MessageFacade (Kind resolved in mapper).
-                ChatMessage chatMessage;
-                ApplyContextInfoExtras(e.Message, out string quotedText, out string quotedSender, out string quotedMessageId, out var quotedKind, out var mentionedJids);
-
-                if (_messageService != null)
-                {
-                    chatMessage = _messageService.GetChatMessage(
-                        new ChatMessageMapContext
-                        {
-                            MessageId = e.MessageId,
-                            ChatJid = jid,
-                            RemoteJid = jid,
-                            ParticipantJid = NormalizeJid(e.Participant),
-                            SenderName = senderName,
-                            IsFromMe = isActuallyFromMe,
-                            Timestamp = NormalizeIncomingTimestamp(e.Timestamp, e.IsOffline),
-                            Status = isActuallyFromMe ? ApplyChatStatusPolicy(jid, ChatMessage.StatusSent) : null
-                        },
-                        new ChatMessageContentSnapshot
-                        {
-                            Text = content,
-                            IsImage = renderInfo?.IsImage == true,
-                            IsVideo = renderInfo?.IsVideo == true,
-                            IsSticker = renderInfo?.IsSticker == true,
-                            IsAudio = renderInfo?.IsAudio == true,
-                            IsVoice = renderInfo?.IsVoice == true,
-                            IsDocument = renderInfo?.IsDocument == true,
-                            Caption = renderInfo?.Caption ?? "",
-                            QuotedText = quotedText,
-                            QuotedKind = quotedKind,
-                            QuotedSenderName = quotedSender,
-                            QuotedMessageId = quotedMessageId,
-                            MentionedJids = mentionedJids
-                        });
-                }
-                else
-                {
-                    // Temporary escape hatch until MessageFacade is always attached.
-                    chatMessage = new ChatMessage
-                    {
-                        Id = e.MessageId,
-                        Content = content,
-                        Kind = ChatPreviewNormalizer.ResolveKind(
-                            renderInfo?.IsImage == true,
-                            renderInfo?.IsVideo == true,
-                            renderInfo?.IsSticker == true,
-                            renderInfo?.IsAudio == true,
-                            renderInfo?.IsVoice == true,
-                            renderInfo?.IsDocument == true),
-                        Caption = renderInfo?.Caption ?? "",
-                        Timestamp = NormalizeIncomingTimestamp(e.Timestamp, e.IsOffline),
-                        IsFromMe = isActuallyFromMe,
-                        SenderName = senderName,
-                        RemoteJid = jid,
-                        ParticipantJid = NormalizeJid(e.Participant),
-                        Status = isActuallyFromMe ? ApplyChatStatusPolicy(jid, ChatMessage.StatusSent) : null,
-                        QuotedText = quotedText,
-                        QuotedKind = quotedKind,
-                        QuotedSenderName = quotedSender,
-                        QuotedMessageId = quotedMessageId,
-                        MentionedJids = mentionedJids
-                    };
-                }
-
-                if (renderInfo?.IsAudio == true && renderInfo.AudioMessage != null)
-                {
-                    ApplyAudioMetadata(chatMessage, renderInfo.AudioMessage);
-                }
-
-                if (renderInfo?.IsImage == true && renderInfo.ImageMessage != null)
-                {
-                    ApplyImageMetadata(chatMessage, renderInfo.ImageMessage);
-                }
-
-                if (renderInfo?.IsSticker == true && renderInfo.StickerMessage != null)
-                {
-                    ApplyStickerMetadata(chatMessage, renderInfo.StickerMessage);
-                }
-
-                if (renderInfo?.IsVideo == true && renderInfo.VideoMessage != null)
-                {
-                    ApplyVideoMetadata(chatMessage, renderInfo.VideoMessage);
-                }
-
-                if (renderInfo?.IsDocument == true && renderInfo.DocumentMessage != null)
-                {
-                    ApplyDocumentMetadata(chatMessage, renderInfo.DocumentMessage);
-                }
-
-                ApplyPendingStateToMessage(jid, chatMessage);
-
-                SetIncomingMessagePumpStage("dedupe", e);
-                // Add to MessagesByChat
-                if (!MessagesByChat.ContainsKey(jid))
-                {
-                    MessagesByChat[jid] = new List<ChatMessage>();
-                }
-
-                string duplicateChatJid = null;
-                ChatMessage duplicateMessage = null;
-                bool hasAliasLinkedDuplicate = !isGroup &&
-                    !string.IsNullOrEmpty(chatMessage.Id) &&
-                    TryFindAliasLinkedMessage(jid, chatMessage.Id, out duplicateChatJid, out duplicateMessage);
-
-                ChatMessage consolidatedMessage;
-                if (!string.IsNullOrEmpty(chatMessage.Id) &&
-                    hasAliasLinkedDuplicate &&
-                    !string.Equals(NormalizeJid(duplicateChatJid), jid, StringComparison.OrdinalIgnoreCase) &&
-                    TryConsolidateAliasDuplicateMessage(jid, duplicateChatJid, chatMessage.Id, out consolidatedMessage))
-                {
-                    Debug.WriteLine($"[WhatsAppService] Consolidated alias-linked duplicate {chatMessage.Id} from {duplicateChatJid} into {jid}");
-
-                    string duplicateJidForPersist = NormalizeJid(duplicateChatJid);
-                    ChatMessage consolidatedForPersist = consolidatedMessage;
-                    QueueMessageControlWork(
-                        "alias-duplicate-persist:" + chatMessage.Id,
-                        async () =>
-                        {
-                            await _messageStore.DeleteMessageAsync(duplicateJidForPersist, chatMessage.Id);
-                            if (consolidatedForPersist != null)
-                            {
-                                await SaveMessageAsync(jid, consolidatedForPersist);
-                            }
-                            await DeduplicateChatsAsync("live-direct-alias-duplicate");
-                        });
-
-                    if (!e.IsOffline)
-                    {
-                        QueueMessageControlWork(
-                            "alias-duplicate-preview:" + chatMessage.Id,
-                            () => RefreshChatPreviewFromReplayAsync(
-                                jid,
-                                displayContent,
-                                chatMessage.Timestamp,
-                                isGroup,
-                                isActuallyFromMe));
-                    }
-                    else
-                    {
-                        MarkOfflineReplayChatDirty(jid);
-                        RecordOfflineReplayChatSummary(
-                            jid,
-                            displayContent,
-                            chatMessage.Timestamp,
-                            isGroup,
-                            isActuallyFromMe,
-                            countUnread: false);
-                    }
-                    if (!e.IsOffline)
-                    {
-                        Log($"[WhatsAppService] Alias-linked duplicate message {e.MessageId} consolidated into {jid}");
-                    }
-                    return;
-                }
-
-                // Fallback duplicate guard for empty IDs / index drift.
-                if ((!string.IsNullOrEmpty(chatMessage.Id) && HasMessageId(jid, chatMessage.Id)) ||
-                    (!string.IsNullOrEmpty(chatMessage.Id) && MessagesByChat[jid].Any(m => m.Id == chatMessage.Id)) ||
-                    hasAliasLinkedDuplicate)
-                {
-                    var existingMessage = MessagesByChat[jid].FirstOrDefault(m => string.Equals(m?.Id, chatMessage.Id, StringComparison.Ordinal));
-                    bool existingChanged = false;
-                    if (existingMessage != null)
-                    {
-                        if (chatMessage.IsFromMe && ShouldApplyMessageStatus(existingMessage.Status, chatMessage.Status))
-                        {
-                            existingMessage.Status = chatMessage.Status;
-                            existingChanged = true;
-                        }
-                        if (string.IsNullOrWhiteSpace(existingMessage.ParticipantJid) &&
-                            !string.IsNullOrWhiteSpace(chatMessage.ParticipantJid))
-                        {
-                            existingMessage.ParticipantJid = chatMessage.ParticipantJid;
-                            existingChanged = true;
-                        }
-                        if (IsWeakHistorySenderName(existingMessage.SenderName) &&
-                            !IsWeakHistorySenderName(chatMessage.SenderName))
-                        {
-                            existingMessage.SenderName = chatMessage.SenderName;
-                            existingChanged = true;
-                        }
-                        if (existingChanged)
-                        {
-                            QueueOfflineReplayMessageForPersist(jid, existingMessage);
-                            SchedulePersist();
-                            QueueChatMessagesChanged(jid);
-                        }
-                    }
-                    if (hasAliasLinkedDuplicate)
-                    {
-                        Debug.WriteLine($"[WhatsAppService] Alias-linked duplicate arrival detected for {chatMessage.Id}: existingChat={duplicateChatJid}, finalChat={jid}");
-                    }
-                    ResolveMissingMessage(jid, chatMessage.Id, "duplicate-arrival");
-                    if (!e.IsOffline)
-                    {
-                        QueueMessageControlWork(
-                            "duplicate-preview:" + chatMessage.Id,
-                            () => RefreshChatPreviewFromReplayAsync(
-                                jid,
-                                displayContent,
-                                chatMessage.Timestamp,
-                                isGroup,
-                                isActuallyFromMe));
-                    }
-                    else
-                    {
-                        MarkOfflineReplayChatDirty(jid);
-                        RecordOfflineReplayChatSummary(
-                            jid,
-                            displayContent,
-                            chatMessage.Timestamp,
-                            isGroup,
-                            isActuallyFromMe,
-                            countUnread: false);
-                    }
-                    if (!e.IsOffline)
-                    {
-                        Log($"[WhatsAppService] Duplicate message {e.MessageId} for {jid}, refreshed preview if needed");
-                    }
-                    return;
-                }
-
-                MessagesByChat[jid].Add(chatMessage);
-                TrimInMemoryMessageWindow(jid);
-                RegisterMessageId(jid, chatMessage.Id);
-                ResolveMissingMessage(jid, chatMessage.Id, "live-arrival");
-                if (!e.IsOffline)
-                {
-                    Log($"[WhatsAppService] Added message to chat {jid}. Total messages in memory: {MessagesByChat[jid].Count}");
-                }
-
-                if (e.IsOffline)
-                {
-                    RecordOfflineReplayChatSummary(
-                        jid,
-                        displayContent,
-                        chatMessage.Timestamp,
-                        isGroup,
-                        isActuallyFromMe,
-                        countUnread: true);
-                    QueueOfflineReplayMessageForPersist(jid, chatMessage);
-
-                    if (IsActiveChatJid(jid))
-                    {
-                        // The user may already be looking at the conversation while the
-                        // reconnect replay is still draining. Refresh only that open chat.
-                        QueueChatMessagesChanged(jid);
-                    }
-                    else
-                    {
-                        UnloadMessageCacheIfInactive(jid);
-                    }
-
-                    // Stickers still need media hydration during offline replay.
-                    if (renderInfo?.IsSticker == true && renderInfo.StickerMessage != null)
-                    {
-                        _ = HydrateStickerForMessageAsync(chatMessage, renderInfo.StickerMessage, e.MessageId, jid);
-                    }
-                    else if (renderInfo?.IsImage == true && renderInfo.ImageMessage != null && IsActiveChatJid(jid))
-                    {
-                        _ = HydrateImageForMessageAsync(chatMessage, renderInfo.ImageMessage, e.MessageId, jid);
-                    }
-
-                    return;
-                }
-
-                if (IsActiveChatJid(jid))
-                {
-                    QueueChatMessagesChanged(jid);
-                }
-
-                if (renderInfo?.IsImage == true && renderInfo.ImageMessage != null)
-                {
-                    _ = HydrateImageForMessageAsync(chatMessage, renderInfo.ImageMessage, e.MessageId, jid);
-                }
-
-                if (renderInfo?.IsSticker == true && renderInfo.StickerMessage != null)
-                {
-                    _ = HydrateStickerForMessageAsync(chatMessage, renderInfo.StickerMessage, e.MessageId, jid);
-                }
-
-                // Update chat preview on UI thread
-                SetIncomingMessagePumpStage("ui-preview", e);
-                ChatItem notificationChat = null;
-                await RunOnUiThreadAsync(() =>
-                    {
-                        var chat = Chats.FirstOrDefault(c => GetCanonicalJid(c.JID) == jid);
-                        
-                        // Create new chat entry if this JID isn't known yet
-                        if (chat == null)
-                        {
-                            string chatName = ResolveDisplayName(jid, "chat");
-                            chat = new ChatItem
-                            {
-                                JID = GetCanonicalJid(jid),
-                                Name = chatName,
-                                Kind = ResolveChatKind(jid),
-                                UnreadCount = 0
-                            };
-                            Chats.Insert(0, chat);
-                            Log($"[WhatsAppService] Created new chat entry for {jid} ({chatName})");
-                            _ = DeduplicateChatsAsync("incoming-new-chat");
-
-                            // If this JID is a PN that has a mapped LID, or vice-versa, trigger a merge scan
-                            if (JidAlias.TryGetValue(jid, out var alias))
-                            {
-                                string lid = jid.EndsWith("@lid") ? jid : alias;
-                                string pn = jid.EndsWith("@s.whatsapp.net") ? jid : alias;
-                                _ = CheckAndMergeDuplicateChatsAsync(lid, pn);
-                            }
-
-                            // If name is still naked, trigger resolution
-                            string bare = chat.JID.Split('@')[0];
-                            if (chat.Name == bare || chat.Name.Contains("@"))
-                            {
-                                _ = ResolveMissingNamesAsync();
-                            }
-                        }
-                        
-                        // Atualiza todas as linhas PN/LID equivalentes. Uma linha duplicada
-                        // podia continuar visivel com mensagem antiga mesmo apos o envio.
-                        ApplyChatPreviewIfNewer(
-                            chat,
-                            displayContent,
-                            chatMessage.Timestamp,
-                            false,
-                            renderInfo?.PreviewKind,
-                            listAuthorPrefix,
-                            chatMessage.MentionedJids);
-                        foreach (var equivalentRow in GetChatRowsForCanonicalJid(jid))
-                        {
-                            if (!ReferenceEquals(equivalentRow, chat))
-                            {
-                                ApplyChatPreviewIfNewer(
-                                    equivalentRow,
-                                    displayContent,
-                                    chatMessage.Timestamp,
-                                    false,
-                                    renderInfo?.PreviewKind,
-                                    listAuthorPrefix,
-                                    chatMessage.MentionedJids);
-                            }
-                        }
-
-                        // If it's a 1-on-1 and name is still a number/JID, try to resolve it with the newly updated name
-                        if (!isGroup && (chat.Name.Contains("@") || chat.Name == jid.Replace("@s.whatsapp.net", "").Replace("@lid", "") || IsSelfMarkerLabel(chat.Name)))
-                        {
-                            var resolvedChatName = ResolveDisplayName(jid, "chat");
-                            if (!string.IsNullOrEmpty(resolvedChatName) && !resolvedChatName.Contains("@"))
-                            {
-                                chat.Name = resolvedChatName;
-                                Log($"[WhatsAppService] Resolved name for UI chat {jid} -> {resolvedChatName}");
-                            }
-                        }
-                        
-                        // Keep pinned chats above regular chats while still moving
-                        // the updated conversation to its correct real-time position.
-                        RepositionChatForDisplay(chat);
-                        
-                        // Increment unread only when the conversation is not being
-                        // viewed. Messages received in the open chat are already visible
-                        // and should not create a badge or toast for themselves.
-                        if (!isActuallyFromMe && !IsActiveChatJid(jid))
-                        {
-                            var unreadRows = GetChatRowsForCanonicalJid(jid);
-                            int nextUnread = unreadRows.Count == 0
-                                ? Math.Max(0, chat.UnreadCount) + 1
-                                : unreadRows.Max(row => Math.Max(0, row.UnreadCount)) + 1;
-                            foreach (var unreadRow in unreadRows)
-                            {
-                                unreadRow.UnreadCount = nextUnread;
-                            }
-                            chat.UnreadCount = nextUnread;
-                        }
-
-                        notificationChat = chat;
-                    });
-
-                SetIncomingMessagePumpStage("notify", e);
-                if (!isActuallyFromMe)
-                {
-                    string notificationName = notificationChat?.Name;
-                    if (string.IsNullOrWhiteSpace(notificationName))
-                    {
-                        notificationName = ResolveDisplayName(jid, "notification");
-                    }
-
-                    // Unified mute (WhatsApp sync + local SQLite) via MutedUntil.
-                    if (notificationChat != null)
-                    {
-                        _chatStore?.ApplyTo(notificationChat);
-                    }
-
-                    bool isMuted = notificationChat != null
-                        ? notificationChat.IsMutedLocally
-                        : (_chatStore?.TryGetCached(jid)?.IsMutedLocally ?? false);
-                    bool suppressToast = Unison.Uwp.App.IsWindowVisible && IsActiveChatJid(jid);
-
-                    NotificationService.Instance.NotifyIncomingMessage(
-                        jid,
-                        notificationName,
-                        senderName,
-                        content,
-                        isGroup,
-                        isMuted,
-                        suppressToast,
-                        GetTotalUnreadCount(),
-                        notificationChat?.GetAvatarUrl(preferHigh: false),
-                        notificationChat != null ? Math.Max(0, notificationChat.UnreadCount) : 0);
-                }
-
-                SetIncomingMessagePumpStage("persist-queue", e);
-                // Persistencia em lote: evita reler, serializar e reescrever o JSON
-                // inteiro para cada mensagem recebida.
-                QueueOfflineReplayMessageForPersist(jid, chatMessage);
-                SchedulePersist();
-                UnloadMessageCacheIfInactive(jid);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WhatsAppService] HandleDecryptedMessageAsync error: {ex.Message}");
-                RuntimeDiagnosticsService.Instance.RecordException(
-                    "messages",
-                    "handle-decrypted-failed",
-                    ex,
-                    "id=" + (e?.MessageId ?? "<none>") + "; stage=" + _incomingMessagePumpStage);
-                throw;
-            }
-        }
-
-        private void RecordOfflineReplayChatSummary(
-            string jid,
-            string preview,
-            DateTime timestamp,
-            bool isGroup,
-            bool isFromMe,
-            bool countUnread)
-        {
-            string canonical = GetCanonicalJid(NormalizeJid(jid));
-            if (string.IsNullOrWhiteSpace(canonical))
-            {
-                return;
-            }
-
-            DateTime comparableTimestamp = IsValidMessageTimestamp(timestamp)
-                ? ToComparableUtc(timestamp)
-                : DateTime.MinValue;
-
-            lock (_offlineReplayUiLock)
-            {
-                if (!_offlineReplayUiSummaries.TryGetValue(canonical, out var summary))
-                {
-                    summary = new OfflineReplayChatSummary
-                    {
-                        Jid = canonical,
-                        Timestamp = DateTime.MinValue,
-                        IsGroup = isGroup
-                    };
-                    _offlineReplayUiSummaries[canonical] = summary;
-                }
-
-                if (comparableTimestamp != DateTime.MinValue &&
-                    (summary.Timestamp == DateTime.MinValue || comparableTimestamp >= summary.Timestamp))
-                {
-                    summary.Timestamp = comparableTimestamp;
-                    summary.Preview = preview ?? string.Empty;
-                    summary.IsGroup = isGroup;
-                }
-
-                if (countUnread && !isFromMe && !IsActiveChatJid(canonical))
-                {
-                    summary.UnreadDelta++;
-                }
-
-                // Throttle instead of debounce: show the first recovered conversation
-                // within ~180 ms even while a long replay continues. Further messages
-                // schedule the next small UI batch after the current timer is consumed.
-                if (_offlineReplayUiTimer == null)
-                {
-                    _offlineReplayUiTimer = new System.Threading.Timer(async _ =>
-                    {
-                        try
-                        {
-                            await ApplyOfflineReplayChatSummariesAsync("replay-progressive");
-                        }
-                        catch (Exception ex)
-                        {
-                            RuntimeDiagnosticsService.Instance.RecordException(
-                                "messages",
-                                "offline-summary-apply-failed",
-                                ex,
-                                "reason=replay-progressive");
-                        }
-                    }, null, (int)OfflineReplayUiDebounce.TotalMilliseconds, Timeout.Infinite);
-                }
-            }
-        }
-
-        private async Task ApplyOfflineReplayChatSummariesAsync(string reason)
-        {
-            await _offlineReplayUiApplyLock.WaitAsync();
-            Dictionary<string, OfflineReplayChatSummary> snapshot = null;
-            try
-            {
-                lock (_offlineReplayUiLock)
-                {
-                    if (_offlineReplayUiSummaries.Count == 0)
-                    {
-                        return;
-                    }
-
-                    snapshot = _offlineReplayUiSummaries.ToDictionary(
-                        pair => pair.Key,
-                        pair => new OfflineReplayChatSummary
-                        {
-                            Jid = pair.Value.Jid,
-                            Preview = pair.Value.Preview,
-                            Timestamp = pair.Value.Timestamp,
-                            IsGroup = pair.Value.IsGroup,
-                            UnreadDelta = pair.Value.UnreadDelta
-                        },
-                        StringComparer.OrdinalIgnoreCase);
-
-                    _offlineReplayUiSummaries.Clear();
-                    _offlineReplayUiTimer?.Dispose();
-                    _offlineReplayUiTimer = null;
-                }
-
-                await RunOnUiThreadAsync(() =>
-                {
-                    int created = 0;
-                    int updated = 0;
-                    int unreadAdded = 0;
-
-                    foreach (var pair in snapshot)
-                    {
-                        var summary = pair.Value;
-                        if (summary == null || string.IsNullOrWhiteSpace(summary.Jid))
-                        {
-                            continue;
-                        }
-
-                        var rows = GetChatRowsForCanonicalJid(summary.Jid);
-                        ChatItem preferred = rows.FirstOrDefault();
-                        if (preferred == null)
-                        {
-                            preferred = new ChatItem
-                            {
-                                JID = summary.Jid,
-                                Name = ResolveDisplayName(summary.Jid, "chat"),
-                                Kind = ResolveChatKind(summary.Jid),
-                                UnreadCount = 0
-                            };
-                            Chats.Add(preferred);
-                            rows = GetChatRowsForCanonicalJid(summary.Jid);
-                            created++;
-                        }
-
-                        foreach (var row in rows)
-                        {
-                            ApplyChatKind(row);
-                            if (summary.Timestamp != DateTime.MinValue &&
-                                ApplyChatPreviewIfNewer(row, summary.Preview ?? string.Empty, summary.Timestamp))
-                            {
-                                updated++;
-                            }
-                        }
-
-                        if (summary.UnreadDelta > 0 && !IsActiveChatJid(summary.Jid))
-                        {
-                            int currentUnread = rows.Count == 0
-                                ? Math.Max(0, preferred.UnreadCount)
-                                : rows.Max(row => Math.Max(0, row.UnreadCount));
-                            int nextUnread = currentUnread + summary.UnreadDelta;
-                            foreach (var row in rows)
-                            {
-                                row.UnreadCount = nextUnread;
-                            }
-                            preferred.UnreadCount = nextUnread;
-                            unreadAdded += summary.UnreadDelta;
-                        }
-                    }
-
-                    SortChatsForDisplay();
-                    NotificationService.Instance.UpdateBadge(GetTotalUnreadCount());
-
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "messages",
-                        "offline-summary-applied",
-                        "reason=" + reason +
-                        "; chats=" + snapshot.Count +
-                        "; created=" + created +
-                        "; previews=" + updated +
-                        "; unreadAdded=" + unreadAdded);
-                });
-
-                SchedulePersist();
-            }
-            catch
-            {
-                if (snapshot != null)
-                {
-                    lock (_offlineReplayUiLock)
-                    {
-                        foreach (var pair in snapshot)
-                        {
-                            if (!_offlineReplayUiSummaries.TryGetValue(pair.Key, out var current))
-                            {
-                                _offlineReplayUiSummaries[pair.Key] = pair.Value;
-                                continue;
-                            }
-
-                            if (pair.Value.Timestamp > current.Timestamp)
-                            {
-                                current.Timestamp = pair.Value.Timestamp;
-                                current.Preview = pair.Value.Preview;
-                                current.IsGroup = pair.Value.IsGroup;
-                            }
-                            current.UnreadDelta += pair.Value.UnreadDelta;
-                        }
-                    }
-                }
-                throw;
-            }
-            finally
-            {
-                _offlineReplayUiApplyLock.Release();
-            }
-        }
-
-        private void QueueOfflineReplayMessageForPersist(string jid, ChatMessage message)
-        {
-            if (message == null)
-            {
-                return;
-            }
-
-            QueueMessagesForPersist(jid, new[] { message });
-        }
-
-        private List<ChatMessage> GetPendingPersistMessagesSnapshot(string chatJid)
-        {
-            string canonical = GetCanonicalJid(NormalizeJid(chatJid));
-            var result = new List<ChatMessage>();
-
-            lock (_offlineReplayPersistLock)
-            {
-                foreach (var pair in _offlineReplayPendingMessagesByChat)
-                {
-                    if (!string.Equals(GetCanonicalJid(NormalizeJid(pair.Key)), canonical, StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
-
-                    if (pair.Value != null)
-                    {
-                        result.AddRange(pair.Value.Where(m => m != null));
-                    }
-                }
-            }
-
-            return result;
-        }
-
-        private void QueueMessagesForPersist(string jid, IEnumerable<ChatMessage> messages, bool queueIncomingJournal = true, bool scheduleFlush = true)
-        {
-            if (string.IsNullOrWhiteSpace(jid) || messages == null)
-            {
-                return;
-            }
-
-            var batch = messages.Where(m => m != null).ToList();
-            if (batch.Count == 0)
-            {
-                return;
-            }
-
-            if (queueIncomingJournal)
-            {
-                _messageStore.QueuePendingIncoming(jid, batch);
-            }
-
-            bool shouldFlush = false;
-            lock (_offlineReplayPersistLock)
-            {
-                if (!_offlineReplayPendingMessagesByChat.TryGetValue(jid, out var pending))
-                {
-                    pending = new List<ChatMessage>();
-                    _offlineReplayPendingMessagesByChat[jid] = pending;
-                }
-
-                int addedToPending = 0;
-                foreach (var message in batch)
-                {
-                    if (message == null) continue;
-
-                    int existingIndex = !string.IsNullOrWhiteSpace(message.Id)
-                        ? pending.FindIndex(m => string.Equals(m?.Id, message.Id, StringComparison.Ordinal))
-                        : -1;
-                    if (existingIndex >= 0)
-                    {
-                        pending[existingIndex] = message;
-                    }
-                    else
-                    {
-                        pending.Add(message);
-                        addedToPending++;
-                    }
-                }
-
-                _offlineReplayDirtyChats.Add(jid);
-                _offlineReplayPendingMessageCount += addedToPending;
-
-                var now = DateTime.UtcNow;
-                bool thresholdReached = _offlineReplayPendingMessageCount >= OfflineReplayFlushMessageThreshold ||
-                    (_lastOfflineReplayFlushUtc != DateTime.MinValue &&
-                     now - _lastOfflineReplayFlushUtc >= OfflineReplayFlushInterval);
-
-                if (scheduleFlush && thresholdReached && !_offlineReplayFlushRequested)
-                {
-                    _offlineReplayFlushRequested = true;
-                    shouldFlush = true;
-                }
-                else if (scheduleFlush)
-                {
-                    ScheduleOfflineReplayFlushTimer_NoLock();
-                }
-
-                if (_lastOfflineReplayFlushUtc == DateTime.MinValue)
-                {
-                    _lastOfflineReplayFlushUtc = now;
-                }
-            }
-
-            if (shouldFlush)
-            {
-                _ = FlushOfflineReplayMessagesAsync("message-batch-threshold");
-            }
-        }
-
-        private void MarkOfflineReplayChatDirty(string jid)
-        {
-            if (string.IsNullOrWhiteSpace(jid))
-            {
-                return;
-            }
-
-            lock (_offlineReplayPersistLock)
-            {
-                _offlineReplayDirtyChats.Add(jid);
-            }
+            return ChatPreviewNormalizer.InferKindFromMessage(message);
         }
 
         private void ScheduleOfflineReplayFlushTimer_NoLock()
@@ -8225,1394 +2270,200 @@ namespace Unison.Uwp.Services.WhatsApp
             }, null, (int)OfflineReplayFlushInterval.TotalMilliseconds, Timeout.Infinite);
         }
 
-        private async Task FlushOfflineReplayMessagesAsync(string reason)
-        {
-            // The append-only journal is the crash/suspend boundary. Flush it before
-            // touching the larger chat files so every decrypted incoming message has a
-            // durable copy even if the process is stopped midway through the merge.
-            await _messageStore.FlushPendingIncomingJournalAsync();
-            await _offlineReplayFlushLock.WaitAsync();
-            try
-            {
-                Dictionary<string, List<ChatMessage>> snapshot;
-                HashSet<string> dirtyChats;
-                lock (_offlineReplayPersistLock)
-                {
-                    if (_offlineReplayPendingMessageCount == 0)
-                    {
-                        return;
-                    }
-
-                    snapshot = _offlineReplayPendingMessagesByChat.ToDictionary(
-                        kvp => kvp.Key,
-                        kvp => kvp.Value.ToList(),
-                        StringComparer.OrdinalIgnoreCase);
-                    dirtyChats = new HashSet<string>(_offlineReplayDirtyChats, StringComparer.OrdinalIgnoreCase);
-                    _offlineReplayPendingMessagesByChat.Clear();
-                    _offlineReplayDirtyChats.Clear();
-                    _offlineReplayPendingMessageCount = 0;
-                    _lastOfflineReplayFlushUtc = DateTime.UtcNow;
-                    _offlineReplayFlushTimer?.Dispose();
-                    _offlineReplayFlushTimer = null;
-                }
-
-                try
-                {
-                    int saved = 0;
-                    var outgoingIdsToRemove = new HashSet<string>(StringComparer.Ordinal);
-                    var incomingIdsToRemove = new HashSet<string>(StringComparer.Ordinal);
-                    foreach (var kvp in snapshot)
-                    {
-                        if (kvp.Value == null || kvp.Value.Count == 0)
-                        {
-                            continue;
-                        }
-
-                        var batchMessages = kvp.Value
-                            .Where(m => m != null)
-                            .GroupBy(
-                                m => string.IsNullOrWhiteSpace(m.Id) ? Guid.NewGuid().ToString() : m.Id,
-                                StringComparer.Ordinal)
-                            .Select(g => g.Last())
-                            .OrderByDescending(m => m.Timestamp)
-                            .Take(MaxPersistMessagesPerChatBatch)
-                            .OrderBy(m => m.Timestamp)
-                            .ToList();
-
-                        await _messageStore.SaveMessagesAsync(kvp.Key, batchMessages);
-
-                        var allIds = batchMessages
-                            .Where(m => !string.IsNullOrWhiteSpace(m.Id))
-                            .Select(m => m.Id)
-                            .Distinct(StringComparer.Ordinal)
-                            .ToList();
-                        if (allIds.Count > 0 &&
-                            !await _messageStore.AreMessagesPersistedAsync(kvp.Key, allIds))
-                        {
-                            throw new IOException(
-                                "Message batch verification failed for " + kvp.Key +
-                                " (" + allIds.Count + " id(s))");
-                        }
-
-                        var outgoingIds = batchMessages
-                            .Where(m => m != null && m.IsFromMe && !string.IsNullOrWhiteSpace(m.Id))
-                            .Select(m => m.Id)
-                            .Distinct(StringComparer.Ordinal)
-                            .ToList();
-                        var incomingIds = batchMessages
-                            .Where(m => m != null && !m.IsFromMe && !string.IsNullOrWhiteSpace(m.Id))
-                            .Select(m => m.Id)
-                            .Distinct(StringComparer.Ordinal)
-                            .ToList();
-
-                        foreach (var outgoingId in outgoingIds)
-                        {
-                            outgoingIdsToRemove.Add(outgoingId);
-                        }
-                        foreach (var incomingId in incomingIds)
-                        {
-                            incomingIdsToRemove.Add(incomingId);
-                        }
-
-                        saved += batchMessages.Count;
-                    }
-
-                    if (outgoingIdsToRemove.Count > 0)
-                    {
-                        await _messageStore.RemovePendingOutgoingAsync(outgoingIdsToRemove);
-                    }
-                    if (incomingIdsToRemove.Count > 0)
-                    {
-                        await _messageStore.RemovePendingIncomingAsync(incomingIdsToRemove);
-                    }
-
-                    Debug.WriteLine($"[WhatsAppService] Flushed {saved} queued message(s) across {snapshot.Count} chat(s), dirtyChats={dirtyChats.Count}, reason={reason}");
-                    if (!reason.StartsWith("shutdown", StringComparison.OrdinalIgnoreCase))
-                    {
-                        SchedulePersist();
-                    }
-                }
-                catch (Exception ex)
-                {
-                    lock (_offlineReplayPersistLock)
-                    {
-                        foreach (var kvp in snapshot)
-                        {
-                            if (!_offlineReplayPendingMessagesByChat.TryGetValue(kvp.Key, out var pending))
-                            {
-                                pending = new List<ChatMessage>();
-                                _offlineReplayPendingMessagesByChat[kvp.Key] = pending;
-                            }
-
-                            foreach (var message in kvp.Value.Where(m => m != null))
-                            {
-                                int existingIndex = !string.IsNullOrWhiteSpace(message.Id)
-                                    ? pending.FindIndex(m => string.Equals(m?.Id, message.Id, StringComparison.Ordinal))
-                                    : -1;
-                                if (existingIndex >= 0)
-                                {
-                                    pending[existingIndex] = message;
-                                }
-                                else
-                                {
-                                    pending.Add(message);
-                                    _offlineReplayPendingMessageCount++;
-                                }
-                            }
-                        }
-
-                        foreach (var jid in dirtyChats)
-                        {
-                            _offlineReplayDirtyChats.Add(jid);
-                        }
-                    }
-
-                    RuntimeDiagnosticsService.Instance.RecordException(
-                        "messages",
-                        "message-batch-flush-deferred",
-                        ex,
-                        "reason=" + reason + "; chats=" + snapshot.Count);
-                }
-            }
-            finally
-            {
-                bool scheduleAnother = false;
-                lock (_offlineReplayPersistLock)
-                {
-                    _offlineReplayFlushRequested = false;
-                    scheduleAnother = _offlineReplayPendingMessageCount > 0;
-                    if (scheduleAnother)
-                    {
-                        ScheduleOfflineReplayFlushTimer_NoLock();
-                    }
-                }
-
-                _offlineReplayFlushLock.Release();
-            }
-        }
-
-        private async Task RefreshChatPreviewFromReplayAsync(string jid, string displayContent, DateTime timestamp, bool isGroup, bool isFromMe)
-        {
-            if (string.IsNullOrWhiteSpace(jid))
-            {
-                return;
-            }
-
-            await RunOnUiThreadAsync(() =>
-                {
-                    var rows = GetChatRowsForCanonicalJid(jid);
-                    if (rows.Count == 0)
-                    {
-                        return;
-                    }
-
-                    ChatItem preferred = null;
-                    foreach (var row in rows)
-                    {
-                        if (ApplyChatPreviewIfNewer(row, displayContent, timestamp))
-                        {
-                            preferred = preferred ?? row;
-                        }
-                    }
-
-                    if (preferred != null)
-                    {
-                        int index = Chats.IndexOf(preferred);
-                        if (index > 0)
-                        {
-                            Chats.Move(index, 0);
-                        }
-                    }
-
-                    Log($"[WhatsAppService] Replay preview refresh applied for {jid} at {timestamp:O}");
-                });
-        }
-
         /// <summary>
-        /// Refreshes all chat previews from stored messages in a single UI dispatch.
-        /// Called once after the offline batch drain completes, instead of per-message
-        /// UI dispatches during the drain.
-        /// </summary>
-        private async Task RefreshAllChatPreviewsFromStoredAsync(string reason)
-        {
-            await RunOnUiThreadAsync(() =>
-            {
-                int updated = 0;
-                foreach (var chat in Chats)
-                {
-                    string canonicalJid = GetCanonicalJid(chat.JID);
-                    if (!MessagesByChat.TryGetValue(canonicalJid, out var messages) || messages == null || messages.Count == 0)
-                    {
-                        continue;
-                    }
-
-                    var latest = messages
-                        .Where(m => m != null && IsValidMessageTimestamp(m.Timestamp))
-                        .OrderByDescending(m => m.Timestamp)
-                        .FirstOrDefault();
-                    if (latest == null)
-                    {
-                        continue;
-                    }
-
-                    bool isGroup = canonicalJid.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
-                    string preview = ChatPreviewNormalizer.FormatListPreview(latest, isGroup);
-                    string author = ChatPreviewNormalizer.FormatListAuthorPrefix(latest, isGroup, SelfListDisplayName());
-
-                    if (ApplyChatPreviewIfNewer(
-                        chat,
-                        preview,
-                        latest.Timestamp,
-                        false,
-                        ChatPreviewNormalizer.InferKindFromMessage(latest),
-                        author,
-                        latest.MentionedJids))
-                    {
-                        updated++;
-                    }
-                }
-
-                Debug.WriteLine($"[WhatsAppService] Bulk preview refresh ({reason}): updated {updated} chat previews");
-            });
-        }
-
-        private async Task ReconcileChatListFromStoredMessagesAsync(string reason)
-        {
-            await RunOnUiThreadAsync(() =>
-            {
-                int refreshed = 0;
-                int created = 0;
-                var latestByChat = new List<Tuple<ChatItem, DateTime>>();
-
-                foreach (var kvp in MessagesByChat)
-                {
-                    string canonicalJid = GetCanonicalJid(kvp.Key);
-                    if (string.IsNullOrWhiteSpace(canonicalJid) || kvp.Value == null || kvp.Value.Count == 0)
-                    {
-                        continue;
-                    }
-
-                    var latest = kvp.Value
-                        .Where(m => m != null && IsValidMessageTimestamp(m.Timestamp))
-                        .OrderByDescending(m => m.Timestamp)
-                        .FirstOrDefault();
-                    if (latest == null)
-                    {
-                        continue;
-                    }
-
-                    var chat = Chats.FirstOrDefault(c => GetCanonicalJid(c.JID) == canonicalJid);
-                    if (chat == null)
-                    {
-                        chat = new ChatItem
-                        {
-                            JID = canonicalJid,
-                            Name = ResolveDisplayName(canonicalJid, "chat"),
-                            Kind = ResolveChatKind(canonicalJid)
-                        };
-                        Chats.Add(chat);
-                        created++;
-                    }
-
-                    string preview = latest.Content ?? string.Empty;
-                    ApplyChatPreviewIfNewer(
-                        chat,
-                        preview,
-                        latest.Timestamp,
-                        false,
-                        ChatPreviewNormalizer.InferKindFromMessage(latest));
-                    ApplyChatKind(chat);
-
-                    if (!chat.IsGroup && (chat.Name.Contains("@") || chat.Name == canonicalJid.Replace("@s.whatsapp.net", "").Replace("@lid", "") || IsSelfMarkerLabel(chat.Name)))
-                    {
-                        chat.Name = ResolveDisplayName(canonicalJid, "chat");
-                    }
-
-                    DateTime effectivePreviewTimestamp = chat.LastMessageTimestampUtc.HasValue
-                        ? ToComparableUtc(chat.LastMessageTimestampUtc.Value)
-                        : ToComparableUtc(latest.Timestamp);
-                    latestByChat.Add(Tuple.Create(chat, effectivePreviewTimestamp));
-                    refreshed++;
-                }
-
-                int targetIndex = 0;
-                foreach (var entry in latestByChat.OrderByDescending(t => t.Item2))
-                {
-                    int currentIndex = Chats.IndexOf(entry.Item1);
-                    if (currentIndex >= 0 && currentIndex != targetIndex)
-                    {
-                        Chats.Move(currentIndex, targetIndex);
-                    }
-                    targetIndex++;
-                }
-
-                Log($"[WhatsAppService] Reconciled {refreshed} chat previews from cached messages (created={created}, reason={reason})");
-            });
-        }
-
-        private async Task ProcessHistorySyncAsync(HistorySync sync)
-        {
-            await ProcessHistorySyncCoreAsync(sync).ConfigureAwait(false);
-        }
-
-        /// <summary>
-        /// History sync core used by <see cref="MessageFacade.SyncMessageHistoryAsync"/>.
-        /// Prefer routing through IMessageService so Person upserts run first.
+        /// Completes resync/progress after a history chunk. SQLite apply lives on HistoryFacade;
+        /// this leftover notify is the live-message fallback if MessageFacade is unset.
         /// </summary>
         public Task ProcessHistorySyncCoreAsync(HistorySync sync)
         {
-            return ProcessHistorySyncBodyAsync(sync);
-        }
-
-        private async Task ProcessHistorySyncBodyAsync(HistorySync sync)
-        {
-            if (sync == null)
+            if (sync != null)
             {
-                Log("[WhatsAppService] ProcessHistorySync called with null payload");
-                return;
+                NotifyHistorySqliteChunkApplied(
+                    sync.SyncType.ToString(),
+                    sync.Conversations?.Count ?? 0);
             }
 
-            await _historySyncProcessingLock.WaitAsync();
-            _historySyncProcessing = true;
-            int conversationCount = 0;
-            bool isFullHistorySync = false;
-            try
-            {
+            return Task.CompletedTask;
+        }
+
+        /// <inheritdoc />
+        public void ApplyHistoryLidMappings(IEnumerable<KeyValuePair<string, string>> lidToPn, string source)
+        {
+            RegisterAliasMappings(lidToPn, source ?? "history-sqlite");
+        }
+
+        /// <inheritdoc />
+        public void NotifyHistorySqliteChunkApplied(string syncType, int conversationCount)
+        {
+            string type = syncType ?? string.Empty;
+            bool isOnDemand = type.IndexOf("OnDemand", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isFull = type.IndexOf("Full", StringComparison.OrdinalIgnoreCase) >= 0;
+            int count = Math.Max(0, conversationCount);
+
             _lastHistorySyncReceivedUtc = DateTime.UtcNow;
-            _lastHistorySyncTypeReceived = sync.SyncType;
-            conversationCount = sync.Conversations?.Count ?? 0;
-            Log($"[WhatsAppService] ProcessHistorySync starting (type {sync.SyncType}, {conversationCount} conversations, receivedAt={_lastHistorySyncReceivedUtc:O})...");
-            Debug.WriteLine($"[WhatsAppService] HistorySyncNotification observed: type={sync.SyncType}, conversations={conversationCount}, pushnames={sync.Pushnames?.Count ?? 0}, receivedAt={_lastHistorySyncReceivedUtc:O}");
-            bool isOnDemandSync = sync.SyncType.ToString().IndexOf("OnDemand", StringComparison.OrdinalIgnoreCase) >= 0;
-            isFullHistorySync = sync.SyncType.ToString().IndexOf("Full", StringComparison.OrdinalIgnoreCase) >= 0;
-            bool userResyncWaiting = IsUserConversationResyncWaiting();
-            // Manual wipe should reuse the pairing-style progressive list UI for any
-            // non-on-demand conversation chunk (Full / InitialBootstrap / Recent).
-            int conversationThreshold = userResyncWaiting ? 1 : InitialSyncConversationThreshold;
-            bool useInitialSyncSafeMode = !isOnDemandSync && conversationCount >= conversationThreshold;
-            int historyMessageLimit = useInitialSyncSafeMode
-                ? InitialSyncMaxMessagesPerConversation
-                : MaxHistoryMessagesPerConversation;
-            if (useInitialSyncSafeMode)
+
+            if (!isOnDemand)
             {
-                PublishInitialSyncProgress(true, false, 0, conversationCount, "starting");
-            }
-            if (isFullHistorySync)
-            {
-                Debug.WriteLine($"[WhatsAppService] Full-history payload observed; marking freshness repair completed at {_lastHistorySyncReceivedUtc:O}");
-                PersistFullHistoryRepairCompletedUtc(_lastHistorySyncReceivedUtc);
-                ClearFullHistoryOnDemandRequestState("history-sync:" + sync.SyncType);
-            }
-            
-            // Chats e ligado a UI. Processamos em prioridade baixa e cedemos a UI em
-            // lotes para evitar congelamentos longos durante sincronizacoes grandes.
-            await RunOnUiThreadTaskAsync(async () =>
-            {
-                int processedConversations = 0;
-                try
-                {
-                    if (isFullHistorySync)
-                    {
-                        lock (_historyOnDemandLock)
-                        {
-                            if (!string.IsNullOrWhiteSpace(_fullHistoryOnDemandRequestId) &&
-                                _historyOnDemandRequestById.TryGetValue(_fullHistoryOnDemandRequestId, out var fullHistoryState))
-                            {
-                                ClearHistoryRequestStateLocked(fullHistoryState);
-                            }
-                        }
-                    }
+                _sqliteHistoryConversationsAccumulated = Math.Max(0, _sqliteHistoryConversationsAccumulated) + count;
+                int processed = _sqliteHistoryConversationsAccumulated;
 
-                    // 1. Process Pushnames first to build contact cache (don't create chats, just cache names)
-                    if (sync.Pushnames != null)
-                    {
-                        foreach (var pn in sync.Pushnames)
-                        {
-                            if (!string.IsNullOrEmpty(pn.Id) && !string.IsNullOrEmpty(pn.Pushname_))
-                            {
-                                string normPnId = NormalizeJid(pn.Id);
-                                string sanitizedPushname = SanitizeContactLabel(pn.Pushname_, normPnId);
-                                if (!string.IsNullOrWhiteSpace(sanitizedPushname))
-                                {
-                                    RememberPersonName(normPnId, sanitizedPushname);
-                                    if (IsSelfLinkedJid(normPnId))
-                                    {
-                                        CaptureSelfPushName(sanitizedPushname, "history-pushnames");
-                                    }
-                                }
-                                // Debug.WriteLine($"[WhatsAppService] Cached pushname: {pn.Id} ({normPnId}) -> {pn.Pushname_}");
-                            }
-                        }
-                        Debug.WriteLine($"[WhatsAppService] Cached {sync.Pushnames.Count} pushnames for name resolution");
-                        if (sync.Pushnames.Count > 0)
-                        {
-                            string samplePushnames = string.Join(", ", sync.Pushnames
-                                .Where(p => !string.IsNullOrWhiteSpace(p?.Id) && !string.IsNullOrWhiteSpace(p?.Pushname_))
-                                .Take(5)
-                                .Select(p => $"{NormalizeJid(p.Id)}='{p.Pushname_}'"));
-                            if (!string.IsNullOrWhiteSpace(samplePushnames))
-                            {
-                                Debug.WriteLine($"[WhatsAppService] HistorySync pushname sample: {samplePushnames}");
-                            }
-                        }
-                    }
+                // Total unknown until Full (or quiet finalize): count-only UI ("N loaded").
+                // Full still uses processed as total so the banner can show "N of N" then complete.
+                int total = isFull ? Math.Max(processed, 1) : 0;
 
-                    // 1.5 Process PhoneNumberToLidMappings to bridge gaps
-                    if (sync.PhoneNumberToLidMappings != null && sync.PhoneNumberToLidMappings.Count > 0)
-                    {
-                        Debug.WriteLine($"[WhatsAppService] Processing {sync.PhoneNumberToLidMappings.Count} PN-to-LID mappings...");
-                        foreach (var mapping in sync.PhoneNumberToLidMappings)
-                        {
-                            if (!string.IsNullOrEmpty(mapping.PnJid) && !string.IsNullOrEmpty(mapping.LidJid))
-                            {
-                                string normPn = NormalizeJid(mapping.PnJid);
-                                string normLid = NormalizeJid(mapping.LidJid);
-                                JidAlias[normPn] = normLid;
-                                JidAlias[normLid] = normPn;
-                                RegisterSocketAlias(normLid, normPn, "history-sync-phone-lid");
-                                Debug.WriteLine($"[WhatsAppService] Indexed mapping: {mapping.PnJid} ({normPn}) <-> {mapping.LidJid} ({normLid})");
-                            }
-                        }
-                    }
+                PublishInitialSyncProgress(true, false, processed, total, isFull ? "sqlite-full" : "sqlite-chunk");
 
-                    foreach (var conv in sync.Conversations)
-                    {
-                        try
-                        {
-                            string jid = GetCanonicalJid(conv.Id);
-                            if (string.IsNullOrEmpty(jid)) continue;
-                            string normJid = NormalizeJid(jid);
-
-                            HistoryOnDemandRequestState completedHistoryState = null;
-                            if (isOnDemandSync)
-                            {
-                                lock (_historyOnDemandLock)
-                                {
-                                    _historyOnDemandInFlight.Remove(normJid);
-                                    if (_historyOnDemandLastRequestIdByChat.TryGetValue(normJid, out var requestId))
-                                    {
-                                        _historyOnDemandLastRequestIdByChat.Remove(normJid);
-                                        if (_historyOnDemandRequestById.TryGetValue(requestId, out completedHistoryState))
-                                        {
-                                            _historyOnDemandRequestById.Remove(requestId);
-                                        }
-                                    }
-                                    _historyOnDemandAttemptsByChat.Remove(normJid);
-                                    _historyOnDemandRejectedUntilUtcByChat.Remove(normJid);
-                                }
-                            }
-
-                            bool isGroup = jid.EndsWith("@g.us");
-
-                            // Populate LID <-> PN mapping from conversation if available
-                            if (!string.IsNullOrEmpty(conv.LidJid) && !string.IsNullOrEmpty(conv.PnJid))
-                            {
-                                string normLid = NormalizeJid(conv.LidJid);
-                                string normPn = NormalizeJid(conv.PnJid);
-                                JidAlias[normLid] = normPn;
-                                JidAlias[normPn] = normLid;
-                                RegisterSocketAlias(normLid, normPn, "history-sync-conversation");
-                                
-                                // Re-canonicalize after adding new potential mapping
-                                jid = GetCanonicalJid(jid);
-                            }
-
-                            _ = StoreConversationTcTokenAsync(conv, jid);
-
-                            if (!MessagesByChat.ContainsKey(jid))
-                            {
-                                MessagesByChat[jid] = new List<ChatMessage>();
-                            }
-
-                            // Track the newest existing message timestamp to avoid overwriting newer data
-                            DateTime newestExisting = MessagesByChat[jid].Count > 0
-                                ? MessagesByChat[jid].Max(m => m.Timestamp)
-                                : DateTime.MinValue;
-                            var existingIds = new HashSet<string>(
-                                MessagesByChat[jid].Where(m => m != null && !string.IsNullOrEmpty(m.Id)).Select(m => m.Id));
-                            int addedCount = 0;
-                            int processedMessages = 0;
-                            var addedMessagesForPersist = new List<ChatMessage>();
-                            var pendingReactions = new List<PendingReaction>();
-
-                            // The on-disk store already retains at most 1500 messages per
-                            // chat. Converting tens of thousands of older protobuf messages
-                            // only to discard them caused long freezes and doubled memory.
-                            IList<Proto.HistorySyncMsg> historyMessagesToProcess;
-                            if (conv.Messages.Count > historyMessageLimit)
-                            {
-                                historyMessagesToProcess = await Task.Run(() => conv.Messages
-                                    .Where(m => m?.Message != null)
-                                    .OrderByDescending(m => m.Message.MessageTimestamp)
-                                    .Take(historyMessageLimit)
-                                    .OrderBy(m => m.Message.MessageTimestamp)
-                                    .ToList());
-                                Debug.WriteLine($"[WhatsAppService] Limited {jid} history conversion from {conv.Messages.Count} to {historyMessagesToProcess.Count} recent messages");
-                            }
-                            else
-                            {
-                                historyMessagesToProcess = conv.Messages;
-                            }
-
-                            foreach (var histMsg in historyMessagesToProcess)
-                            {
-                                processedMessages++;
-                                if ((processedMessages % (useInitialSyncSafeMode ? 15 : 50)) == 0)
-                                {
-                                    // A tiny asynchronous gap gives ListView virtualization,
-                                    // scrolling and input a chance to run on low-end phones.
-                                    if (useInitialSyncSafeMode)
-                                    {
-                                        await Task.Delay(1);
-                                    }
-                                    else
-                                    {
-                                        await Task.Yield();
-                                    }
-                                }
-                                if (histMsg.Message == null || histMsg.Message.Message == null) continue;
-
-                                // Key.Participant and WebMessageInfo.Participant both appear in history;
-                                // protobuf getters return "" when unset, so never coalesce with ??.
-                                string historyParticipantJid = ResolveHistoryParticipantJid(histMsg.Message);
-
-                                // Cache pushname from individual messages (including groups) so
-                                // SenderName / list preview "~ Name:" work after history sync.
-                                if (!string.IsNullOrEmpty(histMsg.Message.PushName))
-                                {
-                                    string senderJid = histMsg.Message.Key?.FromMe == true
-                                        ? _authState.Me?.Id
-                                        : (historyParticipantJid ?? (isGroup ? null : jid));
-                                    if (!string.IsNullOrWhiteSpace(senderJid))
-                                    {
-                                        string normSender = NormalizeJid(senderJid);
-                                        var histPush = SanitizeContactLabel(histMsg.Message.PushName, normSender);
-                                        if (!string.IsNullOrEmpty(histPush))
-                                        {
-                                            RememberPersonName(normSender, histPush);
-                                        }
-                                    }
-                                }
-
-                                if (histMsg.Message.Message.ProtocolMessage != null &&
-                                    (int)histMsg.Message.Message.ProtocolMessage.Type == 0)
-                                {
-                                    await HandleMessageRevocationAsync(jid, histMsg.Message.Message.ProtocolMessage, histMsg.Message.Key?.Id);
-                                    continue;
-                                }
-
-                                if (histMsg.Message.Message.PinInChatMessage != null)
-                                {
-                                    uint duration = histMsg.Message.Message.MessageContextInfo?.MessageAddOnDurationInSecs ?? 0;
-                                    await HandlePinInChatMessageAsync(jid, histMsg.Message.Message.PinInChatMessage, duration);
-                                    continue;
-                                }
-                                if (histMsg.Message.PinInChat != null && histMsg.Message.PinInChat.Key != null)
-                                {
-                                    bool pin = histMsg.Message.PinInChat.Type == Proto.PinInChat.Types.Type.PinForAll;
-                                    DateTime pinAt = histMsg.Message.PinInChat.SenderTimestampMs > 0
-                                        ? UnixMillisecondsToUtc(histMsg.Message.PinInChat.SenderTimestampMs)
-                                        : DateTime.MinValue;
-                                    uint duration = histMsg.Message.PinInChat.MessageAddOnContextInfo?.MessageAddOnDurationInSecs ?? 0;
-                                    DateTime? expires = pin && duration > 0 ? pinAt.AddSeconds(duration) : (DateTime?)null;
-                                    await ApplyPinnedMessageStateAsync(jid, histMsg.Message.PinInChat.Key.Id, pin, pinAt, expires);
-                                }
-
-                                // Buffer reaction envelopes via MessageFacade; apply after the message loop.
-                                if (_messageService != null)
-                                {
-                                    bool histFromMe = histMsg.Message.Key?.FromMe ?? false;
-                                    string histMsgId = histMsg.Message.Key?.Id ?? Guid.NewGuid().ToString();
-                                    long histTsVal = (long)histMsg.Message.MessageTimestamp;
-                                    DateTime histTimestamp = histTsVal > 0
-                                        ? DateTimeOffset.FromUnixTimeSeconds(histTsVal).LocalDateTime
-                                        : DateTime.MinValue;
-
-                                    var reactionContext = new ChatMessageMapContext
-                                    {
-                                        MessageId = histMsgId,
-                                        ChatJid = jid,
-                                        RemoteJid = NormalizeJid(histMsg.Message.Key?.RemoteJid) ?? jid,
-                                        ParticipantJid = historyParticipantJid,
-                                        SenderName = ResolveHistorySenderName(
-                                            histMsg.Message,
-                                            histFromMe,
-                                            isGroup,
-                                            historyParticipantJid,
-                                            jid),
-                                        IsFromMe = histFromMe,
-                                        Timestamp = histTimestamp
-                                    };
-
-                                    PendingReaction pendingReaction;
-                                    if (_messageService.TryBufferReaction(histMsg.Message.Message, reactionContext, out pendingReaction))
-                                    {
-                                        pendingReactions.Add(pendingReaction);
-                                        continue;
-                                    }
-                                }
-
-                                var renderInfo = ExtractMessageRenderInfo(histMsg.Message.Message);
-                                string content = renderInfo?.Content;
-                                if (string.IsNullOrEmpty(content)) continue;
-
-                                bool fromMe = histMsg.Message.Key?.FromMe ?? false;
-                                
-                                // Handle potential zero timestamp
-                                long tsVal = (long)histMsg.Message.MessageTimestamp;
-                                DateTime timestamp = tsVal > 0
-                                    ? DateTimeOffset.FromUnixTimeSeconds(tsVal).LocalDateTime
-                                    : DateTime.MinValue;
-
-                                // Merge: skip if message ID already exists in memory (dedup)
-                                string msgId = histMsg.Message.Key?.Id ?? Guid.NewGuid().ToString();
-                                string historySenderName = ResolveHistorySenderName(
-                                    histMsg.Message,
-                                    fromMe,
-                                    isGroup,
-                                    historyParticipantJid,
-                                    jid);
-
-                                if (fromMe && isGroup && string.IsNullOrWhiteSpace(historyParticipantJid))
-                                {
-                                    historyParticipantJid = NormalizeJid(_authState?.Me?.Lid ?? _authState?.Me?.Id);
-                                }
-
-                                if (!existingIds.Contains(msgId))
-                                {
-                                    ChatMessage newMsg;
-                                    var mapContext = new ChatMessageMapContext
-                                    {
-                                        MessageId = msgId,
-                                        ChatJid = jid,
-                                        RemoteJid = NormalizeJid(histMsg.Message.Key?.RemoteJid) ?? jid,
-                                        ParticipantJid = historyParticipantJid,
-                                        SenderName = historySenderName,
-                                        IsFromMe = fromMe,
-                                        Timestamp = timestamp,
-                                        Status = fromMe
-                                            ? ApplyChatStatusPolicy(jid, MapWebMessageStatus(histMsg.Message) ?? ChatMessage.StatusSent)
-                                            : null,
-                                        IsPinned = histMsg.Message.PinInChat?.Type == Proto.PinInChat.Types.Type.PinForAll,
-                                        PinnedAtUtc = histMsg.Message.PinInChat?.SenderTimestampMs > 0
-                                            ? UnixMillisecondsToUtc(histMsg.Message.PinInChat.SenderTimestampMs)
-                                            : (DateTime?)null,
-                                        PinExpiresAtUtc = histMsg.Message.PinInChat?.Type == Proto.PinInChat.Types.Type.PinForAll &&
-                                            histMsg.Message.PinInChat.MessageAddOnContextInfo?.MessageAddOnDurationInSecs > 0 &&
-                                            histMsg.Message.PinInChat.SenderTimestampMs > 0
-                                                ? UnixMillisecondsToUtc(histMsg.Message.PinInChat.SenderTimestampMs)
-                                                    .AddSeconds(histMsg.Message.PinInChat.MessageAddOnContextInfo.MessageAddOnDurationInSecs)
-                                                : (DateTime?)null
-                                    };
-                                    var contentSnapshot = new ChatMessageContentSnapshot
-                                    {
-                                        Text = content,
-                                        IsImage = renderInfo?.IsImage == true,
-                                        IsVideo = renderInfo?.IsVideo == true,
-                                        IsSticker = renderInfo?.IsSticker == true,
-                                        IsAudio = renderInfo?.IsAudio == true,
-                                        IsVoice = renderInfo?.IsVoice == true,
-                                        IsDocument = renderInfo?.IsDocument == true,
-                                        Caption = renderInfo?.Caption ?? ""
-                                    };
-                                    ApplyContextInfoExtras(
-                                        histMsg.Message.Message,
-                                        out string histQuotedText,
-                                        out string histQuotedSender,
-                                        out string histQuotedMessageId,
-                                        out var histQuotedKind,
-                                        out var histMentions);
-                                    contentSnapshot.QuotedText = histQuotedText;
-                                    contentSnapshot.QuotedKind = histQuotedKind;
-                                    contentSnapshot.QuotedSenderName = histQuotedSender;
-                                    contentSnapshot.QuotedMessageId = histQuotedMessageId;
-                                    contentSnapshot.MentionedJids = histMentions;
-
-                                    if (_messageService != null)
-                                    {
-                                        newMsg = _messageService.GetChatMessage(mapContext, contentSnapshot);
-                                    }
-                                    else
-                                    {
-                                        // Temporary escape hatch until MessageFacade is always attached.
-                                        newMsg = new ChatMessage
-                                        {
-                                            Id = msgId,
-                                            Content = content,
-                                            Kind = ChatPreviewNormalizer.ResolveKind(
-                                                contentSnapshot.IsImage,
-                                                contentSnapshot.IsVideo,
-                                                contentSnapshot.IsSticker,
-                                                contentSnapshot.IsAudio,
-                                                contentSnapshot.IsVoice,
-                                                contentSnapshot.IsDocument),
-                                            Caption = renderInfo?.Caption ?? "",
-                                            IsFromMe = fromMe,
-                                            Timestamp = timestamp,
-                                            SenderName = historySenderName,
-                                            RemoteJid = mapContext.RemoteJid,
-                                            ParticipantJid = historyParticipantJid,
-                                            Status = mapContext.Status,
-                                            IsPinned = mapContext.IsPinned,
-                                            PinnedAtUtc = mapContext.PinnedAtUtc,
-                                            PinExpiresAtUtc = mapContext.PinExpiresAtUtc,
-                                            QuotedText = contentSnapshot.QuotedText,
-                                            QuotedKind = contentSnapshot.QuotedKind,
-                                            QuotedSenderName = contentSnapshot.QuotedSenderName,
-                                            QuotedMessageId = contentSnapshot.QuotedMessageId,
-                                            MentionedJids = contentSnapshot.MentionedJids
-                                        };
-                                    }
-
-                                    // Inline reactions on WebMessageInfo â€” business attaches via MessageFacade.
-                                    if (_messageService != null && histMsg.Message.Reactions != null && histMsg.Message.Reactions.Count > 0)
-                                    {
-                                        _messageService.AttachHistoryReactions(
-                                            newMsg,
-                                            histMsg.Message.Reactions,
-                                            new ChatMessageMapContext
-                                            {
-                                                MessageId = msgId,
-                                                ChatJid = jid,
-                                                Timestamp = timestamp
-                                            });
-                                    }
-
-                                    if (renderInfo?.IsAudio == true && renderInfo.AudioMessage != null)
-                                    {
-                                        ApplyAudioMetadata(newMsg, renderInfo.AudioMessage);
-                                    }
-                                    if (renderInfo?.IsImage == true && renderInfo.ImageMessage != null)
-                                    {
-                                        ApplyImageMetadata(newMsg, renderInfo.ImageMessage);
-                                    }
-                                    if (renderInfo?.IsSticker == true && renderInfo.StickerMessage != null)
-                                    {
-                                        ApplyStickerMetadata(newMsg, renderInfo.StickerMessage);
-                                    }
-                                    if (renderInfo?.IsVideo == true && renderInfo.VideoMessage != null)
-                                    {
-                                        ApplyVideoMetadata(newMsg, renderInfo.VideoMessage);
-                                    }
-                                    if (renderInfo?.IsDocument == true && renderInfo.DocumentMessage != null)
-                                    {
-                                        ApplyDocumentMetadata(newMsg, renderInfo.DocumentMessage);
-                                    }
-                                    ApplyPendingStateToMessage(jid, newMsg);
-                                    MessagesByChat[jid].Add(newMsg);
-                                    existingIds.Add(msgId);
-                                    RegisterMessageId(jid, msgId);
-                                    if (isGroup && !fromMe && string.IsNullOrWhiteSpace(historyParticipantJid))
-                                    {
-                                        // History payload omitted the author; recover via placeholder resend.
-                                        RegisterMissingMessage(
-                                            jid,
-                                            null,
-                                            msgId,
-                                            fromMe,
-                                            timestamp,
-                                            "history-missing-participant");
-                                    }
-                                    else
-                                    {
-                                        ResolveMissingMessage(jid, msgId, "history-sync");
-                                    }
-                                    addedCount++;
-                                    addedMessagesForPersist.Add(newMsg);
-
-                                    // Historical media hydration is deliberately deferred. Starting a
-                                    // download task for every image in a large sync exhausted RAM and network
-                                    // resources on Windows 10 Mobile. Live images are still hydrated normally.
-                                }
-                                else
-                                {
-                                    // Older Unison versions persisted audio only as a text placeholder.
-                                    // When WhatsApp sends the same message again in history sync, enrich
-                                    // the existing row with the media key/direct path instead of dropping
-                                    // the duplicate before it becomes playable.
-                                    var existingMessage = MessagesByChat[jid]
-                                        .FirstOrDefault(m => string.Equals(m?.Id, msgId, StringComparison.Ordinal));
-                                    bool existingChanged = false;
-                                    if (existingMessage != null)
-                                    {
-                                        if (renderInfo?.IsAudio == true && renderInfo.AudioMessage != null)
-                                        {
-                                            ApplyAudioMetadata(existingMessage, renderInfo.AudioMessage);
-                                            existingMessage.Content = content;
-                                            existingChanged = true;
-                                        }
-                                        if (renderInfo?.IsImage == true && renderInfo.ImageMessage != null)
-                                        {
-                                            ApplyImageMetadata(existingMessage, renderInfo.ImageMessage);
-                                            existingMessage.Content = content;
-                                            existingChanged = true;
-                                        }
-                                        if (renderInfo?.IsSticker == true && renderInfo.StickerMessage != null)
-                                        {
-                                            ApplyStickerMetadata(existingMessage, renderInfo.StickerMessage);
-                                            existingMessage.Content = content;
-                                            existingChanged = true;
-                                        }
-                                        if (renderInfo?.IsVideo == true && renderInfo.VideoMessage != null)
-                                        {
-                                            ApplyVideoMetadata(existingMessage, renderInfo.VideoMessage);
-                                            existingMessage.Content = content;
-                                            existingChanged = true;
-                                        }
-                                        if (renderInfo?.IsDocument == true && renderInfo.DocumentMessage != null)
-                                        {
-                                            ApplyDocumentMetadata(existingMessage, renderInfo.DocumentMessage);
-                                            existingMessage.Content = content;
-                                            existingChanged = true;
-                                        }
-                                        if (!IsValidMessageTimestamp(existingMessage.Timestamp) && IsValidMessageTimestamp(timestamp))
-                                        {
-                                            existingMessage.Timestamp = timestamp;
-                                            existingChanged = true;
-                                        }
-                                        if (string.IsNullOrWhiteSpace(existingMessage.ParticipantJid) &&
-                                            !string.IsNullOrWhiteSpace(historyParticipantJid))
-                                        {
-                                            existingMessage.ParticipantJid = historyParticipantJid;
-                                            existingChanged = true;
-                                        }
-                                        if (IsWeakHistorySenderName(existingMessage.SenderName) &&
-                                            !IsWeakHistorySenderName(historySenderName))
-                                        {
-                                            existingMessage.SenderName = historySenderName;
-                                            existingChanged = true;
-                                        }
-                                        if (existingChanged) addedMessagesForPersist.Add(existingMessage);
-                                    }
-                                    ResolveMissingMessage(jid, msgId, "history-sync-duplicate");
-                                }
-                            }
-
-                            // Attach buffered reaction envelopes via MessageFacade (business).
-                            if (_messageService != null && pendingReactions.Count > 0)
-                            {
-                                var reactionParents = _messageService.ApplyBufferedReactions(MessagesByChat[jid], pendingReactions);
-                                foreach (var parent in reactionParents)
-                                {
-                                    if (parent != null)
-                                    {
-                                        addedMessagesForPersist.Add(parent);
-                                    }
-                                }
-                            }
-
-                            if (addedMessagesForPersist.Count > 0)
-                            {
-                                // HistorySync is server-recoverable and can be large;
-                                // do not duplicate it into the crash journal intended
-                                // for newly received live/offline messages.
-                                QueueMessagesForPersist(
-                                    jid,
-                                    addedMessagesForPersist,
-                                    queueIncomingJournal: false);
-                            }
-
-                            // Identity Healing: Check if this LID belongs to US
-                            string meLid = _authState?.Me?.Lid;
-                            if (!string.IsNullOrEmpty(meLid) && jid.EndsWith("@lid") && jid == meLid) // Check if the current conversation JID is our LID
-                            {
-                                string meId = _authState.Me.Id;
-                                // If our LID is mapped to a PN, and that PN is not our current Me.Id, fix it
-                                if (JidAlias.TryGetValue(meLid, out var aliasPn) && aliasPn != meId)
-                                {
-                                    Log($"[WhatsAppService] IDENTITY HEALING: Me.Lid ({meLid}) belongs to PN {aliasPn}, but current Me.Id is {meId}. Fixing...");
-                                    _authState.Me.Id = aliasPn;
-                                    JidAlias[aliasPn] = meLid; // Ensure bidirectional mapping
-                                    _ = PersistAuthStateAsync(null, "identity-heal-alias-pn");
-                                }
-                            }
-                            else if (jid.EndsWith("@s.whatsapp.net") && jid == _authState?.Me?.Id && !string.IsNullOrEmpty(meLid) && !JidAlias.ContainsKey(jid))
-                            {
-                                // Corruption detected: User's Id is a PN, but it's not mapped to our LID
-                                Log($"[WhatsAppService] IDENTITY CORRUPTION DETECTED: Me.Id ({jid}) is a PN but not mapped to our LID {meLid}. PURGING...");
-                                _authState.Me.Id = meLid; // Reset to LID until fixed
-                                JidAlias.Remove(jid); // Remove potentially incorrect mapping
-                                _ = PersistAuthStateAsync(null, "identity-purge-self-pn");
-                            }
-
-
-                            if (addedCount > 0)
-                            {
-                                Log($"[WhatsAppService] Merged {addedCount} new messages for {jid} (total: {MessagesByChat[jid].Count})");
-                                if (completedHistoryState != null)
-                                {
-                                    Debug.WriteLine($"[WhatsAppService] {completedHistoryState.RequestType} produced history payload: requestId={completedHistoryState.RequestId}, chat={normJid}, baseline={completedHistoryState.BaselineMessageCount}, current={MessagesByChat[jid].Count}, added={addedCount}, trigger={completedHistoryState.TriggerReason ?? "unspecified"}");
-                                }
-                                if (IsActiveChatJid(jid))
-                                {
-                                    QueueChatMessagesChanged(jid);
-                                }
-                            }
-                            else if (completedHistoryState != null)
-                            {
-                                Debug.WriteLine($"[WhatsAppService] {completedHistoryState.RequestType} produced payload with no new messages: requestId={completedHistoryState.RequestId}, chat={normJid}, baseline={completedHistoryState.BaselineMessageCount}, current={MessagesByChat[jid].Count}, trigger={completedHistoryState.TriggerReason ?? "unspecified"}");
-                            }
-
-                            MessagesByChat[jid].Sort((a, b) => a.Timestamp.CompareTo(b.Timestamp));
-                            if (MessagesByChat[jid].Count > MaxActiveChatMessagesInMemory)
-                            {
-                                int removeCount = MessagesByChat[jid].Count - MaxActiveChatMessagesInMemory;
-                                MessagesByChat[jid].RemoveRange(0, removeCount);
-                                existingIds = new HashSet<string>(MessagesByChat[jid]
-                                    .Where(m => m != null && !string.IsNullOrWhiteSpace(m.Id))
-                                    .Select(m => m.Id));
-                            }
-                            _messageIdIndexByChat[NormalizeJid(jid)] = existingIds;
-
-                            // Off the row index rather than a scan of the whole list: this runs
-                            // once per conversation in the chunk, and the list it was walking is
-                            // the one the same loop keeps growing.
-                            var existingChat = GetChatRowsForCanonicalJid(normJid)
-                                .FirstOrDefault(c => NormalizeJid(c.JID) == normJid);
-                            int? authoritativeUnread = conv.HasUnreadCount ? (int?)conv.UnreadCount : null;
-                            if (IsActiveChatJid(jid)) authoritativeUnread = 0;
-
-                            // Resolve Display Name
-                            string displayName = "";
-                            if (isGroup)
-                            {
-                                displayName = conv.Name;
-                                if (string.IsNullOrEmpty(displayName)) displayName = conv.DisplayName;
-                                if (string.IsNullOrEmpty(displayName)) displayName = GetNamesFromCache(jid);
-                            }
-                            else
-                            {
-                                displayName = conv.Name;
-                                if (string.IsNullOrEmpty(displayName)) displayName = conv.DisplayName;
-                                if (string.IsNullOrEmpty(displayName)) displayName = conv.Username;
-                                if (string.IsNullOrEmpty(displayName)) displayName = GetNamesFromCache(jid);
-
-                                if (string.IsNullOrEmpty(displayName))
-                                {
-                                    foreach (var m in historyMessagesToProcess)
-                                    {
-                                        if (m.Message != null && !string.IsNullOrEmpty(m.Message.PushName))
-                                        {
-                                            string sanitizedMessagePushName = SanitizeContactLabel(m.Message.PushName, jid);
-                                            if (!string.IsNullOrWhiteSpace(sanitizedMessagePushName))
-                                            {
-                                                displayName = sanitizedMessagePushName;
-                                                ContactNames[jid] = sanitizedMessagePushName;
-                                                break;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            displayName = SanitizeContactLabel(displayName, jid);
-                            if (isGroup && !IsMeaningfulChatLabel(displayName, jid, true))
-                            {
-                                displayName = null;
-                            }
-
-                            if (string.IsNullOrEmpty(displayName))
-                            {
-                                string preservedName = existingChat != null
-                                    ? existingChat.Name
-                                    : null;
-                                if (IsMeaningfulChatLabel(preservedName, jid, isGroup))
-                                {
-                                    displayName = preservedName.Trim();
-                                }
-                                else if (!isGroup)
-                                {
-                                    string phoneJid = !string.IsNullOrEmpty(conv.PnJid) ? conv.PnJid : jid;
-                                    string normPhone = NormalizeJid(phoneJid);
-                                    displayName = normPhone.Replace("@s.whatsapp.net", "").Replace("@g.us", "").Replace("@lid", "");
-                                }
-                                else if (existingChat != null && !string.IsNullOrWhiteSpace(existingChat.Name))
-                                {
-                                    // Keep the id placeholder already on the row; do not bounce
-                                    // a later empty chunk back onto a stripped JID rewrite.
-                                    displayName = existingChat.Name;
-                                }
-                                else
-                                {
-                                    displayName = NormalizeJid(jid).Split('@')[0];
-                                }
-                            }
-                            else if (isGroup)
-                            {
-                                ContactNames[jid] = displayName;
-                            }
-
-                            // Only add/update chats that have at least one message
-                            if (MessagesByChat[jid].Count > 0)
-                            {
-                                // Get the actual latest message from merged data
-                                var actualLastMsg = MessagesByChat[jid]
-                                    .Where(m => m != null && IsValidMessageTimestamp(m.Timestamp))
-                                    .OrderBy(m => m.Timestamp)
-                                    .LastOrDefault();
-                                if (actualLastMsg == null)
-                                {
-                                    // Keep the stored payload for later repair, but do not create or
-                                    // reorder a chat from an event whose real server time is unknown.
-                                    if (existingChat != null && authoritativeUnread.HasValue)
-                                    {
-                                        int exactUnread = Math.Max(0, authoritativeUnread.Value);
-                                        foreach (var row in GetChatRowsForCanonicalJid(jid)) row.UnreadCount = exactUnread;
-                                        existingChat.UnreadCount = exactUnread;
-                                    }
-                                    UnloadMessageCacheIfInactive(jid);
-                                    conv.Messages?.Clear();
-                                    processedConversations++;
-                                    if (useInitialSyncSafeMode)
-                                    {
-                                        PublishInitialSyncProgress(
-                                            true,
-                                            false,
-                                            processedConversations,
-                                            conversationCount,
-                                            "conversations");
-                                        await Task.Delay(1);
-                                    }
-                                    else if ((processedConversations % 2) == 0)
-                                    {
-                                        await Task.Yield();
-                                    }
-                                    continue;
-                                }
-                                string actualLastMessage = ChatPreviewNormalizer.FormatListPreview(actualLastMsg, isGroup);
-                                string actualAuthor = ChatPreviewNormalizer.FormatListAuthorPrefix(actualLastMsg, isGroup, SelfListDisplayName());
-
-                                if (existingChat != null)
-                                {
-                                    bool existingMeaningful = IsMeaningfulChatLabel(existingChat.Name, jid, isGroup);
-                                    bool incomingMeaningful = IsMeaningfulChatLabel(displayName, jid, isGroup);
-                                    if (incomingMeaningful && !existingMeaningful)
-                                    {
-                                        existingChat.Name = displayName;
-                                    }
-                                    else if (isGroup &&
-                                             string.IsNullOrWhiteSpace(existingChat.Name) &&
-                                             !string.IsNullOrWhiteSpace(displayName))
-                                    {
-                                        existingChat.Name = displayName;
-                                    }
-                                    // HistorySync pode chegar atrasado. Nunca substitua um preview
-                                    // mais novo (por exemplo, uma mensagem enviada agora) por historico antigo.
-                                    ApplyChatPreviewIfNewer(
-                                        existingChat,
-                                        actualLastMessage,
-                                        actualLastMsg.Timestamp,
-                                        false,
-                                        ChatPreviewNormalizer.InferKindFromMessage(actualLastMsg),
-                                        actualAuthor,
-                                        actualLastMsg.MentionedJids);
-                                    foreach (var equivalentRow in GetChatRowsForCanonicalJid(jid))
-                                    {
-                                        if (!ReferenceEquals(equivalentRow, existingChat))
-                                        {
-                                            ApplyChatPreviewIfNewer(
-                                                equivalentRow,
-                                                actualLastMessage,
-                                                actualLastMsg.Timestamp,
-                                                false,
-                                                ChatPreviewNormalizer.InferKindFromMessage(actualLastMsg),
-                                                actualAuthor,
-                                                actualLastMsg.MentionedJids);
-                                        }
-                                    }
-                                    existingChat.Kind = ResolveChatKind(jid);
-                                    if (authoritativeUnread.HasValue)
-                                    {
-                                        int exactUnread = Math.Max(0, authoritativeUnread.Value);
-                                        foreach (var row in GetChatRowsForCanonicalJid(jid)) row.UnreadCount = exactUnread;
-                                        existingChat.UnreadCount = exactUnread;
-                                    }
-                                }
-                                else
-                                {
-                                    Chats.Add(new ChatItem
-                                    {
-                                        JID = GetCanonicalJid(jid),
-                                        Name = displayName,
-                                        Kind = ResolveChatKind(jid),
-                                        UnreadCount = authoritativeUnread ?? 0
-                                    });
-                                    var created = Chats[Chats.Count - 1];
-                                    ApplyChatPreviewIfNewer(
-                                        created,
-                                        actualLastMessage,
-                                        actualLastMsg.Timestamp,
-                                        true,
-                                        ChatPreviewNormalizer.InferKindFromMessage(actualLastMsg),
-                                        actualAuthor,
-                                        actualLastMsg.MentionedJids);
-                                }
-
-                                if (conv.HasPinned)
-                                {
-                                    ApplyHistoryConversationPin(jid, conv.Pinned);
-                                }
-                            }
-
-                            // Depois que o preview e a persistencia foram preparados, nao
-                            // ha motivo para manter o historico de chats fechados na RAM.
-                            UnloadMessageCacheIfInactive(jid);
-                            // The protobuf payload can be very large. Release each processed
-                            // conversation immediately instead of retaining the entire sync
-                            // until the dispatcher callback completes.
-                            conv.Messages?.Clear();
-                            processedConversations++;
-                            if (useInitialSyncSafeMode)
-                            {
-                                PublishInitialSyncProgress(
-                                    true,
-                                    false,
-                                    processedConversations,
-                                    conversationCount,
-                                    "conversations");
-                                await Task.Delay(1);
-                            }
-                            else if ((processedConversations % 2) == 0)
-                            {
-                                await Task.Yield();
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            Debug.WriteLine($"[WhatsAppService] Failed to process conversation: {ex.Message}");
-                        }
-                    }
-
-                    sync.Pushnames?.Clear();
-                    sync.PhoneNumberToLidMappings?.Clear();
-
-                    // Recover group authors that history sync omitted (common with older
-                    // Chrome companions / stripped keys). Live duplicate path also backfills.
-                    // Delay past initial sync deferrals so the PDO requests actually fire.
-                    SchedulePendingPlaceholderResendDrain(
-                        "history-missing-participant",
-                        12,
-                        PlaceholderResendFollowUpDrainDelay);
-
-                    // HistorySync can contain hundreds of conversations. Global
-                    // dedup/reconcile/name/avatar work previously started immediately
-                    // after the protobuf loop and made the Lumia sluggish or miss its
-                    // suspend deadline. The individual rows are already updated above;
-                    // optional global repair is delayed until the app is idle.
-                    int historyMaintenanceCount = processedConversations;
-                    if (useInitialSyncSafeMode)
-                    {
-                        PublishInitialSyncProgress(
-                            false,
-                            true,
-                            processedConversations,
-                            conversationCount,
-                            "completed");
-                    }
-                    SchedulePostReplayMaintenance(historyMaintenanceCount);
-
-                    // Persist messages and chats to disk through the normal debounce.
-                    SchedulePersist();
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[WhatsAppService] Error processing history sync: {ex.Message}");
-                }
-            });
-            }
-            finally
-            {
-                if (_initialSyncSafeModeActive)
-                {
-                    PublishInitialSyncProgress(
-                        false,
-                        true,
-                        _initialSyncProcessedConversations,
-                        _initialSyncTotalConversations,
-                        "finalized");
-                }
-                _historySyncProcessing = false;
-                _historySyncProcessingLock.Release();
-
-                // User resync waits here so the UI stays on "Preparing conversations..."
-                // through the download, not only while requesting FULL_HISTORY.
-                if (conversationCount > 0 || isFullHistorySync)
-                {
-                    CompleteUserResyncHistoryWait("history-sync:" + sync.SyncType);
-                }
-            }
-        }
-
-        private async Task StoreConversationTcTokenAsync(Proto.Conversation conv, string canonicalJid)
-        {
-            if (_socket == null || conv == null || !conv.HasTcToken || conv.TcToken == null || conv.TcToken.IsEmpty || !conv.HasTcTokenTimestamp)
-            {
-                return;
+                int generation = Interlocked.Increment(ref _sqliteHistoryFinalizeGeneration);
+                int delayMs = isFull ? SqliteHistoryFullFinalizeDelayMs : SqliteHistoryFinalizeQuietMs;
+                _ = FinalizeSqliteHistoryProgressAfterQuietAsync(generation, delayMs, processed);
             }
 
-            byte[] token = conv.TcToken.ToByteArray();
-            long timestamp = (long)conv.TcTokenTimestamp;
-            long? senderTimestamp = conv.HasTcTokenSenderTimestamp ? (long?)conv.TcTokenSenderTimestamp : null;
-            if (timestamp <= 0 || token.Length == 0)
+            if (count > 0 || isFull)
             {
-                return;
+                CompleteUserResyncHistoryWait("history-sqlite:" + type);
             }
 
-            var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (!string.IsNullOrWhiteSpace(conv.Id)) candidates.Add(NormalizeJid(conv.Id));
-            if (!string.IsNullOrWhiteSpace(canonicalJid)) candidates.Add(NormalizeJid(canonicalJid));
-            if (!string.IsNullOrWhiteSpace(conv.LidJid)) candidates.Add(NormalizeJid(conv.LidJid));
-            if (!string.IsNullOrWhiteSpace(conv.PnJid)) candidates.Add(NormalizeJid(conv.PnJid));
-
-            int stored = 0;
-            foreach (var jid in candidates.Where(j => !string.IsNullOrWhiteSpace(j) && !j.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase)))
-            {
-                await _socket.StoreTcTokenAsync(jid, token, timestamp, senderTimestamp, "history sync conversation");
-                stored++;
-            }
-
-            if (stored > 0)
-            {
-                Debug.WriteLine($"[WhatsAppService] Stored history-sync tctoken for {stored} jid(s), conv={conv.Id}, canonical={canonicalJid}, ts={timestamp}, senderTs={senderTimestamp}");
-            }
-        }
-
-        /// <summary>
-        /// Persists current chats and messages to disk.
-        /// </summary>
-        public async Task PersistDataAsync()
-        {
-            await _persistRunLock.WaitAsync();
             try
             {
-                OnSyncStatus?.Invoke(this, "Saving chats...");
-
-                // Messages are persisted by the batched message queue. Rewriting every
-                // loaded chat file here caused long UI stalls and large allocation spikes.
-                List<ChatItem> chatSnapshot = null;
-                List<string> chatJids = null;
-                Dictionary<string, string> contactSnapshot = null;
-                Dictionary<string, string> phoneContactSnapshot = null;
-                Dictionary<string, string> aliasSnapshot = null;
-                await RunOnUiThreadAsync(() =>
-                {
-                    chatSnapshot = Chats.Where(c => c != null).ToList();
-                    chatJids = chatSnapshot
-                        .Select(c => NormalizeJid(c.JID))
-                        .Where(j => !string.IsNullOrWhiteSpace(j))
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .ToList();
-                    contactSnapshot = new Dictionary<string, string>(ContactNames, StringComparer.OrdinalIgnoreCase);
-                    phoneContactSnapshot = new Dictionary<string, string>(PhoneContactNamesByJid, StringComparer.OrdinalIgnoreCase);
-                    aliasSnapshot = new Dictionary<string, string>(JidAlias, StringComparer.OrdinalIgnoreCase);
-                });
-
-                await _messageStore.SaveChatsAsync(chatSnapshot ?? new List<ChatItem>());
-                await _messageStore.SaveContactNamesAsync(contactSnapshot ?? new Dictionary<string, string>(), chatJids ?? new List<string>());
-                await _messageStore.SavePhoneContactNamesAsync(phoneContactSnapshot ?? new Dictionary<string, string>(), chatJids ?? new List<string>());
-                await _messageStore.SaveJidAliasesAsync(aliasSnapshot ?? new Dictionary<string, string>(), chatJids ?? new List<string>());
-
-                Debug.WriteLine($"[WhatsAppService] Persisted {(chatSnapshot?.Count ?? 0)} chat rows and contact metadata");
+                // Null payload: list UI must not treat this as "sync over" — finalize is debounced.
+                OnHistorySyncReceived?.Invoke(this, null);
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[WhatsAppService] Failed to persist data: {ex.Message}");
+                Debug.WriteLine("[WhatsAppService] OnHistorySyncReceived (sqlite path) failed: " + ex.Message);
             }
-            finally
-            {
-                OnSyncStatus?.Invoke(this, null);
-                _persistRunLock.Release();
-            }
+
+                Log($"[WhatsAppService] History SQLite path applied (type={type}, conversations={count}, accumulated={_sqliteHistoryConversationsAccumulated}).");
         }
 
         /// <summary>
-        /// Schedules a debounced persist operation. Multiple calls within 3 seconds will batch into one save.
+        /// Called when a non-on-demand history chunk starts persisting so the chat list can show
+        /// a banner before SQLite returns (previews/messages can take a while on Mobile).
         /// </summary>
-        private void SchedulePersist()
+        public void NotifyHistorySqliteChunkStarted(string syncType, int conversationCount)
         {
-            lock (_persistLock)
+            string type = syncType ?? string.Empty;
+            if (type.IndexOf("OnDemand", StringComparison.OrdinalIgnoreCase) >= 0)
             {
-                if (_suppressStartupScheduledPersist)
+                return;
+            }
+
+            int count = Math.Max(0, conversationCount);
+            int processed = Math.Max(_sqliteHistoryConversationsAccumulated, 0);
+            PublishInitialSyncProgress(
+                true,
+                false,
+                processed,
+                0,
+                count > 0 ? "sqlite-starting" : "sqlite-starting-empty");
+        }
+
+        private async Task FinalizeSqliteHistoryProgressAfterQuietAsync(
+            int generation,
+            int delayMs,
+            int processedAtSchedule)
+        {
+            try
+            {
+                await Task.Delay(Math.Max(200, delayMs)).ConfigureAwait(false);
+                if (generation != Volatile.Read(ref _sqliteHistoryFinalizeGeneration))
                 {
-                    _persistPending = true;
-                    Debug.WriteLine("[WhatsAppService] SchedulePersist skipped during startup warm-up");
                     return;
                 }
 
-                _persistPending = true;
-                
-                // Cancel existing timer and restart with 3 second delay
-                _persistTimer?.Dispose();
-                _persistTimer = new System.Threading.Timer(async _ =>
-                {
-                    lock (_persistLock)
-                    {
-                        if (!_persistPending) return;
-                        _persistPending = false;
-                    }
-                    
-                    await PersistDataAsync();
-                }, null, 3000, Timeout.Infinite);
-            }
-        }
-
-        /// <summary>
-        /// Public accessor for SchedulePersist - allows UI to trigger debounced save
-        /// </summary>
-        public void SchedulePersistPublic() => SchedulePersist();
-
-        /// <summary>
-        /// Loads persisted chats from disk on startup.
-        /// </summary>
-        private async Task LoadPersistedChatsAsync()
-        {
-            _isLoadingPersistedChats = true;
-            try
-            {
-                // Startup fast path: read only compact chat metadata. Protocol aliases
-                // were already loaded by InitializeConnectionStateAsync before the socket.
-                var storedChats = await _messageStore.LoadChatsAsync();
-                if (storedChats.Count > 0)
-                {
-                    await RunOnUiThreadAsync(() =>
-                    {
-                        var existing = new HashSet<string>(
-                            Chats.Where(c => c != null && !string.IsNullOrWhiteSpace(c.JID))
-                                 .Select(c => NormalizeJid(c.JID)),
-                            StringComparer.OrdinalIgnoreCase);
-
-                        foreach (var chat in storedChats)
-                        {
-                            if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
-                            {
-                                continue;
-                            }
-
-                            string normJid = NormalizeJid(chat.JID);
-                            chat.JID = normJid;
-                            ChatPreviewNormalizer.ApplyToChatItem(chat);
-                            ApplyChatKind(chat);
-                            if (existing.Add(normJid))
-                            {
-                                Chats.Add(chat);
-                            }
-                        }
-
-                        ApplyChatKindsToAll();
-                        SortChatsForDisplay();
-                    });
-
-                    Debug.WriteLine($"[WhatsAppService] Fast startup loaded {storedChats.Count} chat metadata rows");
-                    OnHistorySyncReceived?.Invoke(this, null);
-                }
+                int processed = Math.Max(processedAtSchedule, _sqliteHistoryConversationsAccumulated);
+                int total = Math.Max(processed, 1);
+                PublishInitialSyncProgress(false, true, processed, total, "sqlite-finalized");
+                _sqliteHistoryConversationsAccumulated = 0;
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[WhatsAppService] Failed to load persisted chat metadata: {ex.Message}");
+                Debug.WriteLine("[WhatsAppService] FinalizeSqliteHistoryProgress failed: " + ex.Message);
             }
-            finally
+        }
+
+        /// <inheritdoc />
+        public Task SeedChatMessagesInMemoryAsync(string chatJid, IList<ChatMessage> messages)
+        {
+            if (string.IsNullOrWhiteSpace(chatJid) || messages == null || messages.Count == 0)
             {
-                _isLoadingPersistedChats = false;
+                return Task.CompletedTask;
+            }
+
+            string normJid = NormalizeJid(chatJid);
+            var incoming = messages.Where(m => m != null).ToList();
+            if (incoming.Count == 0)
+            {
+                return Task.CompletedTask;
+            }
+
+            return RunOnUiThreadAsync(() =>
+            {
+                if (!MessagesByChat.TryGetValue(normJid, out var list) || list == null)
+                {
+                    list = new List<ChatMessage>();
+                    MessagesByChat[normJid] = list;
+                }
+
+                var byId = new Dictionary<string, ChatMessage>(StringComparer.Ordinal);
+                foreach (var existing in list)
+                {
+                    if (existing != null && !string.IsNullOrWhiteSpace(existing.Id))
+                    {
+                        byId[existing.Id] = existing;
+                    }
+                }
+
+                foreach (var message in incoming)
+                {
+                    if (string.IsNullOrWhiteSpace(message.Id))
+                    {
+                        list.Add(message);
+                        continue;
+                    }
+
+                    if (!byId.ContainsKey(message.Id))
+                    {
+                        byId[message.Id] = message;
+                        list.Add(message);
+                    }
+                }
+
+                ChatMessageOrder.SortInPlace(list);
+                _messageIdIndexByChat[normJid] = new HashSet<string>(
+                    list.Where(m => !string.IsNullOrEmpty(m.Id)).Select(m => m.Id),
+                    StringComparer.Ordinal);
+            });
+        }
+
+        /// <inheritdoc />
+        public void CompleteHistoryOnDemandForChats(IEnumerable<string> chatJids)
+        {
+            if (chatJids == null)
+            {
+                return;
+            }
+
+            lock (_historyOnDemandLock)
+            {
+                foreach (string raw in chatJids)
+                {
+                    string normJid = NormalizeJid(raw);
+                    if (string.IsNullOrWhiteSpace(normJid))
+                    {
+                        continue;
+                    }
+
+                    _historyOnDemandInFlight.Remove(normJid);
+                    if (_historyOnDemandLastRequestIdByChat.TryGetValue(normJid, out var requestId))
+                    {
+                        _historyOnDemandLastRequestIdByChat.Remove(normJid);
+                        _historyOnDemandRequestById.Remove(requestId);
+                    }
+
+                    _historyOnDemandAttemptsByChat.Remove(normJid);
+                    _historyOnDemandRejectedUntilUtcByChat.Remove(normJid);
+                }
             }
         }
 
@@ -9634,18 +2485,24 @@ namespace Unison.Uwp.Services.WhatsApp
                 try
                 {
                     string jid = GetCanonicalJid(chat.JID);
-                    int count = await _messageStore.GetMessageCountAsync(jid);
-                    int take = Math.Min(120, Math.Max(0, count));
-                    int skip = Math.Max(0, count - take);
-                    var recent = take > 0
-                        ? await _messageStore.LoadMessagesPagedAsync(jid, skip, take)
-                        : new List<ChatMessage>();
-                    var replacement = recent
-                        .Where(m => m != null &&
-                                    IsValidMessageTimestamp(m.Timestamp) &&
-                                    !string.Equals(m.Content, "[Message Deleted]", StringComparison.OrdinalIgnoreCase))
-                        .OrderByDescending(m => m.Timestamp)
-                        .FirstOrDefault();
+                    IReadOnlyList<HistoryMessage> recentRows =
+                        await _historyMessages.GetForChatAsync(jid, 120).ConfigureAwait(false);
+                    ChatMessage replacement = null;
+                    if (recentRows != null)
+                    {
+                        for (int i = recentRows.Count - 1; i >= 0; i--)
+                        {
+                            ChatMessage mapped = HistoryMessageMapper.ToChatMessage(recentRows[i]);
+                            if (mapped != null &&
+                                IsValidMessageTimestamp(mapped.Timestamp) &&
+                                !string.Equals(mapped.Content, "[Message Deleted]", StringComparison.OrdinalIgnoreCase) &&
+                                !mapped.IsRevoked)
+                            {
+                                replacement = mapped;
+                                break;
+                            }
+                        }
+                    }
 
                     await RunOnUiThreadAsync(() =>
                     {
@@ -9688,7 +2545,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             if (changed)
             {
-                try { await _messageStore.SaveChatsAsync(Chats.ToList()); } catch { }
+                try { await PersistChatCatalogAsync(Chats.ToList()).ConfigureAwait(false); } catch { }
                 _messageStore.ClearMemoryCache();
                 OnHistorySyncReceived?.Invoke(this, null);
             }
@@ -9743,33 +2600,30 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
                 }
 
-                // Recovery from all message files is intentionally restricted to the
-                // exceptional case where chats.json/backup could not produce a list.
-                // It is a repair path, not normal startup work.
+                // Chat catalog lives in history_chat_preview (loaded on startup).
                 if (Chats.Count == 0 && _authState?.Registered == true)
                 {
-                    var recovered = await _messageStore.RecoverChatsFromMessageFilesAsync();
-                    if (recovered.Count > 0)
-                    {
-                        await RunOnUiThreadAsync(() =>
-                        {
-                            foreach (var chat in recovered)
-                            {
-                                if (chat != null && !string.IsNullOrWhiteSpace(chat.JID))
-                                {
-                                    Chats.Add(chat);
-                                }
-                            }
-                        });
-                        await _messageStore.SaveChatsAsync(recovered);
-                        OnHistorySyncReceived?.Invoke(this, null);
-                    }
+                    Debug.WriteLine("[WhatsAppService] Startup catalog empty; waiting for history_chat_preview / sync");
                 }
 
                 await NormalizePersistedChatNamesAsync();
                 await HydrateCachedAvatarUrisAsync("deferred-startup");
                 await DeduplicateChatsAsync("deferred-startup");
                 await RepairLegacyDeletedPreviewsAsync();
+
+                if (_contactService != null)
+                {
+                    try
+                    {
+                        await _contactService.RefreshPhoneContactOverlayAsync(force: true);
+                        await ApplyResolvedNamesToChatsAsync();
+                        SchedulePersist();
+                    }
+                    catch (Exception exOverlay)
+                    {
+                        Debug.WriteLine("[WhatsAppService] Address-book overlay after bootstrap failed: " + exOverlay.Message);
+                    }
+                }
 
                 if (Chats.Count > 0 && !IsWindowsMobile)
                 {
@@ -9780,110 +2634,6 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 Debug.WriteLine($"[WhatsAppService] Deferred startup maintenance failed: {ex.Message}");
             }
-        }
-
-
-
-
-
-        private async Task NormalizePersistedChatNamesAsync()
-        {
-            await RunOnUiThreadAsync(() =>
-                {
-                    int updated = 0;
-                    foreach (var chat in Chats)
-                    {
-                        if (chat == null) continue;
-
-                        string resolved = ResolveDisplayName(chat.JID, "chat");
-                        bool existingMeaningful = IsMeaningfulChatLabel(chat.Name, chat.JID, chat.IsGroup);
-                        bool resolvedMeaningful = IsMeaningfulChatLabel(resolved, chat.JID, chat.IsGroup);
-                        bool shouldReplace = !string.IsNullOrEmpty(resolved) &&
-                                             !string.Equals(chat.Name, resolved, StringComparison.Ordinal) &&
-                                             (resolvedMeaningful || !existingMeaningful);
-
-                        if (shouldReplace)
-                        {
-                            string oldName = chat.Name;
-                            chat.Name = resolved;
-                            updated++;
-                            Debug.WriteLine($"[WhatsAppService] Normalized persisted chat title '{oldName}' -> '{resolved}' for {chat.JID}");
-                        }
-                    }
-
-                    if (updated > 0)
-                    {
-                        Debug.WriteLine($"[WhatsAppService] Normalized {updated} persisted chat titles");
-                        OnDisplayNamesUpdated?.Invoke(this, EventArgs.Empty);
-                        SchedulePersist();
-                    }
-                });
-        }
-
-        private async Task HydrateCachedAvatarUrisAsync(string reason)
-        {
-            await RunOnUiThreadAsync(() =>
-                {
-                    int hydrated = 0;
-                    foreach (var chat in Chats)
-                    {
-                        if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
-                        {
-                            continue;
-                        }
-
-                        bool needsLocalUri = string.IsNullOrWhiteSpace(chat.AvatarUrl) ||
-                                             chat.AvatarUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-                                             chat.AvatarUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
-                        if (!needsLocalUri)
-                        {
-                            continue;
-                        }
-
-                        string localUri;
-                        DateTime fetchedAtUtc;
-                        if (!TryGetCachedAvatarUri(chat.JID, out localUri, out fetchedAtUtc))
-                        {
-                            continue;
-                        }
-
-                        chat.AvatarUrl = localUri;
-                        chat.AvatarFetchedAtUtc = fetchedAtUtc;
-                        chat.AvatarFetchFailedAtUtc = null;
-                        chat.AvatarFetchFailureReason = null;
-                        hydrated++;
-                    }
-
-                    foreach (var chat in Chats)
-                    {
-                        if (chat == null || !chat.IsGroup || string.IsNullOrWhiteSpace(chat.JID))
-                        {
-                            continue;
-                        }
-
-                        if (!string.IsNullOrWhiteSpace(chat.AvatarHighUrl) &&
-                            !chat.AvatarHighUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
-                            !chat.AvatarHighUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-                        {
-                            continue;
-                        }
-
-                        string highUri;
-                        DateTime highFetchedAtUtc;
-                        if (!TryGetCachedAvatarUri(chat.JID, out highUri, out highFetchedAtUtc, "_high"))
-                        {
-                            continue;
-                        }
-
-                        chat.AvatarHighUrl = highUri;
-                    }
-
-                    if (hydrated > 0)
-                    {
-                        Debug.WriteLine($"[WhatsAppService] Hydrated {hydrated} avatar URLs from local cache ({reason})");
-                        SchedulePersist();
-                    }
-                });
         }
 
         private bool IsMeaningfulChatLabel(string label, string contextJid, bool isGroup)
@@ -9928,43 +2678,6 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         /// <summary>
-        /// True when a group label is just the chat id: <c>120363…</c> or the legacy
-        /// <c>phone-timestamp</c> user part. Those are placeholders, not subjects.
-        /// </summary>
-        private static bool IsGroupIdPlaceholder(string label, string groupJid)
-        {
-            if (string.IsNullOrWhiteSpace(label))
-            {
-                return true;
-            }
-
-            string trimmed = label.Trim();
-            if (trimmed.Contains("@"))
-            {
-                return true;
-            }
-
-            string bare = (groupJid ?? string.Empty).Split('@')[0];
-            if (!string.IsNullOrEmpty(bare) &&
-                string.Equals(trimmed, bare, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-
-            if (trimmed.All(char.IsDigit))
-            {
-                return true;
-            }
-
-            string labelDigits = ExtractDigitsOnly(trimmed);
-            string jidDigits = ExtractDigitsOnly(bare);
-            bool hasLetters = trimmed.Any(char.IsLetter);
-            return !hasLetters &&
-                   jidDigits.Length >= 7 &&
-                   string.Equals(labelDigits, jidDigits, StringComparison.Ordinal);
-        }
-
-        /// <summary>
         /// Loads messages for a specific chat from disk if not already in memory.
         /// Call this when opening a chat to lazy-load messages.
         /// </summary>
@@ -9982,16 +2695,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             try
             {
-                // Always combine the last persisted page with messages received during
-                // the current connection. Startup no longer preloads every chat, so a
-                // memory-only fast path would hide recent persisted messages.
-                int totalCount = await _messageStore.GetMessageCountAsync(normJid);
-                int take = 30;
-                int skip = Math.Max(0, totalCount - take);
-                var persisted = await _messageStore.LoadMessagesPagedAsync(normJid, skip, take);
-                var pinned = await _messageStore.LoadPinnedMessagesAsync(normJid, 3);
-                var durableOutbox = await _messageStore.LoadPendingOutgoingForChatAsync(normJid);
-
+                // RAM overlay only — SQLite history is loaded by MessageFacade.
                 var merged = new List<ChatMessage>();
                 var byId = new Dictionary<string, ChatMessage>(StringComparer.Ordinal);
 
@@ -10011,12 +2715,6 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
                 };
 
-                addMessages(persisted);
-                addMessages(pinned);
-                addMessages(durableOutbox);
-                // Include writes that are still waiting for the batched disk flush.
-                // Without this merge a cache reload could temporarily hide a message
-                // that was visible seconds earlier.
                 addMessages(GetPendingPersistMessagesSnapshot(normJid));
                 if (MessagesByChat.TryGetValue(normJid, out var liveMessages))
                 {
@@ -10065,16 +2763,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     SchedulePersist();
                 }
 
-                if (durableOutbox.Count > 0)
-                {
-                    // Promote recovered outbox items into the normal batched chat file.
-                    QueueMessagesForPersist(
-                        normJid,
-                        durableOutbox,
-                        queueIncomingJournal: false);
-                }
-
-                Debug.WriteLine($"[WhatsAppService] Initial loaded {cache.Count} merged messages (persisted total={totalCount}, outbox={durableOutbox.Count}) for {normJid}");
+                Debug.WriteLine($"[WhatsAppService] Initial loaded {cache.Count} RAM messages for {normJid}");
                 return cache.ToList();
             }
             catch (Exception ex)
@@ -10128,12 +2817,13 @@ namespace Unison.Uwp.Services.WhatsApp
 
                     if (uniquePrevious.Count > 0)
                     {
-                        MessagesByChat[normJid].InsertRange(0, uniquePrevious);
-                        foreach (var m in uniquePrevious)
+                        var cache = MessagesByChat[normJid];
+                        foreach (var older in uniquePrevious)
                         {
-                            RegisterMessageId(normJid, m?.Id);
+                            ChatMessageOrder.InsertSorted(cache, older);
+                            RegisterMessageId(normJid, older?.Id);
                         }
-                        Debug.WriteLine($"[WhatsAppService] Added {uniquePrevious.Count} older messages for {normJid}. total_in_cache={MessagesByChat[normJid].Count}, total_on_disk={totalCount}");
+                        Debug.WriteLine($"[WhatsAppService] Added {uniquePrevious.Count} older messages for {normJid}. total_in_cache={cache.Count}, total_on_disk={totalCount}");
                     }
                     previousMessages = uniquePrevious;
                 }
@@ -10158,12 +2848,23 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             try
             {
-                await _messageStore.SaveMessageAsync(NormalizeJid(chatJid), message);
+                await PersistLiveMessagesAsync(NormalizeJid(chatJid), new[] { message });
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[WhatsAppService] Failed to save message: {ex.Message}");
             }
+        }
+
+        private async Task<ChatMessage> FindPersistedChatMessageAsync(string chatJid, string messageId)
+        {
+            if (_historyMessages == null || string.IsNullOrWhiteSpace(chatJid) || string.IsNullOrWhiteSpace(messageId))
+            {
+                return null;
+            }
+
+            HistoryMessage row = await _historyMessages.GetAsync(chatJid, messageId).ConfigureAwait(false);
+            return HistoryMessageMapper.ToChatMessage(row);
         }
 
         public void StartNewChat(string jid)
@@ -10394,30 +3095,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 !string.IsNullOrWhiteSpace(c.AvatarUrl));
         }
 
-        private static string BuildSafeAvatarFileName(string jid, string suffix = null)
-        {
-            string source = string.IsNullOrWhiteSpace(jid) ? Guid.NewGuid().ToString("N") : jid;
-            var chars = source
-                .Select(c => char.IsLetterOrDigit(c) ? c : '_')
-                .ToArray();
-            string safe = new string(chars).Trim('_');
-            if (string.IsNullOrWhiteSpace(safe))
-            {
-                safe = Guid.NewGuid().ToString("N");
-            }
-            if (safe.Length > 96)
-            {
-                safe = safe.Substring(0, 96);
-            }
-
-            if (!string.IsNullOrWhiteSpace(suffix))
-            {
-                return safe + suffix + ".jpg";
-            }
-
-            return safe + ".jpg";
-        }
-
         private static bool TryGetCachedAvatarUri(string jid, out string localUri, out DateTime fetchedAtUtc, string suffix = null)
         {
             localUri = null;
@@ -10456,15 +3133,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 Debug.WriteLine($"[WhatsAppService] Failed to check cached avatar for {jid}: {ex.Message}");
                 return false;
             }
-        }
-
-        /// <summary>
-        /// Downloads a remote avatar into LocalFolder/MediaCache/Avatars (JID-named file).
-        /// Used by chat avatar batch and <see cref="ProfileFacade"/>.
-        /// </summary>
-        public Task<string> CacheRemoteAvatarAsync(string jid, string remoteUrl, CancellationToken token)
-        {
-            return DownloadAndCacheAvatarAsync(jid, remoteUrl, token);
         }
 
         private async Task<string> DownloadAndCacheAvatarAsync(string jid, string remoteUrl, CancellationToken token, string suffix = null)
@@ -10537,6 +3205,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         chat.AvatarFetchedAtUtc = nowUtc;
                         chat.AvatarFetchFailedAtUtc = null;
                         chat.AvatarFetchFailureReason = null;
+                        StampGroupMemberAvatars(chat.JID, localUri);
                     });
                 if (_contactService != null)
                 {
@@ -10582,145 +3251,6 @@ namespace Unison.Uwp.Services.WhatsApp
             Debug.WriteLine($"[WhatsAppService] Avatar refresh failed without clearing existing image for {chat.JID}: target={result.TargetJid}, lookup={result.TokenLookupJid}, reason={chat.AvatarFetchFailureReason}");
         }
 
-        private async Task<bool> TryApplyGroupAvatarFallbackAsync(ChatItem chat, ProfilePictureResult originalResult, CancellationToken token)
-        {
-            if (chat == null || !chat.IsGroup || _socket == null || !ShouldTryGroupAvatarFallback(originalResult))
-            {
-                return false;
-            }
-
-            token.ThrowIfCancellationRequested();
-
-            List<string> fallbackJids;
-            try
-            {
-                var metadata = await _socket.QueryGroupMetadataAsync(chat.JID);
-                fallbackJids = ExtractGroupAvatarFallbackJids(metadata, chat.JID);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WhatsAppService] Group avatar fallback metadata query failed for {chat.JID}: {ex.Message}");
-                return false;
-            }
-
-            if (fallbackJids.Count == 0)
-            {
-                Debug.WriteLine($"[WhatsAppService] Group avatar fallback has no parent/community candidate for {chat.JID}");
-                return false;
-            }
-
-            foreach (var fallbackJid in fallbackJids)
-            {
-                token.ThrowIfCancellationRequested();
-
-                try
-                {
-                    Debug.WriteLine($"[WhatsAppService] Group avatar fallback trying {chat.JID} -> {fallbackJid} after {originalResult?.FailureReason}");
-                    var fallbackResult = await _socket.GetProfilePictureUrlResultAsync(fallbackJid, "preview");
-                    Debug.WriteLine($"[WhatsAppService] Group avatar fallback result for {chat.JID}: source={fallbackJid}, hasUrl={!string.IsNullOrWhiteSpace(fallbackResult?.Url)}, notFound={fallbackResult?.IsNotFound}, timeout={fallbackResult?.IsTimeout}, reason={fallbackResult?.FailureReason}");
-
-                    if (string.IsNullOrWhiteSpace(fallbackResult?.Url))
-                    {
-                        continue;
-                    }
-
-                    string localUri = await DownloadAndCacheAvatarAsync(chat.JID, fallbackResult.Url, token);
-                    if (string.IsNullOrWhiteSpace(localUri))
-                    {
-                        continue;
-                    }
-
-                    DateTime nowUtc = DateTime.UtcNow;
-                    await RunOnUiThreadAsync(() =>
-                        {
-                            chat.AvatarUrl = localUri;
-                            chat.AvatarFetchedAtUtc = nowUtc;
-                            chat.AvatarFetchFailedAtUtc = null;
-                            chat.AvatarFetchFailureReason = null;
-                        });
-
-                    if (_contactService != null)
-                    {
-                        await _contactService.NotifyAvatarCachedAsync(chat.JID, localUri);
-                    }
-
-                    Debug.WriteLine($"[WhatsAppService] Group avatar fallback cached {chat.JID} from {fallbackJid}");
-                    return true;
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[WhatsAppService] Group avatar fallback failed for {chat.JID} via {fallbackJid}: {ex.Message}");
-                }
-            }
-
-            return await TryApplySiblingGroupAvatarFallbackAsync(chat, token);
-        }
-
-        private async Task<bool> TryApplySiblingGroupAvatarFallbackAsync(ChatItem chat, CancellationToken token)
-        {
-            var source = FindSiblingGroupAvatarSource(chat);
-            if (source == null)
-            {
-                return false;
-            }
-
-            token.ThrowIfCancellationRequested();
-            string sourceJid = source.JID;
-            string sourceAvatar = source.AvatarUrl;
-            DateTime nowUtc = DateTime.UtcNow;
-
-            await RunOnUiThreadAsync(() =>
-                {
-                    chat.AvatarUrl = sourceAvatar;
-                    chat.AvatarFetchedAtUtc = nowUtc;
-                    chat.AvatarFetchFailedAtUtc = null;
-                    chat.AvatarFetchFailureReason = null;
-                });
-
-            if (_contactService != null && !string.IsNullOrWhiteSpace(sourceAvatar))
-            {
-                await _contactService.NotifyAvatarCachedAsync(chat.JID, sourceAvatar);
-            }
-
-            Debug.WriteLine($"[WhatsAppService] Group avatar sibling fallback copied {chat.JID} from same-subject group {sourceJid}");
-            return true;
-        }
-
-        private static bool ShouldTryGroupAvatarFallback(ProfilePictureResult result)
-        {
-            if (result == null || !string.IsNullOrWhiteSpace(result.Url))
-            {
-                return false;
-            }
-
-            return result.IsNotFound ||
-                   string.Equals(result.FailureReason, "server-error:401", StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(result.FailureReason, "server-error:404", StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(result.FailureReason, "server-error:406", StringComparison.OrdinalIgnoreCase);
-        }
-
-        private List<string> ExtractGroupAvatarFallbackJids(BinaryNode response, string groupJid)
-        {
-            var candidates = new List<string>();
-            var group = FindGroupNode(response, groupJid);
-            if (group == null)
-            {
-                return candidates;
-            }
-
-            AddGroupAvatarCandidate(candidates, group.GetChild("linked_parent"));
-            AddGroupAvatarCandidate(candidates, group.GetChild("parent"));
-            AddGroupAvatarCandidate(candidates, group.GetChild("default_sub_group"));
-            AddGroupAvatarCandidate(candidates, group.GetChild("default_sub_community"));
-
-            return candidates
-                .Where(j => !string.IsNullOrWhiteSpace(j) &&
-                            !string.Equals(NormalizeJid(j), NormalizeJid(groupJid), StringComparison.OrdinalIgnoreCase))
-                .Select(NormalizeJid)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-        }
-
         private BinaryNode FindGroupNode(BinaryNode response, string groupJid)
         {
             if (response == null)
@@ -10747,98 +3277,6 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             return response.GetChild("group");
-        }
-
-        private void AddGroupAvatarCandidate(List<string> candidates, BinaryNode node)
-        {
-            if (node?.Attrs == null)
-            {
-                return;
-            }
-
-            foreach (var key in new[] { "jid", "id", "parent", "linked_parent" })
-            {
-                if (node.Attrs.TryGetValue(key, out var raw))
-                {
-                    string jid = NormalizeGroupJidCandidate(raw);
-                    if (!string.IsNullOrWhiteSpace(jid))
-                    {
-                        candidates.Add(jid);
-                    }
-                }
-            }
-        }
-
-        private string NormalizeGroupJidCandidate(string raw)
-        {
-            if (string.IsNullOrWhiteSpace(raw))
-            {
-                return null;
-            }
-
-            string value = raw.Trim();
-            if (value.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase))
-            {
-                return NormalizeJid(value);
-            }
-
-            if (value.IndexOf('@') < 0 && value.All(char.IsDigit))
-            {
-                return NormalizeJid(value + "@g.us");
-            }
-
-            return null;
-        }
-
-        public void MarkAvatarImageLoadFailed(ChatItem chat, string reason)
-        {
-            if (chat == null)
-            {
-                return;
-            }
-
-            string failedUrl = chat.AvatarUrl;
-            if (!string.IsNullOrWhiteSpace(failedUrl) &&
-                failedUrl.StartsWith("ms-appdata:///local/MediaCache/Avatars/", StringComparison.OrdinalIgnoreCase))
-            {
-                try
-                {
-                    int slashIndex = failedUrl.LastIndexOf('/');
-                    string fileName = slashIndex >= 0 && slashIndex < failedUrl.Length - 1
-                        ? failedUrl.Substring(slashIndex + 1)
-                        : BuildSafeAvatarFileName(chat.JID);
-                    string filePath = System.IO.Path.Combine(
-                        ApplicationData.Current.LocalFolder.Path,
-                        "MediaCache",
-                        "Avatars",
-                        fileName);
-                    if (System.IO.File.Exists(filePath))
-                    {
-                        System.IO.File.Delete(filePath);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[WhatsAppService] Failed to remove broken avatar cache for {chat.JID}: {ex.Message}");
-                }
-            }
-
-            // Nao mantenha uma URI local quebrada nem aplique o backoff de 30 minutos:
-            // isso fazia a foto desaparecer durante toda a sessao. A linha visivel pede
-            // uma nova consulta imediatamente, tentando tambem o JID alternativo PN/LID.
-            chat.AvatarUrl = null;
-            chat.AvatarFetchedAtUtc = null;
-            chat.AvatarFetchFailedAtUtc = null;
-            chat.AvatarFetchFailureReason = string.IsNullOrWhiteSpace(reason) ? "ui-image-failed" : reason;
-            Debug.WriteLine($"[WhatsAppService] UI avatar image load failed for {chat.JID}: {chat.AvatarFetchFailureReason}");
-            RequestAvatarRefresh(chat, force: true);
-            SchedulePersist();
-        }
-
-        /// <summary>Delegates to <see cref="IContactService"/> (owns dedup/backoff policy); this class only supplies the fetch primitive.</summary>
-        public void RequestAvatarRefresh(ChatItem chat, bool force = false)
-        {
-            _contactService?.RequestAvatarRefresh(chat, force);
         }
 
         private List<string> GetAvatarLookupCandidates(ChatItem chat)
@@ -10918,243 +3356,9 @@ namespace Unison.Uwp.Services.WhatsApp
             await RetrieveContactPicturesCoreAsync(token);
         }
 
-        /// <summary>Delegates to <see cref="IContactService"/> (owns batch/backoff policy); this class only supplies the fetch primitives.</summary>
-        public Task RetrieveContactPicturesCoreAsync(CancellationToken token)
-        {
-            if (_socket == null)
-            {
-                return Task.CompletedTask;
-            }
-
-            return _contactService?.RetrieveContactPicturesAsync(token) ?? Task.CompletedTask;
-        }
-
-        public Task QueryAllGroupsAsync() => QueryAllGroupsAsync(false);
-
-        /// <param name="force">
-        /// Ignores the reuse window. For the callers that only ask because a group is still
-        /// showing its JID - there is nothing to gain by making the user wait out a window that
-        /// exists to stop redundant passes, and this pass is not redundant.
-        /// </param>
-        public async Task QueryAllGroupsAsync(bool force)
-        {
-            if (ShouldDeferReconnectReplayWork())
-            {
-                Debug.WriteLine("[WhatsAppService] QueryAllGroupsAsync skipped (replay drain active)");
-                return;
-            }
-
-            string syncTrafficDeferReason;
-            if (ShouldDeferProfilePictureFetch(out syncTrafficDeferReason))
-            {
-                Debug.WriteLine($"[WhatsAppService] QueryAllGroupsAsync skipped (sync traffic active: {syncTrafficDeferReason})");
-                return;
-            }
-
-            if (_socket == null || !_socket.IsHandshakeComplete)
-            {
-                Debug.WriteLine("[WhatsAppService] QueryAllGroupsAsync skipped (handshake not complete)");
-                return;
-            }
-
-            // Five separate callers ask for this - name resolution, the background pass, avatar
-            // fallback, opening a group - and they overlap. Each pass costs one participating
-            // query plus up to twenty-five interactive metadata queries, so two overlapping
-            // passes were enough to keep the socket answering group queries while everything
-            // else timed out waiting behind them. The group list does not change by the second.
-            var sinceLastPass = DateTime.UtcNow - _lastGroupQueryUtc;
-            if (!force && sinceLastPass < GroupQueryReuseWindow)
-            {
-                Debug.WriteLine(
-                    "[WhatsAppService] QueryAllGroupsAsync skipped (last pass was " +
-                    sinceLastPass.TotalSeconds.ToString("F0") + "s ago)");
-                return;
-            }
-
-            // The window is armed on the way out, not on the way in. Arming it first meant a
-            // listing that timed out - which is exactly when the groups are still nameless -
-            // bought itself two minutes of silence before anything could try again.
-            bool listingAnswered = false;
-
-            try
-            {
-                Debug.WriteLine("[WhatsAppService] Fetching all participating groups...");
-                var response = await _socket.QueryParticipatingGroupsAsync();
-                if (response != null)
-                {
-                    listingAnswered = true;
-
-                    // Use recursive search for group nodes
-                    var groupNodes = response.FindAllDescendants("group");
-                    Debug.WriteLine($"[WhatsAppService] QueryAllGroupsAsync found {groupNodes.Count} 'group' nodes in response.");
-
-                    if (groupNodes.Count == 0)
-                    {
-                        // Fallback to top-level children if FindAllDescendants failed
-                        var topTags = string.Join(", ", response.Children.Select(c => c.Tag));
-                        Debug.WriteLine($"[WhatsAppService] No 'group' nodes found. Top tags: [{topTags}]");
-                    }
-
-                    await ProcessGroupNodes(groupNodes);
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WhatsAppService] Group query failed: {ex.Message}");
-            }
-
-            // Deliberately outside the block above. The per-group fallback is what names the
-            // groups the listing missed, so a listing that failed is the case it exists for -
-            // and it used to be skipped in exactly that case, because both shared one try.
-            try
-            {
-                await QueryUnresolvedGroupMetadataAsync(limit: 25);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WhatsAppService] Group metadata fallback failed: {ex.Message}");
-            }
-
-            if (listingAnswered)
-            {
-                _lastGroupQueryUtc = DateTime.UtcNow;
-            }
-        }
-
         Task IWhatsAppService.QueryUnresolvedGroupMetadataAsync(int limit) => QueryUnresolvedGroupMetadataAsync(limit);
 
         Task IWhatsAppService.RefreshGroupSendPermissionsAsync(string groupJid) => RefreshGroupSendPermissionsAsync(groupJid);
-
-        private async Task RefreshGroupSendPermissionsAsync(string groupJid)
-        {
-            if (_socket == null || !_socket.IsHandshakeComplete)
-            {
-                return;
-            }
-
-            string canonical = GetCanonicalJid(groupJid);
-            if (string.IsNullOrWhiteSpace(canonical) ||
-                !canonical.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-
-            try
-            {
-                var response = await _socket.QueryGroupMetadataAsync(canonical);
-                ApplyGroupSendPermissionsFromMetadata(response, canonical);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WhatsAppService] RefreshGroupSendPermissionsAsync failed for {canonical}: {ex.Message}");
-            }
-        }
-
-        private async Task QueryUnresolvedGroupMetadataAsync(int limit = 25)
-        {
-            if (_socket == null || !_socket.IsHandshakeComplete) return;
-
-            var unresolved = new List<ChatItem>();
-            await RunOnUiThreadAsync(() =>
-            {
-                foreach (var c in Chats)
-                {
-                    if (c == null) continue;
-                    bool isGroupChat = c.IsGroup || (!string.IsNullOrEmpty(c.JID) && c.JID.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase));
-                    if (!isGroupChat) continue;
-
-                    bool unresolvedName = !IsMeaningfulChatLabel(c.Name, c.JID, true);
-                    if (unresolvedName)
-                    {
-                        unresolved.Add(c);
-                    }
-                }
-            });
-
-            if (unresolved.Count == 0) return;
-
-            int attempts = 0;
-            int resolved = 0;
-            foreach (var chat in unresolved.Take(Math.Max(1, limit)))
-            {
-                if (string.IsNullOrWhiteSpace(chat.JID)) continue;
-                attempts++;
-
-                try
-                {
-                    var response = await _socket.QueryGroupMetadataAsync(chat.JID);
-                    string subject = ExtractGroupSubject(response, chat.JID);
-                    if (!string.IsNullOrWhiteSpace(subject) &&
-                        !IsGroupIdPlaceholder(subject, chat.JID))
-                    {
-                        ContactNames[chat.JID] = subject;
-                        resolved++;
-                    }
-
-                    ApplyGroupSendPermissionsFromMetadata(response, chat.JID);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[WhatsAppService] QueryGroupMetadataAsync failed for {chat.JID}: {ex.Message}");
-                }
-
-                await Task.Delay(120);
-            }
-
-            if (resolved > 0)
-            {
-                await ApplyResolvedNamesToChatsAsync();
-                SchedulePersist();
-            }
-
-            Debug.WriteLine($"[WhatsAppService] Group metadata fallback: resolved {resolved}/{attempts} unresolved group names");
-        }
-
-        /// <summary>
-        /// Reads announce-only + current user admin rank from a w:g2 group metadata IQ
-        /// and updates the matching chat (Baileys: announcement child, participant admin attr).
-        /// </summary>
-        private void ApplyGroupSendPermissionsFromMetadata(BinaryNode response, string groupJid)
-        {
-            if (response == null || string.IsNullOrWhiteSpace(groupJid))
-            {
-                return;
-            }
-
-            BinaryNode groupNode = FindGroupNode(response, groupJid);
-            if (groupNode == null)
-            {
-                return;
-            }
-
-            bool announceOnly = groupNode.GetChild("announcement") != null;
-            GroupParticipantRole myRole = ResolveMyGroupRole(groupNode);
-
-            string canonical = GetCanonicalJid(groupJid);
-            _ = RunOnUiThreadAsync(() =>
-            {
-                ChatItem chat = Chats.FirstOrDefault(c =>
-                    c != null &&
-                    string.Equals(GetCanonicalJid(c.JID), canonical, StringComparison.OrdinalIgnoreCase));
-                if (chat == null)
-                {
-                    return;
-                }
-
-                if (!chat.IsGroup)
-                {
-                    chat.IsGroup = true;
-                }
-
-                chat.IsAnnounceOnly = announceOnly;
-                chat.MyGroupRole = myRole;
-                int memberCount = CountGroupMembers(groupNode);
-                if (memberCount > 0)
-                {
-                    chat.GroupMemberCount = memberCount;
-                }
-            });
-        }
 
         private GroupParticipantRole ResolveMyGroupRole(BinaryNode groupNode)
         {
@@ -11205,155 +3409,111 @@ namespace Unison.Uwp.Services.WhatsApp
             return GroupParticipantRole.Member;
         }
 
-        private string ExtractGroupSubject(BinaryNode response, string groupJid)
-        {
-            if (response == null) return null;
+        private const int MaxPersistedGroupMembers = 512;
 
-            var groups = response.FindAllDescendants("group");
-            foreach (var g in groups)
+        private IEnumerable<string> EnumerateMembershipPersonKeys(GroupMember member)
+        {
+            if (member == null)
             {
-                if (g?.Attrs == null) continue;
-                g.Attrs.TryGetValue("id", out var id);
-                g.Attrs.TryGetValue("subject", out var subject);
-                if (!string.IsNullOrWhiteSpace(subject) &&
-                    (string.IsNullOrWhiteSpace(id) || string.Equals(NormalizeJid(id), NormalizeJid(groupJid), StringComparison.OrdinalIgnoreCase)))
+                yield break;
+            }
+
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            void Consider(string raw)
+            {
+                if (string.IsNullOrWhiteSpace(raw))
                 {
-                    return subject;
+                    return;
+                }
+
+                string key = NormalizeJid(raw);
+                if (string.IsNullOrEmpty(key) || IsGroupJid(key))
+                {
+                    return;
+                }
+
+                seen.Add(key);
+            }
+
+            Consider(member.Jid);
+            Consider(GetCanonicalJid(member.Jid));
+            Consider(member.Lid);
+            if (!string.IsNullOrWhiteSpace(member.Lid))
+            {
+                Consider(GetCanonicalJid(member.Lid));
+            }
+
+            string phone = member.PhoneNumber;
+            if (!string.IsNullOrWhiteSpace(phone))
+            {
+                if (phone.IndexOf('@') >= 0)
+                {
+                    Consider(phone);
+                }
+                else
+                {
+                    string digits = PhoneNumberHelper.NormalizePhoneDigits(phone);
+                    if (!string.IsNullOrEmpty(digits))
+                    {
+                        Consider(digits + "@s.whatsapp.net");
+                    }
                 }
             }
 
-            var directGroup = response.GetChild("group");
-            if (directGroup?.Attrs != null && directGroup.Attrs.TryGetValue("subject", out var directSubject) && !string.IsNullOrWhiteSpace(directSubject))
+            foreach (string key in seen)
             {
-                return directSubject;
+                yield return key;
+            }
+        }
+
+        private string FindExistingAvatarUrl(string jid, string phone, string lid)
+        {
+            string fromChat = FindAvatarOnChatRows(jid);
+            if (!string.IsNullOrWhiteSpace(fromChat))
+            {
+                return fromChat;
+            }
+
+            if (!string.IsNullOrWhiteSpace(phone))
+            {
+                fromChat = FindAvatarOnChatRows(NormalizeJid(phone));
+                if (!string.IsNullOrWhiteSpace(fromChat))
+                {
+                    return fromChat;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(lid))
+            {
+                fromChat = FindAvatarOnChatRows(NormalizeJid(lid));
+                if (!string.IsNullOrWhiteSpace(fromChat))
+                {
+                    return fromChat;
+                }
             }
 
             return null;
         }
 
-        private async Task ProcessGroupNodes(List<BinaryNode> groupNodes)
+        private bool MemberMatchesJid(GroupMember member, string canonical)
         {
-            if (groupNodes == null || groupNodes.Count == 0)
+            if (member == null || string.IsNullOrWhiteSpace(canonical))
             {
-                Debug.WriteLine("[WhatsAppService] ProcessGroupNodes: No groups to process.");
-                return;
+                return false;
             }
 
-            Debug.WriteLine($"[WhatsAppService] Processing {groupNodes.Count} groups...");
-
-            // Every node is read before a single row is touched. The listing answers for all of
-            // the account's groups at once, so doing this a group at a time meant one hop to the
-            // UI thread and one walk of the chat list each - hundreds of both, back to back,
-            // while the list was trying to render the sync that provoked the query.
-            var parsed = new Dictionary<string, GroupListingEntry>(StringComparer.OrdinalIgnoreCase);
-            foreach (var g in groupNodes)
+            if (JidsMatchCanonical(member.Jid, canonical))
             {
-                if (g?.Attrs == null || !g.Attrs.TryGetValue("id", out var id) || string.IsNullOrWhiteSpace(id))
-                {
-                    continue;
-                }
-
-                var jid = id.Contains("@") ? id : id + "@g.us";
-                g.Attrs.TryGetValue("subject", out var subject);
-
-                parsed[GetCanonicalJid(NormalizeJid(jid))] = new GroupListingEntry
-                {
-                    Jid = jid,
-                    Subject = subject,
-                    AnnounceOnly = g.GetChild("announcement") != null,
-                    MyRole = ResolveMyGroupRole(g),
-                    MemberCount = CountGroupMembers(g)
-                };
+                return true;
             }
 
-            if (parsed.Count == 0)
+            if (JidsMatchCanonical(member.PhoneNumber, canonical))
             {
-                return;
+                return true;
             }
 
-            await RunOnUiThreadAsync(() =>
-            {
-                foreach (var entry in parsed.Values)
-                {
-                    if (!string.IsNullOrWhiteSpace(entry.Subject) &&
-                        !IsGroupIdPlaceholder(entry.Subject, entry.Jid))
-                    {
-                        ContactNames[entry.Jid] = entry.Subject;
-                        Debug.WriteLine($"[WhatsAppService] Group resolved: {entry.Jid} -> {entry.Subject}");
-                    }
-                }
-
-                foreach (var chat in Chats)
-                {
-                    if (chat == null)
-                    {
-                        continue;
-                    }
-
-                    GroupListingEntry entry;
-                    if (!parsed.TryGetValue(GetCanonicalJid(chat.JID), out entry))
-                    {
-                        continue;
-                    }
-
-                    if (!string.IsNullOrWhiteSpace(entry.Subject) &&
-                        !IsGroupIdPlaceholder(entry.Subject, entry.Jid))
-                    {
-                        string resolved = ResolveDisplayName(chat.JID, "chat");
-                        bool incomingMeaningful = IsMeaningfulChatLabel(resolved, chat.JID, true);
-                        bool existingMeaningful = IsMeaningfulChatLabel(chat.Name, chat.JID, true);
-                        if (incomingMeaningful || !existingMeaningful)
-                        {
-                            chat.Name = resolved;
-                        }
-                    }
-
-                    if (!chat.IsGroup)
-                    {
-                        chat.IsGroup = true;
-                    }
-
-                    chat.IsAnnounceOnly = entry.AnnounceOnly;
-                    chat.MyGroupRole = entry.MyRole;
-                    if (entry.MemberCount > 0)
-                    {
-                        chat.GroupMemberCount = entry.MemberCount;
-                    }
-                }
-            });
-        }
-
-        /// <summary>What a group listing says about one group, read off the wire.</summary>
-        private sealed class GroupListingEntry
-        {
-            public string Jid;
-            public string Subject;
-            public bool AnnounceOnly;
-            public GroupParticipantRole MyRole;
-            public int MemberCount;
-        }
-
-        private static int CountGroupMembers(BinaryNode groupNode)
-        {
-            if (groupNode == null)
-            {
-                return 0;
-            }
-
-            int listed = 0;
-            List<BinaryNode> participants = groupNode.GetChildren("participant");
-            if (participants != null)
-            {
-                listed = participants.Count;
-            }
-
-            int size;
-            if (int.TryParse(groupNode.GetAttribute("size"), out size) && size > listed)
-            {
-                return size;
-            }
-
-            return listed;
+            return JidsMatchCanonical(member.Lid, canonical);
         }
 
         private static long ToUnixMilliseconds(DateTime timestamp)
@@ -12077,8 +4237,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             try
             {
-                var stored = await _messageStore
-                    .FindMessageByIdAsync(NormalizeJid(remoteJid), messageId)
+                var stored = await FindPersistedChatMessageAsync(NormalizeJid(remoteJid), messageId)
                     .ConfigureAwait(false);
 
                 if (stored == null || !stored.IsFromMe || string.IsNullOrEmpty(stored.Content))
@@ -12129,20 +4288,6 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 await ApplyAppStateReadStateAsync(update.Id, update.UnreadCount.Value == 0);
             }
-        }
-
-        /// <summary>
-        /// Applied by <see cref="IConnectionService"/> when auto-unlink policy fires.
-        /// Socket-only latch â€” does not wipe auth or navigate.
-        /// </summary>
-        public void SuppressReconnectFromPolicy(string reason)
-        {
-            LatchFatalSession("policy-" + (reason ?? "fatal"));
-            RuntimeDiagnosticsService.Instance.Write(
-                "connection",
-                "reconnect-suppressed-by-policy",
-                "reason=" + (reason ?? ""));
-            Debug.WriteLine("[WhatsAppService] Reconnect suppressed by ConnectionFacade policy: " + reason);
         }
 
         /// <summary>
@@ -12256,157 +4401,6 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             return null;
-        }
-
-        public void Disconnect()
-        {
-            _suppressReconnect = true;
-            StopConnectionHealthMonitor("disconnect");
-            _debugSendService?.Stop("disconnect");
-            var socket = _socket;
-            _socket = null;
-            if (socket != null)
-            {
-                socket.Disconnect();
-                socket.Dispose();
-            }
-        }
-
-        private async Task PersistCriticalSuspendStateAsync()
-        {
-            List<ChatItem> chatSnapshot = null;
-            List<string> chatJids = null;
-            Dictionary<string, string> aliasSnapshot = null;
-            await RunOnUiThreadAsync(() =>
-            {
-                chatSnapshot = Chats.Where(c => c != null).ToList();
-                chatJids = chatSnapshot
-                    .Select(c => NormalizeJid(c.JID))
-                    .Where(j => !string.IsNullOrWhiteSpace(j))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToList();
-                aliasSnapshot = new Dictionary<string, string>(JidAlias, StringComparer.OrdinalIgnoreCase);
-            });
-
-            await _messageStore.SaveChatsAsync(chatSnapshot ?? new List<ChatItem>());
-            await _messageStore.SaveJidAliasesAsync(
-                aliasSnapshot ?? new Dictionary<string, string>(),
-                chatJids ?? new List<string>());
-
-            RuntimeDiagnosticsService.Instance.Write(
-                "lifecycle",
-                "fast-suspend-persisted",
-                "chatRows=" + (chatSnapshot?.Count ?? 0));
-        }
-
-        public async Task PrepareForSuspendAsync()
-        {
-            try
-            {
-                await _messageStore.FlushPendingIncomingJournalAsync();
-                RuntimeDiagnosticsService.Instance.Write(
-                    "lifecycle",
-                    "suspend-incoming-journal-flushed");
-            }
-            catch (Exception ex)
-            {
-                RuntimeDiagnosticsService.Instance.RecordException(
-                    "lifecycle",
-                    "suspend-incoming-journal-failed",
-                    ex);
-            }
-        }
-
-        /// <summary>
-        /// Stops reconnect loops, disconnects socket traffic, and optionally persists state.
-        /// Intended for app suspend/close so the process can terminate cleanly.
-        /// </summary>
-
-        public async Task ShutdownAsync(bool persist = true)
-        {
-            Interlocked.Exchange(ref _forceFreshConnectOnResume, 1);
-            _suppressReconnect = true;
-            StopConnectionHealthMonitor("shutdown");
-            _resolutionCts?.Cancel();
-            _postReplayMaintenanceCts?.Cancel();
-            _postReplayMaintenanceCts?.Dispose();
-            _postReplayMaintenanceCts = null;
-            CancelDeferredProfilePictureResolution();
-            _debugSendService?.Stop("shutdown");
-
-            lock (_persistLock)
-            {
-                _persistTimer?.Dispose();
-                _persistTimer = null;
-                _persistPending = false;
-            }
-
-            // This tiny append-only write is the only mandatory suspend operation.
-            await PrepareForSuspendAsync();
-            await WaitForIncomingMessageQueueDrainAsync(250);
-            await PrepareForSuspendAsync();
-
-            try
-            {
-                var socket = _socket;
-                _socket = null;
-                if (socket != null)
-                {
-                    socket.Disconnect();
-                    socket.Dispose();
-                }
-
-                PublishConnectionUpdate("suspended");
-                ResetIncomingMessagePump("suspend", requeueCurrent: true);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WhatsAppService] Shutdown disconnect failed: {ex.Message}");
-            }
-
-            if (!persist)
-            {
-                return;
-            }
-
-            // Only the compact chat-list/alias snapshot is best effort. The incoming
-            // journal already protects recent messages, so suspension never waits for
-            // a large per-chat JSON rewrite or a HistorySync storage lock.
-            var persistTail = PersistSuspendTailAsync();
-            var completed = await Task.WhenAny(persistTail, Task.Delay(1600));
-            if (completed == persistTail)
-            {
-                await persistTail;
-                RuntimeDiagnosticsService.Instance.Write(
-                    "lifecycle",
-                    "suspend-persist-tail-complete");
-            }
-            else
-            {
-                RuntimeDiagnosticsService.Instance.Write(
-                    "lifecycle",
-                    "suspend-persist-tail-deferred",
-                    "milliseconds=1600; journal=durable");
-            }
-        }
-
-        private async Task PersistSuspendTailAsync()
-        {
-            try
-            {
-                // Recent incoming messages are already durable in the append-only
-                // journal. Rewriting large per-chat JSON files here can exceed the
-                // Windows Phone suspend deadline and make the process look like a
-                // crash. Only the compact chat-list/alias snapshot is best effort.
-                await PersistCriticalSuspendStateAsync();
-            }
-            catch (Exception ex)
-            {
-                RuntimeDiagnosticsService.Instance.RecordException(
-                    "lifecycle",
-                    "suspend-persist-tail-failed",
-                    ex);
-            }
         }
 
 
@@ -12573,205 +4567,6 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        private async Task HandleMessageReceiptSafelyAsync(BinaryNode node)
-        {
-            try
-            {
-                await HandleMessageReceiptAsync(node);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WhatsAppService] Receipt processing failed: {ex.Message}");
-            }
-        }
-
-        private async Task HandleMessageReceiptAsync(BinaryNode node)
-        {
-            if (node?.Attrs == null) return;
-
-            string receiptType = node.Attrs.GetDictionaryValueOrDefault("type", string.Empty);
-            if (string.Equals(receiptType, "retry", StringComparison.OrdinalIgnoreCase)) return;
-
-            string status;
-            if (string.IsNullOrWhiteSpace(receiptType))
-            {
-                status = ChatMessage.StatusDelivered;
-            }
-            else if (string.Equals(receiptType, "sender", StringComparison.OrdinalIgnoreCase))
-            {
-                status = ChatMessage.StatusSent;
-            }
-            else if (string.Equals(receiptType, "read", StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(receiptType, "read-self", StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(receiptType, "played", StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(receiptType, "played-self", StringComparison.OrdinalIgnoreCase))
-            {
-                status = ChatMessage.StatusRead;
-            }
-            else if (string.Equals(receiptType, "delivery", StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(receiptType, "delivered", StringComparison.OrdinalIgnoreCase))
-            {
-                status = ChatMessage.StatusDelivered;
-            }
-            else
-            {
-                // Unknown receipt types must not be promoted to delivered. The official
-                // protocol mapping ignores values it does not recognize.
-                return;
-            }
-
-            var ids = new HashSet<string>(StringComparer.Ordinal);
-            if (node.Attrs.TryGetValue("id", out var rootId) && !string.IsNullOrWhiteSpace(rootId)) ids.Add(rootId);
-            foreach (var item in node.FindAllDescendants("item"))
-            {
-                if (item?.Attrs != null && item.Attrs.TryGetValue("id", out var itemId) && !string.IsNullOrWhiteSpace(itemId))
-                    ids.Add(itemId);
-            }
-
-            string receiptChat = NormalizeJid(node.Attrs.GetDictionaryValueOrDefault("from", string.Empty));
-            bool isGroupReceipt = !string.IsNullOrWhiteSpace(receiptChat) &&
-                receiptChat.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
-
-            if (!isGroupReceipt || string.Equals(status, ChatMessage.StatusSent, StringComparison.OrdinalIgnoreCase))
-            {
-                foreach (var id in ids)
-                {
-                    await UpdateOutgoingMessageStatusAsync(id, status);
-                }
-                return;
-            }
-
-            string participant = GetCanonicalJid(NormalizeJid(
-                node.Attrs.GetDictionaryValueOrDefault("participant", string.Empty)));
-            if (string.IsNullOrWhiteSpace(participant) || IsSelfLinkedJid(participant)) return;
-
-            int expectedRecipients = await GetExpectedGroupRecipientCountAsync(receiptChat);
-            if (expectedRecipients <= 0) return;
-
-            foreach (var id in ids)
-            {
-                string aggregateStatus = RegisterGroupReceipt(
-                    id,
-                    participant,
-                    status,
-                    expectedRecipients);
-                if (!string.IsNullOrWhiteSpace(aggregateStatus))
-                {
-                    await UpdateOutgoingMessageStatusAsync(id, aggregateStatus);
-                }
-            }
-        }
-
-        private string RegisterGroupReceipt(
-            string messageId,
-            string participant,
-            string status,
-            int expectedRecipients)
-        {
-            if (string.IsNullOrWhiteSpace(messageId) ||
-                string.IsNullOrWhiteSpace(participant) ||
-                expectedRecipients <= 0)
-            {
-                return null;
-            }
-
-            lock (_messageStateLock)
-            {
-                if (!_groupReceiptStateByMessageId.TryGetValue(messageId, out var state))
-                {
-                    state = new GroupReceiptState();
-                    _groupReceiptStateByMessageId[messageId] = state;
-                }
-
-                state.UpdatedUtc = DateTime.UtcNow;
-                if (string.Equals(status, ChatMessage.StatusRead, StringComparison.OrdinalIgnoreCase))
-                {
-                    state.ReadParticipants.Add(participant);
-                    state.DeliveredParticipants.Add(participant);
-                }
-                else if (string.Equals(status, ChatMessage.StatusDelivered, StringComparison.OrdinalIgnoreCase))
-                {
-                    state.DeliveredParticipants.Add(participant);
-                }
-
-                if (state.ReadParticipants.Count >= expectedRecipients)
-                {
-                    _groupReceiptStateByMessageId.Remove(messageId);
-                    return ChatMessage.StatusRead;
-                }
-
-                if (state.DeliveredParticipants.Count >= expectedRecipients)
-                {
-                    return ChatMessage.StatusDelivered;
-                }
-
-                // Bound the receipt cache. Completed read entries are removed above;
-                // stale entries are discarded if the user sends to many groups.
-                if (_groupReceiptStateByMessageId.Count > 500)
-                {
-                    DateTime cutoff = DateTime.UtcNow.AddDays(-1);
-                    var staleIds = _groupReceiptStateByMessageId
-                        .Where(pair => pair.Value == null || pair.Value.UpdatedUtc < cutoff)
-                        .Select(pair => pair.Key)
-                        .Take(100)
-                        .ToList();
-                    foreach (var staleId in staleIds) _groupReceiptStateByMessageId.Remove(staleId);
-                }
-            }
-
-            return null;
-        }
-
-        private async Task<int> GetExpectedGroupRecipientCountAsync(string groupJid)
-        {
-            string canonical = GetCanonicalJid(groupJid);
-            if (string.IsNullOrWhiteSpace(canonical) || _socket == null) return 0;
-
-            lock (_messageStateLock)
-            {
-                if (_groupRecipientCountByChat.TryGetValue(canonical, out var cached) &&
-                    cached != null &&
-                    DateTime.UtcNow - cached.FetchedUtc < TimeSpan.FromMinutes(30))
-                {
-                    return cached.RecipientCount;
-                }
-            }
-
-            try
-            {
-                var response = await _socket.QueryGroupMetadataAsync(canonical);
-                ApplyGroupSendPermissionsFromMetadata(response, canonical);
-                var groupNode = response?.GetChild("group") ?? response?.GetChild("query")?.GetChild("group");
-                if (groupNode == null) return 0;
-
-                int recipientCount = groupNode.GetChildren("participant")
-                    .Select(participantNode =>
-                        participantNode != null && participantNode.Attrs != null
-                            ? participantNode.Attrs.GetDictionaryValueOrDefault("jid", string.Empty)
-                            : string.Empty)
-                    .Where(jid => !string.IsNullOrWhiteSpace(jid))
-                    .Select(jid => GetCanonicalJid(NormalizeJid(jid)))
-                    .Where(jid => !string.IsNullOrWhiteSpace(jid) && !IsSelfLinkedJid(jid))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .Count();
-
-                lock (_messageStateLock)
-                {
-                    _groupRecipientCountByChat[canonical] = new GroupRecipientCountCacheEntry
-                    {
-                        RecipientCount = recipientCount,
-                        FetchedUtc = DateTime.UtcNow
-                    };
-                }
-                return recipientCount;
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WhatsAppService] Group receipt aggregation metadata failed for {canonical}: {ex.Message}");
-                return 0;
-            }
-        }
-
         private async Task<bool> ApplyPinnedMessageStateAsync(
             string chatJid,
             string messageId,
@@ -12817,13 +4612,13 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 // A fixed message can be older than the 30-message page currently in RAM.
                 // Update the persisted target and add it to the active chat so the banner can show it.
-                target = await _messageStore.FindMessageByIdAsync(canonical, messageId);
+                target = await FindPersistedChatMessageAsync(canonical, messageId).ConfigureAwait(false);
                 if (target != null)
                 {
                     target.IsPinned = state.IsPinned;
                     target.PinnedAtUtc = state.PinnedAtUtc;
                     target.PinExpiresAtUtc = state.ExpiresAtUtc;
-                    await _messageStore.SaveMessageAsync(canonical, target);
+                    await PersistLiveMessagesAsync(canonical, new[] { target }).ConfigureAwait(false);
 
                     if (IsActiveChatJid(canonical))
                     {
@@ -12836,8 +4631,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             }
                             if (!messages.Any(m => string.Equals(m?.Id, target.Id, StringComparison.Ordinal)))
                             {
-                                messages.Add(target);
-                                messages.Sort((a, b) => a.Timestamp.CompareTo(b.Timestamp));
+                                ChatMessageOrder.InsertSorted(messages, target);
                                 TrimInMemoryMessageWindow(canonical);
                                 RegisterMessageId(canonical, target.Id);
                             }
@@ -13021,7 +4815,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 Content = text,
                 Kind = ChatMessageKind.Text,
                 IsFromMe = true,
-                Timestamp = DateTime.Now,
+                Timestamp = DateTime.UtcNow,
                 SenderName = "Me",
                 RemoteJid = normJid,
                 ParticipantJid = _authState?.Me?.Id,
@@ -13030,7 +4824,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             ApplyPendingStateToMessage(normJid, msg);
             if (!MessagesByChat.ContainsKey(normJid)) MessagesByChat[normJid] = new List<ChatMessage>();
-            MessagesByChat[normJid].Add(msg);
+            ChatMessageOrder.InsertSorted(MessagesByChat[normJid], msg);
             TrimInMemoryMessageWindow(normJid);
             RegisterMessageId(normJid, msg.Id);
             await UpdateChatPreviewForLocalSendAsync(normJid, text, msg.Timestamp, ChatPreviewKind.Text, msg.MentionedJids);
@@ -13038,7 +4832,7 @@ namespace Unison.Uwp.Services.WhatsApp
             // Make the bubble visible immediately, then persist it in the small durable
             // outbox. This avoids rewriting the entire chat JSON before every send.
             QueueChatMessagesChanged(normJid);
-            await _messageStore.SavePendingOutgoingAsync(normJid, msg);
+            await PersistLiveMessagesAsync(normJid, new[] { msg });
 
             try
             {
@@ -13071,7 +4865,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             // Update the durable outbox state and queue the normal batched chat-file
             // upsert. The flush removes the outbox item only after the main file is saved.
-            await _messageStore.SavePendingOutgoingAsync(normJid, msg);
+            await PersistLiveMessagesAsync(normJid, new[] { msg });
             QueueOfflineReplayMessageForPersist(normJid, msg);
             SchedulePersist();
             QueueChatMessagesChanged(normJid);
@@ -13101,7 +4895,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 ImageUri = localUri,
                 Caption = caption ?? "",
                 IsFromMe = true,
-                Timestamp = DateTime.Now,
+                Timestamp = DateTime.UtcNow,
                 SenderName = "Me",
                 RemoteJid = normJid,
                 ParticipantJid = _authState?.Me?.Id,
@@ -13110,7 +4904,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             if (!MessagesByChat.ContainsKey(normJid))
                 MessagesByChat[normJid] = new List<ChatMessage>();
-            MessagesByChat[normJid].Add(msg);
+            ChatMessageOrder.InsertSorted(MessagesByChat[normJid], msg);
             TrimInMemoryMessageWindow(normJid);
             RegisterMessageId(normJid, msg.Id);
             await UpdateChatPreviewForLocalSendAsync(normJid, preview, msg.Timestamp, ChatPreviewKind.Image);
@@ -13140,14 +4934,14 @@ namespace Unison.Uwp.Services.WhatsApp
                 AudioMimeType = mimeType,
                 AudioDurationSeconds = durationSeconds,
                 IsFromMe = true,
-                Timestamp = DateTime.Now,
+                Timestamp = DateTime.UtcNow,
                 SenderName = "Me",
                 RemoteJid = normJid,
                 ParticipantJid = _authState?.Me?.Id,
                 Status = ResolveSentStatus(normJid)
             };
             if (!MessagesByChat.ContainsKey(normJid)) MessagesByChat[normJid] = new List<ChatMessage>();
-            MessagesByChat[normJid].Add(msg);
+            ChatMessageOrder.InsertSorted(MessagesByChat[normJid], msg);
             TrimInMemoryMessageWindow(normJid);
             RegisterMessageId(normJid, msg.Id);
             await UpdateChatPreviewForLocalSendAsync(normJid, preview, msg.Timestamp, ChatPreviewKind.Voice);
@@ -13238,69 +5032,6 @@ namespace Unison.Uwp.Services.WhatsApp
             SchedulePersist();
         }
 
-        public string ResolveDisplayName(string jid, string context = null)
-        {
-            if (string.IsNullOrEmpty(jid)) return "";
-
-            string normalized = NormalizeJid(jid);
-            string canonical = GetCanonicalJid(normalized);
-            bool isGroup = canonical.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
-
-            // Self naming uses explicit "(You)" marker with graceful fallback.
-            if (IsSelfLinkedJid(canonical) || IsSelfLinkedJid(normalized))
-            {
-                return ResolveSelfDisplayName(canonical, normalized, context);
-            }
-
-            // Person in-memory cache (SQLite-backed store) Ã¢â‚¬â€ same idea as Redis in front of Dynamo.
-            string personName = TryGetPersonDisplayName(canonical) ?? TryGetPersonDisplayName(normalized);
-            if (!string.IsNullOrWhiteSpace(personName))
-            {
-                return personName;
-            }
-
-            // Cold cache: warm from disk without blocking the UI name path.
-            if (_personStore != null)
-            {
-                _ = WarmPersonIntoCacheAsync(canonical);
-                if (!string.Equals(canonical, normalized, StringComparison.OrdinalIgnoreCase))
-                {
-                    _ = WarmPersonIntoCacheAsync(normalized);
-                }
-            }
-
-            if (PhoneContactNamesByJid.TryGetValue(canonical, out var phoneName) && !string.IsNullOrWhiteSpace(phoneName))
-            {
-                string cleanPhoneName = SanitizeContactLabel(phoneName, canonical);
-                if (!string.IsNullOrWhiteSpace(cleanPhoneName))
-                {
-                    return cleanPhoneName;
-                }
-            }
-            if (PhoneContactNamesByJid.TryGetValue(normalized, out var phoneNameNorm) && !string.IsNullOrWhiteSpace(phoneNameNorm))
-            {
-                string cleanPhoneName = SanitizeContactLabel(phoneNameNorm, normalized);
-                if (!string.IsNullOrWhiteSpace(cleanPhoneName))
-                {
-                    return cleanPhoneName;
-                }
-            }
-
-            string waName = GetBestWhatsAppName(canonical, normalized);
-            if (!string.IsNullOrWhiteSpace(waName))
-            {
-                string clean = waName.Trim();
-                bool senderContext = string.Equals(context, "sender", StringComparison.OrdinalIgnoreCase);
-                if (!senderContext && !isGroup && !clean.StartsWith("~", StringComparison.Ordinal))
-                {
-                    return "~" + clean;
-                }
-                return clean;
-            }
-
-            return canonical.Split('@')[0];
-        }
-
         private string TryGetPersonDisplayName(string jid)
         {
             if (_personStore == null || string.IsNullOrWhiteSpace(jid))
@@ -13374,24 +5105,12 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            _ = PersistPersonNameAsync(norm, sanitized);
-        }
+            if (cached != null && cached.Source == PersonSource.AddressBook)
+            {
+                return;
+            }
 
-        private async Task PersistPersonNameAsync(string jid, string displayName)
-        {
-            try
-            {
-                await _personStore.InitializeAsync().ConfigureAwait(false);
-                await _personStore.UpsertIfChangedAsync(
-                    jid,
-                    displayName,
-                    null,
-                    JidHelper.TryPhoneFromJid(jid)).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[WhatsAppService] Person name upsert failed: " + ex.Message);
-            }
+            _ = PersistPersonNameAsync(norm, sanitized);
         }
 
         private string ResolveSelfDisplayName(string canonical, string normalized, string context)
@@ -13553,21 +5272,6 @@ namespace Unison.Uwp.Services.WhatsApp
             return null;
         }
 
-        private string GetBestWhatsAppName(params string[] jids)
-        {
-            var candidates = ExpandNameLookupCandidates(jids);
-            foreach (var candidate in candidates)
-            {
-                var name = GetWhatsAppNameFromCache(candidate);
-                if (!string.IsNullOrWhiteSpace(name))
-                {
-                    return name;
-                }
-            }
-
-            return null;
-        }
-
         private IEnumerable<string> ExpandNameLookupCandidates(params string[] jids)
         {
             var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -13598,158 +5302,6 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             return candidates;
-        }
-
-        public string GetCanonicalJid(string jid)
-        {
-            if (string.IsNullOrEmpty(jid)) return jid;
-            string normalized = NormalizeJid(jid);
-
-            if (JidAlias.TryGetValue(normalized, out var alias))
-            {
-                string normalizedAlias = NormalizeJid(alias);
-
-                bool isBidirectionalSelfAlias =
-                    IsSelfLinkedJid(normalizedAlias) &&
-                    JidAlias.TryGetValue(normalizedAlias, out var reverseAlias) &&
-                    string.Equals(NormalizeJid(reverseAlias), normalized, StringComparison.OrdinalIgnoreCase);
-
-                // Guard: never canonicalize a non-self contact to our own JID.
-                if (!IsSelfLinkedJid(normalized) && IsSelfLinkedJid(normalizedAlias) && !isBidirectionalSelfAlias)
-                {
-                    Debug.WriteLine($"[WhatsAppService] Ignoring alias that maps contact to self: {normalized} -> {normalizedAlias}");
-                    return normalized;
-                }
-
-                // Some devices surface LID-like identifiers on @s.whatsapp.net (e.g. 931....1@s.whatsapp.net).
-                // If both ends are @s.whatsapp.net, prefer the non-instance form as canonical.
-                bool normalizedIsPn = normalized.EndsWith("@s.whatsapp.net", StringComparison.OrdinalIgnoreCase);
-                bool aliasIsPn = normalizedAlias.EndsWith("@s.whatsapp.net", StringComparison.OrdinalIgnoreCase);
-                if (normalizedIsPn && aliasIsPn)
-                {
-                    bool normalizedIsLidLike = IsLidLikeJid(normalized);
-                    bool aliasIsLidLike = IsLidLikeJid(normalizedAlias);
-                    if (normalizedIsLidLike && !aliasIsLidLike) return normalizedAlias;
-                    if (!normalizedIsLidLike && aliasIsLidLike) return normalized;
-                }
-                
-                // Favor @s.whatsapp.net (PN) as the canonical JID if both are available
-                if (normalizedAlias.EndsWith("@s.whatsapp.net", StringComparison.OrdinalIgnoreCase) && !IsLidLikeJid(normalizedAlias)) return normalizedAlias;
-                if (normalized.EndsWith("@s.whatsapp.net", StringComparison.OrdinalIgnoreCase) && !IsLidLikeJid(normalized)) return normalized;
-                
-                return normalizedAlias;
-            }
-
-            string lidLikeAlias = GetCanonicalForLidLikeSWhatsappJid(normalized);
-            if (!string.IsNullOrWhiteSpace(lidLikeAlias))
-            {
-                return lidLikeAlias;
-            }
-
-            if (IsSelfLinkedJid(normalized))
-            {
-                string selfJid = GetCanonicalSelfPnJid();
-                if (!string.IsNullOrWhiteSpace(selfJid))
-                {
-                    return selfJid;
-                }
-            }
-
-            return normalized;
-        }
-
-        private string GetCanonicalSelfPnJid()
-        {
-            string meId = NormalizeJid(_authState?.Me?.Id);
-            if (!string.IsNullOrWhiteSpace(meId) &&
-                meId.EndsWith("@s.whatsapp.net", StringComparison.OrdinalIgnoreCase) &&
-                !IsLidLikeJid(meId))
-            {
-                return meId;
-            }
-
-            string meLid = NormalizeJid(_authState?.Me?.Lid);
-            if (!string.IsNullOrWhiteSpace(meLid) &&
-                JidAlias.TryGetValue(meLid, out var alias))
-            {
-                string normalizedAlias = NormalizeJid(alias);
-                if (!string.IsNullOrWhiteSpace(normalizedAlias) &&
-                    normalizedAlias.EndsWith("@s.whatsapp.net", StringComparison.OrdinalIgnoreCase) &&
-                    !IsLidLikeJid(normalizedAlias))
-                {
-                    return normalizedAlias;
-                }
-            }
-
-            if (!string.IsNullOrWhiteSpace(meId))
-            {
-                return meId;
-            }
-
-            return string.IsNullOrWhiteSpace(meLid) ? null : meLid;
-        }
-
-        private string GetCanonicalForLidLikeSWhatsappJid(string normalized)
-        {
-            if (string.IsNullOrWhiteSpace(normalized) ||
-                !normalized.EndsWith("@s.whatsapp.net", StringComparison.OrdinalIgnoreCase))
-            {
-                return null;
-            }
-
-            string user = normalized.Split('@')[0];
-            int dotIndex = user.IndexOf('.');
-            if (dotIndex <= 0)
-            {
-                return null;
-            }
-
-            string baseLid = $"{user.Substring(0, dotIndex)}@lid";
-            if (JidAlias.TryGetValue(baseLid, out var alias))
-            {
-                string canonical = NormalizeJid(alias);
-                if (!string.IsNullOrWhiteSpace(canonical))
-                {
-                    bool isBidirectionalSelfAlias =
-                        IsSelfLinkedJid(canonical) &&
-                        JidAlias.TryGetValue(canonical, out var reverseAlias) &&
-                        string.Equals(NormalizeJid(reverseAlias), baseLid, StringComparison.OrdinalIgnoreCase);
-
-                    if (!IsSelfLinkedJid(baseLid) && IsSelfLinkedJid(canonical) && !isBidirectionalSelfAlias)
-                    {
-                        Debug.WriteLine($"[WhatsAppService] Ignoring dotted alias that maps contact to self: {normalized} -> {canonical}");
-                        return null;
-                    }
-
-                    return GetCanonicalJid(canonical);
-                }
-            }
-
-            if (IsSelfLinkedJid(baseLid))
-            {
-                return GetCanonicalSelfPnJid();
-            }
-
-            return null;
-        }
-
-        private bool TryGetCanonicalNonSelfDirectJid(string jid, out string canonical)
-        {
-            canonical = null;
-            string normalized = NormalizeJid(jid);
-            if (string.IsNullOrWhiteSpace(normalized) || normalized.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-
-            string resolved = GetCanonicalJid(normalized);
-            if (string.IsNullOrWhiteSpace(resolved) || IsSelfLinkedJid(resolved) || IsSelfLinkedJid(normalized))
-            {
-                return false;
-            }
-
-            canonical = resolved;
-            return true;
         }
 
         private string ResolveLiveDirectChatJid(Client.DecryptedMessageEventArgs e, out string routingReason)
@@ -13832,157 +5384,9 @@ namespace Unison.Uwp.Services.WhatsApp
             return GetCanonicalSelfPnJid();
         }
 
-        private async Task MergeTransientDirectChatIntoCanonicalAsync(string transientJid, string canonicalJid, string reason)
-        {
-            string normalizedTransient = NormalizeJid(transientJid);
-            string normalizedCanonical = NormalizeJid(canonicalJid);
-            if (string.IsNullOrWhiteSpace(normalizedTransient) ||
-                string.IsNullOrWhiteSpace(normalizedCanonical) ||
-                string.Equals(normalizedTransient, normalizedCanonical, StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-
-            bool merged = false;
-            List<ChatMessage> canonicalSnapshot = null;
-
-            await RunOnUiThreadAsync(() =>
-            {
-                if (MessagesByChat.TryGetValue(normalizedTransient, out var transientMessages) && transientMessages != null)
-                {
-                    if (!MessagesByChat.TryGetValue(normalizedCanonical, out var canonicalMessages) || canonicalMessages == null)
-                    {
-                        canonicalMessages = new List<ChatMessage>();
-                        MessagesByChat[normalizedCanonical] = canonicalMessages;
-                    }
-
-                    var canonicalIds = GetOrBuildMessageIdIndex(normalizedCanonical);
-                    foreach (var msg in transientMessages.ToList())
-                    {
-                        if (msg == null) continue;
-
-                        if (string.IsNullOrEmpty(msg.Id))
-                        {
-                            if (!canonicalMessages.Contains(msg))
-                            {
-                                canonicalMessages.Add(msg);
-                            }
-                        }
-                        else if (canonicalIds.Add(msg.Id))
-                        {
-                            canonicalMessages.Add(msg);
-                        }
-                    }
-
-                    MessagesByChat.Remove(normalizedTransient);
-                    _messageIdIndexByChat.Remove(normalizedTransient);
-                    _pendingMissingMessagesByChat.Remove(normalizedTransient);
-                    merged = true;
-                    canonicalSnapshot = canonicalMessages.ToList();
-                }
-
-                var transientChat = Chats.FirstOrDefault(c => NormalizeJid(c.JID) == normalizedTransient);
-                var canonicalChat = Chats.FirstOrDefault(c => NormalizeJid(c.JID) == normalizedCanonical);
-                if (transientChat != null)
-                {
-                    if (canonicalChat == null)
-                    {
-                        transientChat.JID = normalizedCanonical;
-                        InvalidateChatRowIndex();
-                        canonicalChat = transientChat;
-                    }
-                    else
-                    {
-                        DateTime canonicalPreviewUtc = canonicalChat.LastMessageTimestampUtc.HasValue
-                            ? ToComparableUtc(canonicalChat.LastMessageTimestampUtc.Value)
-                            : DateTime.MinValue;
-                        DateTime transientPreviewUtc = transientChat.LastMessageTimestampUtc.HasValue
-                            ? ToComparableUtc(transientChat.LastMessageTimestampUtc.Value)
-                            : DateTime.MinValue;
-                        if ((transientPreviewUtc > canonicalPreviewUtc || string.IsNullOrWhiteSpace(canonicalChat.LastMessage)) &&
-                            !string.IsNullOrWhiteSpace(transientChat.LastMessage))
-                        {
-                            canonicalChat.LastMessage = transientChat.LastMessage;
-                            canonicalChat.LastMessageKind = transientChat.LastMessageKind;
-                            canonicalChat.Timestamp = transientChat.Timestamp;
-                            canonicalChat.LastMessageTimestampUtc = transientChat.LastMessageTimestampUtc;
-                        }
-
-                        if (canonicalChat.UnreadCount < transientChat.UnreadCount)
-                        {
-                            canonicalChat.UnreadCount = transientChat.UnreadCount;
-                        }
-
-                        if (string.IsNullOrWhiteSpace(canonicalChat.AvatarUrl) && !string.IsNullOrWhiteSpace(transientChat.AvatarUrl))
-                        {
-                            canonicalChat.AvatarUrl = transientChat.AvatarUrl;
-                            canonicalChat.AvatarFetchedAtUtc = transientChat.AvatarFetchedAtUtc;
-                            canonicalChat.AvatarFetchFailedAtUtc = transientChat.AvatarFetchFailedAtUtc;
-                            canonicalChat.AvatarFetchFailureReason = transientChat.AvatarFetchFailureReason;
-                        }
-
-                        string canonicalBare = normalizedCanonical.Split('@')[0];
-                        string transientBare = normalizedTransient.Split('@')[0];
-                        if ((string.IsNullOrWhiteSpace(canonicalChat.Name) ||
-                             canonicalChat.Name == canonicalBare ||
-                             IsSelfMarkerLabel(canonicalChat.Name)) &&
-                            !string.IsNullOrWhiteSpace(transientChat.Name) &&
-                            transientChat.Name != transientBare)
-                        {
-                            canonicalChat.Name = transientChat.Name;
-                        }
-
-                        Chats.Remove(transientChat);
-                    }
-
-                    merged = true;
-                }
-
-                if (ContactNames.TryGetValue(normalizedTransient, out var transientName))
-                {
-                    if (!ContactNames.ContainsKey(normalizedCanonical))
-                    {
-                        ContactNames[normalizedCanonical] = transientName;
-                    }
-
-                    ContactNames.Remove(normalizedTransient);
-                    merged = true;
-                }
-
-                if (PhoneContactNamesByJid.TryGetValue(normalizedTransient, out var transientPhoneName))
-                {
-                    if (!PhoneContactNamesByJid.ContainsKey(normalizedCanonical))
-                    {
-                        PhoneContactNamesByJid[normalizedCanonical] = transientPhoneName;
-                    }
-
-                    PhoneContactNamesByJid.Remove(normalizedTransient);
-                    merged = true;
-                }
-            });
-
-            if (!merged)
-            {
-                return;
-            }
-
-            Debug.WriteLine($"[WhatsAppService] Collapsed transient direct chat {normalizedTransient} into {normalizedCanonical} ({reason})");
-            if (canonicalSnapshot != null && canonicalSnapshot.Count > 0)
-            {
-                await _messageStore.SaveMessagesAsync(normalizedCanonical, canonicalSnapshot);
-            }
-
-            await _messageStore.DeleteChatMessagesAsync(normalizedTransient);
-            await PersistChatIdentityStateAsync(reason);
-        }
-
-        internal string GetCanonicalChatJid(string jid) => GetCanonicalJid(jid);
-
         internal string NormalizeChatJid(string jid) => NormalizeJid(jid);
 
         internal bool IsSelfChatJid(string jid) => IsSelfJid(jid);
-
-        internal void RegisterAliasFromAppState(string lidJid, string pnJid, string source) => RegisterAliasMapping(lidJid, pnJid, source);
 
         internal async Task RunOnUiThreadTaskAsync(Func<Task> action)
         {
@@ -14080,12 +5484,6 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             OnChatMessagesChanged?.Invoke(this, chatJid);
             _chatState.NotifyChangedExternally(chatJid);
-        }
-
-        internal void SchedulePersistForAppState(string reason)
-        {
-            EnableScheduledPersist(reason);
-            SchedulePersist();
         }
 
         /// <summary>
@@ -14189,53 +5587,6 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             return !string.IsNullOrEmpty(jid) &&
                    jid.EndsWith("@lid", StringComparison.OrdinalIgnoreCase);
-        }
-
-        /// <summary>
-        /// A group was created or renamed while we were connected. The subject is the group's
-        /// only name, so it goes in the same cache a resolved contact name would.
-        /// </summary>
-        internal Task ApplyGroupSubjectAsync(string jid, string subject)
-        {
-            return ApplyGroupSubjectsAsync(new[] { new KeyValuePair<string, string>(jid, subject) });
-        }
-
-        /// <summary>
-        /// The same for a batch, which is what a group listing produces.
-        /// </summary>
-        internal Task ApplyGroupSubjectsAsync(IEnumerable<KeyValuePair<string, string>> subjectsByJid)
-        {
-            var entries = new List<ResolvedNameEntry>();
-            if (subjectsByJid != null)
-            {
-                foreach (var pair in subjectsByJid)
-                {
-                    AddResolvedName(entries, pair.Key, pair.Value, isSubject: true);
-                }
-            }
-
-            return ApplyResolvedNameBatchAsync(entries);
-        }
-
-        internal Task ApplyAppStateContactNameAsync(string jid, string name)
-        {
-            var entries = new List<ResolvedNameEntry>();
-            AddResolvedName(entries, jid, name, isSubject: false);
-            return ApplyResolvedNameBatchAsync(entries);
-        }
-
-        /// <summary>A name that has been resolved to an address, ready to be applied.</summary>
-        private sealed class ResolvedNameEntry
-        {
-            public string Canonical;
-            public string Normalized;
-            public string Name;
-
-            /// <summary>
-            /// A group's subject, which is the group's name outright, as opposed to a contact's
-            /// name, which is one input to a display name that is composed elsewhere.
-            /// </summary>
-            public bool IsSubject;
         }
 
         /// <summary>
@@ -14449,264 +5800,6 @@ namespace Unison.Uwp.Services.WhatsApp
             return !string.IsNullOrWhiteSpace(fromCredentials) && !IsOwnPhoneEchoLabel(fromCredentials)
                 ? fromCredentials
                 : null;
-        }
-
-        internal async Task ApplyAppStateSelfPushNameAsync(string name)
-        {
-            if (_authState?.Me == null)
-            {
-                return;
-            }
-
-            string selfJid = NormalizeJid(_authState.Me.Id);
-            string sanitized = SanitizeContactLabel(name, selfJid);
-            if (string.IsNullOrWhiteSpace(sanitized))
-            {
-                return;
-            }
-
-            CaptureSelfPushName(sanitized, SelfPushNameAppStateSource);
-            await PersistAuthStateAsync(null, "apply-self-contact-name");
-            await ApplyAppStateContactNameAsync(selfJid, sanitized);
-        }
-
-        internal async Task ApplyAppStateReadStateAsync(string jid, bool read)
-        {
-            string canonical = GetCanonicalJid(jid);
-            if (string.IsNullOrWhiteSpace(canonical))
-            {
-                return;
-            }
-
-            await RunOnUiThreadAsync(() =>
-            {
-                var rows = GetChatRowsForCanonicalJid(canonical);
-                if (rows.Count == 0)
-                {
-                    var created = new ChatItem
-                    {
-                        JID = canonical,
-                        Name = ResolveDisplayName(canonical),
-                        Kind = ResolveChatKind(canonical)
-                    };
-                    Chats.Add(created);
-                    rows.Add(created);
-                }
-
-                int value = read ? 0 : Math.Max(1, rows.Max(c => Math.Max(0, c.UnreadCount)));
-                foreach (var row in rows) row.UnreadCount = value;
-            });
-            NotificationService.Instance.UpdateBadge(GetTotalUnreadCount());
-            SchedulePersist();
-        }
-
-        internal async Task ApplyAppStateDeleteChatAsync(string jid)
-        {
-            string canonical = GetCanonicalJid(jid);
-            if (string.IsNullOrWhiteSpace(canonical))
-            {
-                return;
-            }
-
-            await RunOnUiThreadAsync(() =>
-            {
-                var chat = Chats.FirstOrDefault(c => GetCanonicalJid(c.JID) == canonical);
-                if (chat != null)
-                {
-                    Chats.Remove(chat);
-                }
-
-                MessagesByChat.Remove(canonical);
-                _messageIdIndexByChat.Remove(canonical);
-                _pendingMissingMessagesByChat.Remove(canonical);
-                _historyOnDemandMarkerByChat.Remove(canonical);
-                _historyOnDemandLastRequestIdByChat.Remove(canonical);
-                _historyOnDemandAttemptsByChat.Remove(canonical);
-                _historyOnDemandRejectedUntilUtcByChat.Remove(canonical);
-                _activeChatReconcileCooldownByChat.Remove(canonical);
-            });
-        }
-
-        internal async Task<bool> ApplyAppStateDeleteMessageAsync(string jid, string messageId)
-        {
-            string canonical = GetCanonicalJid(jid);
-            if (string.IsNullOrWhiteSpace(canonical) || string.IsNullOrWhiteSpace(messageId))
-            {
-                return false;
-            }
-
-            bool removed = false;
-            await RunOnUiThreadAsync(() =>
-            {
-                if (!MessagesByChat.TryGetValue(canonical, out var messages) || messages == null || messages.Count == 0)
-                {
-                    return;
-                }
-
-                var message = messages.FirstOrDefault(m => string.Equals(m?.Id, messageId, StringComparison.Ordinal));
-                if (message == null)
-                {
-                    return;
-                }
-
-                messages.Remove(message);
-                if (_messageIdIndexByChat.TryGetValue(canonical, out var idSet))
-                {
-                    idSet.Remove(messageId);
-                }
-
-                var chat = Chats.FirstOrDefault(c => GetCanonicalJid(c.JID) == canonical);
-                    if (chat != null)
-                    {
-                        var latest = messages.OrderByDescending(m => m?.Timestamp ?? DateTime.MinValue).FirstOrDefault();
-                        if (latest != null)
-                        {
-                            bool isGroup = canonical.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase) || chat.IsGroup;
-                            ApplyChatPreviewIfNewer(
-                                chat,
-                                ChatPreviewNormalizer.FormatListPreview(latest, isGroup),
-                                latest.Timestamp,
-                                true,
-                                ChatPreviewNormalizer.InferKindFromMessage(latest),
-                                ChatPreviewNormalizer.FormatListAuthorPrefix(latest, isGroup, SelfListDisplayName()),
-                                latest.MentionedJids);
-                        }
-                        else
-                        {
-                            chat.LastMessage = string.Empty;
-                            chat.LastMessageAuthor = string.Empty;
-                            chat.LastMessageMentionedJids = null;
-                            chat.LastMessageKind = ChatPreviewKind.Text;
-                            chat.Timestamp = string.Empty;
-                            chat.LastMessageTimestampUtc = null;
-                        }
-                    }
-
-                removed = true;
-            });
-
-            if (removed)
-            {
-                QueueChatMessagesChanged(canonical);
-            }
-
-            return removed;
-        }
-
-        public Task ApplyChatPinAsync(string jid, bool pinned)
-        {
-            return ApplyAppStateChatFlagsAsync(
-                jid,
-                pinned: pinned,
-                pinnedTimestamp: pinned ? (long?)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() : null);
-        }
-
-        /// <summary>
-        /// History conversations carry a pin timestamp (RC14 Chat.pinned). App-state pinAction
-        /// is the live source of truth, but without this a restart shows every chat unpinned
-        /// until the regular_low collection happens to mention it.
-        /// </summary>
-        private void ApplyHistoryConversationPin(string jid, uint pinnedValue)
-        {
-            bool pinned = pinnedValue > 0;
-            long? timestamp = pinned ? (long?)pinnedValue : 0;
-            var rows = GetChatRowsForCanonicalJid(jid);
-            foreach (var chat in rows)
-            {
-                if (chat == null)
-                {
-                    continue;
-                }
-
-                chat.IsChatPinned = pinned;
-                chat.PinnedTimestamp = timestamp;
-            }
-        }
-
-        internal async Task ApplyAppStateChatFlagsAsync(
-            string jid,
-            bool? archived = null,
-            bool? pinned = null,
-            long? muteEndTimestamp = null,
-            long? pinnedTimestamp = null,
-            bool applyMute = false)
-        {
-            string canonical = GetCanonicalJid(jid);
-            if (string.IsNullOrWhiteSpace(canonical))
-            {
-                return;
-            }
-
-            List<ChatItem> touched = null;
-            await RunOnUiThreadAsync(() =>
-            {
-                var rows = GetChatRowsForCanonicalJid(canonical);
-                if (rows.Count == 0)
-                {
-                    var created = new ChatItem
-                    {
-                        JID = canonical,
-                        Name = ResolveDisplayName(canonical),
-                        Kind = ResolveChatKind(canonical)
-                    };
-                    Chats.Add(created);
-                    rows.Add(created);
-                }
-
-                long effectivePinnedTimestamp = pinnedTimestamp ??
-                    DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-
-                touched = new List<ChatItem>();
-                foreach (var chat in rows)
-                {
-                    if (archived.HasValue)
-                    {
-                        chat.IsArchived = archived.Value;
-                    }
-
-                    if (pinned.HasValue)
-                    {
-                        chat.IsChatPinned = pinned.Value;
-                        // 0 marks an explicit unpin so PN/LID dedupe cannot resurrect the pin
-                        // from an alias row that has not received the same mutation yet.
-                        chat.PinnedTimestamp = pinned.Value
-                            ? (long?)(pinnedTimestamp ?? chat.PinnedTimestamp ?? effectivePinnedTimestamp)
-                            : 0;
-                    }
-
-                    if (applyMute)
-                    {
-                        // null = unmuted; WhatsApp forever may arrive as 0.
-                        chat.MutedUntil = muteEndTimestamp;
-                    }
-
-                    touched.Add(chat);
-                }
-
-                SortChatsForDisplay();
-            });
-
-            if (touched != null && _chatStore != null && (pinned.HasValue || applyMute))
-            {
-                foreach (var chat in touched)
-                {
-                    try
-                    {
-                        await _chatStore.UpsertAsync(
-                            chat.JID,
-                            chat.LocalStatus,
-                            chat.IsWidgetPinned,
-                            chat.IsChatPinned,
-                            chat.MutedUntil).ConfigureAwait(false);
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine("[WhatsAppService] ChatStore upsert from app-state failed: " + ex.Message);
-                    }
-                }
-            }
-
-            SchedulePersist();
         }
 
         private bool IsLidLikeJid(string jid)
@@ -15254,212 +6347,6 @@ namespace Unison.Uwp.Services.WhatsApp
             return new string(value.Where(char.IsDigit).ToArray());
         }
 
-        /// <summary>
-        /// Records a LID/phone pair and schedules the work that follows from it.
-        /// </summary>
-        /// <remarks>
-        /// The follow-up is scheduled rather than run because it is the same work no matter how
-        /// many pairs arrive: rewriting the alias file, collapsing duplicate rows, asking for the
-        /// avatars a resolved pair unblocks. One message registering one pair and a history chunk
-        /// registering a thousand both end in a single pass now. It used to be a pass each, which
-        /// on a first sync meant thousands of dispatches to the UI thread and thousands of writes
-        /// of the whole alias map - during the one minute the app has the least to spare.
-        /// </remarks>
-        private void RegisterAliasMapping(string lidJid, string pnJid, string source)
-        {
-            if (TryRecordAliasMapping(lidJid, pnJid, source))
-            {
-                ScheduleAliasFollowUp(source);
-            }
-        }
-
-        /// <summary>
-        /// Same for a whole set at once, for the sources that deal in tables rather than in single
-        /// pairs - a history chunk, a group listing.
-        /// </summary>
-        internal void RegisterAliasMappings(IEnumerable<KeyValuePair<string, string>> lidToPn, string source)
-        {
-            if (lidToPn == null)
-            {
-                return;
-            }
-
-            int changed = 0;
-            foreach (var pair in lidToPn)
-            {
-                if (TryRecordAliasMapping(pair.Key, pair.Value, source))
-                {
-                    changed++;
-                }
-            }
-
-            if (changed > 0)
-            {
-                Debug.WriteLine($"[WhatsAppService] Recorded {changed} new alias pair(s) from {source}");
-                ScheduleAliasFollowUp(source);
-            }
-        }
-
-        /// <summary>
-        /// The bookkeeping half: validates the pair, files it both ways, and reports whether it
-        /// told us anything we did not already know. No UI, no disk, no scans.
-        /// </summary>
-        private bool TryRecordAliasMapping(string lidJid, string pnJid, string source)
-        {
-            string lid = NormalizeJid(lidJid);
-            string pn = NormalizeJid(pnJid);
-            if (string.IsNullOrEmpty(lid) || string.IsNullOrEmpty(pn)) return false;
-            bool lidAccepted = lid.EndsWith("@lid", StringComparison.OrdinalIgnoreCase) || IsLidLikeJid(lid);
-            bool pnAccepted = pn.EndsWith("@s.whatsapp.net", StringComparison.OrdinalIgnoreCase) && !IsLidLikeJid(pn);
-            if (!lidAccepted || !pnAccepted) return false;
-
-            // Guard against identity poisoning: never map a foreign LID to our own phone JID.
-            // Dotted @s.whatsapp.net LID aliases for our own account are allowed and collapse to self chat.
-            string guardLidKey = lid;
-            if (IsLidLikeJid(lid) && lid.EndsWith("@s.whatsapp.net", StringComparison.OrdinalIgnoreCase))
-            {
-                string lidUser = lid.Split('@')[0];
-                int dotIndex = lidUser.IndexOf('.');
-                if (dotIndex > 0)
-                {
-                    guardLidKey = $"{lidUser.Substring(0, dotIndex)}@lid";
-                }
-            }
-
-            bool isKnownSelfAlias =
-                IsSelfLinkedJid(pn) &&
-                JidAlias.TryGetValue(pn, out var reverseAlias) &&
-                string.Equals(NormalizeJid(reverseAlias), guardLidKey, StringComparison.OrdinalIgnoreCase);
-
-            if (!IsSelfLinkedJid(lid) && IsSelfLinkedJid(pn) && !isKnownSelfAlias)
-            {
-                Debug.WriteLine($"[WhatsAppService] Skipping suspicious alias from {source}: {lid} -> {pn}");
-                return false;
-            }
-
-            bool changed = !JidAlias.TryGetValue(lid, out var existingPn) || NormalizeJid(existingPn) != pn;
-            JidAlias[lid] = pn;
-            JidAlias[pn] = lid;
-            RegisterSocketAlias(lid, pn, source);
-
-            if (!changed)
-            {
-                // Live traffic re-states the same pair on every message. Recognising that costs a
-                // dictionary lookup and saves everything below.
-                return false;
-            }
-
-            // Uma consulta anterior pode ter usado somente o LID ou somente o PN e
-            // gravado um falso "no-picture". Ao descobrir o par correto, permita
-            // uma nova tentativa imediatamente para as linhas sem avatar.
-            if (_contactService != null)
-            {
-                _contactService.ClearAvatarAttempted(lid);
-                _contactService.ClearAvatarAttempted(pn);
-                _contactService.ClearAvatarAttempted(GetCanonicalJid(pn));
-            }
-
-            lock (_aliasFollowUpGate)
-            {
-                _pendingAliasAvatarJids.Add(pn);
-            }
-
-            return true;
-        }
-
-        /// <summary>
-        /// Coalesces the follow-up so a burst of pairs produces one pass instead of one each.
-        /// </summary>
-        private void ScheduleAliasFollowUp(string source)
-        {
-            CancellationToken token;
-            lock (_aliasFollowUpGate)
-            {
-                _pendingAliasFollowUpSource = source;
-
-                if (_aliasFollowUpCts != null)
-                {
-                    _aliasFollowUpCts.Cancel();
-                    _aliasFollowUpCts.Dispose();
-                }
-
-                _aliasFollowUpCts = new CancellationTokenSource();
-                token = _aliasFollowUpCts.Token;
-            }
-
-            Task.Delay(AliasFollowUpDebounce, token).ContinueWith(
-                t =>
-                {
-                    if (t.IsCanceled)
-                    {
-                        return;
-                    }
-
-                    _ = RunAliasFollowUpAsync();
-                },
-                CancellationToken.None,
-                TaskContinuationOptions.ExecuteSynchronously,
-                TaskScheduler.Default);
-        }
-
-        /// <summary>
-        /// Everything that a batch of new aliases implies, done once: the alias file is rewritten,
-        /// rows that turned out to be the same conversation are merged, and the rows whose avatar
-        /// lookup failed under a half-known identity get another chance.
-        /// </summary>
-        private async Task RunAliasFollowUpAsync()
-        {
-            if (Interlocked.Exchange(ref _aliasFollowUpRunning, 1) == 1)
-            {
-                // A pass is already writing the file and walking the list. Whatever arrived in the
-                // meantime is still pending and will be picked up by the next timer.
-                ScheduleAliasFollowUp(_pendingAliasFollowUpSource);
-                return;
-            }
-
-            string source;
-            List<string> avatarTargets;
-            lock (_aliasFollowUpGate)
-            {
-                source = _pendingAliasFollowUpSource ?? "alias";
-                avatarTargets = _pendingAliasAvatarJids.ToList();
-                _pendingAliasAvatarJids.Clear();
-            }
-
-            try
-            {
-                await PersistJidAliasesAsync("alias:" + source);
-
-                if (avatarTargets.Count > 0)
-                {
-                    await RunOnUiThreadAsync(() =>
-                    {
-                        foreach (var pn in avatarTargets)
-                        {
-                            foreach (var chat in GetChatRowsForCanonicalJid(pn)
-                                         .Where(c => string.IsNullOrWhiteSpace(c.AvatarUrl)))
-                            {
-                                RequestAvatarRefresh(chat, force: true);
-                            }
-                        }
-                    });
-                }
-
-                // Deduplication is global and idempotent: it groups every row by canonical JID,
-                // which is what the pairs just changed. Running it once at the end covers every
-                // pair in the burst, including the per-pair merge this used to do separately.
-                await DeduplicateChatsAsync("alias:" + source);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[WhatsAppService] Alias follow-up failed: " + ex.Message);
-            }
-            finally
-            {
-                Interlocked.Exchange(ref _aliasFollowUpRunning, 0);
-            }
-        }
-
         private async Task DeduplicateChatsAsync(string reason)
         {
             await RunOnUiThreadAsync(() =>
@@ -15665,7 +6552,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             }
                         }
 
-                        primaryMsgs.Sort((a, b) => a.Timestamp.CompareTo(b.Timestamp));
+                        ChatMessageOrder.SortInPlace(primaryMsgs);
                         MessagesByChat.Remove(key);
                         _messageIdIndexByChat.Remove(key);
                         normalizedMessageKeyCount++;
@@ -15696,12 +6583,6 @@ namespace Unison.Uwp.Services.WhatsApp
             return LocalizedStrings.Get("Chat_SelfFallbackName", "You");
         }
 
-        /// <summary>Delegates to <see cref="IContactService"/> (owns cooldown/dedup policy); this class only supplies the client primitives.</summary>
-        public Task RefreshContactNamesAsync(bool includeGroups = false, bool force = false)
-        {
-            return _contactService?.RefreshContactNamesAsync(includeGroups, force) ?? Task.CompletedTask;
-        }
-
         private async Task ApplyResolvedNamesToChatsAsync()
         {
             await RunOnUiThreadAsync(() =>
@@ -15721,6 +6602,29 @@ namespace Unison.Uwp.Services.WhatsApp
                             chat.Name = resolved;
                             updated++;
                         }
+
+                        if (chat.GroupMembers == null || chat.GroupMembers.Count == 0)
+                        {
+                            continue;
+                        }
+
+                        foreach (var member in chat.GroupMembers)
+                        {
+                            if (member == null || string.IsNullOrWhiteSpace(member.Jid))
+                            {
+                                continue;
+                            }
+
+                            string memberName = ResolveDisplayName(member.Jid, "sender");
+                            if (string.IsNullOrWhiteSpace(memberName) ||
+                                string.Equals(member.DisplayName, memberName, StringComparison.Ordinal))
+                            {
+                                continue;
+                            }
+
+                            member.DisplayName = memberName;
+                            updated++;
+                        }
                     }
 
                     if (updated > 0)
@@ -15735,397 +6639,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private Task ResolveMissingNamesAsync()
         {
             return _contactService?.ResolveMissingNamesAsync() ?? Task.CompletedTask;
-        }
-    
-        public async Task ResolveContactsAsync(string[] jids, bool allowBatchFallback = true)
-        {
-            if (jids == null || jids.Length == 0) return;
-            if (_socket == null || !_socket.IsHandshakeComplete)
-            {
-                Debug.WriteLine("[WhatsAppService] ResolveContactsAsync skipped (handshake not complete)");
-                return;
-            }
-
-            var bridge = _socket as SocketBridge;
-            var session = bridge != null ? bridge.Session : null;
-            if (session != null && session.Connection.IsConnected)
-            {
-                await ResolveContactsViaSocketAsync(jids).ConfigureAwait(false);
-                return;
-            }
-
-            string[] fallbackJids = null;
-            bool lockTaken = false;
-            try
-            {
-                await _usyncLock.WaitAsync().ConfigureAwait(false);
-                lockTaken = true;
-
-                // Socket may drop while waiting for the usync lock during sync.
-                if (_socket == null || !_socket.IsHandshakeComplete)
-                {
-                    Debug.WriteLine("[WhatsAppService] ResolveContactsAsync skipped after lock (socket not ready)");
-                    return;
-                }
-
-                Debug.WriteLine($"[WhatsAppService] ResolveContactsAsync: querying {jids.Length} contacts...");
-                // Keep the background direct-contact refresh on the narrow phone-based query.
-                // The broader JID-based metadata probe can expose richer metadata, but in the
-                // current companion session it times out even one-at-a-time and is not viable
-                // as an automatic background refresh.
-                var queryProtocols = new List<BinaryNode>
-                {
-                    new BinaryNode("contact", null)
-                };
-
-                // Build user nodes - for the background refresh, use phone-based lookup to keep
-                // the query fast and reliable. Higher-fidelity name sources come from history
-                // pushnames, notify attributes, and explicit profile-style probes.
-                var userNodes = new List<BinaryNode>();
-                foreach (var jid in jids)
-                {
-                    if (string.IsNullOrWhiteSpace(jid))
-                    {
-                        continue;
-                    }
-
-                    if (NormalizeJid(jid) == NormalizeJid(_authState?.Me?.Id))
-                    {
-                        Debug.WriteLine($"[WhatsAppService] ResolveContactsAsync: skipping self JID {jid}");
-                        continue;
-                    }
-
-                    if (jid.EndsWith("@newsletter", StringComparison.OrdinalIgnoreCase) ||
-                        jid.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase) ||
-                        jid.EndsWith("@broadcast", StringComparison.OrdinalIgnoreCase))
-                    {
-                        Debug.WriteLine($"[WhatsAppService] ResolveContactsAsync: skipping non-direct JID {jid}");
-                        continue;
-                    }
-
-                    string phone = null;
-                    if (jid.EndsWith("@s.whatsapp.net", StringComparison.OrdinalIgnoreCase) ||
-                        jid.EndsWith("@lid", StringComparison.OrdinalIgnoreCase))
-                    {
-                        string canonical = GetCanonicalJid(jid);
-                        if (string.IsNullOrWhiteSpace(canonical))
-                        {
-                            canonical = jid;
-                        }
-
-                        int atIndex = canonical.IndexOf('@');
-                        phone = atIndex >= 0 ? canonical.Substring(0, atIndex) : canonical;
-                        int deviceIndex = phone.IndexOf(':');
-                        if (deviceIndex >= 0)
-                        {
-                            phone = phone.Substring(0, deviceIndex);
-                        }
-                    }
-                    else
-                    {
-                        phone = jid;
-                    }
-
-                    phone = phone?.Replace("+", "").Replace(" ", "").Replace("-", "");
-                    if (string.IsNullOrWhiteSpace(phone))
-                    {
-                        Debug.WriteLine($"[WhatsAppService] ResolveContactsAsync: unable to derive phone lookup key for {jid}");
-                        continue;
-                    }
-
-                    if (!phone.StartsWith("+", StringComparison.Ordinal))
-                    {
-                        phone = "+" + phone;
-                    }
-
-                    var children = new List<BinaryNode>
-                    {
-                        new BinaryNode("contact", null, phone)
-                    };
-                    userNodes.Add(new BinaryNode("user", null, children));
-                }
-
-                if (userNodes.Count == 0)
-                {
-                    Debug.WriteLine("[WhatsAppService] ResolveContactsAsync: no supported direct-contact JIDs remained after filtering.");
-                    return;
-                }
-
-                var socket = _socket;
-                if (socket == null || !socket.IsHandshakeComplete)
-                {
-                    Debug.WriteLine("[WhatsAppService] ResolveContactsAsync aborted (socket lost before usync)");
-                    return;
-                }
-
-                int timeoutMs = userNodes.Count > 1 ? 15000 : 8000;
-                var response = await socket.QueryUsyncAsync(userNodes, "interactive", "query", queryProtocols, timeoutMs);
-                if (response == null) return;
-
-                Debug.WriteLine($"[WhatsAppService] usync response: {response.Tag}");
-                var usyncNode = response.GetChild("usync");
-                var listNode = usyncNode?.GetChild("list");
-                if (listNode?.Children == null)
-                {
-                    Debug.WriteLine($"[WhatsAppService] usync response missing list/children node: {response}");
-                    if (usyncNode != null)
-                    {
-                        var errorNode = usyncNode.GetChild("error");
-                        if (errorNode != null) Debug.WriteLine($"[WhatsAppService] usync server error: {errorNode}");
-                    }
-
-                    if (allowBatchFallback && userNodes.Count > 1)
-                    {
-                        Debug.WriteLine($"[WhatsAppService] ResolveContactsAsync batch rejected; retrying individually for {userNodes.Count} JIDs.");
-                        fallbackJids = jids
-                            .Where(j => !string.IsNullOrWhiteSpace(j))
-                            .Distinct(StringComparer.OrdinalIgnoreCase)
-                            .ToArray();
-                    }
-                    return;
-                }
-
-                bool cacheUpdated = false;
-                foreach (var userNode in listNode.Children)
-                {
-                    if (userNode == null) continue;
-
-                    string userJid = userNode.Attrs != null && userNode.Attrs.TryGetValue("jid", out var j) ? j : null;
-                    if (string.IsNullOrEmpty(userJid)) continue;
-
-                    string normalizedUser = NormalizeJid(userJid);
-
-                    // Debug log all children tags for deeper inspection
-                    if (userNode.Children != null && userNode.Children.Count > 0)
-                    {
-                        var childTags = string.Join(", ", userNode.Children.Where(c => c != null).Select(c => c.Tag));
-                        Debug.WriteLine($"[WhatsAppService] user node {userJid} children: [{childTags}]");
-                    }
-                    else
-                    {
-                        Debug.WriteLine($"[WhatsAppService] user node {userJid} children: []");
-                    }
-
-                    // 1. Process LID/PN mapping
-                    var lidNode = userNode.GetChild("lid");
-                    if (lidNode != null)
-                    {
-                        string targetJid = lidNode.Attrs != null && lidNode.Attrs.TryGetValue("val", out var v) ? v : null;
-                        if (!string.IsNullOrEmpty(targetJid))
-                        {
-                            if (!targetJid.Contains("@"))
-                            {
-                                targetJid += userJid.EndsWith("@lid") ? "@s.whatsapp.net" : "@lid";
-                            }
-
-                            string normalizedTarget = NormalizeJid(targetJid);
-                            JidAlias[normalizedUser] = normalizedTarget;
-                            JidAlias[normalizedTarget] = normalizedUser;
-                            RegisterSocketAlias(normalizedUser, normalizedTarget, "contact-usync");
-                            cacheUpdated = true;
-
-                            // Identity Healing: Check if this LID belongs to US
-                            string meLid = _authState?.Me?.Lid;
-                            if (!string.IsNullOrEmpty(meLid) && normalizedUser == NormalizeJid(meLid))
-                            {
-                                string meId = _authState.Me.Id;
-                                if (normalizedTarget != meId)
-                                {
-                                    Log($"[WhatsAppService] IDENTITY HEALING (USync): Me.Lid ({meLid}) belongs to PN {normalizedTarget}, but current Me.Id is {meId}. Fixing...");
-                                    _authState.Me.Id = normalizedTarget;
-                                    _ = PersistAuthStateAsync(null, "usync-identity-heal");
-                                }
-                            }
-                            else if (normalizedUser == _authState?.Me?.Id && !string.IsNullOrEmpty(meLid) && normalizedTarget != NormalizeJid(meLid))
-                            {
-                                // If the PN in Me.Id points to a LID that isn't ours, it's corrupt
-                                Log($"[WhatsAppService] IDENTITY CORRUPTION DETECTED (USync): Me.Id ({normalizedUser}) is mapped to foreign LID {normalizedTarget}. PURGING...");
-                                _authState.Me.Id = meLid;
-                                JidAlias.Remove(normalizedUser);
-                                _ = PersistAuthStateAsync(null, "usync-identity-purge");
-                            }
-                        }
-                    }
-
-                    // 2. Process Contact Name
-                    var contactNode = userNode.GetChild("contact");
-                    if (contactNode != null)
-                    {
-                        string pushName = contactNode.Attrs != null && contactNode.Attrs.TryGetValue("notify", out var n) ? n : null;
-                        if (string.IsNullOrEmpty(pushName))
-                        {
-                            pushName = contactNode.Attrs.TryGetValue("name", out var nm) ? nm : null;
-                        }
-                        if (string.IsNullOrEmpty(pushName))
-                        {
-                            pushName = contactNode.GetContentString();
-                            if (!string.IsNullOrEmpty(pushName)) Debug.WriteLine($"[WhatsAppService] Found name in text content for {userJid}: {pushName}");
-                        }
-
-                        // Process picture (Avatar) ID if the server included it inline.
-                        var pictureNode = userNode.GetChild("picture");
-                        if (pictureNode != null)
-                        {
-                            var pictureId = pictureNode.Attrs.TryGetValue("id", out var pid) ? pid : null;
-                            if (!string.IsNullOrEmpty(pictureId))
-                            {
-                                Debug.WriteLine($"[WhatsAppService] usync avatar ID found for {userJid}: {pictureId}");
-                                
-                                // Fire and forget avatar URL fetch
-                                _ = Task.Run(async () =>
-                                {
-                                    var url = await GetProfilePictureAsync(userJid);
-                                    if (!string.IsNullOrEmpty(url))
-                                    {
-                                        await RunOnUiThreadAsync(() =>
-                                        {
-                                            var chat = Chats.FirstOrDefault(c => NormalizeJid(c.JID) == normalizedUser);
-                                            if (chat != null)
-                                            {
-                                                chat.AvatarUrl = url;
-                                                chat.AvatarFetchedAtUtc = DateTime.UtcNow;
-                                                chat.AvatarFetchFailedAtUtc = null;
-                                                chat.AvatarFetchFailureReason = null;
-                                                Debug.WriteLine($"[WhatsAppService] Updated AvatarUrl for {userJid}");
-                                            }
-                                        });
-                                    }
-                                });
-                            }
-                        }
-
-                        // Process LID mapping for canonicalization
-                        var mappedLidNode = userNode.GetChild("lid");
-                        if (mappedLidNode != null)
-                        {
-                            var targetLid = mappedLidNode.Attrs.TryGetValue("jid", out var lj) ? lj : null;
-                            if (!string.IsNullOrEmpty(targetLid))
-                            {
-                                string normalizedLid = NormalizeJid(targetLid);
-                                if (!JidAlias.ContainsKey(normalizedLid))
-                                {
-                                    JidAlias[normalizedLid] = normalizedUser;
-                                    JidAlias[normalizedUser] = normalizedLid;
-                                    RegisterSocketAlias(normalizedLid, normalizedUser, "contact-usync-mapped-lid");
-                                    Debug.WriteLine($"[WhatsAppService] usync mapping found: {normalizedLid} -> {normalizedUser}");
-                                    
-                                    // Proactively merge chats if both exist
-                                    _ = CheckAndMergeDuplicateChatsAsync(normalizedLid, normalizedUser);
-                                }
-                            }
-                        }
-
-                        pushName = SanitizeContactLabel(pushName, normalizedUser);
-                        if (!string.IsNullOrEmpty(pushName))
-                        {
-                            ContactNames[normalizedUser] = pushName;
-                            cacheUpdated = true;
-                            Debug.WriteLine($"[WhatsAppService] usync name resolved: {userJid} -> {pushName}");
-
-                            // Do not rely on inline usync picture nodes for direct contacts.
-                            // If the chat still has no avatar, fetch it through the dedicated
-                            // profile-picture IQ path once we know the JID is valid.
-                            var chatNeedingAvatar = Chats.FirstOrDefault(c => NormalizeJid(c.JID) == normalizedUser && string.IsNullOrEmpty(c.AvatarUrl));
-                            if (chatNeedingAvatar != null && !normalizedUser.EndsWith("@g.us"))
-                            {
-                                _ = Task.Run(async () =>
-                                {
-                                    var url = await GetProfilePictureAsync(userJid);
-                                    if (!string.IsNullOrEmpty(url))
-                                    {
-                                        await RunOnUiThreadAsync(() =>
-                                        {
-                                            var chat = Chats.FirstOrDefault(c => NormalizeJid(c.JID) == normalizedUser);
-                                            if (chat != null && string.IsNullOrEmpty(chat.AvatarUrl))
-                                            {
-                                                chat.AvatarUrl = url;
-                                                chat.AvatarFetchedAtUtc = DateTime.UtcNow;
-                                                chat.AvatarFetchFailedAtUtc = null;
-                                                chat.AvatarFetchFailureReason = null;
-                                                Debug.WriteLine($"[WhatsAppService] Updated AvatarUrl for {userJid} via profile-picture IQ");
-                                            }
-                                        });
-                                    }
-                                });
-                            }
-                        }
-                        else
-                        {
-                            // Log attributes if name not found
-                            var attrList = contactNode.Attrs != null
-                                ? string.Join(", ", contactNode.Attrs.Select(kv => $"{kv.Key}={kv.Value}"))
-                                : string.Empty;
-                            int contentLen = (contactNode.Content is byte[] b) ? b.Length : (contactNode.Content is string s ? s.Length : 0);
-                            Debug.WriteLine($"[WhatsAppService] usync contact node for {userJid} exists but has no name. Attrs: [{attrList}], ContentLen: {contentLen}");
-                        }
-                    }
-                    else
-                    {
-                        Debug.WriteLine($"[WhatsAppService] usync response for {userJid} is MISSING the 'contact' node.");
-                    }
-                }
-
-                if (cacheUpdated)
-                {
-                    await ApplyResolvedNamesToChatsAsync();
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WhatsAppService] ResolveContactsAsync failed: {ex}");
-                try
-                {
-                    RuntimeDiagnosticsService.Instance.RecordException(
-                        "contacts",
-                        "resolve-contacts-failed",
-                        ex,
-                        "count=" + jids.Length + "; batchFallback=" + allowBatchFallback);
-                }
-                catch
-                {
-                }
-
-                if (allowBatchFallback && jids.Length > 1)
-                {
-                    fallbackJids = jids
-                        .Where(j => !string.IsNullOrWhiteSpace(j))
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .ToArray();
-                }
-            }
-            finally
-            {
-                if (lockTaken)
-                {
-                    try
-                    {
-                        _usyncLock.Release();
-                    }
-                    catch (ObjectDisposedException)
-                    {
-                    }
-                    catch (SemaphoreFullException)
-                    {
-                    }
-                }
-            }
-
-            if (fallbackJids == null || fallbackJids.Length == 0)
-            {
-                return;
-            }
-
-            foreach (var originalJid in fallbackJids)
-            {
-                try
-                {
-                    await ResolveContactsAsync(new[] { originalJid }, allowBatchFallback: false);
-                }
-                catch (Exception exOne)
-                {
-                    Debug.WriteLine($"[WhatsAppService] ResolveContactsAsync single fallback failed for {originalJid}: {exOne.Message}");
-                }
-            }
         }
 
         /// <summary>
@@ -16328,70 +6841,6 @@ namespace Unison.Uwp.Services.WhatsApp
                     chat.AvatarFetchFailureReason = null;
                 }
             });
-        }
-
-        public async Task<string> GetProfilePictureAsync(string jid)
-        {
-            if (string.IsNullOrEmpty(jid) || _socket == null) return null;
-            var result = await _socket.GetProfilePictureUrlResultAsync(jid, "image");
-            if (string.IsNullOrWhiteSpace(result?.Url))
-            {
-                Debug.WriteLine($"[WhatsAppService] GetProfilePictureAsync returned no URL for {jid}: target={result?.TargetJid}, lookup={result?.TokenLookupJid}, reason={result?.FailureReason}");
-                return null;
-            }
-
-            try
-            {
-                return await DownloadAndCacheAvatarAsync(jid, result.Url, CancellationToken.None);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WhatsAppService] GetProfilePictureAsync cache failed for {jid}: {ex.Message}");
-                return result.Url;
-            }
-        }
-
-        public async Task<string> SearchContactAsync(string phoneNumber)
-        {
-            if (string.IsNullOrEmpty(phoneNumber)) return null;
-            
-            // Normalize phone number (remove +, spaces, etc)
-            string cleaned = phoneNumber.Replace("+", "").Replace(" ", "").Replace("-", "");
-            if (string.IsNullOrEmpty(cleaned)) return null;
-
-            Debug.WriteLine($"[WhatsAppService] SearchContactAsync: Searching for {cleaned}...");
-            
-            // Trigger resolution (ResolveContactsAsync handles phone nodes if no @ is present)
-            await ResolveContactsAsync(new string[] { cleaned });
-
-            // Check if we found a mapping or a name for this
-            // USync adds the resolved JID as an alias or key in ContactNames
-            // Let's find any JID that contains this phone number
-            string foundJid = null;
-            
-            // Check JidAlias first (USync often returns LID <-> JID)
-            foreach (var alias in JidAlias)
-            {
-                if (alias.Key.StartsWith(cleaned)) { foundJid = alias.Key; break; }
-                if (alias.Value.StartsWith(cleaned)) { foundJid = alias.Value; break; }
-            }
-
-            if (foundJid == null)
-            {
-                foreach (var name in ContactNames)
-                {
-                    if (name.Key.StartsWith(cleaned)) { foundJid = name.Key; break; }
-                }
-            }
-
-            if (foundJid != null)
-            {
-                Debug.WriteLine($"[WhatsAppService] SearchContactAsync: Found {foundJid} for {cleaned}");
-                return foundJid;
-            }
-
-            Debug.WriteLine($"[WhatsAppService] SearchContactAsync: No contact found for {cleaned}");
-            return null;
         }
     }
 }

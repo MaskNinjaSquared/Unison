@@ -31,6 +31,16 @@
                             <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE718;"/>
                         </MenuFlyoutItem.Icon>
                     </MenuFlyoutItem>
+                    <MenuFlyoutItem Tag="addContact"
+                                   x:Uid="ChatDetail_AddContact"
+                                   Text="Add contact"
+                                   Visibility="Collapsed"
+                                   Style="{StaticResource ModernMenuFlyoutItemStyle}"
+                                   Click="AddContact_Click">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE8FA;"/>
+                        </MenuFlyoutItem.Icon>
+                    </MenuFlyoutItem>
                     <MenuFlyoutSubItem Tag="localMuteSub"
                                       x:Uid="ChatDetail_MuteNotifications"
                                       Text="Mute notifications"
@@ -97,7 +107,8 @@
                                                Kind="{x:Bind LastMessageKind, Mode=OneWay}"
                                                Author="{x:Bind LastMessageAuthor, Mode=OneWay}"
                                                Text="{x:Bind LastMessage, Mode=OneWay}"
-                                               MentionedJids="{x:Bind LastMessageMentionedJids, Mode=OneWay}"/>
+                                               MentionedJids="{x:Bind LastMessageMentionedJids, Mode=OneWay}"
+                                               MentionLookup="{x:Bind MentionLookup, Mode=OneWay}"/>
             </Grid>
 
             <StackPanel Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,14,0,0">

@@ -14,6 +14,52 @@ namespace Unison.Uwp.UI.Controls
             return string.IsNullOrEmpty(value) ? string.Empty : value.ToUpperInvariant();
         }
 
+        /// <summary>Always open chat-info on the first pivot (Profile / Group info).</summary>
+        public static void ResetToRoot(Pivot pivot)
+        {
+            if (pivot == null || pivot.Items == null || pivot.Items.Count == 0)
+            {
+                return;
+            }
+
+            if (pivot.SelectedIndex != 0)
+            {
+                pivot.SelectedIndex = 0;
+            }
+        }
+
+        /// <summary>
+        /// Media and Files share one SQLite index; start it when either pivot is selected.
+        /// </summary>
+        public static void RequestMediaIndexIfSelected(
+            Pivot pivot,
+            ChatDetailInfoViewModel vm,
+            PivotItem mediaItem,
+            PivotItem filesItem)
+        {
+            if (vm == null || pivot == null)
+            {
+                return;
+            }
+
+            object selected = pivot.SelectedItem;
+            if (selected == mediaItem || selected == filesItem)
+            {
+                vm.EnsureMediaIndex();
+            }
+        }
+
+        public static bool IsMediaPaneProperty(string propertyName)
+        {
+            return propertyName == nameof(ChatDetailInfoViewModel.IsMediaIndexLoading) ||
+                   propertyName == nameof(ChatDetailInfoViewModel.HasMedia) ||
+                   propertyName == nameof(ChatDetailInfoViewModel.HasFiles) ||
+                   propertyName == nameof(ChatDetailInfoViewModel.MediaItems) ||
+                   propertyName == nameof(ChatDetailInfoViewModel.FileItems) ||
+                   propertyName == nameof(ChatDetailInfoViewModel.CanLoadMoreMedia) ||
+                   propertyName == nameof(ChatDetailInfoViewModel.CanLoadMoreFiles);
+        }
+
         public static void ApplyNotificationsToggle(
             ToggleSwitch toggle,
             ChatDetailInfoViewModel vm,

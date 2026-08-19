@@ -11,6 +11,101 @@ namespace Unison.Core.Mappers
         private const int PreviewMaxLength = 50;
 
         /// <summary>
+        /// Instant in the device time zone. Message stamps are GMT 0 (UTC);
+        /// <see cref="DateTimeKind.Unspecified"/> (SQLite) is treated as UTC.
+        /// Leftover <see cref="DateTimeKind.Local"/> values are converted to UTC first.
+        /// </summary>
+        public static DateTime ToDeviceLocal(DateTime timestamp)
+        {
+            if (timestamp == DateTime.MinValue)
+            {
+                return timestamp;
+            }
+
+            DateTime utc = ToUtc(timestamp);
+            return TimeZoneInfo.ConvertTimeFromUtc(utc, TimeZoneInfo.Local);
+        }
+
+        /// <summary>Normalizes a chat stamp to UTC for storage and comparison.</summary>
+        public static DateTime ToUtc(DateTime timestamp)
+        {
+            if (timestamp == DateTime.MinValue)
+            {
+                return timestamp;
+            }
+
+            if (timestamp.Kind == DateTimeKind.Utc)
+            {
+                return timestamp;
+            }
+
+            if (timestamp.Kind == DateTimeKind.Local)
+            {
+                return timestamp.ToUniversalTime();
+            }
+
+            return DateTime.SpecifyKind(timestamp, DateTimeKind.Utc);
+        }
+
+        public static string FormatLocalTime(DateTime timestamp)
+        {
+            return timestamp == DateTime.MinValue
+                ? string.Empty
+                : ToDeviceLocal(timestamp).ToString("HH:mm");
+        }
+
+        public static string FormatLocalDate(DateTime timestamp)
+        {
+            return timestamp == DateTime.MinValue
+                ? string.Empty
+                : ToDeviceLocal(timestamp).ToString("d");
+        }
+
+        /// <summary>
+        /// Calendar day in the device time zone, or <see cref="DateTime.MinValue"/> when unset.
+        /// </summary>
+        public static DateTime ToLocalCalendarDate(DateTime timestamp)
+        {
+            return timestamp == DateTime.MinValue
+                ? DateTime.MinValue
+                : ToDeviceLocal(timestamp).Date;
+        }
+
+        /// <summary>
+        /// Timeline date chip: today / yesterday / culture short date (<c>d</c>).
+        /// </summary>
+        public static string FormatDaySeparator(DateTime timestamp, string todayLabel, string yesterdayLabel)
+        {
+            if (timestamp == DateTime.MinValue)
+            {
+                return string.Empty;
+            }
+
+            DateTime local = ToDeviceLocal(timestamp);
+            DateTime date = local.Date;
+            DateTime today = DateTime.Today;
+
+            if (date == today)
+            {
+                return string.IsNullOrWhiteSpace(todayLabel) ? "Today" : todayLabel.Trim();
+            }
+
+            if (date == today.AddDays(-1))
+            {
+                return string.IsNullOrWhiteSpace(yesterdayLabel) ? "Yesterday" : yesterdayLabel.Trim();
+            }
+
+            return local.ToString("d");
+        }
+
+        public static string FormatLocalDateTime(DateTime timestamp)
+        {
+            return timestamp == DateTime.MinValue
+                ? string.Empty
+                : ToDeviceLocal(timestamp).ToString("dd/MM/yyyy HH:mm");
+        }
+
+        /// <summary>
         /// Chat-list style relative timestamp: today → HH:mm, yesterday → localized label,
         /// within a week → weekday name, older → dd/MM/yyyy.
         /// UTC values are converted to local before comparison.
@@ -22,11 +117,7 @@ namespace Unison.Core.Mappers
                 return string.Empty;
             }
 
-            DateTime value = timestamp.Value;
-            DateTime local = value.Kind == DateTimeKind.Utc
-                ? value.ToLocalTime()
-                : value;
-
+            DateTime local = ToDeviceLocal(timestamp.Value);
             DateTime date = local.Date;
             DateTime today = DateTime.Today;
 

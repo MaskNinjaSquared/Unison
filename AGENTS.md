@@ -8,6 +8,8 @@ UWP WhatsApp Multi-Device client (Windows 10 Mobile first). Baileys-style compan
 2. Follow `docs/wiki/Coding-Standards.md` (MVVM, DI, folders, façades).
 3. If the work is protocol/session, also read `docs/wiki/Socket-Stack.md`.
 4. If the work is background/toasts/broker, read `docs/wiki/Background-Broker.md` — transfer is **not** wired on `SocketBridge`.
+5. New UI locale: `docs/wiki/Adding-Languages.md` (copy `en-US` `.resw`, register csproj + manifest + `AppLanguage`).
+6. Shrinking `WhatsAppService` / moving work to façades: `docs/wiki/WhatsAppService-Extraction.md` (phase 0 done; do not treat partials as façades).
 
 Cursor project rules in `.cursor/rules/` repeat the must-not-break bits. The wiki is the full spec.
 

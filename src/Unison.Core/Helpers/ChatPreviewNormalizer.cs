@@ -12,6 +12,11 @@ namespace Unison.Core.Helpers
     {
         private const int MaxLength = 50;
 
+        /// <summary>
+        /// One-line preview for chat lists and quotes: single line, collapsed spaces, capped at
+        /// <see cref="MaxLength"/>. Never use this on text that gets persisted or shown in a
+        /// bubble — that is <see cref="NormalizeBody"/>.
+        /// </summary>
         public static void Normalize(string raw, ChatPreviewKind? kindHint, out ChatPreviewKind kind, out string text)
         {
             string s = (raw ?? string.Empty)
@@ -21,9 +26,28 @@ namespace Unison.Core.Helpers
 
             // Protocol / explicit hint is the only source of kind.
             kind = kindHint ?? ChatPreviewKind.Text;
+            StripPlaceholders(ref s, kind);
+            text = Truncate(CollapseSpaces(s).Trim());
+        }
 
-            // Strip our own placeholders only when the kind already says so
-            // (keeps a literal user message "[Image]" intact as Text).
+        /// <summary>
+        /// Message body / media caption: strips our placeholders but keeps the text whole —
+        /// no preview cap and line breaks survive. History rows and bubbles use this.
+        /// </summary>
+        public static void NormalizeBody(string raw, ChatPreviewKind? kindHint, out ChatPreviewKind kind, out string text)
+        {
+            string s = raw ?? string.Empty;
+            kind = kindHint ?? ChatPreviewKind.Text;
+            StripPlaceholders(ref s, kind);
+            text = s.Trim();
+        }
+
+        /// <summary>
+        /// Strips our own placeholders only when the kind already says so
+        /// (keeps a literal user message "[Image]" intact as Text).
+        /// </summary>
+        private static void StripPlaceholders(ref string s, ChatPreviewKind kind)
+        {
             switch (kind)
             {
                 case ChatPreviewKind.Image:
@@ -46,8 +70,6 @@ namespace Unison.Core.Helpers
                     ConsumeTag(ref s, "[Reaction]");
                     break;
             }
-
-            text = Truncate(CollapseSpaces(s).Trim());
         }
 
         /// <summary>
@@ -119,6 +141,11 @@ namespace Unison.Core.Helpers
                 return ChatPreviewKind.Text;
             }
 
+            if (ContainsIgnoreCase(raw, "[Sticker]"))
+            {
+                return ChatPreviewKind.Sticker;
+            }
+
             if (ContainsIgnoreCase(raw, "[Image]"))
             {
                 return ChatPreviewKind.Image;
@@ -127,11 +154,6 @@ namespace Unison.Core.Helpers
             if (ContainsIgnoreCase(raw, "[Video]"))
             {
                 return ChatPreviewKind.Video;
-            }
-
-            if (ContainsIgnoreCase(raw, "[Sticker]"))
-            {
-                return ChatPreviewKind.Sticker;
             }
 
             if (ContainsIgnoreCase(raw, "[Voice Message]") || ContainsIgnoreCase(raw, "[Audio]"))
@@ -204,6 +226,11 @@ namespace Unison.Core.Helpers
             bool isVoice,
             bool isDocument = false)
         {
+            if (isSticker)
+            {
+                return ChatMessageKind.Sticker;
+            }
+
             if (isImage)
             {
                 return ChatMessageKind.Image;
@@ -212,11 +239,6 @@ namespace Unison.Core.Helpers
             if (isVideo)
             {
                 return ChatMessageKind.Video;
-            }
-
-            if (isSticker)
-            {
-                return ChatMessageKind.Sticker;
             }
 
             if (isDocument)

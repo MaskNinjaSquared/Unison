@@ -2,7 +2,6 @@ using Unison.Core.Models;
 using Unison.Core.ViewModels;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Media;
 
 namespace Unison.Uwp.UI.Controls
 {
@@ -101,19 +100,23 @@ namespace Unison.Uwp.UI.Controls
             var vm = _vm;
             bool audio = IsAudioItem(vm);
             bool video = !audio && IsVideoItem(vm);
-
-            Root.Background = new SolidColorBrush(video
-                ? Windows.UI.Color.FromArgb(0xFF, 0x11, 0x11, 0x11)
-                : Windows.UI.Color.FromArgb(0xFF, 0x1A, 0x1A, 0x1A));
+            bool imageDownload = !audio && !video && vm != null && vm.ShowImageDownloadIcon;
 
             if (Thumb != null)
             {
-                Thumb.Visibility = audio ? Visibility.Collapsed : Visibility.Visible;
+                Thumb.Visibility = (audio || imageDownload) ? Visibility.Collapsed : Visibility.Visible;
+            }
+            if (DownloadPlaceholder != null)
+            {
+                DownloadPlaceholder.Visibility = imageDownload ? Visibility.Visible : Visibility.Collapsed;
             }
 
             if (ImageGlyph != null)
             {
-                ImageGlyph.Visibility = (!audio && !video) ? Visibility.Visible : Visibility.Collapsed;
+                // Placeholder asset replaces the glyph while waiting to download.
+                ImageGlyph.Visibility = (!audio && !video && !imageDownload)
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
             }
 
             bool busy = vm != null && (
@@ -153,7 +156,6 @@ namespace Unison.Uwp.UI.Controls
                 FooterDuration.Text = vm != null ? (vm.MediaBadgeDurationText ?? string.Empty) : string.Empty;
             }
 
-            bool imageDownload = !audio && !video && vm != null && vm.ShowImageDownloadIcon;
             if (DownloadImageButton != null)
             {
                 DownloadImageButton.Visibility = imageDownload ? Visibility.Visible : Visibility.Collapsed;

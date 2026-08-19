@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
@@ -29,6 +30,8 @@ namespace Unison.Uwp.Data
         private SQLiteAsyncConnection _connection;
         private bool _initialized;
 
+        public event EventHandler<string> PersonChanged;
+
         public async Task InitializeAsync()
         {
             if (_initialized)
@@ -49,6 +52,9 @@ namespace Unison.Uwp.Data
                 string dbPath = Path.Combine(ApplicationData.Current.LocalFolder.Path, DatabaseFileName);
                 _connection = new SQLiteAsyncConnection(dbPath);
                 await _connection.CreateTableAsync<PersonRow>().ConfigureAwait(false);
+                await _connection.CreateTableAsync<PersonGroupRow>().ConfigureAwait(false);
+                await EnsurePhoneIndexAsync().ConfigureAwait(false);
+                await EnsurePersonGroupIndexesAsync().ConfigureAwait(false);
                 _initialized = true;
                 Debug.WriteLine("[PersonStore] Initialized at " + dbPath);
             }
@@ -102,7 +108,39 @@ namespace Unison.Uwp.Data
             return person;
         }
 
-        public async Task<bool> UpsertIfChangedAsync(string jid, string name, string avatarUrl, string phone)
+        public async Task<IReadOnlyList<Person>> FindByPhoneAsync(string digits)
+        {
+            string phone = PhoneNumberHelper.NormalizePhoneDigits(digits);
+            if (string.IsNullOrEmpty(phone))
+            {
+                return Array.Empty<Person>();
+            }
+
+            await EnsureInitializedAsync().ConfigureAwait(false);
+
+            List<PersonRow> rows = await _connection.QueryAsync<PersonRow>(
+                "SELECT * FROM Person WHERE Phone = ?",
+                phone).ConfigureAwait(false);
+
+            return ToModels(rows);
+        }
+
+        public async Task<IReadOnlyList<Person>> ListWithPhoneAsync()
+        {
+            await EnsureInitializedAsync().ConfigureAwait(false);
+
+            List<PersonRow> rows = await _connection.QueryAsync<PersonRow>(
+                "SELECT * FROM Person WHERE Phone IS NOT NULL AND Phone != ''").ConfigureAwait(false);
+
+            return ToModels(rows);
+        }
+
+        public async Task<bool> UpsertIfChangedAsync(
+            string jid,
+            string name,
+            string avatarUrl,
+            string phone,
+            PersonSource source)
         {
             string key = NormalizeJid(jid);
             if (string.IsNullOrEmpty(key))
@@ -110,8 +148,11 @@ namespace Unison.Uwp.Data
                 return false;
             }
 
+            string normalizedPhone = PhoneNumberHelper.NormalizePhoneDigits(phone);
+
             await EnsureInitializedAsync().ConfigureAwait(false);
 
+            bool changed = false;
             await _writeLock.WaitAsync().ConfigureAwait(false);
             try
             {
@@ -130,14 +171,17 @@ namespace Unison.Uwp.Data
                     }
                 }
 
-                if (!Person.RequiresUpdate(existing, name, avatarUrl, phone))
+                if (!Person.RequiresUpdate(existing, name, avatarUrl, normalizedPhone, source))
                 {
                     return false;
                 }
 
                 Person next = existing != null ? Clone(existing) : new Person { Jid = key };
                 next.Jid = key;
-                if (!string.IsNullOrWhiteSpace(name))
+                next.Source = Person.Promote(existing != null ? existing.Source : PersonSource.Unknown, source);
+
+                if (Person.CanWriteName(existing != null ? existing.Source : PersonSource.Unknown, source) &&
+                    !string.IsNullOrWhiteSpace(name))
                 {
                     next.Name = name.Trim();
                 }
@@ -147,20 +191,156 @@ namespace Unison.Uwp.Data
                     next.AvatarUrl = avatarUrl.Trim();
                 }
 
-                if (!string.IsNullOrWhiteSpace(phone))
+                if (!string.IsNullOrWhiteSpace(normalizedPhone))
                 {
-                    next.Phone = phone.Trim();
+                    next.Phone = normalizedPhone;
                 }
 
                 next.UpdatedAtUtc = DateTime.UtcNow;
 
                 await _connection.InsertOrReplaceAsync(ToRow(next)).ConfigureAwait(false);
                 _cache[key] = Clone(next);
-                return true;
+                changed = true;
             }
             finally
             {
                 _writeLock.Release();
+            }
+
+            // Raise after the lock: subscribers may re-enter the store to read the new value.
+            if (changed)
+            {
+                PersonChanged?.Invoke(this, key);
+            }
+
+            return changed;
+        }
+
+        public async Task ReplaceGroupMembershipsAsync(
+            string groupJid,
+            IReadOnlyList<PersonGroupMembership> members)
+        {
+            string groupKey = NormalizeJid(groupJid);
+            if (string.IsNullOrEmpty(groupKey) || !JidHelper.IsGroupJid(groupKey))
+            {
+                return;
+            }
+
+            await EnsureInitializedAsync().ConfigureAwait(false);
+            await _writeLock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                await _connection.ExecuteAsync(
+                    "DELETE FROM PersonGroup WHERE GroupJid = ?",
+                    groupKey).ConfigureAwait(false);
+
+                if (members == null || members.Count == 0)
+                {
+                    return;
+                }
+
+                DateTime now = DateTime.UtcNow;
+                foreach (var member in members)
+                {
+                    if (member == null)
+                    {
+                        continue;
+                    }
+
+                    string personKey = NormalizeJid(member.PersonJid);
+                    if (string.IsNullOrEmpty(personKey) || JidHelper.IsGroupJid(personKey))
+                    {
+                        continue;
+                    }
+
+                    var row = new PersonGroupRow
+                    {
+                        Id = PersonGroupRow.MakeId(personKey, groupKey),
+                        PersonJid = personKey,
+                        GroupJid = groupKey,
+                        Role = (int)member.Role,
+                        UpdatedAtUtc = now
+                    };
+                    await _connection.InsertOrReplaceAsync(row).ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                _writeLock.Release();
+            }
+        }
+
+        public async Task<IReadOnlyList<PersonGroupMembership>> ListGroupsForPersonAsync(string personJid)
+        {
+            string personKey = NormalizeJid(personJid);
+            if (string.IsNullOrEmpty(personKey))
+            {
+                return Array.Empty<PersonGroupMembership>();
+            }
+
+            await EnsureInitializedAsync().ConfigureAwait(false);
+
+            List<PersonGroupRow> rows = await _connection.QueryAsync<PersonGroupRow>(
+                "SELECT * FROM PersonGroup WHERE PersonJid = ? ORDER BY UpdatedAtUtc DESC",
+                personKey).ConfigureAwait(false);
+
+            if (rows == null || rows.Count == 0)
+            {
+                return Array.Empty<PersonGroupMembership>();
+            }
+
+            var list = new List<PersonGroupMembership>(rows.Count);
+            foreach (var row in rows)
+            {
+                if (row == null || string.IsNullOrWhiteSpace(row.GroupJid))
+                {
+                    continue;
+                }
+
+                GroupParticipantRole role = GroupParticipantRole.Member;
+                if (row.Role >= (int)GroupParticipantRole.Member &&
+                    row.Role <= (int)GroupParticipantRole.SuperAdmin)
+                {
+                    role = (GroupParticipantRole)row.Role;
+                }
+
+                list.Add(new PersonGroupMembership
+                {
+                    PersonJid = row.PersonJid,
+                    GroupJid = row.GroupJid,
+                    Role = role,
+                    UpdatedAtUtc = row.UpdatedAtUtc
+                });
+            }
+
+            return list;
+        }
+
+        private async Task EnsurePhoneIndexAsync()
+        {
+            try
+            {
+                await _connection.CreateIndexAsync("IX_Person_Phone", "Person", "Phone", unique: false)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[PersonStore] Phone index: " + ex.Message);
+            }
+        }
+
+        private async Task EnsurePersonGroupIndexesAsync()
+        {
+            try
+            {
+                await _connection.CreateIndexAsync(
+                    "IX_PersonGroup_Person", "PersonGroup", "PersonJid", unique: false).ConfigureAwait(false);
+                await _connection.CreateIndexAsync(
+                    "IX_PersonGroup_Group", "PersonGroup", "GroupJid", unique: false).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[PersonStore] PersonGroup indexes: " + ex.Message);
             }
         }
 
@@ -177,11 +357,37 @@ namespace Unison.Uwp.Data
             return JidHelper.Normalize(jid);
         }
 
+        private static IReadOnlyList<Person> ToModels(List<PersonRow> rows)
+        {
+            if (rows == null || rows.Count == 0)
+            {
+                return Array.Empty<Person>();
+            }
+
+            var list = new List<Person>(rows.Count);
+            foreach (var row in rows)
+            {
+                Person person = ToModel(row);
+                if (person != null)
+                {
+                    list.Add(person);
+                }
+            }
+
+            return list;
+        }
+
         private static Person ToModel(PersonRow row)
         {
             if (row == null)
             {
                 return null;
+            }
+
+            PersonSource source = PersonSource.Unknown;
+            if (row.Source >= (int)PersonSource.Unknown && row.Source <= (int)PersonSource.AddressBook)
+            {
+                source = (PersonSource)row.Source;
             }
 
             return new Person
@@ -190,6 +396,7 @@ namespace Unison.Uwp.Data
                 Name = row.Name,
                 AvatarUrl = row.AvatarUrl,
                 Phone = row.Phone,
+                Source = source,
                 UpdatedAtUtc = row.UpdatedAtUtc
             };
         }
@@ -202,6 +409,7 @@ namespace Unison.Uwp.Data
                 Name = person.Name,
                 AvatarUrl = person.AvatarUrl,
                 Phone = person.Phone,
+                Source = (int)person.Source,
                 UpdatedAtUtc = person.UpdatedAtUtc
             };
         }
@@ -219,6 +427,7 @@ namespace Unison.Uwp.Data
                 Name = source.Name,
                 AvatarUrl = source.AvatarUrl,
                 Phone = source.Phone,
+                Source = source.Source,
                 UpdatedAtUtc = source.UpdatedAtUtc
             };
         }

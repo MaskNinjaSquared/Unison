@@ -27,6 +27,11 @@ namespace Unison.Uwp.UI.Templates
             FindChatDetail(sender)?.OnQuotedMessageTapped(sender, e);
         }
 
+        private void GroupParticipant_Tapped(object sender, TappedRoutedEventArgs e)
+        {
+            FindChatDetail(sender)?.OnGroupParticipantTapped(sender, e);
+        }
+
         private void AudioPlayButton_Click(object sender, RoutedEventArgs e)
         {
             FindChatDetail(sender)?.OnAudioPlayButtonClick(sender, e);

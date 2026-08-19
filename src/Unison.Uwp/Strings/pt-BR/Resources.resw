@@ -314,6 +314,9 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="ChatDetail_AttachBarTooltip.Content" xml:space="preserve">
     <value>Anexar</value>
   </data>
+  <data name="ChatDetail_ScrollToBottomTooltip.Content" xml:space="preserve">
+    <value>Ir para o final</value>
+  </data>
   <data name="ChatDetail_AttachCameraTile.Text" xml:space="preserve">
     <value>Câmera</value>
   </data>
@@ -554,6 +557,12 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="Shell_Status.Text" xml:space="preserve">
     <value>Status</value>
   </data>
+  <data name="StatusList_Header.Text" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="StatusList_Empty.Text" xml:space="preserve">
+    <value>Nenhuma atualização de status recente</value>
+  </data>
   <data name="Shell_Starred.Text" xml:space="preserve">
     <value>Mensagens favoritas</value>
   </data>
@@ -575,8 +584,29 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="Common_OK" xml:space="preserve">
     <value>OK</value>
   </data>
+  <data name="Common_Close" xml:space="preserve">
+    <value>Fechar</value>
+  </data>
+  <data name="Reactions_TitleOne" xml:space="preserve">
+    <value>1 reação</value>
+  </data>
+  <data name="Reactions_TitleMany" xml:space="preserve">
+    <value>{0} reações</value>
+  </data>
+  <data name="Login_BackgroundAccessTitle" xml:space="preserve">
+    <value>Execução em segundo plano</value>
+  </data>
+  <data name="Login_BackgroundAccessBody" xml:space="preserve">
+    <value>O Unison precisa de permissão para funcionar em segundo plano para ligar ao WhatsApp. Ative o Unison em Definições → Privacidade → Aplicações em segundo plano e volte a esta app.</value>
+  </data>
+  <data name="Login_BackgroundAccessRetry" xml:space="preserve">
+    <value>A execução em segundo plano está ativa. Toque em Recarregar QR para ligar.</value>
+  </data>
   <data name="Common_Yesterday" xml:space="preserve">
     <value>Ontem</value>
+  </data>
+  <data name="Common_Today" xml:space="preserve">
+    <value>Hoje</value>
   </data>
   <data name="Login_InstrTitle.Text" xml:space="preserve">
     <value>Use o WhatsApp no computador</value>
@@ -632,8 +662,50 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="Settings_AutoUnlink.Text" xml:space="preserve">
     <value>Se a sessão for invalidada no telemóvel, limpar dados locais e pedir QR. Desligue para manter o app como backup e só tentar reconectar.</value>
   </data>
+  <data name="Settings_PublishWindowsContacts.Header" xml:space="preserve">
+    <value>Mostrar contatos do Unison no Windows</value>
+  </data>
+  <data name="Settings_PublishWindowsContacts.Text" xml:space="preserve">
+    <value>Adiciona as conversas 1:1 a uma lista Unison na app Pessoas. Desligado por padrão.</value>
+  </data>
   <data name="Settings_Customization.Text" xml:space="preserve">
     <value>Personalização</value>
+  </data>
+  <data name="Settings_Language.Header" xml:space="preserve">
+    <value>Idioma</value>
+  </data>
+  <data name="Settings_Language.Text" xml:space="preserve">
+    <value>Escolha o idioma do aplicativo. O app reinicia para aplicar.</value>
+  </data>
+  <data name="Settings_LanguageSystem" xml:space="preserve">
+    <value>Sistema</value>
+  </data>
+  <data name="Settings_LanguageRestartTitle" xml:space="preserve">
+    <value>Idioma atualizado</value>
+  </data>
+  <data name="Settings_LanguageRestartBody" xml:space="preserve">
+    <value>O Unison vai reiniciar para aplicar o novo idioma.</value>
+  </data>
+  <data name="Settings_LanguageRestartClose" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="Settings_Advanced.Text" xml:space="preserve">
+    <value>Configurações avançadas</value>
+  </data>
+  <data name="Settings_Disconnect.Text" xml:space="preserve">
+    <value>Desconectar</value>
+  </data>
+  <data name="Settings_DisconnectTitle" xml:space="preserve">
+    <value>Desconectar?</value>
+  </data>
+  <data name="Settings_DisconnectBody" xml:space="preserve">
+    <value>Se você desconectar, voltará à tela de pareamento e todos os dados e conversas serão apagados.</value>
+  </data>
+  <data name="Settings_DisconnectConfirm" xml:space="preserve">
+    <value>Desconectar</value>
+  </data>
+  <data name="Settings_DisconnectCancel" xml:space="preserve">
+    <value>Cancelar</value>
   </data>
   <data name="Settings_Shell.Header" xml:space="preserve">
     <value>Shell</value>
@@ -667,6 +739,9 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   </data>
   <data name="Start_GetStarted.Content" xml:space="preserve">
     <value>Começar</value>
+  </data>
+  <data name="Start_Language.Text" xml:space="preserve">
+    <value>Idioma:</value>
   </data>
   <data name="Settings_About.Text" xml:space="preserve">
     <value>Sobre</value>
@@ -760,6 +835,15 @@ conversa</value>
   <data name="ChatDetailInfo_MembersEmpty" xml:space="preserve">
     <value>Os membros do grupo aparecerão aqui.</value>
   </data>
+  <data name="ChatDetailInfo_Admin.Text" xml:space="preserve">
+    <value>Admin</value>
+  </data>
+  <data name="ChatDetailInfo_GroupsInCommon" xml:space="preserve">
+    <value>Grupos em comum</value>
+  </data>
+  <data name="ChatDetailInfo_GroupsInCommonEmpty" xml:space="preserve">
+    <value>Nenhum grupo em comum.</value>
+  </data>
   <data name="ChatDetailInfo_UnpinAppBarLabel" xml:space="preserve">
     <value>Desafixar do
 Início</value>
@@ -790,6 +874,13 @@ Início</value>
   </data>
   <data name="ChatDetail_ShowContact.Text" xml:space="preserve">
     <value>Ver contato</value>
+  </data>
+  <data name="ChatDetail_AddContact.Text" xml:space="preserve">
+    <value>Adicionar contato</value>
+  </data>
+  <data name="ChatDetailInfo_AddContactAppBarLabel" xml:space="preserve">
+    <value>Adicionar
+contato</value>
   </data>
   <data name="ChatDetailInfo_Calls" xml:space="preserve">
     <value>Chamadas</value>

@@ -314,6 +314,9 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   <data name="ChatDetail_AttachBarTooltip.Content" xml:space="preserve">
     <value>Bijvoegen</value>
   </data>
+  <data name="ChatDetail_ScrollToBottomTooltip.Content" xml:space="preserve">
+    <value>Naar het einde</value>
+  </data>
   <data name="ChatDetail_AttachCameraTile.Text" xml:space="preserve">
     <value>Camera</value>
   </data>
@@ -554,6 +557,12 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   <data name="Shell_Status.Text" xml:space="preserve">
     <value>Status</value>
   </data>
+  <data name="StatusList_Header.Text" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="StatusList_Empty.Text" xml:space="preserve">
+    <value>Geen recente statusupdates</value>
+  </data>
   <data name="Shell_Starred.Text" xml:space="preserve">
     <value>Berichten met ster</value>
   </data>
@@ -575,8 +584,29 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   <data name="Common_OK" xml:space="preserve">
     <value>OK</value>
   </data>
+  <data name="Common_Close" xml:space="preserve">
+    <value>Sluiten</value>
+  </data>
+  <data name="Reactions_TitleOne" xml:space="preserve">
+    <value>1 reactie</value>
+  </data>
+  <data name="Reactions_TitleMany" xml:space="preserve">
+    <value>{0} reacties</value>
+  </data>
+  <data name="Login_BackgroundAccessTitle" xml:space="preserve">
+    <value>Apps op de achtergrond</value>
+  </data>
+  <data name="Login_BackgroundAccessBody" xml:space="preserve">
+    <value>Unison heeft toestemming nodig om op de achtergrond te draaien om met WhatsApp te verbinden. Zet Unison aan onder Instellingen → Privacy → Apps op de achtergrond en kom daarna terug.</value>
+  </data>
+  <data name="Login_BackgroundAccessRetry" xml:space="preserve">
+    <value>Achtergrondtoegang staat aan. Tik op QR opnieuw laden om te verbinden.</value>
+  </data>
   <data name="Common_Yesterday" xml:space="preserve">
     <value>Gisteren</value>
+  </data>
+  <data name="Common_Today" xml:space="preserve">
+    <value>Vandaag</value>
   </data>
   <data name="Login_InstrTitle.Text" xml:space="preserve">
     <value>Gebruik WhatsApp op je computer</value>
@@ -632,8 +662,50 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   <data name="Settings_AutoUnlink.Text" xml:space="preserve">
     <value>Als de telefoon deze sessie ongeldig maakt, lokale gegevens wissen en de QR tonen. Schakel uit om de app als back-up te houden en alleen opnieuw te verbinden.</value>
   </data>
+  <data name="Settings_PublishWindowsContacts.Header" xml:space="preserve">
+    <value>Unison-contacten in Windows tonen</value>
+  </data>
+  <data name="Settings_PublishWindowsContacts.Text" xml:space="preserve">
+    <value>Voegt je 1-op-1-chats toe aan een aparte Unison-lijst in Personen. Standaard uit.</value>
+  </data>
   <data name="Settings_Customization.Text" xml:space="preserve">
     <value>Vormgeving</value>
+  </data>
+  <data name="Settings_Language.Header" xml:space="preserve">
+    <value>Taal</value>
+  </data>
+  <data name="Settings_Language.Text" xml:space="preserve">
+    <value>Kies de taal van de app. De app herstart om dit toe te passen.</value>
+  </data>
+  <data name="Settings_LanguageSystem" xml:space="preserve">
+    <value>Systeem</value>
+  </data>
+  <data name="Settings_LanguageRestartTitle" xml:space="preserve">
+    <value>Taal bijgewerkt</value>
+  </data>
+  <data name="Settings_LanguageRestartBody" xml:space="preserve">
+    <value>Unison wordt opnieuw gestart om de nieuwe taal toe te passen.</value>
+  </data>
+  <data name="Settings_LanguageRestartClose" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="Settings_Advanced.Text" xml:space="preserve">
+    <value>Geavanceerde instellingen</value>
+  </data>
+  <data name="Settings_Disconnect.Text" xml:space="preserve">
+    <value>Verbinding verbreken</value>
+  </data>
+  <data name="Settings_DisconnectTitle" xml:space="preserve">
+    <value>Verbinding verbreken?</value>
+  </data>
+  <data name="Settings_DisconnectBody" xml:space="preserve">
+    <value>Als je de verbinding verbreekt, ga je naar het koppelingsscherm en worden alle gegevens en chats gewist.</value>
+  </data>
+  <data name="Settings_DisconnectConfirm" xml:space="preserve">
+    <value>Verbreken</value>
+  </data>
+  <data name="Settings_DisconnectCancel" xml:space="preserve">
+    <value>Annuleren</value>
   </data>
   <data name="Settings_Shell.Header" xml:space="preserve">
     <value>Thema</value>
@@ -667,6 +739,9 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   </data>
   <data name="Start_GetStarted.Content" xml:space="preserve">
     <value>Beginnen</value>
+  </data>
+  <data name="Start_Language.Text" xml:space="preserve">
+    <value>Taal:</value>
   </data>
   <data name="Settings_About.Text" xml:space="preserve">
     <value>Over</value>
@@ -760,6 +835,15 @@ losmaken</value>
   <data name="ChatDetailInfo_MembersEmpty" xml:space="preserve">
     <value>Groepsleden verschijnen hier.</value>
   </data>
+  <data name="ChatDetailInfo_Admin.Text" xml:space="preserve">
+    <value>Beheerder</value>
+  </data>
+  <data name="ChatDetailInfo_GroupsInCommon" xml:space="preserve">
+    <value>Gemeenschappelijke groepen</value>
+  </data>
+  <data name="ChatDetailInfo_GroupsInCommonEmpty" xml:space="preserve">
+    <value>Geen gemeenschappelijke groepen.</value>
+  </data>
   <data name="ChatDetailInfo_UnpinAppBarLabel" xml:space="preserve">
     <value>Losmaken van
 Start</value>
@@ -790,6 +874,13 @@ Start</value>
   </data>
   <data name="ChatDetail_ShowContact.Text" xml:space="preserve">
     <value>Contact bekijken</value>
+  </data>
+  <data name="ChatDetail_AddContact.Text" xml:space="preserve">
+    <value>Contact toevoegen</value>
+  </data>
+  <data name="ChatDetailInfo_AddContactAppBarLabel" xml:space="preserve">
+    <value>Contact
+toevoegen</value>
   </data>
   <data name="ChatDetailInfo_Calls" xml:space="preserve">
     <value>Oproepen</value>

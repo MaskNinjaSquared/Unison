@@ -19,5 +19,14 @@ namespace Unison.Core.Constants
 
         /// <summary>Grip overlap on the chat-detail side (<see cref="SplitterWidth"/> − list overlap).</summary>
         public const double SplitterOverlapDetail = SplitterWidth - SplitterOverlapList;
+
+        /// <summary>Docked chat-info pane width when chat + info sit side by side.</summary>
+        public const double ChatDetailInfoPaneWidth = 400;
+
+        /// <summary>
+        /// When the chat-detail surface is narrower than this, opening info goes full screen
+        /// so each of chat and info would otherwise be under <see cref="ChatDetailInfoPaneWidth"/>.
+        /// </summary>
+        public const double ChatDetailInfoFullScreenBelowWidth = 800;
     }
 }

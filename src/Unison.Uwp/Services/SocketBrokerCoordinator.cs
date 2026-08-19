@@ -23,7 +23,6 @@ namespace Unison.Uwp.Services
 
         private readonly SemaphoreSlim _gate = new SemaphoreSlim(1, 1);
         private IBackgroundTaskRegistration _registration;
-        private bool _requestAttempted;
         private BackgroundAccessStatus _accessStatus = BackgroundAccessStatus.Unspecified;
 
         public Guid TaskId => _registration == null ? Guid.Empty : _registration.TaskId;
@@ -143,19 +142,25 @@ namespace Unison.Uwp.Services
             string registrationMarker,
             string reason)
         {
-            if (!_requestAttempted)
+            try
             {
-                _requestAttempted = true;
-                _accessStatus =
-                    await BackgroundExecutionManager.RequestAccessAsync();
-                RuntimeDiagnosticsService.Instance.Write(
+                _accessStatus = await BackgroundExecutionManager.RequestAccessAsync();
+            }
+            catch (Exception ex)
+            {
+                RuntimeDiagnosticsService.Instance.RecordException(
                     "socket-broker",
-                    "background-access",
-                    "status=" + _accessStatus);
+                    "background-access-failed",
+                    ex);
+                return false;
             }
 
-            if (_accessStatus == BackgroundAccessStatus.DeniedBySystemPolicy ||
-                _accessStatus == BackgroundAccessStatus.DeniedByUser)
+            RuntimeDiagnosticsService.Instance.Write(
+                "socket-broker",
+                "background-access",
+                "status=" + _accessStatus);
+
+            if (BackgroundAccessService.IsDenied(_accessStatus))
             {
                 RuntimeDiagnosticsService.Instance.Write(
                     "socket-broker",

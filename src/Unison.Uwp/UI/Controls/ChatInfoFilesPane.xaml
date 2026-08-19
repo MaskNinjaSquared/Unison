@@ -39,6 +39,15 @@
                        Style="{StaticResource ChatDetailInfoEmptyTextStyle}"
                        Margin="24,16,24,24"/>
         </StackPanel>
+        <ProgressRing x:Name="FilesLoadingRing"
+                      Width="48"
+                      Height="48"
+                      HorizontalAlignment="Center"
+                      VerticalAlignment="Center"
+                      Foreground="White"
+                      IsActive="False"
+                      Visibility="Collapsed"
+                      IsHitTestVisible="False"/>
         <ListView x:Name="FilesList"
                   SelectionMode="None"
                   HorizontalAlignment="Stretch"

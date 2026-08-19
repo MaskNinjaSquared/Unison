@@ -1,0 +1,33 @@
+using Unison.Core.Models;
+
+namespace Unison.Core.Helpers
+{
+    /// <summary>
+    /// Maps a Status SQLite row onto a <see cref="ChatMessage"/> so on-demand download
+    /// can reuse <c>EnsureImageAvailableAsync</c> / <c>EnsureVideoAvailableAsync</c>.
+    /// </summary>
+    public static class HistoryStatusMapper
+    {
+        public static ChatMessage ToChatMessage(HistoryStatus row)
+        {
+            if (row == null || string.IsNullOrWhiteSpace(row.MessageId))
+            {
+                return null;
+            }
+
+            ChatMessageKind kind = ChatPreviewNormalizer.FromPreviewKind(row.Kind);
+            var message = new ChatMessage
+            {
+                Id = row.MessageId,
+                Content = row.Body ?? string.Empty,
+                Timestamp = HistoryMessageMapper.AsUtc(row.TimestampUtc) ?? System.DateTime.UtcNow,
+                IsFromMe = row.IsFromMe,
+                SenderName = row.PushName,
+                Kind = kind
+            };
+
+            HistoryMessageMapper.ApplyMediaEnvelope(message, row, row.Kind, row.Body);
+            return message;
+        }
+    }
+}

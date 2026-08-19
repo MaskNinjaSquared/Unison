@@ -314,6 +314,9 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="ChatDetail_AttachBarTooltip.Content" xml:space="preserve">
     <value>Lampirkan</value>
   </data>
+  <data name="ChatDetail_ScrollToBottomTooltip.Content" xml:space="preserve">
+    <value>Ke pesan terbaru</value>
+  </data>
   <data name="ChatDetail_AttachCameraTile.Text" xml:space="preserve">
     <value>Kamera</value>
   </data>
@@ -554,6 +557,12 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="Shell_Status.Text" xml:space="preserve">
     <value>Status</value>
   </data>
+  <data name="StatusList_Header.Text" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="StatusList_Empty.Text" xml:space="preserve">
+    <value>Tidak ada pembaruan status terbaru</value>
+  </data>
   <data name="Shell_Starred.Text" xml:space="preserve">
     <value>Pesan berbintang</value>
   </data>
@@ -575,8 +584,29 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="Common_OK" xml:space="preserve">
     <value>OK</value>
   </data>
+  <data name="Common_Close" xml:space="preserve">
+    <value>Tutup</value>
+  </data>
+  <data name="Reactions_TitleOne" xml:space="preserve">
+    <value>1 reaksi</value>
+  </data>
+  <data name="Reactions_TitleMany" xml:space="preserve">
+    <value>{0} reaksi</value>
+  </data>
+  <data name="Login_BackgroundAccessTitle" xml:space="preserve">
+    <value>Aplikasi latar belakang</value>
+  </data>
+  <data name="Login_BackgroundAccessBody" xml:space="preserve">
+    <value>Unison memerlukan izin untuk berjalan di latar belakang agar dapat terhubung ke WhatsApp. Aktifkan Unison di Pengaturan → Privasi → Aplikasi latar belakang, lalu kembali ke sini.</value>
+  </data>
+  <data name="Login_BackgroundAccessRetry" xml:space="preserve">
+    <value>Akses latar belakang sudah aktif. Ketuk Muat ulang QR untuk terhubung.</value>
+  </data>
   <data name="Common_Yesterday" xml:space="preserve">
     <value>Kemarin</value>
+  </data>
+  <data name="Common_Today" xml:space="preserve">
+    <value>Hari ini</value>
   </data>
   <data name="Login_InstrTitle.Text" xml:space="preserve">
     <value>Gunakan WhatsApp di komputer Anda</value>
@@ -632,8 +662,50 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="Settings_AutoUnlink.Text" xml:space="preserve">
     <value>Jika ponsel membatalkan sesi ini, hapus data lokal dan tampilkan QR. Matikan untuk menjaga aplikasi sebagai cadangan dan hanya mencoba menyambung ulang.</value>
   </data>
+  <data name="Settings_PublishWindowsContacts.Header" xml:space="preserve">
+    <value>Tampilkan kontak Unison di Windows</value>
+  </data>
+  <data name="Settings_PublishWindowsContacts.Text" xml:space="preserve">
+    <value>Menambahkan obrolan 1:1 ke daftar Unison terpisah di aplikasi Orang. Nonaktif secara default.</value>
+  </data>
   <data name="Settings_Customization.Text" xml:space="preserve">
     <value>Kustomisasi</value>
+  </data>
+  <data name="Settings_Language.Header" xml:space="preserve">
+    <value>Bahasa</value>
+  </data>
+  <data name="Settings_Language.Text" xml:space="preserve">
+    <value>Pilih bahasa aplikasi. Aplikasi akan dimulai ulang untuk menerapkannya.</value>
+  </data>
+  <data name="Settings_LanguageSystem" xml:space="preserve">
+    <value>Sistem</value>
+  </data>
+  <data name="Settings_LanguageRestartTitle" xml:space="preserve">
+    <value>Bahasa diperbarui</value>
+  </data>
+  <data name="Settings_LanguageRestartBody" xml:space="preserve">
+    <value>Unison akan dimulai ulang untuk menerapkan bahasa baru.</value>
+  </data>
+  <data name="Settings_LanguageRestartClose" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="Settings_Advanced.Text" xml:space="preserve">
+    <value>Pengaturan lanjutan</value>
+  </data>
+  <data name="Settings_Disconnect.Text" xml:space="preserve">
+    <value>Putuskan</value>
+  </data>
+  <data name="Settings_DisconnectTitle" xml:space="preserve">
+    <value>Putuskan?</value>
+  </data>
+  <data name="Settings_DisconnectBody" xml:space="preserve">
+    <value>Jika Anda memutuskan, Anda akan ke layar tautan dan semua data serta obrolan akan dihapus.</value>
+  </data>
+  <data name="Settings_DisconnectConfirm" xml:space="preserve">
+    <value>Putuskan</value>
+  </data>
+  <data name="Settings_DisconnectCancel" xml:space="preserve">
+    <value>Batal</value>
   </data>
   <data name="Settings_Shell.Header" xml:space="preserve">
     <value>Shell</value>
@@ -667,6 +739,9 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   </data>
   <data name="Start_GetStarted.Content" xml:space="preserve">
     <value>Mulai</value>
+  </data>
+  <data name="Start_Language.Text" xml:space="preserve">
+    <value>Bahasa:</value>
   </data>
   <data name="Settings_About.Text" xml:space="preserve">
     <value>Tentang</value>
@@ -760,6 +835,15 @@ sematan</value>
   <data name="ChatDetailInfo_MembersEmpty" xml:space="preserve">
     <value>Anggota grup akan muncul di sini.</value>
   </data>
+  <data name="ChatDetailInfo_Admin.Text" xml:space="preserve">
+    <value>Admin</value>
+  </data>
+  <data name="ChatDetailInfo_GroupsInCommon" xml:space="preserve">
+    <value>Grup yang sama</value>
+  </data>
+  <data name="ChatDetailInfo_GroupsInCommonEmpty" xml:space="preserve">
+    <value>Tidak ada grup yang sama.</value>
+  </data>
   <data name="ChatDetailInfo_UnpinAppBarLabel" xml:space="preserve">
     <value>Lepas dari
 Start</value>
@@ -790,6 +874,13 @@ Start</value>
   </data>
   <data name="ChatDetail_ShowContact.Text" xml:space="preserve">
     <value>Lihat kontak</value>
+  </data>
+  <data name="ChatDetail_AddContact.Text" xml:space="preserve">
+    <value>Tambah kontak</value>
+  </data>
+  <data name="ChatDetailInfo_AddContactAppBarLabel" xml:space="preserve">
+    <value>Tambah
+kontak</value>
   </data>
   <data name="ChatDetailInfo_Calls" xml:space="preserve">
     <value>Panggilan</value>

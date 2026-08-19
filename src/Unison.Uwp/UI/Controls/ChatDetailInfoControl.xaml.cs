@@ -7,8 +7,8 @@ using Windows.UI.Xaml.Controls;
 namespace Unison.Uwp.UI.Controls
 {
     /// <summary>
-    /// Chat-side info pane shell. Hosts user or group pivot controls that share
-    /// <see cref="ChatDetailInfoViewModel"/>.
+    /// Chat-side info pane shell for 1:1 user and group info only.
+    /// Group-member profile uses <see cref="ChatDetailGroupMemberInfoPane"/> (separate control).
     /// </summary>
     public sealed partial class ChatDetailInfoControl : UserControl
     {
@@ -27,6 +27,8 @@ namespace Unison.Uwp.UI.Controls
                 new PropertyMetadata(null));
 
         private ChatDetailInfoViewModel _boundInfo;
+        private ChatDetailUserInfoControl _userInfoHost;
+        private ChatDetailGroupInfoControl _groupInfoHost;
 
         public ChatDetailInfoControl()
         {
@@ -73,24 +75,72 @@ namespace Unison.Uwp.UI.Controls
             ApplyInfoViewModel();
         }
 
-        private void ApplyInfoViewModel()
+        private void EnsureHosts()
         {
-            var vm = InfoViewModel;
-            if (UserInfoPanel != null)
+            if (_userInfoHost != null && _groupInfoHost != null)
             {
-                UserInfoPanel.InfoViewModel = vm != null && vm.IsUser ? vm : null;
-                UserInfoPanel.Visibility = vm != null && vm.IsUser ? Visibility.Visible : Visibility.Collapsed;
+                return;
             }
 
-            if (GroupInfoPanel != null)
+            // Avoid generated UserControl fields (XamlPreCompile omits them). Walk the body grid instead.
+            if (InfoBodyHost == null)
             {
-                GroupInfoPanel.InfoViewModel = vm != null && vm.IsGroup ? vm : null;
-                GroupInfoPanel.Visibility = vm != null && vm.IsGroup ? Visibility.Visible : Visibility.Collapsed;
+                return;
+            }
+
+            foreach (var child in InfoBodyHost.Children)
+            {
+                if (_userInfoHost == null)
+                {
+                    _userInfoHost = child as ChatDetailUserInfoControl;
+                }
+
+                if (_groupInfoHost == null)
+                {
+                    _groupInfoHost = child as ChatDetailGroupInfoControl;
+                }
+            }
+        }
+
+        private void ApplyInfoViewModel()
+        {
+            EnsureHosts();
+            var vm = InfoViewModel;
+
+            if (_userInfoHost != null)
+            {
+                _userInfoHost.InfoViewModel = vm != null && vm.IsUser ? vm : null;
+                _userInfoHost.Visibility = vm != null && vm.IsUser ? Visibility.Visible : Visibility.Collapsed;
+            }
+
+            if (_groupInfoHost != null)
+            {
+                _groupInfoHost.InfoViewModel = vm != null && vm.IsGroup ? vm : null;
+                _groupInfoHost.Visibility = vm != null && vm.IsGroup ? Visibility.Visible : Visibility.Collapsed;
             }
 
             if (vm == null)
             {
                 return;
+            }
+
+            if (AddContactButton != null)
+            {
+                bool canAdd = vm.CanAddToAddressBook;
+                AddContactButton.Visibility = canAdd ? Visibility.Visible : Visibility.Collapsed;
+                if (canAdd)
+                {
+                    string addLabel = vm.AddContactAppBarLabel ?? "Add\ncontact";
+                    if (AddContactButtonLabel != null)
+                    {
+                        AddContactButtonLabel.Text = addLabel;
+                    }
+
+                    ToolTipService.SetToolTip(
+                        AddContactButton,
+                        addLabel.Replace('\n', ' ').Replace("  ", " ").Trim());
+                    AddContactButton.IsEnabled = vm.AddContactCommand?.CanExecute(null) == true;
+                }
             }
 
             if (PinButton != null)
@@ -124,6 +174,15 @@ namespace Unison.Uwp.UI.Controls
             if (CloseCommand?.CanExecute(null) == true)
             {
                 CloseCommand.Execute(null);
+            }
+        }
+
+        private void AddContactButton_Click(object sender, RoutedEventArgs e)
+        {
+            var cmd = InfoViewModel?.AddContactCommand;
+            if (cmd?.CanExecute(null) == true)
+            {
+                cmd.Execute(null);
             }
         }
 

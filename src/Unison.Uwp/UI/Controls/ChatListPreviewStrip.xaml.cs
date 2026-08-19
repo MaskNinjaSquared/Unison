@@ -94,6 +94,20 @@ namespace Unison.Uwp.UI.Controls
 
 
 
+        public static readonly DependencyProperty MentionLookupProperty =
+
+            DependencyProperty.Register(
+
+                nameof(MentionLookup),
+
+                typeof(object),
+
+                typeof(ChatListPreviewStrip),
+
+                new PropertyMetadata(null, OnPreviewTextInputsChanged));
+
+
+
         public ChatListPreviewStrip()
 
         {
@@ -179,6 +193,18 @@ namespace Unison.Uwp.UI.Controls
             get { return GetValue(MentionedJidsProperty); }
 
             set { SetValue(MentionedJidsProperty, value); }
+
+        }
+
+
+
+        public object MentionLookup
+
+        {
+
+            get { return GetValue(MentionLookupProperty); }
+
+            set { SetValue(MentionLookupProperty, value); }
 
         }
 
@@ -302,7 +328,9 @@ namespace Unison.Uwp.UI.Controls
 
                 Text,
 
-                MentionedJids as IEnumerable<string>);
+                MentionedJids as IEnumerable<string>,
+
+                MentionLookup as IReadOnlyDictionary<string, string>);
 
         }
 

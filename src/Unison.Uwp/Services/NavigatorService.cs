@@ -26,6 +26,7 @@ namespace Unison.Uwp.Services
             new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
             {
                 { NavigationRoutes.Chats, typeof(UI.Views.ChatsView) },
+                { NavigationRoutes.Status, typeof(UI.Views.StatusView) },
                 { NavigationRoutes.Settings, typeof(UI.Views.SettingsView) },
                 { NavigationRoutes.Debug, typeof(UI.Views.DebugView) },
             };
@@ -146,6 +147,11 @@ namespace Unison.Uwp.Services
             if (content is UI.Views.DebugView)
             {
                 return NavigationRoutes.Debug;
+            }
+
+            if (content is UI.Views.StatusView)
+            {
+                return NavigationRoutes.Status;
             }
 
             if (content is UI.Views.ChatsView)

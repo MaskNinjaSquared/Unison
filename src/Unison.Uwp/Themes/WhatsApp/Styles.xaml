@@ -12,7 +12,10 @@
             <SolidColorBrush x:Key="WhatsAppBackgroundBrush" Color="#FF2C2C2C"/>
             <SolidColorBrush x:Key="ChatDetailBackgroundBrush" Color="#FF2C2C2C"/>
             <SolidColorBrush x:Key="ChatDetailWallpaperBackgroundBrush" Color="#FF2C2C2C"/>
+            <SolidColorBrush x:Key="ChatDetailDateSeparatorBackgroundBrush" Color="#FF2C2C2C"/>
+            <SolidColorBrush x:Key="ChatDetailDateSeparatorForegroundBrush" Color="#FFFFFFFF"/>
             <ImageBrush x:Key="WhatsAppTextureBrush" ImageSource="ms-appx:///Assets/Backgrounds/WhatsAppBackground.png" Stretch="None" Opacity="0.1"/>
+            <BitmapImage x:Key="ChatDetailImageDownloadPlaceholder" UriSource="ms-appx:///Assets/Media/wallpaper-placeholder-white.png"/>
             <SolidColorBrush x:Key="WhatsAppHeaderBrush" Color="#FF2C2C2C"/>
             <SolidColorBrush x:Key="WhatsAppSidebarBrush" Color="#FF202020"/>
             <SolidColorBrush x:Key="WhatsAppItemHoverBrush" Color="#FF3A3A3A"/>
@@ -92,6 +95,10 @@
             <SolidColorBrush x:Key="ChatDetailReactionChipReceivedBrush" Color="#FF363636"/>
             <SolidColorBrush x:Key="ChatDetailReactionChipReceivedBorderBrush" Color="#FF282828"/>
             <SolidColorBrush x:Key="ChatDetailReactionChipPointerOverBrush" Color="#FF3A3A3A"/>
+
+            <!-- Reactions dialog chips: fill lifted off the dialog surface, not the bubble colors. -->
+            <SolidColorBrush x:Key="ReactionsDialogChipBrush" Color="#FF3A3A3A"/>
+            <SolidColorBrush x:Key="ReactionsDialogChipBorderBrush" Color="#FF4A4A4A"/>
 
             <!-- Dark login / QR -->
             <SolidColorBrush x:Key="LoginPageBackgroundBrush" Color="#FF121212"/>
@@ -118,7 +125,10 @@
             <SolidColorBrush x:Key="WhatsAppBackgroundBrush" Color="#FF2C2C2C"/>
             <SolidColorBrush x:Key="ChatDetailBackgroundBrush" Color="#FF2C2C2C"/>
             <SolidColorBrush x:Key="ChatDetailWallpaperBackgroundBrush" Color="#FF2C2C2C"/>
+            <SolidColorBrush x:Key="ChatDetailDateSeparatorBackgroundBrush" Color="#FF2C2C2C"/>
+            <SolidColorBrush x:Key="ChatDetailDateSeparatorForegroundBrush" Color="#FFFFFFFF"/>
             <ImageBrush x:Key="WhatsAppTextureBrush" ImageSource="ms-appx:///Assets/Backgrounds/WhatsAppBackground.png" Stretch="None" Opacity="0.1"/>
+            <BitmapImage x:Key="ChatDetailImageDownloadPlaceholder" UriSource="ms-appx:///Assets/Media/wallpaper-placeholder-white.png"/>
             <SolidColorBrush x:Key="WhatsAppHeaderBrush" Color="#FF2C2C2C"/>
             <SolidColorBrush x:Key="WhatsAppSidebarBrush" Color="#FF202020"/>
             <SolidColorBrush x:Key="WhatsAppItemHoverBrush" Color="#FF3A3A3A"/>
@@ -199,6 +209,9 @@
             <SolidColorBrush x:Key="ChatDetailReactionChipReceivedBorderBrush" Color="#FF282828"/>
             <SolidColorBrush x:Key="ChatDetailReactionChipPointerOverBrush" Color="#FF3A3A3A"/>
 
+            <SolidColorBrush x:Key="ReactionsDialogChipBrush" Color="#FF3A3A3A"/>
+            <SolidColorBrush x:Key="ReactionsDialogChipBorderBrush" Color="#FF4A4A4A"/>
+
             <SolidColorBrush x:Key="LoginPageBackgroundBrush" Color="#FF121212"/>
             <SolidColorBrush x:Key="LoginHeaderBackgroundBrush" Color="#FF60D56A"/>
             <SolidColorBrush x:Key="LoginAccentBrush" Color="#FF1DAA61"/>
@@ -223,7 +236,10 @@
             <SolidColorBrush x:Key="WhatsAppBackgroundBrush" Color="#FFF0F2F5"/>
             <SolidColorBrush x:Key="ChatDetailBackgroundBrush" Color="#FFEFEAE2"/>
             <SolidColorBrush x:Key="ChatDetailWallpaperBackgroundBrush" Color="#FFEFEAE2"/>
+            <SolidColorBrush x:Key="ChatDetailDateSeparatorBackgroundBrush" Color="#FFEFEAE2"/>
+            <SolidColorBrush x:Key="ChatDetailDateSeparatorForegroundBrush" Color="#FF111B21"/>
             <ImageBrush x:Key="WhatsAppTextureBrush" ImageSource="ms-appx:///Assets/Backgrounds/WhatsAppBackground.png" Stretch="None" Opacity="0.06"/>
+            <BitmapImage x:Key="ChatDetailImageDownloadPlaceholder" UriSource="ms-appx:///Assets/Media/wallpaper-placeholder-black.png"/>
             <SolidColorBrush x:Key="WhatsAppHeaderBrush" Color="#FFF0F2F5"/>
             <SolidColorBrush x:Key="WhatsAppSidebarBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="WhatsAppItemHoverBrush" Color="#FFF5F6F6"/>
@@ -303,6 +319,10 @@
             <SolidColorBrush x:Key="ChatDetailReactionChipReceivedBrush" Color="#FF363636"/>
             <SolidColorBrush x:Key="ChatDetailReactionChipReceivedBorderBrush" Color="#FF282828"/>
             <SolidColorBrush x:Key="ChatDetailReactionChipPointerOverBrush" Color="#FF3A3A3A"/>
+
+            <!-- A white dialog cannot be lightened, so the chip reads as a raised grey panel. -->
+            <SolidColorBrush x:Key="ReactionsDialogChipBrush" Color="#FFF0F2F5"/>
+            <SolidColorBrush x:Key="ReactionsDialogChipBorderBrush" Color="#FFE1E4E8"/>
 
             <!-- Light login / QR (previous default login look) -->
             <SolidColorBrush x:Key="LoginPageBackgroundBrush" Color="#FFFFFFFF"/>

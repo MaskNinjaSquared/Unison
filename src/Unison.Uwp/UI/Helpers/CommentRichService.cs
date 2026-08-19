@@ -18,8 +18,8 @@ namespace Unison.Uwp.UI.Helpers
     public static class CommentRichService
     {
         private static readonly Regex MentionRegex = new Regex(
-            @"@(\d{5,20})\b",
-            RegexOptions.Compiled);
+            @"@((?:\d{5,24})(?:@(?:s\.whatsapp\.net|lid|hosted\.lid))?)",
+            RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         private static readonly SolidColorBrush DefaultMentionBrush =
             new SolidColorBrush(Color.FromArgb(0xFF, 0x25, 0xD3, 0x66));
@@ -37,6 +37,20 @@ namespace Unison.Uwp.UI.Helpers
                 typeof(object),
                 typeof(CommentRichService),
                 new PropertyMetadata(null, OnTextOrMentionsChanged));
+
+        public static readonly DependencyProperty MentionLookupProperty =
+            DependencyProperty.RegisterAttached(
+                "MentionLookup",
+                typeof(object),
+                typeof(CommentRichService),
+                new PropertyMetadata(null, OnTextOrMentionsChanged));
+
+        public static readonly DependencyProperty RefreshKeyProperty =
+            DependencyProperty.RegisterAttached(
+                "RefreshKey",
+                typeof(int),
+                typeof(CommentRichService),
+                new PropertyMetadata(0, OnTextOrMentionsChanged));
 
         /// <summary>
         /// Theme resource key for URL/mention link color (e.g. ChatDetailSentLinkBrush).
@@ -68,6 +82,26 @@ namespace Unison.Uwp.UI.Helpers
             return element.GetValue(MentionedJidsProperty);
         }
 
+        public static void SetMentionLookup(DependencyObject element, object value)
+        {
+            element.SetValue(MentionLookupProperty, value);
+        }
+
+        public static object GetMentionLookup(DependencyObject element)
+        {
+            return element.GetValue(MentionLookupProperty);
+        }
+
+        public static void SetRefreshKey(DependencyObject element, int value)
+        {
+            element.SetValue(RefreshKeyProperty, value);
+        }
+
+        public static int GetRefreshKey(DependencyObject element)
+        {
+            return (int)element.GetValue(RefreshKeyProperty);
+        }
+
         public static void SetLinkBrushKey(DependencyObject element, string value)
         {
             element.SetValue(LinkBrushKeyProperty, value);
@@ -86,14 +120,21 @@ namespace Unison.Uwp.UI.Helpers
                 return;
             }
 
-            Apply(block, GetText(block), GetMentionedJids(block) as IEnumerable<string>);
+            Apply(
+                block,
+                GetText(block),
+                GetMentionedJids(block) as IEnumerable<string>,
+                GetMentionLookup(block) as IReadOnlyDictionary<string, string>);
         }
 
         /// <summary>
         /// Resolves @digits mentions to display names for plain TextBlock previews
         /// (chat list strip). Does not build rich runs — layout stays reliable in list rows.
         /// </summary>
-        public static string FormatMentionsPlain(string text, IEnumerable<string> mentionedJids = null)
+        public static string FormatMentionsPlain(
+            string text,
+            IEnumerable<string> mentionedJids = null,
+            IReadOnlyDictionary<string, string> mentionLookup = null)
         {
             if (string.IsNullOrEmpty(text))
             {
@@ -109,8 +150,8 @@ namespace Unison.Uwp.UI.Helpers
             {
             }
 
-            var mentionLookup = BuildMentionLookup(mentionedJids, whatsApp);
-            if ((mentionLookup == null || mentionLookup.Count == 0) && whatsApp == null)
+            IReadOnlyDictionary<string, string> lookup = BindLookup(mentionLookup, mentionedJids, whatsApp);
+            if ((lookup == null || lookup.Count == 0) && whatsApp == null)
             {
                 return text;
             }
@@ -131,24 +172,13 @@ namespace Unison.Uwp.UI.Helpers
                     sb.Append(text, index, m.Index - index);
                 }
 
-                string digits = m.Groups[1].Value;
-                string displayName = null;
-                if (mentionLookup != null)
-                {
-                    mentionLookup.TryGetValue(digits, out displayName);
-                }
-
-                if (string.IsNullOrWhiteSpace(displayName) && whatsApp != null)
-                {
-                    displayName = SafeResolveName(whatsApp, digits + "@s.whatsapp.net");
-                }
-
-                if (!string.IsNullOrWhiteSpace(displayName) &&
-                    displayName.IndexOf('@') < 0 &&
-                    !string.Equals(displayName, digits, StringComparison.Ordinal))
+                string token = m.Groups[1].Value;
+                string digits = MentionLookupBuilder.ExtractUserDigits(token);
+                string displayName = ResolveMentionDisplayName(digits, lookup, whatsApp);
+                if (MentionLookupBuilder.IsUsableName(displayName, digits))
                 {
                     sb.Append('@');
-                    sb.Append(displayName);
+                    sb.Append(MentionLookupBuilder.CleanLabel(displayName));
                 }
                 else
                 {
@@ -166,7 +196,11 @@ namespace Unison.Uwp.UI.Helpers
             return sb.ToString();
         }
 
-        public static void Apply(RichTextBlock block, string text, IEnumerable<string> mentionedJids = null)
+        public static void Apply(
+            RichTextBlock block,
+            string text,
+            IEnumerable<string> mentionedJids = null,
+            IReadOnlyDictionary<string, string> mentionLookup = null)
         {
             if (block == null)
             {
@@ -194,7 +228,7 @@ namespace Unison.Uwp.UI.Helpers
             {
             }
 
-            var mentionLookup = BuildMentionLookup(mentionedJids, whatsApp);
+            IReadOnlyDictionary<string, string> lookup = BindLookup(mentionLookup, mentionedJids, whatsApp);
             var segments = MessageLinkParser.Parse(text);
             for (int i = 0; i < segments.Count; i++)
             {
@@ -204,7 +238,7 @@ namespace Unison.Uwp.UI.Helpers
                     Uri uri;
                     if (!Uri.TryCreate(segment.NavigateUrl, UriKind.Absolute, out uri))
                     {
-                        AppendPlainWithMentions(paragraph, segment.Text, mentionLookup, whatsApp, mentionBrush);
+                        AppendPlainWithMentions(paragraph, segment.Text, lookup, whatsApp, mentionBrush);
                         continue;
                     }
 
@@ -219,7 +253,7 @@ namespace Unison.Uwp.UI.Helpers
                 }
                 else
                 {
-                    AppendPlainWithMentions(paragraph, segment.Text, mentionLookup, whatsApp, mentionBrush);
+                    AppendPlainWithMentions(paragraph, segment.Text, lookup, whatsApp, mentionBrush);
                 }
             }
 
@@ -279,43 +313,83 @@ namespace Unison.Uwp.UI.Helpers
             return ResolveThemeBrush(mentionKey, DefaultMentionBrush);
         }
 
-        private static Dictionary<string, string> BuildMentionLookup(
+        private static IReadOnlyDictionary<string, string> BindLookup(
+            IReadOnlyDictionary<string, string> rosterLookup,
             IEnumerable<string> mentionedJids,
             IWhatsAppService whatsApp)
         {
-            var map = new Dictionary<string, string>(StringComparer.Ordinal);
-            if (mentionedJids == null || whatsApp == null)
+            IReadOnlyDictionary<string, string> roster = rosterLookup ?? MentionLookupBuilder.Empty;
+            if (mentionedJids == null)
             {
-                return map;
+                return roster;
             }
 
-            foreach (string jid in mentionedJids)
+            bool any = false;
+            foreach (string unused in mentionedJids)
             {
-                if (string.IsNullOrWhiteSpace(jid))
-                {
-                    continue;
-                }
-
-                string digits = ExtractUserDigits(jid);
-                if (string.IsNullOrEmpty(digits) || map.ContainsKey(digits))
-                {
-                    continue;
-                }
-
-                string name = SafeResolveName(whatsApp, jid);
-                if (!string.IsNullOrWhiteSpace(name))
-                {
-                    map[digits] = name;
-                }
+                any = true;
+                break;
             }
 
-            return map;
+            if (!any)
+            {
+                return roster;
+            }
+
+            Func<string, string> canonical = null;
+            if (whatsApp != null)
+            {
+                canonical = jid =>
+                {
+                    try
+                    {
+                        return whatsApp.GetCanonicalJid(jid);
+                    }
+                    catch
+                    {
+                        return null;
+                    }
+                };
+            }
+
+            return MentionLookupBuilder.OverlayMentionedJids(roster, mentionedJids, canonical);
+        }
+
+        private static string ResolveMentionDisplayName(
+            string digits,
+            IReadOnlyDictionary<string, string> mentionLookup,
+            IWhatsAppService whatsApp)
+        {
+            string fromLookup = MentionLookupBuilder.FindName(mentionLookup, digits);
+            if (MentionLookupBuilder.IsUsableName(fromLookup, digits))
+            {
+                return MentionLookupBuilder.CleanLabel(fromLookup);
+            }
+
+            if (whatsApp == null || string.IsNullOrEmpty(digits))
+            {
+                return null;
+            }
+
+            string fromPn = SafeResolveName(whatsApp, digits + "@s.whatsapp.net");
+            if (MentionLookupBuilder.IsUsableName(fromPn, digits))
+            {
+                return MentionLookupBuilder.CleanLabel(fromPn);
+            }
+
+            string fromLid = SafeResolveName(whatsApp, digits + "@lid");
+            if (MentionLookupBuilder.IsUsableName(fromLid, digits))
+            {
+                return MentionLookupBuilder.CleanLabel(fromLid);
+            }
+
+            return null;
         }
 
         private static void AppendPlainWithMentions(
             Paragraph paragraph,
             string text,
-            Dictionary<string, string> mentionLookup,
+            IReadOnlyDictionary<string, string> mentionLookup,
             IWhatsAppService whatsApp,
             Brush mentionBrush)
         {
@@ -336,25 +410,14 @@ namespace Unison.Uwp.UI.Helpers
                     AppendPlainWithBreaks(paragraph, normalized.Substring(index, m.Index - index));
                 }
 
-                string digits = m.Groups[1].Value;
-                string displayName = null;
-                if (mentionLookup != null)
-                {
-                    mentionLookup.TryGetValue(digits, out displayName);
-                }
-
-                if (string.IsNullOrWhiteSpace(displayName) && whatsApp != null)
-                {
-                    displayName = SafeResolveName(whatsApp, digits + "@s.whatsapp.net");
-                }
-
-                if (!string.IsNullOrWhiteSpace(displayName) &&
-                    displayName.IndexOf('@') < 0 &&
-                    !string.Equals(displayName, digits, StringComparison.Ordinal))
+                string token = m.Groups[1].Value;
+                string digits = MentionLookupBuilder.ExtractUserDigits(token);
+                string displayName = ResolveMentionDisplayName(digits, mentionLookup, whatsApp);
+                if (MentionLookupBuilder.IsUsableName(displayName, digits))
                 {
                     paragraph.Inlines.Add(new Run
                     {
-                        Text = "@" + displayName,
+                        Text = "@" + MentionLookupBuilder.CleanLabel(displayName),
                         FontWeight = FontWeights.SemiBold,
                         Foreground = brush
                     });
@@ -383,31 +446,6 @@ namespace Unison.Uwp.UI.Helpers
             {
                 return null;
             }
-        }
-
-        private static string ExtractUserDigits(string jid)
-        {
-            if (string.IsNullOrEmpty(jid))
-            {
-                return null;
-            }
-
-            int at = jid.IndexOf('@');
-            string user = at > 0 ? jid.Substring(0, at) : jid;
-            int colon = user.IndexOf(':');
-            if (colon > 0)
-            {
-                user = user.Substring(0, colon);
-            }
-
-            // Keep only leading digits for PN-style JIDs.
-            int end = 0;
-            while (end < user.Length && char.IsDigit(user[end]))
-            {
-                end++;
-            }
-
-            return end > 0 ? user.Substring(0, end) : null;
         }
 
         private static void AppendPlainWithBreaks(Paragraph paragraph, string text)

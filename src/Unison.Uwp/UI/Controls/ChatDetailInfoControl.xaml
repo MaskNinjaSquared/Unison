@@ -179,6 +179,32 @@
                         HorizontalAlignment="Right"
                         VerticalAlignment="Stretch"
                         Margin="0">
+                <Button x:Name="AddContactButton"
+                        Style="{StaticResource ChatDetailInfoAppBarButtonStyle}"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Stretch"
+                        Visibility="Collapsed"
+                        Click="AddContactButton_Click"
+                        ToolTipService.ToolTip="Add contact">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <FontIcon Glyph="&#xE8FA;"
+                                  FontFamily="{StaticResource IconFont}"
+                                  FontSize="18"
+                                  Foreground="White"
+                                  HorizontalAlignment="Center"/>
+                        <TextBlock x:Name="AddContactButtonLabel"
+                                   Text="Add&#x0a;contact"
+                                   FontSize="10"
+                                   FontFamily="{StaticResource MainFont}"
+                                   Foreground="White"
+                                   Margin="0,2,0,0"
+                                   TextAlignment="Center"
+                                   TextWrapping="Wrap"
+                                   TextLineBounds="Tight"
+                                   MaxWidth="68"
+                                   MaxLines="2"/>
+                    </StackPanel>
+                </Button>
                 <Button x:Name="ChatPinButton"
                         Style="{StaticResource ChatDetailInfoAppBarButtonStyle}"
                         HorizontalAlignment="Right"

@@ -12,6 +12,7 @@ namespace Unison.Core.Constants
 
         // Shell content frame (inside AppShell SplitView)
         public const string Chats = "chats";
+        public const string Status = "status";
         public const string Settings = "settings";
         public const string Debug = "debug";
     }

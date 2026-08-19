@@ -12,35 +12,66 @@ namespace Unison.Core.Models
         public string Name { get; set; }
         public string AvatarUrl { get; set; }
         public string Phone { get; set; }
+        public PersonSource Source { get; set; }
         public DateTime UpdatedAtUtc { get; set; }
 
         /// <summary>
-        /// True when any provided field differs from <paramref name="existing"/>.
-        /// Null/empty incoming values are treated as "leave unchanged" (do not force clear).
+        /// Address-book names are sticky: a lower <see cref="PersonSource"/> cannot replace them.
+        /// Null/empty incoming values are "leave unchanged". Avatar is never owned by the agenda.
         /// </summary>
-        public static bool RequiresUpdate(Person existing, string name, string avatarUrl, string phone)
+        public static bool RequiresUpdate(
+            Person existing,
+            string name,
+            string avatarUrl,
+            string phone,
+            PersonSource source)
         {
             if (existing == null)
             {
                 return true;
             }
 
-            if (HasValue(name) && !string.Equals(Normalize(existing.Name), Normalize(name), StringComparison.Ordinal))
+            if (source > existing.Source)
             {
                 return true;
             }
 
-            if (HasValue(avatarUrl) && !string.Equals(Normalize(existing.AvatarUrl), Normalize(avatarUrl), StringComparison.Ordinal))
+            if (CanWriteName(existing.Source, source) &&
+                HasValue(name) &&
+                !string.Equals(Normalize(existing.Name), Normalize(name), StringComparison.Ordinal))
             {
                 return true;
             }
 
-            if (HasValue(phone) && !string.Equals(Normalize(existing.Phone), Normalize(phone), StringComparison.Ordinal))
+            if (HasValue(avatarUrl) &&
+                !string.Equals(Normalize(existing.AvatarUrl), Normalize(avatarUrl), StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            if (HasValue(phone) &&
+                !string.Equals(Normalize(existing.Phone), Normalize(phone), StringComparison.Ordinal))
             {
                 return true;
             }
 
             return false;
+        }
+
+        /// <summary>True when incoming may replace <see cref="Name"/>.</summary>
+        public static bool CanWriteName(PersonSource existing, PersonSource incoming)
+        {
+            if (incoming == PersonSource.AddressBook)
+            {
+                return true;
+            }
+
+            return existing < PersonSource.AddressBook;
+        }
+
+        public static PersonSource Promote(PersonSource existing, PersonSource incoming)
+        {
+            return incoming > existing ? incoming : existing;
         }
 
         private static bool HasValue(string value)

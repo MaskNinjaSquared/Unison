@@ -20,6 +20,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Diagnostics;
 using Unison.Core.Factories;
+using Unison.Core.Helpers;
 using Unison.Core.Mappers;
 using Unison.Core.State;
 using Unison.Core.ViewModels;
@@ -37,6 +38,7 @@ using Unison.Uwp.Services.WhatsApp.Diagnostics;
 using Unison.Uwp.Services.WhatsApp.History;
 using Unison.Uwp.Services.WhatsApp.Messages;
 using Unison.Uwp.Services.WhatsApp.Profiles;
+using Unison.Uwp.Services.WhatsApp.Status;
 
 namespace Unison.Uwp
 {
@@ -208,8 +210,19 @@ namespace Unison.Uwp
             services.AddSingleton<IMediaProcessor, MediaProcessorAdapter>();
             services.AddSingleton<IAuthPersistence>(_ => new AuthStore());
             services.AddSingleton<IKeyStore>(_ => new FileKeyStore());
+            services.AddSingleton<IMessageStore, MessageStore>();
+            services.AddSingleton<IPersonStore, PersonStore>();
+            services.AddSingleton<IChatStore, ChatStore>();
+            services.AddSingleton<IHistoryMigrationStore, HistoryMigrationStore>();
+            services.AddSingleton<IHistoryChatPreviewStore, HistoryChatPreviewStore>();
+            services.AddSingleton<IHistoryMessageStore, HistoryMessageStore>();
+            services.AddSingleton<IHistoryStatusStore, HistoryStatusStore>();
+
             services.AddSingleton<IWhatsAppService>(
-                sp => WhatsAppService.Create(sp.GetRequiredService<ChatStateStore>()));
+                sp => WhatsAppService.Create(
+                    sp.GetRequiredService<ChatStateStore>(),
+                    sp.GetRequiredService<IHistoryMessageStore>(),
+                    sp.GetRequiredService<IHistoryChatPreviewStore>()));
 #if DEBUG
             // Dev-only tooling: file-watch based debug send. Never attached/started in Release.
             services.AddSingleton<IDebugSendService, DebugSendService>();
@@ -228,17 +241,24 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IWhatsAppSessionProvider>(),
                 sp.GetRequiredService<IWhatsAppService>(),
                 sp.GetRequiredService<IMessageStore>(),
-                sp.GetRequiredService<ILocalSettings>()));
+                sp.GetRequiredService<ILocalSettings>(),
+                sp.GetRequiredService<IHistoryChatPreviewStore>(),
+                sp.GetRequiredService<IHistoryMigrationStore>(),
+                sp.GetRequiredService<IHistoryMessageStore>(),
+                sp.GetRequiredService<IHistoryStatusStore>()));
             services.AddSingleton<IHistoryService>(sp => sp.GetRequiredService<HistoryFacade>());
 
+            services.AddSingleton(sp => new StatusFacade(
+                sp.GetRequiredService<IHistoryStatusStore>(),
+                sp.GetRequiredService<IPersonStore>(),
+                sp.GetRequiredService<IMessageService>()));
+            services.AddSingleton<IStatusService>(sp => sp.GetRequiredService<StatusFacade>());
+
+            services.AddSingleton<IChatAuthorProjection, ChatAuthorProjection>();
             services.AddSingleton<IMessageService, MessageFacade>();
-            services.AddSingleton<IChatItemVmFactory, ChatItemVmFactory>();
             services.AddSingleton<IChatMessageVmFactory, ChatMessageVmFactory>();
             services.AddSingleton<IChatDetailInfoViewModelFactory, ChatDetailInfoViewModelFactory>();
             services.AddSingleton<INewChatDialogViewModelFactory, NewChatDialogViewModelFactory>();
-            services.AddSingleton<IMessageStore, MessageStore>();
-            services.AddSingleton<IPersonStore, PersonStore>();
-            services.AddSingleton<IChatStore, ChatStore>();
             services.AddSingleton<ILocalContactsService, LocalContactsService>();
 
             // The LID mapping store is registered either way: it is the eventual replacement for
@@ -251,7 +271,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ILocalContactsService>(),
                 sp.GetRequiredService<IPersonStore>(),
                 sp.GetRequiredService<IWhatsAppService>(),
-                sp.GetRequiredService<LidMappingStore>()));
+                sp.GetRequiredService<LidMappingStore>(),
+                sp.GetRequiredService<ILocalSettings>()));
             services.AddSingleton<IChatService>(sp => new ChatFacade(
                 sp.GetRequiredService<IWhatsAppSessionProvider>(),
                 sp.GetRequiredService<IWhatsAppService>(),
@@ -267,6 +288,9 @@ namespace Unison.Uwp
             });
             services.AddSingleton<IRuntimeDiagnostics>(_ => RuntimeDiagnosticsService.Instance);
             services.AddSingleton<ISocketBrokerService>(_ => SocketBrokerCoordinator.Instance);
+            services.AddSingleton<IBackgroundAccessService, BackgroundAccessService>();
+            services.AddSingleton<IAppLifecycle, AppLifecycleService>();
+            services.AddSingleton<IBackgroundAccessPrompt, BackgroundAccessPrompt>();
             services.AddSingleton<IUriLauncher, UriLauncherService>();
             services.AddSingleton<IFilePicker, FilePickerService>();
             services.AddSingleton<IShareService, ShareService>();
@@ -279,7 +303,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ILocalSettings>(),
                 sp.GetRequiredService<INotificationService>(),
                 sp.GetRequiredService<IStringResources>(),
-                sp.GetRequiredService<IWhatsAppSessionProvider>()));
+                sp.GetRequiredService<IWhatsAppSessionProvider>(),
+                sp.GetRequiredService<ILocalContactsService>()));
             services.AddSingleton<ISystemInfoProvider, SystemInfoProvider>();
             services.AddSingleton<IStatusBarService, StatusBarService>();
             services.AddSingleton<ILocationKeepAliveService, LocationKeepAliveService>();
@@ -299,8 +324,11 @@ namespace Unison.Uwp
             services.AddSingleton<ShellViewModel>();
             services.AddTransient<ChatListViewModel>();
             services.AddTransient<ChatDetailViewModel>();
+            services.AddTransient<StatusListViewModel>();
+            services.AddTransient<StatusDetailViewModel>();
             services.AddTransient<DebugViewModel>();
             services.AddTransient<NewChatDialogViewModel>();
+            services.AddTransient<MessageReactionsViewModel>();
             services.AddTransient<SettingsViewModel>();
 
             Services = services.BuildServiceProvider(validateScopes: true);
@@ -308,6 +336,7 @@ namespace Unison.Uwp
             var whatsAppImpl = (WhatsAppService)whatsApp;
             whatsAppImpl.AttachSystemInfoProvider(Services.GetRequiredService<ISystemInfoProvider>());
             whatsAppImpl.AttachMessageService(Services.GetRequiredService<IMessageService>());
+            whatsAppImpl.AttachStatusService(Services.GetRequiredService<IStatusService>());
             whatsAppImpl.AttachContactService(Services.GetRequiredService<IContactService>());
             whatsAppImpl.AttachConnectionService(Services.GetRequiredService<IConnectionService>());
             Services.GetRequiredService<IConnectionService>().AttachWhatsAppService(whatsApp);
@@ -315,8 +344,11 @@ namespace Unison.Uwp
             // what they were around to hear. Build them now rather than when a screen first asks.
             Services.GetRequiredService<IProfileService>();
             Services.GetRequiredService<IHistoryService>();
+            Services.GetRequiredService<IStatusService>();
             whatsAppImpl.AttachPersonStore(Services.GetRequiredService<IPersonStore>());
             whatsAppImpl.AttachChatStore(Services.GetRequiredService<IChatStore>());
+            // Rewrites group author strips as names resolve, list open or not.
+            Services.GetRequiredService<IChatAuthorProjection>().Start();
 #if DEBUG
             whatsAppImpl.AttachDebugSendService(Services.GetRequiredService<IDebugSendService>());
 #endif

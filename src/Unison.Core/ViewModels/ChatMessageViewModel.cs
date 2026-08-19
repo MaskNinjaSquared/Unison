@@ -52,8 +52,8 @@ namespace Unison.Core.ViewModels
             _diagnostics = diagnostics;
 
             ShowReactionsCommand = new RelayCommand(
-                () => { /* stub: open reactors list later */ },
-                () => HasReactions);
+                () => _ = ShowReactionsAsync(),
+                () => HasReactions && _dialogs != null);
 
             ToggleExpandCommand = new RelayCommand(
                 () => IsExpanded = !IsExpanded,
@@ -93,6 +93,15 @@ namespace Unison.Core.ViewModels
 
             Model.PropertyChanged += OnModelPropertyChanged;
             SyncAudioPlaybackStatusFromModel();
+        }
+
+        /// <summary>
+        /// Drops the model subscription so cleared/trimmed timeline rows can be GC'd.
+        /// Call before removing from any collection that owns this bubble.
+        /// </summary>
+        public void Detach()
+        {
+            Model.PropertyChanged -= OnModelPropertyChanged;
         }
 
         /// <summary>
@@ -675,6 +684,30 @@ namespace Unison.Core.ViewModels
 
         public System.Collections.Generic.IList<string> MentionedJids => Model.MentionedJids;
 
+        private System.Collections.Generic.IReadOnlyDictionary<string, string> _mentionLookup;
+        /// <summary>Digit → name map from the chat roster for @mention resolution.</summary>
+        public System.Collections.Generic.IReadOnlyDictionary<string, string> MentionLookup => _mentionLookup;
+
+        /// <summary>Bumped when the lookup is replaced so the bubble re-parses mentions.</summary>
+        public int MentionRefreshKey { get; private set; }
+
+        public void AttachMentionLookup(System.Collections.Generic.IReadOnlyDictionary<string, string> lookup)
+        {
+            _mentionLookup = lookup;
+        }
+
+        public void RefreshMentions(System.Collections.Generic.IReadOnlyDictionary<string, string> lookup)
+        {
+            bool changed = !object.ReferenceEquals(_mentionLookup, lookup);
+            _mentionLookup = lookup;
+            if (changed)
+            {
+                Raise(nameof(MentionLookup));
+                MentionRefreshKey++;
+                Raise(nameof(MentionRefreshKey));
+            }
+        }
+
         private bool _isImageDownloading;
         public bool IsImageDownloading
         {
@@ -877,6 +910,18 @@ namespace Unison.Core.ViewModels
         }
 
         public bool ShowTail => Model.ShowTail;
+
+        public bool IsFirstOfDay
+        {
+            get => Model.IsFirstOfDay;
+            set => Model.IsFirstOfDay = value;
+        }
+
+        public string DateSeparatorText
+        {
+            get => Model.DateSeparatorText;
+            set => Model.DateSeparatorText = value;
+        }
 
         public bool ShowGroupSenderName
         {

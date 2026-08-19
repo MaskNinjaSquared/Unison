@@ -9,6 +9,14 @@
         <Setter Property="MinWidth" Value="0"/>
         <Setter Property="Margin" Value="0"/>
     </Style>
+
+    <!-- Timeline date chip (Hoje / Ontem / date). Foreground contrasts wallpaper accent fill. -->
+    <Style x:Key="ChatDetailDateSeparatorTextStyle" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{ThemeResource ChatDetailDateSeparatorForegroundBrush}"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="FontFamily" Value="{StaticResource MainFont}"/>
+    </Style>
     
     <!-- Read-more link under collapsed message body (no underline chrome). -->
     <Style x:Key="ChatDetailReadMoreHyperlinkButtonStyle" TargetType="HyperlinkButton">

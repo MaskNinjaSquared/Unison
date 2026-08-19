@@ -20,7 +20,8 @@
            HorizontalAlignment="Stretch"
            VerticalAlignment="Stretch"
            HorizontalContentAlignment="Stretch"
-           VerticalContentAlignment="Stretch">
+           VerticalContentAlignment="Stretch"
+           SelectionChanged="InfoPivot_SelectionChanged">
         <Pivot.Resources>
             <Style TargetType="PivotItem" BasedOn="{StaticResource ChatDetailInfoPivotItemStyle}"/>
             <Style TargetType="PivotHeaderItem" BasedOn="{StaticResource ChatDetailInfoPivotHeaderItemStyle}"/>
@@ -56,6 +57,13 @@
                     <StackPanel x:Name="PhoneSection" Margin="0,20,0,0" HorizontalAlignment="Stretch">
                         <TextBlock x:Name="PhoneLabel" Style="{StaticResource ChatDetailInfoSectionLabelStyle}" Text="PHONE"/>
                         <TextBlock x:Name="PhoneValue" Style="{StaticResource ChatDetailInfoSectionValueStyle}"/>
+                        <HyperlinkButton x:Name="AddContactButton"
+                                         Margin="0,8,0,0"
+                                         Padding="0"
+                                         FontFamily="{StaticResource MainFont}"
+                                         FontSize="16"
+                                         Foreground="White"
+                                         Visibility="Collapsed"/>
                     </StackPanel>
                     <TextBlock x:Name="StatusLabel" Margin="0,20,0,0" Style="{StaticResource ChatDetailInfoSectionLabelStyle}" Text="STATUS"/>
                     <TextBlock x:Name="StatusValue" Style="{StaticResource ChatDetailInfoSectionValueStyle}"/>

@@ -226,12 +226,13 @@ namespace Unison.Uwp.UI.Views
                 _shell.ClearPendingOpenChatJid();
                 ChatListPart?.HighlightChatQuiet(chat);
 
-                await ChatDetailPart.SetActiveChatAsync(chat);
+                await ChatDetailPart.PrepareActiveChatAsync(chat);
                 if (ChatDetailPart.HasActiveChat)
                 {
                     _shell.SelectChat(chat);
                     ApplyChatPaneState();
                     _shell.ReportActiveChat(true);
+                    await ChatDetailPart.CompleteActiveChatLoadAsync();
                 }
                 else
                 {
@@ -533,19 +534,20 @@ namespace Unison.Uwp.UI.Views
                 if (IsSameActiveConversation(selected) && ChatDetailPart.HasActiveChat)
                 {
                     // Keep shell PendingChat on the live list instance; detail rebinds without reload.
-                    await ChatDetailPart.SetActiveChatAsync(selected);
+                    await ChatDetailPart.PrepareActiveChatAsync(selected);
                     _shell?.SelectChat(selected);
                     _shell?.ReportActiveChat(true);
                     return;
                 }
 
-                await ChatDetailPart.SetActiveChatAsync(selected);
+                await ChatDetailPart.PrepareActiveChatAsync(selected);
                 bool opened = ChatDetailPart.HasActiveChat && IsSameActiveConversation(selected);
                 if (opened)
                 {
                     _shell?.SelectChat(selected);
                     _shell?.ReportActiveChat(true);
                     ApplyChatPaneState();
+                    await ChatDetailPart.CompleteActiveChatLoadAsync();
                 }
                 else if (ChatDetailPart.HasActiveChat)
                 {

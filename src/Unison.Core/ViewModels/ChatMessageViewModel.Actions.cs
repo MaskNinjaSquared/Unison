@@ -11,6 +11,24 @@ namespace Unison.Core.ViewModels
         /// <summary>Raised after a successful pin/unpin so the chat host can refresh chrome.</summary>
         public event EventHandler PinnedChanged;
 
+        public async Task ShowReactionsAsync()
+        {
+            if (_dialogs == null || !HasReactions)
+            {
+                return;
+            }
+
+            try
+            {
+                await _dialogs.ShowReactionsDialogAsync(this);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[ChatMessageViewModel] ShowReactionsAsync: " + ex.Message);
+            }
+        }
+
         public async Task<string> EnsureAudioReadyAsync(bool showErrorDialog = false)
         {
             if (!Model.IsAudio || _messages == null)

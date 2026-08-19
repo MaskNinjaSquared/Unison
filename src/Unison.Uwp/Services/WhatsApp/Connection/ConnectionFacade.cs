@@ -22,6 +22,7 @@ namespace Unison.Uwp.Services.WhatsApp.Connection
         private readonly INotificationService _notificationService;
         private readonly IStringResources _strings;
         private readonly IWhatsAppSessionProvider _sessions;
+        private readonly ILocalContactsService _localContacts;
         private IWhatsAppService _whatsApp;
         private int _handlingRelink;
 
@@ -29,12 +30,14 @@ namespace Unison.Uwp.Services.WhatsApp.Connection
             ILocalSettings localSettings,
             INotificationService notificationService,
             IStringResources strings,
-            IWhatsAppSessionProvider sessions)
+            IWhatsAppSessionProvider sessions,
+            ILocalContactsService localContacts)
         {
             _localSettings = localSettings ?? throw new ArgumentNullException(nameof(localSettings));
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
             _strings = strings ?? throw new ArgumentNullException(nameof(strings));
             _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
+            _localContacts = localContacts;
         }
 
         public event EventHandler<ConnectionEndedEventArgs> ConnectionEnded;
@@ -140,6 +143,17 @@ namespace Unison.Uwp.Services.WhatsApp.Connection
 
             await whatsApp.NotifyServerLogoutAsync(reason).ConfigureAwait(false);
             await whatsApp.ClearSessionAsync().ConfigureAwait(false);
+            if (_localContacts != null)
+            {
+                try
+                {
+                    await _localContacts.ClearPublishedAppContactsAsync().ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[ConnectionFacade] Clearing Windows People list failed: " + ex.Message);
+                }
+            }
         }
 
         private void EvaluateAndMaybeUnlink(DisconnectReason reason, string code, string trigger)
@@ -390,6 +404,7 @@ namespace Unison.Uwp.Services.WhatsApp.Connection
 
         private void Client_OnConnectionUpdate(object sender, string status)
         {
+            Debug.WriteLine("[ConnectionFacade] StatusChanged → " + (status ?? "<null>"));
             Raise(() => StatusChanged?.Invoke(this, status), "StatusChanged");
         }
 

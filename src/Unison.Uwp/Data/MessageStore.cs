@@ -1074,22 +1074,6 @@ namespace Unison.Uwp.Data
             }
         }
 
-        public async Task<List<ChatItem>> LoadChatsBackupAsync()
-        {
-            if (!_initialized) await InitializeAsync();
-
-            try
-            {
-                var backupChats = await TryReadChatsFromFileAsync(CHATS_BACKUP_FILE, "backup-explicit");
-                return backupChats ?? new List<ChatItem>();
-            }
-            catch (Exception ex)
-            {
-                WhatsAppService.Log($"[MessageStore] Failed to load backup chats explicitly: {ex.GetType().Name}: {ex.Message}");
-                return new List<ChatItem>();
-            }
-        }
-
         public async Task<List<ChatItem>> RecoverChatsFromMessageFilesAsync()
         {
             if (!_initialized) await InitializeAsync();

@@ -17,6 +17,7 @@ using System.Threading.Tasks;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
+using Unison.Core.Models;
 
 namespace Unison.Uwp.Services.WhatsApp.Contacts
 {
@@ -37,19 +38,22 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         }
 
         /// <summary>
-        /// Maps saved contact names onto the given direct chats and returns jid to display name.
-        /// Also records what it learned in the person store.
+        /// Maps saved contact names onto the given JIDs and returns jid to display name.
+        /// Updates Person.Name only (never the avatar) and promotes Source to AddressBook.
         /// </summary>
         public async Task<Dictionary<string, string>> SyncAsync(
             IEnumerable<string> directChatJids,
             CancellationToken cancellationToken = default(CancellationToken))
         {
-            var overlay = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            if (directChatJids == null)
-            {
-                return overlay;
-            }
+            return await SyncAsync(directChatJids, extraPhones: null, cancellationToken).ConfigureAwait(false);
+        }
 
+        public async Task<Dictionary<string, string>> SyncAsync(
+            IEnumerable<string> jids,
+            IReadOnlyDictionary<string, string> extraPhones,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            var overlay = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             cancellationToken.ThrowIfCancellationRequested();
 
             var phoneLookup = await _localContacts.LoadPhoneContactNamesAsync().ConfigureAwait(false);
@@ -61,18 +65,58 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
             await _personStore.InitializeAsync().ConfigureAwait(false);
 
-            int personWrites = 0;
-            foreach (string rawJid in directChatJids.Where(j => !string.IsNullOrWhiteSpace(j)))
+            var candidates = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (jids != null)
             {
-                cancellationToken.ThrowIfCancellationRequested();
+                foreach (string rawJid in jids)
+                {
+                    AddCandidate(candidates, rawJid, extraPhones);
+                }
+            }
 
-                string jid = JidHelper.Normalize(rawJid);
+            IReadOnlyList<Person> stored;
+            try
+            {
+                stored = await _personStore.ListWithPhoneAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[AddressBookOverlay] ListWithPhone failed: " + ex.Message);
+                stored = Array.Empty<Person>();
+            }
+
+            foreach (var person in stored)
+            {
+                if (person == null || string.IsNullOrWhiteSpace(person.Jid))
+                {
+                    continue;
+                }
+
+                string jid = JidHelper.Normalize(person.Jid);
                 if (string.IsNullOrEmpty(jid) || JidHelper.IsGroupJid(jid))
                 {
                     continue;
                 }
 
-                string digits = JidHelper.TryPhoneFromJid(jid);
+                if (!candidates.ContainsKey(jid) || string.IsNullOrEmpty(candidates[jid]))
+                {
+                    candidates[jid] = person.Phone;
+                }
+            }
+
+            int personWrites = 0;
+            var seenPhones = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var pair in candidates)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                string jid = pair.Key;
+                string digits = PhoneNumberHelper.NormalizePhoneDigits(pair.Value);
+                if (string.IsNullOrEmpty(digits))
+                {
+                    digits = JidHelper.TryPhoneFromJid(jid);
+                }
+
                 if (string.IsNullOrEmpty(digits))
                 {
                     continue;
@@ -85,17 +129,46 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 }
 
                 overlay[jid] = display;
+                if (await TryUpsertAddressBookNameAsync(jid, display, digits).ConfigureAwait(false))
+                {
+                    personWrites++;
+                }
 
+                if (!seenPhones.Add(digits))
+                {
+                    continue;
+                }
+
+                IReadOnlyList<Person> samePhone;
                 try
                 {
-                    if (await _personStore.UpsertIfChangedAsync(jid, display, null, digits).ConfigureAwait(false))
-                    {
-                        personWrites++;
-                    }
+                    samePhone = await _personStore.FindByPhoneAsync(digits).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine("[AddressBookOverlay] Person upsert failed for " + jid + ": " + ex.Message);
+                    Debug.WriteLine("[AddressBookOverlay] FindByPhone failed: " + ex.Message);
+                    continue;
+                }
+
+                foreach (var other in samePhone)
+                {
+                    if (other == null || string.IsNullOrWhiteSpace(other.Jid))
+                    {
+                        continue;
+                    }
+
+                    string otherJid = JidHelper.Normalize(other.Jid);
+                    if (string.IsNullOrEmpty(otherJid) ||
+                        string.Equals(otherJid, jid, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    overlay[otherJid] = display;
+                    if (await TryUpsertAddressBookNameAsync(otherJid, display, digits).ConfigureAwait(false))
+                    {
+                        personWrites++;
+                    }
                 }
             }
 
@@ -106,8 +179,9 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         }
 
         /// <summary>
-        /// Rebuilds the in-memory overlay for every direct chat. Skipped when one already exists
-        /// and the caller did not insist, since reading the address book is not cheap.
+        /// Rebuilds the in-memory overlay. When <paramref name="force"/> is false and an overlay
+        /// already exists, skipped (reading the address book is not cheap). After bootstrap, pass
+        /// true so live agenda names replace stale JSON / push names.
         /// </summary>
         public async Task RefreshAsync(bool force)
         {
@@ -116,17 +190,60 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 return;
             }
 
-            List<string> directJids = null;
+            var extraPhones = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            List<string> jids = null;
             await _whatsAppService.RunOnUiThreadAsync(() =>
             {
-                directJids = _whatsAppService.Chats
-                    .Where(c => c != null && !c.IsGroup && !string.IsNullOrWhiteSpace(c.JID))
-                    .Select(c => _whatsAppService.GetCanonicalJid(c.JID) ?? c.JID)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToList();
+                jids = new List<string>();
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var chat in _whatsAppService.Chats)
+                {
+                    if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
+                    {
+                        continue;
+                    }
+
+                    string canonical = _whatsAppService.GetCanonicalJid(chat.JID) ?? chat.JID;
+                    if (chat.IsGroup)
+                    {
+                        if (chat.GroupMembers == null)
+                        {
+                            continue;
+                        }
+
+                        foreach (var member in chat.GroupMembers)
+                        {
+                            if (member == null || string.IsNullOrWhiteSpace(member.Jid))
+                            {
+                                continue;
+                            }
+
+                            string memberJid = JidHelper.Normalize(member.Jid);
+                            if (string.IsNullOrEmpty(memberJid) || !seen.Add(memberJid))
+                            {
+                                continue;
+                            }
+
+                            jids.Add(memberJid);
+                            string memberPhone = PhoneNumberHelper.NormalizePhoneDigits(member.PhoneNumber)
+                                ?? JidHelper.TryPhoneFromJid(memberJid);
+                            if (!string.IsNullOrEmpty(memberPhone))
+                            {
+                                extraPhones[memberJid] = memberPhone;
+                            }
+                        }
+
+                        continue;
+                    }
+
+                    if (seen.Add(canonical))
+                    {
+                        jids.Add(canonical);
+                    }
+                }
             });
 
-            var overlay = await SyncAsync(directJids ?? new List<string>());
+            var overlay = await SyncAsync(jids ?? new List<string>(), extraPhones).ConfigureAwait(false);
             if (overlay == null || overlay.Count == 0)
             {
                 Debug.WriteLine("[AddressBookOverlay] Overlay unavailable or empty; falling back to WhatsApp names");
@@ -148,6 +265,58 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             Debug.WriteLine($"[AddressBookOverlay] Overlay refreshed: {updates} mapped JIDs");
         }
 
+        private static void AddCandidate(
+            Dictionary<string, string> candidates,
+            string rawJid,
+            IReadOnlyDictionary<string, string> extraPhones)
+        {
+            if (string.IsNullOrWhiteSpace(rawJid))
+            {
+                return;
+            }
+
+            string jid = JidHelper.Normalize(rawJid);
+            if (string.IsNullOrEmpty(jid) || JidHelper.IsGroupJid(jid))
+            {
+                return;
+            }
+
+            string digits = null;
+            if (extraPhones != null)
+            {
+                extraPhones.TryGetValue(jid, out digits);
+                if (string.IsNullOrEmpty(digits))
+                {
+                    extraPhones.TryGetValue(rawJid, out digits);
+                }
+            }
+
+            if (string.IsNullOrEmpty(digits))
+            {
+                digits = JidHelper.TryPhoneFromJid(jid);
+            }
+
+            candidates[jid] = digits;
+        }
+
+        private async Task<bool> TryUpsertAddressBookNameAsync(string jid, string display, string digits)
+        {
+            try
+            {
+                return await _personStore.UpsertIfChangedAsync(
+                    jid,
+                    display,
+                    null,
+                    digits,
+                    PersonSource.AddressBook).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[AddressBookOverlay] Person upsert failed for " + jid + ": " + ex.Message);
+                return false;
+            }
+        }
+
         /// <summary>
         /// Matches on the full number first, then on the last ten digits. The second pass is what
         /// bridges numbers saved without a country code, or with the extra ninth digit Brazil
@@ -161,16 +330,16 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 return byExact.Trim();
             }
 
-            if (digits.Length <= 10)
+            foreach (string key in PhoneNumberHelper.BuildPhoneKeys(digits))
             {
-                return null;
+                string mapped;
+                if (phoneLookup.TryGetValue(key, out mapped) && !string.IsNullOrWhiteSpace(mapped))
+                {
+                    return mapped.Trim();
+                }
             }
 
-            string byLast10;
-            return phoneLookup.TryGetValue(digits.Substring(digits.Length - 10), out byLast10) &&
-                   !string.IsNullOrWhiteSpace(byLast10)
-                ? byLast10.Trim()
-                : null;
+            return null;
         }
     }
 }

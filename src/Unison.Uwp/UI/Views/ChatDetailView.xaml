@@ -18,6 +18,54 @@
                 <templates:MessageTemplates/>
             </ResourceDictionary.MergedDictionaries>
 
+            <Style x:Key="ScrollToBottomButtonStyle" TargetType="Button">
+                <Setter Property="Background" Value="{ThemeResource ChatDetailInputBarBackgroundBrush}"/>
+                <Setter Property="Foreground" Value="{ThemeResource ChatDetailHeaderTitleBrush}"/>
+                <Setter Property="BorderBrush" Value="{ThemeResource ChatDetailInputBarTopBorderBrush}"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="Padding" Value="0"/>
+                <Setter Property="MinWidth" Value="0"/>
+                <Setter Property="MinHeight" Value="0"/>
+                <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                <Setter Property="VerticalContentAlignment" Value="Center"/>
+                <Setter Property="UseSystemFocusVisuals" Value="False"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Root"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="20">
+                                <VisualStateManager.VisualStateGroups>
+                                    <VisualStateGroup x:Name="CommonStates">
+                                        <VisualState x:Name="Normal"/>
+                                        <VisualState x:Name="PointerOver">
+                                            <Storyboard>
+                                                <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Root" Storyboard.TargetProperty="Background">
+                                                    <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource WhatsAppItemHoverBrush}"/>
+                                                </ObjectAnimationUsingKeyFrames>
+                                            </Storyboard>
+                                        </VisualState>
+                                        <VisualState x:Name="Pressed">
+                                            <Storyboard>
+                                                <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Root" Storyboard.TargetProperty="Background">
+                                                    <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource WhatsAppItemSelectedBrush}"/>
+                                                </ObjectAnimationUsingKeyFrames>
+                                            </Storyboard>
+                                        </VisualState>
+                                    </VisualStateGroup>
+                                </VisualStateManager.VisualStateGroups>
+                                <ContentPresenter x:Name="ContentPresenter"
+                                                  Content="{TemplateBinding Content}"
+                                                  Foreground="{TemplateBinding Foreground}"
+                                                  HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                  VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
         </ResourceDictionary>
     </UserControl.Resources>
 
@@ -53,6 +101,28 @@
                         <Setter Target="ChatDetailGrid.BorderThickness" Value="1,0,0,0"/>
                         <Setter Target="AttachFlyoutButton.Visibility" Value="Visible"/>
                         <Setter Target="AttachBarButton.Visibility" Value="Collapsed"/>
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+
+            <VisualStateGroup x:Name="ChatDetailInfoStates">
+                <VisualState x:Name="InfoClosed">
+                    <VisualState.Setters>
+                        <Setter Target="ChatColumn.Width" Value="*"/>
+                        <Setter Target="InfoColumn.Width" Value="0"/>
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="InfoDocked">
+                    <VisualState.Setters>
+                        <Setter Target="ChatColumn.Width" Value="*"/>
+                        <!-- ChatPaneLayoutConstants.ChatDetailInfoPaneWidth -->
+                        <Setter Target="InfoColumn.Width" Value="400"/>
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="InfoFullScreen">
+                    <VisualState.Setters>
+                        <Setter Target="ChatColumn.Width" Value="0"/>
+                        <Setter Target="InfoColumn.Width" Value="*"/>
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
@@ -217,6 +287,12 @@
                                     <MenuFlyoutItem x:Uid="ChatDetail_ShowContact" Text="View contact"
                                                     Command="{Binding OpenChatDetailInfoCommand}"
                                                     Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
+                                    <MenuFlyoutItem Tag="addContact"
+                                                    x:Uid="ChatDetail_AddContact"
+                                                    Text="Add contact"
+                                                    Command="{Binding AddContactCommand}"
+                                                    Visibility="Collapsed"
+                                                    Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
                                     <MenuFlyoutItem x:Uid="ChatDetail_Search" Text="Search" IsEnabled="False"
                                                     Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
                                     <MenuFlyoutItem x:Uid="ChatDetail_MediaLinksDocs" Text="Media, links, and docs" IsEnabled="False"
@@ -360,7 +436,32 @@
                         <Setter Property="Margin" Value="0"/>
                     </Style>
                 </ListView.ItemContainerStyle>
+                <ListView.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <!-- Prefer KeepItemsInView as a first pass; ChatDetailView still restores
+                             scroll explicitly after load-more because variable bubble heights and
+                             near-zero offsets make the panel alone unreliable. -->
+                        <ItemsStackPanel ItemsUpdatingScrollMode="KeepItemsInView"/>
+                    </ItemsPanelTemplate>
+                </ListView.ItemsPanel>
             </ListView>
+
+            <Button x:Name="ScrollToBottomButton"
+                    Grid.Row="2"
+                    Canvas.ZIndex="2"
+                    Width="40" Height="40"
+                    Margin="0,0,12,12"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Bottom"
+                    Visibility="Collapsed"
+                    Style="{StaticResource ScrollToBottomButtonStyle}"
+                    Click="ScrollToBottomButton_Click">
+                <ToolTipService.ToolTip>
+                    <ToolTip x:Uid="ChatDetail_ScrollToBottomTooltip" Content="Jump to latest"/>
+                </ToolTipService.ToolTip>
+                <TextBlock Text="&#xE74B;" FontFamily="{StaticResource IconFont}" FontSize="16"
+                           Foreground="{ThemeResource ChatDetailAccentBrush}"/>
+            </Button>
 
             <!-- Hidden player for voice bubbles; SMTC driven via MediaPlayer (Imgur-style). -->
             <MediaPlayerElement x:Name="AudioPlayer" Grid.Row="2"
@@ -704,14 +805,19 @@
             </Grid>
             </Grid><!-- ChatSurface -->
 
-            <controls:ChatDetailInfoControl x:Name="ChatDetailInfoPanel"
-                                            Grid.Column="1"
-                                            Visibility="Collapsed"
-                                            CloseCommand="{Binding CloseChatDetailInfoCommand}">
-                <controls:ChatDetailInfoControl.RenderTransform>
+            <Grid x:Name="ChatDetailInfoPaneHost"
+                  Grid.Column="1"
+                  Visibility="Collapsed">
+                <Grid.RenderTransform>
                     <TranslateTransform x:Name="ChatDetailInfoSlideTransform" X="0"/>
-                </controls:ChatDetailInfoControl.RenderTransform>
-            </controls:ChatDetailInfoControl>
+                </Grid.RenderTransform>
+                <controls:ChatDetailInfoControl x:Name="ChatDetailInfoPanel"
+                                                Visibility="Collapsed"
+                                                CloseCommand="{Binding CloseChatDetailInfoCommand}"/>
+                <controls:ChatDetailGroupMemberInfoPane x:Name="ChatDetailMemberInfoPanel"
+                                                        Visibility="Collapsed"
+                                                        CloseCommand="{Binding CloseChatDetailInfoCommand}"/>
+            </Grid>
         </Grid>
 
         <!-- Empty State -->

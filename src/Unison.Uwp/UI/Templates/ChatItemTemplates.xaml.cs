@@ -1,5 +1,6 @@
 using System;
 using Unison.Core.Contracts;
+using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Uwp.Helpers;
@@ -108,6 +109,20 @@ namespace Unison.Uwp.UI.Templates
                     menuItem.Visibility = muted ? Visibility.Visible : Visibility.Collapsed;
                     menuItem.Text = LocalizedStrings.Get("ChatDetail_UnmuteNotifications.Text", "Unmute notifications");
                 }
+                else if (string.Equals(tag, "addContact", StringComparison.Ordinal) && menuItem != null)
+                {
+                    bool canAdd = false;
+                    try
+                    {
+                        canAdd = App.Services?.GetService<IContactService>()?.CanAddToAddressBook(chat.JID) == true;
+                    }
+                    catch
+                    {
+                    }
+
+                    menuItem.Visibility = canAdd ? Visibility.Visible : Visibility.Collapsed;
+                    menuItem.Text = LocalizedStrings.Get("ChatDetail_AddContact.Text", "Add contact");
+                }
             }
         }
 
@@ -124,6 +139,46 @@ namespace Unison.Uwp.UI.Templates
         {
             var chat = ResolveChat(sender as FrameworkElement);
             FindChatList(sender)?.PinChatToStart(chat);
+        }
+
+        private async void AddContact_Click(object sender, RoutedEventArgs e)
+        {
+            var chat = ResolveChat(sender as FrameworkElement);
+            IContactService contacts = null;
+            try
+            {
+                contacts = App.Services?.GetService<IContactService>();
+            }
+            catch
+            {
+            }
+
+            if (chat == null || contacts == null)
+            {
+                return;
+            }
+
+            IStringResources strings = null;
+            try
+            {
+                strings = App.Services?.GetService<IStringResources>();
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                await contacts.ShowAddToAddressBookAsync(
+                    chat.GetNameResolved(strings),
+                    contacts.TryResolvePhone(chat.JID),
+                    chat.GetAvatarUrl(preferHigh: true),
+                    chat.JID);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[ChatItemTemplates] Add contact failed: " + ex.Message);
+            }
         }
 
         private void MuteDuration_Click(object sender, RoutedEventArgs e)

@@ -308,6 +308,9 @@ Wyłącz po zakończeniu diagnozy: pozostawienie włączonego spowalnia aplikacj
   <data name="ChatDetail_AttachBarTooltip.Content" xml:space="preserve">
     <value>Załącz</value>
   </data>
+  <data name="ChatDetail_ScrollToBottomTooltip.Content" xml:space="preserve">
+    <value>Przejdź na koniec</value>
+  </data>
   <data name="ChatDetail_AttachCameraTile.Text" xml:space="preserve">
     <value>Aparat</value>
   </data>
@@ -551,8 +554,29 @@ Wyłącz po zakończeniu diagnozy: pozostawienie włączonego spowalnia aplikacj
   <data name="Common_OK" xml:space="preserve">
     <value>OK</value>
   </data>
+  <data name="Common_Close" xml:space="preserve">
+    <value>Zamknij</value>
+  </data>
+  <data name="Reactions_TitleOne" xml:space="preserve">
+    <value>1 reakcja</value>
+  </data>
+  <data name="Reactions_TitleMany" xml:space="preserve">
+    <value>Reakcje: {0}</value>
+  </data>
+  <data name="Login_BackgroundAccessTitle" xml:space="preserve">
+    <value>Aplikacje w tle</value>
+  </data>
+  <data name="Login_BackgroundAccessBody" xml:space="preserve">
+    <value>Unison potrzebuje uprawnienia do działania w tle, aby połączyć się z WhatsApp. Włącz Unison w Ustawienia → Prywatność → Aplikacje w tle, a następnie wróć tutaj.</value>
+  </data>
+  <data name="Login_BackgroundAccessRetry" xml:space="preserve">
+    <value>Dostęp w tle jest włączony. Dotknij Odśwież QR, aby połączyć.</value>
+  </data>
   <data name="Common_Yesterday" xml:space="preserve">
     <value>Wczoraj</value>
+  </data>
+  <data name="Common_Today" xml:space="preserve">
+    <value>Dzisiaj</value>
   </data>
   <data name="Login_InstrTitle.Text" xml:space="preserve">
     <value>Korzystaj z WhatsApp na komputerze</value>
@@ -626,6 +650,42 @@ Wyłącz po zakończeniu diagnozy: pozostawienie włączonego spowalnia aplikacj
   <data name="Settings_Customization.Text" xml:space="preserve">
     <value>Personalizacja</value>
   </data>
+  <data name="Settings_Language.Header" xml:space="preserve">
+    <value>Język</value>
+  </data>
+  <data name="Settings_Language.Text" xml:space="preserve">
+    <value>Wybierz język aplikacji. Aplikacja uruchomi się ponownie, aby go zastosować.</value>
+  </data>
+  <data name="Settings_LanguageSystem" xml:space="preserve">
+    <value>System</value>
+  </data>
+  <data name="Settings_LanguageRestartTitle" xml:space="preserve">
+    <value>Język zaktualizowany</value>
+  </data>
+  <data name="Settings_LanguageRestartBody" xml:space="preserve">
+    <value>Unison uruchomi się ponownie, aby zastosować nowy język.</value>
+  </data>
+  <data name="Settings_LanguageRestartClose" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="Settings_Advanced.Text" xml:space="preserve">
+    <value>Ustawienia zaawansowane</value>
+  </data>
+  <data name="Settings_Disconnect.Text" xml:space="preserve">
+    <value>Rozłącz</value>
+  </data>
+  <data name="Settings_DisconnectTitle" xml:space="preserve">
+    <value>Rozłączyć?</value>
+  </data>
+  <data name="Settings_DisconnectBody" xml:space="preserve">
+    <value>Jeśli się rozłączysz, wrócisz do ekranu parowania, a wszystkie dane i czaty zostaną usunięte.</value>
+  </data>
+  <data name="Settings_DisconnectConfirm" xml:space="preserve">
+    <value>Rozłącz</value>
+  </data>
+  <data name="Settings_DisconnectCancel" xml:space="preserve">
+    <value>Anuluj</value>
+  </data>
   <data name="Settings_KeepAlive.Header" xml:space="preserve">
     <value>Tryb w tle</value>
   </data>
@@ -637,6 +697,12 @@ Wyłącz po zakończeniu diagnozy: pozostawienie włączonego spowalnia aplikacj
   </data>
   <data name="Settings_AutoUnlink.Text" xml:space="preserve">
     <value>Jeśli telefon unieważni sesję, wyczyść lokalne dane i pokaż kod QR. Wyłącz, aby zachować aplikację jako kopię zapasową i tylko ponawiać połączenie.</value>
+  </data>
+  <data name="Settings_PublishWindowsContacts.Header" xml:space="preserve">
+    <value>Pokaż kontakty Unison w Windows</value>
+  </data>
+  <data name="Settings_PublishWindowsContacts.Text" xml:space="preserve">
+    <value>Dodaje czaty 1:1 do osobnej listy Unison w aplikacji Osoby. Domyślnie wyłączone.</value>
   </data>
   <data name="Settings_Shell.Header" xml:space="preserve">
     <value>Shell</value>
@@ -677,11 +743,20 @@ Wyłącz po zakończeniu diagnozy: pozostawienie włączonego spowalnia aplikacj
   <data name="Shell_Status.Text" xml:space="preserve">
     <value>Status</value>
   </data>
+  <data name="StatusList_Header.Text" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="StatusList_Empty.Text" xml:space="preserve">
+    <value>Brak ostatnich aktualizacji statusu</value>
+  </data>
   <data name="Start_Description.Text" xml:space="preserve">
     <value>Prosty, niezawodny i prywatny sposób korzystania z WhatsApp na komputerze.</value>
   </data>
   <data name="Start_GetStarted.Content" xml:space="preserve">
     <value>Rozpocznij</value>
+  </data>
+  <data name="Start_Language.Text" xml:space="preserve">
+    <value>Język:</value>
   </data>
   <data name="Start_Title.Text" xml:space="preserve">
     <value>Witamy w Unison</value>
@@ -760,6 +835,15 @@ czat</value>
   <data name="ChatDetailInfo_MembersEmpty" xml:space="preserve">
     <value>Czlonkowie grupy pojawia sie tutaj.</value>
   </data>
+  <data name="ChatDetailInfo_Admin.Text" xml:space="preserve">
+    <value>Admin</value>
+  </data>
+  <data name="ChatDetailInfo_GroupsInCommon" xml:space="preserve">
+    <value>Wspólne grupy</value>
+  </data>
+  <data name="ChatDetailInfo_GroupsInCommonEmpty" xml:space="preserve">
+    <value>Brak wspólnych grup.</value>
+  </data>
   <data name="ChatDetailInfo_UnpinAppBarLabel" xml:space="preserve">
     <value>Odepnij ze
 Start</value>
@@ -790,6 +874,13 @@ Start</value>
   </data>
   <data name="ChatDetail_ShowContact.Text" xml:space="preserve">
     <value>Zobacz kontakt</value>
+  </data>
+  <data name="ChatDetail_AddContact.Text" xml:space="preserve">
+    <value>Dodaj kontakt</value>
+  </data>
+  <data name="ChatDetailInfo_AddContactAppBarLabel" xml:space="preserve">
+    <value>Dodaj
+kontakt</value>
   </data>
   <data name="ChatDetailInfo_Calls" xml:space="preserve">
     <value>Polaczenia</value>
