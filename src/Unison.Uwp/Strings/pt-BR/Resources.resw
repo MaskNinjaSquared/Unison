@@ -344,6 +344,9 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="ChatDetail_ReadLess" xml:space="preserve">
     <value>Ler menos</value>
   </data>
+  <data name="ChatDetail_Forwarded" xml:space="preserve">
+    <value>Encaminhada</value>
+  </data>
   <data name="ChatDetail_PinnedIndex" xml:space="preserve">
     <value>Mensagem fixada {0} de {1}</value>
   </data>

@@ -55,6 +55,8 @@ namespace Unison.Uwp.Data.Entities
 
         public bool IsRevoked { get; set; }
 
+        public bool IsForwarded { get; set; }
+
         public bool IsPinned { get; set; }
 
         public DateTime? PinnedAtUtc { get; set; }

@@ -645,6 +645,19 @@ namespace Unison.Core.Models
             }
         }
 
+        private bool _isForwarded;
+        /// <summary>ContextInfo.isForwarded — orthogonal to media <see cref="Kind"/>.</summary>
+        public bool IsForwarded
+        {
+            get => _isForwarded;
+            set
+            {
+                if (_isForwarded == value) return;
+                _isForwarded = value;
+                OnPropertyChanged();
+            }
+        }
+
         private bool _isPinned;
         public bool IsPinned
         {
@@ -819,6 +832,19 @@ namespace Unison.Core.Models
             }
         }
 
+        private string _quotedParticipantJid;
+        /// <summary>ContextInfo.Participant of the quoted message (group author).</summary>
+        public string QuotedParticipantJid
+        {
+            get => _quotedParticipantJid;
+            set
+            {
+                if (string.Equals(_quotedParticipantJid, value, StringComparison.Ordinal)) return;
+                _quotedParticipantJid = value;
+                OnPropertyChanged();
+            }
+        }
+
         private string _quotedMessageId;
         /// <summary>Id of the quoted message (<c>ContextInfo.StanzaId</c>) when available.</summary>
         public string QuotedMessageId
@@ -861,6 +887,22 @@ namespace Unison.Core.Models
             {
                 if (_showGroupSenderName == value) return;
                 _showGroupSenderName = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private bool _showQuotedAuthorLink;
+        /// <summary>
+        /// Group quote header: author name opens member info (JID or roster name match).
+        /// </summary>
+        [JsonIgnore]
+        public bool ShowQuotedAuthorLink
+        {
+            get => _showQuotedAuthorLink;
+            set
+            {
+                if (_showQuotedAuthorLink == value) return;
+                _showQuotedAuthorLink = value;
                 OnPropertyChanged();
             }
         }

@@ -338,6 +338,9 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
   <data name="ChatDetail_ReadLess" xml:space="preserve">
     <value>Leggi meno</value>
   </data>
+  <data name="ChatDetail_Forwarded" xml:space="preserve">
+    <value>Inoltrato</value>
+  </data>
   <data name="ChatDetail_PinnedIndex" xml:space="preserve">
     <value>Messaggio fissato {0} of {1}</value>
   </data>

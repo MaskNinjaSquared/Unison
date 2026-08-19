@@ -209,6 +209,8 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                     if (byId.TryGetValue(message.Id, out existing))
                     {
                         HistoryMessageMapper.CopyMediaKeysIfMissing(message, existing);
+                        HistoryMessageMapper.CopyForwardedIfMissing(message, existing);
+                        HistoryMessageMapper.CopyQuotedParticipantIfMissing(message, existing);
                     }
 
                     byId[message.Id] = message;
@@ -412,6 +414,8 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                     if (byId.TryGetValue(message.Id, out existing))
                     {
                         HistoryMessageMapper.CopyMediaKeysIfMissing(message, existing);
+                        HistoryMessageMapper.CopyForwardedIfMissing(message, existing);
+                        HistoryMessageMapper.CopyQuotedParticipantIfMissing(message, existing);
                     }
 
                     byId[message.Id] = message;

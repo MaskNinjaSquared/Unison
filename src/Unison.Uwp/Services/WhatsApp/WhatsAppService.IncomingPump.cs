@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -856,17 +856,22 @@ namespace Unison.Uwp.Services.WhatsApp
             Proto.Message msg,
             out string quotedText,
             out string quotedSender,
+            out string quotedParticipantJid,
             out string quotedMessageId,
             out ChatPreviewKind quotedKind,
-            out List<string> mentionedJids)
+            out List<string> mentionedJids,
+            out bool isForwarded)
         {
             quotedText = null;
             quotedSender = null;
+            quotedParticipantJid = null;
             quotedMessageId = null;
             quotedKind = ChatPreviewKind.Text;
             mentionedJids = null;
+            isForwarded = false;
 
             Proto.Message unwrapped = UnwrapMessage(msg);
+            isForwarded = HistorySyncContentFilter.ReadIsForwarded(unwrapped);
             Proto.ContextInfo ctx = GetContextInfo(unwrapped);
             if (ctx == null)
             {
@@ -923,6 +928,7 @@ namespace Unison.Uwp.Services.WhatsApp
             string participant = NormalizeJid(ctx.Participant);
             if (!string.IsNullOrEmpty(participant))
             {
+                quotedParticipantJid = participant;
                 quotedSender = ResolveDisplayName(participant, "quote");
                 if (string.IsNullOrWhiteSpace(quotedSender) ||
                     quotedSender.IndexOf('@') >= 0)
@@ -2023,7 +2029,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 SetIncomingMessagePumpStage("model", e);
                 // Domain ChatMessage via the MessageFacade (Kind resolved in mapper).
                 ChatMessage chatMessage;
-                ApplyContextInfoExtras(e.Message, out string quotedText, out string quotedSender, out string quotedMessageId, out var quotedKind, out var mentionedJids);
+                ApplyContextInfoExtras(e.Message, out string quotedText, out string quotedSender, out string quotedParticipantJid, out string quotedMessageId, out var quotedKind, out var mentionedJids, out bool isForwarded);
 
                 if (_messageService != null)
                 {
@@ -2049,9 +2055,11 @@ namespace Unison.Uwp.Services.WhatsApp
                             IsVoice = renderInfo?.IsVoice == true,
                             IsDocument = renderInfo?.IsDocument == true,
                             Caption = renderInfo?.Caption ?? "",
+                            IsForwarded = isForwarded,
                             QuotedText = quotedText,
                             QuotedKind = quotedKind,
                             QuotedSenderName = quotedSender,
+                            QuotedParticipantJid = quotedParticipantJid,
                             QuotedMessageId = quotedMessageId,
                             MentionedJids = mentionedJids
                         });
@@ -2071,6 +2079,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             renderInfo?.IsVoice == true,
                             renderInfo?.IsDocument == true),
                         Caption = renderInfo?.Caption ?? "",
+                        IsForwarded = isForwarded,
                         Timestamp = NormalizeIncomingTimestamp(e.Timestamp, e.IsOffline),
                         IsFromMe = isActuallyFromMe,
                         SenderName = senderName,
@@ -2080,6 +2089,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         QuotedText = quotedText,
                         QuotedKind = quotedKind,
                         QuotedSenderName = quotedSender,
+                        QuotedParticipantJid = quotedParticipantJid,
                         QuotedMessageId = quotedMessageId,
                         MentionedJids = mentionedJids
                     };

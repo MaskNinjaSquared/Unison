@@ -37,11 +37,30 @@
 
                 <Border Background="Transparent" Margin="0,1,0,0" Padding="12,8,16,8">
                     <StackPanel>
+                        <StackPanel Orientation="Horizontal"
+                                    Margin="0,0,0,4"
+                                    Visibility="{x:Bind ShowForwardedLabel, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <TextBlock Text="&#xEA54;"
+                                       FontFamily="{StaticResource IconFont}"
+                                       FontSize="13"
+                                       Foreground="{ThemeResource ChatDetailSentTextBrush}"
+                                       Opacity="0.75"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Text="{x:Bind ForwardedLabelText, Mode=OneWay}"
+                                       FontSize="13"
+                                       FontStyle="Italic"
+                                       Foreground="{ThemeResource ChatDetailSentTextBrush}"
+                                       Opacity="0.75"
+                                       Margin="4,0,0,0"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
                         <Border Background="{ThemeResource ChatDetailSentQuoteBackgroundBrush}"
                                 CornerRadius="8"
                                 Padding="10,8"
                                 Margin="0,0,0,8"
                                 Tapped="QuoteBorder_Tapped"
+                                Tag="{x:Bind QuotedMessageId, Mode=OneWay}"
+                                helpers:DesktopCursor.CursorKind="{x:Bind CanNavigateToQuote, Mode=OneWay, Converter={StaticResource BoolToDesktopCursorKindConverter}}"
                                 Visibility="{x:Bind HasQuote, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <StackPanel>
                                 <TextBlock Text="{x:Bind QuotedSenderName, Mode=OneWay}"
@@ -50,13 +69,21 @@
                                            Foreground="{ThemeResource ChatDetailSentTextBrush}"
                                            Opacity="0.85"
                                            TextWrapping="NoWrap"
-                                           TextTrimming="CharacterEllipsis"/>
+                                           TextTrimming="CharacterEllipsis"
+                                           Tag="{x:Bind QuotedParticipantJid, Mode=OneWay}"
+                                           IsHitTestVisible="{x:Bind CanOpenQuotedAuthor, Mode=OneWay}"
+                                           helpers:DesktopCursor.CursorKind="{x:Bind CanOpenQuotedAuthor, Mode=OneWay, Converter={StaticResource BoolToDesktopCursorKindConverter}}"
+                                           Tapped="QuotedAuthor_Tapped"/>
                                 <controls:ChatListPreviewStrip
                                            Margin="0,2,0,0"
                                            Opacity="0.9"
                                            Foreground="{ThemeResource ChatDetailSentTextBrush}"
                                            Kind="{x:Bind QuotedPreviewKind, Mode=OneWay}"
-                                           Text="{x:Bind QuotedStripText, Mode=OneWay}"/>
+                                           Text="{x:Bind QuotedStripText, Mode=OneWay}"
+                                           Tapped="QuoteBorder_Tapped"
+                                           Tag="{x:Bind QuotedMessageId, Mode=OneWay}"
+                                           helpers:DesktopCursor.CursorKind="{x:Bind CanNavigateToQuote, Mode=OneWay, Converter={StaticResource BoolToDesktopCursorKindConverter}}"
+                                           IsHitTestVisible="{x:Bind CanNavigateToQuote, Mode=OneWay}"/>
                             </StackPanel>
                         </Border>
                         <Button Click="ImageOpenButton_Click"
@@ -449,6 +476,7 @@
                       Margin="0,0,8,0"
                       VerticalAlignment="Top"
                       Tapped="GroupParticipant_Tapped"
+                      helpers:DesktopCursor.CursorKind="Hand"
                       Visibility="{x:Bind ShowContactSlot, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <controls:ChatAvatarControl Size="32"
                                                 Width="32"
@@ -476,12 +504,32 @@
                                    Margin="0,0,0,4"
                                    TextWrapping="NoWrap"
                                    TextTrimming="CharacterEllipsis"
+                                   helpers:DesktopCursor.CursorKind="Hand"
                                    Tapped="GroupParticipant_Tapped"/>
+                        <StackPanel Orientation="Horizontal"
+                                    Margin="0,0,0,4"
+                                    Visibility="{x:Bind ShowForwardedLabel, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <TextBlock Text="&#xEA54;"
+                                       FontFamily="{StaticResource IconFont}"
+                                       FontSize="13"
+                                       Foreground="{ThemeResource ChatDetailGroupSenderBrush}"
+                                       Opacity="0.85"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Text="{x:Bind ForwardedLabelText, Mode=OneWay}"
+                                       FontSize="13"
+                                       FontStyle="Italic"
+                                       Foreground="{ThemeResource ChatDetailGroupSenderBrush}"
+                                       Opacity="0.85"
+                                       Margin="4,0,0,0"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
                         <Border Background="{ThemeResource ChatDetailReceivedQuoteBackgroundBrush}"
                                 CornerRadius="8"
                                 Padding="10,8"
                                 Margin="0,0,0,8"
                                 Tapped="QuoteBorder_Tapped"
+                                Tag="{x:Bind QuotedMessageId, Mode=OneWay}"
+                                helpers:DesktopCursor.CursorKind="{x:Bind CanNavigateToQuote, Mode=OneWay, Converter={StaticResource BoolToDesktopCursorKindConverter}}"
                                 Visibility="{x:Bind HasQuote, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <StackPanel>
                                 <TextBlock Text="{x:Bind QuotedSenderName, Mode=OneWay}"
@@ -490,13 +538,21 @@
                                            Foreground="{ThemeResource ChatDetailReceivedTextBrush}"
                                            Opacity="0.85"
                                            TextWrapping="NoWrap"
-                                           TextTrimming="CharacterEllipsis"/>
+                                           TextTrimming="CharacterEllipsis"
+                                           Tag="{x:Bind QuotedParticipantJid, Mode=OneWay}"
+                                           IsHitTestVisible="{x:Bind CanOpenQuotedAuthor, Mode=OneWay}"
+                                           helpers:DesktopCursor.CursorKind="{x:Bind CanOpenQuotedAuthor, Mode=OneWay, Converter={StaticResource BoolToDesktopCursorKindConverter}}"
+                                           Tapped="QuotedAuthor_Tapped"/>
                                 <controls:ChatListPreviewStrip
                                            Margin="0,2,0,0"
                                            Opacity="0.9"
                                            Foreground="{ThemeResource ChatDetailReceivedTextBrush}"
                                            Kind="{x:Bind QuotedPreviewKind, Mode=OneWay}"
-                                           Text="{x:Bind QuotedStripText, Mode=OneWay}"/>
+                                           Text="{x:Bind QuotedStripText, Mode=OneWay}"
+                                           Tapped="QuoteBorder_Tapped"
+                                           Tag="{x:Bind QuotedMessageId, Mode=OneWay}"
+                                           helpers:DesktopCursor.CursorKind="{x:Bind CanNavigateToQuote, Mode=OneWay, Converter={StaticResource BoolToDesktopCursorKindConverter}}"
+                                           IsHitTestVisible="{x:Bind CanNavigateToQuote, Mode=OneWay}"/>
                             </StackPanel>
                         </Border>
                         <Button Click="ImageOpenButton_Click"

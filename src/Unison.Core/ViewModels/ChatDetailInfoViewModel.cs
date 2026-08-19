@@ -191,7 +191,12 @@ namespace Unison.Core.ViewModels
 
         public string AvatarUrl =>
             _isGroupMember
-                ? (_member?.AvatarUrl ?? string.Empty)
+                ? (GroupParticipantResolver.ResolveAvatar(
+                    _member?.Jid ?? _member?.Lid ?? _member?.PhoneNumber,
+                    _source,
+                    _whatsApp,
+                    _personStore,
+                    _member) ?? string.Empty)
                 : _source.GetAvatarUrl(preferHigh: true);
 
         public string DisplayName
@@ -200,18 +205,14 @@ namespace Unison.Core.ViewModels
             {
                 if (_isGroupMember)
                 {
-                    if (!string.IsNullOrWhiteSpace(_member?.DisplayName))
-                    {
-                        return _member.DisplayName;
-                    }
-
-                    string jid = _member?.Jid;
-                    if (!string.IsNullOrWhiteSpace(jid) && _whatsApp != null)
-                    {
-                        return _whatsApp.ResolveDisplayName(jid, "sender") ?? jid;
-                    }
-
-                    return jid ?? string.Empty;
+                    string jid = _member?.Jid ?? _member?.Lid ?? _member?.PhoneNumber;
+                    return GroupParticipantResolver.ResolveDisplayName(
+                        jid,
+                        _source,
+                        _whatsApp,
+                        _personStore,
+                        _member?.DisplayName,
+                        _member) ?? string.Empty;
                 }
 
                 return _source.GetNameResolved(_strings) ?? string.Empty;

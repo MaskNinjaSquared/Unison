@@ -344,6 +344,9 @@ Disable after diagnosing: keeping it on slows the app.</value>
   <data name="ChatDetail_ReadLess" xml:space="preserve">
     <value>Read less</value>
   </data>
+  <data name="ChatDetail_Forwarded" xml:space="preserve">
+    <value>Forwarded</value>
+  </data>
   <data name="ChatDetail_PinnedIndex" xml:space="preserve">
     <value>Pinned message {0} of {1}</value>
   </data>

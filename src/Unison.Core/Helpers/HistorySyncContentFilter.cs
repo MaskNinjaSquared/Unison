@@ -278,6 +278,19 @@ namespace Unison.Core.Helpers
             return ReadMentionedJids(Unwrap(info?.Message));
         }
 
+        /// <summary>True when proto <c>ContextInfo.isForwarded</c> is set.</summary>
+        public static bool ReadIsForwarded(WebMessageInfo info)
+        {
+            return ReadIsForwarded(Unwrap(info?.Message));
+        }
+
+        /// <summary>True when proto <c>ContextInfo.isForwarded</c> is set.</summary>
+        public static bool ReadIsForwarded(Message unwrapped)
+        {
+            ContextInfo ctx = GetContextInfo(unwrapped);
+            return ctx != null && ctx.HasIsForwarded && ctx.IsForwarded;
+        }
+
         public static List<string> ReadMentionedJids(Message unwrapped)
         {
             ContextInfo ctx = GetContextInfo(unwrapped);

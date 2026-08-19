@@ -70,6 +70,16 @@ namespace Unison.Core.Helpers
                 body = message.Caption;
             }
 
+            if (!revoked)
+            {
+                // Live Content still carries the "[Image]" / "[Sticker]" preview tags; the row
+                // body is the caption source on read-back, so it must be tag-free like sync rows.
+                ChatPreviewNormalizer.NormalizeBody(body, kind, out kind, out body);
+            }
+
+            ChatPreviewKind quotedKind = message.QuotedKind;
+            ChatPreviewNormalizer.NormalizeBody(message.QuotedText, quotedKind, out quotedKind, out string quotedBody);
+
             var row = new HistoryMessage
             {
                 ChatJid = jid,
@@ -81,13 +91,15 @@ namespace Unison.Core.Helpers
                 Kind = kind,
                 SendState = FromStatus(message.Status, message.IsFromMe),
                 IsRevoked = revoked,
+                IsForwarded = message.IsForwarded,
                 IsPinned = message.IsPinned,
                 PinnedAtUtc = message.PinnedAtUtc,
                 PinExpiresAtUtc = message.PinExpiresAtUtc,
                 QuotedMessageId = message.QuotedMessageId,
                 QuotedSenderName = message.QuotedSenderName,
-                QuotedBody = message.QuotedText,
-                QuotedKind = message.QuotedKind,
+                QuotedBody = quotedBody,
+                QuotedKind = quotedKind,
+                QuotedParticipantJid = JidHelper.Normalize(message.QuotedParticipantJid),
                 TimestampUtc = ToUtc(message.Timestamp),
                 SyncType = "live",
                 UpdatedAtUtc = updatedAtUtc ?? DateTime.UtcNow

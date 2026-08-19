@@ -338,6 +338,9 @@ Wyłącz po zakończeniu diagnozy: pozostawienie włączonego spowalnia aplikacj
   <data name="ChatDetail_ReadLess" xml:space="preserve">
     <value>Czytaj mniej</value>
   </data>
+  <data name="ChatDetail_Forwarded" xml:space="preserve">
+    <value>Przekazano</value>
+  </data>
   <data name="ChatDetail_PinnedIndex" xml:space="preserve">
     <value>Przypinana wiadomość {0} of {1}</value>
   </data>

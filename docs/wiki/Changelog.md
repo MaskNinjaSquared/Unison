@@ -4,6 +4,13 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Live media rows no longer store preview tags
+
+- `HistoryLiveMessageMapper` ran `ChatMessage.Content` into `history_message.Body` verbatim, so a live sticker / captionless image / video landed as `[Sticker]` / `[Image]` / `[Video]`. On read-back `HistoryMessageMapper.ApplyMediaEnvelope` promotes a non-empty body to `ChatMessage.Caption`, which is what the media bubble renders — history-sync rows were clean because they already went through `ChatPreviewNormalizer.NormalizeBody`
+- Live writes now normalize body and quoted body the same way; reads normalize again so rows written by older builds stop showing the tag without a schema bump or resync
+
+---
+
 ## Chat-info Media / Files load on tab
 
 - Opening profile / group / member info no longer queries `history_message` for media. `EnsureMediaIndex` runs when the **Media** or **Files** pivot is selected (one shared SQLite index for both)

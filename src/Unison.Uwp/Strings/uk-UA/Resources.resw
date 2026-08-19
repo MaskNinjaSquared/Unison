@@ -344,6 +344,9 @@
   <data name="ChatDetail_ReadLess" xml:space="preserve">
     <value>Згорнути</value>
   </data>
+  <data name="ChatDetail_Forwarded" xml:space="preserve">
+    <value>Переслано</value>
+  </data>
   <data name="ChatDetail_PinnedIndex" xml:space="preserve">
     <value>Закріплене повідомлення {0} з {1}</value>
   </data>

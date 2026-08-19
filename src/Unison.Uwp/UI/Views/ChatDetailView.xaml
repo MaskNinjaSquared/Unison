@@ -3,6 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Unison.Uwp.UI.Controls"
+    xmlns:helpers="using:Unison.Uwp.UI.Helpers"
     xmlns:views="using:Unison.Uwp.UI.Views"
     xmlns:toolkit="using:Microsoft.Toolkit.Uwp.UI.Controls"
     xmlns:templates="using:Unison.Uwp.UI.Templates"
@@ -222,6 +223,7 @@
                                                 ShowBorder="True"
                                                 VerticalAlignment="Center"
                                                 Margin="0,0,6,0"
+                                                helpers:DesktopCursor.CursorKind="Hand"
                                                 Tapped="HeaderAvatar_Tapped"/>
 
                     <!-- Name + status only (avatar has its own tap → OpenChatDetailInfoFromAvatarCommand). -->
@@ -787,6 +789,7 @@
             <!-- Group announce-only lock (replaces composer on row 3) -->
             <Grid Grid.Row="3"
                   Background="{ThemeResource ChatDetailInputBarBackgroundBrush}"
+                  helpers:DesktopCursor.CursorKind="Blocked"
                   Visibility="{Binding IsGroupLockedForMessages, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <Border Height="1"
                         VerticalAlignment="Top"

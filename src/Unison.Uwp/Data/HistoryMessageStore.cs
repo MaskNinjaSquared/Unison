@@ -21,7 +21,7 @@ namespace Unison.Uwp.Data
     {
         private static readonly string DatabaseFileName = "unison.db";
 
-        public const int CurrentSchemaVersion = 5;
+        public const int CurrentSchemaVersion = 6;
 
         /// <summary>
         /// Timeline open / load-more omit <c>MediaThumbnailBase64</c>; media kinds fill it in a second query.
@@ -29,7 +29,7 @@ namespace Unison.Uwp.Data
         private const string TimelineSelectSql =
             "SELECT Id, ChatJid, MessageId, IsFromMe, ParticipantJid, SenderName, Body, Kind, SendState, " +
             "MediaUrl, MediaDirectPath, MediaKeyBase64, MediaFileEncSha256Base64, MediaMimeType, " +
-            "MediaDurationSeconds, MediaFileName, MediaFileLengthBytes, IsVoiceNote, IsRevoked, IsPinned, " +
+            "MediaDurationSeconds, MediaFileName, MediaFileLengthBytes, IsVoiceNote, IsRevoked, IsForwarded, IsPinned, " +
             "PinnedAtUtc, PinExpiresAtUtc, QuotedMessageId, QuotedChatJid, QuotedParticipantJid, " +
             "QuotedSenderName, QuotedBody, QuotedKind, MediaLocalUri, MediaPosterUri, MentionedJids, " +
             "TimestampUtc, SyncId, SyncType, UpdatedAtUtc FROM history_message ";
@@ -777,6 +777,7 @@ namespace Unison.Uwp.Data
                 MediaThumbnailBase64 = model.MediaThumbnailBase64,
                 IsVoiceNote = model.IsVoiceNote,
                 IsRevoked = model.IsRevoked,
+                IsForwarded = model.IsForwarded,
                 IsPinned = model.IsPinned,
                 PinnedAtUtc = model.PinnedAtUtc,
                 PinExpiresAtUtc = model.PinExpiresAtUtc,
@@ -843,6 +844,7 @@ namespace Unison.Uwp.Data
                 MediaThumbnailBase64 = row.MediaThumbnailBase64,
                 IsVoiceNote = row.IsVoiceNote,
                 IsRevoked = row.IsRevoked,
+                IsForwarded = row.IsForwarded,
                 IsPinned = row.IsPinned,
                 PinnedAtUtc = row.PinnedAtUtc,
                 PinExpiresAtUtc = row.PinExpiresAtUtc,

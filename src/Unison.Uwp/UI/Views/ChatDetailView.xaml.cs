@@ -2284,40 +2284,146 @@ namespace Unison.Uwp.UI.Views
                 return;
             }
 
-            ViewModel.OpenGroupMemberInfoByJid(jid);
+            ViewModel.OpenGroupMemberInfoByJid(jid, sourceVm?.SenderName);
+            e.Handled = true;
+        }
+
+        /// <summary>Invoked from <see cref="Templates.MessageTemplates"/> when the quote author name is tapped.</summary>
+        internal void OnQuotedAuthorTapped(object sender, TappedRoutedEventArgs e)
+        {
+            if (ViewModel == null || ViewModel.ActiveChat?.IsGroup != true)
+            {
+                return;
+            }
+
+            string participantJid = ResolveQuotedParticipantJid(sender);
+            string senderName = ResolveQuotedSenderName(sender);
+            if (string.IsNullOrWhiteSpace(participantJid) && string.IsNullOrWhiteSpace(senderName))
+            {
+                return;
+            }
+
+            ViewModel.OpenQuotedAuthor(participantJid, senderName);
             e.Handled = true;
         }
 
         /// <summary>Invoked from <see cref="Templates.MessageTemplates"/> when the quote/reply block is tapped.</summary>
         internal void OnQuotedMessageTapped(object sender, TappedRoutedEventArgs e)
         {
-            var sourceVm = (sender as FrameworkElement)?.DataContext as ChatMessageViewModel;
-            string quotedId = sourceVm?.QuotedMessageId;
-            if (string.IsNullOrWhiteSpace(quotedId) || _messages == null)
+            string quotedId = ResolveQuotedMessageId(sender);
+            if (string.IsNullOrWhiteSpace(quotedId) || ViewModel == null)
             {
                 return;
             }
 
-            ChatMessageViewModel target = null;
-            for (int i = 0; i < _messages.Count; i++)
+            e.Handled = true;
+            _ = NavigateToQuotedMessageAsync(quotedId);
+        }
+
+        private async Task NavigateToQuotedMessageAsync(string quotedMessageId)
+        {
+            if (ViewModel == null || string.IsNullOrWhiteSpace(quotedMessageId))
             {
-                var candidate = _messages[i];
-                if (candidate != null && string.Equals(candidate.Id, quotedId, StringComparison.Ordinal))
+                return;
+            }
+
+            ChatMessageViewModel target = ViewModel.FindMessageById(quotedMessageId);
+            if (target == null)
+            {
+                target = await ViewModel.NavigateToQuotedMessageAsync(quotedMessageId).ConfigureAwait(true);
+                if (target != null && _activeChat != null)
                 {
-                    target = candidate;
-                    break;
+                    bool isGroup = _activeChat.IsGroup ||
+                        _activeChat.JID.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
+                    RecomputeMessageRuns(_messages, isGroup);
                 }
             }
 
-            // Quote is only actionable when the original message is already in the loaded list.
             if (target == null)
             {
                 return;
             }
 
             TryScrollIntoView(target);
-            _ = FlashMessageHighlightAsync(target);
-            e.Handled = true;
+            await FlashMessageHighlightAsync(target).ConfigureAwait(true);
+        }
+
+        /// <summary>
+        /// Resolves the quoted stanza id from <see cref="FrameworkElement.Tag"/> or bubble VM
+        /// (walks up so strip / name taps share the same id).
+        /// </summary>
+        private static string ResolveQuotedMessageId(object sender)
+        {
+            var current = sender as DependencyObject;
+            while (current != null)
+            {
+                var fe = current as FrameworkElement;
+                if (fe != null)
+                {
+                    if (fe.Tag is string tagId &&
+                        !string.IsNullOrWhiteSpace(tagId) &&
+                        tagId.IndexOf('@') < 0)
+                    {
+                        return tagId;
+                    }
+
+                    if (fe.DataContext is ChatMessageViewModel vm && !string.IsNullOrWhiteSpace(vm.QuotedMessageId))
+                    {
+                        return vm.QuotedMessageId;
+                    }
+                }
+
+                current = Windows.UI.Xaml.Media.VisualTreeHelper.GetParent(current);
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Resolves quoted author JID from <see cref="FrameworkElement.Tag"/> or bubble VM.
+        /// </summary>
+        private static string ResolveQuotedParticipantJid(object sender)
+        {
+            var current = sender as DependencyObject;
+            while (current != null)
+            {
+                var fe = current as FrameworkElement;
+                if (fe != null)
+                {
+                    if (fe.Tag is string tagJid && tagJid.IndexOf('@') >= 0)
+                    {
+                        return tagJid;
+                    }
+
+                    if (fe.DataContext is ChatMessageViewModel vm &&
+                        !string.IsNullOrWhiteSpace(vm.QuotedParticipantJid))
+                    {
+                        return vm.QuotedParticipantJid;
+                    }
+                }
+
+                current = Windows.UI.Xaml.Media.VisualTreeHelper.GetParent(current);
+            }
+
+            return null;
+        }
+
+        private static string ResolveQuotedSenderName(object sender)
+        {
+            var current = sender as DependencyObject;
+            while (current != null)
+            {
+                if (current is FrameworkElement fe &&
+                    fe.DataContext is ChatMessageViewModel vm &&
+                    !string.IsNullOrWhiteSpace(vm.QuotedSenderName))
+                {
+                    return vm.QuotedSenderName;
+                }
+
+                current = Windows.UI.Xaml.Media.VisualTreeHelper.GetParent(current);
+            }
+
+            return null;
         }
 
         private async Task FlashMessageHighlightAsync(ChatMessageViewModel target)

@@ -285,6 +285,9 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   <data name="ChatDetail_ReadLess" xml:space="preserve">
     <value>Leer menos</value>
   </data>
+  <data name="ChatDetail_Forwarded" xml:space="preserve">
+    <value>Reenviado</value>
+  </data>
   <data name="ChatDetail_PinnedIndex" xml:space="preserve">
     <value>Mensaje fijado {0} de {1}</value>
   </data>

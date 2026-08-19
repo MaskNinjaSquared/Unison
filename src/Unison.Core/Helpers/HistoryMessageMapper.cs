@@ -26,7 +26,7 @@ namespace Unison.Core.Helpers
             var message = new ChatMessage
             {
                 Id = row.MessageId,
-                Content = row.IsRevoked ? "[Message Deleted]" : (row.Body ?? string.Empty),
+                Content = row.IsRevoked ? "[Message Deleted]" : NormalizeStoredBody(row.Body, row.Kind),
                 Timestamp = AsUtc(row.TimestampUtc) ?? DateTime.UtcNow,
                 IsFromMe = row.IsFromMe,
                 ParticipantJid = row.ParticipantJid,
@@ -34,12 +34,14 @@ namespace Unison.Core.Helpers
                 Kind = row.IsRevoked ? ChatMessageKind.Text : kind,
                 Status = ToStatusString(row.SendState, row.IsFromMe),
                 IsRevoked = row.IsRevoked,
+                IsForwarded = row.IsForwarded,
                 IsPinned = row.IsPinned,
                 PinnedAtUtc = row.PinnedAtUtc,
                 PinExpiresAtUtc = row.PinExpiresAtUtc,
                 QuotedMessageId = row.QuotedMessageId,
                 QuotedSenderName = row.QuotedSenderName,
-                QuotedText = row.QuotedBody,
+                QuotedParticipantJid = row.QuotedParticipantJid,
+                QuotedText = NormalizeStoredBody(row.QuotedBody, row.QuotedKind),
                 QuotedKind = row.QuotedKind
             };
 
@@ -88,7 +90,22 @@ namespace Unison.Core.Helpers
                 return;
             }
 
-            ApplyMediaEnvelope(message, row, row.Kind, row.Body);
+            ApplyMediaEnvelope(message, row, row.Kind, NormalizeStoredBody(row.Body, row.Kind));
+        }
+
+        /// <summary>
+        /// Rows written before live persistence normalized the body still hold "[Image]" /
+        /// "[Sticker]" preview tags. Strip them on read so they never surface as a caption.
+        /// </summary>
+        private static string NormalizeStoredBody(string body, ChatPreviewKind kind)
+        {
+            if (string.IsNullOrEmpty(body))
+            {
+                return string.Empty;
+            }
+
+            ChatPreviewNormalizer.NormalizeBody(body, kind, out _, out string normalized);
+            return normalized;
         }
 
         /// <summary>
@@ -233,6 +250,38 @@ namespace Unison.Core.Helpers
             }
 
             message.NotifyReactionsChanged();
+        }
+
+        /// <summary>
+        /// When a live/JSON row wins on id, keep SQLite quoted author JID if the winner has none.
+        /// </summary>
+        public static void CopyQuotedParticipantIfMissing(ChatMessage target, ChatMessage source)
+        {
+            if (target == null || source == null || !string.IsNullOrWhiteSpace(target.QuotedParticipantJid))
+            {
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(source.QuotedParticipantJid))
+            {
+                target.QuotedParticipantJid = source.QuotedParticipantJid;
+            }
+        }
+
+        /// <summary>
+        /// When a live/JSON row wins on id, keep SQLite forwarded flag if the winner has none.
+        /// </summary>
+        public static void CopyForwardedIfMissing(ChatMessage target, ChatMessage source)
+        {
+            if (target == null || source == null || target.IsForwarded)
+            {
+                return;
+            }
+
+            if (source.IsForwarded)
+            {
+                target.IsForwarded = true;
+            }
         }
 
         /// <summary>

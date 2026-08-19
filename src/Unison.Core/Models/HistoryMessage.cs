@@ -53,6 +53,9 @@ namespace Unison.Core.Models
 
         public bool IsRevoked { get; set; }
 
+        /// <summary>ContextInfo.isForwarded — independent of <see cref="Kind"/>.</summary>
+        public bool IsForwarded { get; set; }
+
         public bool IsPinned { get; set; }
 
         public DateTime? PinnedAtUtc { get; set; }

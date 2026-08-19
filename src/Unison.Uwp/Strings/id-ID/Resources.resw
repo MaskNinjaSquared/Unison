@@ -344,6 +344,9 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="ChatDetail_ReadLess" xml:space="preserve">
     <value>Tampilkan lebih sedikit</value>
   </data>
+  <data name="ChatDetail_Forwarded" xml:space="preserve">
+    <value>Diteruskan</value>
+  </data>
   <data name="ChatDetail_PinnedIndex" xml:space="preserve">
     <value>Pesan yang disematkan {0} dari {1}</value>
   </data>

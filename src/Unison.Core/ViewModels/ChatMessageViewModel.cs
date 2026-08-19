@@ -132,6 +132,19 @@ namespace Unison.Core.ViewModels
                 Raise(nameof(MentionedJids));
             }
 
+            if (name == nameof(ChatMessage.IsForwarded))
+            {
+                Raise(nameof(IsForwarded));
+                Raise(nameof(ShowForwardedLabel));
+                Raise(nameof(ForwardedLabelText));
+            }
+
+            if (name == nameof(ChatMessage.ShowQuotedAuthorLink))
+            {
+                Raise(nameof(ShowQuotedAuthorLink));
+                Raise(nameof(CanOpenQuotedAuthor));
+            }
+
             if (IsImageOrStickerProperty(name))
             {
                 RaiseImageStickerUiChanged();
@@ -176,6 +189,7 @@ namespace Unison.Core.ViewModels
             name == nameof(ChatMessage.QuotedText) ||
             name == nameof(ChatMessage.QuotedKind) ||
             name == nameof(ChatMessage.QuotedSenderName) ||
+            name == nameof(ChatMessage.QuotedParticipantJid) ||
             name == nameof(ChatMessage.QuotedMessageId);
 
         private static bool IsImageOrStickerProperty(string name) =>
@@ -559,6 +573,9 @@ namespace Unison.Core.ViewModels
                 nameof(QuotedPreviewKind),
                 nameof(QuotedStripText),
                 nameof(QuotedSenderName),
+                nameof(QuotedParticipantJid),
+                nameof(CanOpenQuotedAuthor),
+                nameof(CanNavigateToQuote),
                 nameof(QuotedMessageId));
         }
 
@@ -640,6 +657,11 @@ namespace Unison.Core.ViewModels
         public string QuotedText => Model.QuotedText;
         public ChatPreviewKind QuotedKind => Model.QuotedKind;
         public string QuotedSenderName => Model.QuotedSenderName;
+        public string QuotedParticipantJid => Model.QuotedParticipantJid;
+        /// <summary>Group quote author name is tappable (JID and/or visible @name).</summary>
+        public bool CanOpenQuotedAuthor => Model.ShowQuotedAuthorLink;
+        /// <summary>Quote strip is actionable when the protocol stanza id is known.</summary>
+        public bool CanNavigateToQuote => !string.IsNullOrWhiteSpace(Model.QuotedMessageId);
         public string QuotedMessageId => Model.QuotedMessageId;
 
         /// <summary>Kind for the quote strip (falls back to legacy [Image]/[Document] tags).</summary>
@@ -928,6 +950,21 @@ namespace Unison.Core.ViewModels
             get => Model.ShowGroupSenderName;
             set => Model.ShowGroupSenderName = value;
         }
+
+        public bool ShowQuotedAuthorLink
+        {
+            get => Model.ShowQuotedAuthorLink;
+            set => Model.ShowQuotedAuthorLink = value;
+        }
+
+        public bool IsForwarded => Model.IsForwarded;
+
+        public bool ShowForwardedLabel => Model.IsForwarded;
+
+        public string ForwardedLabelText =>
+            _strings != null
+                ? _strings.Get("ChatDetail_Forwarded", "Forwarded")
+                : "Forwarded";
 
         /// <summary>Group author photo URI for the bubble-side avatar.</summary>
         public string ContactUri

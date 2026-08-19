@@ -305,6 +305,8 @@
     </Compile>
     <Compile Include="UI\Helpers\ChatPreviewKindPresentation.cs" />
     <Compile Include="UI\Helpers\CommentRichService.cs" />
+    <Compile Include="UI\Helpers\DesktopCursor.cs" />
+    <Compile Include="UI\Helpers\DesktopCursorKind.cs" />
     <Compile Include="UI\Helpers\RichTextBuilder.cs" />
     <Compile Include="UI\Converters\StringToVisibilityConverter.cs" />
     <Compile Include="UI\Converters\StringToImageSourceConverter.cs" />
@@ -315,6 +317,7 @@
     <Compile Include="UI\Converters\RelativeTimestampConverter.cs" />
     <Compile Include="UI\Converters\LocalTimeConverter.cs" />
     <Compile Include="UI\Converters\ByteSizeConverter.cs" />
+    <Compile Include="UI\Converters\BoolToDesktopCursorKindConverter.cs" />
     <Compile Include="UI\Controls\ChatListPreviewStrip.xaml.cs">
       <DependentUpon>ChatListPreviewStrip.xaml</DependentUpon>
     </Compile>

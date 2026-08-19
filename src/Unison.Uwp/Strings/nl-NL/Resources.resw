@@ -344,6 +344,9 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   <data name="ChatDetail_ReadLess" xml:space="preserve">
     <value>Minder lezen</value>
   </data>
+  <data name="ChatDetail_Forwarded" xml:space="preserve">
+    <value>Doorgestuurd</value>
+  </data>
   <data name="ChatDetail_PinnedIndex" xml:space="preserve">
     <value>Vastgezet bericht {0} van {1}</value>
   </data>
