@@ -17,10 +17,11 @@ Missing a registration step is why a language “exists as a folder” but never
 | `Indonesian` | `id-ID` | Bahasa Indonesia |
 | `Polish` | `pl-PL` | Polski |
 | `Ukrainian` | `uk-UA` | Українська |
+| `Russian` | `ru-RU` | Русский |
 
 `System` is not a `.resw`. It clears `PrimaryLanguageOverride` so MRT uses the OS list, then the first **shipped** match, then English.
 
-Worked example below: **French** as `fr-FR` / `AppLanguage.French = 7`.
+Worked example below: **French** as `fr-FR` / `AppLanguage.French = 9`.
 
 ---
 
@@ -105,8 +106,8 @@ Persisted value is `(int)AppLanguage` in `LocalSettingsConstants.SelectedLanguag
 ### `Unison.Core/Models/AppLanguage.cs`
 
 ```csharp
-Polish = 6,
-French = 7
+Russian = 8,
+French = 9
 ```
 
 ### `Unison.Core/Helpers/AppLanguageInfo.cs`

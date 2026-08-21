@@ -89,7 +89,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             try
             {
                 _isRunning = true;
-                _whatsAppService.RaiseSyncStatus("Refreshing contact names...");
+                _whatsAppService.RaiseSyncStatus(SyncPhaseStatus.Format(SyncPhaseStatus.Names));
 
                 if (includeGroups)
                 {
@@ -180,6 +180,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             if (needsGroupQuery && DateTime.UtcNow - _lastForcedGroupPassUtc >= ForcedGroupPassWindow)
             {
                 _lastForcedGroupPassUtc = DateTime.UtcNow;
+                _whatsAppService.RaiseSyncStatus(SyncPhaseStatus.Format(SyncPhaseStatus.Groups));
                 try
                 {
                     // The participating query already falls back to per-group metadata for the
@@ -284,6 +285,12 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             for (int i = 0; i < jids.Count; i += 5)
             {
                 var chunk = jids.Skip(i).Take(5).ToArray();
+
+                // Each usync can sit for seconds; without a count this whole stretch looked to
+                // the user like the app had stopped doing anything.
+                _whatsAppService.RaiseSyncStatus(
+                    SyncPhaseStatus.Format(SyncPhaseStatus.Names, i, jids.Count));
+
                 try
                 {
                     await _whatsAppService.ResolveContactsAsync(chunk);
@@ -318,11 +325,13 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             }
 
             Debug.WriteLine($"[ContactNameResolver] Retrying {unresolved.Count} unresolved contacts individually");
+            int retried = 0;
             foreach (var jid in unresolved)
             {
                 try
                 {
-                    _whatsAppService.RaiseSyncStatus($"Refreshing contact names... ({jid.Split('@')[0]})");
+                    _whatsAppService.RaiseSyncStatus(
+                        SyncPhaseStatus.Format(SyncPhaseStatus.Names, retried++, unresolved.Count));
                     await _whatsAppService.ResolveContactsAsync(new[] { jid });
                 }
                 catch (Exception ex)

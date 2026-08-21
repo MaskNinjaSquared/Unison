@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Models;
@@ -51,13 +52,15 @@ namespace Unison.Core.Helpers
 
         /// <summary>
         /// Local avatar URI: roster → 1:1 chat → Person cache.
+        /// When <paramref name="directChatAvatars"/> is provided, the Chats walk is skipped.
         /// </summary>
         public static string ResolveAvatar(
             string participantJid,
             ChatItem groupChat,
             IWhatsAppService whatsApp,
             IPersonStore personStore,
-            GroupMember rosterMember = null)
+            GroupMember rosterMember = null,
+            IReadOnlyDictionary<string, string> directChatAvatars = null)
         {
             if (string.IsNullOrWhiteSpace(participantJid))
             {
@@ -81,7 +84,7 @@ namespace Unison.Core.Helpers
                 return fromRoster;
             }
 
-            string fromDirect = FindAvatarOnDirectChat(canonical, whatsApp);
+            string fromDirect = FindAvatarOnDirectChat(canonical, whatsApp, directChatAvatars);
             if (!string.IsNullOrWhiteSpace(fromDirect))
             {
                 return fromDirect;
@@ -92,6 +95,7 @@ namespace Unison.Core.Helpers
 
         /// <summary>
         /// Display label: hint (bubble / quote) → roster → protocol names → Person → 1:1 chat → JID user.
+        /// When <paramref name="directChatNames"/> is provided, the Chats walk is skipped.
         /// </summary>
         public static string ResolveDisplayName(
             string participantJid,
@@ -99,7 +103,8 @@ namespace Unison.Core.Helpers
             IWhatsAppService whatsApp,
             IPersonStore personStore,
             string nameHint = null,
-            GroupMember rosterMember = null)
+            GroupMember rosterMember = null,
+            IReadOnlyDictionary<string, string> directChatNames = null)
         {
             if (string.IsNullOrWhiteSpace(participantJid))
             {
@@ -145,7 +150,7 @@ namespace Unison.Core.Helpers
                 return person.Name.Trim();
             }
 
-            string fromChat = FindNameOnDirectChat(canonical, whatsApp);
+            string fromChat = FindNameOnDirectChat(canonical, whatsApp, directChatNames);
             if (UsableLabel(fromChat, canonical))
             {
                 return fromChat.Trim();
@@ -186,9 +191,29 @@ namespace Unison.Core.Helpers
             return string.IsNullOrWhiteSpace(member?.AvatarUrl) ? null : member.AvatarUrl;
         }
 
-        private static string FindAvatarOnDirectChat(string canonical, IWhatsAppService whatsApp)
+        private static string FindAvatarOnDirectChat(
+            string canonical,
+            IWhatsAppService whatsApp,
+            IReadOnlyDictionary<string, string> directChatAvatars)
         {
-            if (whatsApp?.Chats == null || string.IsNullOrWhiteSpace(canonical))
+            if (string.IsNullOrWhiteSpace(canonical))
+            {
+                return null;
+            }
+
+            if (directChatAvatars != null)
+            {
+                string indexed;
+                if (directChatAvatars.TryGetValue(canonical, out indexed) &&
+                    !string.IsNullOrWhiteSpace(indexed))
+                {
+                    return indexed;
+                }
+
+                return null;
+            }
+
+            if (whatsApp?.Chats == null)
             {
                 return null;
             }
@@ -222,9 +247,29 @@ namespace Unison.Core.Helpers
             return string.IsNullOrWhiteSpace(person?.AvatarUrl) ? null : person.AvatarUrl;
         }
 
-        private static string FindNameOnDirectChat(string canonical, IWhatsAppService whatsApp)
+        private static string FindNameOnDirectChat(
+            string canonical,
+            IWhatsAppService whatsApp,
+            IReadOnlyDictionary<string, string> directChatNames)
         {
-            if (whatsApp?.Chats == null || string.IsNullOrWhiteSpace(canonical))
+            if (string.IsNullOrWhiteSpace(canonical))
+            {
+                return null;
+            }
+
+            if (directChatNames != null)
+            {
+                string indexed;
+                if (directChatNames.TryGetValue(canonical, out indexed) &&
+                    UsableLabel(indexed, canonical))
+                {
+                    return indexed;
+                }
+
+                return null;
+            }
+
+            if (whatsApp?.Chats == null)
             {
                 return null;
             }

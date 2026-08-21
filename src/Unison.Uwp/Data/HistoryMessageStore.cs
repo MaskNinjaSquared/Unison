@@ -21,10 +21,10 @@ namespace Unison.Uwp.Data
     {
         private static readonly string DatabaseFileName = "unison.db";
 
-        public const int CurrentSchemaVersion = 6;
+        public const int CurrentSchemaVersion = 7;
 
         /// <summary>
-        /// Timeline open / load-more omit <c>MediaThumbnailBase64</c>; media kinds fill it in a second query.
+        /// Timeline open / load-more: protocol thumbs live on disk (<c>MediaLocalUri</c> / poster).
         /// </summary>
         private const string TimelineSelectSql =
             "SELECT Id, ChatJid, MessageId, IsFromMe, ParticipantJid, SenderName, Body, Kind, SendState, " +
@@ -33,6 +33,10 @@ namespace Unison.Uwp.Data
             "PinnedAtUtc, PinExpiresAtUtc, QuotedMessageId, QuotedChatJid, QuotedParticipantJid, " +
             "QuotedSenderName, QuotedBody, QuotedKind, MediaLocalUri, MediaPosterUri, MentionedJids, " +
             "TimestampUtc, SyncId, SyncType, UpdatedAtUtc FROM history_message ";
+
+        private const string ReactionDetailSelectSql =
+            "SELECT ChatJid, MessageId, ReactorJid, ReactorName, Emoji, FromMe, ReactionMessageId, TimestampUtc " +
+            "FROM history_message_reaction ";
 
         private readonly SemaphoreSlim _initLock = new SemaphoreSlim(1, 1);
         private readonly SemaphoreSlim _writeLock = new SemaphoreSlim(1, 1);
@@ -64,6 +68,7 @@ namespace Unison.Uwp.Data
                 _connection = new SQLiteAsyncConnection(dbPath);
                 await _connection.CreateTableAsync<HistoryMessageRow>().ConfigureAwait(false);
                 await _connection.CreateTableAsync<HistoryMessageReactionRow>().ConfigureAwait(false);
+                await DropLegacyThumbnailColumnAsync().ConfigureAwait(false);
                 await EnsureIndexesAsync().ConfigureAwait(false);
                 _initialized = true;
                 Debug.WriteLine("[HistoryMessageStore] Initialized schema=" + CurrentSchemaVersion + " at " + dbPath);
@@ -97,6 +102,23 @@ namespace Unison.Uwp.Data
             return PersistWriteBatchAsync(batch);
         }
 
+        public Task UpsertReactionsAsync(IReadOnlyList<HistoryMessageReaction> reactions)
+        {
+            var batch = new HistoryMessageWriteBatch();
+            if (reactions != null)
+            {
+                for (int i = 0; i < reactions.Count; i++)
+                {
+                    if (reactions[i] != null)
+                    {
+                        batch.Reactions.Add(reactions[i]);
+                    }
+                }
+            }
+
+            return PersistWriteBatchAsync(batch);
+        }
+
         public async Task<HistoryMessage> GetAsync(string chatJid, string messageId)
         {
             string key = JidHelper.Normalize(chatJid);
@@ -116,7 +138,7 @@ namespace Unison.Uwp.Data
             }
 
             var list = new List<HistoryMessage> { model };
-            await AttachReactionsAsync(key, list).ConfigureAwait(false);
+            await AttachReactionsSafeAsync(key, list).ConfigureAwait(false);
             return list[0];
         }
 
@@ -140,7 +162,7 @@ namespace Unison.Uwp.Data
                     upserted += WriteMessages(conn, batch.Messages, chats, ref syncId, ref syncType);
                     if (batch.ReplaceExistingReactions)
                     {
-                        ClearReactionsForMessages(conn, batch.Messages);
+                        ClearReactionsForMessages(conn, batch);
                     }
 
                     WriteReactions(conn, batch.Reactions, chats);
@@ -208,7 +230,6 @@ namespace Unison.Uwp.Data
                     key, take).ConfigureAwait(false);
             }
 
-            await FillTimelineThumbnailsAsync(rows).ConfigureAwait(false);
             rows.Reverse();
             var list = new List<HistoryMessage>(rows.Count);
             foreach (var row in rows)
@@ -216,7 +237,307 @@ namespace Unison.Uwp.Data
                 list.Add(ToModel(row));
             }
 
-            await AttachReactionsAsync(key, list).ConfigureAwait(false);
+            await AttachReactionsSafeAsync(key, list).ConfigureAwait(false);
+            return list;
+        }
+
+        /// <inheritdoc />
+        public async Task<IReadOnlyList<HistoryMessage>> GetForChatKeysAsync(
+            IReadOnlyList<string> chatJids,
+            int limit = 100,
+            DateTime? beforeUtc = null,
+            string beforeMessageId = null)
+        {
+            var keys = NormalizeChatKeys(chatJids);
+            if (keys.Count == 0)
+            {
+                return Array.Empty<HistoryMessage>();
+            }
+
+            if (keys.Count == 1)
+            {
+                return await GetForChatAsync(keys[0], limit, beforeUtc, beforeMessageId)
+                    .ConfigureAwait(false);
+            }
+
+            await EnsureInitializedAsync().ConfigureAwait(false);
+            int take = Math.Max(1, limit);
+
+            var sql = new StringBuilder(TimelineSelectSql);
+            sql.Append("WHERE ChatJid IN (");
+            var args = new List<object>(keys.Count + 4);
+            for (int i = 0; i < keys.Count; i++)
+            {
+                if (i > 0)
+                {
+                    sql.Append(',');
+                }
+
+                sql.Append('?');
+                args.Add(keys[i]);
+            }
+
+            sql.Append(')');
+
+            if (beforeUtc.HasValue)
+            {
+                DateTime before = beforeUtc.Value;
+                string beforeId = beforeMessageId ?? string.Empty;
+                sql.Append(" AND (TimestampUtc < ? OR (TimestampUtc = ? AND MessageId < ?))");
+                args.Add(before);
+                args.Add(before);
+                args.Add(beforeId);
+            }
+
+            sql.Append(" ORDER BY TimestampUtc DESC, MessageId DESC LIMIT ?");
+            args.Add(take);
+
+            List<HistoryMessageRow> rows =
+                await _connection.QueryAsync<HistoryMessageRow>(sql.ToString(), args.ToArray())
+                    .ConfigureAwait(false);
+
+            rows.Reverse();
+
+            var list = new List<HistoryMessage>(rows.Count);
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var row in rows)
+            {
+                if (row == null || string.IsNullOrWhiteSpace(row.MessageId))
+                {
+                    continue;
+                }
+
+                if (!seen.Add(row.MessageId))
+                {
+                    continue;
+                }
+
+                list.Add(ToModel(row));
+            }
+
+            await AttachReactionsForKeysSafeAsync(keys, list).ConfigureAwait(false);
+            return list;
+        }
+
+        private static List<string> NormalizeChatKeys(IReadOnlyList<string> chatJids)
+        {
+            var keys = new List<string>();
+            if (chatJids == null)
+            {
+                return keys;
+            }
+
+            for (int i = 0; i < chatJids.Count; i++)
+            {
+                string norm = JidHelper.Normalize(chatJids[i]);
+                if (string.IsNullOrWhiteSpace(norm))
+                {
+                    continue;
+                }
+
+                bool exists = false;
+                for (int j = 0; j < keys.Count; j++)
+                {
+                    if (string.Equals(keys[j], norm, StringComparison.OrdinalIgnoreCase))
+                    {
+                        exists = true;
+                        break;
+                    }
+                }
+
+                if (!exists)
+                {
+                    keys.Add(norm);
+                }
+            }
+
+            return keys;
+        }
+
+        private async Task AttachReactionsForKeysSafeAsync(
+            IReadOnlyList<string> chatJids,
+            List<HistoryMessage> messages)
+        {
+            try
+            {
+                await AttachReactionsAsync(chatJids, messages).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[HistoryMessageStore] Reaction attach failed: " + ex.Message);
+            }
+        }
+
+        private async Task AttachReactionsSafeAsync(string chatJid, List<HistoryMessage> messages)
+        {
+            try
+            {
+                await AttachReactionsAsync(new[] { chatJid }, messages).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[HistoryMessageStore] Reaction attach failed: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Fills <see cref="HistoryMessage.Reactions"/> for a whole page: one batched query per 80
+        /// ids, explicit columns, reactors ordered oldest first.
+        /// </summary>
+        private async Task AttachReactionsAsync(
+            IReadOnlyList<string> chatJids,
+            List<HistoryMessage> messages)
+        {
+            if (messages == null || messages.Count == 0 || chatJids == null || chatJids.Count == 0)
+            {
+                return;
+            }
+
+            var byId = new Dictionary<string, HistoryMessage>(StringComparer.Ordinal);
+            var ids = new List<string>(messages.Count);
+            CollectMessageIds(messages, byId, ids);
+            if (ids.Count == 0)
+            {
+                return;
+            }
+
+            List<HistoryMessageReactionRow> rows =
+                await QueryReactionRowsAsync(chatJids, ids).ConfigureAwait(false);
+            if (rows == null || rows.Count == 0)
+            {
+                return;
+            }
+
+            for (int i = 0; i < rows.Count; i++)
+            {
+                HistoryMessageReactionRow row = rows[i];
+                HistoryMessage parent;
+                if (row == null ||
+                    string.IsNullOrWhiteSpace(row.MessageId) ||
+                    string.IsNullOrWhiteSpace(row.Emoji) ||
+                    !byId.TryGetValue(row.MessageId, out parent) ||
+                    parent == null)
+                {
+                    continue;
+                }
+
+                if (parent.Reactions == null)
+                {
+                    parent.Reactions = new List<HistoryMessageReaction>();
+                }
+
+                parent.Reactions.Add(ToReactionModel(row));
+            }
+        }
+
+        private async Task<List<HistoryMessageReactionRow>> QueryReactionRowsAsync(
+            IReadOnlyList<string> chatJids,
+            List<string> messageIds)
+        {
+            const int batchSize = 80;
+            var all = new List<HistoryMessageReactionRow>();
+            if (chatJids == null || chatJids.Count == 0 || messageIds == null)
+            {
+                return all;
+            }
+
+            for (int offset = 0; offset < messageIds.Count; offset += batchSize)
+            {
+                int count = Math.Min(batchSize, messageIds.Count - offset);
+                var sql = new StringBuilder(ReactionDetailSelectSql);
+                sql.Append("WHERE ChatJid IN (");
+                var args = new List<object>(chatJids.Count + count);
+                for (int i = 0; i < chatJids.Count; i++)
+                {
+                    if (i > 0)
+                    {
+                        sql.Append(',');
+                    }
+
+                    sql.Append('?');
+                    args.Add(chatJids[i]);
+                }
+
+                sql.Append(") AND MessageId IN (");
+                for (int i = 0; i < count; i++)
+                {
+                    if (i > 0)
+                    {
+                        sql.Append(',');
+                    }
+
+                    sql.Append('?');
+                    args.Add(messageIds[offset + i]);
+                }
+
+                sql.Append(") ORDER BY TimestampUtc ASC");
+                List<HistoryMessageReactionRow> batch =
+                    await _connection.QueryAsync<HistoryMessageReactionRow>(sql.ToString(), args.ToArray())
+                        .ConfigureAwait(false);
+                if (batch != null && batch.Count > 0)
+                {
+                    all.AddRange(batch);
+                }
+            }
+
+            return all;
+        }
+
+        private static void CollectMessageIds(
+            List<HistoryMessage> messages,
+            Dictionary<string, HistoryMessage> byId,
+            List<string> ids)
+        {
+            for (int i = 0; i < messages.Count; i++)
+            {
+                HistoryMessage message = messages[i];
+                if (message == null || string.IsNullOrWhiteSpace(message.MessageId))
+                {
+                    continue;
+                }
+
+                if (byId.ContainsKey(message.MessageId))
+                {
+                    continue;
+                }
+
+                byId[message.MessageId] = message;
+                ids.Add(message.MessageId);
+            }
+        }
+
+        public async Task<IReadOnlyList<HistoryMessageReaction>> GetReactionsForMessageAsync(
+            string chatJid,
+            string messageId)
+        {
+            string key = JidHelper.Normalize(chatJid);
+            if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(messageId))
+            {
+                return Array.Empty<HistoryMessageReaction>();
+            }
+
+            await EnsureInitializedAsync().ConfigureAwait(false);
+            List<HistoryMessageReactionRow> rows = await _connection.QueryAsync<HistoryMessageReactionRow>(
+                    ReactionDetailSelectSql +
+                    "WHERE ChatJid = ? AND MessageId = ? ORDER BY TimestampUtc ASC",
+                    key,
+                    messageId.Trim())
+                .ConfigureAwait(false);
+
+            if (rows == null || rows.Count == 0)
+            {
+                return Array.Empty<HistoryMessageReaction>();
+            }
+
+            var list = new List<HistoryMessageReaction>(rows.Count);
+            for (int i = 0; i < rows.Count; i++)
+            {
+                if (rows[i] != null)
+                {
+                    list.Add(ToReactionModel(rows[i]));
+                }
+            }
+
             return list;
         }
 
@@ -232,7 +553,8 @@ namespace Unison.Uwp.Data
             int take = Math.Max(1, maxCount);
             DateTime now = DateTime.UtcNow;
             List<HistoryMessageRow> rows = await _connection.QueryAsync<HistoryMessageRow>(
-                    "SELECT * FROM history_message WHERE ChatJid = ? AND IsPinned = 1 " +
+                    TimelineSelectSql +
+                    "WHERE ChatJid = ? AND IsPinned = 1 " +
                     "ORDER BY PinnedAtUtc DESC LIMIT ?",
                     key, take * 3)
                 .ConfigureAwait(false);
@@ -249,7 +571,7 @@ namespace Unison.Uwp.Data
                 list.Add(ToModel(row));
             }
 
-            await AttachReactionsAsync(key, list).ConfigureAwait(false);
+            await AttachReactionsSafeAsync(key, list).ConfigureAwait(false);
             return list;
         }
 
@@ -278,7 +600,7 @@ namespace Unison.Uwp.Data
                 list.Add(ToModel(row));
             }
 
-            await AttachReactionsAsync(key, list).ConfigureAwait(false);
+            await AttachReactionsSafeAsync(key, list).ConfigureAwait(false);
             return list;
         }
 
@@ -298,7 +620,8 @@ namespace Unison.Uwp.Data
             int document = (int)ChatPreviewKind.Document;
 
             List<HistoryMessageRow> rows = await _connection.QueryAsync<HistoryMessageRow>(
-                    "SELECT * FROM history_message WHERE ChatJid = ? AND Kind IN (?, ?, ?, ?) " +
+                    TimelineSelectSql +
+                    "WHERE ChatJid = ? AND Kind IN (?, ?, ?, ?) " +
                     "ORDER BY TimestampUtc DESC LIMIT ?",
                     key, image, video, voice, document, take)
                 .ConfigureAwait(false);
@@ -307,6 +630,41 @@ namespace Unison.Uwp.Data
             foreach (var row in rows)
             {
                 list.Add(ToModel(row));
+            }
+
+            return list;
+        }
+
+        public async Task<IReadOnlyList<HistoryMessage>> GetNewestPerChatAsync(IReadOnlyList<string> chatJids = null)
+        {
+            await EnsureInitializedAsync().ConfigureAwait(false);
+
+            var keys = NormalizeChatKeys(chatJids);
+            if (keys.Count == 0)
+            {
+                return Array.Empty<HistoryMessage>();
+            }
+
+            // One indexed LIMIT 1 per chat — reliable on older Mobile SQLite.
+            var list = new List<HistoryMessage>(keys.Count);
+            for (int i = 0; i < keys.Count; i++)
+            {
+                List<HistoryMessageRow> rows = await _connection.QueryAsync<HistoryMessageRow>(
+                        TimelineSelectSql +
+                        "WHERE ChatJid = ? AND IsRevoked = 0 AND TimestampUtc IS NOT NULL " +
+                        "ORDER BY TimestampUtc DESC, MessageId DESC LIMIT 1",
+                        keys[i])
+                    .ConfigureAwait(false);
+                if (rows == null || rows.Count == 0)
+                {
+                    continue;
+                }
+
+                HistoryMessage model = ToModel(rows[0]);
+                if (model != null)
+                {
+                    list.Add(model);
+                }
             }
 
             return list;
@@ -342,107 +700,59 @@ namespace Unison.Uwp.Data
             }
         }
 
-        private async Task AttachReactionsAsync(string chatJid, List<HistoryMessage> messages)
-        {
-            if (messages == null || messages.Count == 0)
-            {
-                return;
-            }
-
-            var byId = new Dictionary<string, HistoryMessage>(StringComparer.Ordinal);
-            var ids = new List<string>(messages.Count);
-            for (int i = 0; i < messages.Count; i++)
-            {
-                HistoryMessage message = messages[i];
-                if (message == null || string.IsNullOrWhiteSpace(message.MessageId))
-                {
-                    continue;
-                }
-
-                if (byId.ContainsKey(message.MessageId))
-                {
-                    continue;
-                }
-
-                byId[message.MessageId] = message;
-                ids.Add(message.MessageId);
-            }
-
-            if (ids.Count == 0)
-            {
-                return;
-            }
-
-            List<HistoryMessageReactionRow> rows = await QueryReactionsAsync(chatJid, ids).ConfigureAwait(false);
-            if (rows == null || rows.Count == 0)
-            {
-                return;
-            }
-
-            for (int i = 0; i < rows.Count; i++)
-            {
-                HistoryMessageReactionRow row = rows[i];
-                HistoryMessage parent;
-                if (row == null ||
-                    string.IsNullOrWhiteSpace(row.MessageId) ||
-                    !byId.TryGetValue(row.MessageId, out parent) ||
-                    parent == null)
-                {
-                    continue;
-                }
-
-                if (parent.Reactions == null)
-                {
-                    parent.Reactions = new List<HistoryMessageReaction>();
-                }
-
-                parent.Reactions.Add(ToReactionModel(row));
-            }
-        }
-
-        private async Task<List<HistoryMessageReactionRow>> QueryReactionsAsync(
-            string chatJid,
-            List<string> messageIds)
-        {
-            const int batchSize = 80;
-            var all = new List<HistoryMessageReactionRow>();
-            for (int offset = 0; offset < messageIds.Count; offset += batchSize)
-            {
-                int count = Math.Min(batchSize, messageIds.Count - offset);
-                var sql = new StringBuilder(
-                    "SELECT * FROM history_message_reaction WHERE ChatJid = ? AND MessageId IN (");
-                var args = new object[count + 1];
-                args[0] = chatJid;
-                for (int i = 0; i < count; i++)
-                {
-                    if (i > 0)
-                    {
-                        sql.Append(',');
-                    }
-
-                    sql.Append('?');
-                    args[i + 1] = messageIds[offset + i];
-                }
-
-                sql.Append(')');
-                List<HistoryMessageReactionRow> chunk =
-                    await _connection.QueryAsync<HistoryMessageReactionRow>(sql.ToString(), args)
-                        .ConfigureAwait(false);
-                if (chunk != null && chunk.Count > 0)
-                {
-                    all.AddRange(chunk);
-                }
-            }
-
-            return all;
-        }
-
         private async Task EnsureInitializedAsync()
         {
             if (!_initialized)
             {
                 await InitializeAsync().ConfigureAwait(false);
             }
+        }
+
+        private async Task DropLegacyThumbnailColumnAsync()
+        {
+            try
+            {
+                List<SqliteTableInfoRow> cols = await _connection
+                    .QueryAsync<SqliteTableInfoRow>("PRAGMA table_info(history_message)")
+                    .ConfigureAwait(false);
+                bool hasColumn = false;
+                if (cols != null)
+                {
+                    for (int i = 0; i < cols.Count; i++)
+                    {
+                        if (cols[i] != null &&
+                            string.Equals(cols[i].name, "MediaThumbnailBase64", StringComparison.OrdinalIgnoreCase))
+                        {
+                            hasColumn = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!hasColumn)
+                {
+                    return;
+                }
+
+                await _connection.ExecuteAsync(
+                        "ALTER TABLE history_message DROP COLUMN MediaThumbnailBase64")
+                    .ConfigureAwait(false);
+                Debug.WriteLine("[HistoryMessageStore] Dropped MediaThumbnailBase64 column");
+            }
+            catch (Exception ex)
+            {
+                // Older SQLite without DROP COLUMN: property is gone from the entity; column may linger.
+                Debug.WriteLine("[HistoryMessageStore] Drop MediaThumbnailBase64 skipped: " + ex.Message);
+            }
+        }
+
+        private sealed class SqliteTableInfoRow
+        {
+            public int cid { get; set; }
+
+            public string name { get; set; }
+
+            public string type { get; set; }
         }
 
         private async Task EnsureIndexesAsync()
@@ -465,88 +775,15 @@ namespace Unison.Uwp.Data
             }
         }
 
-        private async Task FillTimelineThumbnailsAsync(List<HistoryMessageRow> rows)
+        private static bool IsThumbCacheUri(string uri)
         {
-            if (rows == null || rows.Count == 0)
+            if (string.IsNullOrWhiteSpace(uri))
             {
-                return;
+                return false;
             }
 
-            var ids = new List<string>();
-            for (int i = 0; i < rows.Count; i++)
-            {
-                HistoryMessageRow row = rows[i];
-                if (row != null && NeedsTimelineThumbnail(row.Kind) && !string.IsNullOrEmpty(row.Id))
-                {
-                    ids.Add(row.Id);
-                }
-            }
-
-            if (ids.Count == 0)
-            {
-                return;
-            }
-
-            var byId = new Dictionary<string, HistoryMessageRow>(rows.Count, StringComparer.Ordinal);
-            for (int i = 0; i < rows.Count; i++)
-            {
-                HistoryMessageRow row = rows[i];
-                if (row != null && !string.IsNullOrEmpty(row.Id))
-                {
-                    byId[row.Id] = row;
-                }
-            }
-
-            const int batchSize = 80;
-            for (int offset = 0; offset < ids.Count; offset += batchSize)
-            {
-                int count = Math.Min(batchSize, ids.Count - offset);
-                var sql = new StringBuilder(
-                    "SELECT Id, MediaThumbnailBase64 FROM history_message WHERE Id IN (");
-                var args = new object[count];
-                for (int i = 0; i < count; i++)
-                {
-                    if (i > 0)
-                    {
-                        sql.Append(',');
-                    }
-
-                    sql.Append('?');
-                    args[i] = ids[offset + i];
-                }
-
-                sql.Append(')');
-                List<HistoryMessageRow> thumbs =
-                    await _connection.QueryAsync<HistoryMessageRow>(sql.ToString(), args)
-                        .ConfigureAwait(false);
-                if (thumbs == null)
-                {
-                    continue;
-                }
-
-                for (int i = 0; i < thumbs.Count; i++)
-                {
-                    HistoryMessageRow thumb = thumbs[i];
-                    HistoryMessageRow parent;
-                    if (thumb == null ||
-                        string.IsNullOrEmpty(thumb.Id) ||
-                        !byId.TryGetValue(thumb.Id, out parent) ||
-                        parent == null)
-                    {
-                        continue;
-                    }
-
-                    parent.MediaThumbnailBase64 = thumb.MediaThumbnailBase64;
-                }
-            }
-        }
-
-        private static bool NeedsTimelineThumbnail(int kind)
-        {
-            return kind == (int)ChatPreviewKind.Image ||
-                   kind == (int)ChatPreviewKind.Video ||
-                   kind == (int)ChatPreviewKind.Sticker ||
-                   kind == (int)ChatPreviewKind.Document;
+            return uri.IndexOf("_thumb.", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   uri.EndsWith("_thumb", StringComparison.OrdinalIgnoreCase);
         }
 
         private static int WriteMessages(
@@ -584,8 +821,21 @@ namespace Unison.Uwp.Data
                     {
                         row.MediaLocalUri = existing.MediaLocalUri;
                     }
+                    else if (IsThumbCacheUri(row.MediaLocalUri) &&
+                             !string.IsNullOrWhiteSpace(existing.MediaLocalUri) &&
+                             !IsThumbCacheUri(existing.MediaLocalUri))
+                    {
+                        // Keep downloaded full media; history thumb must not clobber it.
+                        row.MediaLocalUri = existing.MediaLocalUri;
+                    }
 
                     if (string.IsNullOrWhiteSpace(row.MediaPosterUri))
+                    {
+                        row.MediaPosterUri = existing.MediaPosterUri;
+                    }
+                    else if (IsThumbCacheUri(row.MediaPosterUri) &&
+                             !string.IsNullOrWhiteSpace(existing.MediaPosterUri) &&
+                             !IsThumbCacheUri(existing.MediaPosterUri))
                     {
                         row.MediaPosterUri = existing.MediaPosterUri;
                     }
@@ -596,6 +846,7 @@ namespace Unison.Uwp.Data
                     }
                 }
 
+                // Never persist fat protocol thumbnails in SQLite (disk URI is enough).
                 conn.InsertOrReplace(row);
                 upserted++;
             }
@@ -603,19 +854,26 @@ namespace Unison.Uwp.Data
             return upserted;
         }
 
-        private static void ClearReactionsForMessages(SQLiteConnection conn, List<HistoryMessage> messages)
+        /// <summary>
+        /// Only the ids the batch is authoritative about: chip-summary rows carry no reactor rows,
+        /// so clearing by message would drop stored reactions on every live upsert.
+        /// </summary>
+        private static void ClearReactionsForMessages(SQLiteConnection conn, HistoryMessageWriteBatch batch)
         {
-            if (conn == null || messages == null)
+            if (conn == null || batch == null || batch.ReactionOwnerMessageIds.Count == 0)
             {
                 return;
             }
 
+            var owners = new HashSet<string>(batch.ReactionOwnerMessageIds, StringComparer.Ordinal);
+            List<HistoryMessage> messages = batch.Messages;
             for (int i = 0; i < messages.Count; i++)
             {
                 HistoryMessage message = messages[i];
                 if (message == null ||
                     string.IsNullOrWhiteSpace(message.ChatJid) ||
-                    string.IsNullOrWhiteSpace(message.MessageId))
+                    string.IsNullOrWhiteSpace(message.MessageId) ||
+                    !owners.Contains(message.MessageId))
                 {
                     continue;
                 }
@@ -774,7 +1032,6 @@ namespace Unison.Uwp.Data
                 MediaDurationSeconds = model.MediaDurationSeconds,
                 MediaFileName = model.MediaFileName,
                 MediaFileLengthBytes = model.MediaFileLengthBytes,
-                MediaThumbnailBase64 = model.MediaThumbnailBase64,
                 IsVoiceNote = model.IsVoiceNote,
                 IsRevoked = model.IsRevoked,
                 IsForwarded = model.IsForwarded,
@@ -841,7 +1098,6 @@ namespace Unison.Uwp.Data
                 MediaDurationSeconds = row.MediaDurationSeconds,
                 MediaFileName = row.MediaFileName,
                 MediaFileLengthBytes = row.MediaFileLengthBytes,
-                MediaThumbnailBase64 = row.MediaThumbnailBase64,
                 IsVoiceNote = row.IsVoiceNote,
                 IsRevoked = row.IsRevoked,
                 IsForwarded = row.IsForwarded,

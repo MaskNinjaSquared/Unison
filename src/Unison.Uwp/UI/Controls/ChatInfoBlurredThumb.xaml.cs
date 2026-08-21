@@ -1,14 +1,12 @@
 using System;
 using Unison.Core.ViewModels;
-using Windows.Storage.Streams;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Media.Imaging;
-using System.Runtime.InteropServices.WindowsRuntime;
 
 namespace Unison.Uwp.UI.Controls
 {
-    /// <summary>Low-quality jpegThumbnail / cached URI for the chat-info media grid.</summary>
+    /// <summary>Cached local URI for the chat-info media grid (full media or protocol thumb).</summary>
     public sealed partial class ChatInfoBlurredThumb : UserControl
     {
         private ChatMessageViewModel _vm;
@@ -46,9 +44,7 @@ namespace Unison.Uwp.UI.Controls
             string name = e?.PropertyName;
             if (string.IsNullOrEmpty(name) ||
                 name == nameof(ChatMessageViewModel.InfoPreviewUri) ||
-                name == nameof(ChatMessageViewModel.InfoPreviewBase64) ||
                 name == nameof(ChatMessageViewModel.HasInfoPreviewUri) ||
-                name == nameof(ChatMessageViewModel.HasInfoPreviewBase64) ||
                 name == nameof(ChatMessageViewModel.ImageUri) ||
                 name == nameof(ChatMessageViewModel.VideoPosterUri))
             {
@@ -80,19 +76,19 @@ namespace Unison.Uwp.UI.Controls
             }
         }
 
-        private async System.Threading.Tasks.Task LoadPreviewAsync()
+        private System.Threading.Tasks.Task LoadPreviewAsync()
         {
             int version = ++_loadVersion;
             var vm = _vm;
             if (PreviewImage == null)
             {
-                return;
+                return System.Threading.Tasks.Task.CompletedTask;
             }
 
             if (vm == null)
             {
                 PreviewImage.Source = null;
-                return;
+                return System.Threading.Tasks.Task.CompletedTask;
             }
 
             try
@@ -106,42 +102,18 @@ namespace Unison.Uwp.UI.Controls
                         DecodePixelType = DecodePixelType.Logical,
                         UriSource = new Uri(uri)
                     };
-                    if (version != _loadVersion)
-                    {
-                        return;
-                    }
-
-                    PreviewImage.Source = bmp;
-                    return;
-                }
-
-                string encoded = vm.InfoPreviewBase64;
-                if (string.IsNullOrWhiteSpace(encoded))
-                {
                     if (version == _loadVersion)
                     {
-                        PreviewImage.Source = null;
+                        PreviewImage.Source = bmp;
                     }
 
-                    return;
+                    return System.Threading.Tasks.Task.CompletedTask;
                 }
 
-                byte[] bytes = Convert.FromBase64String(encoded);
-                var stream = new InMemoryRandomAccessStream();
-                await stream.WriteAsync(bytes.AsBuffer());
-                stream.Seek(0);
-                var image = new BitmapImage
+                if (version == _loadVersion)
                 {
-                    DecodePixelWidth = 48,
-                    DecodePixelType = DecodePixelType.Logical
-                };
-                await image.SetSourceAsync(stream);
-                if (version != _loadVersion)
-                {
-                    return;
+                    PreviewImage.Source = null;
                 }
-
-                PreviewImage.Source = image;
             }
             catch (Exception)
             {
@@ -150,6 +122,8 @@ namespace Unison.Uwp.UI.Controls
                     PreviewImage.Source = null;
                 }
             }
+
+            return System.Threading.Tasks.Task.CompletedTask;
         }
 
         private static bool IsLoadableUri(string uri)

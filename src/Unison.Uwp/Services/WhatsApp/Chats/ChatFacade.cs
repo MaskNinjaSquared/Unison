@@ -237,9 +237,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
                 return DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             }
 
-            var utc = timestamp.Kind == DateTimeKind.Utc
-                ? timestamp
-                : timestamp.ToUniversalTime();
+            var utc = Unison.Core.Mappers.WhatsAppMapper.ToUtc(timestamp);
 
             return new DateTimeOffset(utc).ToUnixTimeSeconds();
         }

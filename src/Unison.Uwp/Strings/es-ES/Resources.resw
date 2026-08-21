@@ -147,6 +147,9 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   <data name="ChatList_FilterHeader.Text" xml:space="preserve">
     <value>Filtrar chats por</value>
   </data>
+  <data name="ChatList_FilterAll.Text" xml:space="preserve">
+    <value>Todas</value>
+  </data>
   <data name="ChatList_FilterUnread.Text" xml:space="preserve">
     <value>No leídos</value>
   </data>
@@ -215,6 +218,21 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   </data>
   <data name="ChatList_SyncDone" xml:space="preserve">
     <value>Sincronización completada</value>
+  </data>
+  <data name="ChatList_Settling" xml:space="preserve">
+    <value>Finalizando el inicio…</value>
+  </data>
+  <data name="ChatList_ResolvingNames" xml:space="preserve">
+    <value>Resolviendo nombres… {0} de {1}</value>
+  </data>
+  <data name="ChatList_FetchingAvatars" xml:space="preserve">
+    <value>Cargando fotos… {0} de {1}</value>
+  </data>
+  <data name="ChatList_FetchingGroups" xml:space="preserve">
+    <value>Cargando información de grupos… {0} de {1}</value>
+  </data>
+  <data name="ChatList_PausedLowMemory" xml:space="preserve">
+    <value>En pausa: memoria insuficiente</value>
   </data>
   <data name="ChatList_Organizing" xml:space="preserve">
     <value>Organizando chats…</value>
@@ -290,6 +308,18 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   </data>
   <data name="ChatDetail_PinnedIndex" xml:space="preserve">
     <value>Mensaje fijado {0} de {1}</value>
+  </data>
+  <data name="ChatDetail_UnpinMessage" xml:space="preserve">
+    <value>Desfijar mensaje</value>
+  </data>
+  <data name="ChatDetail_PinFor24Hours" xml:space="preserve">
+    <value>Fijar durante 24 horas</value>
+  </data>
+  <data name="ChatDetail_PinFor7Days" xml:space="preserve">
+    <value>Fijar durante 7 días</value>
+  </data>
+  <data name="ChatDetail_PinFor30Days" xml:space="preserve">
+    <value>Fijar durante 30 días</value>
   </data>
   <data name="Chat_SelfMarker" xml:space="preserve">
     <value>(Tú)</value>
@@ -650,6 +680,18 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   </data>
   <data name="Settings_DisconnectCancel" xml:space="preserve">
     <value>Cancelar</value>
+  </data>
+  <data name="Settings_TimeFormat.Header" xml:space="preserve">
+    <value>Formato de hora</value>
+  </data>
+  <data name="Settings_TimeFormat.Text" xml:space="preserve">
+    <value>Elige reloj de 24 o 12 horas.</value>
+  </data>
+  <data name="Settings_TimeFormat24Hours.Content" xml:space="preserve">
+    <value>24 Horas</value>
+  </data>
+  <data name="Settings_TimeFormat12Hours.Content" xml:space="preserve">
+    <value>12 Horas</value>
   </data>
   <data name="Settings_Shell.Header" xml:space="preserve">
     <value>Shell</value>

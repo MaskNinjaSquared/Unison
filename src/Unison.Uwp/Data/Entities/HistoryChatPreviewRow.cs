@@ -36,8 +36,14 @@ namespace Unison.Uwp.Data.Entities
         /// <summary><see cref="ChatPreviewKind"/> as INTEGER.</summary>
         public int LastMessageKind { get; set; }
 
+        /// <summary><see cref="MessageSendState"/> as INTEGER.</summary>
+        public int LastMessageSendState { get; set; }
+
         /// <summary>Comma-separated mentioned JIDs for the list strip.</summary>
         public string LastMessageMentionedJids { get; set; }
+
+        /// <summary>MessageId of the tip shown on the list strip.</summary>
+        public string LastMessageId { get; set; }
 
         public DateTime? LastMessageTimestampUtc { get; set; }
 

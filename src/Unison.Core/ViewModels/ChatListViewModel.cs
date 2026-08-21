@@ -23,8 +23,8 @@ namespace Unison.Core.ViewModels
     /// </summary>
     /// <remarks>
     /// This owns <see cref="VisibleChats"/> outright. The list the store gives us is not the list
-    /// the user should see - it needs the search filter, the PN/LID dedupe and the pinned-first
-    /// ordering applied, and none of that is layout, so none of it belongs in a view.
+    /// the user should see - it needs the list filter, the search filter, the PN/LID dedupe and the
+    /// pinned-first ordering applied, and none of that is layout, so none of it belongs in a view.
     /// <para>
     /// Rows are <see cref="ChatItem"/> and not a per-row view model. The model already raises
     /// change notifications, every consumer of this list - the detail pane, the shell, the
@@ -74,6 +74,7 @@ namespace Unison.Core.ViewModels
         private string _lastSyncBannerLog;
 
         private string _searchQuery;
+        private ChatListFilter _activeFilter = ChatListFilter.All;
         private string _syncStatusText;
         private bool _isSyncStatusVisible;
         private bool _isLoadingOverlayVisible;
@@ -100,11 +101,21 @@ namespace Unison.Core.ViewModels
         private static readonly TimeSpan BatchInterval = TimeSpan.FromMilliseconds(140);
 
         /// <summary>
+        /// How long one release turn may hold the UI thread past the guaranteed first batch.
+        /// Under a 60Hz frame, so a turn that runs long still cannot drop a frame of input.
+        /// </summary>
+        private const int BatchBudgetMs = 8;
+
+        /// <summary>
         /// How many SQLite preview rows to merge into <see cref="IChatStateStore"/> per UI tick.
         /// Large chunks must not walk/add thousands of chats in one dispatcher callback.
         /// </summary>
         private const int PreviewHydrateBatchSize = 25;
         private static readonly TimeSpan PreviewHydrateInterval = TimeSpan.FromMilliseconds(40);
+        private static readonly TimeSpan MessagePreviewReconcileDebounce = TimeSpan.FromMilliseconds(350);
+        private readonly object _messagePreviewReconcileGate = new object();
+        private List<string> _messagePreviewReconcileQueue;
+        private CancellationTokenSource _messagePreviewReconcileCts;
 
         private bool _batchRendering;
         private bool _batchLoopRunning;
@@ -116,6 +127,14 @@ namespace Unison.Core.ViewModels
         private bool _previewHydrateLoopRunning;
         private readonly object _previewHydrateGate = new object();
         private List<HistoryChatPreview> _previewHydrateQueue;
+
+        /// <summary>
+        /// JID lookup reused across the slices of one hydrate drain. Rebuilding it per slice made
+        /// the drain quadratic on the store size, all of it on the UI thread. Held only while the
+        /// queue is draining; <see cref="_hydrateIndexChatCount"/> is the staleness check.
+        /// </summary>
+        private Dictionary<string, ChatItem> _hydrateIndex;
+        private int _hydrateIndexChatCount = -1;
 
         /// <summary>
         /// Builds a fresh <see cref="NewChatDialogViewModel"/> per New Chat dialog
@@ -195,6 +214,7 @@ namespace Unison.Core.ViewModels
                            _chatStore != null);
             OpenMenuCommand = new RelayCommand(() => MenuRequested?.Invoke(this, EventArgs.Empty));
             NewChatCommand = new RelayCommand(() => _ = StartNewChatAsync());
+            FilterChatsCommand = new RelayCommand<int>(ApplyChatListFilter);
         }
 
         // ---------------------------------------------------------------------
@@ -241,6 +261,25 @@ namespace Unison.Core.ViewModels
                 }
             }
         }
+
+        /// <summary>
+        /// Active list filter from the filter flyout. <see cref="ChatListFilter.All"/> means the
+        /// list is only constrained by search, if any.
+        /// </summary>
+        public ChatListFilter ActiveFilter
+        {
+            get => _activeFilter;
+            private set
+            {
+                if (Set(ref _activeFilter, value))
+                {
+                    OnPropertyChanged(nameof(IsFilterActive));
+                }
+            }
+        }
+
+        /// <summary>True when a non-All filter is narrowing the list.</summary>
+        public bool IsFilterActive => _activeFilter != ChatListFilter.All;
 
         public string SyncStatusText
         {
@@ -301,6 +340,13 @@ namespace Unison.Core.ViewModels
         /// <summary>Opens the new-chat dialog, creates the chat if needed, then raises <see cref="OpenChatRequested"/>.</summary>
         public ICommand NewChatCommand { get; }
 
+        /// <summary>
+        /// Narrows <see cref="VisibleChats"/> by a <see cref="ChatListFilter"/> id from the
+        /// flyout. Parameter is an <see cref="int"/> because UWP <c>CommandParameter</c> is not
+        /// reliably typed as an enum.
+        /// </summary>
+        public ICommand FilterChatsCommand { get; }
+
         // ---------------------------------------------------------------------
         // What the view has to be told
         //
@@ -347,6 +393,7 @@ namespace Unison.Core.ViewModels
             _history.HistorySyncReceived += History_SyncReceived;
             _history.InitialSyncProgress += History_InitialSyncProgress;
             _history.ChatPreviewChunkPersisted += History_ChatPreviewChunkPersisted;
+            _history.HistoryMessageChunkPersisted += History_MessageChunkPersisted;
             _contactService.DisplayNamesUpdated += Contacts_DisplayNamesUpdated;
             _chatState.Chats.CollectionChanged += ChatState_ChatsChanged;
 
@@ -363,7 +410,8 @@ namespace Unison.Core.ViewModels
             {
                 BeginBatchRendering(
                     _whatsAppService.InitialSyncProcessedConversations,
-                    _whatsAppService.InitialSyncTotalConversations);
+                    _whatsAppService.InitialSyncTotalConversations,
+                    _chatState.Chats.Count);
             }
 
             _ = PresentFromConnectionStatusAsync(_connection.CurrentStatus);
@@ -380,11 +428,23 @@ namespace Unison.Core.ViewModels
             if (!_attached) return;
             _attached = false;
 
+            try
+            {
+                _messagePreviewReconcileCts?.Cancel();
+                _messagePreviewReconcileCts?.Dispose();
+            }
+            catch
+            {
+            }
+
+            _messagePreviewReconcileCts = null;
+
             _connection.StatusChanged -= Connection_StatusChanged;
             _history.SyncStatusChanged -= History_SyncStatusChanged;
             _history.HistorySyncReceived -= History_SyncReceived;
             _history.InitialSyncProgress -= History_InitialSyncProgress;
             _history.ChatPreviewChunkPersisted -= History_ChatPreviewChunkPersisted;
+            _history.HistoryMessageChunkPersisted -= History_MessageChunkPersisted;
             _contactService.DisplayNamesUpdated -= Contacts_DisplayNamesUpdated;
             _chatState.Chats.CollectionChanged -= ChatState_ChatsChanged;
 
@@ -861,6 +921,8 @@ namespace Unison.Core.ViewModels
 
         private async void History_SyncStatusChanged(object sender, string message)
         {
+            string resolved = TranslateSyncPhase(message);
+
             await _dispatcher.RunAsync(() =>
             {
                 if (_batchRendering)
@@ -874,22 +936,84 @@ namespace Unison.Core.ViewModels
                     // Surface service progress ("Re-syncing...", "Preparing...") instead of
                     // freezing on the wipe banner until the wait completes. The service's own
                     // "Saving chats..." is skipped: it is less specific than what we already show.
-                    if (string.IsNullOrEmpty(message) ||
+                    if (string.IsNullOrEmpty(resolved) ||
                         string.Equals(message, "Saving chats...", StringComparison.Ordinal))
                     {
                         return;
                     }
 
-                    ShowLoadingOverlay(message);
-                    _ = PresentSyncStatusAsync(message, visible: true, source: "IHistoryService:SyncStatus");
+                    ShowLoadingOverlay(resolved);
+                    _ = PresentSyncStatusAsync(resolved, visible: true, source: "IHistoryService:SyncStatus");
                     return;
                 }
 
-                if (!string.IsNullOrEmpty(message))
-                    _ = PresentSyncStatusAsync(message, visible: true, source: "IHistoryService:SyncStatus");
+                if (!string.IsNullOrEmpty(resolved))
+                    _ = PresentSyncStatusAsync(resolved, visible: true, source: "IHistoryService:SyncStatus");
                 else
                     _ = PresentSyncStatusAsync(null, visible: false, source: "IHistoryService:SyncStatus");
             });
+        }
+
+        /// <summary>
+        /// Turns a <see cref="SyncPhaseStatus"/> token into localized text. Non-token messages are
+        /// returned as they came, so the literal wording still in the service keeps working.
+        /// </summary>
+        private string TranslateSyncPhase(string message)
+        {
+            string phase;
+            int current;
+            int total;
+            if (!SyncPhaseStatus.TryParse(message, out phase, out current, out total))
+            {
+                return message;
+            }
+
+            switch (phase)
+            {
+                case SyncPhaseStatus.Settling:
+                    return GetPhaseString("ChatList_Settling", "Finishing startup...");
+                case SyncPhaseStatus.LowMemory:
+                    return GetPhaseString("ChatList_PausedLowMemory", "Paused - low memory");
+                case SyncPhaseStatus.Names:
+                    return FormatPhaseWithCount(
+                        "ChatList_ResolvingNames", "Resolving names... {0} of {1}", current, total);
+                case SyncPhaseStatus.Avatars:
+                    return FormatPhaseWithCount(
+                        "ChatList_FetchingAvatars", "Loading photos... {0} of {1}", current, total);
+                case SyncPhaseStatus.Groups:
+                    return FormatPhaseWithCount(
+                        "ChatList_FetchingGroups", "Loading group info... {0} of {1}", current, total);
+                default:
+                    return null;
+            }
+        }
+
+        /// <summary>
+        /// A counted phase, or its bare form when the total is unknown / current is still zero —
+        /// "0 of 40" reads worse than no number at all.
+        /// </summary>
+        private string FormatPhaseWithCount(string key, string fallback, int current, int total)
+        {
+            string format = GetPhaseString(key, fallback);
+            if (total <= 0 || current <= 0)
+            {
+                int trim = format.IndexOf("{0}", StringComparison.Ordinal);
+                return trim > 0 ? format.Substring(0, trim).TrimEnd() : format;
+            }
+
+            try
+            {
+                return string.Format(format, current, total);
+            }
+            catch (FormatException)
+            {
+                return format;
+            }
+        }
+
+        private string GetPhaseString(string key, string fallback)
+        {
+            return _strings == null ? fallback : _strings.Get(key, fallback);
         }
 
         private async void History_SyncReceived(object sender, global::Proto.HistorySync sync)
@@ -909,7 +1033,7 @@ namespace Unison.Core.ViewModels
                     }
 
                     _batchCompleted = true;
-                    _batchVisibleTarget = Math.Max(_batchVisibleTarget, _chatState.Chats.Count);
+                    RaiseVisibleTarget(_chatState.Chats.Count);
                     EnsureBatchLoop();
                     return;
                 }
@@ -940,20 +1064,24 @@ namespace Unison.Core.ViewModels
 
                 if (!e.IsCompleted)
                 {
-                    BeginBatchRendering(e.ProcessedConversations, e.TotalConversations);
+                    BeginBatchRendering(
+                        e.ProcessedConversations,
+                        e.TotalConversations,
+                        e.VisibleChatTarget);
                     return;
                 }
 
                 _batchRendering = true;
                 _batchProcessed = Math.Max(_batchProcessed, e.ProcessedConversations);
                 _batchTotal = Math.Max(_batchTotal, e.TotalConversations);
-                _batchVisibleTarget = Math.Max(_batchVisibleTarget, _chatState.Chats.Count);
+                RaiseVisibleTarget(e.VisibleChatTarget);
 
                 // SQLite previews may still be merging into the list after the chunk is marked
                 // complete — keep the syncing banner until that queue drains.
                 if (!HasPendingPreviewHydrate())
                 {
                     _batchCompleted = true;
+                    ScheduleFullSqlitePreviewReconcile();
                 }
 
                 UpdateBatchProgressText();
@@ -972,6 +1100,122 @@ namespace Unison.Core.ViewModels
             }
 
             EnqueueHistoryChatPreviews(e.Rows);
+        }
+
+        /// <summary>
+        /// Messages landed in SQLite (often without a matching preview apply) — reconcile
+        /// LastMessage from the newest row so cross-device sends update the list strip.
+        /// </summary>
+        private void History_MessageChunkPersisted(object sender, HistoryMessageChunkEventArgs e)
+        {
+            if (e?.ChatJids == null || e.ChatJids.Count == 0 || _whatsAppService == null)
+            {
+                return;
+            }
+
+            lock (_messagePreviewReconcileGate)
+            {
+                if (_messagePreviewReconcileQueue == null)
+                {
+                    _messagePreviewReconcileQueue = new List<string>(e.ChatJids.Count);
+                }
+
+                for (int i = 0; i < e.ChatJids.Count; i++)
+                {
+                    string jid = e.ChatJids[i];
+                    if (!string.IsNullOrWhiteSpace(jid))
+                    {
+                        _messagePreviewReconcileQueue.Add(jid);
+                    }
+                }
+            }
+
+            CancellationTokenSource previous = _messagePreviewReconcileCts;
+            _messagePreviewReconcileCts = new CancellationTokenSource();
+            CancellationToken token = _messagePreviewReconcileCts.Token;
+            try
+            {
+                previous?.Cancel();
+                previous?.Dispose();
+            }
+            catch
+            {
+            }
+
+            _ = RunMessagePreviewReconcileAsync(token, full: false);
+        }
+
+        /// <summary>
+        /// After sync quiet / preview hydrate drain: reconcile every visible chat from SQLite
+        /// so Last Message matches history_message even when preview rows were stale.
+        /// </summary>
+        private void ScheduleFullSqlitePreviewReconcile()
+        {
+            if (_whatsAppService == null)
+            {
+                return;
+            }
+
+            CancellationTokenSource previous = _messagePreviewReconcileCts;
+            _messagePreviewReconcileCts = new CancellationTokenSource();
+            CancellationToken token = _messagePreviewReconcileCts.Token;
+            try
+            {
+                previous?.Cancel();
+                previous?.Dispose();
+            }
+            catch
+            {
+            }
+
+            _ = RunMessagePreviewReconcileAsync(token, full: true);
+        }
+
+        private async Task RunMessagePreviewReconcileAsync(CancellationToken token, bool full)
+        {
+            try
+            {
+                await Task.Delay(MessagePreviewReconcileDebounce, token).ConfigureAwait(false);
+            }
+            catch (TaskCanceledException)
+            {
+                return;
+            }
+
+            if (_whatsAppService == null)
+            {
+                return;
+            }
+
+            IReadOnlyList<string> jids = null;
+            if (!full)
+            {
+                List<string> queued;
+                lock (_messagePreviewReconcileGate)
+                {
+                    queued = _messagePreviewReconcileQueue;
+                    _messagePreviewReconcileQueue = null;
+                }
+
+                if (queued == null || queued.Count == 0)
+                {
+                    return;
+                }
+
+                jids = queued;
+            }
+
+            try
+            {
+                await _whatsAppService
+                    .ReconcileChatPreviewsFromSqliteAsync(jids, full ? "list-full" : "list-chunk")
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[ChatListViewModel] Message preview reconcile failed: " + ex.Message);
+            }
         }
 
         private void EnqueueHistoryChatPreviews(IReadOnlyList<HistoryChatPreview> rows)
@@ -1088,17 +1332,22 @@ namespace Unison.Core.ViewModels
                 _previewHydrateLoopRunning = false;
             }
 
+            // Nothing left to hydrate: drop the index rather than hold every ChatItem alive.
+            _hydrateIndex = null;
+            _hydrateIndexChatCount = -1;
+
             if (!_batchRendering)
             {
                 return;
             }
 
             _batchProcessed = Math.Max(_batchProcessed, _chatState.Chats.Count);
-            _batchVisibleTarget = Math.Max(_batchVisibleTarget, _chatState.Chats.Count);
+            RaiseVisibleTarget(_chatState.Chats.Count);
 
             if (!IsInSafeMode)
             {
                 _batchCompleted = true;
+                ScheduleFullSqlitePreviewReconcile();
             }
 
             UpdateBatchProgressText();
@@ -1125,7 +1374,7 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
-            Dictionary<string, ChatItem> index = BuildChatJidIndex();
+            Dictionary<string, ChatItem> index = RentChatJidIndex();
             var toAdd = new List<ChatItem>();
             int updated = 0;
             string selfLabel = _strings != null
@@ -1185,10 +1434,18 @@ namespace Unison.Core.ViewModels
                 _chatState.Chats.Add(chat);
             }
 
+            // The rows just added are already in the index, so keep it rather than paying for a
+            // rebuild on the next slice.
+            _hydrateIndexChatCount = _chatState.Chats.Count;
+
+            // Outside the mutation check on purpose: on a reconnect every preview can be older
+            // than what is already in memory, so nothing is added or updated - and gating the
+            // ceiling on a mutation left the list stuck at one batch for the whole session.
+            RaiseVisibleTarget(_chatState.Chats.Count);
+
             if (toAdd.Count > 0 || updated > 0)
             {
                 _batchRendering = true;
-                _batchVisibleTarget = Math.Max(_batchVisibleTarget, _chatState.Chats.Count);
                 _batchProcessed = Math.Max(_batchProcessed, _chatState.Chats.Count);
                 if (_batchTotal < _chatState.Chats.Count)
                 {
@@ -1199,6 +1456,23 @@ namespace Unison.Core.ViewModels
                 UpdateBatchProgressText();
                 EnsureBatchLoop();
             }
+        }
+
+        /// <summary>
+        /// The JID index for this hydrate slice, rebuilt only when the store changed behind us.
+        /// A stale hit can at worst create a duplicate row, which both the visible-set dedupe in
+        /// <see cref="ReleaseNextBatch"/> and <see cref="DeduplicateByCanonicalJid"/> absorb.
+        /// </summary>
+        private Dictionary<string, ChatItem> RentChatJidIndex()
+        {
+            if (_hydrateIndex != null && _hydrateIndexChatCount == _chatState.Chats.Count)
+            {
+                return _hydrateIndex;
+            }
+
+            _hydrateIndex = BuildChatJidIndex();
+            _hydrateIndexChatCount = _chatState.Chats.Count;
+            return _hydrateIndex;
         }
 
         private Dictionary<string, ChatItem> BuildChatJidIndex()
@@ -1282,7 +1556,7 @@ namespace Unison.Core.ViewModels
             {
                 TrackItems(args);
                 _batchRendering = true;
-                _batchVisibleTarget = Math.Max(_batchVisibleTarget, _chatState.Chats.Count);
+                RaiseVisibleTarget(_chatState.Chats.Count);
                 EnsureBatchLoop();
                 return;
             }
@@ -1388,8 +1662,8 @@ namespace Unison.Core.ViewModels
         }
 
         /// <summary>
-        /// Rebuilds the visible order in place: filter by the search box, collapse PN/LID
-        /// duplicates, sort pinned first and then by recency.
+        /// Rebuilds the visible order in place: apply the active list filter, then the search
+        /// box, collapse PN/LID duplicates, sort pinned first and then by recency.
         /// </summary>
         public void RefreshVisibleChats()
         {
@@ -1400,6 +1674,11 @@ namespace Unison.Core.ViewModels
 
             string query = SearchQuery?.Trim() ?? string.Empty;
             var source = _chatState.Chats.ToList();
+
+            if (_activeFilter != ChatListFilter.All)
+            {
+                source = source.Where(MatchesActiveFilter).ToList();
+            }
 
             if (!string.IsNullOrEmpty(query))
             {
@@ -1441,6 +1720,92 @@ namespace Unison.Core.ViewModels
             }
 
             RestoreSelection();
+        }
+
+        /// <summary>
+        /// Accepts the flyout's integer id, maps it onto <see cref="ChatListFilter"/>, and
+        /// refreshes. Unknown ids are ignored so a mistyped parameter cannot blank the list.
+        /// </summary>
+        private void ApplyChatListFilter(int filterId)
+        {
+            if (!Enum.IsDefined(typeof(ChatListFilter), filterId))
+            {
+                return;
+            }
+
+            var next = (ChatListFilter)filterId;
+            if (next == ActiveFilter)
+            {
+                return;
+            }
+
+            ActiveFilter = next;
+            ScheduleRefreshVisibleChats();
+        }
+
+        /// <summary>
+        /// Whether a row belongs under the current list filter. Search is applied separately so
+        /// the two constraints compose with AND rather than competing for one predicate.
+        /// </summary>
+        private bool MatchesActiveFilter(ChatItem chat)
+        {
+            if (chat == null)
+            {
+                return false;
+            }
+
+            switch (_activeFilter)
+            {
+                case ChatListFilter.All:
+                    return true;
+
+                case ChatListFilter.Unread:
+                    return chat.HasUnread;
+
+                case ChatListFilter.Favorites:
+                    return chat.IsFavorite;
+
+                case ChatListFilter.Contacts:
+                    return !chat.IsGroup && IsAddressBookContact(chat);
+
+                case ChatListFilter.NonContacts:
+                    return chat.IsDirect && !IsAddressBookContact(chat);
+
+                case ChatListFilter.Groups:
+                    return chat.IsGroup;
+
+                case ChatListFilter.Drafts:
+                    return chat.HasDraft;
+
+                default:
+                    return true;
+            }
+        }
+
+        /// <summary>
+        /// True when this JID (or its canonical form) is in the device address-book overlay —
+        /// the same map WhatsApp uses to prefer phone-book names over push names.
+        /// </summary>
+        private bool IsAddressBookContact(ChatItem chat)
+        {
+            if (chat == null || string.IsNullOrWhiteSpace(chat.JID) || _whatsAppService == null)
+            {
+                return false;
+            }
+
+            var names = _whatsAppService.PhoneContactNamesByJid;
+            if (names == null || names.Count == 0)
+            {
+                return false;
+            }
+
+            if (names.ContainsKey(chat.JID))
+            {
+                return true;
+            }
+
+            string canonical = _whatsAppService.GetCanonicalJid(chat.JID);
+            return !string.IsNullOrWhiteSpace(canonical) && names.ContainsKey(canonical);
         }
 
         private bool MatchesQuery(ChatItem chat, string query)
@@ -1552,13 +1917,15 @@ namespace Unison.Core.ViewModels
 
         /// <summary>
         /// Applies a single source change straight to the visible list instead of rebuilding it.
-        /// Only valid without a search filter, where the visible list is the source list; with a
-        /// filter, whether a row belongs on screen is a question only a rebuild can answer.
-        /// Returns false when the caller should rebuild.
+        /// Only valid without a search or list filter, where the visible list is the source list;
+        /// with either filter, whether a row belongs on screen is a question only a rebuild can
+        /// answer. Returns false when the caller should rebuild.
         /// </summary>
         private bool TryApplyIncrementalChange(NotifyCollectionChangedEventArgs args)
         {
-            if (args == null || !string.IsNullOrWhiteSpace(SearchQuery))
+            if (args == null ||
+                !string.IsNullOrWhiteSpace(SearchQuery) ||
+                _activeFilter != ChatListFilter.All)
             {
                 return false;
             }
@@ -1704,7 +2071,7 @@ namespace Unison.Core.ViewModels
         // Batch rendering
         // ---------------------------------------------------------------------
 
-        private void BeginBatchRendering(int processed, int total)
+        private void BeginBatchRendering(int processed, int total, int visibleTarget)
         {
             bool fresh = !_batchRendering || _batchCompleted;
             _batchRendering = true;
@@ -1713,22 +2080,35 @@ namespace Unison.Core.ViewModels
             {
                 _batchProcessed = Math.Max(0, processed);
                 _batchTotal = Math.Max(0, total);
-                _batchVisibleTarget = Math.Min(
-                    _chatState.Chats.Count,
-                    Math.Max(BatchSize, processed));
             }
             else
             {
                 _batchProcessed = Math.Max(_batchProcessed, processed);
                 _batchTotal = Math.Max(_batchTotal, total);
-                _batchVisibleTarget = Math.Max(
-                    _batchVisibleTarget,
-                    Math.Min(_chatState.Chats.Count, Math.Max(BatchSize, processed)));
             }
+
+            // Never clamped to the store count: this event is raised before the chunk's previews
+            // are persisted, so on the first chunk the store is still empty and clamping pinned
+            // the target at zero - which left the list frozen at one batch until the whole sync
+            // finalized. The release pace is bounded by the per-turn budget, not by this number.
+            RaiseVisibleTarget(Math.Max(visibleTarget, processed));
 
             IsLoadingOverlayVisible = VisibleChats.Count == 0;
             UpdateBatchProgressText();
             EnsureBatchLoop();
+        }
+
+        /// <summary>
+        /// Grows the ceiling on how many rows may be on screen. Monotonic: a later event that
+        /// knows less than an earlier one must not shrink the list back.
+        /// </summary>
+        private void RaiseVisibleTarget(int candidate)
+        {
+            int target = Math.Max(_chatState.Chats.Count, Math.Max(BatchSize, candidate));
+            if (target > _batchVisibleTarget)
+            {
+                _batchVisibleTarget = target;
+            }
         }
 
         private void EnsureBatchLoop()
@@ -1773,6 +2153,14 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
+            // The loop keeps ticking until the sync finalizes, long after the store has been
+            // drained onto the screen. Without this the idle turns would re-sort every chat on
+            // the UI thread, every interval, to discover there is nothing to add.
+            if (!_batchCompleted && VisibleChats.Count >= _chatState.Chats.Count)
+            {
+                return;
+            }
+
             var source = SortForDisplay(
                 _chatState.Chats.Where(c => c != null && !string.IsNullOrWhiteSpace(c.JID)));
 
@@ -1787,10 +2175,19 @@ namespace Unison.Core.ViewModels
                 visibleCanonical.Add(GetCanonical(visible.JID));
             }
 
+            var budget = Stopwatch.StartNew();
             int added = 0;
             foreach (var chat in source)
             {
-                if (VisibleChats.Count >= desiredCount || added >= BatchSize)
+                if (VisibleChats.Count >= desiredCount)
+                {
+                    break;
+                }
+
+                // A fixed count either starves a fast machine or stalls a slow one. Release one
+                // batch unconditionally, then keep going while this turn still has time, so the
+                // list fills as fast as the device allows without eating an input frame.
+                if (added >= BatchSize && budget.ElapsedMilliseconds >= BatchBudgetMs)
                 {
                     break;
                 }
@@ -1820,6 +2217,11 @@ namespace Unison.Core.ViewModels
 
             if (!_batchCompleted)
             {
+                if (added > 0)
+                {
+                    UpdateBatchProgressText();
+                }
+
                 return;
             }
 
@@ -1848,8 +2250,14 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
-            string text = _batchTotal > 0
-                ? FormatString("ChatList_SyncProgress", _batchProcessed, _batchTotal)
+            // Counts rows, not conversations. The sync figure climbed into the hundreds while the
+            // list showed twenty, because it measured what the chunk carried rather than what
+            // reached the screen - which is the part the user is actually waiting on.
+            int shown = VisibleChats.Count;
+            int available = Math.Max(_chatState.Chats.Count, shown);
+
+            string text = available > 0
+                ? FormatString("ChatList_SyncProgress", shown, available)
                 : FormatString("ChatList_SyncProgressCount", _batchProcessed);
 
             _ = PresentSyncStatusAsync(text, visible: true);

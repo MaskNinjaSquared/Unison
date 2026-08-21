@@ -155,6 +155,13 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>Schedules a debounced persist of chats/session state.</summary>
         void SchedulePersistPublic();
 
+        /// <summary>
+        /// Writes only the given chat-list rows to the preview store (no contact JSON rewrite).
+        /// Prefer this after mark-read or a single-row preview update; use
+        /// <see cref="SchedulePersistPublic"/> when aliases/names must flush too.
+        /// </summary>
+        void PersistChatListRowsPublic(IList<ChatItem> chats);
+
         /// <summary>True when a JID already has a resolved display name in the local name cache.</summary>
         bool HasResolvedContactName(string jid);
 
@@ -182,8 +189,12 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>Promotes avatar files already cached on disk into each chat's AvatarUrl before a fetch pass.</summary>
         Task HydrateCachedAvatarUrisAsync(string reason);
 
-        /// <summary>Fetches the best available profile picture for a chat (incl. group-avatar fallback) and applies it.</summary>
-        Task FetchAndApplyAvatarAsync(ChatItem chat, CancellationToken token);
+        /// <summary>
+        /// Fetches the best available profile picture for a chat (incl. group-avatar fallback) and applies it.
+        /// When <paramref name="fetchHighQuality"/> is false, skips the extra group <c>type=image</c> pass
+        /// (startup batch); visible refresh / chat-info should pass true.
+        /// </summary>
+        Task FetchAndApplyAvatarAsync(ChatItem chat, CancellationToken token, bool fetchHighQuality = true);
 
         /// <summary>One member picture GET (PN candidates first). Does not stamp the roster.</summary>
         Task<GroupMemberAvatarFetchResult> FetchGroupMemberAvatarAsync(
@@ -296,6 +307,15 @@ namespace Unison.Core.Contracts.WhatsApp
 
         /// <summary>Fetches a remote profile picture URL (null when unavailable).</summary>
         Task<string> GetProfilePictureUrlAsync(string jid, string type = "preview");
+
+        /// <summary>
+        /// Aligns list <c>LastMessage</c> with the newest SQLite row when the list is behind
+        /// (cross-device send / history chunk that persisted messages without updating the strip).
+        /// When <paramref name="chatJids"/> is null, every open chat row is checked.
+        /// </summary>
+        Task ReconcileChatPreviewsFromSqliteAsync(
+            IReadOnlyList<string> chatJids = null,
+            string reason = null);
 
         RuntimeDiagnosticsSnapshot GetRuntimeDiagnosticsSnapshot();
 

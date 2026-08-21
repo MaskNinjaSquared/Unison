@@ -19,7 +19,11 @@ namespace Unison.Core.Models
 
         long MediaFileLengthBytes { get; set; }
 
-        string MediaThumbnailBase64 { get; set; }
+        /// <summary>
+        /// Proto jpeg/png thumbnail while building a history batch. Not persisted —
+        /// the UWP host writes <c>MediaCache/Images/*_thumb</c> and clears this.
+        /// </summary>
+        byte[] MediaThumbnailJpeg { get; set; }
 
         bool IsVoiceNote { get; set; }
     }

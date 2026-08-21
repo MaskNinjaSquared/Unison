@@ -2324,7 +2324,12 @@ namespace Unison.Uwp.Services.WhatsApp
                 ChatItem notificationChat = null;
                 await RunOnUiThreadAsync(() =>
                     {
-                        var chat = Chats.FirstOrDefault(c => GetCanonicalJid(c.JID) == jid);
+                        string canonicalLookup = GetCanonicalJid(jid) ?? jid;
+                        var chat = Chats.FirstOrDefault(c =>
+                            string.Equals(
+                                GetCanonicalJid(c.JID),
+                                canonicalLookup,
+                                StringComparison.OrdinalIgnoreCase));
                         
                         // Create new chat entry if this JID isn't known yet
                         if (chat == null)
@@ -2366,7 +2371,10 @@ namespace Unison.Uwp.Services.WhatsApp
                             false,
                             renderInfo?.PreviewKind,
                             listAuthorPrefix,
-                            chatMessage.MentionedJids);
+                            chatMessage.MentionedJids,
+                            chatMessage.IsFromMe,
+                            HistoryLiveMessageMapper.FromStatus(chatMessage.Status, chatMessage.IsFromMe),
+                            chatMessage.Id);
                         foreach (var equivalentRow in GetChatRowsForCanonicalJid(jid))
                         {
                             if (!ReferenceEquals(equivalentRow, chat))
@@ -2378,7 +2386,10 @@ namespace Unison.Uwp.Services.WhatsApp
                                     false,
                                     renderInfo?.PreviewKind,
                                     listAuthorPrefix,
-                                    chatMessage.MentionedJids);
+                                    chatMessage.MentionedJids,
+                                    chatMessage.IsFromMe,
+                                    HistoryLiveMessageMapper.FromStatus(chatMessage.Status, chatMessage.IsFromMe),
+                                    chatMessage.Id);
                             }
                         }
 
@@ -2507,6 +2518,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     summary.Timestamp = comparableTimestamp;
                     summary.Preview = preview ?? string.Empty;
                     summary.IsGroup = isGroup;
+                    summary.IsFromMe = isFromMe;
                     summary.Kind = kind;
                 }
 
@@ -2560,6 +2572,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             Preview = pair.Value.Preview,
                             Timestamp = pair.Value.Timestamp,
                             IsGroup = pair.Value.IsGroup,
+                            IsFromMe = pair.Value.IsFromMe,
                             UnreadDelta = pair.Value.UnreadDelta,
                             Kind = pair.Value.Kind
                         },
@@ -2609,7 +2622,13 @@ namespace Unison.Uwp.Services.WhatsApp
                                     summary.Preview ?? string.Empty,
                                     summary.Timestamp,
                                     false,
-                                    summary.Kind))
+                                    summary.Kind,
+                                    null,
+                                    null,
+                                    summary.IsFromMe,
+                                    summary.IsFromMe
+                                        ? MessageSendState.Sent
+                                        : MessageSendState.NotApplicable))
                             {
                                 updated++;
                             }
@@ -2714,7 +2733,16 @@ namespace Unison.Uwp.Services.WhatsApp
                     ChatItem preferred = null;
                     foreach (var row in rows)
                     {
-                        if (ApplyChatPreviewIfNewer(row, displayContent, timestamp, false, kindHint))
+                        if (ApplyChatPreviewIfNewer(
+                            row,
+                            displayContent,
+                            timestamp,
+                            false,
+                            kindHint,
+                            null,
+                            null,
+                            isFromMe,
+                            isFromMe ? MessageSendState.Sent : MessageSendState.NotApplicable))
                         {
                             preferred = preferred ?? row;
                         }
@@ -2771,7 +2799,10 @@ namespace Unison.Uwp.Services.WhatsApp
                         false,
                         ChatPreviewNormalizer.InferKindFromMessage(latest),
                         author,
-                        latest.MentionedJids))
+                        latest.MentionedJids,
+                        latest.IsFromMe,
+                        HistoryLiveMessageMapper.FromStatus(latest.Status, latest.IsFromMe),
+                        latest.Id))
                     {
                         updated++;
                     }
@@ -2825,7 +2856,12 @@ namespace Unison.Uwp.Services.WhatsApp
                         preview,
                         latest.Timestamp,
                         false,
-                        ChatPreviewNormalizer.InferKindFromMessage(latest));
+                        ChatPreviewNormalizer.InferKindFromMessage(latest),
+                        ChatPreviewNormalizer.FormatListAuthorPrefix(latest, JidHelper.IsGroupJid(canonicalJid), SelfListDisplayName()),
+                        latest.MentionedJids,
+                        latest.IsFromMe,
+                        HistoryLiveMessageMapper.FromStatus(latest.Status, latest.IsFromMe),
+                        latest.Id);
                     ApplyChatKind(chat);
 
                     if (!chat.IsGroup && (chat.Name.Contains("@") || chat.Name == canonicalJid.Replace("@s.whatsapp.net", "").Replace("@lid", "") || IsSelfMarkerLabel(chat.Name)))

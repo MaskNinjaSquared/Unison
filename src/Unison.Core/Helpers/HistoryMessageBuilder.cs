@@ -461,7 +461,7 @@ namespace Unison.Core.Helpers
             HistoryMediaFiller.Apply(row, info);
         }
 
-        private static MessageSendState MapSendState(WebMessageInfo info, bool fromMe)
+        public static MessageSendState MapSendState(WebMessageInfo info, bool fromMe)
         {
             if (!fromMe)
             {

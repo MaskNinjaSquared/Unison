@@ -1,64 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <root>
-  <!-- 
-    Microsoft ResX Schema 
-    
-    Version 2.0
-    
-    The primary goals of this format is to allow a simple XML format 
-    that is mostly human readable. The generation and parsing of the 
-    various data types are done through the TypeConverter classes 
-    associated with the data types.
-    
-    Example:
-    
-    ... ado.net/XML headers & schema ...
-    <resheader name="resmimetype">text/microsoft-resx</resheader>
-    <resheader name="version">2.0</resheader>
-    <resheader name="reader">System.Resources.ResXResourceReader, System.Windows.Forms, ...</resheader>
-    <resheader name="writer">System.Resources.ResXResourceWriter, System.Windows.Forms, ...</resheader>
-    <data name="Name1"><value>this is my long string</value><comment>this is a comment</comment></data>
-    <data name="Color1" type="System.Drawing.Color, System.Drawing">Blue</data>
-    <data name="Bitmap1" mimetype="application/x-microsoft.net.object.binary.base64">
-        <value>[base64 mime encoded serialized .NET Framework object]</value>
-    </data>
-    <data name="Icon1" type="System.Drawing.Icon, System.Drawing" mimetype="application/x-microsoft.net.object.bytearray.base64">
-        <value>[base64 mime encoded string representing a byte array form of the .NET Framework object]</value>
-        <comment>This is a comment</comment>
-    </data>
-                
-    There are any number of "resheader" rows that contain simple 
-    name/value pairs.
-    
-    Each data row contains a name, and value. The row also contains a 
-    type or mimetype. Type corresponds to a .NET class that support 
-    text/value conversion through the TypeConverter architecture. 
-    Classes that don't support this are serialized and stored with the 
-    mimetype set.
-    
-    The mimetype is used for serialized objects, and tells the 
-    ResXResourceReader how to depersist the object. This is currently not 
-    extensible. For a given mimetype the value must be set accordingly:
-    
-    Note - application/x-microsoft.net.object.binary.base64 is the format 
-    that the ResXResourceWriter will generate, however the reader can 
-    read any of the formats listed below.
-    
-    mimetype: application/x-microsoft.net.object.binary.base64
-    value   : The object must be serialized with 
-            : System.Runtime.Serialization.Formatters.Binary.BinaryFormatter
-            : and then encoded with base64 encoding.
-    
-    mimetype: application/x-microsoft.net.object.soap.base64
-    value   : The object must be serialized with 
-            : System.Runtime.Serialization.Formatters.Soap.SoapFormatter
-            : and then encoded with base64 encoding.
-
-    mimetype: application/x-microsoft.net.object.bytearray.base64
-    value   : The object must be serialized into a byte array 
-            : using a System.ComponentModel.TypeConverter
-            : and then encoded with base64 encoding.
-    -->
   <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
     <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
     <xsd:element name="root" msdata:IsDataSet="true">
@@ -118,192 +59,192 @@
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
   <data name="Login_ReloadQR.Text" xml:space="preserve">
-    <value>Оновити QR-код</value>
+    <value>Получить новый QR-код</value>
   </data>
   <data name="Login_QRStatus.Text" xml:space="preserve">
-    <value>Відскануйте цей код телефоном</value>
+    <value>Отсканируйте код на другом устройстве</value>
   </data>
   <data name="Login_ShowLog.Content" xml:space="preserve">
-    <value>Переглянути діагностичний журнал</value>
+    <value>Посмотреть диагностический лог</value>
   </data>
   <data name="Login_ShowLogHide.Content" xml:space="preserve">
-    <value>Сховати журнал (торкніться ще раз, щоб оновити)</value>
+    <value>Скрыть лог (нажмите ещё раз, чтобы обновить)</value>
   </data>
   <data name="Login_LogTitle.Text" xml:space="preserve">
-    <value>Діагностичний журнал</value>
+    <value>Диагностический лог</value>
   </data>
   <data name="Login_ToggleLogOn.Content" xml:space="preserve">
-    <value>Увімкнути журнал</value>
+    <value>Включить логирование</value>
   </data>
   <data name="Login_ToggleLogOff.Content" xml:space="preserve">
-    <value>Вимкнути журнал</value>
+    <value>Отключить логирование</value>
   </data>
   <data name="Login_CloseLog.Content" xml:space="preserve">
-    <value>Закрити</value>
+    <value>Закрыть</value>
   </data>
   <data name="Login_PairPhoneTitle" xml:space="preserve">
-    <value>Прив'язати за номером телефону</value>
+    <value>Использовать номер телефона</value>
   </data>
   <data name="Login_PairPhonePrompt" xml:space="preserve">
-    <value>Введіть номер з кодом країни та кодом міста, лише цифри.</value>
+    <value>Введите номер телефона в международном формате</value>
   </data>
   <data name="Login_PairPhoneContinue" xml:space="preserve">
-    <value>Продовжити</value>
+    <value>Продолжить</value>
   </data>
   <data name="Login_PairPhoneCancel" xml:space="preserve">
-    <value>Скасувати</value>
+    <value>Отмена</value>
   </data>
   <data name="Login_PairPhoneInvalidTitle" xml:space="preserve">
-    <value>Некоректний номер</value>
+    <value>Неверный номер</value>
   </data>
   <data name="Login_PairPhoneInvalidBody" xml:space="preserve">
-    <value>Введіть повний номер з кодом країни (наприклад, 5562999999999).</value>
+    <value>Введите полный номер с кодом страны (например: +79281232323).</value>
   </data>
   <data name="Login_PairPhoneNoConnTitle" xml:space="preserve">
-    <value>Немає з'єднання</value>
+    <value>Нет подключения</value>
   </data>
   <data name="Login_PairPhoneNoConnBody" xml:space="preserve">
-    <value>Не вдалося з'єднатися з WhatsApp для запиту коду. Перевірте діагностичний журнал.</value>
+    <value>Не удалось подключиться к WhatsApp для запроса кода. Проверьте журнал диагностики.</value>
   </data>
   <data name="Login_PairPhoneCodeTitle" xml:space="preserve">
-    <value>Код прив'язки</value>
+    <value>Код подключения</value>
   </data>
   <data name="Login_PairPhoneCodeBody" xml:space="preserve">
-    <value>На телефоні з WhatsApp:
+    <value>На телефоне, где установлен WhatsApp:
 
-Пов'язані пристрої &gt; Прив'язати пристрій &gt; Прив'язати за номером телефону
+Связанные устройства &gt; Связывание устройства &gt; Связать по номеру телефона
 
-Введіть цей код:
+Введите этот код:
 
 {0}</value>
   </data>
   <data name="Login_PairPhoneFailTitle" xml:space="preserve">
-    <value>Не вдалося прив'язати за номером</value>
+    <value>Не удалось войти с помощью номера телефона</value>
   </data>
   <data name="Login_LogEmpty" xml:space="preserve">
-    <value>(журнал ще порожній — прив'язка вже автоматично записує етапи [Pairing]. Торкніться «Оновити QR» і знову відкрийте журнал; повне журналювання сеансу вмикайте лише за потреби повного трафіку.)</value>
+    <value>(лог пока пуст — привязка устройства уже автоматически записывает ключевые события [Pairing]. Нажмите «Обновить QR-код» и откройте лог снова; полное логирование сессии включайте, только если нужен весь трафик.)</value>
   </data>
   <data name="Login_LogReadFail" xml:space="preserve">
-    <value>Не вдалося прочитати журнал: {0}</value>
+    <value>Не удалось прочитать лог: {0}</value>
   </data>
   <data name="Login_LogEnabledHint" xml:space="preserve">
-    <value>Журнал УВІМКНЕНО. Торкніться «Оновити QR» або перепідключіться, щоб зафіксувати нову спробу.
+    <value>Логирование включено. Нажмите «Обновить QR-код» или переподключитесь, чтобы записать новую попытку.
 
-Вимкніть після діагностики: увімкнений журнал сповільнює застосунок.</value>
+Отключите после диагностики: если оставить включённым, приложение будет работать медленнее.</value>
   </data>
   <data name="Login_LogDisabledHint" xml:space="preserve">
-    <value>Журнал ВИМКНЕНО (рекомендовано для звичайного використання).</value>
+    <value>Логирование отключено (рекомендуется для обычного использования).</value>
   </data>
   <data name="Login_LogToggleFail" xml:space="preserve">
-    <value>Не вдалося перемкнути журнал: {0}</value>
+    <value>Не удалось переключить лог: {0}</value>
   </data>
   <data name="ChatList_Header.Text" xml:space="preserve">
-    <value>Чати</value>
+    <value>Чаты</value>
   </data>
   <data name="ChatList_SyncUpdating.Text" xml:space="preserve">
-    <value>Оновлення...</value>
+    <value>Обновление...</value>
   </data>
   <data name="ChatList_FilterHeader.Text" xml:space="preserve">
-    <value>Фільтрувати чати за</value>
+    <value>Фильтровать чаты по</value>
   </data>
   <data name="ChatList_FilterAll.Text" xml:space="preserve">
-    <value>Усі</value>
+    <value>Все</value>
   </data>
   <data name="ChatList_FilterUnread.Text" xml:space="preserve">
-    <value>Непрочитані</value>
+    <value>Непрочитанным</value>
   </data>
   <data name="ChatList_FilterFavorites.Text" xml:space="preserve">
-    <value>Обране</value>
+    <value>Избранным</value>
   </data>
   <data name="ChatList_FilterContacts.Text" xml:space="preserve">
-    <value>Контакти</value>
+    <value>Контактам</value>
   </data>
   <data name="ChatList_FilterNonContacts.Text" xml:space="preserve">
-    <value>Не контакти</value>
+    <value>Не контактам</value>
   </data>
   <data name="ChatList_FilterGroups.Text" xml:space="preserve">
-    <value>Групи</value>
+    <value>Группам</value>
   </data>
   <data name="ChatList_FilterDrafts.Text" xml:space="preserve">
-    <value>Чернетки</value>
+    <value>Черновикам</value>
   </data>
   <data name="ChatList_RefreshNames.Text" xml:space="preserve">
-    <value>Оновити імена контактів</value>
+    <value>Обновить имена контактов</value>
   </data>
   <data name="ChatList_SearchBox.PlaceholderText" xml:space="preserve">
-    <value>Пошук або новий чат</value>
+    <value>Найти или начать новый чат</value>
   </data>
   <data name="ChatList_PreviewPhoto" xml:space="preserve">
     <value>Фото</value>
   </data>
   <data name="ChatList_PreviewVideo" xml:space="preserve">
-    <value>Відео</value>
+    <value>Видео</value>
   </data>
   <data name="ChatList_PreviewSticker" xml:space="preserve">
-    <value>Стікер</value>
+    <value>Стикер</value>
   </data>
   <data name="ChatList_PreviewVoice" xml:space="preserve">
-    <value>Голосове повідомлення</value>
+    <value>Голосовое сообщение</value>
   </data>
   <data name="ChatDetail_Audio" xml:space="preserve">
-    <value>Аудіо</value>
+    <value>Аудио</value>
   </data>
   <data name="ChatList_PreviewDocument" xml:space="preserve">
     <value>Документ</value>
   </data>
   <data name="ChatList_PreviewReaction" xml:space="preserve">
-    <value>Реакція</value>
+    <value>Реакция</value>
   </data>
   <data name="ChatList_Loading.Text" xml:space="preserve">
-    <value>Підготовка розмов…</value>
+    <value>Подготовка чатов...</value>
   </data>
   <data name="ChatList_RefreshingNames" xml:space="preserve">
-    <value>Оновлення імен контактів...</value>
+    <value>Обновление имён контактов…</value>
   </data>
   <data name="ChatList_Connecting" xml:space="preserve">
-    <value>З'єднання...</value>
+    <value>Подключение...</value>
   </data>
   <data name="ChatList_Handshake" xml:space="preserve">
-    <value>Рукостискання...</value>
+    <value>Установка соединения...</value>
   </data>
   <data name="ChatList_Updating" xml:space="preserve">
-    <value>Оновлення...</value>
+    <value>Обновление...</value>
   </data>
   <data name="ChatList_SyncProgress" xml:space="preserve">
-    <value>Синхронізація розмов… {0} з {1}</value>
+    <value>Синхронизация чатов… {0} из {1}</value>
   </data>
   <data name="ChatList_SyncProgressCount" xml:space="preserve">
-    <value>Синхронізація розмов… завантажено {0}</value>
+    <value>Синхронизация чатов… {0} загружено</value>
   </data>
   <data name="ChatList_SyncDone" xml:space="preserve">
-    <value>Синхронізацію завершено</value>
+    <value>Синхронизация завершена</value>
   </data>
   <data name="ChatList_Settling" xml:space="preserve">
-    <value>Завершення запуску…</value>
+    <value>Завершение запуска…</value>
   </data>
   <data name="ChatList_ResolvingNames" xml:space="preserve">
-    <value>Визначення імен… {0} з {1}</value>
+    <value>Определение имён… {0} из {1}</value>
   </data>
   <data name="ChatList_FetchingAvatars" xml:space="preserve">
-    <value>Завантаження фото… {0} з {1}</value>
+    <value>Загрузка фото… {0} из {1}</value>
   </data>
   <data name="ChatList_FetchingGroups" xml:space="preserve">
-    <value>Завантаження даних груп… {0} з {1}</value>
+    <value>Загрузка данных групп… {0} из {1}</value>
   </data>
   <data name="ChatList_PausedLowMemory" xml:space="preserve">
-    <value>Призупинено — мало пам'яті</value>
+    <value>Приостановлено — мало памяти</value>
   </data>
   <data name="ChatList_Organizing" xml:space="preserve">
-    <value>Упорядкування чатів…</value>
+    <value>Подготовка чатов…</value>
   </data>
   <data name="ChatDetail_SelectChat.Text" xml:space="preserve">
-    <value>Виберіть чат</value>
+    <value>Выберите чат</value>
   </data>
   <data name="ChatDetail_Empty.Text" xml:space="preserve">
-    <value>Виберіть чат, щоб почати спілкування</value>
+    <value>Выберите чат, чтобы начать общение</value>
   </data>
   <data name="ChatDetail_MessageInput.PlaceholderText" xml:space="preserve">
-    <value>Введіть повідомлення</value>
+    <value>Сообщение</value>
   </data>
   <data name="ChatDetail_AttachCamera.Text" xml:space="preserve">
     <value>Камера</value>
@@ -315,25 +256,25 @@
     <value>Контакт</value>
   </data>
   <data name="ChatDetail_AttachMedia.Text" xml:space="preserve">
-    <value>Медіа</value>
+    <value>Медиа</value>
   </data>
   <data name="ChatDetail_AttachAudio.Text" xml:space="preserve">
-    <value>Аудіо</value>
+    <value>Аудио</value>
   </data>
   <data name="ChatDetail_AttachLocation.Text" xml:space="preserve">
-    <value>Розташування</value>
+    <value>Местоположение</value>
   </data>
   <data name="ChatDetail_AttachTitle.Text" xml:space="preserve">
-    <value>ВКЛАСТИ</value>
+    <value>ВЛОЖЕНИЕ</value>
   </data>
   <data name="ChatDetail_AttachFlyoutTooltip.Content" xml:space="preserve">
-    <value>Вкласти</value>
+    <value>Добавить вложение</value>
   </data>
   <data name="ChatDetail_AttachBarTooltip.Content" xml:space="preserve">
-    <value>Вкласти</value>
+    <value>Добавить вложение</value>
   </data>
   <data name="ChatDetail_ScrollToBottomTooltip.Content" xml:space="preserve">
-    <value>До останніх</value>
+    <value>Перейти в конец</value>
   </data>
   <data name="ChatDetail_AttachCameraTile.Text" xml:space="preserve">
     <value>Камера</value>
@@ -345,247 +286,247 @@
     <value>Контакт</value>
   </data>
   <data name="ChatDetail_AttachMediaTile.Text" xml:space="preserve">
-    <value>Медіа</value>
+    <value>Медиа</value>
   </data>
   <data name="ChatDetail_AttachAudioTile.Text" xml:space="preserve">
-    <value>Аудіо</value>
+    <value>Аудио</value>
   </data>
   <data name="ChatDetail_AttachLocationTile.Text" xml:space="preserve">
-    <value>Розташування</value>
+    <value>Местоположение</value>
   </data>
   <data name="ChatDetail_Pinned.Text" xml:space="preserve">
-    <value>Закріплене повідомлення</value>
+    <value>Закреплённое сообщение</value>
   </data>
   <data name="ChatDetail_ReadMore" xml:space="preserve">
-    <value>Читати більше</value>
+    <value>Далее</value>
   </data>
   <data name="ChatDetail_ReadLess" xml:space="preserve">
-    <value>Згорнути</value>
+    <value>Свернуть</value>
   </data>
   <data name="ChatDetail_Forwarded" xml:space="preserve">
     <value>Переслано</value>
   </data>
   <data name="ChatDetail_PinnedIndex" xml:space="preserve">
-    <value>Закріплене повідомлення {0} з {1}</value>
+    <value>Закреплённое сообщение {0} из {1}</value>
   </data>
   <data name="ChatDetail_UnpinMessage" xml:space="preserve">
-    <value>Відкріпити повідомлення</value>
+    <value>Открепить сообщение</value>
   </data>
   <data name="ChatDetail_PinFor24Hours" xml:space="preserve">
-    <value>Закріпити на 24 год.</value>
+    <value>Закрепить на 24 ч.</value>
   </data>
   <data name="ChatDetail_PinFor7Days" xml:space="preserve">
-    <value>Закріпити на 7 дн.</value>
+    <value>Закрепить на 7 дн.</value>
   </data>
   <data name="ChatDetail_PinFor30Days" xml:space="preserve">
-    <value>Закріпити на 30 дн.</value>
+    <value>Закрепить на 30 дн.</value>
   </data>
   <data name="Chat_SelfMarker" xml:space="preserve">
-    <value>(Ви)</value>
+    <value>(Вы)</value>
   </data>
   <data name="Chat_SelfFallbackName" xml:space="preserve">
-    <value>Ви</value>
+    <value>Вы</value>
   </data>
   <data name="ChatDetail_PersonalSubtitle.Text" xml:space="preserve">
-    <value>Повідомлення собі</value>
+    <value>Сообщение самому себе</value>
   </data>
   <data name="ChatDetail_PresenceOnline" xml:space="preserve">
-    <value>у мережі</value>
+    <value>в сети</value>
   </data>
   <data name="ChatDetail_PresenceTyping" xml:space="preserve">
-    <value>друкує...</value>
+    <value>печатает...</value>
   </data>
   <data name="ChatDetail_PresenceLastSeenToday" xml:space="preserve">
-    <value>був(-ла) в мережі сьогодні о {0}</value>
+    <value>был(а) в сети сегодня в {0}</value>
   </data>
   <data name="ChatDetail_PresenceLastSeenYesterday" xml:space="preserve">
-    <value>був(-ла) в мережі вчора о {0}</value>
+    <value>был(а) в сети вчера в {0}</value>
   </data>
   <data name="ChatDetail_PresenceLastSeenWeekday" xml:space="preserve">
-    <value>був(-ла) в мережі {0} о {1}</value>
+    <value>был(а) в сети {0} в {1}</value>
   </data>
   <data name="ChatDetail_PresenceLastSeenDate" xml:space="preserve">
-    <value>був(-ла) в мережі {0} о {1}</value>
+    <value>был(а) в сети {0} в {1}</value>
   </data>
   <data name="ChatDetail_PresenceLastSeenRecently" xml:space="preserve">
-    <value>був(-ла) в мережі нещодавно</value>
+    <value>был(а) недавно</value>
   </data>
   <data name="ChatDetail_SelectForContactInfo" xml:space="preserve">
-    <value>торкніться контакту, щоб дізнатися більше</value>
+    <value>Нажмите на контакт, чтобы узнать больше</value>
   </data>
   <data name="ChatDetail_SelectForGroupInfo" xml:space="preserve">
-    <value>торкніться тут, щоб переглянути інформацію про групу</value>
+    <value>Нажмите здесь, чтобы посмотреть информацию о группе</value>
   </data>
   <data name="ImageViewer_Download" xml:space="preserve">
-    <value>Завантажити</value>
+    <value>Сохранить</value>
   </data>
   <data name="ImageViewer_Share" xml:space="preserve">
-    <value>Поділитися</value>
+    <value>Поделиться</value>
   </data>
   <data name="ImageViewer_UnknownSender" xml:space="preserve">
     <value>Контакт</value>
   </data>
   <data name="ChatDetail_SendImage.Title" xml:space="preserve">
-    <value>Надіслати зображення?</value>
+    <value>Отправить изображение?</value>
   </data>
   <data name="ChatDetail_SendImage.PrimaryButtonText" xml:space="preserve">
-    <value>Надіслати</value>
+    <value>Отправить</value>
   </data>
   <data name="ChatDetail_SendImage.SecondaryButtonText" xml:space="preserve">
-    <value>Скасувати</value>
+    <value>Отмена</value>
   </data>
   <data name="ChatDetail_AudioPlayFailed" xml:space="preserve">
-    <value>Не вдалося відтворити це аудіо.</value>
+    <value>Не удалось воспроизвести аудио.</value>
   </data>
   <data name="ChatDetail_RecordFailed" xml:space="preserve">
-    <value>Не вдалося записати аудіо. Перевірте дозвіл на використання мікрофона.</value>
+    <value>Не удалось записать аудио. Проверьте разрешение на использование микрофона.</value>
   </data>
   <data name="ChatDetail_RecordingChatUnavailable" xml:space="preserve">
-    <value>Розмова для цього запису більше недоступна.</value>
+    <value>Чат, в котором выполнялась запись, больше недоступен.</value>
   </data>
   <data name="ChatDetail_AudioSendFailed" xml:space="preserve">
-    <value>Не вдалося надіслати аудіо.</value>
+    <value>Не удалось отправить аудио.</value>
   </data>
   <data name="ChatDetail_AttachSendFailed" xml:space="preserve">
-    <value>Не вдалося надіслати файл.</value>
+    <value>Не удалось отправить файл.</value>
   </data>
   <data name="ChatDetail_ImageDownloadFailed" xml:space="preserve">
-    <value>Не вдалося завантажити це зображення.</value>
+    <value>Не удалось сохранить изображение.</value>
   </data>
   <data name="NewChatDialog.Title" xml:space="preserve">
-    <value>Новий чат</value>
+    <value>Новый чат</value>
   </data>
   <data name="NewChatDialog.PrimaryButtonText" xml:space="preserve">
-    <value>Почати чат</value>
+    <value>Начать чат</value>
   </data>
   <data name="NewChatDialog.SecondaryButtonText" xml:space="preserve">
-    <value>Скасувати</value>
+    <value>Отмена</value>
   </data>
   <data name="NewChat_Hint.Text" xml:space="preserve">
-    <value>Введіть номер телефону особи, якій хочете написати.</value>
+    <value>Введите номер телефона человека, которому вы хотите отправить сообщение.</value>
   </data>
   <data name="NewChat_Phone.Header" xml:space="preserve">
-    <value>Номер телефону</value>
+    <value>Номер телефона</value>
   </data>
   <data name="NewChat_Phone.PlaceholderText" xml:space="preserve">
-    <value>напр. +447700900000</value>
+    <value>например: +79281232323</value>
   </data>
   <data name="NewChat_EnterPhone" xml:space="preserve">
-    <value>Будь ласка, введіть номер телефону.</value>
+    <value>Пожалуйста, введите номер телефона.</value>
   </data>
   <data name="NewChat_Searching" xml:space="preserve">
-    <value>Пошук...</value>
+    <value>Поиск...</value>
   </data>
   <data name="NewChat_NotFound" xml:space="preserve">
-    <value>Не вдалося знайти обліковий запис WhatsApp для цього номера.</value>
+    <value>Не удалось найти аккаунт WhatsApp по этому номеру.</value>
   </data>
   <data name="NewChat_Error" xml:space="preserve">
-    <value>Помилка: {0}</value>
+    <value>Ошибка: {0}</value>
   </data>
   <data name="Debug_Title.Text" xml:space="preserve">
-    <value>Налагодження та журнали протоколу</value>
+    <value>Отладка и Логи протокола</value>
   </data>
   <data name="Debug_Logging.Text" xml:space="preserve">
-    <value>Журналювання</value>
+    <value>Логирование</value>
   </data>
   <data name="Debug_Verbose.Header" xml:space="preserve">
-    <value>Детальне журналювання налагодження</value>
+    <value>Подробное отладочное логирование</value>
   </data>
   <data name="Debug_Verbose.Text" xml:space="preserve">
-    <value>Увімкнути докладний вивід налагодження. Може сповільнити застосунок.</value>
+    <value>Включить подробный отладочный вывод. Это может замедлить работу приложения.</value>
   </data>
   <data name="Debug_Capture.Header" xml:space="preserve">
-    <value>Захоплення трафіку протоколу</value>
+    <value>Захват трафика протокола</value>
   </data>
   <data name="Debug_Capture.Text" xml:space="preserve">
-    <value>Записувати всі вхідні та вихідні бінарні вузли.</value>
+    <value>Записывать все входящие и исходящие бинарные узлы.</value>
   </data>
   <data name="Debug_VerboseTitle.Text" xml:space="preserve">
-    <value>Детальне журналювання налагодження</value>
+    <value>Подробное логирование</value>
   </data>
   <data name="Debug_VerboseDesc.Text" xml:space="preserve">
-    <value>Увімкнути докладний вивід налагодження. Може сповільнити застосунок.</value>
+    <value>Включение подробного логирования может замедлить работу приложения.</value>
   </data>
   <data name="Debug_RuntimeTitle.Text" xml:space="preserve">
-    <value>Стан виконання</value>
+    <value>Состояние среды выполнения</value>
   </data>
   <data name="Debug_RuntimeDesc.Text" xml:space="preserve">
-    <value>Постійні лічильники з'єднання, черг, надсилання, отримання та пам'яті. Текст повідомлень не записується.</value>
+    <value>Постоянный мониторинг подключений, очередей, отправки, получения и использования памяти. Текст сообщений не записывается.</value>
   </data>
   <data name="Debug_Refresh.Content" xml:space="preserve">
-    <value>Оновити</value>
+    <value>Обновить</value>
   </data>
   <data name="Debug_SaveReport.Content" xml:space="preserve">
-    <value>Зберегти діагностичний звіт</value>
+    <value>Сохранить диагностический отчёт</value>
   </data>
   <data name="Debug_ClearRuntime.Content" xml:space="preserve">
-    <value>Очистити журнал виконання</value>
+    <value>Очистить лог среды выполнения</value>
   </data>
   <data name="Debug_Collecting.Text" xml:space="preserve">
-    <value>Збір стану виконання...</value>
+    <value>Сбор состояния среды выполнения...</value>
   </data>
   <data name="Debug_CaptureTitle.Text" xml:space="preserve">
-    <value>Захоплення трафіку протоколу</value>
+    <value>Захват трафика протокола</value>
   </data>
   <data name="Debug_CaptureDesc.Text" xml:space="preserve">
-    <value>Записувати всі вхідні та вихідні бінарні вузли.</value>
+    <value>Записывать все входящие и исходящие бинарные узлы.</value>
   </data>
   <data name="Debug_LiveStream.Text" xml:space="preserve">
-    <value>Потокове відображення</value>
+    <value>Лог в реальном времени</value>
   </data>
   <data name="Debug_SaveLog.Content" xml:space="preserve">
-    <value>Зберегти журнал</value>
+    <value>Сохранить лог</value>
   </data>
   <data name="Debug_ClearLog.Content" xml:space="preserve">
-    <value>Очистити</value>
+    <value>Очистить</value>
   </data>
   <data name="Debug_Actions.Text" xml:space="preserve">
-    <value>Дії</value>
+    <value>Действия</value>
   </data>
   <data name="Debug_Crypto.Header" xml:space="preserve">
-    <value>Команди</value>
+    <value>Команды</value>
   </data>
   <data name="Debug_Crypto.Text" xml:space="preserve">
-    <value>Виконати локальну перевірку криптографії.</value>
+    <value>Запустить локальную проверку криптографии.</value>
   </data>
   <data name="Debug_WipeBox.Header" xml:space="preserve">
-    <value>Очищення сеансу</value>
+    <value>Очистить сессию</value>
   </data>
   <data name="Debug_WipeBox.Text" xml:space="preserve">
-    <value>Видалити локальні дані автентифікації та повернутися до прив'язки.</value>
+    <value>Удалить локальные данные авторизации и вернуться к авторизации.</value>
   </data>
   <data name="Debug_StatusBox.Header" xml:space="preserve">
-    <value>Стан</value>
+    <value>Статус</value>
   </data>
   <data name="Debug_StatusBox.Text" xml:space="preserve">
-    <value>Збірка пакета та архітектура.</value>
+    <value>Сборка пакета и архитектуры</value>
   </data>
   <data name="Debug_Wipe.Content" xml:space="preserve">
-    <value>Очистити сеанс</value>
+    <value>Очистить сессию</value>
   </data>
   <data name="Debug_WipeTitle" xml:space="preserve">
-    <value>Очистити сеанс?</value>
+    <value>Очистить сессию?</value>
   </data>
   <data name="Debug_WipeBody" xml:space="preserve">
-    <value>Це видалить усі локальні дані автентифікації та закриє застосунок. Потрібно буде прив'язати пристрій знову.</value>
+    <value>Это приведёт к удалению всех локальных данных аутентификации и закрытию приложения. Вам потребуется авторизоваться заново.</value>
   </data>
   <data name="Debug_WipeDelete" xml:space="preserve">
-    <value>Видалити</value>
+    <value>Удалить</value>
   </data>
   <data name="Debug_WipeCancel" xml:space="preserve">
-    <value>Скасувати</value>
+    <value>Отмена</value>
   </data>
   <data name="Debug_PreparingReport" xml:space="preserve">
-    <value>Підготовка звіту...</value>
+    <value>Подготовка отчёта...</value>
   </data>
   <data name="Debug_RuntimeCleared" xml:space="preserve">
-    <value>Журнал виконання очищено.</value>
+    <value>Лог выполнения очищен.</value>
   </data>
   <data name="Shell_Chats.Text" xml:space="preserve">
-    <value>Чати</value>
+    <value>Чаты</value>
   </data>
   <data name="Shell_Calls.Text" xml:space="preserve">
-    <value>Дзвінки</value>
+    <value>Звонки</value>
   </data>
   <data name="Shell_Status.Text" xml:space="preserve">
     <value>Статус</value>
@@ -594,383 +535,383 @@
     <value>Статус</value>
   </data>
   <data name="StatusList_Empty.Text" xml:space="preserve">
-    <value>Немає недавніх оновлень статусу</value>
+    <value>Нет последних обновлений статуса</value>
   </data>
   <data name="Shell_Starred.Text" xml:space="preserve">
-    <value>Позначені зірочкою</value>
+    <value>Избранное сообщение</value>
   </data>
   <data name="Shell_Archived.Text" xml:space="preserve">
-    <value>Архівовані чати</value>
+    <value>Архивированные чаты</value>
   </data>
   <data name="Shell_Settings.Text" xml:space="preserve">
-    <value>Налаштування</value>
+    <value>Настройки</value>
   </data>
   <data name="Shell_Debug.Text" xml:space="preserve">
-    <value>Налагодження</value>
+    <value>Отладка</value>
   </data>
   <data name="Shell_Profile.Text" xml:space="preserve">
-    <value>Профіль</value>
+    <value>Профиль</value>
   </data>
   <data name="Common_Cancel" xml:space="preserve">
-    <value>Скасувати</value>
+    <value>Отмена</value>
   </data>
   <data name="Common_OK" xml:space="preserve">
-    <value>Гаразд</value>
+    <value>OK</value>
   </data>
   <data name="Common_Close" xml:space="preserve">
-    <value>Закрити</value>
+    <value>Закрыть</value>
   </data>
   <data name="Reactions_TitleOne" xml:space="preserve">
-    <value>1 реакція</value>
+    <value>1 реакция</value>
   </data>
   <data name="Reactions_TitleMany" xml:space="preserve">
-    <value>Реакцій: {0}</value>
+    <value>{0} реакций</value>
   </data>
   <data name="Login_BackgroundAccessTitle" xml:space="preserve">
-    <value>Фонові програми</value>
+    <value>Фоновые приложения</value>
   </data>
   <data name="Login_BackgroundAccessBody" xml:space="preserve">
-    <value>Unison потрібен дозвіл на роботу у фоні, щоб підключитися до WhatsApp. Увімкніть Unison у Параметри → Конфіденційність → Фонові програми й поверніться сюди.</value>
+    <value>Unison требуется разрешение на работу в фоновом режиме. Включите Unison в разделе «Настройки» → «Конфиденциальность» → «Фоновые приложения», затем вернитесь сюда.</value>
   </data>
   <data name="Login_BackgroundAccessRetry" xml:space="preserve">
-    <value>Фоновий доступ увімкнено. Натисніть Перезавантажити QR, щоб підключитися.</value>
+    <value>Фоновый доступ включён. Нажмите «Обновить QR-код».</value>
   </data>
   <data name="Common_Yesterday" xml:space="preserve">
-    <value>Учора</value>
+    <value>Вчера</value>
   </data>
   <data name="Common_Today" xml:space="preserve">
-    <value>Сьогодні</value>
+    <value>Сегодня</value>
   </data>
   <data name="Login_InstrTitle.Text" xml:space="preserve">
-    <value>Використовуйте WhatsApp на комп'ютері</value>
+    <value>Используйте WhatsApp на компьютере</value>
   </data>
   <data name="Login_InstrStep1.Text" xml:space="preserve">
-    <value>1. Відкрийте WhatsApp на телефоні</value>
+    <value>1. Откройте WhatsApp на телефоне</value>
   </data>
   <data name="Login_InstrStep2.Text" xml:space="preserve">
-    <value>2. Торкніться «Меню» або «Налаштування» та виберіть «Пов'язані пристрої»</value>
+    <value>2. Нажмите «Меню» или «Настройки» и выберите «Связанные устройства»</value>
   </data>
   <data name="Login_InstrStep3.Text" xml:space="preserve">
-    <value>3. Торкніться «Прив'язати пристрій»</value>
+    <value>3. Нажмите «Привязать устройство»</value>
   </data>
   <data name="Login_InstrStep4.Text" xml:space="preserve">
-    <value>4. Наведіть телефон на цей екран, щоб відсканувати код</value>
+    <value>4. Наведите телефон, чтобы отсканировать код</value>
   </data>
   <data name="Login_LinkPhone.Text" xml:space="preserve">
-    <value>Прив'язати за номером телефону</value>
+    <value>Привязать по номеру телефона</value>
   </data>
   <data name="Login_DevResetTitle" xml:space="preserve">
-    <value>Скидання для розробників</value>
+    <value>Сброс для разработчика</value>
   </data>
   <data name="Login_DevResetBody" xml:space="preserve">
-    <value>Сеанс і локальні дані очищено. Застосунок зараз закриється для чистого перезапуску.</value>
+    <value>Сеанс и локальные данные удалены. Приложение будет перезапущено.</value>
   </data>
   <data name="Settings_Title.Text" xml:space="preserve">
-    <value>Налаштування</value>
+    <value>Настройки</value>
   </data>
   <data name="Settings_General.Text" xml:space="preserve">
-    <value>Загальні</value>
+    <value>Общие</value>
   </data>
   <data name="Settings_Notifications.Header" xml:space="preserve">
-    <value>Сповіщення</value>
+    <value>Уведомления</value>
   </data>
   <data name="Settings_Notifications.Text" xml:space="preserve">
-    <value>Показувати спливаючі сповіщення та значок для нових повідомлень.</value>
+    <value>Показывать уведомления и количество новых сообщений на значке.</value>
   </data>
   <data name="Settings_LiveTiles.Header" xml:space="preserve">
-    <value>Живі плитки</value>
+    <value>Динамическая плитка</value>
   </data>
   <data name="Settings_LiveTiles.Text" xml:space="preserve">
-    <value>Оновлювати основну плитку останнім повідомленням.</value>
+    <value>Показывать последнее сообщение на плитке приложения.</value>
   </data>
   <data name="Settings_KeepAlive.Header" xml:space="preserve">
-    <value>Фоновий режим</value>
+    <value>Фоновый режим</value>
   </data>
   <data name="Settings_KeepAlive.Text" xml:space="preserve">
-    <value>Використовує лише геолокацію, щоб Windows 10 Mobile не заморожував застосунок (трюк Unogram). Місцезнаходження не зчитується й не надсилається. Витрачає більше заряду батареї.</value>
+    <value>Использует геолокацию, чтобы Windows 10 Mobile не приостанавливала работу приложения (метод Unogram). Геолокация не считывается и не передаётся. Увеличивает расход батареи.</value>
   </data>
   <data name="Settings_AutoUnlink.Header" xml:space="preserve">
-    <value>Автоматичне відв'язування при виході</value>
+    <value>Автоматически отвязывать при выходе</value>
   </data>
   <data name="Settings_AutoUnlink.Text" xml:space="preserve">
-    <value>Якщо телефон анулює цей сеанс, очистити локальні дані та показати QR-код. Вимкніть, щоб залишити застосунок як резервний і лише повторювати спроби з'єднання.</value>
+    <value>При автоматическом завершении сеанса локальные данные будут удалены. Если отключить эту функцию, приложение сохранит данные.</value>
   </data>
   <data name="Settings_PublishWindowsContacts.Header" xml:space="preserve">
-    <value>Показувати контакти Unison у Windows</value>
+    <value>Показывать контакты Unison в Windows</value>
   </data>
   <data name="Settings_PublishWindowsContacts.Text" xml:space="preserve">
-    <value>Додає чати 1:1 до окремого списку Unison у програмі Люди. Типово вимкнено.</value>
+    <value>Добавляет ваши личные чаты в отдельный список. По умолчанию отключено.</value>
   </data>
   <data name="Settings_Customization.Text" xml:space="preserve">
-    <value>Налаштування вигляду</value>
+    <value>Персонализация</value>
   </data>
   <data name="Settings_Language.Header" xml:space="preserve">
-    <value>Мова</value>
+    <value>Язык</value>
   </data>
   <data name="Settings_Language.Text" xml:space="preserve">
-    <value>Виберіть мову застосунку. Для застосування потрібен перезапуск.</value>
+    <value>Выберите язык приложения. Для применения изменений приложение будет перезапущено.</value>
   </data>
   <data name="Settings_LanguageSystem" xml:space="preserve">
-    <value>Системна</value>
+    <value>Системный</value>
   </data>
   <data name="Settings_LanguageRestartTitle" xml:space="preserve">
-    <value>Мову оновлено</value>
+    <value>Язык изменён</value>
   </data>
   <data name="Settings_LanguageRestartBody" xml:space="preserve">
-    <value>Unison перезапуститься, щоб застосувати нову мову.</value>
+    <value>Unison будет перезапущен для применения языка.</value>
   </data>
   <data name="Settings_LanguageRestartClose" xml:space="preserve">
-    <value>Гаразд</value>
+    <value>OK</value>
   </data>
   <data name="Settings_Advanced.Text" xml:space="preserve">
-    <value>Розширені налаштування</value>
+    <value>Дополнительные настройки</value>
   </data>
   <data name="Settings_Disconnect.Text" xml:space="preserve">
-    <value>Відключити</value>
+    <value>Выйти</value>
   </data>
   <data name="Settings_DisconnectTitle" xml:space="preserve">
-    <value>Відключити?</value>
+    <value>Вы уверены, что хотите выйти?</value>
   </data>
   <data name="Settings_DisconnectBody" xml:space="preserve">
-    <value>Якщо ви відключитеся, вас буде перенаправлено на екран прив'язки, а всі дані та чати буде стерто.</value>
+    <value>После выхода вы перейдёте на экран авторизации, а все данные и чаты будут удалены.</value>
   </data>
   <data name="Settings_DisconnectConfirm" xml:space="preserve">
-    <value>Відключити</value>
+    <value>Выйти</value>
   </data>
   <data name="Settings_DisconnectCancel" xml:space="preserve">
-    <value>Скасувати</value>
+    <value>Отмена</value>
   </data>
   <data name="Settings_TimeFormat.Header" xml:space="preserve">
-    <value>Формат часу</value>
+    <value>Формат времени</value>
   </data>
   <data name="Settings_TimeFormat.Text" xml:space="preserve">
-    <value>Оберіть 24-годинний або 12-годинний годинник.</value>
+    <value>Выберите 24-часовой или 12-часовой формат.</value>
   </data>
   <data name="Settings_TimeFormat24Hours.Content" xml:space="preserve">
-    <value>24 години</value>
+    <value>24 часа</value>
   </data>
   <data name="Settings_TimeFormat12Hours.Content" xml:space="preserve">
-    <value>12 годин</value>
+    <value>12 часов</value>
   </data>
   <data name="Settings_Shell.Header" xml:space="preserve">
-    <value>Оболонка</value>
+    <value>Оформление</value>
   </data>
   <data name="Settings_Shell.Text" xml:space="preserve">
-    <value>Виберіть вигляд і стиль застосунку.</value>
+    <value>Выберите внешний вид приложения.</value>
   </data>
   <data name="Settings_ShellRestartTitle" xml:space="preserve">
-    <value>Оболонку оновлено</value>
+    <value>Оформление изменено</value>
   </data>
   <data name="Settings_ShellRestartBody" xml:space="preserve">
-    <value>Unison перезапуститься, щоб застосувати нову оболонку.</value>
+    <value>Unison будет перезапущен для применения нового оформления.</value>
   </data>
   <data name="Settings_ShellRestartClose" xml:space="preserve">
-    <value>Гаразд</value>
+    <value>OK</value>
   </data>
   <data name="Settings_ShellAppliedTitle" xml:space="preserve">
-    <value>Оболонку застосовано</value>
+    <value>Оформление применено.</value>
   </data>
   <data name="Settings_ShellAppliedBody" xml:space="preserve">
-    <value>Вибрана оболонка тепер активна.</value>
+    <value>Новое оформление успешно применено.</value>
   </data>
   <data name="Boot_Loading.Text" xml:space="preserve">
-    <value>Завантаження...</value>
+    <value>Загрузка...</value>
   </data>
   <data name="Start_Title.Text" xml:space="preserve">
-    <value>Ласкаво просимо до Unison</value>
+    <value>Добро пожаловать в Unison</value>
   </data>
   <data name="Start_Description.Text" xml:space="preserve">
-    <value>Простий, надійний і приватний спосіб користуватися WhatsApp на комп'ютері.</value>
+    <value>Простой, надёжный и безопасный способ пользоваться WhatsApp на компьютере.</value>
   </data>
   <data name="Start_GetStarted.Content" xml:space="preserve">
-    <value>Почати</value>
+    <value>Начать</value>
   </data>
   <data name="Start_Language.Text" xml:space="preserve">
-    <value>Мова:</value>
+    <value>Язык:</value>
   </data>
   <data name="Settings_About.Text" xml:space="preserve">
-    <value>Про застосунок</value>
+    <value>О приложении</value>
   </data>
   <data name="Settings_VersionLabel.Text" xml:space="preserve">
-    <value>Версія</value>
+    <value>Версия</value>
   </data>
   <data name="Settings_BranchLabel.Text" xml:space="preserve">
-    <value>Гілка</value>
+    <value>Канал</value>
   </data>
   <data name="Settings_Developers.Text" xml:space="preserve">
-    <value>Розробники</value>
+    <value>Разработчики</value>
   </data>
   <data name="Settings_AppDescription.Text" xml:space="preserve">
-    <value>Клієнт WhatsApp на основі Baileys для Windows Universal Platform.</value>
+    <value>Клиент WhatsApp на базе Baileys для UWP.</value>
   </data>
   <data name="Settings_AppBranch.Text" xml:space="preserve">
-    <value>Реліз</value>
+    <value>Release</value>
   </data>
   <data name="Toast_DisconnectedTitle" xml:space="preserve">
-    <value>Unison відключено</value>
+    <value>Unison не подключён</value>
   </data>
   <data name="Toast_DisconnectedBody" xml:space="preserve">
-    <value>Відкрийте застосунок, щоб відновити з'єднання з WhatsApp.</value>
+    <value>Откройте приложение, чтобы восстановить подключение.</value>
   </data>
   <data name="Toast_LoggedOutTitle" xml:space="preserve">
-    <value>Сеанс відв'язано</value>
+    <value>Сеанс завершён.</value>
   </data>
   <data name="Toast_LoggedOutBody" xml:space="preserve">
-    <value>Сеанс було відключено на телефоні. Відскануйте QR-код, щоб прив'язати знову.</value>
+    <value>Сеанс был завершён. Необходимо войти повторно.</value>
   </data>
   <data name="Toast_SessionReplacedBody" xml:space="preserve">
-    <value>Інший сеанс WhatsApp Web перейняв керування. Відскануйте QR-код знову.</value>
+    <value>Отсканируйте QR-код, чтобы подключиться снова.</value>
   </data>
   <data name="Toast_GenericFallbackTitle" xml:space="preserve">
-    <value>Нова активність у WhatsApp</value>
+    <value>Новое сообщение в WhatsApp</value>
   </data>
   <data name="Toast_GenericFallbackBody" xml:space="preserve">
-    <value>Відкрийте Unison, щоб завантажити повідомлення.</value>
+    <value>Откройте Unison, чтобы посмотреть сообщение.</value>
   </data>
   <data name="Toast_NewMessageFallback" xml:space="preserve">
-    <value>Нове повідомлення</value>
+    <value>Новое сообщение</value>
   </data>
   <data name="Toast_MediaPlaceholder" xml:space="preserve">
-    <value>[Медіа]</value>
+    <value>[Медиа]</value>
   </data>
   <data name="Toast_AppName" xml:space="preserve">
     <value>Unison</value>
   </data>
   <data name="ChatList_PinChat.Text" xml:space="preserve">
-    <value>Закріпити чат</value>
+    <value>Закрепить чат</value>
   </data>
   <data name="ChatList_UnpinChat.Text" xml:space="preserve">
-    <value>Відкріпити чат</value>
+    <value>Открепить чат</value>
   </data>
   <data name="ChatDetailInfo_PinChatAppBarLabel" xml:space="preserve">
-    <value>Закріпити
+    <value>Закрепить
 чат</value>
   </data>
   <data name="ChatDetailInfo_UnpinChatAppBarLabel" xml:space="preserve">
-    <value>Відкріпити
+    <value>Открепить
 чат</value>
   </data>
   <data name="ChatDetailInfo_Media" xml:space="preserve">
-    <value>Медіа</value>
+    <value>Медиа</value>
   </data>
   <data name="ChatDetailInfo_Files" xml:space="preserve">
-    <value>Файли</value>
+    <value>Файлы</value>
   </data>
   <data name="ChatDetailInfo_Members" xml:space="preserve">
-    <value>Учасники</value>
+    <value>Участники</value>
   </data>
   <data name="ChatDetailInfo_Calls" xml:space="preserve">
-    <value>Дзвінки</value>
+    <value>Звонки</value>
   </data>
   <data name="ChatDetailInfo_CallsEmpty" xml:space="preserve">
-    <value>Дзвінки, які ви здійснюєте та отримуєте, з'являться тут.</value>
+    <value>Здесь будут отображаться ваши входящие и исходящие звонки.</value>
   </data>
   <data name="ChatDetailInfo_MembersEmpty" xml:space="preserve">
-    <value>Учасники групи з'являться тут.</value>
+    <value>Здесь будут отображаться участники группы.</value>
   </data>
   <data name="ChatDetailInfo_Admin.Text" xml:space="preserve">
-    <value>Адмін</value>
+    <value>Админ</value>
   </data>
   <data name="ChatDetailInfo_GroupsInCommon" xml:space="preserve">
-    <value>Спільні групи</value>
+    <value>Общие группы</value>
   </data>
   <data name="ChatDetailInfo_GroupsInCommonEmpty" xml:space="preserve">
-    <value>Немає спільних груп.</value>
+    <value>Нет общих групп.</value>
   </data>
   <data name="ChatDetailInfo_MediaEmpty" xml:space="preserve">
-    <value>Фото, відео та аудіо з'являться тут.</value>
+    <value>Здесь будут отображаться фото, видео и аудиофайлы.</value>
   </data>
   <data name="ChatDetailInfo_FilesEmpty" xml:space="preserve">
-    <value>Документи з'являться тут.</value>
+    <value>Здесь будут отображаться документы.</value>
   </data>
   <data name="ChatDetailInfo_MemberCount" xml:space="preserve">
-    <value>{0} учасників</value>
+    <value>{0} участников</value>
   </data>
   <data name="ChatDetailInfo_MemberCountSingular" xml:space="preserve">
-    <value>1 учасник</value>
+    <value>1 участник</value>
   </data>
   <data name="ChatDetail_Search.Text" xml:space="preserve">
-    <value>Пошук</value>
+    <value>Поиск</value>
   </data>
   <data name="ChatDetail_ExportChat.Text" xml:space="preserve">
-    <value>Експортувати чат</value>
+    <value>Экспортировать чат</value>
   </data>
   <data name="ChatDetailInfo_Phone" xml:space="preserve">
     <value>Телефон</value>
   </data>
   <data name="ChatDetail_GroupMedia.Text" xml:space="preserve">
-    <value>Медіа групи</value>
+    <value>Медиа группы</value>
   </data>
   <data name="ChatDetail_MuteNotifications.Text" xml:space="preserve">
-    <value>Вимкнути сповіщення</value>
+    <value>Отключить уведомления</value>
   </data>
   <data name="ChatDetailInfo_UnpinAppBarLabel" xml:space="preserve">
-    <value>Відкріпити з
-Початку</value>
+    <value>Убрать с
+начального экрана</value>
   </data>
   <data name="ChatDetailInfo_Notifications" xml:space="preserve">
-    <value>Сповіщення</value>
+    <value>Уведомления</value>
   </data>
   <data name="ChatDetailInfo_GroupInfo" xml:space="preserve">
-    <value>Інформація про групу</value>
+    <value>Информация о группе</value>
   </data>
   <data name="ChatDetail_PinToStart.Text" xml:space="preserve">
-    <value>Закріпити на Початку</value>
+    <value>Закрепить на начальном экране</value>
   </data>
   <data name="ChatDetail_UnmuteNotifications.Text" xml:space="preserve">
-    <value>Увімкнути сповіщення</value>
+    <value>Включить уведомления</value>
   </data>
   <data name="ChatDetail_MuteFor1Week.Text" xml:space="preserve">
-    <value>1 тиждень</value>
+    <value>1 неделя</value>
   </data>
   <data name="ChatDetailInfo_Description" xml:space="preserve">
-    <value>Опис</value>
+    <value>Описание</value>
   </data>
   <data name="ChatDetailInfo_Profile" xml:space="preserve">
-    <value>Профіль</value>
+    <value>Профиль</value>
   </data>
   <data name="ChatDetail_ShowContact.Text" xml:space="preserve">
-    <value>Переглянути контакт</value>
+    <value>Посмотреть контакт</value>
   </data>
   <data name="ChatDetail_AddContact.Text" xml:space="preserve">
-    <value>Додати контакт</value>
+    <value>Добавить контакт</value>
   </data>
   <data name="ChatDetailInfo_AddContactAppBarLabel" xml:space="preserve">
-    <value>Додати
+    <value>Добавить
 контакт</value>
   </data>
   <data name="ChatDetailInfo_NotificationsOn" xml:space="preserve">
-    <value>Увімк.</value>
+    <value>Включить</value>
   </data>
   <data name="ChatDetailInfo_Name" xml:space="preserve">
-    <value>Ім'я</value>
+    <value>Имя</value>
   </data>
   <data name="ChatDetailInfo_NotificationsOff" xml:space="preserve">
-    <value>Вимк.</value>
+    <value>Выключить</value>
   </data>
   <data name="ChatDetailInfo_Status" xml:space="preserve">
     <value>Статус</value>
   </data>
   <data name="ChatDetailInfo_GroupName" xml:space="preserve">
-    <value>Назва групи</value>
+    <value>Имя группы</value>
   </data>
   <data name="ChatDetail_MuteFor8Hours.Text" xml:space="preserve">
-    <value>8 годин</value>
+    <value>8 часов</value>
   </data>
   <data name="ChatDetail_MuteForever.Text" xml:space="preserve">
-    <value>Завжди</value>
+    <value>Всегда</value>
   </data>
   <data name="ChatDetail_GroupInfo.Text" xml:space="preserve">
-    <value>Інформація про групу</value>
+    <value>Информация о группе</value>
   </data>
   <data name="ChatDetail_MediaLinksDocs.Text" xml:space="preserve">
-    <value>Медіа, посилання та документи</value>
+    <value>Медиа, ссылки и документы</value>
   </data>
   <data name="ChatDetailInfo_PinAppBarLabel" xml:space="preserve">
-    <value>Закріпити на
-Початку</value>
+    <value>Закрепить на
+начального экрана</value>
   </data>
   <data name="ChatDetail_UnpinFromStart.Text" xml:space="preserve">
-    <value>Відкріпити з Початку</value>
+    <value>Убрать с начального экрана</value>
   </data>
 </root>

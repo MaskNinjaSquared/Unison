@@ -137,11 +137,16 @@ namespace Unison.Uwp.Services.WhatsApp
             // listing that timed out - which is exactly when the groups are still nameless -
             // bought itself two minutes of silence before anything could try again.
             bool listingAnswered = false;
+            var socket = _socket;
+            if (socket == null || !socket.IsHandshakeComplete)
+            {
+                return;
+            }
 
             try
             {
                 Debug.WriteLine("[WhatsAppService] Fetching all participating groups...");
-                var response = await _socket.QueryParticipatingGroupsAsync();
+                var response = await socket.QueryParticipatingGroupsAsync();
                 if (response != null)
                 {
                     listingAnswered = true;
@@ -185,7 +190,8 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private async Task RefreshGroupSendPermissionsAsync(string groupJid)
         {
-            if (_socket == null || !_socket.IsHandshakeComplete)
+            var socket = _socket;
+            if (socket == null || !socket.IsHandshakeComplete)
             {
                 return;
             }
@@ -199,8 +205,8 @@ namespace Unison.Uwp.Services.WhatsApp
 
             try
             {
-                var response = await _socket.QueryGroupMetadataAsync(canonical);
-                await ApplyGroupMetadataFromResponseAsync(response, canonical, hydrateAvatars: true);
+                var response = await socket.QueryGroupMetadataAsync(canonical);
+                await ApplyGroupMetadataFromResponseAsync(response, canonical, hydrateAvatars: false);
             }
             catch (Exception ex)
             {
@@ -210,7 +216,10 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private async Task QueryUnresolvedGroupMetadataAsync(int limit = 25)
         {
-            if (_socket == null || !_socket.IsHandshakeComplete) return;
+            // Capture once: post-replay maintenance can still be running when the session
+            // tears the socket down. Re-reading _socket after each await races that clear.
+            var socket = _socket;
+            if (socket == null || !socket.IsHandshakeComplete) return;
 
             var unresolved = new List<ChatItem>();
             await RunOnUiThreadAsync(() =>
@@ -233,14 +242,29 @@ namespace Unison.Uwp.Services.WhatsApp
 
             int attempts = 0;
             int resolved = 0;
-            foreach (var chat in unresolved.Take(Math.Max(1, limit)))
+            var pending = unresolved.Take(Math.Max(1, limit)).ToList();
+            foreach (var chat in pending)
             {
                 if (string.IsNullOrWhiteSpace(chat.JID)) continue;
+
+                socket = _socket;
+                if (socket == null || !socket.IsHandshakeComplete)
+                {
+                    Debug.WriteLine("[WhatsAppService] QueryUnresolvedGroupMetadataAsync aborted (socket gone)");
+                    break;
+                }
+
                 attempts++;
+
+                // One interactive IQ per group with a pause between: on a large account this
+                // stretch runs for a while, and it is the last thing standing between the user
+                // and correctly named groups. Start at 1 of N (never "0 of N").
+                RaiseSyncStatus(
+                    SyncPhaseStatus.Format(SyncPhaseStatus.Groups, attempts, pending.Count));
 
                 try
                 {
-                    var response = await _socket.QueryGroupMetadataAsync(chat.JID);
+                    var response = await socket.QueryGroupMetadataAsync(chat.JID);
                     string subject = ExtractGroupSubject(response, chat.JID);
                     if (!string.IsNullOrWhiteSpace(subject) &&
                         !IsGroupIdPlaceholder(subject, chat.JID))
@@ -258,6 +282,8 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 await Task.Delay(120);
             }
+
+            RaiseSyncStatus(null);
 
             if (resolved > 0)
             {
@@ -584,6 +610,22 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
+            // Same JID set → merge fields onto existing instances (no GroupMembers replace / relayout).
+            if (previousList != null &&
+                previousList.Count == next.Count &&
+                RosterJidSetsEqual(previous, next))
+            {
+                MergeGroupMembersInPlace(previousList, next);
+                chat.RefreshMentionLookupFromRoster();
+                if (chat.GroupMemberCount < previousList.Count)
+                {
+                    chat.GroupMemberCount = previousList.Count;
+                }
+
+                SchedulePersistGroupMemberships(chat.JID, previousList);
+                return;
+            }
+
             chat.GroupMembers = next;
             if (chat.GroupMemberCount < next.Count)
             {
@@ -591,6 +633,103 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             SchedulePersistGroupMemberships(chat.JID, next);
+        }
+
+        private static bool RosterJidSetsEqual(
+            Dictionary<string, GroupMember> previousByJid,
+            List<GroupMember> next)
+        {
+            if (previousByJid == null || next == null || previousByJid.Count != next.Count)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < next.Count; i++)
+            {
+                GroupMember member = next[i];
+                if (member == null ||
+                    string.IsNullOrWhiteSpace(member.Jid) ||
+                    !previousByJid.ContainsKey(member.Jid))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static void MergeGroupMembersInPlace(
+            List<GroupMember> existing,
+            List<GroupMember> incoming)
+        {
+            if (existing == null || incoming == null)
+            {
+                return;
+            }
+
+            var byJid = new Dictionary<string, GroupMember>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < incoming.Count; i++)
+            {
+                GroupMember src = incoming[i];
+                if (src == null || string.IsNullOrWhiteSpace(src.Jid))
+                {
+                    continue;
+                }
+
+                byJid[src.Jid] = src;
+            }
+
+            for (int i = 0; i < existing.Count; i++)
+            {
+                GroupMember dest = existing[i];
+                if (dest == null || string.IsNullOrWhiteSpace(dest.Jid))
+                {
+                    continue;
+                }
+
+                GroupMember src;
+                if (!byJid.TryGetValue(dest.Jid, out src) || src == null)
+                {
+                    continue;
+                }
+
+                if (!string.IsNullOrWhiteSpace(src.PhoneNumber))
+                {
+                    dest.PhoneNumber = src.PhoneNumber;
+                }
+
+                if (!string.IsNullOrWhiteSpace(src.Lid))
+                {
+                    dest.Lid = src.Lid;
+                }
+
+                dest.Role = src.Role;
+
+                if (!string.IsNullOrWhiteSpace(src.DisplayName))
+                {
+                    dest.DisplayName = src.DisplayName;
+                }
+
+                if (!string.IsNullOrWhiteSpace(src.AvatarUrl))
+                {
+                    dest.AvatarUrl = src.AvatarUrl;
+                }
+
+                if (src.AvatarFetchedAtUtc.HasValue)
+                {
+                    dest.AvatarFetchedAtUtc = src.AvatarFetchedAtUtc;
+                }
+
+                if (src.AvatarFetchFailedAtUtc.HasValue)
+                {
+                    dest.AvatarFetchFailedAtUtc = src.AvatarFetchFailedAtUtc;
+                }
+
+                if (!string.IsNullOrWhiteSpace(src.AvatarFetchFailureReason))
+                {
+                    dest.AvatarFetchFailureReason = src.AvatarFetchFailureReason;
+                }
+            }
         }
 
         private GroupMember FindPreviousGroupMember(

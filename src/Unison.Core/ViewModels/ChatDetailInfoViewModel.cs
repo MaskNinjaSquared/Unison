@@ -41,6 +41,8 @@ namespace Unison.Core.ViewModels
         private bool _detached;
         private bool _mediaIndexRequested;
         private bool _isMediaIndexLoading;
+        private bool _membersAvatarsRequested;
+        private bool _isMembersAvatarsLoading;
 
         /// <summary>Tiles materialized per page. Groups hold hundreds of media rows.</summary>
         private const int MediaPageSize = 30;
@@ -176,6 +178,9 @@ namespace Unison.Core.ViewModels
         /// SQLite media/files index is idle until the Media or Files pivot is opened.
         /// </summary>
         public bool IsMediaIndexLoading => _isMediaIndexLoading;
+
+        /// <summary>True while the Members pivot is hydrating roster pictures.</summary>
+        public bool IsMembersAvatarsLoading => _isMembersAvatarsLoading;
 
         public bool HasSharedGroups => SharedGroups.Count > 0;
 
@@ -438,6 +443,8 @@ namespace Unison.Core.ViewModels
             _fileWindow = 0;
             _mediaIndexRequested = false;
             _isMediaIndexLoading = false;
+            _membersAvatarsRequested = false;
+            _isMembersAvatarsLoading = false;
         }
 
         /// <summary>
@@ -459,6 +466,67 @@ namespace Unison.Core.ViewModels
             }
 
             _ = RebuildFilteredAsync();
+        }
+
+        /// <summary>
+        /// Full-roster member pictures on first Members pivot open (not on chat open).
+        /// </summary>
+        public Task EnsureMembersAvatarsHydratedAsync()
+        {
+            if (_detached || !_isGroup || _contacts == null || string.IsNullOrWhiteSpace(_source?.JID))
+            {
+                return Task.CompletedTask;
+            }
+
+            if (_membersAvatarsRequested)
+            {
+                return Task.CompletedTask;
+            }
+
+            _membersAvatarsRequested = true;
+            return RunMembersAvatarsHydrateAsync();
+        }
+
+        private async Task RunMembersAvatarsHydrateAsync()
+        {
+            SetMembersAvatarsLoading(true);
+
+            try
+            {
+                await _contacts.HydrateGroupMemberAvatarsAsync(_source.JID).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[ChatDetailInfoViewModel] Members avatar hydrate failed: " + ex.Message);
+            }
+            finally
+            {
+                SetMembersAvatarsLoading(false);
+            }
+        }
+
+        private void SetMembersAvatarsLoading(bool value)
+        {
+            Action apply = () =>
+            {
+                if (_isMembersAvatarsLoading == value)
+                {
+                    return;
+                }
+
+                _isMembersAvatarsLoading = value;
+                OnPropertyChanged(nameof(IsMembersAvatarsLoading));
+            };
+
+            if (_dispatcher != null)
+            {
+                _ = _dispatcher.RunAsync(apply);
+            }
+            else
+            {
+                apply();
+            }
         }
 
         /// <summary>Materializes one more page of media tiles from the index.</summary>

@@ -5,8 +5,9 @@ using Windows.UI.Xaml.Data;
 namespace Unison.Uwp.UI.Converters
 {
     /// <summary>
-    /// Formats a message stamp stored as GMT 0 (UTC) in the device time zone.
-    /// ConverterParameter: empty or <c>t</c> → HH:mm, <c>d</c> → date, <c>g</c> → date+time.
+    /// Formats a message stamp stored as GMT 0 (UTC) in the device time zone,
+    /// then 24h (HH:mm) or 12h (h:mm AM/PM) from <see cref="Unison.Core.Mappers.WhatsAppMapper.CurrentTimeFormat"/>.
+    /// ConverterParameter: empty or <c>t</c> → time, <c>d</c> → date, <c>g</c> → date+time.
     /// </summary>
     public sealed class LocalTimeConverter : IValueConverter
     {

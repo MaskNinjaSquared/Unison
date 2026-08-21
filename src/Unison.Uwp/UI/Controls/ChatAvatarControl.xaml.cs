@@ -41,6 +41,10 @@ namespace Unison.Uwp.UI.Controls
                 typeof(ChatAvatarControl),
                 new PropertyMetadata(false, OnVisualPropertyChanged));
 
+        /// <summary>What the brush is currently showing, so an unchanged picture is not decoded again.</summary>
+        private string _appliedUrl;
+        private int _appliedDecodeWidth;
+
         public ChatAvatarControl()
         {
             InitializeComponent();
@@ -110,23 +114,47 @@ namespace Unison.Uwp.UI.Controls
             string url = AvatarUrl;
             if (string.IsNullOrWhiteSpace(url))
             {
+                _appliedUrl = null;
                 PhotoBrush.ImageSource = null;
                 PhotoEllipse.Visibility = Visibility.Collapsed;
                 return;
             }
 
+            // Logical units are already scaled by the display, so asking for twice the control
+            // size decoded a bitmap four times the area actually drawn.
+            int decodeWidth = Math.Max(48, (int)Math.Round(size));
+
+            // ApplyVisual runs for any visual property, and re-decoding an unchanged picture is
+            // what made the info panel stutter every time it was laid out.
+            if (string.Equals(_appliedUrl, url, StringComparison.Ordinal) &&
+                _appliedDecodeWidth == decodeWidth &&
+                PhotoBrush.ImageSource != null)
+            {
+                PhotoEllipse.Visibility = Visibility.Visible;
+                return;
+            }
+
             try
             {
-                int decodeWidth = Math.Max(48, (int)Math.Round(size * 2));
-                PhotoBrush.ImageSource = new BitmapImage(new Uri(url))
+                // Order matters: the Uri-taking constructor starts decoding right away, so a
+                // DecodePixelWidth assigned afterwards - as an object initializer does - arrives
+                // too late and the full-resolution frame is decoded on the UI thread. A group
+                // photo at 640 square then cost more than the whole panel around it.
+                var bitmap = new BitmapImage
                 {
-                    DecodePixelWidth = decodeWidth,
-                    DecodePixelType = DecodePixelType.Logical
+                    DecodePixelType = DecodePixelType.Logical,
+                    DecodePixelWidth = decodeWidth
                 };
+                bitmap.UriSource = new Uri(url);
+
+                PhotoBrush.ImageSource = bitmap;
                 PhotoEllipse.Visibility = Visibility.Visible;
+                _appliedUrl = url;
+                _appliedDecodeWidth = decodeWidth;
             }
             catch
             {
+                _appliedUrl = null;
                 PhotoBrush.ImageSource = null;
                 PhotoEllipse.Visibility = Visibility.Collapsed;
             }
@@ -136,6 +164,7 @@ namespace Unison.Uwp.UI.Controls
         {
             PhotoEllipse.Visibility = Visibility.Collapsed;
             PhotoBrush.ImageSource = null;
+            _appliedUrl = null;
 
             string url = AvatarUrl;
             if (string.IsNullOrEmpty(url))

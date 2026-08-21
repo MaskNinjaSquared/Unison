@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Proto;
+using Unison.Core.Mappers;
 using Unison.Core.Models;
 
 namespace Unison.Core.Helpers
@@ -83,9 +84,7 @@ namespace Unison.Core.Helpers
                 return null;
             }
 
-            DateTime stamp = timestampUtc.Kind == DateTimeKind.Unspecified
-                ? DateTime.SpecifyKind(timestampUtc, DateTimeKind.Utc)
-                : timestampUtc.ToUniversalTime();
+            DateTime stamp = WhatsAppMapper.ToUtc(timestampUtc);
             if (stamp == DateTime.MinValue)
             {
                 stamp = DateTime.UtcNow;

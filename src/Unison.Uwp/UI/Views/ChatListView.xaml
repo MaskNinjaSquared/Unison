@@ -92,32 +92,58 @@
                     <Button.Flyout>
                         <MenuFlyout MenuFlyoutPresenterStyle="{StaticResource ModernMenuFlyoutStyle}">
                             <MenuFlyoutItem x:Uid="ChatList_FilterHeader" Text="Filter chats by" Style="{StaticResource ModernMenuFlyoutHeaderStyle}"/>
-                            <MenuFlyoutItem x:Uid="ChatList_FilterUnread" Text="Unread" Style="{StaticResource ModernMenuFlyoutItemStyle}">
+                            <MenuFlyoutItem x:Uid="ChatList_FilterAll" Text="All"
+                                            Command="{Binding FilterChatsCommand}"
+                                            CommandParameter="0"
+                                            Style="{StaticResource ModernMenuFlyoutItemStyle}">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE8A5;" FontFamily="{StaticResource IconFont}" Foreground="White"/>
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutItem x:Uid="ChatList_FilterUnread" Text="Unread"
+                                            Command="{Binding FilterChatsCommand}"
+                                            CommandParameter="1"
+                                            Style="{StaticResource ModernMenuFlyoutItemStyle}">
                                 <MenuFlyoutItem.Icon>
                                     <PathIcon Style="{StaticResource UnreadIconStyle}" Foreground="White"/>
                                 </MenuFlyoutItem.Icon>
                             </MenuFlyoutItem>
-                            <MenuFlyoutItem x:Uid="ChatList_FilterFavorites" Text="Favorites" Style="{StaticResource ModernMenuFlyoutItemStyle}">
+                            <MenuFlyoutItem x:Uid="ChatList_FilterFavorites" Text="Favorites"
+                                            Command="{Binding FilterChatsCommand}"
+                                            CommandParameter="2"
+                                            Style="{StaticResource ModernMenuFlyoutItemStyle}">
                                 <MenuFlyoutItem.Icon>
                                     <FontIcon Glyph="&#xEB51;" FontFamily="{StaticResource IconFont}" Foreground="White"/>
                                 </MenuFlyoutItem.Icon>
                             </MenuFlyoutItem>
-                            <MenuFlyoutItem x:Uid="ChatList_FilterContacts" Text="Contacts" Style="{StaticResource ModernMenuFlyoutItemStyle}">
+                            <MenuFlyoutItem x:Uid="ChatList_FilterContacts" Text="Contacts"
+                                            Command="{Binding FilterChatsCommand}"
+                                            CommandParameter="3"
+                                            Style="{StaticResource ModernMenuFlyoutItemStyle}">
                                 <MenuFlyoutItem.Icon>
                                     <FontIcon Glyph="&#xE77B;" FontFamily="{StaticResource IconFont}" Foreground="White"/>
                                 </MenuFlyoutItem.Icon>
                             </MenuFlyoutItem>
-                            <MenuFlyoutItem x:Uid="ChatList_FilterNonContacts" Text="Non-contacts" Style="{StaticResource ModernMenuFlyoutItemStyle}">
+                            <MenuFlyoutItem x:Uid="ChatList_FilterNonContacts" Text="Non-contacts"
+                                            Command="{Binding FilterChatsCommand}"
+                                            CommandParameter="4"
+                                            Style="{StaticResource ModernMenuFlyoutItemStyle}">
                                 <MenuFlyoutItem.Icon>
                                     <FontIcon Glyph="&#xE8F8;" FontFamily="{StaticResource IconFont}" Foreground="White"/>
                                 </MenuFlyoutItem.Icon>
                             </MenuFlyoutItem>
-                            <MenuFlyoutItem x:Uid="ChatList_FilterGroups" Text="Groups" Style="{StaticResource ModernMenuFlyoutItemStyle}">
+                            <MenuFlyoutItem x:Uid="ChatList_FilterGroups" Text="Groups"
+                                            Command="{Binding FilterChatsCommand}"
+                                            CommandParameter="5"
+                                            Style="{StaticResource ModernMenuFlyoutItemStyle}">
                                 <MenuFlyoutItem.Icon>
                                     <FontIcon Glyph="&#xE716;" FontFamily="{StaticResource IconFont}" Foreground="White"/>
                                 </MenuFlyoutItem.Icon>
                             </MenuFlyoutItem>
-                            <MenuFlyoutItem x:Uid="ChatList_FilterDrafts" Text="Drafts" Style="{StaticResource ModernMenuFlyoutItemStyle}">
+                            <MenuFlyoutItem x:Uid="ChatList_FilterDrafts" Text="Drafts"
+                                            Command="{Binding FilterChatsCommand}"
+                                            CommandParameter="6"
+                                            Style="{StaticResource ModernMenuFlyoutItemStyle}">
                                 <MenuFlyoutItem.Icon>
                                     <FontIcon Glyph="&#xE70F;" FontFamily="{StaticResource IconFont}" Foreground="White"/>
                                 </MenuFlyoutItem.Icon>

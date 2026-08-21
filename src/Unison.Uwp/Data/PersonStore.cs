@@ -240,8 +240,10 @@ namespace Unison.Uwp.Data
                 }
 
                 DateTime now = DateTime.UtcNow;
-                foreach (var member in members)
+                var rows = new List<PersonGroupRow>(members.Count);
+                for (int i = 0; i < members.Count; i++)
                 {
+                    PersonGroupMembership member = members[i];
                     if (member == null)
                     {
                         continue;
@@ -253,16 +255,28 @@ namespace Unison.Uwp.Data
                         continue;
                     }
 
-                    var row = new PersonGroupRow
+                    rows.Add(new PersonGroupRow
                     {
                         Id = PersonGroupRow.MakeId(personKey, groupKey),
                         PersonJid = personKey,
                         GroupJid = groupKey,
                         Role = (int)member.Role,
                         UpdatedAtUtc = now
-                    };
-                    await _connection.InsertOrReplaceAsync(row).ConfigureAwait(false);
+                    });
                 }
+
+                if (rows.Count == 0)
+                {
+                    return;
+                }
+
+                await _connection.RunInTransactionAsync(conn =>
+                {
+                    for (int i = 0; i < rows.Count; i++)
+                    {
+                        conn.InsertOrReplace(rows[i]);
+                    }
+                }).ConfigureAwait(false);
             }
             finally
             {

@@ -32,6 +32,11 @@ namespace Unison.Core.Helpers
                 }
 
                 batch.Messages.Add(row);
+                if (messages[i].AreReactionDetailsLoaded)
+                {
+                    batch.ReactionOwnerMessageIds.Add(row.MessageId);
+                }
+
                 AddReactions(batch, row, messages[i]);
             }
 
@@ -183,8 +188,8 @@ namespace Unison.Core.Helpers
                     row.MediaKeyBase64 = NullIfEmpty(message.ImageMediaKeyBase64);
                     row.MediaFileEncSha256Base64 = NullIfEmpty(message.ImageFileEncSha256Base64);
                     row.MediaMimeType = NullIfEmpty(message.ImageMimeType);
-                    row.MediaThumbnailBase64 = NullIfEmpty(message.MediaThumbnailBase64);
-                    row.MediaLocalUri = NullIfEmpty(message.ImageUri);
+                    row.MediaLocalUri = NullIfEmpty(message.ImageUri)
+                        ?? NullIfEmpty(message.ThumbnailUri);
                     break;
                 case ChatPreviewKind.Video:
                     row.MediaUrl = NullIfEmpty(message.VideoUrl);
@@ -193,9 +198,9 @@ namespace Unison.Core.Helpers
                     row.MediaFileEncSha256Base64 = NullIfEmpty(message.VideoFileEncSha256Base64);
                     row.MediaMimeType = NullIfEmpty(message.VideoMimeType);
                     row.MediaDurationSeconds = message.VideoDurationSeconds;
-                    row.MediaThumbnailBase64 = NullIfEmpty(message.MediaThumbnailBase64);
                     row.MediaLocalUri = NullIfEmpty(message.VideoUri);
-                    row.MediaPosterUri = NullIfEmpty(message.VideoPosterUri);
+                    row.MediaPosterUri = NullIfEmpty(message.VideoPosterUri)
+                        ?? NullIfEmpty(message.ThumbnailUri);
                     break;
                 case ChatPreviewKind.Voice:
                     row.MediaUrl = NullIfEmpty(message.AudioUrl);
@@ -215,8 +220,8 @@ namespace Unison.Core.Helpers
                     row.MediaMimeType = NullIfEmpty(message.DocumentMimeType);
                     row.MediaFileName = NullIfEmpty(message.DocumentFileName);
                     row.MediaFileLengthBytes = message.DocumentFileLengthBytes;
-                    row.MediaThumbnailBase64 = NullIfEmpty(message.MediaThumbnailBase64);
-                    row.MediaLocalUri = NullIfEmpty(message.DocumentUri);
+                    row.MediaLocalUri = NullIfEmpty(message.DocumentUri)
+                        ?? NullIfEmpty(message.ThumbnailUri);
                     break;
             }
         }

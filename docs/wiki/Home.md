@@ -16,7 +16,8 @@ Day-to-day chat on a linked session:
 - Group and user chat-info panes (Members roster, member info + groups in common, author avatars on bubbles)
 - Background socket activity task and real message toasts
 - Pin chats to Start
-- Localized UI (eight shipped languages plus System)
+- Localized UI (nine shipped languages plus System)
+- Settings clock: 12-hour (AM/PM) or 24-hour after device time-zone conversion (UTC in storage)
 
 The **Unison.Socket** stack (Baileys **7.0.0-rc14**) is now the foundation for WhatsApp communication. `WhatsAppService` is still the compatibility client; shrinking it to connection-only is [WhatsAppService extraction](WhatsAppService-Extraction) (phase 0 done: dead code + partials).
 

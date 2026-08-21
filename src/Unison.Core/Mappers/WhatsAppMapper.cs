@@ -1,4 +1,6 @@
 using System;
+using System.Globalization;
+using Unison.Core.Models;
 
 namespace Unison.Core.Mappers
 {
@@ -9,6 +11,11 @@ namespace Unison.Core.Mappers
     public static class WhatsAppMapper
     {
         private const int PreviewMaxLength = 50;
+
+        /// <summary>
+        /// Clock used after GMT 0 → device local. Settings writes this; converters read it.
+        /// </summary>
+        public static TimeFormat CurrentTimeFormat { get; set; } = TimeFormat.Hours24;
 
         /// <summary>
         /// Instant in the device time zone. Message stamps are GMT 0 (UTC);
@@ -51,7 +58,7 @@ namespace Unison.Core.Mappers
         {
             return timestamp == DateTime.MinValue
                 ? string.Empty
-                : ToDeviceLocal(timestamp).ToString("HH:mm");
+                : FormatClock(ToDeviceLocal(timestamp));
         }
 
         public static string FormatLocalDate(DateTime timestamp)
@@ -100,9 +107,13 @@ namespace Unison.Core.Mappers
 
         public static string FormatLocalDateTime(DateTime timestamp)
         {
-            return timestamp == DateTime.MinValue
-                ? string.Empty
-                : ToDeviceLocal(timestamp).ToString("dd/MM/yyyy HH:mm");
+            if (timestamp == DateTime.MinValue)
+            {
+                return string.Empty;
+            }
+
+            DateTime local = ToDeviceLocal(timestamp);
+            return local.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture) + " " + FormatClock(local);
         }
 
         /// <summary>
@@ -123,7 +134,7 @@ namespace Unison.Core.Mappers
 
             if (date == today)
             {
-                return local.ToString("HH:mm");
+                return FormatClock(local);
             }
 
             if (date == today.AddDays(-1))
@@ -138,6 +149,14 @@ namespace Unison.Core.Mappers
             }
 
             return local.ToString("dd/MM/yyyy");
+        }
+
+        /// <summary>24h stays HH:mm; 12h is h:mm AM/PM after the local-zone conversion.</summary>
+        private static string FormatClock(DateTime local)
+        {
+            return CurrentTimeFormat == TimeFormat.Hours12
+                ? local.ToString("h:mm tt", CultureInfo.InvariantCulture)
+                : local.ToString("HH:mm");
         }
 
         public static string FormatPreview(string body)

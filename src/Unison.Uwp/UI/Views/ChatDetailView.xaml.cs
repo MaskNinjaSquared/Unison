@@ -74,6 +74,9 @@ namespace Unison.Uwp.UI.Views
         private bool _isSyncingFromService = false;
         private bool _syncRequestedAgain = false;
         private DateTime _suppressLoadMoreUntilUtc = DateTime.MinValue;
+        /// <summary>Throttle visible group-author avatar hydrate while scrolling.</summary>
+        private DateTime _lastVisibleAvatarRequestUtc = DateTime.MinValue;
+        private bool _messageListCacheLengthApplied;
         /// <summary>After an outgoing send, keep snapping to the true bottom until the bubble lands.</summary>
         private DateTime _stickToBottomUntilUtc = DateTime.MinValue;
         private CancellationTokenSource _chatLoadCts;
@@ -479,6 +482,40 @@ namespace Unison.Uwp.UI.Views
             {
                 UpdateScrollToBottomButton();
             }
+
+            if (e.PropertyName == nameof(ChatDetailViewModel.IsTimelineBusy) ||
+                e.PropertyName == nameof(ChatDetailViewModel.IsLoadingMessages) ||
+                e.PropertyName == nameof(ChatDetailViewModel.IsLoadingMore))
+            {
+                ApplyTimelineScrollLock();
+            }
+        }
+
+        /// <summary>
+        /// While the timeline is loading (open or load-more), freeze vertical scroll so Mobile
+        /// does not stack ViewChanged / layout thrash on top of VM materialization.
+        /// </summary>
+        private void ApplyTimelineScrollLock()
+        {
+            bool busy = ViewModel?.IsTimelineBusy == true;
+            EnsureMessageListScrollViewer();
+
+            if (MessageListView != null)
+            {
+                ScrollViewer.SetVerticalScrollMode(
+                    MessageListView,
+                    busy ? ScrollMode.Disabled : ScrollMode.Auto);
+                ScrollViewer.SetVerticalScrollBarVisibility(
+                    MessageListView,
+                    busy ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto);
+            }
+
+            if (_scrollViewer != null)
+            {
+                _scrollViewer.VerticalScrollMode = busy ? ScrollMode.Disabled : ScrollMode.Auto;
+                _scrollViewer.VerticalScrollBarVisibility =
+                    busy ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto;
+            }
         }
 
         /// <summary>
@@ -753,6 +790,7 @@ namespace Unison.Uwp.UI.Views
                 _scrollViewer.ViewChanged += ScrollViewer_ViewChanged;
             }
 
+            ApplyMessageListCacheLengthIfMobile();
             UpdateScrollToBottomButton();
         }
 
@@ -768,17 +806,70 @@ namespace Unison.Uwp.UI.Views
             return null;
         }
 
+        /// <summary>
+        /// Mobile: shrink ItemsStackPanel cache so fewer off-screen bubbles stay realized (default ~4).
+        /// </summary>
+        private void ApplyMessageListCacheLengthIfMobile()
+        {
+            if (!_isWindowsMobile || MessageListView == null || _messageListCacheLengthApplied)
+            {
+                return;
+            }
+
+            try
+            {
+                ItemsStackPanel panel = MessageListView.ItemsPanelRoot as ItemsStackPanel;
+                if (panel == null)
+                {
+                    panel = FindItemsStackPanel(MessageListView);
+                }
+
+                if (panel != null)
+                {
+                    panel.CacheLength = 0.5;
+                    _messageListCacheLengthApplied = true;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatDetailView] CacheLength: " + ex.Message);
+            }
+        }
+
+        private static ItemsStackPanel FindItemsStackPanel(DependencyObject root)
+        {
+            if (root is ItemsStackPanel stack)
+            {
+                return stack;
+            }
+
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                ItemsStackPanel found = FindItemsStackPanel(VisualTreeHelper.GetChild(root, i));
+                if (found != null)
+                {
+                    return found;
+                }
+            }
+
+            return null;
+        }
+
         private async void ScrollViewer_ViewChanged(object sender, ScrollViewerViewChangedEventArgs e)
         {
             UpdateScrollToBottomButton();
 
             if (_scrollViewer == null || ViewModel == null || _activeChat == null) return;
+            if (ViewModel.IsTimelineBusy) return;
 
             // Wait for the gesture to settle. Firing while e.IsIntermediate is true means the
             // load-more (and its ChangeView) lands on top of an active manipulation/fling, which
             // the platform discards - the viewport then ends the scroll at the top anyway.
             if (e.IsIntermediate) return;
             if (DateTime.UtcNow < _suppressLoadMoreUntilUtc) return;
+
+            RequestVisibleParticipantAvatarsFromViewportThrottled();
 
             // Exige conteudo realmente rolavel. Sem isso, uma conversa curta abre com
             // offset baixo, dispara "carregar mais" imediatamente, prepende mensagens
@@ -791,6 +882,80 @@ namespace Unison.Uwp.UI.Views
             {
                 Debug.WriteLine($"[ChatDetailView] TRIGGER HIT: Offset={_scrollViewer.VerticalOffset} < 300. Loading more...");
                 await LoadMoreMessagesAsync();
+            }
+        }
+
+        private void RequestVisibleParticipantAvatarsFromViewportThrottled()
+        {
+            if (DateTime.UtcNow - _lastVisibleAvatarRequestUtc < TimeSpan.FromMilliseconds(400))
+            {
+                return;
+            }
+
+            RequestVisibleParticipantAvatarsFromViewport();
+        }
+
+        /// <summary>
+        /// Collects ParticipantJids from realized bubbles in the viewport and asks the VM
+        /// to hydrate only those member pictures.
+        /// </summary>
+        private void RequestVisibleParticipantAvatarsFromViewport()
+        {
+            if (ViewModel == null || _activeChat == null || !_activeChat.IsGroup ||
+                MessageListView == null || _messages == null)
+            {
+                return;
+            }
+
+            _lastVisibleAvatarRequestUtc = DateTime.UtcNow;
+            var jids = new List<string>();
+            int count = MessageListView.Items?.Count ?? 0;
+            for (int i = 0; i < count; i++)
+            {
+                var container = MessageListView.ContainerFromIndex(i) as FrameworkElement;
+                if (container == null)
+                {
+                    continue;
+                }
+
+                if (_scrollViewer != null)
+                {
+                    try
+                    {
+                        GeneralTransform transform = container.TransformToVisual(_scrollViewer);
+                        double top = transform.TransformPoint(new Point(0, 0)).Y;
+                        if (top + container.ActualHeight <= 0)
+                        {
+                            continue;
+                        }
+
+                        if (top >= _scrollViewer.ViewportHeight)
+                        {
+                            break;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine("[ChatDetailView] Visible avatar transform: " + ex.Message);
+                    }
+                }
+
+                var vm = MessageListView.Items[i] as ChatMessageViewModel;
+                string participant = vm?.ParticipantJid;
+                if (string.IsNullOrWhiteSpace(participant))
+                {
+                    participant = vm?.Model?.ParticipantJid;
+                }
+
+                if (!string.IsNullOrWhiteSpace(participant))
+                {
+                    jids.Add(participant);
+                }
+            }
+
+            if (jids.Count > 0)
+            {
+                ViewModel.RequestVisibleParticipantAvatars(jids);
             }
         }
 
@@ -1494,6 +1659,7 @@ namespace Unison.Uwp.UI.Views
             string requestedJid = service.GetCanonicalJid(chat.JID);
             Debug.WriteLine($"[ChatDetailView] Loading messages for {requestedJid}");
 
+            ViewModel.BeginLoadingMessages();
             List<ChatMessage> messages;
             try
             {
@@ -1502,18 +1668,22 @@ namespace Unison.Uwp.UI.Views
             catch (Exception ex)
             {
                 Debug.WriteLine($"[ChatDetailView] LoadMessagesForChatAsync failed: {ex.Message}");
+                ViewModel.EndLoadingMessages();
                 return;
             }
 
             if (token.IsCancellationRequested || _activeChat == null ||
                 !string.Equals(service.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
             {
+                ViewModel.EndLoadingMessages();
                 return;
             }
 
+            try
+            {
             var visibleMessages = ChatDetailViewModel.TakeLastWindow(
                 messages,
-                ChatDetailViewModel.InitialUiMessageWindow);
+                ViewModel.InitialUiMessageWindow);
 
             bool activeIsGroup = chat.IsGroup ||
                 requestedJid.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
@@ -1535,51 +1705,102 @@ namespace Unison.Uwp.UI.Views
             }
             else
             {
-                var lastMsg = visibleMessages[visibleMessages.Count - 1];
-                bool isGroup = chat.IsGroup ||
-                    (chat.JID ?? string.Empty).EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
-                string rawPreview = ChatPreviewNormalizer.FormatListPreview(lastMsg, isGroup);
-                string authorPrefix = ChatPreviewNormalizer.FormatListAuthorPrefix(
-                    lastMsg,
-                    isGroup,
-                    _strings?.Get("Chat_SelfFallbackName", "You") ?? "You");
-                ChatPreviewNormalizer.Normalize(
-                    rawPreview,
-                    ChatPreviewNormalizer.InferKindFromMessage(lastMsg),
-                    out var previewKind,
-                    out var preview);
-
-                DateTime loadedUtc = lastMsg.Timestamp.Kind == DateTimeKind.Utc
-                    ? lastMsg.Timestamp
-                    : lastMsg.Timestamp.ToUniversalTime();
-                DateTime currentUtc = chat.LastMessageTimestampUtc.HasValue
-                    ? (chat.LastMessageTimestampUtc.Value.Kind == DateTimeKind.Utc
-                        ? chat.LastMessageTimestampUtc.Value
-                        : chat.LastMessageTimestampUtc.Value.ToUniversalTime())
-                    : DateTime.MinValue;
-
-                if (lastMsg.Timestamp != DateTime.MinValue && loadedUtc >= currentUtc &&
-                    (chat.LastMessage != preview ||
-                     chat.LastMessageKind != previewKind ||
-                     chat.LastMessageAuthor != authorPrefix ||
-                     currentUtc == DateTime.MinValue))
+                // Last Message = newest by TimestampUtc (then MessageId), not "last bubble in the
+                // window". Arrival / DB order can be shuffled; bubble runs re-order for display.
+                ChatMessage lastMsg = null;
+                DateTime tipUtc = DateTime.MinValue;
+                for (int i = 0; i < visibleMessages.Count; i++)
                 {
-                    chat.LastMessage = preview;
-                    chat.LastMessageAuthor = authorPrefix;
-                    chat.LastMessageKind = previewKind;
-                    chat.LastMessageMentionedJids = lastMsg.MentionedJids != null && lastMsg.MentionedJids.Count > 0
-                        ? new System.Collections.Generic.List<string>(lastMsg.MentionedJids)
-                        : null;
-                    chat.LastMessageTimestampUtc = loadedUtc;
-                    chat.Timestamp = WhatsAppMapper.FormatTimestamp(
-                        lastMsg.Timestamp,
-                        LocalizedStrings.Get("Common_Yesterday", "Yesterday"));
-                    service.SchedulePersistPublic();
+                    ChatMessage candidate = visibleMessages[i];
+                    if (candidate == null || candidate.Timestamp == DateTime.MinValue)
+                    {
+                        continue;
+                    }
+
+                    DateTime candidateUtc = WhatsAppMapper.ToUtc(candidate.Timestamp);
+                    if (lastMsg == null ||
+                        candidateUtc > tipUtc ||
+                        (candidateUtc == tipUtc &&
+                         string.CompareOrdinal(candidate.Id ?? string.Empty, lastMsg.Id ?? string.Empty) > 0))
+                    {
+                        lastMsg = candidate;
+                        tipUtc = candidateUtc;
+                    }
+                }
+
+                if (lastMsg == null)
+                {
+                    _ = service.ReconcileChatPreviewsFromSqliteAsync(
+                        new[] { requestedJid },
+                        "chat-open-empty");
+                }
+                else
+                {
+                    bool isGroup = chat.IsGroup ||
+                        (chat.JID ?? string.Empty).EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
+                    string rawPreview = ChatPreviewNormalizer.FormatListPreview(lastMsg, isGroup);
+                    string authorPrefix = ChatPreviewNormalizer.FormatListAuthorPrefix(
+                        lastMsg,
+                        isGroup,
+                        _strings?.Get("Chat_SelfFallbackName", "You") ?? "You");
+                    ChatPreviewNormalizer.Normalize(
+                        rawPreview,
+                        ChatPreviewNormalizer.InferKindFromMessage(lastMsg),
+                        out var previewKind,
+                        out var preview);
+
+                    DateTime currentUtc = chat.LastMessageTimestampUtc.HasValue
+                        ? WhatsAppMapper.ToUtc(chat.LastMessageTimestampUtc.Value)
+                        : DateTime.MinValue;
+
+                    MessageSendState loadedSendState =
+                        HistoryLiveMessageMapper.FromStatus(lastMsg.Status, lastMsg.IsFromMe);
+
+                    // Only advance by TimestampUtc, or refresh when MessageId / body / fromMe differ
+                    // at the same second. When MessageId differs, trust the visible tip even if the
+                    // strip timestamp was poisoned (Unspecified→ToUniversalTime / +3h).
+                    bool tipIdDiffers = !string.IsNullOrWhiteSpace(lastMsg.Id) &&
+                                        !string.Equals(chat.LastMessageId, lastMsg.Id, StringComparison.Ordinal);
+                    bool shouldApply =
+                        tipIdDiffers ||
+                        tipUtc > currentUtc ||
+                        (tipUtc == currentUtc &&
+                         currentUtc != DateTime.MinValue &&
+                         (!string.Equals(chat.LastMessage, preview, StringComparison.Ordinal) ||
+                          chat.LastMessageKind != previewKind ||
+                          !string.Equals(chat.LastMessageAuthor, authorPrefix, StringComparison.Ordinal) ||
+                          chat.LastMessageIsFromMe != lastMsg.IsFromMe ||
+                          chat.LastMessageSendState != loadedSendState)) ||
+                        (currentUtc == DateTime.MinValue && tipUtc != DateTime.MinValue);
+
+                    if (shouldApply)
+                    {
+                        chat.LastMessage = preview;
+                        chat.LastMessageAuthor = authorPrefix;
+                        chat.LastMessageKind = previewKind;
+                        chat.LastMessageMentionedJids = lastMsg.MentionedJids != null && lastMsg.MentionedJids.Count > 0
+                            ? new System.Collections.Generic.List<string>(lastMsg.MentionedJids)
+                            : null;
+                        chat.LastMessageIsFromMe = lastMsg.IsFromMe;
+                        chat.LastMessageSendState = loadedSendState;
+                        chat.LastMessageId = lastMsg.Id;
+                        chat.LastMessageTimestampUtc = tipUtc;
+                        chat.Timestamp = WhatsAppMapper.FormatTimestamp(
+                            lastMsg.Timestamp,
+                            LocalizedStrings.Get("Common_Yesterday", "Yesterday"));
+                        service.PersistChatListRowsPublic(new[] { chat });
+                        Debug.WriteLine(
+                            "[ChatDetailView] List preview from newest tip id=" +
+                            (lastMsg.Id ?? "?") +
+                            " fromMe=" + lastMsg.IsFromMe +
+                            " ts=" + tipUtc.ToString("O"));
+                    }
+
+                    _ = service.ReconcileChatPreviewsFromSqliteAsync(
+                        new[] { requestedJid },
+                        "chat-open");
                 }
             }
-
-            ScrollToBottom();
-            _ = StickScrollToBottomOnOpenAsync(token);
 
             if (chat.IsPersonal)
             {
@@ -1588,6 +1809,22 @@ namespace Unison.Uwp.UI.Views
             else if (!_isWindowsMobile)
             {
                 ViewModel.StartPresenceWatch(chat.JID);
+            }
+            }
+            finally
+            {
+                ViewModel.EndLoadingMessages();
+            }
+
+            // ChangeView needs scroll enabled; lock is cleared in finally above.
+            if (!token.IsCancellationRequested &&
+                _activeChat != null &&
+                string.Equals(service.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
+            {
+                ScrollToBottom();
+                _ = StickScrollToBottomOnOpenAsync(token);
+                ApplyMessageListCacheLengthIfMobile();
+                RequestVisibleParticipantAvatarsFromViewport();
             }
         }
 
@@ -1708,6 +1945,7 @@ namespace Unison.Uwp.UI.Views
                          _activeChat.JID.IndexOf("@g.us", StringComparison.OrdinalIgnoreCase) >= 0);
                     if (isGroup)
                     {
+                        ViewModel.RebuildParticipantLookup();
                         RecomputeMessageRuns(_messages, isGroup: true);
                         if (!_isWindowsMobile && ViewModel != null && !_activeChat.IsPersonal)
                         {
@@ -2148,7 +2386,7 @@ namespace Unison.Uwp.UI.Views
             try
             {
                 bool stickToBottom = ShouldStickScrollToBottom();
-                List<ChatMessage> serviceMessages = await MessagesFacade.LoadMessagesForChatAsync(requestedJid);
+                List<ChatMessage> serviceMessages = await MessagesFacade.LoadRecentMessagesForSyncAsync(requestedJid);
                 if (_activeChat == null ||
                     !string.Equals(service.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase) ||
                     serviceMessages == null || serviceMessages.Count == 0)
@@ -2196,18 +2434,54 @@ namespace Unison.Uwp.UI.Views
 
         private void MessageInput_KeyDown(object sender, KeyRoutedEventArgs e)
         {
-            if (e.Key != Windows.System.VirtualKey.Enter || ViewModel?.SendMessageCommand == null)
+            if (e.Key != Windows.System.VirtualKey.Enter)
             {
                 return;
             }
 
-            if (!ViewModel.SendMessageCommand.CanExecute(null))
+            // Shift+Enter inserts a newline (AcceptsReturn is false so Enter alone can send).
+            var shift = Window.Current.CoreWindow
+                .GetKeyState(Windows.System.VirtualKey.Shift);
+            if ((shift & Windows.UI.Core.CoreVirtualKeyStates.Down) ==
+                Windows.UI.Core.CoreVirtualKeyStates.Down)
+            {
+                var box = sender as TextBox;
+                if (box == null)
+                {
+                    return;
+                }
+
+                int start = box.SelectionStart;
+                string text = box.Text ?? string.Empty;
+                string next = text.Insert(Math.Min(start, text.Length), "\r");
+                box.Text = next;
+                box.SelectionStart = start + 1;
+                e.Handled = true;
+                return;
+            }
+
+            if (ViewModel?.SendMessageCommand == null ||
+                !ViewModel.SendMessageCommand.CanExecute(null))
             {
                 return;
             }
 
             e.Handled = true;
             ViewModel.SendMessageCommand.Execute(null);
+        }
+
+        /// <summary>
+        /// Keeps Auto height: if something stamps a fixed Height, clear it so wrap can grow again.
+        /// </summary>
+        private void MessageInput_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            var box = sender as TextBox;
+            if (box == null || double.IsNaN(box.Height))
+            {
+                return;
+            }
+
+            box.Height = double.NaN;
         }
 
         private void UpdatePinnedBanner()
@@ -2495,13 +2769,33 @@ namespace Unison.Uwp.UI.Views
             var flyout = new MenuFlyout();
             if (message.IsPinned)
             {
-                AddPinAction(flyout, vm, "Desafixar mensagem", false, 0);
+                AddPinAction(
+                    flyout,
+                    vm,
+                    LocalizedStrings.Get("ChatDetail_UnpinMessage", "Unpin message"),
+                    false,
+                    0);
             }
             else
             {
-                AddPinAction(flyout, vm, "Fixar por 24 horas", true, 86400);
-                AddPinAction(flyout, vm, "Fixar por 7 dias", true, 604800);
-                AddPinAction(flyout, vm, "Fixar por 30 dias", true, 2592000);
+                AddPinAction(
+                    flyout,
+                    vm,
+                    LocalizedStrings.Get("ChatDetail_PinFor24Hours", "Pin for 24 hours"),
+                    true,
+                    86400);
+                AddPinAction(
+                    flyout,
+                    vm,
+                    LocalizedStrings.Get("ChatDetail_PinFor7Days", "Pin for 7 days"),
+                    true,
+                    604800);
+                AddPinAction(
+                    flyout,
+                    vm,
+                    LocalizedStrings.Get("ChatDetail_PinFor30Days", "Pin for 30 days"),
+                    true,
+                    2592000);
             }
             // The one-argument FlyoutBase.ShowAt overload requires Windows 10 1809.
             // Windows 10 Mobile 15063 supports the original MenuFlyout overload.

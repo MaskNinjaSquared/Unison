@@ -102,11 +102,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 target.Caption = image.Caption;
             }
 
-            if (image.JpegThumbnail != null && image.JpegThumbnail.Length > 0)
-            {
-                target.MediaThumbnailBase64 = Convert.ToBase64String(image.JpegThumbnail.ToByteArray());
-            }
-
             // Plain auto-props above; nudge bindings for download affordance.
             target.NotifyImageDownloadStateChanged();
         }
@@ -145,11 +140,6 @@ namespace Unison.Uwp.Services.WhatsApp
             if (!string.IsNullOrWhiteSpace(video.Caption))
             {
                 target.Caption = video.Caption;
-            }
-
-            if (video.JpegThumbnail != null && video.JpegThumbnail.Length > 0)
-            {
-                target.MediaThumbnailBase64 = Convert.ToBase64String(video.JpegThumbnail.ToByteArray());
             }
 
             target.NotifyVideoDownloadStateChanged();
@@ -1055,7 +1045,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     var thumbUri = await SaveImageBytesToCacheAsync(imageMessage.JpegThumbnail.ToByteArray(), mediaKeyId + "_thumb", "image/jpeg");
                     if (!string.IsNullOrWhiteSpace(thumbUri))
                     {
-                        chatMessage.ImageUri = thumbUri;
+                        chatMessage.ThumbnailUri = thumbUri;
                         await SaveMessageAsync(chatJid, chatMessage);
                         SchedulePersist();
                         QueueChatMessagesChanged(chatJid);

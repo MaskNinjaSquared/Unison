@@ -20,7 +20,7 @@ namespace Unison.Uwp.Data
     {
         private static readonly string DatabaseFileName = "unison.db";
 
-        public const int CurrentSchemaVersion = 1;
+        public const int CurrentSchemaVersion = 2;
 
         private readonly SemaphoreSlim _initLock = new SemaphoreSlim(1, 1);
         private readonly SemaphoreSlim _writeLock = new SemaphoreSlim(1, 1);
@@ -51,8 +51,9 @@ namespace Unison.Uwp.Data
                 string dbPath = Path.Combine(ApplicationData.Current.LocalFolder.Path, DatabaseFileName);
                 _connection = new SQLiteAsyncConnection(dbPath);
                 await _connection.CreateTableAsync<HistoryStatusRow>().ConfigureAwait(false);
+                await DropLegacyThumbnailColumnAsync().ConfigureAwait(false);
                 _initialized = true;
-                Debug.WriteLine("[HistoryStatusStore] Initialized at " + dbPath);
+                Debug.WriteLine("[HistoryStatusStore] Initialized schema=" + CurrentSchemaVersion + " at " + dbPath);
                 await DeleteExpiredAsync().ConfigureAwait(false);
             }
             finally
@@ -193,6 +194,52 @@ namespace Unison.Uwp.Data
             }
         }
 
+        private async Task DropLegacyThumbnailColumnAsync()
+        {
+            try
+            {
+                List<SqliteTableInfoRow> cols = await _connection
+                    .QueryAsync<SqliteTableInfoRow>("PRAGMA table_info(history_status)")
+                    .ConfigureAwait(false);
+                bool hasColumn = false;
+                if (cols != null)
+                {
+                    for (int i = 0; i < cols.Count; i++)
+                    {
+                        if (cols[i] != null &&
+                            string.Equals(cols[i].name, "MediaThumbnailBase64", StringComparison.OrdinalIgnoreCase))
+                        {
+                            hasColumn = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!hasColumn)
+                {
+                    return;
+                }
+
+                await _connection.ExecuteAsync(
+                        "ALTER TABLE history_status DROP COLUMN MediaThumbnailBase64")
+                    .ConfigureAwait(false);
+                Debug.WriteLine("[HistoryStatusStore] Dropped MediaThumbnailBase64 column");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[HistoryStatusStore] Drop MediaThumbnailBase64 skipped: " + ex.Message);
+            }
+        }
+
+        private sealed class SqliteTableInfoRow
+        {
+            public int cid { get; set; }
+
+            public string name { get; set; }
+
+            public string type { get; set; }
+        }
+
         private static IReadOnlyList<HistoryStatus> ToModels(List<HistoryStatusRow> rows)
         {
             if (rows == null || rows.Count == 0)
@@ -230,7 +277,8 @@ namespace Unison.Uwp.Data
                 MediaDurationSeconds = model.MediaDurationSeconds,
                 MediaFileName = model.MediaFileName,
                 MediaFileLengthBytes = model.MediaFileLengthBytes,
-                MediaThumbnailBase64 = model.MediaThumbnailBase64,
+                MediaLocalUri = model.MediaLocalUri,
+                MediaPosterUri = model.MediaPosterUri,
                 IsVoiceNote = model.IsVoiceNote,
                 TimestampUtc = model.TimestampUtc,
                 ExpiresAtUtc = model.ExpiresAtUtc,
@@ -271,7 +319,8 @@ namespace Unison.Uwp.Data
                 MediaDurationSeconds = row.MediaDurationSeconds,
                 MediaFileName = row.MediaFileName,
                 MediaFileLengthBytes = row.MediaFileLengthBytes,
-                MediaThumbnailBase64 = row.MediaThumbnailBase64,
+                MediaLocalUri = row.MediaLocalUri,
+                MediaPosterUri = row.MediaPosterUri,
                 IsVoiceNote = row.IsVoiceNote,
                 TimestampUtc = row.TimestampUtc,
                 ExpiresAtUtc = row.ExpiresAtUtc,

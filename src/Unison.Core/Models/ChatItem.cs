@@ -31,28 +31,38 @@ namespace Unison.Core.Models
             set { _name = value; OnPropertyChanged(); OnPropertyChanged(nameof(Initial)); }
         }
 
-        private string _lastMessage;
+        private readonly ChatListPreview _lastPreview = new ChatListPreview();
+
+        /// <summary>Last-message strip DTO (kind, body, author, outgoing ticks).</summary>
+        public ChatListPreview LastPreview => _lastPreview;
+
         public string LastMessage
         {
-            get => _lastMessage;
-            set { _lastMessage = value; OnPropertyChanged(); }
-        }
-
-        private string _lastMessageAuthor;
-        /// <summary>Group strip prefix ("Alice: "), empty for DMs.</summary>
-        public string LastMessageAuthor
-        {
-            get => _lastMessageAuthor;
+            get => _lastPreview.Text;
             set
             {
-                if (_lastMessageAuthor == value) return;
-                _lastMessageAuthor = value;
+                if (_lastPreview.Text == value) return;
+                _lastPreview.Text = value ?? string.Empty;
                 OnPropertyChanged();
-                OnPropertyChanged(nameof(HasLastMessageAuthor));
+                OnPropertyChanged(nameof(LastPreview));
             }
         }
 
-        public bool HasLastMessageAuthor => !string.IsNullOrEmpty(_lastMessageAuthor);
+        /// <summary>Group strip prefix ("Alice: "), empty for DMs.</summary>
+        public string LastMessageAuthor
+        {
+            get => _lastPreview.Author;
+            set
+            {
+                if (_lastPreview.Author == value) return;
+                _lastPreview.Author = value ?? string.Empty;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasLastMessageAuthor));
+                OnPropertyChanged(nameof(LastPreview));
+            }
+        }
+
+        public bool HasLastMessageAuthor => !string.IsNullOrEmpty(_lastPreview.Author);
 
         /// <summary>
         /// Who wrote <see cref="LastMessage"/> in a group, kept so the strip can be recomposed when
@@ -65,39 +75,62 @@ namespace Unison.Core.Models
         public string LastMessageSenderName { get; set; }
 
         /// <summary>Newest message was ours, so the strip uses the localized "You" label.</summary>
-        public bool LastMessageIsFromMe { get; set; }
-
-        private System.Collections.Generic.List<string> _lastMessageMentionedJids;
-        /// <summary>JIDs mentioned in <see cref="LastMessage"/> (for @alias resolution in the list strip).</summary>
-        public System.Collections.Generic.List<string> LastMessageMentionedJids
+        public bool LastMessageIsFromMe
         {
-            get => _lastMessageMentionedJids;
+            get => _lastPreview.IsFromMe;
             set
             {
-                _lastMessageMentionedJids = value;
+                if (_lastPreview.IsFromMe == value) return;
+                _lastPreview.IsFromMe = value;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(LastPreview));
             }
         }
 
-        private ChatPreviewKind _lastMessageKind;
+        /// <summary>Outgoing ticks for the list strip; <see cref="MessageSendState.NotApplicable"/> when incoming.</summary>
+        public MessageSendState LastMessageSendState
+        {
+            get => _lastPreview.SendState;
+            set
+            {
+                if (_lastPreview.SendState == value) return;
+                _lastPreview.SendState = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(LastPreview));
+            }
+        }
+
+        /// <summary>JIDs mentioned in <see cref="LastMessage"/> (for @alias resolution in the list strip).</summary>
+        public System.Collections.Generic.List<string> LastMessageMentionedJids
+        {
+            get => _lastPreview.MentionedJids;
+            set
+            {
+                _lastPreview.MentionedJids = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(LastPreview));
+            }
+        }
+
         /// <summary>Category for the chat-list preview (text / image / video / sticker / voice).</summary>
         public ChatPreviewKind LastMessageKind
         {
-            get => _lastMessageKind;
+            get => _lastPreview.Kind;
             set
             {
-                if (_lastMessageKind == value) return;
-                _lastMessageKind = value;
+                if (_lastPreview.Kind == value) return;
+                _lastPreview.Kind = value;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(LastPreview));
                 RaiseLastMessageKindFlagsChanged();
             }
         }
 
-        public bool IsLastMessageImage => _lastMessageKind == ChatPreviewKind.Image;
-        public bool IsLastMessageVideo => _lastMessageKind == ChatPreviewKind.Video;
-        public bool IsLastMessageSticker => _lastMessageKind == ChatPreviewKind.Sticker;
-        public bool IsLastMessageVoice => _lastMessageKind == ChatPreviewKind.Voice;
-        public bool IsLastMessageText => _lastMessageKind == ChatPreviewKind.Text;
+        public bool IsLastMessageImage => _lastPreview.IsImage;
+        public bool IsLastMessageVideo => _lastPreview.IsVideo;
+        public bool IsLastMessageSticker => _lastPreview.IsSticker;
+        public bool IsLastMessageVoice => _lastPreview.IsVoice;
+        public bool IsLastMessageText => _lastPreview.IsText;
 
         private string _timestamp;
         public string Timestamp
@@ -111,6 +144,19 @@ namespace Unison.Core.Models
         {
             get => _lastMessageTimestampUtc;
             set { _lastMessageTimestampUtc = value; OnPropertyChanged(); }
+        }
+
+        private string _lastMessageId;
+        /// <summary>MessageId of the tip currently shown on the list strip.</summary>
+        public string LastMessageId
+        {
+            get => _lastMessageId;
+            set
+            {
+                if (string.Equals(_lastMessageId, value, StringComparison.Ordinal)) return;
+                _lastMessageId = value;
+                OnPropertyChanged();
+            }
         }
 
         private int _unreadCount;
@@ -129,6 +175,17 @@ namespace Unison.Core.Models
 
         /// <summary>True when there are unread messages (bind with BooleanToVisibilityConverter).</summary>
         public bool HasUnread => _unreadCount > 0;
+
+        /// <summary>
+        /// Favourite chats. Always false until favourites are persisted; the list filter still
+        /// consults this so the UI can ship before the feature does.
+        /// </summary>
+        public bool IsFavorite => false;
+
+        /// <summary>
+        /// Local unsent draft. Always false until drafts are stored on the chat row.
+        /// </summary>
+        public bool HasDraft => false;
 
         private string _avatarUrl;
         /// <summary>Preview / low-res file. Display through <see cref="GetAvatarUrl"/>.</summary>
@@ -224,6 +281,15 @@ namespace Unison.Core.Models
         [Newtonsoft.Json.JsonIgnore]
         public System.Collections.Generic.IReadOnlyDictionary<string, string> MentionLookup =>
             _mentionLookup ?? MentionLookupBuilder.Empty;
+
+        /// <summary>
+        /// Rebuilds <see cref="MentionLookup"/> after in-place roster field merges (no list replace).
+        /// </summary>
+        public void RefreshMentionLookupFromRoster()
+        {
+            _mentionLookup = MentionLookupBuilder.FromRoster(_groupMembers);
+            OnPropertyChanged(nameof(MentionLookup));
+        }
 
         private DateTime? _avatarFetchedAtUtc;
         public DateTime? AvatarFetchedAtUtc

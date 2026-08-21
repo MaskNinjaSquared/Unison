@@ -18,6 +18,7 @@ namespace Unison.Core.Models
         Dutch = 4,
         Indonesian = 5,
         Polish = 6,
-        Ukrainian = 7
+        Ukrainian = 7,
+        Russian = 8
     }
 }

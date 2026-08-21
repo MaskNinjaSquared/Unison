@@ -104,10 +104,7 @@
                            TextTrimming="CharacterEllipsis"/>
                 <controls:ChatListPreviewStrip Grid.Row="1"
                                                Margin="0,4,0,0"
-                                               Kind="{x:Bind LastMessageKind, Mode=OneWay}"
-                                               Author="{x:Bind LastMessageAuthor, Mode=OneWay}"
-                                               Text="{x:Bind LastMessage, Mode=OneWay}"
-                                               MentionedJids="{x:Bind LastMessageMentionedJids, Mode=OneWay}"
+                                               Preview="{x:Bind LastPreview, Mode=OneWay}"
                                                MentionLookup="{x:Bind MentionLookup, Mode=OneWay}"/>
             </Grid>
 

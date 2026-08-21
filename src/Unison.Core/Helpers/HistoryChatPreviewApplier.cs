@@ -67,8 +67,10 @@ namespace Unison.Core.Helpers
                 LastMessageSenderName = chat.LastMessageSenderName,
                 LastMessageParticipantJid = chat.LastMessageParticipantJid,
                 LastMessageKind = chat.LastMessageKind,
+                LastMessageSendState = chat.LastMessageSendState,
                 LastMessageMentionedJids = CopyMentioned(chat.LastMessageMentionedJids),
                 LastMessageTimestampUtc = chat.LastMessageTimestampUtc,
+                LastMessageId = chat.LastMessageId,
                 SyncId = syncId ?? string.Empty,
                 SyncType = "live",
                 UpdatedAtUtc = DateTime.UtcNow
@@ -107,8 +109,10 @@ namespace Unison.Core.Helpers
                 LastMessageSenderName = preview.LastMessageSenderName,
                 LastMessageIsFromMe = preview.LastMessageIsFromMe,
                 LastMessageKind = preview.LastMessageKind,
+                LastMessageSendState = preview.LastMessageSendState,
                 LastMessageMentionedJids = CopyMentioned(preview.LastMessageMentionedJids),
                 LastMessageTimestampUtc = preview.LastMessageTimestampUtc,
+                LastMessageId = preview.LastMessageId,
                 UnreadCount = Math.Max(0, preview.UnreadCount)
             };
             chat.IsGroup = preview.IsGroup;
@@ -157,8 +161,10 @@ namespace Unison.Core.Helpers
                 LastMessageSenderName = preview.LastMessageSenderName,
                 LastMessageIsFromMe = preview.LastMessageIsFromMe,
                 LastMessageKind = preview.LastMessageKind,
+                LastMessageSendState = preview.LastMessageSendState,
                 LastMessageMentionedJids = CopyMentioned(preview.LastMessageMentionedJids),
                 LastMessageTimestampUtc = preview.LastMessageTimestampUtc,
+                LastMessageId = preview.LastMessageId,
                 UnreadCount = Math.Max(0, preview.UnreadCount),
                 Timestamp = WhatsAppMapper.FormatTimestamp(preview.LastMessageTimestampUtc, yesterdayLabel)
             };
@@ -208,16 +214,33 @@ namespace Unison.Core.Helpers
             }
 
             bool changed = false;
-            DateTime incomingTs = preview.LastMessageTimestampUtc ?? DateTime.MinValue;
-            DateTime existingTs = target.LastMessageTimestampUtc ?? DateTime.MinValue;
-            bool newer = incomingTs > existingTs;
-            bool sameOrUnknown = incomingTs == existingTs || existingTs == DateTime.MinValue;
+            DateTime incomingTs = preview.LastMessageTimestampUtc.HasValue
+                ? WhatsAppMapper.ToUtc(preview.LastMessageTimestampUtc.Value)
+                : DateTime.MinValue;
+            DateTime existingTs = target.LastMessageTimestampUtc.HasValue
+                ? WhatsAppMapper.ToUtc(target.LastMessageTimestampUtc.Value)
+                : DateTime.MinValue;
+
+            // Match live ApplyChatPreviewIfNewer: equal timestamps may still carry a newer
+            // fromMe / body (cross-device send in the same second). Strict `>` left the list
+            // stuck on the previous preview while SQLite already had the message.
+            bool applyBody = incomingTs != DateTime.MinValue &&
+                             (existingTs == DateTime.MinValue ||
+                              incomingTs > existingTs ||
+                              (incomingTs == existingTs &&
+                               (!string.Equals(target.LastMessageId, preview.LastMessageId, StringComparison.Ordinal) ||
+                                !string.Equals(target.LastMessage, preview.LastMessage, StringComparison.Ordinal) ||
+                                target.LastMessageKind != preview.LastMessageKind ||
+                                target.LastMessageIsFromMe != preview.LastMessageIsFromMe ||
+                                target.LastMessageSendState != preview.LastMessageSendState)));
 
             if (!string.IsNullOrWhiteSpace(preview.Name) &&
-                (string.IsNullOrWhiteSpace(target.Name) || (newer && !string.IsNullOrWhiteSpace(preview.Name))))
+                (string.IsNullOrWhiteSpace(target.Name) ||
+                 (incomingTs >= existingTs && incomingTs != DateTime.MinValue && !string.IsNullOrWhiteSpace(preview.Name))))
             {
-                // Prefer a non-empty name; overwrite on newer only when existing looks empty/weak.
-                if (string.IsNullOrWhiteSpace(target.Name) || newer)
+                // Prefer a non-empty name; overwrite on newer/equal only when existing looks empty/weak.
+                if (string.IsNullOrWhiteSpace(target.Name) ||
+                    (incomingTs >= existingTs && incomingTs != DateTime.MinValue))
                 {
                     if (!string.Equals(target.Name, preview.Name, StringComparison.Ordinal))
                     {
@@ -227,7 +250,7 @@ namespace Unison.Core.Helpers
                 }
             }
 
-            if (newer || (sameOrUnknown && string.IsNullOrWhiteSpace(target.LastMessage)))
+            if (applyBody || string.IsNullOrWhiteSpace(target.LastMessage))
             {
                 if (!string.Equals(target.LastMessage, preview.LastMessage, StringComparison.Ordinal))
                 {
@@ -257,11 +280,25 @@ namespace Unison.Core.Helpers
                     changed = true;
                 }
 
+                if (target.LastMessageSendState != preview.LastMessageSendState)
+                {
+                    target.LastMessageSendState = preview.LastMessageSendState;
+                    changed = true;
+                }
+
                 target.LastMessageMentionedJids = CopyMentioned(preview.LastMessageMentionedJids);
+
+                if (!string.Equals(target.LastMessageId, preview.LastMessageId, StringComparison.Ordinal))
+                {
+                    target.LastMessageId = preview.LastMessageId;
+                    changed = true;
+                }
 
                 if (target.LastMessageTimestampUtc != preview.LastMessageTimestampUtc)
                 {
-                    target.LastMessageTimestampUtc = preview.LastMessageTimestampUtc;
+                    target.LastMessageTimestampUtc = preview.LastMessageTimestampUtc.HasValue
+                        ? WhatsAppMapper.ToUtc(preview.LastMessageTimestampUtc.Value)
+                        : (DateTime?)null;
                     changed = true;
                 }
 

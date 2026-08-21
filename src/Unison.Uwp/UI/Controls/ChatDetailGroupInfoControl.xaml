@@ -74,8 +74,22 @@
 
         <PivotItem x:Name="MembersPivotItem">
             <Grid x:Name="MembersHost" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
-                <TextBlock x:Name="MembersEmptyText" Style="{StaticResource ChatDetailInfoEmptyTextStyle}"/>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <ProgressBar x:Name="MembersAvatarsProgress"
+                             Height="2"
+                             Margin="0"
+                             BorderThickness="0"
+                             IsIndeterminate="True"
+                             IsHitTestVisible="False"
+                             Foreground="White"
+                             Background="Transparent"
+                             Visibility="Collapsed"/>
+                <TextBlock x:Name="MembersEmptyText" Grid.Row="1" Style="{StaticResource ChatDetailInfoEmptyTextStyle}"/>
                 <ListView x:Name="MembersList"
+                          Grid.Row="1"
                           Visibility="Collapsed"
                           SelectionMode="None"
                           IsItemClickEnabled="True"

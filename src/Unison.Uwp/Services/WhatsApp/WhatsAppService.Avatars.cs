@@ -44,7 +44,7 @@ namespace Unison.Uwp.Services.WhatsApp
     {
 
         /// <summary>Fetches the best available profile picture for a chat (incl. group-avatar fallback) and applies it.</summary>
-        public async Task FetchAndApplyAvatarAsync(ChatItem chat, CancellationToken token)
+        public async Task FetchAndApplyAvatarAsync(ChatItem chat, CancellationToken token, bool fetchHighQuality = true)
         {
             if (chat == null)
             {
@@ -54,7 +54,10 @@ namespace Unison.Uwp.Services.WhatsApp
             var lookupCandidates = GetAvatarLookupCandidates(chat);
             var result = await FetchBestProfilePictureResultAsync(chat, lookupCandidates, token);
             await ApplyAvatarResultAsync(chat, result, token);
-            _ = EnsureHighQualityGroupAvatarAsync(chat);
+            if (fetchHighQuality)
+            {
+                _ = EnsureHighQualityGroupAvatarAsync(chat);
+            }
         }
 
         public Task EnsureHighQualityGroupAvatarAsync(ChatItem chat)
@@ -155,68 +158,122 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private async Task HydrateCachedAvatarUrisAsync(string reason)
         {
+            // Snapshot what needs a disk check on the UI thread, probe files off-UI, then apply
+            // property updates in one UI pass. File Exists / GetLastWriteTime must not run while
+            // holding the chat list dispatcher.
+            List<AvatarHydrateCandidate> candidates = null;
             await RunOnUiThreadAsync(() =>
+            {
+                candidates = new List<AvatarHydrateCandidate>();
+                foreach (var chat in Chats)
                 {
-                    int hydrated = 0;
-                    foreach (var chat in Chats)
+                    if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
                     {
-                        if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
-                        {
-                            continue;
-                        }
+                        continue;
+                    }
 
-                        bool needsLocalUri = string.IsNullOrWhiteSpace(chat.AvatarUrl) ||
-                                             chat.AvatarUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-                                             chat.AvatarUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
-                        if (!needsLocalUri)
-                        {
-                            continue;
-                        }
+                    bool needsPreview = string.IsNullOrWhiteSpace(chat.AvatarUrl) ||
+                                        chat.AvatarUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                                        chat.AvatarUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
 
+                    bool needsHigh = chat.IsGroup &&
+                                     (string.IsNullOrWhiteSpace(chat.AvatarHighUrl) ||
+                                      chat.AvatarHighUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                                      chat.AvatarHighUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase));
+
+                    if (!needsPreview && !needsHigh)
+                    {
+                        continue;
+                    }
+
+                    candidates.Add(new AvatarHydrateCandidate
+                    {
+                        Jid = chat.JID,
+                        NeedsPreview = needsPreview,
+                        NeedsHigh = needsHigh
+                    });
+                }
+            });
+
+            if (candidates == null || candidates.Count == 0)
+            {
+                return;
+            }
+
+            var previewHits = new Dictionary<string, Tuple<string, DateTime>>(StringComparer.OrdinalIgnoreCase);
+            var highHits = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            await Task.Run(() =>
+            {
+                foreach (var candidate in candidates)
+                {
+                    if (candidate.NeedsPreview)
+                    {
                         string localUri;
                         DateTime fetchedAtUtc;
-                        if (!TryGetCachedAvatarUri(chat.JID, out localUri, out fetchedAtUtc))
+                        if (TryGetCachedAvatarUri(candidate.Jid, out localUri, out fetchedAtUtc))
                         {
-                            continue;
+                            previewHits[candidate.Jid] = Tuple.Create(localUri, fetchedAtUtc);
                         }
+                    }
 
-                        chat.AvatarUrl = localUri;
-                        chat.AvatarFetchedAtUtc = fetchedAtUtc;
+                    if (candidate.NeedsHigh)
+                    {
+                        string highUri;
+                        DateTime highFetchedAtUtc;
+                        if (TryGetCachedAvatarUri(candidate.Jid, out highUri, out highFetchedAtUtc, "_high"))
+                        {
+                            highHits[candidate.Jid] = highUri;
+                        }
+                    }
+                }
+            }).ConfigureAwait(false);
+
+            if (previewHits.Count == 0 && highHits.Count == 0)
+            {
+                return;
+            }
+
+            int hydrated = 0;
+            await RunOnUiThreadAsync(() =>
+            {
+                foreach (var chat in Chats)
+                {
+                    if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
+                    {
+                        continue;
+                    }
+
+                    Tuple<string, DateTime> preview;
+                    if (previewHits.TryGetValue(chat.JID, out preview))
+                    {
+                        chat.AvatarUrl = preview.Item1;
+                        chat.AvatarFetchedAtUtc = preview.Item2;
                         chat.AvatarFetchFailedAtUtc = null;
                         chat.AvatarFetchFailureReason = null;
                         hydrated++;
                     }
 
-                    foreach (var chat in Chats)
+                    string highUri;
+                    if (highHits.TryGetValue(chat.JID, out highUri))
                     {
-                        if (chat == null || !chat.IsGroup || string.IsNullOrWhiteSpace(chat.JID))
-                        {
-                            continue;
-                        }
-
-                        if (!string.IsNullOrWhiteSpace(chat.AvatarHighUrl) &&
-                            !chat.AvatarHighUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
-                            !chat.AvatarHighUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-                        {
-                            continue;
-                        }
-
-                        string highUri;
-                        DateTime highFetchedAtUtc;
-                        if (!TryGetCachedAvatarUri(chat.JID, out highUri, out highFetchedAtUtc, "_high"))
-                        {
-                            continue;
-                        }
-
                         chat.AvatarHighUrl = highUri;
                     }
+                }
 
-                    if (hydrated > 0)
-                    {
-                        Debug.WriteLine($"[WhatsAppService] Hydrated {hydrated} avatar URLs from local cache ({reason})");
-                        SchedulePersist();
-                    }
-                });
+                if (hydrated > 0)
+                {
+                    Debug.WriteLine($"[WhatsAppService] Hydrated {hydrated} avatar URLs from local cache ({reason})");
+                    SchedulePersist();
+                }
+            });
+        }
+
+        private sealed class AvatarHydrateCandidate
+        {
+            public string Jid;
+            public bool NeedsPreview;
+            public bool NeedsHigh;
         }
 
         private static string BuildSafeAvatarFileName(string jid, string suffix = null)

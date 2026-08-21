@@ -187,7 +187,7 @@ Text normalization: `ChatPreviewNormalizer.Normalize` is the **chat-list preview
 - Master-detail stays on `ChatsView` / `StatusView` (not a Frame push list → detail).
 - Settings keys and defaults: `LocalSettingsConstants`. Do not invent a parallel key string; Background toasts that share a key must keep the **same literal**.
 - UI strings: `Strings/{tag}/Resources.resw` + `x:Uid` and/or `IStringResources`. English fallback for missing keys.
-- Shipped languages: `en-US`, `pt-BR`, `es-ES`, `it-IT`, `nl-NL`, `id-ID`, `pl-PL`, `uk-UA`. Add the key to **all** packs, or English-only with fallback — never a hardcoded sentence in a ViewModel.
+- Shipped languages: `en-US`, `pt-BR`, `es-ES`, `it-IT`, `nl-NL`, `id-ID`, `pl-PL`, `uk-UA`, `ru-RU`. Add the key to **all** packs, or English-only with fallback — never a hardcoded sentence in a ViewModel.
 - Language packs stay in the **main** package (`AppxDefaultResourceQualifiers`). Do not split resource packs.
 - Apply language **before** `InitializeComponent` (already in `App` ctor).
 - New locale: follow [Adding languages](Adding-Languages) (folder + PRI + manifest + enum). Do not add a `.resw` without registering it.

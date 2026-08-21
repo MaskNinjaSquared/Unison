@@ -17,16 +17,37 @@
         </ResourceDictionary>
     </UserControl.Resources>
 
-    <!-- Group: Author | chip | body — author preferred; remainder ellipsizes continuously. -->
+    <!-- Outgoing ticks | Author | chip | body — author preferred; remainder ellipsizes. -->
     <Grid x:Name="RootLayout" SizeChanged="RootLayout_SizeChanged">
         <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
             <ColumnDefinition Width="Auto"/>
             <ColumnDefinition Width="Auto"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
+        <Grid x:Name="StatusHost"
+              Grid.Column="0"
+              VerticalAlignment="Center"
+              Margin="0,4,0,0"
+              Visibility="Collapsed">
+            <Image x:Name="StatusImage"
+                   Width="16"
+                   Height="12"
+                   Stretch="Uniform"
+                   VerticalAlignment="Center"
+                   Visibility="Collapsed"/>
+            <TextBlock x:Name="FailedMark"
+                       Text="!"
+                       FontSize="12"
+                       FontWeight="Bold"
+                       Foreground="#E81123"
+                       VerticalAlignment="Center"
+                       Visibility="Collapsed"/>
+        </Grid>
+
         <TextBlock x:Name="AuthorBlock"
-                   Grid.Column="0"
+                   Grid.Column="1"
                    FontSize="16"
                    Margin="0,0,4,0"
                    Foreground="{Binding Foreground, ElementName=Root}"
@@ -39,7 +60,7 @@
                    Visibility="{x:Bind Author, Mode=OneWay, Converter={StaticResource StringToVisibilityConverter}}"/>
 
         <ContentControl x:Name="KindHost"
-                        Grid.Column="1"
+                        Grid.Column="2"
                         VerticalAlignment="Center"
                         HorizontalContentAlignment="Left"
                         VerticalContentAlignment="Center"
@@ -49,7 +70,7 @@
                         ContentTemplateSelector="{StaticResource ChatPreviewKindTemplateSelector}"/>
 
         <TextBlock x:Name="PreviewTextBlock"
-                   Grid.Column="2"
+                   Grid.Column="3"
                    FontSize="16"
                    Margin="5,0,0,0"
                    Foreground="{Binding Foreground, ElementName=Root}"

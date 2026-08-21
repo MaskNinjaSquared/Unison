@@ -1150,9 +1150,7 @@ namespace Unison.Uwp.Data
                         LastMessageAuthor = author,
                         LastMessageKind = kind,
                         Timestamp = latest.Timestamp.ToString("g"),
-                        LastMessageTimestampUtc = latest.Timestamp.Kind == DateTimeKind.Utc
-                            ? latest.Timestamp
-                            : latest.Timestamp.ToUniversalTime(),
+                        LastMessageTimestampUtc = Unison.Core.Mappers.WhatsAppMapper.ToUtc(latest.Timestamp),
                         Kind = isGroup ? ChatKind.Group : ChatKind.Direct
                     });
                 }
