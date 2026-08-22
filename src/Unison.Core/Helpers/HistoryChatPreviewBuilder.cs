@@ -101,8 +101,10 @@ namespace Unison.Core.Helpers
                     LastMessageSenderName = senderName,
                     LastMessageParticipantJid = participant,
                     LastMessageKind = kind,
+                    LastMessageSendState = HistoryMessageBuilder.MapSendState(newest, fromMe),
                     LastMessageMentionedJids = HistorySyncContentFilter.ReadMentionedJids(newest),
                     LastMessageTimestampUtc = ts,
+                    LastMessageId = newest.Key?.Id,
                     SyncId = syncId ?? string.Empty,
                     SyncType = syncType,
                     UpdatedAtUtc = now

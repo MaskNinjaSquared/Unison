@@ -20,7 +20,7 @@ namespace Unison.Uwp.Data
     {
         private static readonly string DatabaseFileName = "unison.db";
 
-        public const int CurrentSchemaVersion = 2;
+        public const int CurrentSchemaVersion = 4;
 
         private readonly SemaphoreSlim _initLock = new SemaphoreSlim(1, 1);
         private readonly SemaphoreSlim _writeLock = new SemaphoreSlim(1, 1);
@@ -51,6 +51,7 @@ namespace Unison.Uwp.Data
                 string dbPath = Path.Combine(ApplicationData.Current.LocalFolder.Path, DatabaseFileName);
                 _connection = new SQLiteAsyncConnection(dbPath);
                 await _connection.CreateTableAsync<HistoryChatPreviewRow>().ConfigureAwait(false);
+                await EnsureLastMessageIdColumnAsync().ConfigureAwait(false);
                 _initialized = true;
                 Debug.WriteLine("[HistoryChatPreviewStore] Initialized at " + dbPath);
             }
@@ -181,6 +182,47 @@ namespace Unison.Uwp.Data
             }
         }
 
+        private async Task EnsureLastMessageIdColumnAsync()
+        {
+            try
+            {
+                List<SqliteTableInfoRow> cols = await _connection
+                    .QueryAsync<SqliteTableInfoRow>("PRAGMA table_info(history_chat_preview)")
+                    .ConfigureAwait(false);
+                bool hasId = false;
+                if (cols != null)
+                {
+                    for (int i = 0; i < cols.Count; i++)
+                    {
+                        if (string.Equals(cols[i]?.name, "LastMessageId", StringComparison.OrdinalIgnoreCase))
+                        {
+                            hasId = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!hasId)
+                {
+                    await _connection.ExecuteAsync(
+                            "ALTER TABLE history_chat_preview ADD COLUMN LastMessageId TEXT")
+                        .ConfigureAwait(false);
+                    Debug.WriteLine("[HistoryChatPreviewStore] Added LastMessageId column");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[HistoryChatPreviewStore] EnsureLastMessageIdColumn failed: " + ex.Message);
+            }
+        }
+
+        private sealed class SqliteTableInfoRow
+        {
+            public int cid { get; set; }
+            public string name { get; set; }
+            public string type { get; set; }
+        }
+
         private static HistoryChatPreviewRow ToRow(HistoryChatPreview model)
         {
             return new HistoryChatPreviewRow
@@ -197,7 +239,9 @@ namespace Unison.Uwp.Data
                 LastMessageSenderName = model.LastMessageSenderName,
                 LastMessageParticipantJid = model.LastMessageParticipantJid,
                 LastMessageKind = (int)model.LastMessageKind,
+                LastMessageSendState = (int)model.LastMessageSendState,
                 LastMessageMentionedJids = JoinMentionedJids(model.LastMessageMentionedJids),
+                LastMessageId = model.LastMessageId,
                 LastMessageTimestampUtc = model.LastMessageTimestampUtc,
                 SyncId = model.SyncId ?? string.Empty,
                 SyncType = model.SyncType ?? string.Empty,
@@ -219,6 +263,18 @@ namespace Unison.Uwp.Data
                 kind = (ChatPreviewKind)row.LastMessageKind;
             }
 
+            MessageSendState sendState = MessageSendState.NotApplicable;
+            if (row.LastMessageSendState >= (int)MessageSendState.NotApplicable &&
+                row.LastMessageSendState <= (int)MessageSendState.Failed)
+            {
+                sendState = (MessageSendState)row.LastMessageSendState;
+            }
+
+            if (!row.LastMessageIsFromMe)
+            {
+                sendState = MessageSendState.NotApplicable;
+            }
+
             return new HistoryChatPreview
             {
                 Jid = row.Jid,
@@ -233,7 +289,9 @@ namespace Unison.Uwp.Data
                 LastMessageSenderName = row.LastMessageSenderName,
                 LastMessageParticipantJid = row.LastMessageParticipantJid,
                 LastMessageKind = kind,
+                LastMessageSendState = sendState,
                 LastMessageMentionedJids = SplitMentionedJids(row.LastMessageMentionedJids),
+                LastMessageId = row.LastMessageId,
                 LastMessageTimestampUtc = row.LastMessageTimestampUtc,
                 SyncId = row.SyncId,
                 SyncType = row.SyncType,

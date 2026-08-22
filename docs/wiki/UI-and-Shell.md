@@ -62,7 +62,9 @@ Extended splash: animations, language already applied, ~3s dwell, then `FinishBo
 
 ### Settings shell
 
-Account block (push name, phone, avatar), disconnect/logout, language, shell theme, collaborators with GitHub links. `SettingsViewModel.LogoutAsync` goes through `IConnectionService` (server logout + local wipe). Toggle **Show Unison contacts in Windows** (off by default) publishes 1:1 chats into a Unison `UserDataAccount` in People via `IContactService` (Unigram-shaped list + annotations; not the user agenda).
+Account block (push name, phone, avatar), disconnect/logout, language, **time format** (24-hour vs 12-hour AM/PM), shell theme, collaborators with GitHub links. `SettingsViewModel.LogoutAsync` goes through `IConnectionService` (server logout + local wipe). Toggle **Show Unison contacts in Windows** (off by default) publishes 1:1 chats into a Unison `UserDataAccount` in People via `IContactService` (Unigram-shaped list + annotations; not the user agenda).
+
+Clock preference is `LocalSettingsConstants.TimeFormat` (`TimeFormat.Hours24` default). It does **not** change stored message stamps — only how `WhatsAppMapper` / `LocalTimeConverter` format device-local times after `ToDeviceLocal`.
 
 **Shell reload** restarts the app after theme/language changes that require a new resource context.
 
@@ -81,7 +83,7 @@ Persisted as `LocalSettingsConstants.SelectedShell`. `App.xaml` merges Unison fi
 
 Language packs are **in the main package** (not resource packs). That fixes sideload on Windows 10 Mobile, where a bundle would otherwise install only OS + pt-BR and `PrimaryLanguageOverride` would fall back incorrectly.
 
-Shipped tags: `en-US`, `pt-BR`, `es-ES`, `it-IT`, `nl-NL`, `id-ID`, `pl-PL`, `uk-UA`, plus **System** (OS preferred → first shipped match → English).
+Shipped tags: `en-US`, `pt-BR`, `es-ES`, `it-IT`, `nl-NL`, `id-ID`, `pl-PL`, `uk-UA`, `ru-RU`, plus **System** (OS preferred → first shipped match → English).
 
 To add another locale, see [Adding languages](Adding-Languages).
 
@@ -151,7 +153,7 @@ Group roster lives on `ChatItem.GroupMembers` (`GroupMember`: Jid, phone/LID, na
 
 Timeline bubbles in a group get author photos from `ChatDetailViewModel.ApplyMessageRunLayout` (roster / 1:1 / Person), not from the bubble control itself. Tap name/avatar opens the member info pane. The group header status animation loops hint → alphabetical member names (~90s). `@digits` / `@digits@lid` in the bubble and in the chat-list last-message strip (`CommentRichService`) resolve from persisted `MentionedJids` plus `ChatItem.MentionLookup`. The bubble re-parses when the lookup is replaced with the roster.
 
-Chat timeline: open paints the header first, then ~50 factory-made bubble VMs; SQLite reads the newest **100** rows (`SqlOpenPageSize`). Scroll near top asks `CanLoadMore` then `LoadMoreMessagesAsync` (SQLite page of 30, cap ~150). Message stamps are UTC; bubble clocks bind `Timestamp` through `LocalTimeConverter` (device time zone). Date chips (Hoje / Ontem / short date) sit on the first bubble of each local day via `IsFirstOfDay` — not extra list rows. Scroll offset stabilization stays in `ChatDetailView` code-behind, and so do the run layout, midnight date-chip timer, and the pinned banner — inserting, refreshing or trimming rows is `ChatDetailViewModel`'s job.
+Chat timeline: open paints the header first, then ~50 factory-made bubble VMs; SQLite reads the newest **100** rows (`SqlOpenPageSize`). Scroll near top asks `CanLoadMore` then `LoadMoreMessagesAsync` (SQLite page of 30, cap ~150). Message stamps are **UTC in storage and comparison** (`WhatsAppMapper.ToUtc` — SQLite `Unspecified` is already UTC). Bubble and list clocks bind through `LocalTimeConverter` / `FormatTimestamp` → device time zone (`TimeZoneInfo.Local`), then 12h or 24h from Settings. Long-press pin/unpin on a bubble uses localized resources (`ChatDetail_PinFor24Hours` / `PinFor7Days` / `PinFor30Days` / `UnpinMessage`). Date chips (Hoje / Ontem / short date) sit on the first bubble of each local day via `IsFirstOfDay` — not extra list rows. Scroll offset stabilization stays in `ChatDetailView` code-behind, and so do the run layout, midnight date-chip timer, and the pinned banner — inserting, refreshing or trimming rows is `ChatDetailViewModel`'s job.
 
 `ChatDetailView` hooks ViewModel events in `Loaded` and unhooks them in `Unloaded`. Leaving them on the constructor leaks the whole page: the ViewModel stays reachable from `ChatItem`, so its event list keeps the visual tree alive after Back.
 

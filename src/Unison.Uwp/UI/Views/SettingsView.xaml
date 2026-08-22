@@ -227,6 +227,28 @@
                             </controls:SettingBox.Control>
                         </controls:SettingBox>
 
+                        <controls:SettingBox LocalizationUid="Settings_TimeFormat"
+                                             Margin="5"
+                                             Header="Time format"
+                                             Text="Choose 24-hour or 12-hour clock.">
+                            <controls:SettingBox.Control>
+                                <ComboBox x:Name="TimeFormatComboBox"
+                                          MinWidth="140"
+                                          Margin="0,0,4,0"
+                                          SelectedIndex="{Binding SelectedTimeFormatIndex, Mode=OneWay}">
+                                    <Interactivity:Interaction.Behaviors>
+                                        <Core:EventTriggerBehavior EventName="SelectionChanged">
+                                            <Core:InvokeCommandAction
+                                                Command="{Binding ChangeTimeFormatCommand}"
+                                                CommandParameter="{Binding SelectedIndex, ElementName=TimeFormatComboBox}"/>
+                                        </Core:EventTriggerBehavior>
+                                    </Interactivity:Interaction.Behaviors>
+                                    <ComboBoxItem x:Uid="Settings_TimeFormat24Hours" Content="24 Hours"/>
+                                    <ComboBoxItem x:Uid="Settings_TimeFormat12Hours" Content="12 Hours"/>
+                                </ComboBox>
+                            </controls:SettingBox.Control>
+                        </controls:SettingBox>
+
                         <controls:SettingBox LocalizationUid="Settings_Shell"
                                              Margin="5"
                                              Header="Shell"

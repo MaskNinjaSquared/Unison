@@ -35,8 +35,18 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>
         /// One idle pass of group-member pictures (16, then schedules the next). Confirmed
         /// no-photo misses are stamped so the same people are not asked again soon.
+        /// Used by the Members pivot — not on chat open.
         /// </summary>
         Task HydrateGroupMemberAvatarsAsync(string groupJid);
+
+        /// <summary>
+        /// Fetches pictures only for the given member JIDs (visible bubbles). Does not schedule
+        /// a full-roster next batch.
+        /// </summary>
+        Task HydrateGroupMemberAvatarsForJidsAsync(string groupJid, IReadOnlyList<string> memberJids);
+
+        /// <summary>True while a full-roster <see cref="HydrateGroupMemberAvatarsAsync"/> is in flight.</summary>
+        bool IsHydratingGroupMemberAvatars { get; }
 
         /// <summary>
         /// Persists Person.AvatarUrl after a local avatar file was cached (UpsertIfChanged).

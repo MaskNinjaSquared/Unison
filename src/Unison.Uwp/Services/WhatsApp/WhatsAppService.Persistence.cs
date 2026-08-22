@@ -142,6 +142,19 @@ namespace Unison.Uwp.Services.WhatsApp
                     "startup",
                     "persisted-ui-loaded",
                     "chatRows=" + Chats.Count);
+
+                // Catalog came from history_chat_preview; fix Last Message from history_message
+                // when the preview row is stale (deferred maintenance may have run with empty Chats).
+                try
+                {
+                    await ReconcileChatPreviewsFromSqliteAsync(null, "persisted-ui-loaded")
+                        .ConfigureAwait(false);
+                }
+                catch (Exception exReconcile)
+                {
+                    Debug.WriteLine(
+                        "[WhatsAppService] Startup preview reconcile failed: " + exReconcile.Message);
+                }
             }
             finally
             {
@@ -524,7 +537,10 @@ namespace Unison.Uwp.Services.WhatsApp
             await _persistRunLock.WaitAsync();
             try
             {
-                OnSyncStatus?.Invoke(this, "Saving chats...");
+                // No OnSyncStatus here: mark-read and avatar/name enrichment used to surface
+                // "Saving chats..." on the Mobile status bar for the whole catalog rewrite, which
+                // looked like opening a chat was blocked on disk. Sync stages already report
+                // through SyncPhaseStatus; this path is housekeeping.
 
                 // Messages are persisted by the batched message queue. Rewriting every
                 // loaded chat file here caused long UI stalls and large allocation spikes.
@@ -559,7 +575,33 @@ namespace Unison.Uwp.Services.WhatsApp
             }
             finally
             {
-                OnSyncStatus?.Invoke(this, null);
+                _persistRunLock.Release();
+            }
+        }
+
+        /// <summary>
+        /// Writes only the given chat-list rows to <c>history_chat_preview</c>. Used after
+        /// mark-read so clearing a badge does not rewrite the whole catalogue and contact maps.
+        /// </summary>
+        private async Task PersistChatCatalogSliceAsync(IList<ChatItem> chats)
+        {
+            if (chats == null || chats.Count == 0)
+            {
+                return;
+            }
+
+            await _persistRunLock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                await PersistChatCatalogAsync(chats).ConfigureAwait(false);
+                Debug.WriteLine("[WhatsAppService] Persisted chat-preview slice rows=" + chats.Count);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[WhatsAppService] Chat-preview slice persist failed: " + ex.Message);
+            }
+            finally
+            {
                 _persistRunLock.Release();
             }
         }
@@ -599,6 +641,32 @@ namespace Unison.Uwp.Services.WhatsApp
         /// Public accessor for SchedulePersist - allows UI to trigger debounced save
         /// </summary>
         public void SchedulePersistPublic() => SchedulePersist();
+
+        /// <inheritdoc />
+        public void PersistChatListRowsPublic(IList<ChatItem> chats)
+        {
+            if (chats == null || chats.Count == 0)
+            {
+                return;
+            }
+
+            // Copy: callers often pass live UI rows that may mutate before the write runs.
+            var slice = new List<ChatItem>(chats.Count);
+            for (int i = 0; i < chats.Count; i++)
+            {
+                if (chats[i] != null)
+                {
+                    slice.Add(chats[i]);
+                }
+            }
+
+            if (slice.Count == 0)
+            {
+                return;
+            }
+
+            _ = PersistChatCatalogSliceAsync(slice);
+        }
 
         private async Task PersistChatCatalogAsync(IList<ChatItem> chats)
         {

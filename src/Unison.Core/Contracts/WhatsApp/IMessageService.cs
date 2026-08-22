@@ -41,6 +41,13 @@ namespace Unison.Core.Contracts.WhatsApp
         Task<System.Collections.Generic.List<ChatMessage>> LoadMessagesForChatAsync(string jid);
 
         /// <summary>
+        /// Lightweight reload for <see cref="ChatMessagesChanged"/>: live RAM plus a small SQLite
+        /// tail (no pinned/pending extras). Prefer this over <see cref="LoadMessagesForChatAsync"/>
+        /// once the chat is already open.
+        /// </summary>
+        Task<System.Collections.Generic.List<ChatMessage>> LoadRecentMessagesForSyncAsync(string jid);
+
+        /// <summary>
         /// Older page from SQLite <c>history_message</c> (then prefer <see cref="EnsureHistoryOnDemandAsync"/>).
         /// Pass the oldest visible bubble as the cursor.
         /// </summary>

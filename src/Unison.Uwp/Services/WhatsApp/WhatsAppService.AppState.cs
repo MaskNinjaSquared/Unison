@@ -200,7 +200,10 @@ namespace Unison.Uwp.Services.WhatsApp
                                 true,
                                 ChatPreviewNormalizer.InferKindFromMessage(latest),
                                 ChatPreviewNormalizer.FormatListAuthorPrefix(latest, isGroup, SelfListDisplayName()),
-                                latest.MentionedJids);
+                                latest.MentionedJids,
+                                latest.IsFromMe,
+                                HistoryLiveMessageMapper.FromStatus(latest.Status, latest.IsFromMe),
+                                latest.Id);
                         }
                         else
                         {
@@ -208,6 +211,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             chat.LastMessageAuthor = string.Empty;
                             chat.LastMessageMentionedJids = null;
                             chat.LastMessageKind = ChatPreviewKind.Text;
+                            chat.LastMessageId = null;
                             chat.Timestamp = string.Empty;
                             chat.LastMessageTimestampUtc = null;
                         }

@@ -64,6 +64,12 @@ namespace Unison.Core.Constants
         public const string SelectedLanguage = "SelectedLanguage";
 
         /// <summary>
+        /// Message clock after local time-zone conversion (<see cref="Models.TimeFormat"/> stored as int).
+        /// Default <see cref="Models.TimeFormat.Hours24"/>.
+        /// </summary>
+        public const string TimeFormat = "TimeFormat";
+
+        /// <summary>
         /// When true, invalid session (401/revoked) clears local auth and returns to QR.
         /// Off by default — safer against false positives on flaky Mobile reconnects.
         /// </summary>
@@ -106,6 +112,7 @@ namespace Unison.Core.Constants
                 { AutoUnlinkOnLogoutEnabled, false },
                 { SelectedShell, (int)AppShell.Unison },
                 { SelectedLanguage, (int)AppLanguage.System },
+                { TimeFormat, (int)Models.TimeFormat.Hours24 },
                 { PendingShellAppliedToast, false },
                 { MessageStoreSyncId, "" },
                 { MessageStoreForceHistoryRepair, false },

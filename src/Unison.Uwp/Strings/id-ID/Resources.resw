@@ -206,6 +206,9 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="ChatList_FilterHeader.Text" xml:space="preserve">
     <value>Sortir obrolan</value>
   </data>
+  <data name="ChatList_FilterAll.Text" xml:space="preserve">
+    <value>Semua</value>
+  </data>
   <data name="ChatList_FilterUnread.Text" xml:space="preserve">
     <value>Belum dibaca</value>
   </data>
@@ -274,6 +277,21 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   </data>
   <data name="ChatList_SyncDone" xml:space="preserve">
     <value>Sinkronisasi komplit</value>
+  </data>
+  <data name="ChatList_Settling" xml:space="preserve">
+    <value>Menyelesaikan proses awal…</value>
+  </data>
+  <data name="ChatList_ResolvingNames" xml:space="preserve">
+    <value>Menentukan nama… {0} dari {1}</value>
+  </data>
+  <data name="ChatList_FetchingAvatars" xml:space="preserve">
+    <value>Memuat foto… {0} dari {1}</value>
+  </data>
+  <data name="ChatList_FetchingGroups" xml:space="preserve">
+    <value>Memuat info grup… {0} dari {1}</value>
+  </data>
+  <data name="ChatList_PausedLowMemory" xml:space="preserve">
+    <value>Dijeda — memori rendah</value>
   </data>
   <data name="ChatList_Organizing" xml:space="preserve">
     <value>Mengatur obrolan…</value>
@@ -344,8 +362,23 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="ChatDetail_ReadLess" xml:space="preserve">
     <value>Tampilkan lebih sedikit</value>
   </data>
+  <data name="ChatDetail_Forwarded" xml:space="preserve">
+    <value>Diteruskan</value>
+  </data>
   <data name="ChatDetail_PinnedIndex" xml:space="preserve">
     <value>Pesan yang disematkan {0} dari {1}</value>
+  </data>
+  <data name="ChatDetail_UnpinMessage" xml:space="preserve">
+    <value>Lepas sematan pesan</value>
+  </data>
+  <data name="ChatDetail_PinFor24Hours" xml:space="preserve">
+    <value>Sematkan selama 24 jam</value>
+  </data>
+  <data name="ChatDetail_PinFor7Days" xml:space="preserve">
+    <value>Sematkan selama 7 hari</value>
+  </data>
+  <data name="ChatDetail_PinFor30Days" xml:space="preserve">
+    <value>Sematkan selama 30 hari</value>
   </data>
   <data name="Chat_SelfMarker" xml:space="preserve">
     <value>(Anda)</value>
@@ -706,6 +739,18 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   </data>
   <data name="Settings_DisconnectCancel" xml:space="preserve">
     <value>Batal</value>
+  </data>
+  <data name="Settings_TimeFormat.Header" xml:space="preserve">
+    <value>Format waktu</value>
+  </data>
+  <data name="Settings_TimeFormat.Text" xml:space="preserve">
+    <value>Pilih jam 24 jam atau 12 jam.</value>
+  </data>
+  <data name="Settings_TimeFormat24Hours.Content" xml:space="preserve">
+    <value>24 Jam</value>
+  </data>
+  <data name="Settings_TimeFormat12Hours.Content" xml:space="preserve">
+    <value>12 Jam</value>
   </data>
   <data name="Settings_Shell.Header" xml:space="preserve">
     <value>Shell</value>

@@ -21,6 +21,13 @@ namespace Unison.Core.Contracts
         /// <summary>Live send/receive/outbox: upsert bodies and replace reactions for those ids.</summary>
         Task UpsertLiveMessagesAsync(string chatJid, IReadOnlyList<ChatMessage> messages);
 
+        /// <summary>
+        /// Additive reactor rows, no message bodies (live reaction envelope). An empty emoji removes
+        /// that reactor. Needed because a chip-summary bubble cannot carry the rows through
+        /// <see cref="UpsertLiveMessagesAsync"/>.
+        /// </summary>
+        Task UpsertReactionsAsync(IReadOnlyList<HistoryMessageReaction> reactions);
+
         Task<HistoryMessage> GetAsync(string chatJid, string messageId);
 
         /// <summary>
@@ -29,6 +36,16 @@ namespace Unison.Core.Contracts
         /// </summary>
         Task<IReadOnlyList<HistoryMessage>> GetForChatAsync(
             string chatJid,
+            int limit = 100,
+            DateTime? beforeUtc = null,
+            string beforeMessageId = null);
+
+        /// <summary>
+        /// Same as <see cref="GetForChatAsync"/> but for every SQLite key a conversation may use
+        /// (PN / LID / canonical). One query with <c>ChatJid IN (...)</c> instead of N round-trips.
+        /// </summary>
+        Task<IReadOnlyList<HistoryMessage>> GetForChatKeysAsync(
+            IReadOnlyList<string> chatJids,
             int limit = 100,
             DateTime? beforeUtc = null,
             string beforeMessageId = null);
@@ -42,6 +59,19 @@ namespace Unison.Core.Contracts
         /// Feeds the chat-info Media / Files panes, which must not be crowded out by text rows.
         /// </summary>
         Task<IReadOnlyList<HistoryMessage>> GetMediaForChatAsync(string chatJid, int limit = 400);
+
+        /// <summary>
+        /// Newest listable row per chat (no reactions). When <paramref name="chatJids"/> is null
+        /// or empty, every chat in SQLite is considered — used to repair list previews on startup.
+        /// </summary>
+        Task<IReadOnlyList<HistoryMessage>> GetNewestPerChatAsync(IReadOnlyList<string> chatJids = null);
+
+        /// <summary>
+        /// Full reactor rows for one message (reactions dialog). Uses explicit columns — not <c>SELECT *</c>.
+        /// </summary>
+        Task<IReadOnlyList<HistoryMessageReaction>> GetReactionsForMessageAsync(
+            string chatJid,
+            string messageId);
 
         Task<int> CountAsync(string syncId = null);
 

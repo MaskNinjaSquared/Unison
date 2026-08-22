@@ -36,10 +36,16 @@ namespace Unison.Core.Models
 
         public ChatPreviewKind LastMessageKind { get; set; }
 
+        /// <summary>Outgoing ticks for the list strip.</summary>
+        public MessageSendState LastMessageSendState { get; set; }
+
         /// <summary>ContextInfo mentioned JIDs for the list-strip @alias parser.</summary>
         public System.Collections.Generic.List<string> LastMessageMentionedJids { get; set; }
 
         public DateTime? LastMessageTimestampUtc { get; set; }
+
+        /// <summary>MessageId of the tip shown in the list strip (for SQLite reconcile).</summary>
+        public string LastMessageId { get; set; }
 
         /// <summary><see cref="Constants.LocalSettingsConstants.MessageStoreSyncId"/> when written.</summary>
         public string SyncId { get; set; }

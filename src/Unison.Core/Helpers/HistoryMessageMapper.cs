@@ -26,7 +26,8 @@ namespace Unison.Core.Helpers
             var message = new ChatMessage
             {
                 Id = row.MessageId,
-                Content = row.IsRevoked ? "[Message Deleted]" : (row.Body ?? string.Empty),
+                RemoteJid = row.ChatJid,
+                Content = row.IsRevoked ? "[Message Deleted]" : NormalizeStoredBody(row.Body, row.Kind),
                 Timestamp = AsUtc(row.TimestampUtc) ?? DateTime.UtcNow,
                 IsFromMe = row.IsFromMe,
                 ParticipantJid = row.ParticipantJid,
@@ -34,12 +35,14 @@ namespace Unison.Core.Helpers
                 Kind = row.IsRevoked ? ChatMessageKind.Text : kind,
                 Status = ToStatusString(row.SendState, row.IsFromMe),
                 IsRevoked = row.IsRevoked,
+                IsForwarded = row.IsForwarded,
                 IsPinned = row.IsPinned,
                 PinnedAtUtc = row.PinnedAtUtc,
                 PinExpiresAtUtc = row.PinExpiresAtUtc,
                 QuotedMessageId = row.QuotedMessageId,
                 QuotedSenderName = row.QuotedSenderName,
-                QuotedText = row.QuotedBody,
+                QuotedParticipantJid = row.QuotedParticipantJid,
+                QuotedText = NormalizeStoredBody(row.QuotedBody, row.QuotedKind),
                 QuotedKind = row.QuotedKind
             };
 
@@ -88,7 +91,22 @@ namespace Unison.Core.Helpers
                 return;
             }
 
-            ApplyMediaEnvelope(message, row, row.Kind, row.Body);
+            ApplyMediaEnvelope(message, row, row.Kind, NormalizeStoredBody(row.Body, row.Kind));
+        }
+
+        /// <summary>
+        /// Rows written before live persistence normalized the body still hold "[Image]" /
+        /// "[Sticker]" preview tags. Strip them on read so they never surface as a caption.
+        /// </summary>
+        private static string NormalizeStoredBody(string body, ChatPreviewKind kind)
+        {
+            if (string.IsNullOrEmpty(body))
+            {
+                return string.Empty;
+            }
+
+            ChatPreviewNormalizer.NormalizeBody(body, kind, out _, out string normalized);
+            return normalized;
         }
 
         /// <summary>
@@ -120,7 +138,6 @@ namespace Unison.Core.Helpers
                         message.Caption = body;
                     }
 
-                    message.MediaThumbnailBase64 = row.MediaThumbnailBase64;
                     message.NotifyImageDownloadStateChanged();
                     break;
 
@@ -136,7 +153,6 @@ namespace Unison.Core.Helpers
                         message.Caption = body;
                     }
 
-                    message.MediaThumbnailBase64 = row.MediaThumbnailBase64;
                     message.NotifyVideoDownloadStateChanged();
                     break;
 
@@ -159,7 +175,6 @@ namespace Unison.Core.Helpers
                     message.DocumentMimeType = row.MediaMimeType;
                     message.DocumentFileName = row.MediaFileName;
                     message.DocumentFileLengthBytes = row.MediaFileLengthBytes;
-                    message.MediaThumbnailBase64 = row.MediaThumbnailBase64;
                     message.NotifyDocumentDownloadStateChanged();
                     break;
             }
@@ -185,12 +200,35 @@ namespace Unison.Core.Helpers
             switch (row.Kind)
             {
                 case ChatPreviewKind.Image:
+                    if (IsThumbCacheUri(row.MediaLocalUri))
+                    {
+                        // Protocol jpegThumbnail on disk — preview only; keep NeedsImageDownload.
+                        message.ThumbnailUri = row.MediaLocalUri;
+                    }
+                    else
+                    {
+                        message.ImageUri = row.MediaLocalUri;
+                    }
+
+                    message.NotifyImageDownloadStateChanged();
+                    break;
                 case ChatPreviewKind.Sticker:
                     message.ImageUri = row.MediaLocalUri;
                     message.NotifyImageDownloadStateChanged();
                     break;
                 case ChatPreviewKind.Video:
-                    message.VideoUri = row.MediaLocalUri;
+                    if (IsThumbCacheUri(row.MediaLocalUri))
+                    {
+                        if (string.IsNullOrWhiteSpace(message.VideoPosterUri))
+                        {
+                            message.VideoPosterUri = row.MediaLocalUri;
+                        }
+                    }
+                    else
+                    {
+                        message.VideoUri = row.MediaLocalUri;
+                    }
+
                     message.NotifyVideoDownloadStateChanged();
                     break;
                 case ChatPreviewKind.Voice:
@@ -198,21 +236,45 @@ namespace Unison.Core.Helpers
                     message.NotifyAudioDownloadStateChanged();
                     break;
                 case ChatPreviewKind.Document:
-                    message.DocumentUri = row.MediaLocalUri;
+                    if (IsThumbCacheUri(row.MediaLocalUri))
+                    {
+                        message.ThumbnailUri = row.MediaLocalUri;
+                    }
+                    else
+                    {
+                        message.DocumentUri = row.MediaLocalUri;
+                    }
+
                     message.NotifyDocumentDownloadStateChanged();
                     break;
             }
         }
 
+        /// <summary>Protocol thumbs live under MediaCache as <c>*_thumb</c> files.</summary>
+        public static bool IsThumbCacheUri(string uri)
+        {
+            if (string.IsNullOrWhiteSpace(uri))
+            {
+                return false;
+            }
+
+            return uri.IndexOf("_thumb.", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   uri.EndsWith("_thumb", StringComparison.OrdinalIgnoreCase);
+        }
+
         private static void ApplyReactions(ChatMessage message, HistoryMessage row)
         {
-            if (message == null || row?.Reactions == null || row.Reactions.Count == 0)
+            if (message == null || row == null)
             {
                 return;
             }
 
-            var list = message.Reactions;
-            list.Clear();
+            if (row.Reactions == null || row.Reactions.Count == 0)
+            {
+                return;
+            }
+
+            var list = new List<MessageReaction>(row.Reactions.Count);
             for (int i = 0; i < row.Reactions.Count; i++)
             {
                 HistoryMessageReaction reaction = row.Reactions[i];
@@ -232,7 +294,85 @@ namespace Unison.Core.Helpers
                 });
             }
 
-            message.NotifyReactionsChanged();
+            message.ApplyReactionDetails(list);
+        }
+
+        /// <summary>
+        /// When a live/JSON row wins on id, keep SQLite quoted author JID if the winner has none.
+        /// </summary>
+        public static void CopyQuotedParticipantIfMissing(ChatMessage target, ChatMessage source)
+        {
+            if (target == null || source == null || !string.IsNullOrWhiteSpace(target.QuotedParticipantJid))
+            {
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(source.QuotedParticipantJid))
+            {
+                target.QuotedParticipantJid = source.QuotedParticipantJid;
+            }
+        }
+
+        /// <summary>
+        /// When a live/JSON row wins on id, keep SQLite forwarded flag if the winner has none.
+        /// </summary>
+        public static void CopyForwardedIfMissing(ChatMessage target, ChatMessage source)
+        {
+            if (target == null || source == null || target.IsForwarded)
+            {
+                return;
+            }
+
+            if (source.IsForwarded)
+            {
+                target.IsForwarded = true;
+            }
+        }
+
+        /// <summary>
+        /// When a live/JSON row wins on id, keep the SQLite reactors if the winner has none —
+        /// otherwise timeline open loses every reaction chip.
+        /// </summary>
+        public static void CopyReactionsIfMissing(ChatMessage target, ChatMessage source)
+        {
+            if (target == null || source == null || target.HasReactions || !source.HasReactions)
+            {
+                return;
+            }
+
+            CopyReactors(target, source);
+        }
+
+        /// <summary>
+        /// Reload merged onto a row already on screen. A source with no reactors is only trusted when
+        /// it came from the store, so a live-only object never blanks a chip that is already up.
+        /// </summary>
+        public static void CopyReactionState(ChatMessage target, ChatMessage source)
+        {
+            if (target == null || source == null || ReferenceEquals(target, source))
+            {
+                return;
+            }
+
+            if (source.HasReactions || source.AreReactionDetailsLoaded)
+            {
+                CopyReactors(target, source);
+            }
+        }
+
+        /// <summary>
+        /// Store provenance is not transferable: a list seen only on the wire must not let the target
+        /// claim it holds every reactor, or a later live upsert would replace stored rows with it.
+        /// </summary>
+        private static void CopyReactors(ChatMessage target, ChatMessage source)
+        {
+            if (source.AreReactionDetailsLoaded)
+            {
+                target.ApplyReactionDetails(source.Reactions);
+                return;
+            }
+
+            target.Reactions = new List<MessageReaction>(source.Reactions);
         }
 
         /// <summary>
@@ -255,9 +395,9 @@ namespace Unison.Core.Helpers
                     target.ImageFileEncSha256Base64,
                     source.ImageFileEncSha256Base64);
                 target.ImageMimeType = FirstNonEmpty(target.ImageMimeType, source.ImageMimeType);
-                if (string.IsNullOrWhiteSpace(target.MediaThumbnailBase64))
+                if (string.IsNullOrWhiteSpace(target.ThumbnailUri))
                 {
-                    target.MediaThumbnailBase64 = source.MediaThumbnailBase64;
+                    target.ThumbnailUri = source.ThumbnailUri;
                 }
 
                 target.NotifyImageDownloadStateChanged();
@@ -278,9 +418,9 @@ namespace Unison.Core.Helpers
                     target.VideoDurationSeconds = source.VideoDurationSeconds;
                 }
 
-                if (string.IsNullOrWhiteSpace(target.MediaThumbnailBase64))
+                if (string.IsNullOrWhiteSpace(target.VideoPosterUri))
                 {
-                    target.MediaThumbnailBase64 = source.MediaThumbnailBase64;
+                    target.VideoPosterUri = source.VideoPosterUri;
                 }
 
                 target.NotifyVideoDownloadStateChanged();

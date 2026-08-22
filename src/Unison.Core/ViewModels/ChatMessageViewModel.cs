@@ -29,6 +29,10 @@ namespace Unison.Core.ViewModels
         private readonly IRuntimeDiagnostics _diagnostics;
         private bool _isExpanded;
         private bool _isHighlighted;
+        private bool? _canExpandCached;
+        private string _quotedStripTextCached;
+        private ChatPreviewKind? _quotedPreviewKindCached;
+        private string _documentDisplayNameCached;
 
         public ChatMessage Model { get; }
 
@@ -119,17 +123,40 @@ namespace Unison.Core.ViewModels
 
             if (IsExpandInputProperty(name))
             {
+                _canExpandCached = null;
                 RaiseExpandPropsChanged();
             }
 
             if (IsQuoteProperty(name))
             {
+                _quotedStripTextCached = null;
+                _quotedPreviewKindCached = null;
                 RaiseQuoteUiChanged();
+            }
+
+            if (name == nameof(ChatMessage.DocumentFileName) ||
+                name == nameof(ChatMessage.Content) ||
+                name == nameof(ChatMessage.DocumentDisplayName))
+            {
+                _documentDisplayNameCached = null;
             }
 
             if (name == nameof(ChatMessage.MentionedJids))
             {
                 Raise(nameof(MentionedJids));
+            }
+
+            if (name == nameof(ChatMessage.IsForwarded))
+            {
+                Raise(nameof(IsForwarded));
+                Raise(nameof(ShowForwardedLabel));
+                Raise(nameof(ForwardedLabelText));
+            }
+
+            if (name == nameof(ChatMessage.ShowQuotedAuthorLink))
+            {
+                Raise(nameof(ShowQuotedAuthorLink));
+                Raise(nameof(CanOpenQuotedAuthor));
             }
 
             if (IsImageOrStickerProperty(name))
@@ -176,6 +203,7 @@ namespace Unison.Core.ViewModels
             name == nameof(ChatMessage.QuotedText) ||
             name == nameof(ChatMessage.QuotedKind) ||
             name == nameof(ChatMessage.QuotedSenderName) ||
+            name == nameof(ChatMessage.QuotedParticipantJid) ||
             name == nameof(ChatMessage.QuotedMessageId);
 
         private static bool IsImageOrStickerProperty(string name) =>
@@ -183,7 +211,6 @@ namespace Unison.Core.ViewModels
             name == nameof(ChatMessage.HasImage) ||
             name == nameof(ChatMessage.ImageUri) ||
             name == nameof(ChatMessage.ThumbnailUri) ||
-            name == nameof(ChatMessage.MediaThumbnailBase64) ||
             name == nameof(ChatMessage.HasMediaThumbnail) ||
             name == nameof(ChatMessage.IsImage) ||
             name == nameof(ChatMessage.ShowStickerError) ||
@@ -266,8 +293,18 @@ namespace Unison.Core.ViewModels
         }
 
         /// <summary>True when body text is long enough to warrant collapse / read-more.</summary>
-        public bool CanExpand =>
-            ShowTextContent && NeedsCollapse(Content, CollapsedContentMaxLines);
+        public bool CanExpand
+        {
+            get
+            {
+                if (!_canExpandCached.HasValue)
+                {
+                    _canExpandCached = ShowTextContent && NeedsCollapse(Content, CollapsedContentMaxLines);
+                }
+
+                return _canExpandCached.Value;
+            }
+        }
 
         /// <summary>0 = unlimited when expanded; otherwise <see cref="CollapsedContentMaxLines"/>.</summary>
         public int ContentMaxLines =>
@@ -559,6 +596,9 @@ namespace Unison.Core.ViewModels
                 nameof(QuotedPreviewKind),
                 nameof(QuotedStripText),
                 nameof(QuotedSenderName),
+                nameof(QuotedParticipantJid),
+                nameof(CanOpenQuotedAuthor),
+                nameof(CanNavigateToQuote),
                 nameof(QuotedMessageId));
         }
 
@@ -572,10 +612,11 @@ namespace Unison.Core.ViewModels
                 nameof(IsSticker),
                 nameof(HasImage),
                 nameof(ImageUri),
+                nameof(ThumbnailUri),
+                nameof(HasMediaThumbnail),
+                nameof(ShowImageDownloadPlaceholderGlyph),
                 nameof(InfoPreviewUri),
-                nameof(InfoPreviewBase64),
                 nameof(HasInfoPreviewUri),
-                nameof(HasInfoPreviewBase64),
                 nameof(NeedsImageDownload),
                 nameof(IsImage),
                 nameof(ShowTextContent));
@@ -626,6 +667,10 @@ namespace Unison.Core.ViewModels
 
         public string ImageUri => Model.ImageUri;
         public bool HasImage => Model.HasImage;
+        public string ThumbnailUri => Model.ThumbnailUri;
+        public bool HasMediaThumbnail => Model.HasMediaThumbnail;
+        /// <summary>Generic download glyph when no protocol thumb is on disk yet.</summary>
+        public bool ShowImageDownloadPlaceholderGlyph => NeedsImageDownload && !HasMediaThumbnail;
         /// <summary>Protocol image bubble (Kind.Image) — footer photo glyph.</summary>
         public bool IsImage => Model.IsImage;
         public bool NeedsImageDownload => Model.NeedsImageDownload;
@@ -640,6 +685,11 @@ namespace Unison.Core.ViewModels
         public string QuotedText => Model.QuotedText;
         public ChatPreviewKind QuotedKind => Model.QuotedKind;
         public string QuotedSenderName => Model.QuotedSenderName;
+        public string QuotedParticipantJid => Model.QuotedParticipantJid;
+        /// <summary>Group quote author name is tappable (JID and/or visible @name).</summary>
+        public bool CanOpenQuotedAuthor => Model.ShowQuotedAuthorLink;
+        /// <summary>Quote strip is actionable when the protocol stanza id is known.</summary>
+        public bool CanNavigateToQuote => !string.IsNullOrWhiteSpace(Model.QuotedMessageId);
         public string QuotedMessageId => Model.QuotedMessageId;
 
         /// <summary>Kind for the quote strip (falls back to legacy [Image]/[Document] tags).</summary>
@@ -647,12 +697,16 @@ namespace Unison.Core.ViewModels
         {
             get
             {
-                if (Model.QuotedKind != ChatPreviewKind.Text)
+                if (_quotedPreviewKindCached.HasValue)
                 {
-                    return Model.QuotedKind;
+                    return _quotedPreviewKindCached.Value;
                 }
 
-                return ChatPreviewNormalizer.InferKindFromLegacyMediaTags(Model.QuotedText);
+                ChatPreviewKind kind = Model.QuotedKind != ChatPreviewKind.Text
+                    ? Model.QuotedKind
+                    : ChatPreviewNormalizer.InferKindFromLegacyMediaTags(Model.QuotedText);
+                _quotedPreviewKindCached = kind;
+                return kind;
             }
         }
 
@@ -661,12 +715,18 @@ namespace Unison.Core.ViewModels
         {
             get
             {
+                if (_quotedStripTextCached != null)
+                {
+                    return _quotedStripTextCached;
+                }
+
                 ChatPreviewKind kind = QuotedPreviewKind;
                 ChatPreviewKind? hint = kind == ChatPreviewKind.Text
                     ? null
                     : (ChatPreviewKind?)kind;
                 ChatPreviewNormalizer.Normalize(Model.QuotedText, hint, out _, out string text);
-                return text;
+                _quotedStripTextCached = text ?? string.Empty;
+                return _quotedStripTextCached;
             }
         }
 
@@ -812,12 +872,18 @@ namespace Unison.Core.ViewModels
         {
             get
             {
+                if (_documentDisplayNameCached != null)
+                {
+                    return _documentDisplayNameCached;
+                }
+
                 string resolved = ChatPreviewNormalizer.ResolveDocumentDisplayName(
                     Model.DocumentFileName,
                     Model.Content);
-                return !string.IsNullOrWhiteSpace(resolved)
+                _documentDisplayNameCached = !string.IsNullOrWhiteSpace(resolved)
                     ? resolved
                     : (_strings?.Get("ChatDetail_DocumentFallbackName", "Document") ?? "Document");
+                return _documentDisplayNameCached;
             }
         }
         public string DocumentUri => Model.DocumentUri;
@@ -929,6 +995,21 @@ namespace Unison.Core.ViewModels
             set => Model.ShowGroupSenderName = value;
         }
 
+        public bool ShowQuotedAuthorLink
+        {
+            get => Model.ShowQuotedAuthorLink;
+            set => Model.ShowQuotedAuthorLink = value;
+        }
+
+        public bool IsForwarded => Model.IsForwarded;
+
+        public bool ShowForwardedLabel => Model.IsForwarded;
+
+        public string ForwardedLabelText =>
+            _strings != null
+                ? _strings.Get("ChatDetail_Forwarded", "Forwarded")
+                : "Forwarded";
+
         /// <summary>Group author photo URI for the bubble-side avatar.</summary>
         public string ContactUri
         {
@@ -977,10 +1058,6 @@ namespace Unison.Core.ViewModels
                 return null;
             }
         }
-
-        public string InfoPreviewBase64 => Model.MediaThumbnailBase64;
-
-        public bool HasInfoPreviewBase64 => !string.IsNullOrWhiteSpace(Model.MediaThumbnailBase64);
 
         public bool HasInfoPreviewUri => !string.IsNullOrWhiteSpace(InfoPreviewUri);
 

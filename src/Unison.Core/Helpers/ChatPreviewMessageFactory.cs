@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Unison.Core.Mappers;
 using Unison.Core.Models;
 
 namespace Unison.Core.Helpers
@@ -109,8 +110,7 @@ namespace Unison.Core.Helpers
         {
             if (chat.LastMessageTimestampUtc.HasValue)
             {
-                DateTime utc = chat.LastMessageTimestampUtc.Value;
-                return utc.Kind == DateTimeKind.Utc ? utc : utc.ToUniversalTime();
+                return WhatsAppMapper.ToUtc(chat.LastMessageTimestampUtc.Value);
             }
 
             return DateTime.UtcNow;

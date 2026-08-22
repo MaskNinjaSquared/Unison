@@ -60,6 +60,12 @@ namespace Unison.Uwp.UI.Controls
 
         private void Info_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
+            if (e.PropertyName == nameof(ChatDetailInfoViewModel.IsMembersAvatarsLoading))
+            {
+                ApplyMembersAvatarsLoading();
+                return;
+            }
+
             if (ChatDetailInfoPivotHelper.IsMediaPaneProperty(e.PropertyName))
             {
                 BindMediaPanes();
@@ -76,6 +82,23 @@ namespace Unison.Uwp.UI.Controls
                 InfoViewModel,
                 MediaPivotItem,
                 FilesPivotItem);
+
+            if (InfoPivot?.SelectedItem == MembersPivotItem && InfoViewModel != null)
+            {
+                _ = InfoViewModel.EnsureMembersAvatarsHydratedAsync();
+                ApplyMembersAvatarsLoading();
+            }
+        }
+
+        private void ApplyMembersAvatarsLoading()
+        {
+            if (MembersAvatarsProgress == null)
+            {
+                return;
+            }
+
+            bool loading = InfoViewModel?.IsMembersAvatarsLoading == true;
+            MembersAvatarsProgress.Visibility = loading ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void NotificationsToggle_Toggled(object sender, RoutedEventArgs e)
@@ -195,6 +218,8 @@ namespace Unison.Uwp.UI.Controls
             {
                 MembersValue.Text = vm.MembersCountText ?? "—";
             }
+
+            ApplyMembersAvatarsLoading();
         }
 
         private void BindMediaPanes()

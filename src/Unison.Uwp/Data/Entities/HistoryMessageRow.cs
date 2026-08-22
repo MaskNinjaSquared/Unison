@@ -49,11 +49,11 @@ namespace Unison.Uwp.Data.Entities
 
         public long MediaFileLengthBytes { get; set; }
 
-        public string MediaThumbnailBase64 { get; set; }
-
         public bool IsVoiceNote { get; set; }
 
         public bool IsRevoked { get; set; }
+
+        public bool IsForwarded { get; set; }
 
         public bool IsPinned { get; set; }
 

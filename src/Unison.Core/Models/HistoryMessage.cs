@@ -45,13 +45,16 @@ namespace Unison.Core.Models
 
         public long MediaFileLengthBytes { get; set; }
 
-        /// <summary>Protocol jpegThumbnail (base64), image/video/document.</summary>
-        public string MediaThumbnailBase64 { get; set; }
+        /// <summary>Transient proto thumb bytes; cleared after disk materialize.</summary>
+        public byte[] MediaThumbnailJpeg { get; set; }
 
         /// <summary>True when audio is a PTT voice note.</summary>
         public bool IsVoiceNote { get; set; }
 
         public bool IsRevoked { get; set; }
+
+        /// <summary>ContextInfo.isForwarded — independent of <see cref="Kind"/>.</summary>
+        public bool IsForwarded { get; set; }
 
         public bool IsPinned { get; set; }
 
@@ -77,6 +80,7 @@ namespace Unison.Core.Models
         /// <summary>Local video poster URI after on-demand download.</summary>
         public string MediaPosterUri { get; set; }
 
+        /// <summary>Full reactor rows for this message (<c>history_message_reaction</c>).</summary>
         public List<HistoryMessageReaction> Reactions { get; set; }
 
         /// <summary>ContextInfo mentioned JIDs (@number in the body).</summary>

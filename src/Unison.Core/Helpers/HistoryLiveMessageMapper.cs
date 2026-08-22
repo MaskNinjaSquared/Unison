@@ -32,6 +32,11 @@ namespace Unison.Core.Helpers
                 }
 
                 batch.Messages.Add(row);
+                if (messages[i].AreReactionDetailsLoaded)
+                {
+                    batch.ReactionOwnerMessageIds.Add(row.MessageId);
+                }
+
                 AddReactions(batch, row, messages[i]);
             }
 
@@ -70,6 +75,16 @@ namespace Unison.Core.Helpers
                 body = message.Caption;
             }
 
+            if (!revoked)
+            {
+                // Live Content still carries the "[Image]" / "[Sticker]" preview tags; the row
+                // body is the caption source on read-back, so it must be tag-free like sync rows.
+                ChatPreviewNormalizer.NormalizeBody(body, kind, out kind, out body);
+            }
+
+            ChatPreviewKind quotedKind = message.QuotedKind;
+            ChatPreviewNormalizer.NormalizeBody(message.QuotedText, quotedKind, out quotedKind, out string quotedBody);
+
             var row = new HistoryMessage
             {
                 ChatJid = jid,
@@ -81,13 +96,15 @@ namespace Unison.Core.Helpers
                 Kind = kind,
                 SendState = FromStatus(message.Status, message.IsFromMe),
                 IsRevoked = revoked,
+                IsForwarded = message.IsForwarded,
                 IsPinned = message.IsPinned,
                 PinnedAtUtc = message.PinnedAtUtc,
                 PinExpiresAtUtc = message.PinExpiresAtUtc,
                 QuotedMessageId = message.QuotedMessageId,
                 QuotedSenderName = message.QuotedSenderName,
-                QuotedBody = message.QuotedText,
-                QuotedKind = message.QuotedKind,
+                QuotedBody = quotedBody,
+                QuotedKind = quotedKind,
+                QuotedParticipantJid = JidHelper.Normalize(message.QuotedParticipantJid),
                 TimestampUtc = ToUtc(message.Timestamp),
                 SyncType = "live",
                 UpdatedAtUtc = updatedAtUtc ?? DateTime.UtcNow
@@ -171,8 +188,8 @@ namespace Unison.Core.Helpers
                     row.MediaKeyBase64 = NullIfEmpty(message.ImageMediaKeyBase64);
                     row.MediaFileEncSha256Base64 = NullIfEmpty(message.ImageFileEncSha256Base64);
                     row.MediaMimeType = NullIfEmpty(message.ImageMimeType);
-                    row.MediaThumbnailBase64 = NullIfEmpty(message.MediaThumbnailBase64);
-                    row.MediaLocalUri = NullIfEmpty(message.ImageUri);
+                    row.MediaLocalUri = NullIfEmpty(message.ImageUri)
+                        ?? NullIfEmpty(message.ThumbnailUri);
                     break;
                 case ChatPreviewKind.Video:
                     row.MediaUrl = NullIfEmpty(message.VideoUrl);
@@ -181,9 +198,9 @@ namespace Unison.Core.Helpers
                     row.MediaFileEncSha256Base64 = NullIfEmpty(message.VideoFileEncSha256Base64);
                     row.MediaMimeType = NullIfEmpty(message.VideoMimeType);
                     row.MediaDurationSeconds = message.VideoDurationSeconds;
-                    row.MediaThumbnailBase64 = NullIfEmpty(message.MediaThumbnailBase64);
                     row.MediaLocalUri = NullIfEmpty(message.VideoUri);
-                    row.MediaPosterUri = NullIfEmpty(message.VideoPosterUri);
+                    row.MediaPosterUri = NullIfEmpty(message.VideoPosterUri)
+                        ?? NullIfEmpty(message.ThumbnailUri);
                     break;
                 case ChatPreviewKind.Voice:
                     row.MediaUrl = NullIfEmpty(message.AudioUrl);
@@ -203,8 +220,8 @@ namespace Unison.Core.Helpers
                     row.MediaMimeType = NullIfEmpty(message.DocumentMimeType);
                     row.MediaFileName = NullIfEmpty(message.DocumentFileName);
                     row.MediaFileLengthBytes = message.DocumentFileLengthBytes;
-                    row.MediaThumbnailBase64 = NullIfEmpty(message.MediaThumbnailBase64);
-                    row.MediaLocalUri = NullIfEmpty(message.DocumentUri);
+                    row.MediaLocalUri = NullIfEmpty(message.DocumentUri)
+                        ?? NullIfEmpty(message.ThumbnailUri);
                     break;
             }
         }

@@ -42,7 +42,14 @@ namespace Unison.Core.Models
 
         public long MediaFileLengthBytes { get; set; }
 
-        public string MediaThumbnailBase64 { get; set; }
+        /// <summary>Transient proto thumb bytes; cleared after disk materialize.</summary>
+        public byte[] MediaThumbnailJpeg { get; set; }
+
+        /// <summary>Local thumb / full media URI after materialize or download.</summary>
+        public string MediaLocalUri { get; set; }
+
+        /// <summary>Local video poster URI.</summary>
+        public string MediaPosterUri { get; set; }
 
         public bool IsVoiceNote { get; set; }
 

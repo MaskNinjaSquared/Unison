@@ -464,6 +464,13 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             return _roster.HydrateAsync(groupJid);
         }
 
+        public Task HydrateGroupMemberAvatarsForJidsAsync(string groupJid, IReadOnlyList<string> memberJids)
+        {
+            return _roster.HydrateVisibleAsync(groupJid, memberJids);
+        }
+
+        public bool IsHydratingGroupMemberAvatars => _roster.IsHydrating;
+
         public void RequestAvatarRefresh(ChatItem chat, bool force = false)
         {
             _avatars.RequestRefresh(chat, force);

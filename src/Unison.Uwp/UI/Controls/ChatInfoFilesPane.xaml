@@ -3,6 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Unison.Uwp.UI.Controls"
+    xmlns:helpers="using:Unison.Uwp.UI.Helpers"
     HorizontalAlignment="Stretch"
     VerticalAlignment="Stretch">
 
@@ -54,6 +55,7 @@
                   VerticalAlignment="Stretch">
             <ListView.ItemContainerStyle>
                 <Style TargetType="ListViewItem">
+                    <Setter Property="helpers:DesktopCursor.CursorKind" Value="Hand"/>
                     <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
                     <Setter Property="Padding" Value="0"/>
                     <Setter Property="MinHeight" Value="0"/>

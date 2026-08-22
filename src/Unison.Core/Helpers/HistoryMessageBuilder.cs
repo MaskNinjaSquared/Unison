@@ -400,6 +400,7 @@ namespace Unison.Core.Helpers
                 SenderName = senderName,
                 Body = normalized,
                 Kind = kind,
+                IsForwarded = HistorySyncContentFilter.ReadIsForwarded(info),
                 SendState = MapSendState(info, fromMe),
                 TimestampUtc = timestampUtc,
                 SyncId = syncId ?? string.Empty,
@@ -460,7 +461,7 @@ namespace Unison.Core.Helpers
             HistoryMediaFiller.Apply(row, info);
         }
 
-        private static MessageSendState MapSendState(WebMessageInfo info, bool fromMe)
+        public static MessageSendState MapSendState(WebMessageInfo info, bool fromMe)
         {
             if (!fromMe)
             {

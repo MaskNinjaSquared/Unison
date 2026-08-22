@@ -1,6 +1,7 @@
 <ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:helpers="using:Unison.Uwp.UI.Helpers">
 
     <SolidColorBrush x:Key="ChatDetailInfoTextBrush" Color="White"/>
     <SolidColorBrush x:Key="ChatDetailInfoMutedTextBrush" Color="#E8FFFFFF"/>
@@ -74,6 +75,7 @@
     </Style>
 
     <Style x:Key="ChatDetailInfoPivotHeaderItemStyle" TargetType="PivotHeaderItem">
+        <Setter Property="helpers:DesktopCursor.CursorKind" Value="Hand"/>
         <Setter Property="FontSize" Value="14"/>
         <Setter Property="FontFamily" Value="{StaticResource MainFontSemibold}"/>
         <Setter Property="FontWeight" Value="Bold"/>

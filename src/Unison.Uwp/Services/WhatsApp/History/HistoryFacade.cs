@@ -488,6 +488,16 @@ namespace Unison.Uwp.Services.WhatsApp.History
                 return empty;
             }
 
+            try
+            {
+                await HistoryThumbnailMaterializer.MaterializeMessageThumbsAsync(batch.Messages)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[HistoryFacade] Thumbnail materialize failed: " + ex.Message);
+            }
+
             await _messageHistoryStore.PersistWriteBatchAsync(batch).ConfigureAwait(false);
 
             var jids = new List<string>();
@@ -544,6 +554,17 @@ namespace Unison.Uwp.Services.WhatsApp.History
             if (rows == null || rows.Count == 0)
             {
                 return;
+            }
+
+            try
+            {
+                await HistoryThumbnailMaterializer.MaterializeStatusThumbsAsync(
+                        rows as IList<HistoryStatus> ?? new List<HistoryStatus>(rows))
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[HistoryFacade] Status thumbnail materialize failed: " + ex.Message);
             }
 
             await _statusStore.UpsertManyAsync(rows).ConfigureAwait(false);

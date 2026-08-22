@@ -430,7 +430,11 @@ namespace Unison.Core.State
             target.LastMessage = source.LastMessage;
             target.LastMessageAuthor = source.LastMessageAuthor;
             target.LastMessageKind = source.LastMessageKind;
+            target.LastMessageIsFromMe = source.LastMessageIsFromMe;
+            target.LastMessageSendState = source.LastMessageSendState;
+            target.LastMessageMentionedJids = source.LastMessageMentionedJids;
             target.LastMessageTimestampUtc = source.LastMessageTimestampUtc;
+            target.LastMessageId = source.LastMessageId;
             target.Timestamp = source.Timestamp;
             target.UnreadCount = source.UnreadCount;
             target.AvatarUrl = source.AvatarUrl;

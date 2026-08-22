@@ -24,6 +24,9 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
         private readonly IReactionMapper _reactionMapper;
         private readonly HistoryFacade _history;
         private readonly IHistoryMessageStore _historyMessageStore;
+        private readonly int _sqlOpenPageSize;
+        private readonly int _sqlLoadMorePageSize;
+        private readonly int _thinTimelineThreshold;
 
         public MessageFacade(
             IPersonStore personStore,
@@ -31,7 +34,8 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             IChatMessageMapper chatMessageMapper,
             IReactionMapper reactionMapper,
             HistoryFacade history,
-            IHistoryMessageStore historyMessageStore)
+            IHistoryMessageStore historyMessageStore,
+            ISystemInfoProvider systemInfo = null)
         {
             _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
             _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
@@ -40,6 +44,11 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             _history = history ?? throw new ArgumentNullException(nameof(history));
             _historyMessageStore = historyMessageStore
                 ?? throw new ArgumentNullException(nameof(historyMessageStore));
+
+            bool mobile = systemInfo != null && systemInfo.IsMobile();
+            _sqlOpenPageSize = mobile ? 30 : 50;
+            _sqlLoadMorePageSize = mobile ? 20 : 30;
+            _thinTimelineThreshold = Math.Max(5, _sqlOpenPageSize - ThinTimelineOnDemandMargin);
 
             // Both live as long as the app does, so there is nothing to unhook from.
             _whatsAppService.OnChatMessagesChanged += (s, jid) => Relay(() => ChatMessagesChanged?.Invoke(this, jid), "ChatMessagesChanged");
@@ -110,13 +119,13 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
         }
 
         /// <summary>
-        /// Below this local count, opening a chat asks the phone for older history
-        /// (RECENT sync often leaves only the list-preview message).
+        /// A full open page is never "thin": the threshold has to follow <c>_sqlOpenPageSize</c> or the
+        /// smaller Mobile page asks the phone for history on every single open.
         /// </summary>
-        private const int ThinTimelineOnDemandThreshold = 40;
+        private const int ThinTimelineOnDemandMargin = 5;
         private const int OnDemandFetchCount = 80;
-        private const int SqlOpenPageSize = 100;
-        private const int SqlLoadMorePageSize = 30;
+        /// <summary>Live ChatMessagesChanged only needs the newest tail for MergeTimeline.</summary>
+        private const int SqlSyncPageSize = 30;
 
         public async Task<List<ChatMessage>> LoadMessagesForChatAsync(string jid)
         {
@@ -209,6 +218,9 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                     if (byId.TryGetValue(message.Id, out existing))
                     {
                         HistoryMessageMapper.CopyMediaKeysIfMissing(message, existing);
+                        HistoryMessageMapper.CopyForwardedIfMissing(message, existing);
+                        HistoryMessageMapper.CopyQuotedParticipantIfMissing(message, existing);
+                        HistoryMessageMapper.CopyReactionsIfMissing(message, existing);
                     }
 
                     byId[message.Id] = message;
@@ -245,7 +257,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
 
             // RECENT history often leaves a single listable message — pull older on open.
             if (merged.Count > 0 &&
-                merged.Count < ThinTimelineOnDemandThreshold &&
+                merged.Count < _thinTimelineThreshold &&
                 !IsHistoryOnDemandPending(jid))
             {
                 _ = RequestOlderHistorySafeAsync(jid, merged.Count);
@@ -412,6 +424,9 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                     if (byId.TryGetValue(message.Id, out existing))
                     {
                         HistoryMessageMapper.CopyMediaKeysIfMissing(message, existing);
+                        HistoryMessageMapper.CopyForwardedIfMissing(message, existing);
+                        HistoryMessageMapper.CopyQuotedParticipantIfMissing(message, existing);
+                        HistoryMessageMapper.CopyReactionsIfMissing(message, existing);
                     }
 
                     byId[message.Id] = message;
@@ -428,75 +443,183 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
 
         private async Task<IReadOnlyList<HistoryMessage>> LoadSqlHistoryRowsAsync(string jid)
         {
-            return await LoadSqlHistoryPageAsync(jid, SqlOpenPageSize, null, null).ConfigureAwait(false);
+            return await LoadSqlHistoryPageAsync(jid, _sqlOpenPageSize, null, null).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Newest messages for an already-open chat: prefer the in-memory client overlay, and only
+        /// hit SQLite for a small tail so ChatMessagesChanged does not re-run a full open query.
+        /// </summary>
+        public async Task<List<ChatMessage>> LoadRecentMessagesForSyncAsync(string jid)
+        {
+            if (string.IsNullOrWhiteSpace(jid))
+            {
+                return new List<ChatMessage>();
+            }
+
+            List<ChatMessage> fromClient = null;
+            try
+            {
+                fromClient = await _whatsAppService.LoadMessagesForChatAsync(jid).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] Client sync load failed: " + ex.Message);
+            }
+
+            IReadOnlyList<HistoryMessage> fromSql = null;
+            try
+            {
+                fromSql = await LoadSqlHistoryPageAsync(jid, SqlSyncPageSize, null, null, mergeExtras: false)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] SQLite sync load failed: " + ex.Message);
+            }
+
+            return MergeClientAndSql(fromClient, fromSql);
+        }
+
+        private List<ChatMessage> MergeClientAndSql(
+            List<ChatMessage> fromClient,
+            IReadOnlyList<HistoryMessage> fromSql)
+        {
+            var byId = new Dictionary<string, ChatMessage>(StringComparer.Ordinal);
+            var merged = new List<ChatMessage>();
+
+            void AddRange(IEnumerable<ChatMessage> source)
+            {
+                if (source == null)
+                {
+                    return;
+                }
+
+                foreach (var message in source)
+                {
+                    if (message == null)
+                    {
+                        continue;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(message.Id))
+                    {
+                        merged.Add(message);
+                        continue;
+                    }
+
+                    if (!byId.ContainsKey(message.Id))
+                    {
+                        byId[message.Id] = message;
+                        merged.Add(message);
+                    }
+                }
+            }
+
+            if (fromSql != null)
+            {
+                foreach (var row in fromSql)
+                {
+                    ChatMessage mapped = HistoryMessageMapper.ToChatMessage(row);
+                    if (mapped != null)
+                    {
+                        AddRange(new[] { mapped });
+                    }
+                }
+            }
+
+            if (fromClient != null)
+            {
+                foreach (var message in fromClient)
+                {
+                    if (message == null)
+                    {
+                        continue;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(message.Id))
+                    {
+                        merged.Add(message);
+                        continue;
+                    }
+
+                    ChatMessage existing;
+                    if (byId.TryGetValue(message.Id, out existing))
+                    {
+                        HistoryMessageMapper.CopyMediaKeysIfMissing(message, existing);
+                        HistoryMessageMapper.CopyForwardedIfMissing(message, existing);
+                        HistoryMessageMapper.CopyQuotedParticipantIfMissing(message, existing);
+                        HistoryMessageMapper.CopyReactionsIfMissing(message, existing);
+                    }
+
+                    byId[message.Id] = message;
+                }
+
+                merged = byId.Values
+                    .Concat(merged.Where(m => string.IsNullOrWhiteSpace(m.Id)))
+                    .GroupBy(m => m.Id ?? Guid.NewGuid().ToString("N"), StringComparer.Ordinal)
+                    .Select(g => g.First())
+                    .OrderBy(m => m.Timestamp)
+                    .ThenBy(m => m.Id ?? string.Empty, StringComparer.Ordinal)
+                    .ToList();
+            }
+            else
+            {
+                merged = merged
+                    .OrderBy(m => m.Timestamp)
+                    .ThenBy(m => m.Id ?? string.Empty, StringComparer.Ordinal)
+                    .ToList();
+            }
+
+            return merged;
         }
 
         private async Task<IReadOnlyList<HistoryMessage>> LoadSqlHistoryPageAsync(
             string jid,
             int limit,
             DateTime? beforeUtc,
-            string beforeMessageId)
+            string beforeMessageId,
+            bool mergeExtras = true)
         {
             List<string> keys = ResolveChatKeys(jid);
-            var byId = new Dictionary<string, HistoryMessage>(StringComparer.Ordinal);
-            var ordered = new List<HistoryMessage>();
-            foreach (string key in keys)
+            if (keys.Count == 0)
             {
-                IReadOnlyList<HistoryMessage> rows =
-                    await _historyMessageStore.GetForChatAsync(key, limit, beforeUtc, beforeMessageId)
-                        .ConfigureAwait(false);
-                if (rows == null)
-                {
-                    continue;
-                }
-
-                foreach (var row in rows)
-                {
-                    if (row == null || string.IsNullOrWhiteSpace(row.MessageId))
-                    {
-                        continue;
-                    }
-
-                    if (byId.ContainsKey(row.MessageId))
-                    {
-                        continue;
-                    }
-
-                    byId[row.MessageId] = row;
-                    ordered.Add(row);
-                }
+                return Array.Empty<HistoryMessage>();
             }
 
-            if (ordered.Count == 0)
+            IReadOnlyList<HistoryMessage> page =
+                await _historyMessageStore.GetForChatKeysAsync(keys, limit, beforeUtc, beforeMessageId)
+                    .ConfigureAwait(false);
+
+            if (page == null || page.Count == 0)
+            {
+                return page ?? Array.Empty<HistoryMessage>();
+            }
+
+            var ordered = page as List<HistoryMessage> ?? new List<HistoryMessage>(page);
+            if (!mergeExtras || beforeUtc.HasValue)
             {
                 return ordered;
             }
 
-            List<HistoryMessage> page = ordered
-                .OrderByDescending(r => r.TimestampUtc ?? DateTime.MinValue)
-                .ThenByDescending(r => r.MessageId, StringComparer.Ordinal)
-                .Take(limit)
-                .Reverse()
-                .ToList();
-
-            if (!beforeUtc.HasValue)
+            var pageById = new Dictionary<string, HistoryMessage>(StringComparer.Ordinal);
+            for (int i = 0; i < ordered.Count; i++)
             {
-                var pageById = new Dictionary<string, HistoryMessage>(StringComparer.Ordinal);
-                for (int i = 0; i < page.Count; i++)
+                if (ordered[i] != null && !string.IsNullOrWhiteSpace(ordered[i].MessageId))
                 {
-                    if (page[i] != null && !string.IsNullOrWhiteSpace(page[i].MessageId))
-                    {
-                        pageById[page[i].MessageId] = page[i];
-                    }
-                }
-
-                foreach (string key in keys)
-                {
-                    await MergeSqlExtrasAsync(key, pageById, page).ConfigureAwait(false);
+                    pageById[ordered[i].MessageId] = ordered[i];
                 }
             }
 
-            return page;
+            foreach (string key in keys)
+            {
+                await MergeSqlExtrasAsync(key, pageById, ordered).ConfigureAwait(false);
+            }
+
+            return ordered
+                .OrderBy(r => r.TimestampUtc ?? DateTime.MinValue)
+                .ThenBy(r => r.MessageId, StringComparer.Ordinal)
+                .ToList();
         }
 
         private async Task MergeSqlExtrasAsync(
@@ -559,7 +682,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             IReadOnlyList<HistoryMessage> rows = null;
             try
             {
-                rows = await LoadSqlHistoryPageAsync(jid, SqlLoadMorePageSize, beforeUtc, beforeMessageId)
+                rows = await LoadSqlHistoryPageAsync(jid, _sqlLoadMorePageSize, beforeUtc, beforeMessageId)
                     .ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -652,7 +775,56 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                 _reactionMapper.TryApply(chatMessages, pending, out updatedParent);
             }
 
+            // A chip-summary bubble holds no reactor rows, so the parent upsert that follows cannot
+            // store this reaction. Write the single row on its own — it also lands ahead of a parent
+            // we have not received yet.
+            _ = PersistLiveReactionAsync(context?.ChatJid, pending);
             return true;
+        }
+
+        private async Task PersistLiveReactionAsync(string chatJid, PendingReaction pending)
+        {
+            if (pending == null || string.IsNullOrWhiteSpace(pending.TargetMessageId))
+            {
+                return;
+            }
+
+            string jid = JidHelper.Normalize(
+                string.IsNullOrWhiteSpace(chatJid) ? pending.TargetChatJid : chatJid);
+            string reactor = JidHelper.Normalize(pending.ReactorJid);
+            if (string.IsNullOrWhiteSpace(reactor) && pending.FromMe)
+            {
+                reactor = "from-me";
+            }
+
+            if (string.IsNullOrWhiteSpace(jid) || string.IsNullOrWhiteSpace(reactor))
+            {
+                return;
+            }
+
+            try
+            {
+                await _historyMessageStore.UpsertReactionsAsync(new[]
+                {
+                    new HistoryMessageReaction
+                    {
+                        ChatJid = jid,
+                        MessageId = pending.TargetMessageId.Trim(),
+                        ReactorJid = reactor,
+                        ReactorName = pending.ReactorName,
+                        Emoji = pending.Emoji ?? string.Empty,
+                        FromMe = pending.FromMe,
+                        ReactionMessageId = pending.ReactionMessageId,
+                        TimestampUtc = pending.Timestamp == default(DateTime)
+                            ? DateTime.UtcNow
+                            : pending.Timestamp
+                    }
+                }).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] Live reaction persist failed: " + ex.Message);
+            }
         }
 
         public bool TryBufferReaction(

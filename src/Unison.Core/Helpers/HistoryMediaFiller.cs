@@ -6,6 +6,8 @@ namespace Unison.Core.Helpers
 {
     /// <summary>
     /// Copies media key / path / URL from a history envelope onto SQLite rows.
+    /// Thumbnails stay as raw bytes (<see cref="IHistoryMediaFields.MediaThumbnailJpeg"/>);
+    /// the host materializes them to disk before persist.
     /// </summary>
     public static class HistoryMediaFiller
     {
@@ -30,6 +32,7 @@ namespace Unison.Core.Helpers
                 target.MediaKeyBase64 = ToBase64(sticker.MediaKey);
                 target.MediaFileEncSha256Base64 = ToBase64(sticker.FileEncSha256);
                 target.MediaMimeType = NullIfEmpty(sticker.Mimetype);
+                target.MediaThumbnailJpeg = ToBytes(sticker.PngThumbnail);
                 return;
             }
 
@@ -41,7 +44,7 @@ namespace Unison.Core.Helpers
                 target.MediaKeyBase64 = ToBase64(image.MediaKey);
                 target.MediaFileEncSha256Base64 = ToBase64(image.FileEncSha256);
                 target.MediaMimeType = NullIfEmpty(image.Mimetype);
-                target.MediaThumbnailBase64 = ToBase64(image.JpegThumbnail);
+                target.MediaThumbnailJpeg = ToBytes(image.JpegThumbnail);
                 return;
             }
 
@@ -54,7 +57,7 @@ namespace Unison.Core.Helpers
                 target.MediaFileEncSha256Base64 = ToBase64(video.FileEncSha256);
                 target.MediaMimeType = NullIfEmpty(video.Mimetype);
                 target.MediaDurationSeconds = video.Seconds;
-                target.MediaThumbnailBase64 = ToBase64(video.JpegThumbnail);
+                target.MediaThumbnailJpeg = ToBytes(video.JpegThumbnail);
                 return;
             }
 
@@ -88,18 +91,24 @@ namespace Unison.Core.Helpers
                         : (long)document.FileLength;
                 }
 
-                target.MediaThumbnailBase64 = ToBase64(document.JpegThumbnail);
+                target.MediaThumbnailJpeg = ToBytes(document.JpegThumbnail);
             }
         }
 
-        private static string ToBase64(Google.Protobuf.ByteString bytes)
+        private static byte[] ToBytes(Google.Protobuf.ByteString bytes)
         {
             if (bytes == null || bytes.Length == 0)
             {
                 return null;
             }
 
-            return Convert.ToBase64String(bytes.ToByteArray());
+            return bytes.ToByteArray();
+        }
+
+        private static string ToBase64(Google.Protobuf.ByteString bytes)
+        {
+            byte[] raw = ToBytes(bytes);
+            return raw == null ? null : Convert.ToBase64String(raw);
         }
 
         private static string NullIfEmpty(string value)

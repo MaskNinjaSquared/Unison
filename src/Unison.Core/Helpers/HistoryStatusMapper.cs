@@ -27,6 +27,61 @@ namespace Unison.Core.Helpers
             };
 
             HistoryMessageMapper.ApplyMediaEnvelope(message, row, row.Kind, row.Body);
+            if (!string.IsNullOrWhiteSpace(row.MediaPosterUri))
+            {
+                message.VideoPosterUri = row.MediaPosterUri;
+            }
+
+            if (!string.IsNullOrWhiteSpace(row.MediaLocalUri))
+            {
+                switch (row.Kind)
+                {
+                    case ChatPreviewKind.Image:
+                        if (HistoryMessageMapper.IsThumbCacheUri(row.MediaLocalUri))
+                        {
+                            message.ThumbnailUri = row.MediaLocalUri;
+                        }
+                        else
+                        {
+                            message.ImageUri = row.MediaLocalUri;
+                        }
+
+                        message.NotifyImageDownloadStateChanged();
+                        break;
+                    case ChatPreviewKind.Sticker:
+                        message.ImageUri = row.MediaLocalUri;
+                        message.NotifyImageDownloadStateChanged();
+                        break;
+                    case ChatPreviewKind.Video:
+                        if (HistoryMessageMapper.IsThumbCacheUri(row.MediaLocalUri))
+                        {
+                            if (string.IsNullOrWhiteSpace(message.VideoPosterUri))
+                            {
+                                message.VideoPosterUri = row.MediaLocalUri;
+                            }
+                        }
+                        else
+                        {
+                            message.VideoUri = row.MediaLocalUri;
+                        }
+
+                        message.NotifyVideoDownloadStateChanged();
+                        break;
+                    case ChatPreviewKind.Document:
+                        if (HistoryMessageMapper.IsThumbCacheUri(row.MediaLocalUri))
+                        {
+                            message.ThumbnailUri = row.MediaLocalUri;
+                        }
+                        else
+                        {
+                            message.DocumentUri = row.MediaLocalUri;
+                        }
+
+                        message.NotifyDocumentDownloadStateChanged();
+                        break;
+                }
+            }
+
             return message;
         }
     }

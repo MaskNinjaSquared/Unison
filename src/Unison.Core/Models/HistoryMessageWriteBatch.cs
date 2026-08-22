@@ -16,10 +16,17 @@ namespace Unison.Core.Models
         public List<HistoryMessageRevoke> Revokes { get; } = new List<HistoryMessageRevoke>();
 
         /// <summary>
-        /// When true, live upsert replaces all reaction rows for the messages in this batch
+        /// When true, live upsert replaces the reaction rows of <see cref="ReactionOwnerMessageIds"/>
         /// (history sync stays additive).
         /// </summary>
         public bool ReplaceExistingReactions { get; set; }
+
+        /// <summary>
+        /// Message ids whose reactions this batch is authoritative about. A timeline row loaded in
+        /// chip-summary mode carries no reactor rows, so replacing by <see cref="Messages"/> would
+        /// delete the stored reactions instead of rewriting them.
+        /// </summary>
+        public List<string> ReactionOwnerMessageIds { get; } = new List<string>();
 
         public bool IsEmpty
         {

@@ -48,11 +48,15 @@ namespace Unison.Uwp.UI.Controls
             {
             }
 
-            _sharedTileSource = new BitmapImage(new Uri("ms-appx:///Assets/Backgrounds/WhatsAppBackground_Colored.png"))
+            // UriSource last: the constructor overload that takes it starts decoding immediately,
+            // so a DecodePixelWidth set afterwards is ignored and the asset comes in at full size.
+            _sharedTileSource = new BitmapImage
             {
-                DecodePixelWidth = decodeWidth,
-                DecodePixelType = DecodePixelType.Physical
+                DecodePixelType = DecodePixelType.Physical,
+                DecodePixelWidth = decodeWidth
             };
+            _sharedTileSource.UriSource =
+                new Uri("ms-appx:///Assets/Backgrounds/WhatsAppBackground_Colored.png");
 
             SizeChanged += TiledBackground_SizeChanged;
             Unloaded += TiledBackground_Unloaded;

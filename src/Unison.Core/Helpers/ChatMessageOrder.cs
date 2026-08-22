@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Unison.Core.Mappers;
 using Unison.Core.Models;
 
 namespace Unison.Core.Helpers
@@ -79,6 +80,12 @@ namespace Unison.Core.Helpers
             return lo;
         }
 
+        /// <summary>
+        /// Same rules as <see cref="WhatsAppMapper.ToUtc"/>: SQLite
+        /// <see cref="DateTimeKind.Unspecified"/> is already UTC wall-clock — do not
+        /// call <see cref="DateTime.ToUniversalTime"/> (that treats Unspecified as local
+        /// and shifts Brazil UTC−3 by +3h into the strip).
+        /// </summary>
         public static DateTime ToComparableUtc(DateTime timestamp)
         {
             if (timestamp == DateTime.MinValue || timestamp == DateTime.MaxValue)
@@ -86,12 +93,7 @@ namespace Unison.Core.Helpers
                 return timestamp;
             }
 
-            if (timestamp.Kind == DateTimeKind.Utc)
-            {
-                return timestamp;
-            }
-
-            return timestamp.ToUniversalTime();
+            return WhatsAppMapper.ToUtc(timestamp);
         }
 
         private static int CompareMessages(ChatMessage left, ChatMessage right)

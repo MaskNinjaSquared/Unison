@@ -4,6 +4,187 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Bubble pin menu + clock format (i18n / Settings)
+
+- Message long-press **pin / unpin** labels come from `.resw` (`ChatDetail_UnpinMessage`, `ChatDetail_PinFor24Hours`, `ChatDetail_PinFor7Days`, `ChatDetail_PinFor30Days`) in every shipped locale — no hardcoded PT-BR in `ChatDetailView`
+- Settings **Customization:** clock after device time-zone conversion is **24-hour** or **12-hour (AM/PM)** (`TimeFormat` / `LocalSettingsConstants.TimeFormat`). Storage and tip compare stay **UTC**; only UI clocks (`WhatsAppMapper.FormatClock` / `LocalTimeConverter`) read `WhatsAppMapper.CurrentTimeFormat`
+
+---
+
+## Chat list: Last Message stays in sync with SQLite
+
+- **Rule:** load newest `history_message` for the chat by **TimestampUtc** (PN+LID keys); if that tip’s **MessageId** differs from `ChatItem.LastMessageId` (or body/fromMe), swap the strip — never on a strictly older timestamp
+- **`LastMessageId`** on `history_chat_preview` (schema v4). No WhatsApp history resync: first reconcile after upgrade stamps Ids from `history_message` (ALTER COLUMN + backfill)
+- **Startup:** reconcile Last Message **before** name/photo resolution
+- Reconcile also considers in-memory tips; opening a chat picks newest tip by timestamp then reconciles
+- **Fix (UTC kind):** `ChatMessageOrder.ToComparableUtc` now matches `WhatsAppMapper.ToUtc` — SQLite `Unspecified` is UTC wall-clock, not local. The old `ToUniversalTime()` path shifted Brazil UTC−3 by **+3h** into `LastMessageTimestampUtc`, so the strip looked “newer” than the real tip and reconcile kept the stale Last Message. Reconcile force-applies the chosen tip so already-poisoned strips heal
+- **Sent checkmarks** on the Last Message strip follow `LastMessageSendState` (same send-state vocabulary as bubbles)
+
+---
+
+## Chat detail: bubble cost (layout, tree, decode)
+
+- **Participant resolve no longer walks every chat per bubble.** `RebuildParticipantLookup` indexes 1:1 avatars/names once; `GroupParticipantResolver` uses that map instead of scanning `Chats`. Roster `AvatarUrl` PropertyChanged patches visible `ContactUri` as hydrates land
+- **`MergeTimelineFromService` is O(n)** via an id→row dictionary (was FirstOrDefault per service message). Midnight date chips only rewrite separator fields — no full run/avatar pass
+- **Message templates use `x:Load`** for quote, media grids, sticker, caption, audio, document, body, and read-more — text bubbles no longer build 300×300 download trees. Dead `MessageBubbleChrome` ContactUri/ShowContact bindings removed
+- **`StringToImageSourceConverter` caches** BitmapImage by URL+decode width (cap 96). Quote/document/`CanExpand` getters on `ChatMessageViewModel` are memoized. Unused `ChatMessage.ReactionChips` getter removed; no-op `FillTimelineThumbnailsAsync` gone
+
+---
+
+## Reactions: back to one path for Mobile and desktop (revert of the summary mode)
+
+- **Timeline open loads the reactor rows again.** `AttachReactionsAsync` fills `HistoryMessage.Reactions` with one batched `ChatJid IN (…) AND MessageId IN (…)` query per 80 ids, explicit columns, oldest reactor first. Gone: `ReactionSummarySelectSql`, `COUNT(*)` / `GROUP_CONCAT` aggregation, `ReactionSummaryRow` / `ReactionEmojiRow` and the in-process fallback
+- **One shape in the models.** `HistoryMessage.ReactionTotal` / `ReactionSummaryText` removed; `ChatMessage.Reactions` is the single source for `HasReactions` / `TotalReactions` / `ReactionsDisplayText` / `ReactionChips`, so `ApplyReactionSummary` and `ReactionsBuilder.BuildEmojiLineFromSummary` are gone. `ReactionMapper` always edits the list (no `SoftApplyToSummary`)
+- **`AreReactionDetailsLoaded` kept, with a narrower meaning:** true only when the list came from the store. It is what scopes the reaction `DELETE` in a live upsert, so a live-only object still cannot wipe stored reactors
+- Cost is back where it was before the optimization: opening a big group reads every reactor of the page (still one query per batch, not N+1)
+- Unchanged from the previous fix: on-demand threshold follows `_sqlOpenPageSize`, and live reaction envelopes persist additively via `UpsertReactionsAsync`
+
+---
+
+## Reactions chips missing on Mobile: live upsert was deleting the rows (fix)
+
+- **Live upsert no longer clears reactions of chip-summary rows.** `HistoryMessageWriteBatch.ReactionOwnerMessageIds` lists only the ids whose reactor rows the batch actually carries (`AreReactionDetailsLoaded`); `ClearReactionsForMessages` deletes just those. Before, any receipt/pin/state flush of a summary-only row ran `DELETE FROM history_message_reaction` and rewrote nothing, so `COUNT(*)` was 0 on the next open
+- **Timeline merge carries the summary.** `ApplyLiveFieldsTo` assigned only the reactor list, never `ReactionsDisplayText` / `TotalReactions`, so a row already on screen could never receive a chip from a later SQL page — `HistoryMessageMapper.CopyReactionState` now applies details or summary (and never blanks a chip a partial read cannot confirm)
+- **On-demand threshold follows the page size** (`_sqlOpenPageSize - 5`): the fixed `40` meant the 30-row Mobile page was always "thin", so every chat open asked the phone for history and ran an extra sync/merge/persist cycle — the cycle that tripped both bugs above on Mobile and never on desktop (50-row page)
+- **Live reaction envelopes are durable again.** `IHistoryMessageStore.UpsertReactionsAsync` writes the single reactor row additively (empty emoji still removes it), so a reaction landing on a summary-only bubble survives a restart and can even arrive before its parent message
+- Reaction rows already deleted on device do not come back on their own; they return with the next reaction, on-demand chunk, or resync (history-sync persist is additive)
+
+---
+
+## Reactions chips missing on Mobile (fix)
+
+- Live/client rows winning the open merge dropped SQLite reaction summaries — `CopyReactionsIfMissing` keeps the chip when the winner has none
+- Reaction attach falls back to an explicit `MessageId, Emoji` query + in-process tally when `GROUP BY` / `GROUP_CONCAT` fails or returns empty (common on older Mobile SQLite)
+- `COUNT(*)` mapped as `long`; `GROUP_CONCAT` no longer uses `DISTINCT` (optional; fallback still dedupes)
+
+---
+
+## Sync StatusBar: no sticky settling / “0 of N” over open chats
+
+- Opening a chat (`SetActiveChatJid`) clears the global sync banner so Mobile StatusBar does not keep “Finishing startup…” / list enrichment over chat detail
+- List enrichment phases (`settling` / `names` / `avatars` / `groups` / `lowmemory`) are suppressed while a conversation is active; work still runs in the background
+- Early exits from post-replay / background resolution / cancelled quiet-wait always `RaiseSyncStatus(null)` so settling cannot stick forever
+- Avatar batch no longer reports `0 of N`; progress starts after the first completed fetch. UI also strips zero-current counts to bare phase text
+
+---
+
+## Reactions: summary on open, details on dialog (no SELECT *)
+
+- Timeline attach uses `GROUP BY MessageId` with `COUNT(*)` + `GROUP_CONCAT(DISTINCT Emoji)` instead of loading every reactor row
+- Bubble chip binds cached `ReactionsDisplayText` / `ReactionTotal`; full rows load in `MessageReactionsViewModel` via `GetReactionsForMessageAsync` (explicit columns)
+- Live reaction updates on summary-only bubbles soft-adjust the chip without wiping other reactors; dialog always reloads from SQLite
+- Pinned / media history queries use `TimelineSelectSql` (no `SELECT *`)
+- **Fix:** dropped `GROUP_CONCAT(DISTINCT …, ' ')` (needs SQLite 3.44+); that SQL failed on UWP/Mobile and aborted the whole history page, leaving only the list-preview placeholder. Summaries now use comma separator; attach is try/caught so reactions never block the timeline
+
+---
+
+## Mobile performance: timeline windows, selective avatars, roster merge
+
+- **Timeline windows by device** (`ISystemInfoProvider`): chat open UI window is **30/80** on Mobile vs **50/150** on desktop; SQLite open/load-more pages are **30/20** vs **50/30** (`ChatDetailViewModel`, `MessageFacade`)
+- **Group member avatars not on open**: `RefreshGroupSendPermissionsAsync` uses `hydrateAvatars: false`. Visible bubble authors hydrate via `HydrateGroupMemberAvatarsForJidsAsync` / `GroupRosterPolicy.HydrateVisibleAsync` (no full-roster next-batch). Full roster hydrate waits for the Members pivot (`EnsureMembersAvatarsHydratedAsync` + `IsMembersAvatarsLoading` progress)
+- **Roster diff**: when metadata returns the same JID set, `ApplyGroupMembersToChat` merges name/avatar fields in place instead of replacing `GroupMembers` (avoids PropertyChanged relayout)
+- **Mobile `CacheLength`**: message `ItemsStackPanel.CacheLength = 0.5` after list load / chat open (default is much higher)
+- **Selective `RefreshMentions`**: run layout only refreshes bubbles with `HasMentions` (skips the common no-@ case)
+
+---
+
+## Lighter “Loading photos…” batch (Mobile)
+
+- Avatar batch no longer calls `SchedulePersist` after every download — one debounced write at the end of the batch
+- Sync-status banner updates are throttled (every few items + start/end) instead of rewriting the StatusBar on each photo
+- `HydrateCachedAvatarUris` probes disk off the UI thread and applies URIs in one dispatcher pass
+- Startup batch fetches preview only (`fetchHighQuality: false`); high-res group art waits for visible-row refresh
+- Mobile uses a smaller batch (8) and a shorter inter-request delay (400 ms) than desktop
+
+---
+
+## Protocol thumbs behind the download placeholder
+
+- History `_thumb` URIs map to `ThumbnailUri` (images) / `VideoPosterUri` (video), not full `ImageUri`/`VideoUri`, so `NeedsImageDownload` stays true and the bubble can still offer CDN download
+- Sent/received download overlays show the protocol thumb (or video poster) under the download button; the generic placeholder glyph only appears when no thumb is on disk
+
+---
+
+## Transparent message ListViewItem (no white recycle flash)
+
+- Timeline `MessageListView` used the default opaque `ListViewItem` chrome, so virtualization recycle flashed white blocks over the tiled wallpaper while scrolling up. Containers are now a transparent `ContentPresenter`-only template (same idea as Unigram’s wallpaper-friendly history items); the list itself is `Background="Transparent"`
+
+---
+
+## Timeline load progress + scroll lock
+
+- `IsLoadingMore` already gated load-more (`CanLoadMore`); first open now sets `IsLoadingMessages` via `BeginLoadingMessages` / `EndLoadingMessages`. `IsTimelineBusy` drives a 2px indeterminate `ProgressBar` on the bottom edge of the chat header
+- While busy, vertical scroll on the message list is disabled (and `ViewChanged` ignores load-more) so Mobile does not stack flings on top of materialization; scroll is restored when the load finishes
+
+---
+
+## Dropped MediaThumbnailBase64 from SQLite
+
+- Removed the fat `MediaThumbnailBase64` column/property from `history_message`, `history_status`, `ChatMessage`, mappers, and UI. Protocol thumbs live only as `MediaCache/Images/*_thumb` URIs (`MediaLocalUri` / `MediaPosterUri` / `ThumbnailUri`)
+- On init, stores attempt `ALTER TABLE … DROP COLUMN MediaThumbnailBase64` (schema message **7**, status **2**). Chat-info preview is URI-only; `Base64ToImageSourceConverter` deleted
+
+---
+
+## History thumbs on disk + light group participant lookup
+
+- History sync no longer stores protocol `jpegThumbnail` as base64 in `history_message`. Bytes are written to `MediaCache/Images/*_thumb` and the URI goes on `MediaLocalUri` / `MediaPosterUri` (full media is never overwritten by a thumb). Timeline open skips the fat second thumbnail query
+- Opening a large group no longer runs `ResolveDisplayName`/`ResolveAvatar` for every roster member. `RebuildParticipantLookup` only indexes names/avatars already on the roster; the full resolver runs on demand for JIDs that appear on visible bubbles. `PersonGroup` roster persist uses one transaction instead of N async inserts
+
+---
+
+## Chat open: fewer SQLite round-trips + participant lookup cache
+
+- Opening a conversation used to call `GetForChatAsync` once per PN/LID/canonical key (timeline + thumbs + reactions each), then resolve every group author name by walking the roster. `GetForChatKeysAsync` loads with `ChatJid IN (...)` in one query; open page size is **50** (matches the UI window). Live `ChatMessagesChanged` uses `LoadRecentMessagesForSyncAsync` (RAM + 30-row SQL tail, no pinned/pending extras)
+- `ChatDetailViewModel` builds `participant name/avatar` dictionaries once from the roster (`RebuildParticipantLookup`) and injects them into run layout / sender labels / avatars so bubbles hit `TryGetValue` instead of resolving per message
+
+---
+
+## Composer grows upward while typing
+
+- Chat detail `MessageInput` mirrors Unigram: `TextWrapping="Wrap"`, `MinHeight="40"`, `MaxHeight="192"`, `VerticalAlignment`/`VerticalContentAlignment` Bottom so the box expands upward; attach / mic / send stay Bottom on the single-line baseline. Enter sends; Shift+Enter inserts a newline. Starting a voice note clears `MessageText` so the box collapses before the recording overlay
+
+---
+
+## Mark-read no longer rewrites the chat catalogue
+
+- Opening a chat called `ClearUnreadForChatAsync` → `SchedulePersist` → `PersistDataAsync`, which upserted **every** `history_chat_preview` row and rewrote three contact JSON maps, then published `OnSyncStatus("Saving chats...")`. On Mobile (Unison theme) that landed on the StatusBar and contended with SQLite message load on eMMC — Unigram stays fast because TDLib patches one chat and the UI only updates that row
+- `ClearUnreadForChatAsync` now no-ops when no alias row had unread, otherwise upserts **only the dirty rows** via `PersistChatCatalogSliceAsync` / `PersistChatListRowsPublic`. Preview refresh after open uses the same slice path instead of a full `SchedulePersistPublic`
+- Routine `PersistDataAsync` no longer raises `"Saving chats..."`; sync phases already report through `SyncPhaseStatus`
+
+---
+
+## Chat list filter flyout
+
+- Filter menu items bind `FilterChatsCommand` with integer `CommandParameter` values that map to `ChatListFilter` (`All = 0` … `Drafts = 6`). UWP does not pass enums reliably from XAML, so the command is `RelayCommand<int>` and the view model casts after `Enum.IsDefined`
+- `RefreshVisibleChats` applies the active filter with LINQ before the search box filter, so both compose with AND. Incremental list patches fall back to a full rebuild while a non-All filter is active
+- `ChatItem.IsFavorite` and `HasDraft` currently return false (stubs) so Favorites / Drafts ship empty until those features exist. Contacts / Non-contacts use the address-book overlay (`PhoneContactNamesByJid`); Groups uses `IsGroup`; Unread uses `HasUnread`
+
+---
+
+## Startup phases are visible and localized
+
+- The service published finished English sentences through `OnSyncStatus` ("Fetching contact names…"), which the chat list showed verbatim — the only part of the UI that never translated. A phase now travels as a `SyncPhaseStatus` token (`phase:names:12/40`) and `ChatListViewModel.TranslateSyncPhase` is the single place that turns it into words. Anything that is not a token still passes through untouched
+- Five phases that ran silently now report: settling after replay (`ChatList_Settling`), name resolution, avatar fetch and group metadata (`ChatList_ResolvingNames` / `_FetchingAvatars` / `_FetchingGroups`, each with a running count), and the low-memory pause (`ChatList_PausedLowMemory`). All nine packs carry the keys
+- Post-replay maintenance no longer sleeps a flat 25 s on Windows Mobile. `WaitForStartupQuietAsync` polls every 500 ms and stops as soon as safe mode and the replay drain are both clear, past a 3 s floor (1 s on desktop); the ceilings are 8 s / 10 s / 6 s
+- Memory pressure no longer abandons enrichment on the spot. `WaitForMemoryHeadroomAsync` retries at 10 s / 20 s / 40 s and only gives up after the last one, so a device that was briefly above the low watermark still gets its names. `TriggerBackgroundResolution` also runs on Mobile now — it was desktop-only, which is why Mobile never showed those phases at all
+- `RuntimeDiagnosticsService` gains a `startup-phase` category: begin/end per phase with elapsed ms, `AppMemoryUsageLevel` at both ends, plus `quiet-wait`, `memory-retry` and `memory-abandoned` records
+
+---
+
+## Avatars decode at the size they are drawn
+
+- `BitmapImage(Uri)` starts decoding in the constructor, so a `DecodePixelWidth` assigned in the object initializer that follows arrives too late and the full-resolution frame is decoded **on the UI thread**. `ChatAvatarControl`, `StringToImageSourceConverter` and `TiledBackground` all had that shape — a 640-square group photo cost more than the info panel around it, and the tiled background ignored its 256 px Mobile cap. All three now set the decode properties first and assign `UriSource` last
+- `ChatAvatarControl` asked for `size * 2` under `DecodePixelType.Logical`, which is already display-scaled — four times the drawn area. It now decodes at `size`, and remembers the applied URL so `ApplyVisual` (which runs for any visual property change) stops re-decoding an unchanged picture
+
+---
+
+## Live media rows no longer store preview tags
+
+- `HistoryLiveMessageMapper` ran `ChatMessage.Content` into `history_message.Body` verbatim, so a live sticker / captionless image / video landed as `[Sticker]` / `[Image]` / `[Video]`. On read-back `HistoryMessageMapper.ApplyMediaEnvelope` promotes a non-empty body to `ChatMessage.Caption`, which is what the media bubble renders — history-sync rows were clean because they already went through `ChatPreviewNormalizer.NormalizeBody`
+- Live writes now normalize body and quoted body the same way; reads normalize again so rows written by older builds stop showing the tag without a schema bump or resync
+
+---
+
 ## Chat-info Media / Files load on tab
 
 - Opening profile / group / member info no longer queries `history_message` for media. `EnsureMediaIndex` runs when the **Media** or **Files** pivot is selected (one shared SQLite index for both)

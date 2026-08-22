@@ -43,7 +43,9 @@ namespace Unison.Uwp.Data.Entities
 
         public long MediaFileLengthBytes { get; set; }
 
-        public string MediaThumbnailBase64 { get; set; }
+        public string MediaLocalUri { get; set; }
+
+        public string MediaPosterUri { get; set; }
 
         public bool IsVoiceNote { get; set; }
 

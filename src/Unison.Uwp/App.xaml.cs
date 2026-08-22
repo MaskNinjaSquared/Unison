@@ -22,6 +22,7 @@ using Unison.Core.Diagnostics;
 using Unison.Core.Factories;
 using Unison.Core.Helpers;
 using Unison.Core.Mappers;
+using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.Core.ViewModels;
 using Unison.Socket.Abstractions;
@@ -384,6 +385,8 @@ namespace Unison.Uwp
             {
                 System.Diagnostics.Debug.WriteLine("[App] Apply shell theme: " + ex.Message);
             }
+
+            ApplyTimeFormatFromSettings();
 
             _ = ApplyLocationKeepAliveConfigAsync();
 
@@ -823,6 +826,21 @@ namespace Unison.Uwp
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine("[App] Apply language (early): " + ex.Message);
+            }
+        }
+
+        private static void ApplyTimeFormatFromSettings()
+        {
+            try
+            {
+                int raw = Helpers.LocalSettingsAccess.Current.Get<int>(LocalSettingsConstants.TimeFormat);
+                WhatsAppMapper.CurrentTimeFormat = Enum.IsDefined(typeof(TimeFormat), raw)
+                    ? (TimeFormat)raw
+                    : TimeFormat.Hours24;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[App] Apply time format: " + ex.Message);
             }
         }
 

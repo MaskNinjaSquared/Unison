@@ -7,6 +7,7 @@ using Unison.Core.Constants;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
+using Unison.Core.Mappers;
 using Unison.Core.Models;
 
 namespace Unison.Core.ViewModels
@@ -37,6 +38,7 @@ namespace Unison.Core.ViewModels
         private bool _keepAliveBusy;
         private bool _shellChangeBusy;
         private bool _languageChangeBusy;
+        private bool _timeFormatChangeBusy;
         private bool _disconnectBusy;
         private bool _publishContactsBusy;
 
@@ -85,6 +87,15 @@ namespace Unison.Core.ViewModels
                 }
 
                 _ = ChangeLanguageAsync(index);
+            });
+            ChangeTimeFormatCommand = new RelayCommand<int>(index =>
+            {
+                if (_timeFormatChangeBusy)
+                {
+                    return;
+                }
+
+                ChangeTimeFormat(index);
             });
             DisconnectCommand = new RelayCommand(() =>
             {
@@ -245,6 +256,21 @@ namespace Unison.Core.ViewModels
             }
         }
 
+        /// <summary>Current persisted clock (<see cref="TimeFormat"/>).</summary>
+        public TimeFormat SelectedTimeFormat
+        {
+            get
+            {
+                int raw = _localSettings.Get<int>(LocalSettingsConstants.TimeFormat);
+                return Enum.IsDefined(typeof(TimeFormat), raw)
+                    ? (TimeFormat)raw
+                    : TimeFormat.Hours24;
+            }
+        }
+
+        /// <summary>ComboBox SelectedIndex (OneWay). Changes go through <see cref="ChangeTimeFormatCommand"/>.</summary>
+        public int SelectedTimeFormatIndex => (int)SelectedTimeFormat;
+
         public string AppTitle => "Unison";
 
         public string AppDescription =>
@@ -276,15 +302,20 @@ namespace Unison.Core.ViewModels
         /// <summary>Changes UI language and restarts. Parameter: index into <see cref="LanguageOptions"/>.</summary>
         public ICommand ChangeLanguageCommand { get; }
 
+        /// <summary>Applies 24h or 12h clock. Parameter: 0 = 24 Hours, 1 = 12 Hours.</summary>
+        public ICommand ChangeTimeFormatCommand { get; }
+
         /// <summary>Confirms, then wipes local auth/session and returns to pairing.</summary>
         public ICommand DisconnectCommand { get; }
 
         public void Initialize(string appVersion)
         {
             AppVersion = appVersion ?? string.Empty;
+            WhatsAppMapper.CurrentTimeFormat = SelectedTimeFormat;
             RaiseToggleSettingsChanged();
             RaiseShellSelectionChanged();
             RaiseLanguageSelectionChanged();
+            RaiseTimeFormatSelectionChanged();
             RaiseAboutCopyChanged();
             RaiseProfileHeaderChanged();
         }
@@ -338,6 +369,37 @@ namespace Unison.Core.ViewModels
         private void RaiseProfileHeaderChanged()
         {
             RaiseProperties(nameof(ProfileDisplayName), nameof(CurrentUserAvatar));
+        }
+
+        private void RaiseTimeFormatSelectionChanged()
+        {
+            RaiseProperties(nameof(SelectedTimeFormat), nameof(SelectedTimeFormatIndex));
+        }
+
+        private void ChangeTimeFormat(int index)
+        {
+            if (!Enum.IsDefined(typeof(TimeFormat), index))
+            {
+                return;
+            }
+
+            var format = (TimeFormat)index;
+            if (format == SelectedTimeFormat)
+            {
+                return;
+            }
+
+            _timeFormatChangeBusy = true;
+            try
+            {
+                _localSettings.Set(LocalSettingsConstants.TimeFormat, (int)format);
+                WhatsAppMapper.CurrentTimeFormat = format;
+            }
+            finally
+            {
+                _timeFormatChangeBusy = false;
+                RaiseTimeFormatSelectionChanged();
+            }
         }
 
         private async Task ConfirmAndDisconnectAsync()

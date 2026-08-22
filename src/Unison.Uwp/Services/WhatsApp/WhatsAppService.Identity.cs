@@ -116,7 +116,10 @@ namespace Unison.Uwp.Services.WhatsApp
                                 JID = NormalizeJid(c.JID),
                                 Name = c.Name,
                                 LastMessage = c.LastMessage,
+                                LastMessageAuthor = c.LastMessageAuthor,
                                 LastMessageKind = c.LastMessageKind,
+                                LastMessageIsFromMe = c.LastMessageIsFromMe,
+                                LastMessageSendState = c.LastMessageSendState,
                                 Timestamp = c.Timestamp,
                                 LastMessageTimestampUtc = c.LastMessageTimestampUtc,
                                 UnreadCount = c.UnreadCount,
@@ -484,6 +487,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         {
                             canonicalChat.LastMessage = transientChat.LastMessage;
                             canonicalChat.LastMessageKind = transientChat.LastMessageKind;
+                            canonicalChat.LastPreview.CopyFrom(transientChat.LastPreview);
                             canonicalChat.Timestamp = transientChat.Timestamp;
                             canonicalChat.LastMessageTimestampUtc = transientChat.LastMessageTimestampUtc;
                         }

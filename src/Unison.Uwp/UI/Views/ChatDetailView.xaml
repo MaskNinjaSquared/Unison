@@ -3,6 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Unison.Uwp.UI.Controls"
+    xmlns:helpers="using:Unison.Uwp.UI.Helpers"
     xmlns:views="using:Unison.Uwp.UI.Views"
     xmlns:toolkit="using:Microsoft.Toolkit.Uwp.UI.Controls"
     xmlns:templates="using:Unison.Uwp.UI.Templates"
@@ -222,6 +223,7 @@
                                                 ShowBorder="True"
                                                 VerticalAlignment="Center"
                                                 Margin="0,0,6,0"
+                                                helpers:DesktopCursor.CursorKind="Hand"
                                                 Tapped="HeaderAvatar_Tapped"/>
 
                     <!-- Name + status only (avatar has its own tap → OpenChatDetailInfoFromAvatarCommand). -->
@@ -402,6 +404,19 @@
                             </Button.Flyout>
                         </Button>
                     </StackPanel>
+
+                    <ProgressBar x:Name="TimelineLoadProgress"
+                                 Grid.Column="0"
+                                 Grid.ColumnSpan="4"
+                                 VerticalAlignment="Bottom"
+                                 Height="2"
+                                 Margin="0"
+                                 BorderThickness="0"
+                                 IsIndeterminate="True"
+                                 IsHitTestVisible="False"
+                                 Foreground="{ThemeResource ChatDetailAccentBrush}"
+                                 Background="Transparent"
+                                 Visibility="{Binding IsTimelineBusy, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                 </Grid>
             </toolkit:DropShadowPanel>
 
@@ -424,16 +439,37 @@
                 </Grid>
             </Button>
 
-            <!-- Messages List -->
+            <!-- Messages List: transparent containers so recycle does not flash opaque ListViewItem chrome over the wallpaper. -->
             <ListView Grid.Row="2" x:Name="MessageListView" 
                       ItemTemplateSelector="{StaticResource MessageTemplateSelector}"
                       SelectionMode="None"
+                      IsItemClickEnabled="False"
+                      Background="Transparent"
                       Padding="0,12">
                 <ListView.ItemContainerStyle>
                     <Style TargetType="ListViewItem">
+                        <Setter Property="Background" Value="Transparent"/>
                         <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        <Setter Property="VerticalContentAlignment" Value="Stretch"/>
                         <Setter Property="Padding" Value="0"/>
                         <Setter Property="Margin" Value="0"/>
+                        <Setter Property="MinWidth" Value="0"/>
+                        <Setter Property="MinHeight" Value="0"/>
+                        <Setter Property="UseSystemFocusVisuals" Value="False"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListViewItem">
+                                    <ContentPresenter x:Name="ContentPresenter"
+                                                      Background="Transparent"
+                                                      Content="{TemplateBinding Content}"
+                                                      ContentTransitions="{TemplateBinding ContentTransitions}"
+                                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                      HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                      VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                                      Margin="{TemplateBinding Padding}"/>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
                     </Style>
                 </ListView.ItemContainerStyle>
                 <ListView.ItemsPanel>
@@ -515,6 +551,7 @@
                     <Button x:Name="AttachFlyoutButton"
                             Style="{StaticResource WhatsAppIconButtonStyle}"
                             Width="40" Height="40"
+                            VerticalAlignment="Bottom"
                             Visibility="Collapsed"
                             IsEnabled="{Binding CanCompose}">
                         <ToolTipService.ToolTip>
@@ -579,6 +616,7 @@
                     <Button x:Name="AttachBarButton"
                             Style="{StaticResource WhatsAppIconButtonStyle}"
                             Width="40" Height="40"
+                            VerticalAlignment="Bottom"
                             IsEnabled="{Binding CanCompose}"
                             Click="AttachBarButton_Click">
                         <ToolTipService.ToolTip>
@@ -587,16 +625,36 @@
                         <TextBlock Text="&#xE710;" FontFamily="{StaticResource IconFont}" FontSize="20"/>
                     </Button>
 
+                    <!--
+                        Grows upward like Unigram: TextWrapping + Auto height, anchored Bottom,
+                        capped at MaxHeight (then scrolls). Icons stay Bottom so they ride the
+                        single-line baseline while the box expands above them.
+                    -->
                     <TextBox Grid.Column="1" x:Name="MessageInput" x:Uid="ChatDetail_MessageInput"
                              PlaceholderText="Type a message"
                              Text="{Binding MessageText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                             Margin="8,0" VerticalAlignment="Center" BorderThickness="0"
+                             Margin="8,0"
+                             MinHeight="40"
+                             MaxHeight="192"
+                             VerticalAlignment="Bottom"
+                             VerticalContentAlignment="Center"
+                             TextWrapping="Wrap"
+                             AcceptsReturn="False"
+                             BorderThickness="0"
+                             Padding="10,8,6,5"
                              Style="{StaticResource TransparentTextBoxStyle}"
-                             Background="Transparent" KeyDown="MessageInput_KeyDown"/>
+                             Background="Transparent"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto"
+                             ScrollViewer.VerticalScrollMode="Auto"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             ScrollViewer.HorizontalScrollMode="Disabled"
+                             SizeChanged="MessageInput_SizeChanged"
+                             KeyDown="MessageInput_KeyDown"/>
 
                     <Button x:Name="MicButton" Grid.Column="2"
                             Style="{StaticResource WhatsAppIconButtonStyle}"
                             Width="40" Height="40"
+                            VerticalAlignment="Bottom"
                             Command="{Binding StartRecordingCommand}">
                         <TextBlock x:Name="MicIcon" Text="&#xE720;" FontFamily="{StaticResource IconFont}" FontSize="20"
                                    Foreground="{ThemeResource ChatDetailAccentBrush}"/>
@@ -605,6 +663,7 @@
                     <Button x:Name="SendButton" Grid.Column="3"
                             Style="{StaticResource WhatsAppIconButtonStyle}"
                             Width="40" Height="40"
+                            VerticalAlignment="Bottom"
                             Command="{Binding SendMessageCommand}">
                         <TextBlock Text="&#xE724;" FontFamily="{StaticResource IconFont}" FontSize="20"
                                    Foreground="{ThemeResource ChatDetailAccentBrush}"/>
@@ -787,6 +846,7 @@
             <!-- Group announce-only lock (replaces composer on row 3) -->
             <Grid Grid.Row="3"
                   Background="{ThemeResource ChatDetailInputBarBackgroundBrush}"
+                  helpers:DesktopCursor.CursorKind="Blocked"
                   Visibility="{Binding IsGroupLockedForMessages, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <Border Height="1"
                         VerticalAlignment="Top"

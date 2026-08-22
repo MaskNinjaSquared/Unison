@@ -432,24 +432,8 @@ namespace Unison.Core.Models
             }
         }
 
-        private string _mediaThumbnailBase64;
-        /// <summary>Embedded jpegThumbnail (base64) when the file cache is not written yet.</summary>
-        public string MediaThumbnailBase64
-        {
-            get => _mediaThumbnailBase64;
-            set
-            {
-                if (_mediaThumbnailBase64 == value) return;
-                _mediaThumbnailBase64 = value;
-                OnPropertyChanged();
-                OnPropertyChanged(nameof(HasMediaThumbnail));
-            }
-        }
-
         [JsonIgnore]
-        public bool HasMediaThumbnail =>
-            !string.IsNullOrWhiteSpace(ThumbnailUri) ||
-            !string.IsNullOrWhiteSpace(MediaThumbnailBase64);
+        public bool HasMediaThumbnail => !string.IsNullOrWhiteSpace(ThumbnailUri);
 
         private string _videoUri;
         /// <summary>Local cached video file (ms-appdata) after on-demand download.</summary>
@@ -645,6 +629,19 @@ namespace Unison.Core.Models
             }
         }
 
+        private bool _isForwarded;
+        /// <summary>ContextInfo.isForwarded — orthogonal to media <see cref="Kind"/>.</summary>
+        public bool IsForwarded
+        {
+            get => _isForwarded;
+            set
+            {
+                if (_isForwarded == value) return;
+                _isForwarded = value;
+                OnPropertyChanged();
+            }
+        }
+
         private bool _isPinned;
         public bool IsPinned
         {
@@ -672,8 +669,12 @@ namespace Unison.Core.Models
         }
 
         private List<MessageReaction> _reactions;
+        private string _reactionsDisplayText;
+        private bool _reactionDetailsLoaded;
+
         /// <summary>
-        /// Reactions attached to this message (not timeline rows). SQLite <c>history_message_reaction</c>.
+        /// Reactors on this message (not timeline rows). SQLite <c>history_message_reaction</c>,
+        /// filled on timeline open.
         /// </summary>
         public List<MessageReaction> Reactions
         {
@@ -681,11 +682,18 @@ namespace Unison.Core.Models
             set
             {
                 _reactions = value ?? new List<MessageReaction>();
+                RebuildReactionSummaryFromList();
                 NotifyReactionsChanged();
             }
         }
 
-        /// <summary>Count of <see cref="Reactions"/> (all reactors, not unique emojis).</summary>
+        /// <summary>
+        /// True when the list came from the store, so a live upsert may replace those rows. A live
+        /// envelope alone does not set it: that list is only what this session happened to see.
+        /// </summary>
+        [JsonIgnore]
+        public bool AreReactionDetailsLoaded => _reactionDetailsLoaded;
+
         [JsonIgnore]
         public int TotalReactions
         {
@@ -698,29 +706,41 @@ namespace Unison.Core.Models
             get { return TotalReactions > 0; }
         }
 
-        /// <summary>Side-by-side emoji line from <see cref="ReactionsBuilder.BuildEmojiLine"/>.</summary>
+        /// <summary>Side-by-side emoji line (cached; rebuilt when the list changes).</summary>
         [JsonIgnore]
         public string ReactionsDisplayText
         {
-            get { return ReactionsBuilder.BuildEmojiLine(Reactions); }
+            get { return _reactionsDisplayText ?? string.Empty; }
         }
 
-        /// <summary>Grouped chips for rounded buttons under the bubble.</summary>
-        [JsonIgnore]
-        public IList<ReactionChip> ReactionChips
+        /// <summary>Store-backed rows (SQLite attach / dialog reload): the full reactor set.</summary>
+        public void ApplyReactionDetails(IList<MessageReaction> reactions)
         {
-            get { return ReactionsBuilder.BuildChips(Reactions); }
+            _reactions = reactions == null
+                ? new List<MessageReaction>()
+                : new List<MessageReaction>(reactions);
+            _reactionDetailsLoaded = true;
+            RebuildReactionSummaryFromList();
+            NotifyReactionsChanged();
         }
 
         /// <summary>Call after in-place mutate of <see cref="Reactions"/> (upsert/remove).</summary>
         public void NotifyReactionsChanged()
         {
+            RebuildReactionSummaryFromList();
             Raise(
                 nameof(Reactions),
                 nameof(TotalReactions),
                 nameof(HasReactions),
                 nameof(ReactionsDisplayText),
-                nameof(ReactionChips));
+                nameof(AreReactionDetailsLoaded));
+        }
+
+        private void RebuildReactionSummaryFromList()
+        {
+            _reactionsDisplayText = _reactions == null || _reactions.Count == 0
+                ? string.Empty
+                : ReactionsBuilder.BuildEmojiLine(_reactions);
         }
 
         private bool _isRunStart = true;
@@ -819,6 +839,19 @@ namespace Unison.Core.Models
             }
         }
 
+        private string _quotedParticipantJid;
+        /// <summary>ContextInfo.Participant of the quoted message (group author).</summary>
+        public string QuotedParticipantJid
+        {
+            get => _quotedParticipantJid;
+            set
+            {
+                if (string.Equals(_quotedParticipantJid, value, StringComparison.Ordinal)) return;
+                _quotedParticipantJid = value;
+                OnPropertyChanged();
+            }
+        }
+
         private string _quotedMessageId;
         /// <summary>Id of the quoted message (<c>ContextInfo.StanzaId</c>) when available.</summary>
         public string QuotedMessageId
@@ -845,8 +878,13 @@ namespace Unison.Core.Models
             {
                 _mentionedJids = value;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(HasMentions));
             }
         }
+
+        /// <summary>True when <see cref="MentionedJids"/> has at least one entry (no empty-list alloc).</summary>
+        [JsonIgnore]
+        public bool HasMentions => _mentionedJids != null && _mentionedJids.Count > 0;
 
         private bool _showGroupSenderName;
         /// <summary>
@@ -861,6 +899,22 @@ namespace Unison.Core.Models
             {
                 if (_showGroupSenderName == value) return;
                 _showGroupSenderName = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private bool _showQuotedAuthorLink;
+        /// <summary>
+        /// Group quote header: author name opens member info (JID or roster name match).
+        /// </summary>
+        [JsonIgnore]
+        public bool ShowQuotedAuthorLink
+        {
+            get => _showQuotedAuthorLink;
+            set
+            {
+                if (_showQuotedAuthorLink == value) return;
+                _showQuotedAuthorLink = value;
                 OnPropertyChanged();
             }
         }

@@ -17,17 +17,21 @@ namespace Unison.Core.ViewModels
     public sealed class MessageReactionsViewModel : Observable
     {
         private readonly IPersonStore _people;
+        private readonly IHistoryMessageStore _historyMessages;
         private readonly IStringResources _strings;
         private readonly IWhatsAppService _whatsApp;
 
         private string _title;
+        private bool _isLoading;
 
         public MessageReactionsViewModel(
             IPersonStore people,
+            IHistoryMessageStore historyMessages = null,
             IStringResources strings = null,
             IWhatsAppService whatsApp = null)
         {
             _people = people ?? throw new ArgumentNullException(nameof(people));
+            _historyMessages = historyMessages;
             _strings = strings;
             _whatsApp = whatsApp;
         }
@@ -37,6 +41,12 @@ namespace Unison.Core.ViewModels
         {
             get => _title;
             private set => Set(ref _title, value);
+        }
+
+        public bool IsLoading
+        {
+            get => _isLoading;
+            private set => Set(ref _isLoading, value);
         }
 
         /// <summary>One chip per distinct emoji, with its tally.</summary>
@@ -56,27 +66,92 @@ namespace Unison.Core.ViewModels
             Chips.Clear();
             Authors.Clear();
 
-            List<MessageReaction> reactions = bubble?.Model?.Reactions
-                ?.Where(r => r != null && !string.IsNullOrWhiteSpace(r.Emoji))
-                .OrderBy(r => r.Timestamp)
-                .ToList();
-
-            Title = BuildTitle(reactions == null ? 0 : reactions.Count);
-            if (reactions == null || reactions.Count == 0)
+            ChatMessage model = bubble?.Model;
+            if (model == null || !model.HasReactions)
             {
+                Title = BuildTitle(0);
                 return;
             }
 
-            foreach (ReactionChip chip in ReactionsBuilder.BuildChips(reactions))
+            IsLoading = true;
+            try
             {
-                Chips.Add(chip);
+                List<MessageReaction> reactions = await EnsureReactionDetailsAsync(model).ConfigureAwait(true);
+                Title = BuildTitle(reactions == null ? 0 : reactions.Count);
+                if (reactions == null || reactions.Count == 0)
+                {
+                    return;
+                }
+
+                foreach (ReactionChip chip in ReactionsBuilder.BuildChips(reactions))
+                {
+                    Chips.Add(chip);
+                }
+
+                var resolved = new Dictionary<string, Person>(StringComparer.OrdinalIgnoreCase);
+                foreach (MessageReaction reaction in reactions)
+                {
+                    Authors.Add(await BuildAuthorAsync(reaction, resolved).ConfigureAwait(true));
+                }
+            }
+            finally
+            {
+                IsLoading = false;
+            }
+        }
+
+        private async Task<List<MessageReaction>> EnsureReactionDetailsAsync(ChatMessage model)
+        {
+            if (model.AreReactionDetailsLoaded && model.Reactions.Count > 0)
+            {
+                return model.Reactions
+                    .Where(r => r != null && !string.IsNullOrWhiteSpace(r.Emoji))
+                    .OrderBy(r => r.Timestamp)
+                    .ToList();
             }
 
-            var resolved = new Dictionary<string, Person>(StringComparer.OrdinalIgnoreCase);
-            foreach (MessageReaction reaction in reactions)
+            if (_historyMessages == null ||
+                string.IsNullOrWhiteSpace(model.RemoteJid) ||
+                string.IsNullOrWhiteSpace(model.Id))
             {
-                Authors.Add(await BuildAuthorAsync(reaction, resolved).ConfigureAwait(true));
+                return model.Reactions
+                    ?.Where(r => r != null && !string.IsNullOrWhiteSpace(r.Emoji))
+                    .OrderBy(r => r.Timestamp)
+                    .ToList()
+                    ?? new List<MessageReaction>();
             }
+
+            IReadOnlyList<HistoryMessageReaction> rows =
+                await _historyMessages.GetReactionsForMessageAsync(model.RemoteJid, model.Id)
+                    .ConfigureAwait(true);
+
+            var list = new List<MessageReaction>(rows?.Count ?? 0);
+            if (rows != null)
+            {
+                for (int i = 0; i < rows.Count; i++)
+                {
+                    HistoryMessageReaction row = rows[i];
+                    if (row == null || string.IsNullOrWhiteSpace(row.Emoji))
+                    {
+                        continue;
+                    }
+
+                    list.Add(new MessageReaction
+                    {
+                        Emoji = row.Emoji,
+                        ReactorJid = row.ReactorJid,
+                        ReactorName = row.ReactorName,
+                        Timestamp = row.TimestampUtc,
+                        ReactionMessageId = row.ReactionMessageId,
+                        FromMe = row.FromMe
+                    });
+                }
+            }
+
+            model.ApplyReactionDetails(list);
+            return list
+                .OrderBy(r => r.Timestamp)
+                .ToList();
         }
 
         private string BuildTitle(int total)
@@ -127,10 +202,6 @@ namespace Unison.Core.ViewModels
             return string.IsNullOrWhiteSpace(canonical) ? JidHelper.Normalize(jid) : canonical;
         }
 
-        /// <summary>
-        /// The reactor may be filed under either form: history writes the LID it saw, a later usync
-        /// writes the phone JID.
-        /// </summary>
         private async Task<Person> LoadPersonAsync(string canonical, string rawJid)
         {
             Person person = await GetPersonAsync(canonical).ConfigureAwait(true);
@@ -194,10 +265,6 @@ namespace Unison.Core.ViewModels
             return BareUser(canonical);
         }
 
-        /// <summary>
-        /// Second line. Suppressed when it would only repeat the name (an unnamed reactor already
-        /// shows their number on the first line).
-        /// </summary>
         private string ResolvePhone(Person person, string canonical, string rawJid)
         {
             string digits = person == null

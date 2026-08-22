@@ -37,12 +37,33 @@
 
                 <Border Background="Transparent" Margin="0,1,0,0" Padding="12,8,16,8">
                     <StackPanel>
-                        <Border Background="{ThemeResource ChatDetailSentQuoteBackgroundBrush}"
+                        <StackPanel x:Name="SentForwardedLabel"
+                                    Orientation="Horizontal"
+                                    Margin="0,0,0,4"
+                                    x:Load="{x:Bind ShowForwardedLabel, Mode=OneWay}">
+                            <TextBlock Text="&#xEA54;"
+                                       FontFamily="{StaticResource IconFont}"
+                                       FontSize="13"
+                                       Foreground="{ThemeResource ChatDetailSentTextBrush}"
+                                       Opacity="0.75"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Text="{x:Bind ForwardedLabelText, Mode=OneWay}"
+                                       FontSize="13"
+                                       FontStyle="Italic"
+                                       Foreground="{ThemeResource ChatDetailSentTextBrush}"
+                                       Opacity="0.75"
+                                       Margin="4,0,0,0"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <Border x:Name="SentQuoteBorder"
+                                Background="{ThemeResource ChatDetailSentQuoteBackgroundBrush}"
                                 CornerRadius="8"
                                 Padding="10,8"
                                 Margin="0,0,0,8"
                                 Tapped="QuoteBorder_Tapped"
-                                Visibility="{x:Bind HasQuote, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                Tag="{x:Bind QuotedMessageId, Mode=OneWay}"
+                                helpers:DesktopCursor.CursorKind="{x:Bind CanNavigateToQuote, Mode=OneWay, Converter={StaticResource BoolToDesktopCursorKindConverter}}"
+                                x:Load="{x:Bind HasQuote, Mode=OneWay}">
                             <StackPanel>
                                 <TextBlock Text="{x:Bind QuotedSenderName, Mode=OneWay}"
                                            FontSize="12"
@@ -50,18 +71,27 @@
                                            Foreground="{ThemeResource ChatDetailSentTextBrush}"
                                            Opacity="0.85"
                                            TextWrapping="NoWrap"
-                                           TextTrimming="CharacterEllipsis"/>
+                                           TextTrimming="CharacterEllipsis"
+                                           Tag="{x:Bind QuotedParticipantJid, Mode=OneWay}"
+                                           IsHitTestVisible="{x:Bind CanOpenQuotedAuthor, Mode=OneWay}"
+                                           helpers:DesktopCursor.CursorKind="{x:Bind CanOpenQuotedAuthor, Mode=OneWay, Converter={StaticResource BoolToDesktopCursorKindConverter}}"
+                                           Tapped="QuotedAuthor_Tapped"/>
                                 <controls:ChatListPreviewStrip
                                            Margin="0,2,0,0"
                                            Opacity="0.9"
                                            Foreground="{ThemeResource ChatDetailSentTextBrush}"
                                            Kind="{x:Bind QuotedPreviewKind, Mode=OneWay}"
-                                           Text="{x:Bind QuotedStripText, Mode=OneWay}"/>
+                                           Text="{x:Bind QuotedStripText, Mode=OneWay}"
+                                           Tapped="QuoteBorder_Tapped"
+                                           Tag="{x:Bind QuotedMessageId, Mode=OneWay}"
+                                           helpers:DesktopCursor.CursorKind="{x:Bind CanNavigateToQuote, Mode=OneWay, Converter={StaticResource BoolToDesktopCursorKindConverter}}"
+                                           IsHitTestVisible="{x:Bind CanNavigateToQuote, Mode=OneWay}"/>
                             </StackPanel>
                         </Border>
-                        <Button Click="ImageOpenButton_Click"
+                        <Button x:Name="SentImageOpenButton"
+                                Click="ImageOpenButton_Click"
                                 Style="{StaticResource TransparentMediaButtonStyle}"
-                                Visibility="{x:Bind HasImage, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                x:Load="{x:Bind HasImage, Mode=OneWay}"
                                 HorizontalAlignment="Left"
                                 Margin="0,0,0,6"
                                 Padding="0">
@@ -70,28 +100,38 @@
                                    Stretch="Uniform"
                                    HorizontalAlignment="Left"/>
                         </Button>
-                        <Grid Width="96" Height="96" Margin="0,0,0,6"
-                              Visibility="{x:Bind ShowStickerLoading, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <Grid x:Name="SentStickerLoading"
+                              Width="96" Height="96" Margin="0,0,0,6"
+                              x:Load="{x:Bind ShowStickerLoading, Mode=OneWay}">
                             <ProgressRing Width="32" Height="32" IsActive="True"
                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Grid>
-                        <TextBlock Text="!Sticker Error"
+                        <TextBlock x:Name="SentStickerError"
+                                   Text="!Sticker Error"
                                    Foreground="#FFFF3B30"
                                    FontSize="14"
                                    FontWeight="SemiBold"
                                    Margin="0,0,0,6"
-                                   Visibility="{x:Bind ShowStickerError, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                        <Grid Width="300" Height="300" Margin="0,0,0,6"
+                                   x:Load="{x:Bind ShowStickerError, Mode=OneWay}"/>
+                        <Grid x:Name="SentImageDownload"
+                              Width="300" Height="300" Margin="0,0,0,6"
                               HorizontalAlignment="Left"
-                              Visibility="{x:Bind NeedsImageDownload, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                              x:Load="{x:Bind NeedsImageDownload, Mode=OneWay}">
                             <Border Background="{ThemeResource ChatDetailSentMediaDownloadOverlayBrush}" CornerRadius="4"/>
+                            <Image Source="{x:Bind ThumbnailUri, Mode=OneWay, Converter={StaticResource StringToImageSourceConverter}, ConverterParameter=320}"
+                                   Stretch="UniformToFill"
+                                   HorizontalAlignment="Stretch"
+                                   VerticalAlignment="Stretch"
+                                   IsHitTestVisible="False"
+                                   Visibility="{x:Bind HasMediaThumbnail, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                             <Image Source="{ThemeResource ChatDetailImageDownloadPlaceholder}"
                                    Stretch="Uniform"
                                    MaxWidth="160"
                                    MaxHeight="124"
                                    HorizontalAlignment="Center"
                                    VerticalAlignment="Center"
-                                   IsHitTestVisible="False"/>
+                                   IsHitTestVisible="False"
+                                   Visibility="{x:Bind ShowImageDownloadPlaceholderGlyph, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                             <ProgressRing Width="36" Height="36"
                                           Foreground="{ThemeResource ChatDetailSentMediaDownloadIconBrush}"
                                           IsActive="{x:Bind IsImageDownloading, Mode=OneWay}"
@@ -115,10 +155,17 @@
                                 </Grid>
                             </Button>
                         </Grid>
-                        <Grid Width="300" Height="300" Margin="0,0,0,6"
+                        <Grid x:Name="SentVideoDownload"
+                              Width="300" Height="300" Margin="0,0,0,6"
                               HorizontalAlignment="Left"
-                              Visibility="{x:Bind NeedsVideoDownload, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                              x:Load="{x:Bind NeedsVideoDownload, Mode=OneWay}">
                             <Border Background="{ThemeResource ChatDetailSentMediaDownloadOverlayBrush}" CornerRadius="4"/>
+                            <Image Source="{x:Bind VideoPosterUri, Mode=OneWay, Converter={StaticResource StringToImageSourceConverter}, ConverterParameter=320}"
+                                   Stretch="UniformToFill"
+                                   HorizontalAlignment="Stretch"
+                                   VerticalAlignment="Stretch"
+                                   IsHitTestVisible="False"
+                                   Visibility="{x:Bind HasVideoPoster, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                             <ProgressRing Width="36" Height="36"
                                           Foreground="{ThemeResource ChatDetailSentMediaDownloadIconBrush}"
                                           IsActive="{x:Bind IsVideoDownloading, Mode=OneWay}"
@@ -134,9 +181,10 @@
                                            VerticalAlignment="Center"/>
                             </Button>
                         </Grid>
-                        <Grid Width="300" Height="300" Margin="0,0,0,6"
+                        <Grid x:Name="SentVideoPlay"
+                              Width="300" Height="300" Margin="0,0,0,6"
                               HorizontalAlignment="Left"
-                              Visibility="{x:Bind ShowVideoPlayOverlay, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                              x:Load="{x:Bind ShowVideoPlayOverlay, Mode=OneWay}">
                             <Border Background="#FF111111" CornerRadius="4"/>
                             <Image Source="{x:Bind VideoPosterUri, Mode=OneWay, Converter={StaticResource StringToImageSourceConverter}, ConverterParameter=320}"
                                    Stretch="UniformToFill"
@@ -160,19 +208,21 @@
                                 </Grid>
                             </Button>
                         </Grid>
-                        <RichTextBlock helpers:CommentRichService.Text="{x:Bind Caption, Mode=OneWay}"
+                        <RichTextBlock x:Name="SentCaption"
+                                       helpers:CommentRichService.Text="{x:Bind Caption, Mode=OneWay}"
                                        helpers:CommentRichService.MentionedJids="{x:Bind MentionedJids, Mode=OneWay}"
                                        helpers:CommentRichService.MentionLookup="{x:Bind MentionLookup, Mode=OneWay}"
                                        helpers:CommentRichService.RefreshKey="{x:Bind MentionRefreshKey, Mode=OneWay}"
                                        helpers:CommentRichService.LinkBrushKey="ChatDetailSentLinkBrush"
-                                       Visibility="{x:Bind HasCaption, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                       x:Load="{x:Bind HasCaption, Mode=OneWay}"
                                        Foreground="{ThemeResource ChatDetailSentTextBrush}"
                                        IsTextSelectionEnabled="True"
                                        TextWrapping="Wrap"
                                        FontSize="15"
                                        LineHeight="20"
                                        Margin="0,0,0,2"/>
-                        <Grid Visibility="{x:Bind IsAudio, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
+                        <Grid x:Name="SentAudioHost"
+                              x:Load="{x:Bind IsAudio, Mode=OneWay}"
                               HorizontalAlignment="Left"
                               Margin="0,0,0,2"
                               MinWidth="250"
@@ -220,7 +270,8 @@
                                 GlyphForeground="{ThemeResource ChatDetailSentBubbleButtonBrush}"
                                 HorizontalAlignment="Stretch"/>
                         </Grid>
-                        <Grid Visibility="{x:Bind IsDocument, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
+                        <Grid x:Name="SentDocumentHost"
+                              x:Load="{x:Bind IsDocument, Mode=OneWay}"
                               HorizontalAlignment="Stretch"
                               MinWidth="220"
                               MaxWidth="280"
@@ -319,12 +370,13 @@
                                           VerticalAlignment="Center"
                                           Visibility="{x:Bind IsDocumentDownloading, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                         </Grid>
-                        <RichTextBlock helpers:CommentRichService.Text="{x:Bind Content, Mode=OneWay}"
+                        <RichTextBlock x:Name="SentBodyText"
+                                       helpers:CommentRichService.Text="{x:Bind Content, Mode=OneWay}"
                                        helpers:CommentRichService.MentionedJids="{x:Bind MentionedJids, Mode=OneWay}"
                                        helpers:CommentRichService.MentionLookup="{x:Bind MentionLookup, Mode=OneWay}"
                                        helpers:CommentRichService.RefreshKey="{x:Bind MentionRefreshKey, Mode=OneWay}"
                                        helpers:CommentRichService.LinkBrushKey="ChatDetailSentLinkBrush"
-                                       Visibility="{x:Bind ShowTextContent, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                       x:Load="{x:Bind ShowTextContent, Mode=OneWay}"
                                        Foreground="{ThemeResource ChatDetailSentTextBrush}"
                                        IsTextSelectionEnabled="True"
                                        TextWrapping="Wrap"
@@ -332,9 +384,10 @@
                                        MaxLines="{x:Bind ContentMaxLines, Mode=OneWay}"
                                        FontSize="15"
                                        LineHeight="20"/>
-                        <HyperlinkButton Content="{x:Bind ExpandLinkText, Mode=OneWay}"
+                        <HyperlinkButton x:Name="SentExpandLink"
+                                         Content="{x:Bind ExpandLinkText, Mode=OneWay}"
                                          Command="{x:Bind ToggleExpandCommand, Mode=OneWay}"
-                                         Visibility="{x:Bind CanExpand, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                         x:Load="{x:Bind CanExpand, Mode=OneWay}"
                                          Style="{StaticResource ChatDetailSentReadMoreHyperlinkButtonStyle}"/>
                         <Grid Margin="0,4,0,0">
                             <Grid.ColumnDefinitions>
@@ -449,6 +502,7 @@
                       Margin="0,0,8,0"
                       VerticalAlignment="Top"
                       Tapped="GroupParticipant_Tapped"
+                      helpers:DesktopCursor.CursorKind="Hand"
                       Visibility="{x:Bind ShowContactSlot, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <controls:ChatAvatarControl Size="32"
                                                 Width="32"
@@ -461,9 +515,7 @@
                 <Grid Grid.Column="1" HorizontalAlignment="Left">
                 <controls:MessageBubbleChrome
                     IsFromMe="False"
-                    IsRunStart="{x:Bind ShowTail, Mode=OneWay}"
-                    ContactUri="{x:Bind ContactUri, Mode=OneWay}"
-                    ShowContact="{x:Bind ShowContact, Mode=OneWay}"/>
+                    IsRunStart="{x:Bind ShowTail, Mode=OneWay}"/>
 
                 <Border Background="Transparent" Margin="0,1,0,0" Padding="16,8,12,8">
                     <StackPanel>
@@ -476,13 +528,35 @@
                                    Margin="0,0,0,4"
                                    TextWrapping="NoWrap"
                                    TextTrimming="CharacterEllipsis"
+                                   helpers:DesktopCursor.CursorKind="Hand"
                                    Tapped="GroupParticipant_Tapped"/>
-                        <Border Background="{ThemeResource ChatDetailReceivedQuoteBackgroundBrush}"
+                        <StackPanel x:Name="ReceivedForwardedLabel"
+                                    Orientation="Horizontal"
+                                    Margin="0,0,0,4"
+                                    x:Load="{x:Bind ShowForwardedLabel, Mode=OneWay}">
+                            <TextBlock Text="&#xEA54;"
+                                       FontFamily="{StaticResource IconFont}"
+                                       FontSize="13"
+                                       Foreground="{ThemeResource ChatDetailGroupSenderBrush}"
+                                       Opacity="0.85"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Text="{x:Bind ForwardedLabelText, Mode=OneWay}"
+                                       FontSize="13"
+                                       FontStyle="Italic"
+                                       Foreground="{ThemeResource ChatDetailGroupSenderBrush}"
+                                       Opacity="0.85"
+                                       Margin="4,0,0,0"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <Border x:Name="ReceivedQuoteBorder"
+                                Background="{ThemeResource ChatDetailReceivedQuoteBackgroundBrush}"
                                 CornerRadius="8"
                                 Padding="10,8"
                                 Margin="0,0,0,8"
                                 Tapped="QuoteBorder_Tapped"
-                                Visibility="{x:Bind HasQuote, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                Tag="{x:Bind QuotedMessageId, Mode=OneWay}"
+                                helpers:DesktopCursor.CursorKind="{x:Bind CanNavigateToQuote, Mode=OneWay, Converter={StaticResource BoolToDesktopCursorKindConverter}}"
+                                x:Load="{x:Bind HasQuote, Mode=OneWay}">
                             <StackPanel>
                                 <TextBlock Text="{x:Bind QuotedSenderName, Mode=OneWay}"
                                            FontSize="12"
@@ -490,18 +564,27 @@
                                            Foreground="{ThemeResource ChatDetailReceivedTextBrush}"
                                            Opacity="0.85"
                                            TextWrapping="NoWrap"
-                                           TextTrimming="CharacterEllipsis"/>
+                                           TextTrimming="CharacterEllipsis"
+                                           Tag="{x:Bind QuotedParticipantJid, Mode=OneWay}"
+                                           IsHitTestVisible="{x:Bind CanOpenQuotedAuthor, Mode=OneWay}"
+                                           helpers:DesktopCursor.CursorKind="{x:Bind CanOpenQuotedAuthor, Mode=OneWay, Converter={StaticResource BoolToDesktopCursorKindConverter}}"
+                                           Tapped="QuotedAuthor_Tapped"/>
                                 <controls:ChatListPreviewStrip
                                            Margin="0,2,0,0"
                                            Opacity="0.9"
                                            Foreground="{ThemeResource ChatDetailReceivedTextBrush}"
                                            Kind="{x:Bind QuotedPreviewKind, Mode=OneWay}"
-                                           Text="{x:Bind QuotedStripText, Mode=OneWay}"/>
+                                           Text="{x:Bind QuotedStripText, Mode=OneWay}"
+                                           Tapped="QuoteBorder_Tapped"
+                                           Tag="{x:Bind QuotedMessageId, Mode=OneWay}"
+                                           helpers:DesktopCursor.CursorKind="{x:Bind CanNavigateToQuote, Mode=OneWay, Converter={StaticResource BoolToDesktopCursorKindConverter}}"
+                                           IsHitTestVisible="{x:Bind CanNavigateToQuote, Mode=OneWay}"/>
                             </StackPanel>
                         </Border>
-                        <Button Click="ImageOpenButton_Click"
+                        <Button x:Name="ReceivedImageOpenButton"
+                                Click="ImageOpenButton_Click"
                                 Style="{StaticResource TransparentMediaButtonStyle}"
-                                Visibility="{x:Bind HasImage, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                x:Load="{x:Bind HasImage, Mode=OneWay}"
                                 HorizontalAlignment="Left"
                                 Margin="0,0,0,6"
                                 Padding="0">
@@ -510,28 +593,38 @@
                                    Stretch="Uniform"
                                    HorizontalAlignment="Left"/>
                         </Button>
-                        <Grid Width="96" Height="96" Margin="0,0,0,6"
-                              Visibility="{x:Bind ShowStickerLoading, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <Grid x:Name="ReceivedStickerLoading"
+                              Width="96" Height="96" Margin="0,0,0,6"
+                              x:Load="{x:Bind ShowStickerLoading, Mode=OneWay}">
                             <ProgressRing Width="32" Height="32" IsActive="True"
                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Grid>
-                        <TextBlock Text="!Sticker Error"
+                        <TextBlock x:Name="ReceivedStickerError"
+                                   Text="!Sticker Error"
                                    Foreground="#FFFF3B30"
                                    FontSize="14"
                                    FontWeight="SemiBold"
                                    Margin="0,0,0,6"
-                                   Visibility="{x:Bind ShowStickerError, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                        <Grid Width="300" Height="300" Margin="0,0,0,6"
+                                   x:Load="{x:Bind ShowStickerError, Mode=OneWay}"/>
+                        <Grid x:Name="ReceivedImageDownload"
+                              Width="300" Height="300" Margin="0,0,0,6"
                               HorizontalAlignment="Left"
-                              Visibility="{x:Bind NeedsImageDownload, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                              x:Load="{x:Bind NeedsImageDownload, Mode=OneWay}">
                             <Border Background="{ThemeResource ChatDetailReceivedMediaDownloadOverlayBrush}" CornerRadius="4"/>
+                            <Image Source="{x:Bind ThumbnailUri, Mode=OneWay, Converter={StaticResource StringToImageSourceConverter}, ConverterParameter=320}"
+                                   Stretch="UniformToFill"
+                                   HorizontalAlignment="Stretch"
+                                   VerticalAlignment="Stretch"
+                                   IsHitTestVisible="False"
+                                   Visibility="{x:Bind HasMediaThumbnail, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                             <Image Source="{ThemeResource ChatDetailImageDownloadPlaceholder}"
                                    Stretch="Uniform"
                                    MaxWidth="160"
                                    MaxHeight="124"
                                    HorizontalAlignment="Center"
                                    VerticalAlignment="Center"
-                                   IsHitTestVisible="False"/>
+                                   IsHitTestVisible="False"
+                                   Visibility="{x:Bind ShowImageDownloadPlaceholderGlyph, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                             <ProgressRing Width="36" Height="36"
                                           IsActive="{x:Bind IsImageDownloading, Mode=OneWay}"
                                           Visibility="{x:Bind IsImageDownloading, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
@@ -554,10 +647,17 @@
                                 </Grid>
                             </Button>
                         </Grid>
-                        <Grid Width="300" Height="300" Margin="0,0,0,6"
+                        <Grid x:Name="ReceivedVideoDownload"
+                              Width="300" Height="300" Margin="0,0,0,6"
                               HorizontalAlignment="Left"
-                              Visibility="{x:Bind NeedsVideoDownload, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                              x:Load="{x:Bind NeedsVideoDownload, Mode=OneWay}">
                             <Border Background="{ThemeResource ChatDetailReceivedMediaDownloadOverlayBrush}" CornerRadius="4"/>
+                            <Image Source="{x:Bind VideoPosterUri, Mode=OneWay, Converter={StaticResource StringToImageSourceConverter}, ConverterParameter=320}"
+                                   Stretch="UniformToFill"
+                                   HorizontalAlignment="Stretch"
+                                   VerticalAlignment="Stretch"
+                                   IsHitTestVisible="False"
+                                   Visibility="{x:Bind HasVideoPoster, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                             <ProgressRing Width="36" Height="36"
                                           IsActive="{x:Bind IsVideoDownloading, Mode=OneWay}"
                                           Visibility="{x:Bind IsVideoDownloading, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
@@ -572,9 +672,10 @@
                                            VerticalAlignment="Center"/>
                             </Button>
                         </Grid>
-                        <Grid Width="300" Height="300" Margin="0,0,0,6"
+                        <Grid x:Name="ReceivedVideoPlay"
+                              Width="300" Height="300" Margin="0,0,0,6"
                               HorizontalAlignment="Left"
-                              Visibility="{x:Bind ShowVideoPlayOverlay, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                              x:Load="{x:Bind ShowVideoPlayOverlay, Mode=OneWay}">
                             <Border Background="#FF111111" CornerRadius="4"/>
                             <Image Source="{x:Bind VideoPosterUri, Mode=OneWay, Converter={StaticResource StringToImageSourceConverter}, ConverterParameter=320}"
                                    Stretch="UniformToFill"
@@ -598,12 +699,13 @@
                                 </Grid>
                             </Button>
                         </Grid>
-                        <RichTextBlock helpers:CommentRichService.Text="{x:Bind Caption, Mode=OneWay}"
+                        <RichTextBlock x:Name="ReceivedCaption"
+                                       helpers:CommentRichService.Text="{x:Bind Caption, Mode=OneWay}"
                                        helpers:CommentRichService.MentionedJids="{x:Bind MentionedJids, Mode=OneWay}"
                                        helpers:CommentRichService.MentionLookup="{x:Bind MentionLookup, Mode=OneWay}"
                                        helpers:CommentRichService.RefreshKey="{x:Bind MentionRefreshKey, Mode=OneWay}"
                                        helpers:CommentRichService.LinkBrushKey="ChatDetailReceivedLinkBrush"
-                                       Visibility="{x:Bind HasCaption, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                       x:Load="{x:Bind HasCaption, Mode=OneWay}"
                                        Foreground="{ThemeResource ChatDetailReceivedTextBrush}"
                                        IsTextSelectionEnabled="True"
                                        TextWrapping="Wrap"
@@ -611,7 +713,8 @@
                                        LineHeight="20"
                                        FontFamily="{StaticResource MainFont}"
                                        Margin="0,0,0,2"/>
-                        <Grid Visibility="{x:Bind IsAudio, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
+                        <Grid x:Name="ReceivedAudioHost"
+                              x:Load="{x:Bind IsAudio, Mode=OneWay}"
                               HorizontalAlignment="Left"
                               Margin="0,0,0,2"
                               MinWidth="250"
@@ -658,7 +761,8 @@
                                 GlyphForeground="{ThemeResource ChatDetailReceivedBubbleButtonBrush}"
                                 HorizontalAlignment="Stretch"/>
                         </Grid>
-                        <Grid Visibility="{x:Bind IsDocument, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
+                        <Grid x:Name="ReceivedDocumentHost"
+                              x:Load="{x:Bind IsDocument, Mode=OneWay}"
                               HorizontalAlignment="Stretch"
                               MinWidth="220"
                               MaxWidth="280"
@@ -756,12 +860,13 @@
                                           VerticalAlignment="Center"
                                           Visibility="{x:Bind IsDocumentDownloading, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                         </Grid>
-                        <RichTextBlock helpers:CommentRichService.Text="{x:Bind Content, Mode=OneWay}"
+                        <RichTextBlock x:Name="ReceivedBodyText"
+                                       helpers:CommentRichService.Text="{x:Bind Content, Mode=OneWay}"
                                        helpers:CommentRichService.MentionedJids="{x:Bind MentionedJids, Mode=OneWay}"
                                        helpers:CommentRichService.MentionLookup="{x:Bind MentionLookup, Mode=OneWay}"
                                        helpers:CommentRichService.RefreshKey="{x:Bind MentionRefreshKey, Mode=OneWay}"
                                        helpers:CommentRichService.LinkBrushKey="ChatDetailReceivedLinkBrush"
-                                       Visibility="{x:Bind ShowTextContent, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                       x:Load="{x:Bind ShowTextContent, Mode=OneWay}"
                                        Foreground="{ThemeResource ChatDetailReceivedTextBrush}"
                                        IsTextSelectionEnabled="True"
                                        TextWrapping="Wrap"
@@ -770,9 +875,10 @@
                                        FontSize="15"
                                        LineHeight="20"
                                        FontFamily="{StaticResource MainFont}"/>
-                        <HyperlinkButton Content="{x:Bind ExpandLinkText, Mode=OneWay}"
+                        <HyperlinkButton x:Name="ReceivedExpandLink"
+                                         Content="{x:Bind ExpandLinkText, Mode=OneWay}"
                                          Command="{x:Bind ToggleExpandCommand, Mode=OneWay}"
-                                         Visibility="{x:Bind CanExpand, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                         x:Load="{x:Bind CanExpand, Mode=OneWay}"
                                          Style="{StaticResource ChatDetailReceivedReadMoreHyperlinkButtonStyle}"/>
                         <Grid Margin="0,4,0,0">
                             <Grid.ColumnDefinitions>

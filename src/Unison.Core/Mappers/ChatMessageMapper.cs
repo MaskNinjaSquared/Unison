@@ -71,9 +71,11 @@ namespace Unison.Core.Mappers
                 PinExpiresAtUtc = context.PinExpiresAtUtc,
                 IsAudio = kind == ChatMessageKind.Audio || kind == ChatMessageKind.Voice,
                 IsVoiceMessage = kind == ChatMessageKind.Voice,
+                IsForwarded = snapshot.IsForwarded,
                 QuotedText = snapshot.QuotedText,
                 QuotedKind = snapshot.QuotedKind,
                 QuotedSenderName = snapshot.QuotedSenderName,
+                QuotedParticipantJid = snapshot.QuotedParticipantJid,
                 QuotedMessageId = snapshot.QuotedMessageId,
                 MentionedJids = snapshot.MentionedJids != null
                     ? new System.Collections.Generic.List<string>(snapshot.MentionedJids)

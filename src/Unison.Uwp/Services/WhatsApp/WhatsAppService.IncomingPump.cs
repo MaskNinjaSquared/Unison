@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -856,17 +856,22 @@ namespace Unison.Uwp.Services.WhatsApp
             Proto.Message msg,
             out string quotedText,
             out string quotedSender,
+            out string quotedParticipantJid,
             out string quotedMessageId,
             out ChatPreviewKind quotedKind,
-            out List<string> mentionedJids)
+            out List<string> mentionedJids,
+            out bool isForwarded)
         {
             quotedText = null;
             quotedSender = null;
+            quotedParticipantJid = null;
             quotedMessageId = null;
             quotedKind = ChatPreviewKind.Text;
             mentionedJids = null;
+            isForwarded = false;
 
             Proto.Message unwrapped = UnwrapMessage(msg);
+            isForwarded = HistorySyncContentFilter.ReadIsForwarded(unwrapped);
             Proto.ContextInfo ctx = GetContextInfo(unwrapped);
             if (ctx == null)
             {
@@ -923,6 +928,7 @@ namespace Unison.Uwp.Services.WhatsApp
             string participant = NormalizeJid(ctx.Participant);
             if (!string.IsNullOrEmpty(participant))
             {
+                quotedParticipantJid = participant;
                 quotedSender = ResolveDisplayName(participant, "quote");
                 if (string.IsNullOrWhiteSpace(quotedSender) ||
                     quotedSender.IndexOf('@') >= 0)
@@ -2023,7 +2029,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 SetIncomingMessagePumpStage("model", e);
                 // Domain ChatMessage via the MessageFacade (Kind resolved in mapper).
                 ChatMessage chatMessage;
-                ApplyContextInfoExtras(e.Message, out string quotedText, out string quotedSender, out string quotedMessageId, out var quotedKind, out var mentionedJids);
+                ApplyContextInfoExtras(e.Message, out string quotedText, out string quotedSender, out string quotedParticipantJid, out string quotedMessageId, out var quotedKind, out var mentionedJids, out bool isForwarded);
 
                 if (_messageService != null)
                 {
@@ -2049,9 +2055,11 @@ namespace Unison.Uwp.Services.WhatsApp
                             IsVoice = renderInfo?.IsVoice == true,
                             IsDocument = renderInfo?.IsDocument == true,
                             Caption = renderInfo?.Caption ?? "",
+                            IsForwarded = isForwarded,
                             QuotedText = quotedText,
                             QuotedKind = quotedKind,
                             QuotedSenderName = quotedSender,
+                            QuotedParticipantJid = quotedParticipantJid,
                             QuotedMessageId = quotedMessageId,
                             MentionedJids = mentionedJids
                         });
@@ -2071,6 +2079,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             renderInfo?.IsVoice == true,
                             renderInfo?.IsDocument == true),
                         Caption = renderInfo?.Caption ?? "",
+                        IsForwarded = isForwarded,
                         Timestamp = NormalizeIncomingTimestamp(e.Timestamp, e.IsOffline),
                         IsFromMe = isActuallyFromMe,
                         SenderName = senderName,
@@ -2080,6 +2089,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         QuotedText = quotedText,
                         QuotedKind = quotedKind,
                         QuotedSenderName = quotedSender,
+                        QuotedParticipantJid = quotedParticipantJid,
                         QuotedMessageId = quotedMessageId,
                         MentionedJids = mentionedJids
                     };
@@ -2314,7 +2324,12 @@ namespace Unison.Uwp.Services.WhatsApp
                 ChatItem notificationChat = null;
                 await RunOnUiThreadAsync(() =>
                     {
-                        var chat = Chats.FirstOrDefault(c => GetCanonicalJid(c.JID) == jid);
+                        string canonicalLookup = GetCanonicalJid(jid) ?? jid;
+                        var chat = Chats.FirstOrDefault(c =>
+                            string.Equals(
+                                GetCanonicalJid(c.JID),
+                                canonicalLookup,
+                                StringComparison.OrdinalIgnoreCase));
                         
                         // Create new chat entry if this JID isn't known yet
                         if (chat == null)
@@ -2356,7 +2371,10 @@ namespace Unison.Uwp.Services.WhatsApp
                             false,
                             renderInfo?.PreviewKind,
                             listAuthorPrefix,
-                            chatMessage.MentionedJids);
+                            chatMessage.MentionedJids,
+                            chatMessage.IsFromMe,
+                            HistoryLiveMessageMapper.FromStatus(chatMessage.Status, chatMessage.IsFromMe),
+                            chatMessage.Id);
                         foreach (var equivalentRow in GetChatRowsForCanonicalJid(jid))
                         {
                             if (!ReferenceEquals(equivalentRow, chat))
@@ -2368,7 +2386,10 @@ namespace Unison.Uwp.Services.WhatsApp
                                     false,
                                     renderInfo?.PreviewKind,
                                     listAuthorPrefix,
-                                    chatMessage.MentionedJids);
+                                    chatMessage.MentionedJids,
+                                    chatMessage.IsFromMe,
+                                    HistoryLiveMessageMapper.FromStatus(chatMessage.Status, chatMessage.IsFromMe),
+                                    chatMessage.Id);
                             }
                         }
 
@@ -2497,6 +2518,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     summary.Timestamp = comparableTimestamp;
                     summary.Preview = preview ?? string.Empty;
                     summary.IsGroup = isGroup;
+                    summary.IsFromMe = isFromMe;
                     summary.Kind = kind;
                 }
 
@@ -2550,6 +2572,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             Preview = pair.Value.Preview,
                             Timestamp = pair.Value.Timestamp,
                             IsGroup = pair.Value.IsGroup,
+                            IsFromMe = pair.Value.IsFromMe,
                             UnreadDelta = pair.Value.UnreadDelta,
                             Kind = pair.Value.Kind
                         },
@@ -2599,7 +2622,13 @@ namespace Unison.Uwp.Services.WhatsApp
                                     summary.Preview ?? string.Empty,
                                     summary.Timestamp,
                                     false,
-                                    summary.Kind))
+                                    summary.Kind,
+                                    null,
+                                    null,
+                                    summary.IsFromMe,
+                                    summary.IsFromMe
+                                        ? MessageSendState.Sent
+                                        : MessageSendState.NotApplicable))
                             {
                                 updated++;
                             }
@@ -2704,7 +2733,16 @@ namespace Unison.Uwp.Services.WhatsApp
                     ChatItem preferred = null;
                     foreach (var row in rows)
                     {
-                        if (ApplyChatPreviewIfNewer(row, displayContent, timestamp, false, kindHint))
+                        if (ApplyChatPreviewIfNewer(
+                            row,
+                            displayContent,
+                            timestamp,
+                            false,
+                            kindHint,
+                            null,
+                            null,
+                            isFromMe,
+                            isFromMe ? MessageSendState.Sent : MessageSendState.NotApplicable))
                         {
                             preferred = preferred ?? row;
                         }
@@ -2761,7 +2799,10 @@ namespace Unison.Uwp.Services.WhatsApp
                         false,
                         ChatPreviewNormalizer.InferKindFromMessage(latest),
                         author,
-                        latest.MentionedJids))
+                        latest.MentionedJids,
+                        latest.IsFromMe,
+                        HistoryLiveMessageMapper.FromStatus(latest.Status, latest.IsFromMe),
+                        latest.Id))
                     {
                         updated++;
                     }
@@ -2815,7 +2856,12 @@ namespace Unison.Uwp.Services.WhatsApp
                         preview,
                         latest.Timestamp,
                         false,
-                        ChatPreviewNormalizer.InferKindFromMessage(latest));
+                        ChatPreviewNormalizer.InferKindFromMessage(latest),
+                        ChatPreviewNormalizer.FormatListAuthorPrefix(latest, JidHelper.IsGroupJid(canonicalJid), SelfListDisplayName()),
+                        latest.MentionedJids,
+                        latest.IsFromMe,
+                        HistoryLiveMessageMapper.FromStatus(latest.Status, latest.IsFromMe),
+                        latest.Id);
                     ApplyChatKind(chat);
 
                     if (!chat.IsGroup && (chat.Name.Contains("@") || chat.Name == canonicalJid.Replace("@s.whatsapp.net", "").Replace("@lid", "") || IsSelfMarkerLabel(chat.Name)))
