@@ -54,9 +54,7 @@ namespace Unison.Core.Contracts
 
         /// <summary>
 
-        /// Applies SQLite local fields onto a chat model.
-
-        /// Does not overwrite <see cref="ChatItem.IsChatPinned"/> (history remains source of truth for now).
+        /// Applies SQLite local fields onto a chat model (widget pin, chat-list pin, mute).
 
         /// </summary>
 

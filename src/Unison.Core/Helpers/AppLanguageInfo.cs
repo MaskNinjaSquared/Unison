@@ -21,7 +21,8 @@ namespace Unison.Core.Helpers
             AppLanguage.Indonesian,
             AppLanguage.Polish,
             AppLanguage.Ukrainian,
-            AppLanguage.Russian
+            AppLanguage.Russian,
+            AppLanguage.German
         };
 
         private static readonly AppLanguage[] ShippedLanguages =
@@ -34,7 +35,8 @@ namespace Unison.Core.Helpers
             AppLanguage.Indonesian,
             AppLanguage.Polish,
             AppLanguage.Ukrainian,
-            AppLanguage.Russian
+            AppLanguage.Russian,
+            AppLanguage.German
         };
 
         /// <summary>ComboBox order (System first, then shipped locales).</summary>
@@ -94,6 +96,8 @@ namespace Unison.Core.Helpers
                     return "Українська";
                 case AppLanguage.Russian:
                     return "Русский";
+                case AppLanguage.German:
+                    return "Deutsch";
                 default:
                     return "English";
             }
@@ -163,6 +167,8 @@ namespace Unison.Core.Helpers
                     return "uk-UA";
                 case AppLanguage.Russian:
                     return "ru-RU";
+                case AppLanguage.German:
+                    return "de-DE";
                 default:
                     return "en-US";
             }

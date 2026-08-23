@@ -28,6 +28,12 @@ namespace Unison.Core.Contracts
         /// </summary>
         Task UpsertReactionsAsync(IReadOnlyList<HistoryMessageReaction> reactions);
 
+        /// <summary>
+        /// Pin/unpin flags on existing <c>history_message</c> rows (live pin envelope or local
+        /// long-press). Does not insert missing bodies — only updates rows that already exist.
+        /// </summary>
+        Task UpsertPinsAsync(IReadOnlyList<HistoryMessagePinUpdate> pins);
+
         Task<HistoryMessage> GetAsync(string chatJid, string messageId);
 
         /// <summary>

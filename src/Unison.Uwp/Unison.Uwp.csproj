@@ -20,7 +20,7 @@
     <PackageCertificateThumbprint>
     </PackageCertificateThumbprint>
     <!-- APPX4001: declare bundle platforms explicitly -->
-    <AppxBundlePlatforms>arm</AppxBundlePlatforms>
+    <AppxBundlePlatforms>x64|arm</AppxBundlePlatforms>
     <!-- PRI257: avoid NuGet satellite assemblies overriding app default language -->
     <AppxGeneratePrisForPortableLibrariesEnabled>false</AppxGeneratePrisForPortableLibrariesEnabled>
     <!-- Prefer 64-bit ILC; can avoid some 1.7.6 Analysis NREs -->
@@ -35,7 +35,7 @@
     <AppxBundleAutoResourcePackageQualifiers>Scale|DXFeatureLevel</AppxBundleAutoResourcePackageQualifiers>
     <!-- Language list (semicolons) must stay in the main package; Scale=200 matches
          the scale-qualified splash/logos so MakeAppx finds a main-package candidate. -->
-    <AppxDefaultResourceQualifiers>Language=en-US;pt-BR;es-ES;nl-NL;id-ID;it-IT;pl-PL;uk-UA;ru-RU|Scale=200</AppxDefaultResourceQualifiers>
+    <AppxDefaultResourceQualifiers>Language=en-US;pt-BR;es-ES;nl-NL;id-ID;it-IT;pl-PL;uk-UA;ru-RU;de-DE|Scale=200</AppxDefaultResourceQualifiers>
     <PackageCertificateKeyFile>Unison.Uwp_TemporaryKey.pfx</PackageCertificateKeyFile>
     <AppInstallerUpdateFrequency>0</AppInstallerUpdateFrequency>
     <AppInstallerCheckForUpdateFrequency>OnApplicationRun</AppInstallerCheckForUpdateFrequency>
@@ -712,6 +712,7 @@
     <PRIResource Include="Strings\pl-PL\Resources.resw" />
     <PRIResource Include="Strings\uk-UA\Resources.resw" />
     <PRIResource Include="Strings\ru-RU\Resources.resw" />
+    <PRIResource Include="Strings\de-DE\Resources.resw" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Unison.Background\Unison.Background.csproj">

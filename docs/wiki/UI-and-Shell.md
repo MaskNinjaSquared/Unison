@@ -83,7 +83,7 @@ Persisted as `LocalSettingsConstants.SelectedShell`. `App.xaml` merges Unison fi
 
 Language packs are **in the main package** (not resource packs). That fixes sideload on Windows 10 Mobile, where a bundle would otherwise install only OS + pt-BR and `PrimaryLanguageOverride` would fall back incorrectly.
 
-Shipped tags: `en-US`, `pt-BR`, `es-ES`, `it-IT`, `nl-NL`, `id-ID`, `pl-PL`, `uk-UA`, `ru-RU`, plus **System** (OS preferred → first shipped match → English).
+Shipped tags: `en-US`, `pt-BR`, `es-ES`, `it-IT`, `nl-NL`, `id-ID`, `pl-PL`, `uk-UA`, `ru-RU`, `de-DE`, plus **System** (OS preferred → first shipped match → English).
 
 To add another locale, see [Adding languages](Adding-Languages).
 

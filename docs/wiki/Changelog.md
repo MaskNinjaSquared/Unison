@@ -4,10 +4,29 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## German (`de-DE`) locale
+
+- New UI pack `Strings/de-DE/Resources.resw` (parity with `en-US`; download draft + 92 missing keys filled)
+- Registered in `AppLanguage.German = 9`, `AppLanguageInfo`, `Package.appxmanifest`, and `AppxDefaultResourceQualifiers` / `PRIResource`
+
+---
+
+## ViewModel slim-down (helpers)
+
+- **`GroupParticipantLookup`** owns roster/name/avatar/1:1 indexes previously inlined on `ChatDetailViewModel`; VM keeps thin wrappers (`RebuildParticipantLookup`, `ResolveParticipantContactUri`) and timeline Mentions refresh
+- **`MessageRunLayout`** owns run chrome, date chips, sender/quote labels, and contact slots; midnight refresh only rewrites separators
+- **`SelfIdentity`** centralizes “is this JID me?” for You/Você labels (used by the participant lookup)
+- **`ChatListDisplayOrder`** owns PN/LID dedupe + pin/timestamp/name sort; `ChatListViewModel` delegates instead of duplicating the merge logic
+- Collaborators stay VM-owned (no new DI interfaces for these helpers)
+
+---
+
 ## Bubble pin menu + clock format (i18n / Settings)
 
 - Message long-press **pin / unpin** labels come from `.resw` (`ChatDetail_UnpinMessage`, `ChatDetail_PinFor24Hours`, `ChatDetail_PinFor7Days`, `ChatDetail_PinFor30Days`) in every shipped locale — no hardcoded PT-BR in `ChatDetailView`
 - Settings **Customization:** clock after device time-zone conversion is **24-hour** or **12-hour (AM/PM)** (`TimeFormat` / `LocalSettingsConstants.TimeFormat`). Storage and tip compare stay **UTC**; only UI clocks (`WhatsAppMapper.FormatClock` / `LocalTimeConverter`) read `WhatsAppMapper.CurrentTimeFormat`
+- **Fix (message pin persistence):** live pin/unpin now writes `history_message` immediately via `UpsertPinsAsync` (PN+LID keys + MessageId fallback). Body upserts preserve an existing pin unless the row already carries `IsPinned=true` or `WritePins` clears it — history sync `InsertOrReplace` no longer wipes the banner after a successful pin
+- **Fix (chat-list pin persistence):** `ChatStore.UpsertAsync` already saved `IsChatPinned`, but `ApplyTo` ignored it (comment said “history is source of truth” while `history_chat_preview` has no pin columns). `ApplyLocalFields` now restores chat-list pin from SQLite on list hydrate so a restart does not wait for the next `pin_v1` app-state sync
 
 ---
 

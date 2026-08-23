@@ -328,7 +328,7 @@ namespace Unison.Uwp.Data
 
         /// <summary>
 
-        /// Applies widget pin + mutedUntil from store. Leaves <see cref="ChatItem.IsChatPinned"/> from history.
+        /// Applies widget pin, chat-list pin, and mutedUntil from store onto the model.
 
         /// </summary>
 
@@ -342,7 +342,7 @@ namespace Unison.Uwp.Data
 
                 chat.IsWidgetPinned = false;
 
-                // Keep existing MutedUntil from history/JSON when no SQLite row yet.
+                // Keep existing MutedUntil / IsChatPinned from history/JSON when no SQLite row yet.
 
                 return;
 
@@ -355,6 +355,36 @@ namespace Unison.Uwp.Data
             chat.IsWidgetPinned = state.IsWidgetPinned;
 
             chat.MutedUntil = state.MutedUntil;
+
+            // ChatStore is the durable local mirror of pin_v1 (ApplyChatPin / app-state).
+
+            // history_chat_preview has no pin columns; without this, a restart showed every
+
+            // chat unpinned until the next app-state sync arrived.
+
+            chat.IsChatPinned = state.IsChatPinned;
+
+            if (!state.IsChatPinned)
+
+            {
+
+                // Match ApplyAppStateChatFlagsAsync: 0 is an explicit unpin tombstone so
+
+                // PN/LID dedupe cannot resurrect a pin from an alias that was not updated.
+
+                chat.PinnedTimestamp = 0;
+
+            }
+
+            else if (chat.PinnedTimestamp == null || chat.PinnedTimestamp == 0)
+
+            {
+
+                // Sort key until app-state fills the real pin timestamp; keep pinned rows on top.
+
+                chat.PinnedTimestamp = 1;
+
+            }
 
         }
 

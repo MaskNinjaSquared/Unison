@@ -929,11 +929,18 @@ namespace Unison.Uwp.Services.WhatsApp
             if (!string.IsNullOrEmpty(participant))
             {
                 quotedParticipantJid = participant;
-                quotedSender = ResolveDisplayName(participant, "quote");
-                if (string.IsNullOrWhiteSpace(quotedSender) ||
-                    quotedSender.IndexOf('@') >= 0)
+                if (IsSelfJid(participant) || IsSelfLinkedJid(participant))
                 {
-                    quotedSender = GetResolvedName(participant);
+                    quotedSender = SelfListDisplayName();
+                }
+                else
+                {
+                    quotedSender = ResolveDisplayName(participant, "quote");
+                    if (string.IsNullOrWhiteSpace(quotedSender) ||
+                        quotedSender.IndexOf('@') >= 0)
+                    {
+                        quotedSender = GetResolvedName(participant);
+                    }
                 }
             }
         }
