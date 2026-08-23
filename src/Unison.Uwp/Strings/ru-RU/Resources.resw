@@ -493,7 +493,7 @@
     <value>Очистить сессию</value>
   </data>
   <data name="Debug_WipeBox.Text" xml:space="preserve">
-    <value>Удалить локальные данные авторизации и вернуться к авторизации.</value>
+    <value>Удалить локальные данные сессии и вернуться к авторизации.</value>
   </data>
   <data name="Debug_StatusBox.Header" xml:space="preserve">
     <value>Статус</value>
@@ -538,10 +538,10 @@
     <value>Нет последних обновлений статуса</value>
   </data>
   <data name="Shell_Starred.Text" xml:space="preserve">
-    <value>Избранное сообщение</value>
+    <value>Избранное</value>
   </data>
   <data name="Shell_Archived.Text" xml:space="preserve">
-    <value>Архивированные чаты</value>
+    <value>Архив</value>
   </data>
   <data name="Shell_Settings.Text" xml:space="preserve">
     <value>Настройки</value>
@@ -881,13 +881,13 @@
 контакт</value>
   </data>
   <data name="ChatDetailInfo_NotificationsOn" xml:space="preserve">
-    <value>Включить</value>
+    <value>Вкл</value>
   </data>
   <data name="ChatDetailInfo_Name" xml:space="preserve">
     <value>Имя</value>
   </data>
   <data name="ChatDetailInfo_NotificationsOff" xml:space="preserve">
-    <value>Выключить</value>
+    <value>Выкл</value>
   </data>
   <data name="ChatDetailInfo_Status" xml:space="preserve">
     <value>Статус</value>
@@ -909,7 +909,7 @@
   </data>
   <data name="ChatDetailInfo_PinAppBarLabel" xml:space="preserve">
     <value>Закрепить на
-начального экрана</value>
+начальном экране</value>
   </data>
   <data name="ChatDetail_UnpinFromStart.Text" xml:space="preserve">
     <value>Убрать с начального экрана</value>
