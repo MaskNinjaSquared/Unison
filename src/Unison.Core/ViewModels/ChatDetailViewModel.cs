@@ -110,35 +110,10 @@ namespace Unison.Core.ViewModels
         private int _emptyLoadAttempts;
 
         /// <summary>
-        /// Per open-chat lookup of group participant labels/avatars. Built once from the roster
-        /// (plus service/Person caches) and reused by run layout so every bubble does not walk
-        /// the member list and ResolveDisplayName again.
+        /// Per open-chat lookup of group participant labels/avatars (plus 1:1 indexes).
+        /// Owned for the VM lifetime; roster hooks detach on uninitialize without Dispose.
         /// </summary>
-        private Dictionary<string, string> _participantNames =
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        private Dictionary<string, string> _participantAvatars =
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        private Dictionary<string, GroupMember> _rosterByCanonical =
-            new Dictionary<string, GroupMember>(StringComparer.OrdinalIgnoreCase);
-
-        /// <summary>
-        /// 1:1 chat avatar/name by canonical JID — built once per lookup rebuild so bubbles
-        /// never walk <see cref="IWhatsAppService.Chats"/> on a cache miss.
-        /// </summary>
-        private Dictionary<string, string> _directChatAvatars =
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        private Dictionary<string, string> _directChatNames =
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        private List<GroupMember> _hookedRosterMembers;
-        private PropertyChangedEventHandler _rosterAvatarChangedHandler;
-
-        private int _participantLookupRosterCount = -1;
-        private string _participantLookupChatJid;
-        private System.Collections.Generic.IReadOnlyDictionary<string, string> _participantLookupMentionRef;
+        private readonly GroupParticipantLookup _participants;
 
         /// <summary>How many bubble VMs to materialize when opening a chat (service may hold more data).</summary>
         public int InitialUiMessageWindow { get; }
@@ -251,12 +226,17 @@ namespace Unison.Core.ViewModels
             AddContactCommand = new RelayCommand(
                 () => _ = AddContactAsync(),
                 () => CanAddToAddressBook);
+
+            _participants = new GroupParticipantLookup(_whatsAppService, _personStore, SelfListDisplayName);
+            _participants.ParticipantAvatarChanged += OnParticipantAvatarChanged;
         }
 
         // ── Lifecycle ─────────────────────────────────────────────────────────
 
         public Task InitializeAsync()
         {
+            _participants.ParticipantAvatarChanged -= OnParticipantAvatarChanged;
+            _participants.ParticipantAvatarChanged += OnParticipantAvatarChanged;
             Attach();
             return Task.CompletedTask;
         }
@@ -269,7 +249,8 @@ namespace Unison.Core.ViewModels
         {
             StopPresenceWatch();
             await CancelRecordingCoreAsync();
-            UnhookRosterAvatarChanges();
+            _participants.ParticipantAvatarChanged -= OnParticipantAvatarChanged;
+            _participants.DetachHooks();
             ClearTimeline();
             if (_contactService != null)
             {
@@ -854,7 +835,8 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
-            GroupMember member = FindGroupMember(participantJid);
+            _participants.EnsureFresh(ActiveChat);
+            GroupMember member = _participants.Find(participantJid);
             if (member == null)
             {
                 member = new GroupMember
@@ -904,234 +886,24 @@ namespace Unison.Core.ViewModels
             OpenGroupMemberInfoByDisplayName(senderName);
         }
 
-        private GroupMember FindGroupMember(string participantJid)
-        {
-            if (string.IsNullOrWhiteSpace(participantJid))
-            {
-                return null;
-            }
-
-            EnsureParticipantLookupFresh(ActiveChat);
-
-            string canonical = _whatsAppService != null
-                ? _whatsAppService.GetCanonicalJid(participantJid)
-                : JidHelper.Normalize(participantJid);
-
-            GroupMember member;
-            if (!string.IsNullOrWhiteSpace(canonical) &&
-                _rosterByCanonical.TryGetValue(canonical, out member))
-            {
-                return member;
-            }
-
-            if (_rosterByCanonical.TryGetValue(participantJid, out member))
-            {
-                return member;
-            }
-
-            return null;
-        }
-
         /// <summary>
-        /// Rebuilds <see cref="_participantNames"/> / avatars / roster index for the active chat.
-        /// Indexes only what is already on the roster (no ResolveDisplayName/Avatar walk per member).
-        /// Missing labels are resolved on demand for JIDs that appear on visible bubbles.
+        /// Rebuilds participant name/avatar/roster indexes for the active chat.
         /// </summary>
         public void RebuildParticipantLookup()
         {
-            UnhookRosterAvatarChanges();
-
-            var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var avatars = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var roster = new Dictionary<string, GroupMember>(StringComparer.OrdinalIgnoreCase);
-
-            ChatItem chat = ActiveChat;
-            _participantLookupChatJid = chat?.JID;
-            _participantLookupRosterCount = chat?.GroupMembers?.Count ?? 0;
-            _participantLookupMentionRef = chat?.MentionLookup;
-
-            RebuildDirectChatIndex();
-
-            if (chat?.GroupMembers == null || chat.GroupMembers.Count == 0)
-            {
-                _participantNames = names;
-                _participantAvatars = avatars;
-                _rosterByCanonical = roster;
-                return;
-            }
-
-            for (int i = 0; i < chat.GroupMembers.Count; i++)
-            {
-                GroupMember member = chat.GroupMembers[i];
-                if (member == null || string.IsNullOrWhiteSpace(member.Jid))
-                {
-                    continue;
-                }
-
-                string name = member.DisplayName;
-                string avatar = member.AvatarUrl;
-
-                IndexParticipantKey(roster, names, avatars, member.Jid, member, name, avatar);
-                IndexParticipantKey(roster, names, avatars, member.Lid, member, name, avatar);
-                IndexParticipantKey(roster, names, avatars, member.PhoneNumber, member, name, avatar);
-
-                string canonical = _whatsAppService != null
-                    ? _whatsAppService.GetCanonicalJid(member.Jid)
-                    : JidHelper.Normalize(member.Jid);
-                IndexParticipantKey(roster, names, avatars, canonical, member, name, avatar);
-            }
-
-            _participantNames = names;
-            _participantAvatars = avatars;
-            _rosterByCanonical = roster;
-            HookRosterAvatarChanges(chat.GroupMembers);
+            _participants.Rebuild(ActiveChat);
         }
 
         /// <summary>
-        /// Indexes non-group chats once so participant resolution is O(1) per JID, not O(chats).
+        /// Pushes a freshly hydrated roster avatar into any visible bubbles that still show a
+        /// blank contact slot for that participant. Cache update is already done by the lookup.
         /// </summary>
-        private void RebuildDirectChatIndex()
-        {
-            var avatars = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var chats = _whatsAppService?.Chats;
-            if (chats == null || chats.Count == 0)
-            {
-                _directChatAvatars = avatars;
-                _directChatNames = names;
-                return;
-            }
-
-            for (int i = 0; i < chats.Count; i++)
-            {
-                ChatItem chat = chats[i];
-                if (chat == null || chat.IsGroup || string.IsNullOrWhiteSpace(chat.JID))
-                {
-                    continue;
-                }
-
-                string raw = JidHelper.Normalize(chat.JID) ?? chat.JID;
-                string canonical = _whatsAppService != null
-                    ? _whatsAppService.GetCanonicalJid(chat.JID)
-                    : raw;
-                if (string.IsNullOrWhiteSpace(canonical))
-                {
-                    canonical = raw;
-                }
-
-                string url = chat.GetAvatarUrl(preferHigh: false);
-                if (!string.IsNullOrWhiteSpace(url))
-                {
-                    IndexDirectMap(avatars, raw, url);
-                    IndexDirectMap(avatars, canonical, url);
-                }
-
-                if (!string.IsNullOrWhiteSpace(chat.Name) &&
-                    chat.Name.IndexOf('@') < 0 &&
-                    !string.Equals(chat.Name, "Me", StringComparison.OrdinalIgnoreCase) &&
-                    !string.Equals(chat.Name, "You", StringComparison.OrdinalIgnoreCase))
-                {
-                    IndexDirectMap(names, raw, chat.Name.Trim());
-                    IndexDirectMap(names, canonical, chat.Name.Trim());
-                }
-            }
-
-            _directChatAvatars = avatars;
-            _directChatNames = names;
-        }
-
-        private static void IndexDirectMap(Dictionary<string, string> map, string key, string value)
-        {
-            if (map == null || string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(value))
-            {
-                return;
-            }
-
-            if (!map.ContainsKey(key))
-            {
-                map[key] = value;
-            }
-        }
-
-        private void HookRosterAvatarChanges(IList<GroupMember> members)
-        {
-            if (members == null || members.Count == 0)
-            {
-                return;
-            }
-
-            if (_rosterAvatarChangedHandler == null)
-            {
-                _rosterAvatarChangedHandler = OnRosterMemberPropertyChanged;
-            }
-
-            var hooked = new List<GroupMember>(members.Count);
-            for (int i = 0; i < members.Count; i++)
-            {
-                GroupMember member = members[i];
-                if (member == null)
-                {
-                    continue;
-                }
-
-                member.PropertyChanged += _rosterAvatarChangedHandler;
-                hooked.Add(member);
-            }
-
-            _hookedRosterMembers = hooked;
-        }
-
-        private void UnhookRosterAvatarChanges()
-        {
-            if (_hookedRosterMembers == null || _rosterAvatarChangedHandler == null)
-            {
-                _hookedRosterMembers = null;
-                return;
-            }
-
-            for (int i = 0; i < _hookedRosterMembers.Count; i++)
-            {
-                GroupMember member = _hookedRosterMembers[i];
-                if (member != null)
-                {
-                    member.PropertyChanged -= _rosterAvatarChangedHandler;
-                }
-            }
-
-            _hookedRosterMembers = null;
-        }
-
-        private void OnRosterMemberPropertyChanged(object sender, PropertyChangedEventArgs e)
-        {
-            if (e == null ||
-                e.PropertyName != nameof(GroupMember.AvatarUrl) ||
-                !(sender is GroupMember member) ||
-                string.IsNullOrWhiteSpace(member.AvatarUrl))
-            {
-                return;
-            }
-
-            string jid = FirstNonEmpty(member.Jid, member.Lid, member.PhoneNumber);
-            if (string.IsNullOrWhiteSpace(jid))
-            {
-                return;
-            }
-
-            ApplyParticipantAvatarToTimeline(jid, member.AvatarUrl);
-        }
-
-        /// <summary>
-        /// Pushes a freshly hydrated roster avatar into the cache and any visible bubbles
-        /// that still show a blank contact slot for that participant.
-        /// </summary>
-        private void ApplyParticipantAvatarToTimeline(string participantJid, string avatarUrl)
+        private void OnParticipantAvatarChanged(string participantJid, string avatarUrl)
         {
             if (string.IsNullOrWhiteSpace(participantJid) || string.IsNullOrWhiteSpace(avatarUrl))
             {
                 return;
             }
-
-            CacheParticipantAvatar(participantJid, avatarUrl);
 
             string canonical = _whatsAppService != null
                 ? _whatsAppService.GetCanonicalJid(participantJid)
@@ -1179,115 +951,9 @@ namespace Unison.Core.ViewModels
                    string.Equals(leftCanonical, rightCanonical, StringComparison.OrdinalIgnoreCase);
         }
 
-        private static string FirstNonEmpty(params string[] values)
+        private string SelfListDisplayName()
         {
-            if (values == null)
-            {
-                return null;
-            }
-
-            for (int i = 0; i < values.Length; i++)
-            {
-                if (!string.IsNullOrWhiteSpace(values[i]))
-                {
-                    return values[i];
-                }
-            }
-
-            return null;
-        }
-
-        private static void IndexParticipantKey(
-            Dictionary<string, GroupMember> roster,
-            Dictionary<string, string> names,
-            Dictionary<string, string> avatars,
-            string key,
-            GroupMember member,
-            string name,
-            string avatar)
-        {
-            if (string.IsNullOrWhiteSpace(key) || member == null)
-            {
-                return;
-            }
-
-            string norm = JidHelper.Normalize(key) ?? key;
-            if (string.IsNullOrWhiteSpace(norm))
-            {
-                return;
-            }
-
-            roster[norm] = member;
-            if (!string.IsNullOrWhiteSpace(name))
-            {
-                names[norm] = name;
-            }
-
-            if (!string.IsNullOrWhiteSpace(avatar))
-            {
-                avatars[norm] = avatar;
-            }
-        }
-
-        private void EnsureParticipantLookupFresh(ChatItem groupChat)
-        {
-            int rosterCount = groupChat?.GroupMembers?.Count ?? 0;
-            string jid = groupChat?.JID;
-            System.Collections.Generic.IReadOnlyDictionary<string, string> mentionLookup =
-                groupChat?.MentionLookup;
-            if (_participantLookupRosterCount == rosterCount &&
-                string.Equals(_participantLookupChatJid, jid, StringComparison.OrdinalIgnoreCase) &&
-                _participantNames != null &&
-                object.ReferenceEquals(_participantLookupMentionRef, mentionLookup))
-            {
-                return;
-            }
-
-            RebuildParticipantLookup();
-        }
-
-        private bool TryGetCachedParticipantName(string participantJid, out string name)
-        {
-            name = null;
-            if (string.IsNullOrWhiteSpace(participantJid) || _participantNames == null)
-            {
-                return false;
-            }
-
-            if (_participantNames.TryGetValue(participantJid, out name) &&
-                !string.IsNullOrWhiteSpace(name))
-            {
-                return true;
-            }
-
-            string canonical = _whatsAppService != null
-                ? _whatsAppService.GetCanonicalJid(participantJid)
-                : JidHelper.Normalize(participantJid);
-            return !string.IsNullOrWhiteSpace(canonical) &&
-                   _participantNames.TryGetValue(canonical, out name) &&
-                   !string.IsNullOrWhiteSpace(name);
-        }
-
-        private bool TryGetCachedParticipantAvatar(string participantJid, out string avatar)
-        {
-            avatar = null;
-            if (string.IsNullOrWhiteSpace(participantJid) || _participantAvatars == null)
-            {
-                return false;
-            }
-
-            if (_participantAvatars.TryGetValue(participantJid, out avatar) &&
-                !string.IsNullOrWhiteSpace(avatar))
-            {
-                return true;
-            }
-
-            string canonical = _whatsAppService != null
-                ? _whatsAppService.GetCanonicalJid(participantJid)
-                : JidHelper.Normalize(participantJid);
-            return !string.IsNullOrWhiteSpace(canonical) &&
-                   _participantAvatars.TryGetValue(canonical, out avatar) &&
-                   !string.IsNullOrWhiteSpace(avatar);
+            return _strings?.Get("Chat_SelfFallbackName", "You") ?? "You";
         }
 
         private GroupMember FindGroupMemberByDisplayName(string displayName)
@@ -1320,24 +986,6 @@ namespace Unison.Core.ViewModels
             }
 
             return partial;
-        }
-
-        private bool JidsMatchCanonical(string jid, string canonical)
-        {
-            if (string.IsNullOrWhiteSpace(jid) || string.IsNullOrWhiteSpace(canonical))
-            {
-                return false;
-            }
-
-            string other = _whatsAppService != null
-                ? _whatsAppService.GetCanonicalJid(jid)
-                : JidHelper.Normalize(jid);
-            if (string.IsNullOrWhiteSpace(other))
-            {
-                other = JidHelper.Normalize(jid);
-            }
-
-            return string.Equals(other, canonical, StringComparison.OrdinalIgnoreCase);
         }
 
         public void CloseChatDetailInfo()
@@ -2724,6 +2372,7 @@ namespace Unison.Core.ViewModels
         /// <summary>
         /// One pass over the visible timeline: run chrome, date chips, sender labels, and group
         /// author avatars. The bubble only binds the resolved <see cref="ChatMessage.ContactUri"/>.
+        /// Mentions refresh stays here (needs bubble VMs).
         /// </summary>
         public void ApplyMessageRunLayout(IList<ChatMessage> messages, bool isGroup, ChatItem groupChat)
         {
@@ -2732,82 +2381,22 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
-            if (isGroup)
-            {
-                EnsureParticipantLookupFresh(groupChat ?? ActiveChat);
-            }
-
             string todayLabel = _strings != null ? _strings.Get("Common_Today", "Today") : "Today";
             string yesterdayLabel = _strings != null
                 ? _strings.Get("Common_Yesterday", "Yesterday")
                 : "Yesterday";
-            DateTime? previousLocalDate = null;
 
-            for (int i = 0; i < messages.Count; i++)
-            {
-                var current = messages[i];
-                if (current == null)
-                {
-                    continue;
-                }
-
-                DateTime localDate = WhatsAppMapper.ToLocalCalendarDate(current.Timestamp);
-                bool isFirstOfDay = localDate != DateTime.MinValue &&
-                    (!previousLocalDate.HasValue || localDate != previousLocalDate.Value);
-                current.IsFirstOfDay = isFirstOfDay;
-                current.DateSeparatorText = isFirstOfDay
-                    ? WhatsAppMapper.FormatDaySeparator(current.Timestamp, todayLabel, yesterdayLabel)
-                    : string.Empty;
-                if (localDate != DateTime.MinValue)
-                {
-                    previousLocalDate = localDate;
-                }
-
-                if (isGroup)
-                {
-                    EnsureGroupSenderName(current, groupChat);
-                    EnsureQuotedSenderName(current, groupChat);
-                }
-
-                bool isRunStart = i == 0;
-                bool isRunEnd = i == messages.Count - 1;
-
-                if (!isRunStart)
-                {
-                    isRunStart = !IsSameMessageRun(messages[i - 1], current);
-                }
-
-                if (!isRunEnd)
-                {
-                    isRunEnd = !IsSameMessageRun(current, messages[i + 1]);
-                }
-
-                current.IsRunStart = isRunStart;
-                current.IsRunEnd = isRunEnd;
-                current.ShowGroupSenderName =
-                    isGroup &&
-                    isRunStart &&
-                    !current.IsFromMe &&
-                    !string.IsNullOrWhiteSpace(current.SenderName) &&
-                    !string.Equals(current.SenderName, "Me", StringComparison.OrdinalIgnoreCase) &&
-                    !string.Equals(current.SenderName, "You", StringComparison.OrdinalIgnoreCase);
-
-                bool contactSlot = isGroup && !current.IsFromMe;
-                current.ShowContactSlot = contactSlot;
-                current.ShowContact = contactSlot && isRunStart;
-                current.ContactUri = contactSlot
-                    ? ResolveParticipantContactUri(current.ParticipantJid, groupChat)
-                    : null;
-
-                current.ShowQuotedAuthorLink =
-                    isGroup &&
-                    current.HasQuote &&
-                    (!string.IsNullOrWhiteSpace(current.QuotedParticipantJid) ||
-                     !string.IsNullOrWhiteSpace(current.QuotedSenderName));
-            }
+            MessageRunLayout.Apply(
+                messages,
+                isGroup,
+                groupChat ?? ActiveChat,
+                _participants,
+                todayLabel,
+                yesterdayLabel,
+                QuotedMessageIdIsFromMe);
 
             System.Collections.Generic.IReadOnlyDictionary<string, string> lookup =
-                isGroup ? groupChat?.MentionLookup : null;
+                isGroup ? (groupChat ?? ActiveChat)?.MentionLookup : null;
             for (int i = 0; i < Messages.Count; i++)
             {
                 ChatMessageViewModel row = Messages[i];
@@ -2872,28 +2461,18 @@ namespace Unison.Core.ViewModels
             string yesterdayLabel = _strings != null
                 ? _strings.Get("Common_Yesterday", "Yesterday")
                 : "Yesterday";
-            DateTime? previousLocalDate = null;
 
+            var models = new List<ChatMessage>(Messages.Count);
             for (int i = 0; i < Messages.Count; i++)
             {
                 ChatMessage current = Messages[i]?.Model;
-                if (current == null)
+                if (current != null)
                 {
-                    continue;
-                }
-
-                DateTime localDate = WhatsAppMapper.ToLocalCalendarDate(current.Timestamp);
-                bool isFirstOfDay = localDate != DateTime.MinValue &&
-                    (!previousLocalDate.HasValue || localDate != previousLocalDate.Value);
-                current.IsFirstOfDay = isFirstOfDay;
-                current.DateSeparatorText = isFirstOfDay
-                    ? WhatsAppMapper.FormatDaySeparator(current.Timestamp, todayLabel, yesterdayLabel)
-                    : string.Empty;
-                if (localDate != DateTime.MinValue)
-                {
-                    previousLocalDate = localDate;
+                    models.Add(current);
                 }
             }
+
+            MessageRunLayout.RefreshDateSeparators(models, todayLabel, yesterdayLabel);
         }
 
         /// <summary>
@@ -2901,267 +2480,33 @@ namespace Unison.Core.ViewModels
         /// </summary>
         public string ResolveParticipantContactUri(string participantJid, ChatItem groupChat)
         {
-            EnsureParticipantLookupFresh(groupChat ?? ActiveChat);
-            if (string.IsNullOrWhiteSpace(participantJid))
-            {
-                return null;
-            }
-
-            GroupMember roster = FindGroupMember(participantJid);
-            if (!string.IsNullOrWhiteSpace(roster?.AvatarUrl))
-            {
-                CacheParticipantAvatar(participantJid, roster.AvatarUrl);
-                return roster.AvatarUrl;
-            }
-
-            string avatar;
-            if (TryGetCachedParticipantAvatar(participantJid, out avatar))
-            {
-                return avatar;
-            }
-
-            if (TryGetDirectChatAvatar(participantJid, out avatar))
-            {
-                CacheParticipantAvatar(participantJid, avatar);
-                return avatar;
-            }
-
-            string resolved = GroupParticipantResolver.ResolveAvatar(
-                participantJid,
-                groupChat,
-                _whatsAppService,
-                _personStore,
-                roster,
-                _directChatAvatars);
-            if (!string.IsNullOrWhiteSpace(resolved))
-            {
-                CacheParticipantAvatar(participantJid, resolved);
-            }
-
-            return resolved;
+            return _participants.ResolveContactUri(participantJid, groupChat ?? ActiveChat);
         }
 
-        private void EnsureGroupSenderName(ChatMessage message, ChatItem groupChat)
+        /// <summary>
+        /// Timeline scan: true when the quoted message id matches an outgoing bubble on screen.
+        /// Self-JID checks live in <see cref="GroupParticipantLookup"/>.
+        /// </summary>
+        private bool QuotedMessageIdIsFromMe(string quotedId)
         {
-            if (message == null || message.IsFromMe)
-            {
-                return;
-            }
-
-            string participant = message.ParticipantJid;
-            if (string.IsNullOrWhiteSpace(participant))
-            {
-                return;
-            }
-
-            string cached;
-            if (TryGetCachedParticipantName(participant, out cached))
-            {
-                message.SenderName = cached;
-                return;
-            }
-
-            GroupMember roster = FindGroupMember(participant);
-            if (!string.IsNullOrWhiteSpace(roster?.DisplayName) &&
-                roster.DisplayName.IndexOf('@') < 0)
-            {
-                message.SenderName = roster.DisplayName.Trim();
-                CacheParticipantName(participant, message.SenderName);
-                return;
-            }
-
-            string fromDirect;
-            if (TryGetDirectChatName(participant, out fromDirect))
-            {
-                message.SenderName = fromDirect;
-                CacheParticipantName(participant, fromDirect);
-                return;
-            }
-
-            string resolved = GroupParticipantResolver.ResolveDisplayName(
-                participant,
-                groupChat,
-                _whatsAppService,
-                _personStore,
-                message.SenderName,
-                roster,
-                _directChatNames);
-
-            if (!string.IsNullOrWhiteSpace(resolved))
-            {
-                message.SenderName = resolved;
-                CacheParticipantName(participant, resolved);
-            }
-        }
-
-        private void EnsureQuotedSenderName(ChatMessage message, ChatItem groupChat)
-        {
-            if (message == null || !message.HasQuote)
-            {
-                return;
-            }
-
-            string participant = message.QuotedParticipantJid;
-            if (string.IsNullOrWhiteSpace(participant))
-            {
-                return;
-            }
-
-            string cached;
-            if (TryGetCachedParticipantName(participant, out cached))
-            {
-                message.QuotedSenderName = cached;
-                return;
-            }
-
-            GroupMember roster = FindGroupMember(participant);
-            if (!string.IsNullOrWhiteSpace(roster?.DisplayName) &&
-                roster.DisplayName.IndexOf('@') < 0)
-            {
-                message.QuotedSenderName = roster.DisplayName.Trim();
-                CacheParticipantName(participant, message.QuotedSenderName);
-                return;
-            }
-
-            string fromDirect;
-            if (TryGetDirectChatName(participant, out fromDirect))
-            {
-                message.QuotedSenderName = fromDirect;
-                CacheParticipantName(participant, fromDirect);
-                return;
-            }
-
-            string resolved = GroupParticipantResolver.ResolveDisplayName(
-                participant,
-                groupChat,
-                _whatsAppService,
-                _personStore,
-                message.QuotedSenderName,
-                roster,
-                _directChatNames);
-
-            if (!string.IsNullOrWhiteSpace(resolved))
-            {
-                message.QuotedSenderName = resolved;
-                CacheParticipantName(participant, resolved);
-            }
-        }
-
-        private bool TryGetDirectChatAvatar(string participantJid, out string avatar)
-        {
-            avatar = null;
-            if (string.IsNullOrWhiteSpace(participantJid) || _directChatAvatars == null)
+            if (string.IsNullOrWhiteSpace(quotedId) || Messages == null || Messages.Count == 0)
             {
                 return false;
             }
 
-            if (_directChatAvatars.TryGetValue(participantJid, out avatar) &&
-                !string.IsNullOrWhiteSpace(avatar))
+            for (int i = 0; i < Messages.Count; i++)
             {
-                return true;
+                ChatMessage row = Messages[i]?.Model;
+                if (row != null &&
+                    string.Equals(row.Id, quotedId, StringComparison.Ordinal) &&
+                    row.IsFromMe)
+                {
+                    return true;
+                }
             }
 
-            string canonical = _whatsAppService != null
-                ? _whatsAppService.GetCanonicalJid(participantJid)
-                : JidHelper.Normalize(participantJid);
-            return !string.IsNullOrWhiteSpace(canonical) &&
-                   _directChatAvatars.TryGetValue(canonical, out avatar) &&
-                   !string.IsNullOrWhiteSpace(avatar);
+            return false;
         }
 
-        private bool TryGetDirectChatName(string participantJid, out string name)
-        {
-            name = null;
-            if (string.IsNullOrWhiteSpace(participantJid) || _directChatNames == null)
-            {
-                return false;
-            }
-
-            if (_directChatNames.TryGetValue(participantJid, out name) &&
-                !string.IsNullOrWhiteSpace(name))
-            {
-                return true;
-            }
-
-            string canonical = _whatsAppService != null
-                ? _whatsAppService.GetCanonicalJid(participantJid)
-                : JidHelper.Normalize(participantJid);
-            return !string.IsNullOrWhiteSpace(canonical) &&
-                   _directChatNames.TryGetValue(canonical, out name) &&
-                   !string.IsNullOrWhiteSpace(name);
-        }
-
-        private void CacheParticipantName(string participantJid, string name)
-        {
-            if (string.IsNullOrWhiteSpace(participantJid) || string.IsNullOrWhiteSpace(name))
-            {
-                return;
-            }
-
-            if (_participantNames == null)
-            {
-                _participantNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            }
-
-            string norm = JidHelper.Normalize(participantJid) ?? participantJid;
-            _participantNames[norm] = name;
-            string canonical = _whatsAppService != null
-                ? _whatsAppService.GetCanonicalJid(participantJid)
-                : null;
-            if (!string.IsNullOrWhiteSpace(canonical))
-            {
-                _participantNames[canonical] = name;
-            }
-        }
-
-        private void CacheParticipantAvatar(string participantJid, string avatar)
-        {
-            if (string.IsNullOrWhiteSpace(participantJid) || string.IsNullOrWhiteSpace(avatar))
-            {
-                return;
-            }
-
-            if (_participantAvatars == null)
-            {
-                _participantAvatars = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            }
-
-            string norm = JidHelper.Normalize(participantJid) ?? participantJid;
-            _participantAvatars[norm] = avatar;
-            string canonical = _whatsAppService != null
-                ? _whatsAppService.GetCanonicalJid(participantJid)
-                : null;
-            if (!string.IsNullOrWhiteSpace(canonical))
-            {
-                _participantAvatars[canonical] = avatar;
-            }
-        }
-
-        private static bool IsSameMessageRun(ChatMessage left, ChatMessage right)
-        {
-            if (left == null || right == null)
-            {
-                return false;
-            }
-
-            if (left.IsFromMe != right.IsFromMe)
-            {
-                return false;
-            }
-
-            if (left.IsFromMe)
-            {
-                return true;
-            }
-
-            string leftParticipant = left.ParticipantJid ?? string.Empty;
-            string rightParticipant = right.ParticipantJid ?? string.Empty;
-            if (!string.IsNullOrEmpty(leftParticipant) && !string.IsNullOrEmpty(rightParticipant))
-            {
-                return string.Equals(leftParticipant, rightParticipant, StringComparison.OrdinalIgnoreCase);
-            }
-
-            return string.Equals(left.SenderName ?? string.Empty, right.SenderName ?? string.Empty, StringComparison.OrdinalIgnoreCase);
-        }
     }
 }

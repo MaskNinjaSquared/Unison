@@ -3452,8 +3452,18 @@ namespace Unison.Uwp.Services.WhatsApp
                 return null;
             }
 
-            HistoryMessage row = await _historyMessages.GetAsync(chatJid, messageId).ConfigureAwait(false);
-            return HistoryMessageMapper.ToChatMessage(row);
+            List<string> keys = ExpandHistoryChatKeys(chatJid);
+            for (int i = 0; i < keys.Count; i++)
+            {
+                HistoryMessage row = await _historyMessages.GetAsync(keys[i], messageId).ConfigureAwait(false);
+                ChatMessage mapped = HistoryMessageMapper.ToChatMessage(row);
+                if (mapped != null)
+                {
+                    return mapped;
+                }
+            }
+
+            return null;
         }
 
         public void StartNewChat(string jid)
@@ -5284,12 +5294,72 @@ namespace Unison.Uwp.Services.WhatsApp
                         if (byMessageId.Count == 0) _pendingPinStateByChat.Remove(canonical);
                     }
                 }
+
+                // Pin must hit history_message immediately. Offline-replay flush is debounced and
+                // a later history/live body upsert used to InsertOrReplace with IsPinned=false.
+                await PersistPinnedMessageToSqliteAsync(canonical, messageId, state, target)
+                    .ConfigureAwait(false);
+
                 QueueOfflineReplayMessageForPersist(canonical, target);
                 SchedulePersist();
                 QueueChatMessagesChanged(canonical);
                 return true;
             }
+
+            // Body not in RAM/SQLite yet under expanded keys — still try WritePins (MessageId
+            // fallback) so a row stored under another alias is not left unpinned until reopen.
+            await PersistPinnedMessageToSqliteAsync(canonical, messageId, state, null)
+                .ConfigureAwait(false);
             return false;
+        }
+
+        /// <summary>
+        /// Writes pin/unpin onto existing SQLite rows (PN+LID keys). When the body is only in RAM,
+        /// also upserts the live message so the row exists with the pin flags.
+        /// </summary>
+        private async Task PersistPinnedMessageToSqliteAsync(
+            string canonical,
+            string messageId,
+            PendingPinState state,
+            ChatMessage target)
+        {
+            if (_historyMessages == null ||
+                string.IsNullOrWhiteSpace(canonical) ||
+                string.IsNullOrWhiteSpace(messageId) ||
+                state == null)
+            {
+                return;
+            }
+
+            try
+            {
+                List<string> keys = ExpandHistoryChatKeys(canonical);
+                var pins = new List<HistoryMessagePinUpdate>(keys.Count);
+                for (int i = 0; i < keys.Count; i++)
+                {
+                    pins.Add(new HistoryMessagePinUpdate
+                    {
+                        ChatJid = keys[i],
+                        MessageId = messageId,
+                        IsPinned = state.IsPinned,
+                        PinnedAtUtc = state.PinnedAtUtc,
+                        PinExpiresAtUtc = state.ExpiresAtUtc
+                    });
+                }
+
+                await _historyMessages.UpsertPinsAsync(pins).ConfigureAwait(false);
+
+                if (target != null)
+                {
+                    // Ensures a missing SQLite body still lands with IsPinned; WritePins alone
+                    // cannot insert. Preserve-on-upsert keeps later sync from clearing the flag.
+                    await PersistLiveMessagesAsync(canonical, new[] { target }).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[WhatsAppService] SQLite pin persist failed: " + ex.Message);
+            }
         }
 
         private async Task HandlePinInChatMessageAsync(string chatJid, Proto.Message.Types.PinInChatMessage pinMessage, uint durationSeconds = 0)

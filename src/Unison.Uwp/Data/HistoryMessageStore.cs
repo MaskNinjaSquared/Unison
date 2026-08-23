@@ -119,6 +119,23 @@ namespace Unison.Uwp.Data
             return PersistWriteBatchAsync(batch);
         }
 
+        public Task UpsertPinsAsync(IReadOnlyList<HistoryMessagePinUpdate> pins)
+        {
+            var batch = new HistoryMessageWriteBatch();
+            if (pins != null)
+            {
+                for (int i = 0; i < pins.Count; i++)
+                {
+                    if (pins[i] != null)
+                    {
+                        batch.Pins.Add(pins[i]);
+                    }
+                }
+            }
+
+            return PersistWriteBatchAsync(batch);
+        }
+
         public async Task<HistoryMessage> GetAsync(string chatJid, string messageId)
         {
             string key = JidHelper.Normalize(chatJid);
@@ -844,6 +861,16 @@ namespace Unison.Uwp.Data
                     {
                         row.IsRevoked = true;
                     }
+
+                    // Pin/unpin is authoritative only via WritePins (or an upsert that already
+                    // carries IsPinned=true). History/live body rewrites must not clear a pin
+                    // the strip/banner already persisted — same idea as IsRevoked.
+                    if (existing.IsPinned && !row.IsPinned)
+                    {
+                        row.IsPinned = true;
+                        row.PinnedAtUtc = existing.PinnedAtUtc;
+                        row.PinExpiresAtUtc = existing.PinExpiresAtUtc;
+                    }
                 }
 
                 // Never persist fat protocol thumbnails in SQLite (disk URI is enough).
@@ -959,11 +986,20 @@ namespace Unison.Uwp.Data
                 }
 
                 string chatJid = JidHelper.Normalize(pin.ChatJid);
-                string id = HistoryMessageRow.MakeId(chatJid, pin.MessageId.Trim());
+                string messageId = pin.MessageId.Trim();
+                string id = HistoryMessageRow.MakeId(chatJid, messageId);
                 var row = conn.Find<HistoryMessageRow>(id);
                 if (row == null)
                 {
-                    continue;
+                    // History may have stored the body under PN while the pin envelope used LID
+                    // (or the reverse). MessageId is unique enough for a single-chat fallback.
+                    row = conn.FindWithQuery<HistoryMessageRow>(
+                        "SELECT * FROM history_message WHERE MessageId = ? LIMIT 1",
+                        messageId);
+                    if (row == null)
+                    {
+                        continue;
+                    }
                 }
 
                 row.IsPinned = pin.IsPinned;
@@ -971,7 +1007,7 @@ namespace Unison.Uwp.Data
                 row.PinExpiresAtUtc = pin.IsPinned ? pin.PinExpiresAtUtc : null;
                 row.UpdatedAtUtc = now;
                 conn.Update(row);
-                chats.Add(chatJid);
+                chats.Add(row.ChatJid ?? chatJid);
             }
         }
 

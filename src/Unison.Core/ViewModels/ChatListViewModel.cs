@@ -1461,7 +1461,7 @@ namespace Unison.Core.ViewModels
         /// <summary>
         /// The JID index for this hydrate slice, rebuilt only when the store changed behind us.
         /// A stale hit can at worst create a duplicate row, which both the visible-set dedupe in
-        /// <see cref="ReleaseNextBatch"/> and <see cref="DeduplicateByCanonicalJid"/> absorb.
+        /// <see cref="ReleaseNextBatch"/> and <see cref="ChatListDisplayOrder.DeduplicateByCanonicalJid"/> absorb.
         /// </summary>
         private Dictionary<string, ChatItem> RentChatJidIndex()
         {
@@ -1685,7 +1685,8 @@ namespace Unison.Core.ViewModels
                 source = source.Where(c => MatchesQuery(c, query)).ToList();
             }
 
-            source = SortForDisplay(DeduplicateByCanonicalJid(source));
+            source = ChatListDisplayOrder.SortForDisplay(
+                ChatListDisplayOrder.DeduplicateByCanonicalJid(source, GetCanonical));
 
             IsRefreshing = true;
             try
@@ -1842,78 +1843,6 @@ namespace Unison.Core.ViewModels
                    resolved.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
-        /// <summary>
-        /// One row per person, even while the same conversation exists under both a phone number
-        /// and a LID. Which of the two survives is decided by what it can show: the newest
-        /// preview, then a picture over no picture, then a name over no name. Pinning is carried
-        /// across either way, because the two rows can receive app-state updates independently
-        /// and losing the pin on a merge is visible to the user.
-        /// </summary>
-        private List<ChatItem> DeduplicateByCanonicalJid(List<ChatItem> source)
-        {
-            var deduped = new List<ChatItem>();
-            var canonicalIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-
-            foreach (var item in source)
-            {
-                if (item == null || string.IsNullOrWhiteSpace(item.JID)) continue;
-
-                string canonical = GetCanonical(item.JID);
-                if (!canonicalIndex.TryGetValue(canonical, out var existingIndex))
-                {
-                    canonicalIndex[canonical] = deduped.Count;
-                    deduped.Add(item);
-                    continue;
-                }
-
-                var existing = deduped[existingIndex];
-
-                if (item.IsChatPinned && !existing.IsChatPinned && existing.PinnedTimestamp != 0)
-                {
-                    existing.IsChatPinned = true;
-                    existing.PinnedTimestamp = item.PinnedTimestamp;
-                }
-                else if (item.IsChatPinned && existing.IsChatPinned &&
-                         (item.PinnedTimestamp ?? 0) > (existing.PinnedTimestamp ?? 0))
-                {
-                    existing.PinnedTimestamp = item.PinnedTimestamp;
-                }
-
-                DateTime existingPreviewUtc = existing.LastMessageTimestampUtc ?? DateTime.MinValue;
-                DateTime itemPreviewUtc = item.LastMessageTimestampUtc ?? DateTime.MinValue;
-                bool itemHasNewerPreview = itemPreviewUtc > existingPreviewUtc;
-                bool samePreviewButBetterAvatar = itemPreviewUtc == existingPreviewUtc &&
-                    string.IsNullOrWhiteSpace(existing.GetAvatarUrl(preferHigh: false)) &&
-                    !string.IsNullOrWhiteSpace(item.GetAvatarUrl(preferHigh: false));
-                bool samePreviewAndAvatarButBetterName = itemPreviewUtc == existingPreviewUtc &&
-                    string.Equals(existing.GetAvatarUrl(preferHigh: false), item.GetAvatarUrl(preferHigh: false), StringComparison.OrdinalIgnoreCase) &&
-                    string.IsNullOrWhiteSpace(existing.Name) &&
-                    !string.IsNullOrWhiteSpace(item.Name);
-
-                if (itemHasNewerPreview || samePreviewButBetterAvatar || samePreviewAndAvatarButBetterName)
-                {
-                    if (existing.IsChatPinned && !item.IsChatPinned && item.PinnedTimestamp != 0)
-                    {
-                        item.IsChatPinned = true;
-                        item.PinnedTimestamp = existing.PinnedTimestamp;
-                    }
-
-                    deduped[existingIndex] = item;
-                }
-            }
-
-            return deduped;
-        }
-
-        private static List<ChatItem> SortForDisplay(IEnumerable<ChatItem> source)
-        {
-            return source
-                .OrderByDescending(c => c.IsChatPinned)
-                .ThenByDescending(c => c.PinnedTimestamp ?? 0)
-                .ThenByDescending(c => c.LastMessageTimestampUtc ?? DateTime.MinValue)
-                .ThenBy(c => c.Name ?? string.Empty, StringComparer.CurrentCultureIgnoreCase)
-                .ToList();
-        }
 
         /// <summary>
         /// Applies a single source change straight to the visible list instead of rebuilding it.
@@ -2161,7 +2090,7 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
-            var source = SortForDisplay(
+            var source = ChatListDisplayOrder.SortForDisplay(
                 _chatState.Chats.Where(c => c != null && !string.IsNullOrWhiteSpace(c.JID)));
 
             int desiredCount = _batchCompleted
