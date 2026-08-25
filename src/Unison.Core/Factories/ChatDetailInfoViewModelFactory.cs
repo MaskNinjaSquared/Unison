@@ -19,6 +19,7 @@ namespace Unison.Core.Factories
         private readonly IPersonStore _personStore;
         private readonly IMessageService _messages;
         private readonly IContactService _contacts;
+        private readonly IDialogService _dialogs;
 
         public ChatDetailInfoViewModelFactory(
             IShortcutService shortcutService,
@@ -31,7 +32,8 @@ namespace Unison.Core.Factories
             IWhatsAppService whatsApp = null,
             IPersonStore personStore = null,
             IMessageService messages = null,
-            IContactService contacts = null)
+            IContactService contacts = null,
+            IDialogService dialogs = null)
         {
             _shortcutService = shortcutService;
             _chatStore = chatStore;
@@ -44,6 +46,7 @@ namespace Unison.Core.Factories
             _personStore = personStore;
             _messages = messages;
             _contacts = contacts;
+            _dialogs = dialogs;
         }
 
         public ChatDetailInfoViewModel CreateUser(ChatItem contact)
@@ -97,7 +100,8 @@ namespace Unison.Core.Factories
                 member,
                 _personStore,
                 _messages,
-                _contacts);
+                _contacts,
+                _dialogs);
         }
     }
 }

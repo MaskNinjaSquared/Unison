@@ -1190,10 +1190,12 @@ namespace Unison.Uwp.UI.Views
                 return;
             }
 
-            // Mute can have been changed elsewhere since this chat was opened; the view model
-            // re-reads it so the menu offers the action that actually applies.
+            // Mute / pin can have changed since this chat was opened; re-read and swap
+            // Visibility. MenuFlyout Visibility bindings are unreliable on UWP, so this is
+            // done on Opening — texts stay on x:Uid, no Loc round-trip.
             ViewModel.RefreshLocalChatState();
             bool muted = ViewModel.ShowUnmuteOption;
+            bool widgetPinned = ViewModel.IsWidgetPinned;
             foreach (var item in flyout.Items)
             {
                 var menuItem = item as MenuFlyoutItem;
@@ -1203,46 +1205,22 @@ namespace Unison.Uwp.UI.Views
                 if (string.Equals(tag, "localMuteSub", StringComparison.Ordinal) && subItem != null)
                 {
                     subItem.Visibility = muted ? Visibility.Collapsed : Visibility.Visible;
-                    subItem.Text = LocalizedStrings.Get("ChatDetail_MuteNotifications.Text", "Mute notifications");
                     subItem.Foreground = new SolidColorBrush(Windows.UI.Colors.White);
-                    foreach (var child in subItem.Items)
-                    {
-                        var duration = child as MenuFlyoutItem;
-                        if (duration == null)
-                        {
-                            continue;
-                        }
-
-                        string durationTag = duration.Tag as string;
-                        if (string.Equals(durationTag, "mute8h", StringComparison.Ordinal) ||
-                            duration.Command == ViewModel.MuteFor8HoursCommand)
-                        {
-                            duration.Text = LocalizedStrings.Get("ChatDetail_MuteFor8Hours.Text", "8 hours");
-                        }
-                        else if (string.Equals(durationTag, "mute1w", StringComparison.Ordinal) ||
-                                 duration.Command == ViewModel.MuteFor1WeekCommand)
-                        {
-                            duration.Text = LocalizedStrings.Get("ChatDetail_MuteFor1Week.Text", "1 week");
-                        }
-                        else if (string.Equals(durationTag, "muteForever", StringComparison.Ordinal) ||
-                                 duration.Command == ViewModel.MuteForeverCommand)
-                        {
-                            duration.Text = LocalizedStrings.Get("ChatDetail_MuteForever.Text", "Always");
-                        }
-                    }
                 }
                 else if (string.Equals(tag, "unmute", StringComparison.Ordinal) && menuItem != null)
                 {
                     menuItem.Visibility = muted ? Visibility.Visible : Visibility.Collapsed;
-                    menuItem.Text = LocalizedStrings.Get("ChatDetail_UnmuteNotifications.Text", "Unmute notifications");
                 }
                 else if (string.Equals(tag, "widgetPin", StringComparison.Ordinal) && menuItem != null)
                 {
-                    menuItem.Text = ViewModel.LiveTilePinMenuLabel;
+                    menuItem.Visibility = widgetPinned ? Visibility.Collapsed : Visibility.Visible;
+                }
+                else if (string.Equals(tag, "widgetUnpin", StringComparison.Ordinal) && menuItem != null)
+                {
+                    menuItem.Visibility = widgetPinned ? Visibility.Visible : Visibility.Collapsed;
                 }
                 else if (string.Equals(tag, "addContact", StringComparison.Ordinal) && menuItem != null)
                 {
-                    menuItem.Text = ViewModel.AddContactLabel;
                     menuItem.Visibility = ViewModel.CanAddToAddressBook
                         ? Visibility.Visible
                         : Visibility.Collapsed;

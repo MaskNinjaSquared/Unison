@@ -143,7 +143,8 @@
                             Style="{StaticResource WhatsAppIconButtonStyle}"
                             Width="40" Height="40"
                             Opacity="0.35"
-                            ToolTipService.ToolTip="{x:Bind ViewModel.DownloadTooltip, Mode=OneWay}">
+                            x:Uid="ImageViewer_Download"
+                            ToolTipService.ToolTip="Download">
                         <TextBlock Text="&#xE896;"
                                    FontFamily="{StaticResource IconFont}"
                                    FontSize="18"
@@ -154,7 +155,8 @@
                             Style="{StaticResource WhatsAppIconButtonStyle}"
                             Width="40" Height="40"
                             Opacity="0.35"
-                            ToolTipService.ToolTip="{x:Bind ViewModel.ShareTooltip, Mode=OneWay}">
+                            x:Uid="ImageViewer_Share"
+                            ToolTipService.ToolTip="Share">
                         <TextBlock Text="&#xE72D;"
                                    FontFamily="{StaticResource IconFont}"
                                    FontSize="18"

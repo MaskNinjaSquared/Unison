@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -415,12 +415,6 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   </data>
   <data name="ChatDetail_SelectForGroupInfo" xml:space="preserve">
     <value>ketuk di sini untuk info grup</value>
-  </data>
-  <data name="ImageViewer_Download" xml:space="preserve">
-    <value>Unduh</value>
-  </data>
-  <data name="ImageViewer_Share" xml:space="preserve">
-    <value>Bagikan</value>
   </data>
   <data name="ImageViewer_UnknownSender" xml:space="preserve">
     <value>Kontak</value>
@@ -842,20 +836,6 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="ChatList_UnpinChat.Text" xml:space="preserve">
     <value>Lepas sematan</value>
   </data>
-  <data name="ChatDetailInfo_PinChatAppBarLabel" xml:space="preserve">
-    <value>Sematkan
-obrolan</value>
-  </data>
-  <data name="ChatDetailInfo_UnpinChatAppBarLabel" xml:space="preserve">
-    <value>Lepas
-sematan</value>
-  </data>
-  <data name="ChatDetailInfo_Files" xml:space="preserve">
-    <value>File</value>
-  </data>
-  <data name="ChatDetailInfo_Media" xml:space="preserve">
-    <value>Media</value>
-  </data>
   <data name="ChatDetail_Search.Text" xml:space="preserve">
     <value>Cari</value>
   </data>
@@ -865,20 +845,11 @@ sematan</value>
   <data name="ChatDetailInfo_Phone" xml:space="preserve">
     <value>Telepon</value>
   </data>
-  <data name="ChatDetailInfo_CallsEmpty" xml:space="preserve">
-    <value>Panggilan yang Anda buat dan terima akan muncul di sini.</value>
-  </data>
   <data name="ChatDetail_GroupMedia.Text" xml:space="preserve">
     <value>Media grup</value>
   </data>
-  <data name="ChatDetailInfo_MediaEmpty" xml:space="preserve">
-    <value>Foto, video, dan audio akan muncul di sini.</value>
-  </data>
   <data name="ChatDetail_MuteNotifications.Text" xml:space="preserve">
     <value>Bisukan notifikasi</value>
-  </data>
-  <data name="ChatDetailInfo_MembersEmpty" xml:space="preserve">
-    <value>Anggota grup akan muncul di sini.</value>
   </data>
   <data name="ChatDetailInfo_Admin.Text" xml:space="preserve">
     <value>Admin</value>
@@ -886,18 +857,8 @@ sematan</value>
   <data name="ChatDetailInfo_GroupsInCommon" xml:space="preserve">
     <value>Grup yang sama</value>
   </data>
-  <data name="ChatDetailInfo_GroupsInCommonEmpty" xml:space="preserve">
-    <value>Tidak ada grup yang sama.</value>
-  </data>
-  <data name="ChatDetailInfo_UnpinAppBarLabel" xml:space="preserve">
-    <value>Lepas dari
-Start</value>
-  </data>
   <data name="ChatDetailInfo_Notifications" xml:space="preserve">
     <value>Notifikasi</value>
-  </data>
-  <data name="ChatDetailInfo_GroupInfo" xml:space="preserve">
-    <value>Info grup</value>
   </data>
   <data name="ChatDetail_PinToStart.Text" xml:space="preserve">
     <value>Sematkan ke Start</value>
@@ -914,21 +875,14 @@ Start</value>
   <data name="ChatDetailInfo_MemberCountSingular" xml:space="preserve">
     <value>1 anggota</value>
   </data>
-  <data name="ChatDetailInfo_Profile" xml:space="preserve">
-    <value>Profil</value>
-  </data>
   <data name="ChatDetail_ShowContact.Text" xml:space="preserve">
     <value>Lihat kontak</value>
   </data>
   <data name="ChatDetail_AddContact.Text" xml:space="preserve">
     <value>Tambah kontak</value>
   </data>
-  <data name="ChatDetailInfo_AddContactAppBarLabel" xml:space="preserve">
-    <value>Tambah
-kontak</value>
-  </data>
-  <data name="ChatDetailInfo_Calls" xml:space="preserve">
-    <value>Panggilan</value>
+  <data name="ChatDetail_AddContactLink.Content" xml:space="preserve">
+    <value>Tambah kontak</value>
   </data>
   <data name="ChatDetailInfo_NotificationsOn" xml:space="preserve">
     <value>Aktif</value>
@@ -942,9 +896,6 @@ kontak</value>
   <data name="ChatDetailInfo_MemberCount" xml:space="preserve">
     <value>{0} anggota</value>
   </data>
-  <data name="ChatDetailInfo_FilesEmpty" xml:space="preserve">
-    <value>Dokumen akan muncul di sini.</value>
-  </data>
   <data name="ChatDetailInfo_Status" xml:space="preserve">
     <value>Status</value>
   </data>
@@ -957,20 +908,121 @@ kontak</value>
   <data name="ChatDetail_MuteForever.Text" xml:space="preserve">
     <value>Selalu</value>
   </data>
-  <data name="ChatDetailInfo_Members" xml:space="preserve">
-    <value>Anggota</value>
-  </data>
   <data name="ChatDetail_GroupInfo.Text" xml:space="preserve">
     <value>Info grup</value>
   </data>
   <data name="ChatDetail_MediaLinksDocs.Text" xml:space="preserve">
     <value>Media, tautan, dan dokumen</value>
   </data>
-  <data name="ChatDetailInfo_PinAppBarLabel" xml:space="preserve">
-    <value>Sematkan ke
-Start</value>
-  </data>
   <data name="ChatDetail_UnpinFromStart.Text" xml:space="preserve">
     <value>Lepas dari Start</value>
+  </data>
+  <data name="ChatList_DeleteChat.Text" xml:space="preserve">
+    <value>Hapus chat</value>
+  </data>
+  <data name="ChatDetail_DeleteChat.Text" xml:space="preserve">
+    <value>Hapus chat</value>
+  </data>
+  <data name="Chat_DeleteChatTitle" xml:space="preserve">
+    <value>Hapus chat?</value>
+  </data>
+  <data name="Chat_DeleteChatBody" xml:space="preserve">
+    <value>"{0}" dan pesannya akan dihapus di ponsel ini dan di perangkat Anda yang lain. Tindakan ini tidak dapat dibatalkan.</value>
+  </data>
+  <data name="Chat_DeleteChatConfirm" xml:space="preserve">
+    <value>Hapus</value>
+  </data>
+  <data name="Chat_DeleteChatFailedTitle" xml:space="preserve">
+    <value>Chat tidak dihapus</value>
+  </data>
+  <data name="Chat_DeleteChatFailedBody" xml:space="preserve">
+    <value>WhatsApp tidak menerima perubahan ini, jadi percakapan dibiarkan apa adanya. Coba lagi saat Anda terhubung.</value>
+  </data>
+  <data name="ChatDetailInfo_NameLabel.Text" xml:space="preserve">
+    <value>NAMA</value>
+  </data>
+  <data name="ChatDetailInfo_GroupNameLabel.Text" xml:space="preserve">
+    <value>NAMA GRUP</value>
+  </data>
+  <data name="ChatDetailInfo_PhoneLabel.Text" xml:space="preserve">
+    <value>TELEPON</value>
+  </data>
+  <data name="ChatDetailInfo_StatusLabel.Text" xml:space="preserve">
+    <value>STATUS</value>
+  </data>
+  <data name="ChatDetailInfo_DescriptionLabel.Text" xml:space="preserve">
+    <value>DESKRIPSI</value>
+  </data>
+  <data name="ChatDetailInfo_NotificationsLabel.Text" xml:space="preserve">
+    <value>NOTIFIKASI</value>
+  </data>
+  <data name="ChatDetailInfo_MembersLabel.Text" xml:space="preserve">
+    <value>ANGGOTA</value>
+  </data>
+  <data name="ChatDetailInfo_GroupsInCommonLabel.Text" xml:space="preserve">
+    <value>GRUP YANG SAMA</value>
+  </data>
+  <data name="ChatDetailInfo_Profile.Header" xml:space="preserve">
+    <value>PROFIL</value>
+  </data>
+  <data name="ChatDetailInfo_GroupInfo.Header" xml:space="preserve">
+    <value>INFO GRUP</value>
+  </data>
+  <data name="ChatDetailInfo_Media.Header" xml:space="preserve">
+    <value>MEDIA</value>
+  </data>
+  <data name="ChatDetailInfo_Files.Header" xml:space="preserve">
+    <value>FILE</value>
+  </data>
+  <data name="ChatDetailInfo_Members.Header" xml:space="preserve">
+    <value>ANGGOTA</value>
+  </data>
+  <data name="ChatDetailInfo_Calls.Header" xml:space="preserve">
+    <value>PANGGILAN</value>
+  </data>
+  <data name="ChatDetailInfo_MediaEmpty.Text" xml:space="preserve">
+    <value>Foto, video, dan audio akan muncul di sini.</value>
+  </data>
+  <data name="ChatDetailInfo_FilesEmpty.Text" xml:space="preserve">
+    <value>Dokumen akan muncul di sini.</value>
+  </data>
+  <data name="ChatDetailInfo_CallsEmpty.Text" xml:space="preserve">
+    <value>Panggilan yang Anda buat dan terima akan muncul di sini.</value>
+  </data>
+  <data name="ChatDetailInfo_MembersEmpty.Text" xml:space="preserve">
+    <value>Anggota grup akan muncul di sini.</value>
+  </data>
+  <data name="ChatDetailInfo_GroupsInCommonEmpty.Text" xml:space="preserve">
+    <value>Tidak ada grup yang sama.</value>
+  </data>
+  <data name="ChatDetailInfo_NotificationsToggle.OnContent" xml:space="preserve">
+    <value>Aktif</value>
+  </data>
+  <data name="ChatDetailInfo_NotificationsToggle.OffContent" xml:space="preserve">
+    <value>Nonaktif</value>
+  </data>
+  <data name="ImageViewer_Download.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Unduh</value>
+  </data>
+  <data name="ImageViewer_Share.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Bagikan</value>
+  </data>
+  <data name="ChatDetailInfo_PinChatAppBarLabel.Text" xml:space="preserve">
+    <value>Sematkan&#x0a;obrolan</value>
+  </data>
+  <data name="ChatDetailInfo_UnpinChatAppBarLabel.Text" xml:space="preserve">
+    <value>Lepas&#x0a;sematan</value>
+  </data>
+  <data name="ChatDetailInfo_PinAppBarLabel.Text" xml:space="preserve">
+    <value>Sematkan ke&#x0a;Start</value>
+  </data>
+  <data name="ChatDetailInfo_UnpinAppBarLabel.Text" xml:space="preserve">
+    <value>Lepas dari&#x0a;Start</value>
+  </data>
+  <data name="ChatDetailInfo_AddContactAppBarLabel.Text" xml:space="preserve">
+    <value>Tambah&#x0a;kontak</value>
+  </data>
+  <data name="ChatDetailInfo_DeleteChatBar.Text" xml:space="preserve">
+    <value>Hapus&#x0a;chat</value>
   </data>
 </root>

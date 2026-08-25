@@ -86,17 +86,6 @@ namespace Unison.Uwp.UI.Controls
                 return;
             }
 
-            ProfilePivotItem.Header = ChatDetailInfoPivotHelper.Upper(vm.ProfilePivotHeader);
-            if (MediaPivotItem != null)
-            {
-                MediaPivotItem.Header = ChatDetailInfoPivotHelper.Upper(vm.MediaPivotHeader);
-            }
-
-            if (FilesPivotItem != null)
-            {
-                FilesPivotItem.Header = ChatDetailInfoPivotHelper.Upper(vm.FilesPivotHeader);
-            }
-
             MediaPane?.AttachPaging(vm, isFilesPane: false);
             FilesPane?.AttachPaging(vm);
             BindMediaPanes();
@@ -107,11 +96,6 @@ namespace Unison.Uwp.UI.Controls
                 InfoAvatar.IsGroup = false;
             }
 
-            if (NameLabel != null)
-            {
-                NameLabel.Text = ChatDetailInfoPivotHelper.Upper(vm.NameSectionLabel);
-            }
-
             if (NameValue != null)
             {
                 NameValue.Text = vm.DisplayName ?? string.Empty;
@@ -119,7 +103,6 @@ namespace Unison.Uwp.UI.Controls
 
             if (AdminValue != null)
             {
-                AdminValue.Text = vm.AdminRoleText ?? string.Empty;
                 AdminValue.Visibility = vm.IsMemberAdmin ? Visibility.Visible : Visibility.Collapsed;
             }
 
@@ -130,11 +113,6 @@ namespace Unison.Uwp.UI.Controls
                     : Visibility.Collapsed;
             }
 
-            if (PhoneLabel != null)
-            {
-                PhoneLabel.Text = ChatDetailInfoPivotHelper.Upper(vm.PhoneSectionLabel);
-            }
-
             if (PhoneValue != null)
             {
                 PhoneValue.Text = vm.PhoneValue ?? string.Empty;
@@ -142,16 +120,10 @@ namespace Unison.Uwp.UI.Controls
 
             if (AddContactButton != null)
             {
-                AddContactButton.Content = vm.AddContactLabel;
                 AddContactButton.Command = vm.AddContactCommand;
                 AddContactButton.Visibility = vm.CanAddToAddressBook
                     ? Visibility.Visible
                     : Visibility.Collapsed;
-            }
-
-            if (SharedGroupsLabel != null)
-            {
-                SharedGroupsLabel.Text = ChatDetailInfoPivotHelper.Upper(vm.SharedGroupsSectionLabel);
             }
 
             if (SharedGroupsList != null)
@@ -162,7 +134,6 @@ namespace Unison.Uwp.UI.Controls
 
             if (SharedGroupsEmpty != null)
             {
-                SharedGroupsEmpty.Text = vm.SharedGroupsEmptyText ?? string.Empty;
                 SharedGroupsEmpty.Visibility = vm.HasSharedGroups ? Visibility.Collapsed : Visibility.Visible;
             }
         }
@@ -176,8 +147,8 @@ namespace Unison.Uwp.UI.Controls
             }
 
             bool loading = vm.IsMediaIndexLoading;
-            MediaPane?.Bind(vm.MediaItems, vm.HasMedia, vm.MediaEmptyText, loading);
-            FilesPane?.Bind(vm.FileItems, vm.HasFiles, vm.FilesEmptyText, loading);
+            MediaPane?.Bind(vm.MediaItems, vm.HasMedia, loading);
+            FilesPane?.Bind(vm.FileItems, vm.HasFiles, loading);
         }
     }
 }

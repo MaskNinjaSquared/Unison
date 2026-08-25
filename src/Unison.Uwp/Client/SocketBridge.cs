@@ -875,6 +875,22 @@ namespace Unison.Uwp.Client
         }
 
         /// <summary>
+        /// Deletes a conversation for the whole account.
+        /// </summary>
+        /// <remarks>
+        /// The range names the tail the deletion covers; the phone reads it to decide what
+        /// "delete this chat" applies to. RC14's chatModify({ delete }) requires lastMessages for
+        /// the same reason, so a caller with no tail to offer is better off not sending at all.
+        ///
+        /// The account never reports this back as a state: a deleted chat simply stops appearing.
+        /// The local tombstone is what keeps it from returning on the next history sync.
+        /// </remarks>
+        public Task DeleteChatAsync(string jid, IEnumerable<RangeMessage> lastMessages)
+        {
+            return RequireAppState().Patch.ExecuteAsync(AppStatePatchFactory.DeleteChat(jid, lastMessages));
+        }
+
+        /// <summary>
         /// The id we encode app-state writes with. RC14 reads this off creds.myAppStateKeyId;
         /// without it a pin patch cannot be built and the UI change is reverted.
         /// </summary>

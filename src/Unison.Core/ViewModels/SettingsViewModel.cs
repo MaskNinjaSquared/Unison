@@ -273,13 +273,6 @@ namespace Unison.Core.ViewModels
 
         public string AppTitle => "Unison";
 
-        public string AppDescription =>
-            _strings.Get("Settings_AppDescription.Text",
-                "WhatsApp Client based on Baileys for Windows Universal Platform.");
-
-        public string AppBranch =>
-            _strings.Get("Settings_AppBranch.Text", "Release");
-
         public string AppVersion
         {
             get => _appVersion;
@@ -360,8 +353,6 @@ namespace Unison.Core.ViewModels
         {
             RaiseProperties(
                 nameof(AppTitle),
-                nameof(AppDescription),
-                nameof(AppBranch),
                 nameof(DeveloperPrimary),
                 nameof(Contributors));
         }

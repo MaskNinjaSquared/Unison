@@ -22,9 +22,29 @@
                             <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE840;"/>
                         </MenuFlyoutItem.Icon>
                     </MenuFlyoutItem>
+                    <MenuFlyoutItem Tag="chatUnpin"
+                                   x:Uid="ChatList_UnpinChat"
+                                   Text="Unpin chat"
+                                   Visibility="Collapsed"
+                                   Style="{StaticResource ModernMenuFlyoutItemStyle}"
+                                   Click="PinChat_Click">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE840;"/>
+                        </MenuFlyoutItem.Icon>
+                    </MenuFlyoutItem>
                     <MenuFlyoutItem Tag="widgetPin"
                                    x:Uid="ChatDetail_PinToStart"
                                    Text="Pin to Start"
+                                   Style="{StaticResource ModernMenuFlyoutItemStyle}"
+                                   Click="PinToStart_Click">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE718;"/>
+                        </MenuFlyoutItem.Icon>
+                    </MenuFlyoutItem>
+                    <MenuFlyoutItem Tag="widgetUnpin"
+                                   x:Uid="ChatDetail_UnpinFromStart"
+                                   Text="Unpin from Start"
+                                   Visibility="Collapsed"
                                    Style="{StaticResource ModernMenuFlyoutItemStyle}"
                                    Click="PinToStart_Click">
                         <MenuFlyoutItem.Icon>
@@ -72,6 +92,16 @@
                                    Click="Unmute_Click">
                         <MenuFlyoutItem.Icon>
                             <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE74F;"/>
+                        </MenuFlyoutItem.Icon>
+                    </MenuFlyoutItem>
+                    <MenuFlyoutSeparator/>
+                    <MenuFlyoutItem Tag="deleteChat"
+                                   x:Uid="ChatList_DeleteChat"
+                                   Text="Delete chat"
+                                   Style="{StaticResource ModernMenuFlyoutItemStyle}"
+                                   Click="DeleteChat_Click">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE74D;"/>
                         </MenuFlyoutItem.Icon>
                     </MenuFlyoutItem>
                 </MenuFlyout>

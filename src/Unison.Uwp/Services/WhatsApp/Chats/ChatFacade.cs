@@ -1,19 +1,22 @@
 // =============================================================================
 // ChatFacade
 //
-// The conversation itself as a subject: pinned or not, read or not.
+// The conversation itself as a subject: pinned or not, read or not, there or
+// gone.
 //
-// Both operations are two writes rather than one, and the two do different
+// Pin and mark-read are two writes rather than one, and the two do different
 // jobs. The app state patch is what the account agrees on - it moves the pin and
 // clears the badge on the phone. The receipt is what the other party sees. Only
 // sending the patch leaves contacts without blue ticks; only sending the receipt
 // leaves the chat unread everywhere but here.
 //
-// The local copy is written first and reverted on failure. The list has to react
-// to a tap immediately, and the round trip through the server is not fast enough
-// to be part of that.
+// For those two the local copy is written first and reverted on failure. The
+// list has to react to a tap immediately, and the round trip through the server
+// is not fast enough to be part of that. Delete is the exception: it removes the
+// messages, so there is nothing to revert to, and it waits for the patch.
 //
-// Ports: rc14 chatModify({ pin }), chatModify({ markRead }) and readMessages
+// Ports: rc14 chatModify({ pin }), chatModify({ markRead }),
+// chatModify({ delete }) and readMessages
 // =============================================================================
 using System;
 using System.Collections.Generic;
@@ -37,6 +40,12 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
         /// every message it holds.
         /// </summary>
         private const int MaxMarkReadMessages = 50;
+
+        /// <summary>
+        /// How much of the tail a delete names. RC14 sends the newest few: the range is there to
+        /// place the deletion, not to enumerate what is being removed.
+        /// </summary>
+        private const int MaxDeleteRangeMessages = 5;
 
         private readonly IWhatsAppSessionProvider _sessions;
         private readonly IWhatsAppService _appState;
@@ -150,7 +159,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
                 return;
             }
 
-            var recent = CollectRecent(jid, unread);
+            var recent = CollectTail(jid, Math.Min(MaxMarkReadMessages, Math.Max(unread + 1, 1)));
             if (recent.Count == 0)
             {
                 return;
@@ -175,12 +184,67 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             }
         }
 
+        public async Task DeleteChatAsync(ChatItem chat)
+        {
+            if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
+            {
+                return;
+            }
+
+            var jid = _appState.GetCanonicalJid(chat.JID);
+
+            // The range is read before anything is removed: it names the tail the deletion covers,
+            // and after the local wipe there is nothing left to describe.
+            var range = CollectTail(jid, MaxDeleteRangeMessages);
+
+            var socket = _sessions.Socket;
+            if (socket != null && range.Count > 0)
+            {
+                try
+                {
+                    await socket
+                        .DeleteChatAsync(jid, range.Select(m => ToRangeMessage(jid, m)))
+                        .ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    // Nothing was removed yet, so the chat is still intact and the user can retry.
+                    // Wiping it here would leave this device disagreeing with the account forever:
+                    // the deletion is never reported back as a state that could repair it.
+                    var details =
+                        "chatJid=" + chat.JID +
+                        "; canonicalJid=" + jid +
+                        "; rangeCount=" + range.Count +
+                        "; socket=" + socket.GetType().FullName;
+
+                    Debug.WriteLine("[ChatFacade] Delete failed; " + details + Environment.NewLine + ex);
+                    RuntimeDiagnosticsService.Instance.RecordException(
+                        "app-state",
+                        "chat-delete-patch-failed",
+                        ex,
+                        details);
+
+                    throw;
+                }
+            }
+            else
+            {
+                // Offline, or a chat with no message to anchor the range - RC14's chatModify
+                // requires lastMessages, so there is nothing valid to send. The chat goes away
+                // here and the phone keeps it.
+                Debug.WriteLine(
+                    "[ChatFacade] Delete kept local: " +
+                    (socket == null ? "no socket" : "no messages to build the range with"));
+            }
+
+            await _appState.ApplyChatDeletionAsync(jid).ConfigureAwait(false);
+        }
+
         /// <summary>
-        /// The tail of the conversation, oldest first. Unread counts are approximate after a
-        /// history sync, so a little more than the count is taken - the range only has to cover
-        /// what was unread, and covering slightly too much is harmless.
+        /// The last <paramref name="take"/> messages of the conversation, oldest first. Both
+        /// mark-read and delete send a range rather than a single id, and both only need the tail.
         /// </summary>
-        private List<ChatMessage> CollectRecent(string jid, int unreadCount)
+        private List<ChatMessage> CollectTail(string jid, int take)
         {
             List<ChatMessage> live;
             try
@@ -197,8 +261,6 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             {
                 return new List<ChatMessage>();
             }
-
-            var take = Math.Min(MaxMarkReadMessages, Math.Max(unreadCount + 1, 1));
 
             return live
                 .Where(m => m != null && !string.IsNullOrEmpty(m.Id))

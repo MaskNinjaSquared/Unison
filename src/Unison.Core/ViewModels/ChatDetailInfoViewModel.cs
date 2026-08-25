@@ -31,6 +31,7 @@ namespace Unison.Core.ViewModels
         private readonly IContactService _contacts;
         private readonly IDispatcher _dispatcher;
         private readonly IStringResources _strings;
+        private readonly IDialogService _dialogs;
         private readonly ChatItem _source;
         private readonly GroupMember _member;
         private readonly bool _isGroup;
@@ -58,10 +59,6 @@ namespace Unison.Core.ViewModels
         private int _mediaWindow;
         private int _fileWindow;
 
-        private string _notificationsValue;
-        private string _pinMenuLabel;
-        private string _chatPinLabel;
-
         public ChatDetailInfoViewModel(
             ChatItem source,
             bool isGroup,
@@ -76,7 +73,8 @@ namespace Unison.Core.ViewModels
             GroupMember member = null,
             IPersonStore personStore = null,
             IMessageService messages = null,
-            IContactService contacts = null)
+            IContactService contacts = null,
+            IDialogService dialogs = null)
         {
             _source = source ?? throw new ArgumentNullException(nameof(source));
             _member = member;
@@ -93,6 +91,7 @@ namespace Unison.Core.ViewModels
             _contacts = contacts;
             _dispatcher = dispatcher;
             _strings = strings;
+            _dialogs = dialogs;
 
             _source.PropertyChanged += Source_PropertyChanged;
             if (_member != null)
@@ -126,6 +125,14 @@ namespace Unison.Core.ViewModels
 
             PinChatCommand = new RelayCommand(
                 () => _ = ToggleChatPinAsync(),
+                () => !_isGroupMember &&
+                      _chatService != null &&
+                      !string.IsNullOrWhiteSpace(_source?.JID));
+
+            // Same surface as ChatDetail overflow: 1:1 and group. Hidden on a member's profile so
+            // it cannot delete the group the member happens to be in.
+            DeleteChatCommand = new RelayCommand(
+                () => _ = DeleteChatAsync(),
                 () => !_isGroupMember &&
                       _chatService != null &&
                       !string.IsNullOrWhiteSpace(_source?.JID));
@@ -266,71 +273,21 @@ namespace Unison.Core.ViewModels
             _contacts != null &&
             _contacts.CanAddToAddressBook(LookupJid, PhoneValue);
 
-        public string AddContactLabel => Loc("ChatDetail_AddContact.Text", "Add contact");
-
-        public string AddContactAppBarLabel =>
-            Loc("ChatDetailInfo_AddContactAppBarLabel", "Add\ncontact");
-
         /// <summary>Contact about / group description — local-only placeholder until synced.</summary>
         public string StatusOrDescription => string.Empty;
 
         public bool HasStatusOrDescription => !string.IsNullOrWhiteSpace(StatusOrDescription);
 
-        public string NotificationsValue
-        {
-            get => _notificationsValue;
-            private set => Set(ref _notificationsValue, value);
-        }
-
         /// <summary>True when the chat is not muted — notifications are delivered.</summary>
         public bool NotificationsEnabled => !_source.IsMutedLocally;
 
-        public string PinMenuLabel
-        {
-            get => _pinMenuLabel;
-            private set => Set(ref _pinMenuLabel, value);
-        }
+        /// <summary>Start-tile pin state (drives pin/unpin app-bar Visibility).</summary>
+        public bool IsWidgetPinned => _source != null && _source.IsWidgetPinned;
 
-        public string ProfilePivotHeader =>
-            _isGroupMember
-                ? Loc("ChatDetailInfo_Profile", "Profile")
-                : _isGroup
-                    ? Loc("ChatDetailInfo_GroupInfo", "Group info")
-                    : Loc("ChatDetailInfo_Profile", "Profile");
-
-        public string NameSectionLabel =>
-            _isGroup
-                ? Loc("ChatDetailInfo_GroupName", "Group name")
-                : Loc("ChatDetailInfo_Name", "Name");
-
-        public string PhoneSectionLabel => Loc("ChatDetailInfo_Phone", "Phone");
-
-        public string StatusSectionLabel =>
-            _isGroup
-                ? Loc("ChatDetailInfo_Description", "Description")
-                : Loc("ChatDetailInfo_Status", "Status");
-
-        public string NotificationsSectionLabel =>
-            Loc("ChatDetailInfo_Notifications", "Notifications");
-
-        public string SharedGroupsSectionLabel =>
-            Loc("ChatDetailInfo_GroupsInCommon", "Groups in common");
-
-        public string SharedGroupsEmptyText =>
-            Loc("ChatDetailInfo_GroupsInCommonEmpty", "No groups in common.");
-
-        public string AdminRoleText =>
-            _member != null && _member.IsAdmin
-                ? Loc("ChatDetailInfo_Admin", "Admin")
-                : string.Empty;
+        /// <summary>Account chat-list pin state (drives pin/unpin app-bar Visibility).</summary>
+        public bool IsChatPinned => _source != null && _source.IsChatPinned;
 
         public bool IsMemberAdmin => _member != null && _member.IsAdmin;
-
-        public string NotificationsOnText => Loc("ChatDetailInfo_NotificationsOn", "On");
-
-        public string NotificationsOffText => Loc("ChatDetailInfo_NotificationsOff", "Off");
-
-        public string MembersSectionLabel => Loc("ChatDetailInfo_Members", "Members");
 
         public bool HasMembersCount => _source.GroupMemberCount > 0;
 
@@ -355,8 +312,6 @@ namespace Unison.Core.ViewModels
             }
         }
 
-        public string MembersPivotHeader => Loc("ChatDetailInfo_Members", "Members");
-
         public IList<GroupMember> Members => _source.GroupMembers;
 
         public bool HasMembers => _source.HasGroupMembers;
@@ -364,37 +319,18 @@ namespace Unison.Core.ViewModels
         /// <summary>Digit → name map from <see cref="Members"/> for bubble/strip parsers.</summary>
         public IReadOnlyDictionary<string, string> MentionLookup => _source.MentionLookup;
 
-        public string MediaPivotHeader => Loc("ChatDetailInfo_Media", "Media");
-
-        public string FilesPivotHeader => Loc("ChatDetailInfo_Files", "Files");
-
-        public string CallsPivotHeader => Loc("ChatDetailInfo_Calls", "Calls");
-
-        public string CallsEmptyText =>
-            Loc("ChatDetailInfo_CallsEmpty", "Calls you make and receive will appear here.");
-
-        public string MembersEmptyText =>
-            Loc("ChatDetailInfo_MembersEmpty", "Group members will appear here.");
-
-        public string MediaEmptyText =>
-            Loc("ChatDetailInfo_MediaEmpty", "Photos, videos and audio will appear here.");
-
-        public string FilesEmptyText =>
-            Loc("ChatDetailInfo_FilesEmpty", "Documents will appear here.");
-
-        /// <summary>
-        /// Label for the WhatsApp chat-list pin, which is a different thing from the Start tile
-        /// beside it: this one follows the account to every device.
-        /// </summary>
-        public string ChatPinLabel
-        {
-            get => _chatPinLabel;
-            private set => Set(ref _chatPinLabel, value);
-        }
-
         public ICommand PinToStartCommand { get; }
 
         public ICommand PinChatCommand { get; }
+
+        /// <summary>Deletes the 1:1 conversation for the account after asking.</summary>
+        public ICommand DeleteChatCommand { get; }
+
+        /// <summary>
+        /// Raised once the conversation is gone, so the host can leave the chat surface instead of
+        /// keeping an info pane open on something that no longer exists.
+        /// </summary>
+        public event EventHandler ChatDeleted;
 
         /// <summary>True = unmute; false = mute forever (same local mute as the chat overflow).</summary>
         public ICommand SetNotificationsCommand { get; }
@@ -559,7 +495,7 @@ namespace Unison.Core.ViewModels
             OnPropertyChanged(nameof(PhoneValue));
             OnPropertyChanged(nameof(HasPhone));
             OnPropertyChanged(nameof(IsMemberAdmin));
-            OnPropertyChanged(nameof(AdminRoleText));
+            OnPropertyChanged(nameof(IsMemberAdmin));
             RaiseCanAddToAddressBook();
         }
 
@@ -1078,20 +1014,19 @@ namespace Unison.Core.ViewModels
             }
             else if (e.PropertyName == nameof(ChatItem.IsWidgetPinned))
             {
-                RefreshPinLabel();
+                OnPropertyChanged(nameof(IsWidgetPinned));
                 (PinToStartCommand as RelayCommand)?.RaiseCanExecuteChanged();
             }
             else if (e.PropertyName == nameof(ChatItem.IsChatPinned))
             {
-                RefreshChatPinLabel();
+                OnPropertyChanged(nameof(IsChatPinned));
+                (PinChatCommand as RelayCommand)?.RaiseCanExecuteChanged();
             }
         }
 
         private void RefreshDerived()
         {
             RefreshNotifications();
-            RefreshPinLabel();
-            RefreshChatPinLabel();
             RaiseCanAddToAddressBook();
         }
 
@@ -1152,9 +1087,6 @@ namespace Unison.Core.ViewModels
 
         private void RefreshNotifications()
         {
-            NotificationsValue = _source.IsMutedLocally
-                ? Loc("ChatDetailInfo_NotificationsOff", "Off")
-                : Loc("ChatDetailInfo_NotificationsOn", "On");
             OnPropertyChanged(nameof(NotificationsEnabled));
             (SetNotificationsCommand as RelayCommand<bool>)?.RaiseCanExecuteChanged();
         }
@@ -1190,20 +1122,6 @@ namespace Unison.Core.ViewModels
             }
         }
 
-        private void RefreshPinLabel()
-        {
-            PinMenuLabel = _source.IsWidgetPinned
-                ? Loc("ChatDetailInfo_UnpinAppBarLabel", "Unpin from\nStart")
-                : Loc("ChatDetailInfo_PinAppBarLabel", "Pin to\nStart");
-        }
-
-        private void RefreshChatPinLabel()
-        {
-            ChatPinLabel = _source.IsChatPinned
-                ? Loc("ChatDetailInfo_UnpinChatAppBarLabel", "Unpin\nchat")
-                : Loc("ChatDetailInfo_PinChatAppBarLabel", "Pin\nchat");
-        }
-
         /// <summary>
         /// The pin the account shares. The label follows the chat rather than the outcome of this
         /// call, because the row is updated the moment the change is accepted locally and reverted
@@ -1223,6 +1141,20 @@ namespace Unison.Core.ViewModels
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine("[ChatDetailInfoViewModel] Chat pin failed: " + ex.Message);
+            }
+        }
+
+        private async Task DeleteChatAsync()
+        {
+            bool deleted = await ChatDeletionPrompt.ConfirmAndDeleteAsync(
+                _source,
+                _chatService,
+                _dialogs,
+                _strings);
+
+            if (deleted)
+            {
+                ChatDeleted?.Invoke(this, EventArgs.Empty);
             }
         }
 
@@ -1274,13 +1206,13 @@ namespace Unison.Core.ViewModels
                 {
                     await _dispatcher.RunAsync(() =>
                     {
-                        RefreshPinLabel();
+                        OnPropertyChanged(nameof(IsWidgetPinned));
                         (PinToStartCommand as RelayCommand)?.RaiseCanExecuteChanged();
                     });
                 }
                 else
                 {
-                    RefreshPinLabel();
+                    OnPropertyChanged(nameof(IsWidgetPinned));
                     (PinToStartCommand as RelayCommand)?.RaiseCanExecuteChanged();
                 }
             }

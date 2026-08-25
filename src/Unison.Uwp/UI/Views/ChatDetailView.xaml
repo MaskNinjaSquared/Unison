@@ -329,9 +329,25 @@
                                     <MenuFlyoutItem x:Uid="ChatDetail_ExportChat" Text="Export chat" IsEnabled="False"
                                                     Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
                                     <MenuFlyoutItem Tag="widgetPin"
-                                                    Text="{Binding LiveTilePinMenuLabel}"
+                                                    x:Uid="ChatDetail_PinToStart"
+                                                    Text="Pin to Start"
                                                     Command="{Binding PinToStartCommand}"
                                                     Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
+                                    <MenuFlyoutItem Tag="widgetUnpin"
+                                                    x:Uid="ChatDetail_UnpinFromStart"
+                                                    Text="Unpin from Start"
+                                                    Command="{Binding PinToStartCommand}"
+                                                    Visibility="Collapsed"
+                                                    Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
+                                    <MenuFlyoutSeparator/>
+                                    <MenuFlyoutItem x:Uid="ChatDetail_DeleteChat"
+                                                    Text="Delete chat"
+                                                    Command="{Binding DeleteChatCommand}"
+                                                    Style="{StaticResource ModernMenuFlyoutItemStyle}">
+                                        <MenuFlyoutItem.Icon>
+                                            <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE74D;"/>
+                                        </MenuFlyoutItem.Icon>
+                                    </MenuFlyoutItem>
                                 </MenuFlyout>
                             </Button.Flyout>
                         </Button>
@@ -397,9 +413,25 @@
                                     <MenuFlyoutItem x:Uid="ChatDetail_ExportChat" Text="Export chat" IsEnabled="False"
                                                     Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
                                     <MenuFlyoutItem Tag="widgetPin"
-                                                    Text="{Binding LiveTilePinMenuLabel}"
+                                                    x:Uid="ChatDetail_PinToStart"
+                                                    Text="Pin to Start"
                                                     Command="{Binding PinToStartCommand}"
                                                     Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
+                                    <MenuFlyoutItem Tag="widgetUnpin"
+                                                    x:Uid="ChatDetail_UnpinFromStart"
+                                                    Text="Unpin from Start"
+                                                    Command="{Binding PinToStartCommand}"
+                                                    Visibility="Collapsed"
+                                                    Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
+                                    <MenuFlyoutSeparator/>
+                                    <MenuFlyoutItem x:Uid="ChatDetail_DeleteChat"
+                                                    Text="Delete chat"
+                                                    Command="{Binding DeleteChatCommand}"
+                                                    Style="{StaticResource ModernMenuFlyoutItemStyle}">
+                                        <MenuFlyoutItem.Icon>
+                                            <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE74D;"/>
+                                        </MenuFlyoutItem.Icon>
+                                    </MenuFlyoutItem>
                                 </MenuFlyout>
                             </Button.Flyout>
                         </Button>

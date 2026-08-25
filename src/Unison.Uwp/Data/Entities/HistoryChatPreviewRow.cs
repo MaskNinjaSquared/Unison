@@ -51,6 +51,13 @@ namespace Unison.Uwp.Data.Entities
 
         public string SyncType { get; set; }
 
+        /// <summary>
+        /// When the conversation was deleted for this account, or null while it is live.
+        /// The protocol has no such field: a deleted chat simply stops appearing, so without a
+        /// local tombstone the next history sync puts the row back.
+        /// </summary>
+        public DateTime? DeletedAtUtc { get; set; }
+
         public DateTime UpdatedAtUtc { get; set; }
     }
 }

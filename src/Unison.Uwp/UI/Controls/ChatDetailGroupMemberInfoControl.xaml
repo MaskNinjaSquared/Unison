@@ -38,7 +38,7 @@
             <Border Width="60" Height="44" Background="Transparent" IsHitTestVisible="False"/>
         </Pivot.RightHeader>
 
-        <PivotItem x:Name="ProfilePivotItem">
+        <PivotItem x:Name="ProfilePivotItem" x:Uid="ChatDetailInfo_Profile" Header="PROFILE">
             <ScrollViewer x:Name="ProfileScrollViewer"
                           VerticalScrollBarVisibility="Auto"
                           HorizontalScrollBarVisibility="Disabled"
@@ -52,18 +52,22 @@
                                                 Height="220"
                                                 HorizontalAlignment="Center"
                                                 Margin="0,16,0,24"/>
-                    <TextBlock x:Name="NameLabel" Style="{StaticResource ChatDetailInfoSectionLabelStyle}" Text="NAME"/>
+                    <TextBlock x:Name="NameLabel" x:Uid="ChatDetailInfo_NameLabel" Style="{StaticResource ChatDetailInfoSectionLabelStyle}" Text="NAME"/>
                     <TextBlock x:Name="NameValue" Style="{StaticResource ChatDetailInfoSectionValueStyle}"/>
                     <TextBlock x:Name="AdminValue"
+                               x:Uid="ChatDetailInfo_Admin"
+                               Text="Admin"
                                Margin="0,4,0,0"
                                FontFamily="{StaticResource MainFont}"
                                FontSize="13"
                                Foreground="#E8FFFFFF"
                                Visibility="Collapsed"/>
                     <StackPanel x:Name="PhoneSection" Margin="0,20,0,0" HorizontalAlignment="Stretch">
-                        <TextBlock x:Name="PhoneLabel" Style="{StaticResource ChatDetailInfoSectionLabelStyle}" Text="PHONE"/>
+                        <TextBlock x:Name="PhoneLabel" x:Uid="ChatDetailInfo_PhoneLabel" Style="{StaticResource ChatDetailInfoSectionLabelStyle}" Text="PHONE"/>
                         <TextBlock x:Name="PhoneValue" Style="{StaticResource ChatDetailInfoSectionValueStyle}"/>
                         <HyperlinkButton x:Name="AddContactButton"
+                                         x:Uid="ChatDetail_AddContactLink"
+                                         Content="Add contact"
                                          Margin="0,8,0,0"
                                          Padding="0"
                                          FontFamily="{StaticResource MainFont}"
@@ -72,6 +76,7 @@
                                          Visibility="Collapsed"/>
                     </StackPanel>
                     <TextBlock x:Name="SharedGroupsLabel"
+                               x:Uid="ChatDetailInfo_GroupsInCommonLabel"
                                Margin="0,20,0,0"
                                Style="{StaticResource ChatDetailInfoSectionLabelStyle}"
                                Text="GROUPS IN COMMON"/>
@@ -103,6 +108,7 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                     <TextBlock x:Name="SharedGroupsEmpty"
+                               x:Uid="ChatDetailInfo_GroupsInCommonEmpty"
                                Style="{StaticResource ChatDetailInfoEmptyTextStyle}"
                                Margin="0,4,0,0"
                                HorizontalAlignment="Left"
@@ -112,11 +118,11 @@
             </ScrollViewer>
         </PivotItem>
 
-        <PivotItem x:Name="MediaPivotItem">
+        <PivotItem x:Name="MediaPivotItem" x:Uid="ChatDetailInfo_Media" Header="MEDIA">
             <controls:ChatInfoMediaPane x:Name="MediaPane"/>
         </PivotItem>
 
-        <PivotItem x:Name="FilesPivotItem">
+        <PivotItem x:Name="FilesPivotItem" x:Uid="ChatDetailInfo_Files" Header="FILES">
             <controls:ChatInfoFilesPane x:Name="FilesPane"/>
         </PivotItem>
     </Pivot>

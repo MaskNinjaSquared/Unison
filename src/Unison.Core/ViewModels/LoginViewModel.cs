@@ -32,8 +32,6 @@ namespace Unison.Core.ViewModels
         private bool _isLogPanelVisible;
         private string _diagnosticLogText;
         private string _versionText;
-        private string _showLogButtonLabel;
-        private string _toggleLogButtonLabel;
         private bool _logLiveHooked;
         private bool _connectionHooked;
 
@@ -61,7 +59,6 @@ namespace Unison.Core.ViewModels
             DevResetSessionCommand = new RelayCommand(async () => await ResetSessionForDevAsync());
 
             _versionText = "v?";
-            RefreshLogButtonLabels();
 
             Attach();
         }
@@ -215,13 +212,7 @@ namespace Unison.Core.ViewModels
         public bool IsLogPanelVisible
         {
             get => _isLogPanelVisible;
-            private set
-            {
-                if (Set(ref _isLogPanelVisible, value))
-                {
-                    RefreshLogButtonLabels();
-                }
-            }
+            private set => Set(ref _isLogPanelVisible, value);
         }
 
         public string DiagnosticLogText
@@ -230,17 +221,8 @@ namespace Unison.Core.ViewModels
             private set => Set(ref _diagnosticLogText, value);
         }
 
-        public string ShowLogButtonLabel
-        {
-            get => _showLogButtonLabel;
-            private set => Set(ref _showLogButtonLabel, value);
-        }
-
-        public string ToggleLogButtonLabel
-        {
-            get => _toggleLogButtonLabel;
-            private set => Set(ref _toggleLogButtonLabel, value);
-        }
+        /// <summary>Whether session logging is on (drives Enable/Disable log button Visibility).</summary>
+        public bool IsSessionLoggingEnabled => _sessionLogger != null && _sessionLogger.Enabled;
 
         /// <summary>Connects and waits for a QR payload (or times out).</summary>
         public ICommand StartPairingCommand { get; }
@@ -296,7 +278,6 @@ namespace Unison.Core.ViewModels
 
             try
             {
-                RefreshLogButtonLabels();
                 RefreshDiagnosticLogText();
                 HookLiveLog();
             }
@@ -316,7 +297,7 @@ namespace Unison.Core.ViewModels
             {
                 bool enabled = !_sessionLogger.Enabled;
                 _sessionLogger.Enabled = enabled;
-                RefreshLogButtonLabels();
+                OnPropertyChanged(nameof(IsSessionLoggingEnabled));
                 DiagnosticLogText = enabled
                     ? _strings.Get("Login_LogEnabledHint", "Logging enabled.")
                     : _strings.Get("Login_LogDisabledHint", "Logging disabled.");
@@ -371,16 +352,6 @@ namespace Unison.Core.ViewModels
                     _strings.Get("Login_LogReadFail", "Failed to read log: {0}"),
                     ex.Message);
             }
-        }
-
-        private void RefreshLogButtonLabels()
-        {
-            ShowLogButtonLabel = IsLogPanelVisible
-                ? _strings.Get("Login_ShowLogHide.Content", "Hide log")
-                : _strings.Get("Login_ShowLog.Content", "Show diagnostic log");
-            ToggleLogButtonLabel = _sessionLogger.Enabled
-                ? _strings.Get("Login_ToggleLogOff.Content", "Disable log")
-                : _strings.Get("Login_ToggleLogOn.Content", "Enable log");
         }
 
         private void RaiseQrFullscreenCanExecuteChanged() =>

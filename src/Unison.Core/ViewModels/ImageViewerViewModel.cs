@@ -94,16 +94,6 @@ namespace Unison.Core.ViewModels
             }
         }
 
-        public string DownloadTooltip =>
-            _strings != null
-                ? _strings.Get("ImageViewer_Download", "Download")
-                : "Download";
-
-        public string ShareTooltip =>
-            _strings != null
-                ? _strings.Get("ImageViewer_Share", "Share")
-                : "Share";
-
         public bool IsChromeVisible
         {
             get => _isChromeVisible;

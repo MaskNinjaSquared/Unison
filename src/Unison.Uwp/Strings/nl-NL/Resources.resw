@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -415,12 +415,6 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   </data>
   <data name="ChatDetail_SelectForGroupInfo" xml:space="preserve">
     <value>tik hier voor groepsinfo</value>
-  </data>
-  <data name="ImageViewer_Download" xml:space="preserve">
-    <value>Downloaden</value>
-  </data>
-  <data name="ImageViewer_Share" xml:space="preserve">
-    <value>Delen</value>
   </data>
   <data name="ImageViewer_UnknownSender" xml:space="preserve">
     <value>Contact</value>
@@ -842,20 +836,6 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   <data name="ChatList_UnpinChat.Text" xml:space="preserve">
     <value>Chat losmaken</value>
   </data>
-  <data name="ChatDetailInfo_PinChatAppBarLabel" xml:space="preserve">
-    <value>Chat
-vastmaken</value>
-  </data>
-  <data name="ChatDetailInfo_UnpinChatAppBarLabel" xml:space="preserve">
-    <value>Chat
-losmaken</value>
-  </data>
-  <data name="ChatDetailInfo_Files" xml:space="preserve">
-    <value>Bestanden</value>
-  </data>
-  <data name="ChatDetailInfo_Media" xml:space="preserve">
-    <value>Media</value>
-  </data>
   <data name="ChatDetail_Search.Text" xml:space="preserve">
     <value>Zoeken</value>
   </data>
@@ -865,20 +845,11 @@ losmaken</value>
   <data name="ChatDetailInfo_Phone" xml:space="preserve">
     <value>Telefoon</value>
   </data>
-  <data name="ChatDetailInfo_CallsEmpty" xml:space="preserve">
-    <value>Oproepen die je plaatst en ontvangt verschijnen hier.</value>
-  </data>
   <data name="ChatDetail_GroupMedia.Text" xml:space="preserve">
     <value>Groepsmedia</value>
   </data>
-  <data name="ChatDetailInfo_MediaEmpty" xml:space="preserve">
-    <value>Foto's, video's en audio verschijnen hier.</value>
-  </data>
   <data name="ChatDetail_MuteNotifications.Text" xml:space="preserve">
     <value>Meldingen dempen</value>
-  </data>
-  <data name="ChatDetailInfo_MembersEmpty" xml:space="preserve">
-    <value>Groepsleden verschijnen hier.</value>
   </data>
   <data name="ChatDetailInfo_Admin.Text" xml:space="preserve">
     <value>Beheerder</value>
@@ -886,18 +857,8 @@ losmaken</value>
   <data name="ChatDetailInfo_GroupsInCommon" xml:space="preserve">
     <value>Gemeenschappelijke groepen</value>
   </data>
-  <data name="ChatDetailInfo_GroupsInCommonEmpty" xml:space="preserve">
-    <value>Geen gemeenschappelijke groepen.</value>
-  </data>
-  <data name="ChatDetailInfo_UnpinAppBarLabel" xml:space="preserve">
-    <value>Losmaken van
-Start</value>
-  </data>
   <data name="ChatDetailInfo_Notifications" xml:space="preserve">
     <value>Meldingen</value>
-  </data>
-  <data name="ChatDetailInfo_GroupInfo" xml:space="preserve">
-    <value>Groepsinfo</value>
   </data>
   <data name="ChatDetail_PinToStart.Text" xml:space="preserve">
     <value>Vastmaken aan Start</value>
@@ -914,21 +875,14 @@ Start</value>
   <data name="ChatDetailInfo_MemberCountSingular" xml:space="preserve">
     <value>1 lid</value>
   </data>
-  <data name="ChatDetailInfo_Profile" xml:space="preserve">
-    <value>Profiel</value>
-  </data>
   <data name="ChatDetail_ShowContact.Text" xml:space="preserve">
     <value>Contact bekijken</value>
   </data>
   <data name="ChatDetail_AddContact.Text" xml:space="preserve">
     <value>Contact toevoegen</value>
   </data>
-  <data name="ChatDetailInfo_AddContactAppBarLabel" xml:space="preserve">
-    <value>Contact
-toevoegen</value>
-  </data>
-  <data name="ChatDetailInfo_Calls" xml:space="preserve">
-    <value>Oproepen</value>
+  <data name="ChatDetail_AddContactLink.Content" xml:space="preserve">
+    <value>Contact toevoegen</value>
   </data>
   <data name="ChatDetailInfo_NotificationsOn" xml:space="preserve">
     <value>Aan</value>
@@ -942,9 +896,6 @@ toevoegen</value>
   <data name="ChatDetailInfo_MemberCount" xml:space="preserve">
     <value>{0} leden</value>
   </data>
-  <data name="ChatDetailInfo_FilesEmpty" xml:space="preserve">
-    <value>Documenten verschijnen hier.</value>
-  </data>
   <data name="ChatDetailInfo_Status" xml:space="preserve">
     <value>Status</value>
   </data>
@@ -957,20 +908,121 @@ toevoegen</value>
   <data name="ChatDetail_MuteForever.Text" xml:space="preserve">
     <value>Altijd</value>
   </data>
-  <data name="ChatDetailInfo_Members" xml:space="preserve">
-    <value>Leden</value>
-  </data>
   <data name="ChatDetail_GroupInfo.Text" xml:space="preserve">
     <value>Groepsinfo</value>
   </data>
   <data name="ChatDetail_MediaLinksDocs.Text" xml:space="preserve">
     <value>Media, links en docs</value>
   </data>
-  <data name="ChatDetailInfo_PinAppBarLabel" xml:space="preserve">
-    <value>Vastmaken aan
-Start</value>
-  </data>
   <data name="ChatDetail_UnpinFromStart.Text" xml:space="preserve">
     <value>Losmaken van Start</value>
+  </data>
+  <data name="ChatList_DeleteChat.Text" xml:space="preserve">
+    <value>Chat verwijderen</value>
+  </data>
+  <data name="ChatDetail_DeleteChat.Text" xml:space="preserve">
+    <value>Chat verwijderen</value>
+  </data>
+  <data name="Chat_DeleteChatTitle" xml:space="preserve">
+    <value>Chat verwijderen?</value>
+  </data>
+  <data name="Chat_DeleteChatBody" xml:space="preserve">
+    <value>"{0}" en de berichten worden verwijderd op deze telefoon en op je andere apparaten. Dit kan niet worden ongedaan gemaakt.</value>
+  </data>
+  <data name="Chat_DeleteChatConfirm" xml:space="preserve">
+    <value>Verwijderen</value>
+  </data>
+  <data name="Chat_DeleteChatFailedTitle" xml:space="preserve">
+    <value>Chat niet verwijderd</value>
+  </data>
+  <data name="Chat_DeleteChatFailedBody" xml:space="preserve">
+    <value>WhatsApp heeft de wijziging niet geaccepteerd, dus het gesprek is behouden. Probeer het opnieuw wanneer je verbonden bent.</value>
+  </data>
+  <data name="ChatDetailInfo_NameLabel.Text" xml:space="preserve">
+    <value>NAAM</value>
+  </data>
+  <data name="ChatDetailInfo_GroupNameLabel.Text" xml:space="preserve">
+    <value>GROEPSNAAM</value>
+  </data>
+  <data name="ChatDetailInfo_PhoneLabel.Text" xml:space="preserve">
+    <value>TELEFOON</value>
+  </data>
+  <data name="ChatDetailInfo_StatusLabel.Text" xml:space="preserve">
+    <value>STATUS</value>
+  </data>
+  <data name="ChatDetailInfo_DescriptionLabel.Text" xml:space="preserve">
+    <value>BESCHRIJVING</value>
+  </data>
+  <data name="ChatDetailInfo_NotificationsLabel.Text" xml:space="preserve">
+    <value>MELDINGEN</value>
+  </data>
+  <data name="ChatDetailInfo_MembersLabel.Text" xml:space="preserve">
+    <value>LEDEN</value>
+  </data>
+  <data name="ChatDetailInfo_GroupsInCommonLabel.Text" xml:space="preserve">
+    <value>GEMEENSCHAPPELIJKE GROEPEN</value>
+  </data>
+  <data name="ChatDetailInfo_Profile.Header" xml:space="preserve">
+    <value>PROFIEL</value>
+  </data>
+  <data name="ChatDetailInfo_GroupInfo.Header" xml:space="preserve">
+    <value>GROEPSINFO</value>
+  </data>
+  <data name="ChatDetailInfo_Media.Header" xml:space="preserve">
+    <value>MEDIA</value>
+  </data>
+  <data name="ChatDetailInfo_Files.Header" xml:space="preserve">
+    <value>BESTANDEN</value>
+  </data>
+  <data name="ChatDetailInfo_Members.Header" xml:space="preserve">
+    <value>LEDEN</value>
+  </data>
+  <data name="ChatDetailInfo_Calls.Header" xml:space="preserve">
+    <value>OPROEPEN</value>
+  </data>
+  <data name="ChatDetailInfo_MediaEmpty.Text" xml:space="preserve">
+    <value>Foto's, video's en audio verschijnen hier.</value>
+  </data>
+  <data name="ChatDetailInfo_FilesEmpty.Text" xml:space="preserve">
+    <value>Documenten verschijnen hier.</value>
+  </data>
+  <data name="ChatDetailInfo_CallsEmpty.Text" xml:space="preserve">
+    <value>Oproepen die je plaatst en ontvangt verschijnen hier.</value>
+  </data>
+  <data name="ChatDetailInfo_MembersEmpty.Text" xml:space="preserve">
+    <value>Groepsleden verschijnen hier.</value>
+  </data>
+  <data name="ChatDetailInfo_GroupsInCommonEmpty.Text" xml:space="preserve">
+    <value>Geen gemeenschappelijke groepen.</value>
+  </data>
+  <data name="ChatDetailInfo_NotificationsToggle.OnContent" xml:space="preserve">
+    <value>Aan</value>
+  </data>
+  <data name="ChatDetailInfo_NotificationsToggle.OffContent" xml:space="preserve">
+    <value>Uit</value>
+  </data>
+  <data name="ImageViewer_Download.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Downloaden</value>
+  </data>
+  <data name="ImageViewer_Share.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Delen</value>
+  </data>
+  <data name="ChatDetailInfo_PinChatAppBarLabel.Text" xml:space="preserve">
+    <value>Chat&#x0a;vastmaken</value>
+  </data>
+  <data name="ChatDetailInfo_UnpinChatAppBarLabel.Text" xml:space="preserve">
+    <value>Chat&#x0a;losmaken</value>
+  </data>
+  <data name="ChatDetailInfo_PinAppBarLabel.Text" xml:space="preserve">
+    <value>Vastmaken aan&#x0a;Start</value>
+  </data>
+  <data name="ChatDetailInfo_UnpinAppBarLabel.Text" xml:space="preserve">
+    <value>Losmaken van&#x0a;Start</value>
+  </data>
+  <data name="ChatDetailInfo_AddContactAppBarLabel.Text" xml:space="preserve">
+    <value>Contact&#x0a;toevoegen</value>
+  </data>
+  <data name="ChatDetailInfo_DeleteChatBar.Text" xml:space="preserve">
+    <value>Chat&#x0a;verwijderen</value>
   </data>
 </root>

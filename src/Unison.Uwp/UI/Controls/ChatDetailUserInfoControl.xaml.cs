@@ -92,27 +92,6 @@ namespace Unison.Uwp.UI.Controls
                 return;
             }
 
-            ProfilePivotItem.Header = ChatDetailInfoPivotHelper.Upper(vm.ProfilePivotHeader);
-            if (MediaPivotItem != null)
-            {
-                MediaPivotItem.Header = ChatDetailInfoPivotHelper.Upper(vm.MediaPivotHeader);
-            }
-
-            if (FilesPivotItem != null)
-            {
-                FilesPivotItem.Header = ChatDetailInfoPivotHelper.Upper(vm.FilesPivotHeader);
-            }
-
-            if (CallsPivotItem != null)
-            {
-                CallsPivotItem.Header = ChatDetailInfoPivotHelper.Upper(vm.CallsPivotHeader);
-            }
-
-            if (CallsEmptyText != null)
-            {
-                CallsEmptyText.Text = vm.CallsEmptyText ?? string.Empty;
-            }
-
             MediaPane?.AttachPaging(vm, isFilesPane: false);
             FilesPane?.AttachPaging(vm);
             BindMediaPanes();
@@ -121,11 +100,6 @@ namespace Unison.Uwp.UI.Controls
             {
                 InfoAvatar.AvatarUrl = vm.AvatarUrl;
                 InfoAvatar.IsGroup = false;
-            }
-
-            if (NameLabel != null)
-            {
-                NameLabel.Text = ChatDetailInfoPivotHelper.Upper(vm.NameSectionLabel);
             }
 
             if (NameValue != null)
@@ -140,11 +114,6 @@ namespace Unison.Uwp.UI.Controls
                     : Visibility.Collapsed;
             }
 
-            if (PhoneLabel != null)
-            {
-                PhoneLabel.Text = ChatDetailInfoPivotHelper.Upper(vm.PhoneSectionLabel);
-            }
-
             if (PhoneValue != null)
             {
                 PhoneValue.Text = string.IsNullOrWhiteSpace(vm.PhoneValue) ? "—" : vm.PhoneValue;
@@ -152,26 +121,15 @@ namespace Unison.Uwp.UI.Controls
 
             if (AddContactButton != null)
             {
-                AddContactButton.Content = vm.AddContactLabel;
                 AddContactButton.Command = vm.AddContactCommand;
                 AddContactButton.Visibility = vm.CanAddToAddressBook
                     ? Visibility.Visible
                     : Visibility.Collapsed;
             }
 
-            if (StatusLabel != null)
-            {
-                StatusLabel.Text = ChatDetailInfoPivotHelper.Upper(vm.StatusSectionLabel);
-            }
-
             if (StatusValue != null)
             {
                 StatusValue.Text = vm.HasStatusOrDescription ? vm.StatusOrDescription : "—";
-            }
-
-            if (NotificationsLabel != null)
-            {
-                NotificationsLabel.Text = ChatDetailInfoPivotHelper.Upper(vm.NotificationsSectionLabel);
             }
 
             ChatDetailInfoPivotHelper.ApplyNotificationsToggle(
@@ -189,8 +147,8 @@ namespace Unison.Uwp.UI.Controls
             }
 
             bool loading = vm.IsMediaIndexLoading;
-            MediaPane?.Bind(vm.MediaItems, vm.HasMedia, vm.MediaEmptyText, loading);
-            FilesPane?.Bind(vm.FileItems, vm.HasFiles, vm.FilesEmptyText, loading);
+            MediaPane?.Bind(vm.MediaItems, vm.HasMedia, loading);
+            FilesPane?.Bind(vm.FileItems, vm.HasFiles, loading);
         }
     }
 }

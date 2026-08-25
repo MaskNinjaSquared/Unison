@@ -207,6 +207,11 @@ namespace Unison.Core.ViewModels
                 request => request?.Chat != null &&
                            !string.IsNullOrWhiteSpace(request.Chat.JID) &&
                            _chatService != null);
+            DeleteChatCommand = new RelayCommand<ChatItem>(
+                chat => _ = DeleteChatAsync(chat),
+                chat => chat != null &&
+                        !string.IsNullOrWhiteSpace(chat.JID) &&
+                        _chatService != null);
             SetLocalMuteCommand = new RelayCommand<ChatMuteRequest>(
                 request => _ = SetLocalMuteAsync(request),
                 request => request?.Chat != null &&
@@ -330,6 +335,12 @@ namespace Unison.Core.ViewModels
         /// which is what moves it to the top of the list on the phone as well.
         /// </summary>
         public ICommand SetChatPinnedCommand { get; }
+
+        /// <summary>
+        /// Deletes the conversation for the account after asking. Not undoable, which is why the
+        /// row does not disappear until the user has confirmed.
+        /// </summary>
+        public ICommand DeleteChatCommand { get; }
 
         /// <summary>Sets or clears local/unified <see cref="ChatItem.MutedUntil"/>.</summary>
         public ICommand SetLocalMuteCommand { get; }
@@ -636,6 +647,24 @@ namespace Unison.Core.ViewModels
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine("[ChatListViewModel] SetChatPinned failed: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// The list only has to stop showing the row: the facade removes it from the shared
+        /// collection, and the mirror this list draws from follows that.
+        /// </summary>
+        private async Task DeleteChatAsync(ChatItem chat)
+        {
+            bool deleted = await ChatDeletionPrompt.ConfirmAndDeleteAsync(
+                chat,
+                _chatService,
+                _dialogService,
+                _strings);
+
+            if (deleted)
+            {
+                RefreshVisibleChats();
             }
         }
 

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -415,12 +415,6 @@
   </data>
   <data name="ChatDetail_SelectForGroupInfo" xml:space="preserve">
     <value>торкніться тут, щоб переглянути інформацію про групу</value>
-  </data>
-  <data name="ImageViewer_Download" xml:space="preserve">
-    <value>Завантажити</value>
-  </data>
-  <data name="ImageViewer_Share" xml:space="preserve">
-    <value>Поділитися</value>
   </data>
   <data name="ImageViewer_UnknownSender" xml:space="preserve">
     <value>Контакт</value>
@@ -842,46 +836,11 @@
   <data name="ChatList_UnpinChat.Text" xml:space="preserve">
     <value>Відкріпити чат</value>
   </data>
-  <data name="ChatDetailInfo_PinChatAppBarLabel" xml:space="preserve">
-    <value>Закріпити
-чат</value>
-  </data>
-  <data name="ChatDetailInfo_UnpinChatAppBarLabel" xml:space="preserve">
-    <value>Відкріпити
-чат</value>
-  </data>
-  <data name="ChatDetailInfo_Media" xml:space="preserve">
-    <value>Медіа</value>
-  </data>
-  <data name="ChatDetailInfo_Files" xml:space="preserve">
-    <value>Файли</value>
-  </data>
-  <data name="ChatDetailInfo_Members" xml:space="preserve">
-    <value>Учасники</value>
-  </data>
-  <data name="ChatDetailInfo_Calls" xml:space="preserve">
-    <value>Дзвінки</value>
-  </data>
-  <data name="ChatDetailInfo_CallsEmpty" xml:space="preserve">
-    <value>Дзвінки, які ви здійснюєте та отримуєте, з'являться тут.</value>
-  </data>
-  <data name="ChatDetailInfo_MembersEmpty" xml:space="preserve">
-    <value>Учасники групи з'являться тут.</value>
-  </data>
   <data name="ChatDetailInfo_Admin.Text" xml:space="preserve">
     <value>Адмін</value>
   </data>
   <data name="ChatDetailInfo_GroupsInCommon" xml:space="preserve">
     <value>Спільні групи</value>
-  </data>
-  <data name="ChatDetailInfo_GroupsInCommonEmpty" xml:space="preserve">
-    <value>Немає спільних груп.</value>
-  </data>
-  <data name="ChatDetailInfo_MediaEmpty" xml:space="preserve">
-    <value>Фото, відео та аудіо з'являться тут.</value>
-  </data>
-  <data name="ChatDetailInfo_FilesEmpty" xml:space="preserve">
-    <value>Документи з'являться тут.</value>
   </data>
   <data name="ChatDetailInfo_MemberCount" xml:space="preserve">
     <value>{0} учасників</value>
@@ -904,15 +863,8 @@
   <data name="ChatDetail_MuteNotifications.Text" xml:space="preserve">
     <value>Вимкнути сповіщення</value>
   </data>
-  <data name="ChatDetailInfo_UnpinAppBarLabel" xml:space="preserve">
-    <value>Відкріпити з
-Початку</value>
-  </data>
   <data name="ChatDetailInfo_Notifications" xml:space="preserve">
     <value>Сповіщення</value>
-  </data>
-  <data name="ChatDetailInfo_GroupInfo" xml:space="preserve">
-    <value>Інформація про групу</value>
   </data>
   <data name="ChatDetail_PinToStart.Text" xml:space="preserve">
     <value>Закріпити на Початку</value>
@@ -926,18 +878,14 @@
   <data name="ChatDetailInfo_Description" xml:space="preserve">
     <value>Опис</value>
   </data>
-  <data name="ChatDetailInfo_Profile" xml:space="preserve">
-    <value>Профіль</value>
-  </data>
   <data name="ChatDetail_ShowContact.Text" xml:space="preserve">
     <value>Переглянути контакт</value>
   </data>
   <data name="ChatDetail_AddContact.Text" xml:space="preserve">
     <value>Додати контакт</value>
   </data>
-  <data name="ChatDetailInfo_AddContactAppBarLabel" xml:space="preserve">
-    <value>Додати
-контакт</value>
+  <data name="ChatDetail_AddContactLink.Content" xml:space="preserve">
+    <value>Додати контакт</value>
   </data>
   <data name="ChatDetailInfo_NotificationsOn" xml:space="preserve">
     <value>Увімк.</value>
@@ -966,11 +914,115 @@
   <data name="ChatDetail_MediaLinksDocs.Text" xml:space="preserve">
     <value>Медіа, посилання та документи</value>
   </data>
-  <data name="ChatDetailInfo_PinAppBarLabel" xml:space="preserve">
-    <value>Закріпити на
-Початку</value>
-  </data>
   <data name="ChatDetail_UnpinFromStart.Text" xml:space="preserve">
     <value>Відкріпити з Початку</value>
+  </data>
+  <data name="ChatList_DeleteChat.Text" xml:space="preserve">
+    <value>Видалити чат</value>
+  </data>
+  <data name="ChatDetail_DeleteChat.Text" xml:space="preserve">
+    <value>Видалити чат</value>
+  </data>
+  <data name="Chat_DeleteChatTitle" xml:space="preserve">
+    <value>Видалити чат?</value>
+  </data>
+  <data name="Chat_DeleteChatBody" xml:space="preserve">
+    <value>Чат «{0}» та його повідомлення буде видалено на цьому телефоні та на інших ваших пристроях. Це дію неможливо скасувати.</value>
+  </data>
+  <data name="Chat_DeleteChatConfirm" xml:space="preserve">
+    <value>Видалити</value>
+  </data>
+  <data name="Chat_DeleteChatFailedTitle" xml:space="preserve">
+    <value>Чат не видалено</value>
+  </data>
+  <data name="Chat_DeleteChatFailedBody" xml:space="preserve">
+    <value>WhatsApp не прийняв зміну, тому розмову залишено як було. Спробуйте знову, коли будете онлайн.</value>
+  </data>
+  <data name="ChatDetailInfo_NameLabel.Text" xml:space="preserve">
+    <value>ІМ'Я</value>
+  </data>
+  <data name="ChatDetailInfo_GroupNameLabel.Text" xml:space="preserve">
+    <value>НАЗВА ГРУПИ</value>
+  </data>
+  <data name="ChatDetailInfo_PhoneLabel.Text" xml:space="preserve">
+    <value>ТЕЛЕФОН</value>
+  </data>
+  <data name="ChatDetailInfo_StatusLabel.Text" xml:space="preserve">
+    <value>СТАТУС</value>
+  </data>
+  <data name="ChatDetailInfo_DescriptionLabel.Text" xml:space="preserve">
+    <value>ОПИС</value>
+  </data>
+  <data name="ChatDetailInfo_NotificationsLabel.Text" xml:space="preserve">
+    <value>СПОВІЩЕННЯ</value>
+  </data>
+  <data name="ChatDetailInfo_MembersLabel.Text" xml:space="preserve">
+    <value>УЧАСНИКИ</value>
+  </data>
+  <data name="ChatDetailInfo_GroupsInCommonLabel.Text" xml:space="preserve">
+    <value>СПІЛЬНІ ГРУПИ</value>
+  </data>
+  <data name="ChatDetailInfo_Profile.Header" xml:space="preserve">
+    <value>ПРОФІЛЬ</value>
+  </data>
+  <data name="ChatDetailInfo_GroupInfo.Header" xml:space="preserve">
+    <value>ІНФОРМАЦІЯ ПРО ГРУПУ</value>
+  </data>
+  <data name="ChatDetailInfo_Media.Header" xml:space="preserve">
+    <value>МЕДІА</value>
+  </data>
+  <data name="ChatDetailInfo_Files.Header" xml:space="preserve">
+    <value>ФАЙЛИ</value>
+  </data>
+  <data name="ChatDetailInfo_Members.Header" xml:space="preserve">
+    <value>УЧАСНИКИ</value>
+  </data>
+  <data name="ChatDetailInfo_Calls.Header" xml:space="preserve">
+    <value>ДЗВІНКИ</value>
+  </data>
+  <data name="ChatDetailInfo_MediaEmpty.Text" xml:space="preserve">
+    <value>Фото, відео та аудіо з'являться тут.</value>
+  </data>
+  <data name="ChatDetailInfo_FilesEmpty.Text" xml:space="preserve">
+    <value>Документи з'являться тут.</value>
+  </data>
+  <data name="ChatDetailInfo_CallsEmpty.Text" xml:space="preserve">
+    <value>Дзвінки, які ви здійснюєте та отримуєте, з'являться тут.</value>
+  </data>
+  <data name="ChatDetailInfo_MembersEmpty.Text" xml:space="preserve">
+    <value>Учасники групи з'являться тут.</value>
+  </data>
+  <data name="ChatDetailInfo_GroupsInCommonEmpty.Text" xml:space="preserve">
+    <value>Немає спільних груп.</value>
+  </data>
+  <data name="ChatDetailInfo_NotificationsToggle.OnContent" xml:space="preserve">
+    <value>Увімк.</value>
+  </data>
+  <data name="ChatDetailInfo_NotificationsToggle.OffContent" xml:space="preserve">
+    <value>Вимк.</value>
+  </data>
+  <data name="ImageViewer_Download.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Завантажити</value>
+  </data>
+  <data name="ImageViewer_Share.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Поділитися</value>
+  </data>
+  <data name="ChatDetailInfo_PinChatAppBarLabel.Text" xml:space="preserve">
+    <value>Закріпити&#x0a;чат</value>
+  </data>
+  <data name="ChatDetailInfo_UnpinChatAppBarLabel.Text" xml:space="preserve">
+    <value>Відкріпити&#x0a;чат</value>
+  </data>
+  <data name="ChatDetailInfo_PinAppBarLabel.Text" xml:space="preserve">
+    <value>Закріпити на&#x0a;Початку</value>
+  </data>
+  <data name="ChatDetailInfo_UnpinAppBarLabel.Text" xml:space="preserve">
+    <value>Відкріпити з&#x0a;Початку</value>
+  </data>
+  <data name="ChatDetailInfo_AddContactAppBarLabel.Text" xml:space="preserve">
+    <value>Додати&#x0a;контакт</value>
+  </data>
+  <data name="ChatDetailInfo_DeleteChatBar.Text" xml:space="preserve">
+    <value>Видалити&#x0a;чат</value>
   </data>
 </root>

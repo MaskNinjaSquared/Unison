@@ -131,6 +131,22 @@ namespace Unison.Uwp.Services.WhatsApp
             SchedulePersist();
         }
 
+        /// <summary>
+        /// Removes a conversation because the account says it is gone - either the phone deleted it
+        /// or we did.
+        /// </summary>
+        /// <remarks>
+        /// Dropping the in-memory rows is only the visible half. SQLite is what the list and the
+        /// timeline are rebuilt from on the next launch, so a chat cleared from RAM alone comes
+        /// straight back; a delete that leaves the tail behind is undone by the next history chunk.
+        /// Hence both: a tombstone on the preview and a real delete of the messages.
+        /// </remarks>
+        /// <inheritdoc />
+        public Task ApplyChatDeletionAsync(string jid)
+        {
+            return ApplyAppStateDeleteChatAsync(jid);
+        }
+
         internal async Task ApplyAppStateDeleteChatAsync(string jid)
         {
             string canonical = GetCanonicalJid(jid);
@@ -138,6 +154,8 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 return;
             }
+
+            List<string> keys = ExpandHistoryChatKeys(canonical);
 
             await RunOnUiThreadAsync(() =>
             {
@@ -156,6 +174,71 @@ namespace Unison.Uwp.Services.WhatsApp
                 _historyOnDemandRejectedUntilUtcByChat.Remove(canonical);
                 _activeChatReconcileCooldownByChat.Remove(canonical);
             });
+
+            await ForgetChatInStorageAsync(canonical, keys).ConfigureAwait(false);
+
+            NotificationService.Instance.UpdateBadge(GetTotalUnreadCount());
+            SchedulePersist();
+        }
+
+        /// <summary>
+        /// The persistent half of a chat deletion: tombstone the list preview, drop the stored
+        /// messages, and take the chat out of the catalog the app rehydrates from.
+        /// </summary>
+        private async Task ForgetChatInStorageAsync(string canonical, IReadOnlyList<string> keys)
+        {
+            var jids = new List<string>();
+            if (keys != null)
+            {
+                jids.AddRange(keys);
+            }
+
+            if (!jids.Any(k => string.Equals(k, canonical, StringComparison.OrdinalIgnoreCase)))
+            {
+                jids.Add(canonical);
+            }
+
+            if (_chatPreviews != null)
+            {
+                try
+                {
+                    await _chatPreviews.MarkDeletedAsync(jids, DateTime.UtcNow).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[WhatsAppService] Chat preview tombstone failed: " + ex.Message);
+                }
+            }
+
+            if (_historyMessages != null)
+            {
+                try
+                {
+                    await _historyMessages.DeleteForChatKeysAsync(jids).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[WhatsAppService] Chat message delete failed: " + ex.Message);
+                }
+            }
+
+            try
+            {
+                _messageStore?.ClearMemoryCache();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[WhatsAppService] Message cache clear failed: " + ex.Message);
+            }
+
+            try
+            {
+                await PersistChatCatalogAsync(Chats.ToList()).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[WhatsAppService] Chat catalog persist failed: " + ex.Message);
+            }
         }
 
         internal async Task<bool> ApplyAppStateDeleteMessageAsync(string jid, string messageId)

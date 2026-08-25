@@ -25,6 +25,14 @@ namespace Unison.Core.Contracts
         /// <summary>Clears all preview rows (wipe / resync epoch rotate).</summary>
         Task ClearAsync(string reason = null);
 
+        /// <summary>
+        /// Tombstones the given conversation keys (PN / LID / canonical) so they stop being read
+        /// back. The protocol carries no deleted flag, so a plain row delete would be undone by the
+        /// next history chunk. A message newer than <paramref name="deletedAtUtc"/> lifts it again,
+        /// which is how a deleted chat comes back when someone writes.
+        /// </summary>
+        Task MarkDeletedAsync(IReadOnlyList<string> jids, DateTime deletedAtUtc);
+
         event EventHandler<HistoryChatPreviewChunkEventArgs> ChunkPersisted;
     }
 }

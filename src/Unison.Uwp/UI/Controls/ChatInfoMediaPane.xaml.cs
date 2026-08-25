@@ -33,13 +33,8 @@ namespace Unison.Uwp.UI.Controls
             EnsureScrollHook();
         }
 
-        public void Bind(IEnumerable items, bool hasItems, string emptyText, bool isLoading)
+        public void Bind(IEnumerable items, bool hasItems, bool isLoading)
         {
-            if (MediaEmptyText != null)
-            {
-                MediaEmptyText.Text = emptyText ?? string.Empty;
-            }
-
             if (MediaLoadingRing != null)
             {
                 MediaLoadingRing.IsActive = isLoading;

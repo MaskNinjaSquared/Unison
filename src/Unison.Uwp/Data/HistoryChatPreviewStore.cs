@@ -20,7 +20,7 @@ namespace Unison.Uwp.Data
     {
         private static readonly string DatabaseFileName = "unison.db";
 
-        public const int CurrentSchemaVersion = 4;
+        public const int CurrentSchemaVersion = 5;
 
         private readonly SemaphoreSlim _initLock = new SemaphoreSlim(1, 1);
         private readonly SemaphoreSlim _writeLock = new SemaphoreSlim(1, 1);
@@ -51,7 +51,8 @@ namespace Unison.Uwp.Data
                 string dbPath = Path.Combine(ApplicationData.Current.LocalFolder.Path, DatabaseFileName);
                 _connection = new SQLiteAsyncConnection(dbPath);
                 await _connection.CreateTableAsync<HistoryChatPreviewRow>().ConfigureAwait(false);
-                await EnsureLastMessageIdColumnAsync().ConfigureAwait(false);
+                await EnsureColumnAsync("LastMessageId", "TEXT").ConfigureAwait(false);
+                await EnsureColumnAsync("DeletedAtUtc", "DATETIME").ConfigureAwait(false);
                 _initialized = true;
                 Debug.WriteLine("[HistoryChatPreviewStore] Initialized at " + dbPath);
             }
@@ -69,6 +70,11 @@ namespace Unison.Uwp.Data
             }
 
             await EnsureInitializedAsync().ConfigureAwait(false);
+
+            // A row replaced wholesale would lose its tombstone, and the chat the user deleted
+            // would be back on the next sync chunk.
+            var tombstones = await LoadTombstonesAsync().ConfigureAwait(false);
+
             await _writeLock.WaitAsync().ConfigureAwait(false);
             string syncId = null;
             string syncType = null;
@@ -86,7 +92,7 @@ namespace Unison.Uwp.Data
 
                         syncId = model.SyncId ?? syncId;
                         syncType = model.SyncType ?? syncType;
-                        conn.InsertOrReplace(ToRow(model));
+                        conn.InsertOrReplace(ToRow(model, CarriedTombstone(tombstones, model)));
                         upserted++;
                     }
                 }).ConfigureAwait(false);
@@ -123,6 +129,7 @@ namespace Unison.Uwp.Data
             if (string.IsNullOrWhiteSpace(syncId))
             {
                 rows = await _connection.Table<HistoryChatPreviewRow>()
+                    .Where(r => r.DeletedAtUtc == null)
                     .OrderByDescending(r => r.LastMessageTimestampUtc)
                     .ToListAsync()
                     .ConfigureAwait(false);
@@ -130,7 +137,7 @@ namespace Unison.Uwp.Data
             else
             {
                 rows = await _connection.Table<HistoryChatPreviewRow>()
-                    .Where(r => r.SyncId == syncId)
+                    .Where(r => r.SyncId == syncId && r.DeletedAtUtc == null)
                     .OrderByDescending(r => r.LastMessageTimestampUtc)
                     .ToListAsync()
                     .ConfigureAwait(false);
@@ -150,11 +157,14 @@ namespace Unison.Uwp.Data
             await EnsureInitializedAsync().ConfigureAwait(false);
             if (string.IsNullOrWhiteSpace(syncId))
             {
-                return await _connection.Table<HistoryChatPreviewRow>().CountAsync().ConfigureAwait(false);
+                return await _connection.Table<HistoryChatPreviewRow>()
+                    .Where(r => r.DeletedAtUtc == null)
+                    .CountAsync()
+                    .ConfigureAwait(false);
             }
 
             return await _connection.Table<HistoryChatPreviewRow>()
-                .Where(r => r.SyncId == syncId)
+                .Where(r => r.SyncId == syncId && r.DeletedAtUtc == null)
                 .CountAsync()
                 .ConfigureAwait(false);
         }
@@ -174,6 +184,103 @@ namespace Unison.Uwp.Data
             }
         }
 
+        public async Task MarkDeletedAsync(IReadOnlyList<string> jids, DateTime deletedAtUtc)
+        {
+            if (jids == null || jids.Count == 0)
+            {
+                return;
+            }
+
+            await EnsureInitializedAsync().ConfigureAwait(false);
+            await _writeLock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                int marked = 0;
+                foreach (var jid in jids)
+                {
+                    if (string.IsNullOrWhiteSpace(jid))
+                    {
+                        continue;
+                    }
+
+                    marked += await _connection.ExecuteAsync(
+                            "UPDATE history_chat_preview SET DeletedAtUtc = ? WHERE Jid = ?",
+                            deletedAtUtc,
+                            jid)
+                        .ConfigureAwait(false);
+                }
+
+                Debug.WriteLine("[HistoryChatPreviewStore] Tombstoned " + marked + " row(s)");
+            }
+            finally
+            {
+                _writeLock.Release();
+            }
+        }
+
+        /// <summary>
+        /// The tombstone per JID, so an upsert can decide whether the incoming row is a leftover
+        /// from a sync chunk or a genuinely newer message that should bring the chat back.
+        /// </summary>
+        private async Task<Dictionary<string, DateTime>> LoadTombstonesAsync()
+        {
+            var map = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                var rows = await _connection
+                    .QueryAsync<TombstoneRow>(
+                        "SELECT Jid, DeletedAtUtc FROM history_chat_preview WHERE DeletedAtUtc IS NOT NULL")
+                    .ConfigureAwait(false);
+                if (rows != null)
+                {
+                    foreach (var row in rows)
+                    {
+                        if (row != null && !string.IsNullOrWhiteSpace(row.Jid) && row.DeletedAtUtc.HasValue)
+                        {
+                            map[row.Jid] = row.DeletedAtUtc.Value;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[HistoryChatPreviewStore] LoadTombstones failed: " + ex.Message);
+            }
+
+            return map;
+        }
+
+        /// <summary>
+        /// Keeps the chat deleted unless the incoming preview is newer than the deletion. A message
+        /// that arrives after the user deleted the conversation is meant to bring it back; anything
+        /// older is history the deletion already covered.
+        /// </summary>
+        private static DateTime? CarriedTombstone(
+            Dictionary<string, DateTime> tombstones,
+            HistoryChatPreview model)
+        {
+            if (tombstones.Count == 0 || string.IsNullOrWhiteSpace(model.Jid))
+            {
+                return null;
+            }
+
+            DateTime deletedAt;
+            if (!tombstones.TryGetValue(model.Jid, out deletedAt))
+            {
+                return null;
+            }
+
+            var incoming = model.LastMessageTimestampUtc;
+
+            return incoming.HasValue && incoming.Value > deletedAt ? (DateTime?)null : deletedAt;
+        }
+
+        private sealed class TombstoneRow
+        {
+            public string Jid { get; set; }
+            public DateTime? DeletedAtUtc { get; set; }
+        }
+
         private async Task EnsureInitializedAsync()
         {
             if (!_initialized)
@@ -182,37 +289,37 @@ namespace Unison.Uwp.Data
             }
         }
 
-        private async Task EnsureLastMessageIdColumnAsync()
+        private async Task EnsureColumnAsync(string column, string sqlType)
         {
             try
             {
                 List<SqliteTableInfoRow> cols = await _connection
                     .QueryAsync<SqliteTableInfoRow>("PRAGMA table_info(history_chat_preview)")
                     .ConfigureAwait(false);
-                bool hasId = false;
+                bool present = false;
                 if (cols != null)
                 {
                     for (int i = 0; i < cols.Count; i++)
                     {
-                        if (string.Equals(cols[i]?.name, "LastMessageId", StringComparison.OrdinalIgnoreCase))
+                        if (string.Equals(cols[i]?.name, column, StringComparison.OrdinalIgnoreCase))
                         {
-                            hasId = true;
+                            present = true;
                             break;
                         }
                     }
                 }
 
-                if (!hasId)
+                if (!present)
                 {
                     await _connection.ExecuteAsync(
-                            "ALTER TABLE history_chat_preview ADD COLUMN LastMessageId TEXT")
+                            "ALTER TABLE history_chat_preview ADD COLUMN " + column + " " + sqlType)
                         .ConfigureAwait(false);
-                    Debug.WriteLine("[HistoryChatPreviewStore] Added LastMessageId column");
+                    Debug.WriteLine("[HistoryChatPreviewStore] Added " + column + " column");
                 }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine("[HistoryChatPreviewStore] EnsureLastMessageIdColumn failed: " + ex.Message);
+                Debug.WriteLine("[HistoryChatPreviewStore] EnsureColumn " + column + " failed: " + ex.Message);
             }
         }
 
@@ -223,10 +330,11 @@ namespace Unison.Uwp.Data
             public string type { get; set; }
         }
 
-        private static HistoryChatPreviewRow ToRow(HistoryChatPreview model)
+        private static HistoryChatPreviewRow ToRow(HistoryChatPreview model, DateTime? deletedAtUtc)
         {
             return new HistoryChatPreviewRow
             {
+                DeletedAtUtc = deletedAtUtc,
                 Jid = model.Jid,
                 LidJid = model.LidJid,
                 PnJid = model.PnJid,

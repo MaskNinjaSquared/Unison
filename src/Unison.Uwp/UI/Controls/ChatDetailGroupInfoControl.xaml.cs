@@ -141,25 +141,8 @@ namespace Unison.Uwp.UI.Controls
                 return;
             }
 
-            ProfilePivotItem.Header = ChatDetailInfoPivotHelper.Upper(vm.ProfilePivotHeader);
-            if (MembersPivotItem != null)
-            {
-                MembersPivotItem.Header = ChatDetailInfoPivotHelper.Upper(vm.MembersPivotHeader);
-            }
-
-            if (MediaPivotItem != null)
-            {
-                MediaPivotItem.Header = ChatDetailInfoPivotHelper.Upper(vm.MediaPivotHeader);
-            }
-
-            if (FilesPivotItem != null)
-            {
-                FilesPivotItem.Header = ChatDetailInfoPivotHelper.Upper(vm.FilesPivotHeader);
-            }
-
             if (MembersEmptyText != null)
             {
-                MembersEmptyText.Text = vm.MembersEmptyText ?? string.Empty;
                 MembersEmptyText.Visibility = vm.HasMembers ? Visibility.Collapsed : Visibility.Visible;
             }
 
@@ -179,19 +162,9 @@ namespace Unison.Uwp.UI.Controls
                 InfoAvatar.IsGroup = true;
             }
 
-            if (NameLabel != null)
-            {
-                NameLabel.Text = ChatDetailInfoPivotHelper.Upper(vm.NameSectionLabel);
-            }
-
             if (NameValue != null)
             {
                 NameValue.Text = vm.DisplayName ?? string.Empty;
-            }
-
-            if (StatusLabel != null)
-            {
-                StatusLabel.Text = ChatDetailInfoPivotHelper.Upper(vm.StatusSectionLabel);
             }
 
             if (StatusValue != null)
@@ -199,20 +172,10 @@ namespace Unison.Uwp.UI.Controls
                 StatusValue.Text = vm.HasStatusOrDescription ? vm.StatusOrDescription : "—";
             }
 
-            if (NotificationsLabel != null)
-            {
-                NotificationsLabel.Text = ChatDetailInfoPivotHelper.Upper(vm.NotificationsSectionLabel);
-            }
-
             ChatDetailInfoPivotHelper.ApplyNotificationsToggle(
                 NotificationsToggle,
                 vm,
                 ref _notificationsToggleQuiet);
-
-            if (MembersLabel != null)
-            {
-                MembersLabel.Text = ChatDetailInfoPivotHelper.Upper(vm.MembersSectionLabel);
-            }
 
             if (MembersValue != null)
             {
@@ -231,8 +194,8 @@ namespace Unison.Uwp.UI.Controls
             }
 
             bool loading = vm.IsMediaIndexLoading;
-            MediaPane?.Bind(vm.MediaItems, vm.HasMedia, vm.MediaEmptyText, loading);
-            FilesPane?.Bind(vm.FileItems, vm.HasFiles, vm.FilesEmptyText, loading);
+            MediaPane?.Bind(vm.MediaItems, vm.HasMedia, loading);
+            FilesPane?.Bind(vm.FileItems, vm.HasFiles, loading);
         }
     }
 }

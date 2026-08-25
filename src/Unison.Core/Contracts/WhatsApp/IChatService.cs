@@ -30,5 +30,13 @@ namespace Unison.Core.Contracts.WhatsApp
         /// so it is safe to call every time a chat is opened.
         /// </summary>
         Task MarkReadAsync(ChatItem chat);
+
+        /// <summary>
+        /// Deletes the conversation for this account everywhere: it leaves the list here, on the
+        /// phone and on every other linked device. The messages are removed locally too - unlike a
+        /// pin there is nothing to revert to, so this is not undoable and callers are expected to
+        /// have asked first.
+        /// </summary>
+        Task DeleteChatAsync(ChatItem chat);
     }
 }

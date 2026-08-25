@@ -9,11 +9,6 @@ namespace Unison.Uwp.UI.Controls
 {
     internal static class ChatDetailInfoPivotHelper
     {
-        public static string Upper(string value)
-        {
-            return string.IsNullOrEmpty(value) ? string.Empty : value.ToUpperInvariant();
-        }
-
         /// <summary>Always open chat-info on the first pivot (Profile / Group info).</summary>
         public static void ResetToRoot(Pivot pivot)
         {
@@ -70,8 +65,7 @@ namespace Unison.Uwp.UI.Controls
                 return;
             }
 
-            toggle.OnContent = vm.NotificationsOnText ?? "On";
-            toggle.OffContent = vm.NotificationsOffText ?? "Off";
+            // OnContent / OffContent come from x:Uid on the ToggleSwitch.
 
             bool on = vm.NotificationsEnabled;
             if (toggle.IsOn == on)

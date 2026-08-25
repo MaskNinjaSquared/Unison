@@ -37,6 +37,8 @@
                        FontFamily="{StaticResource IconFont}"
                        Style="{StaticResource ChatDetailInfoEmptyIconStyle}"/>
             <TextBlock x:Name="FilesEmptyText"
+                       x:Uid="ChatDetailInfo_FilesEmpty"
+                       Text="Documents will appear here."
                        Style="{StaticResource ChatDetailInfoEmptyTextStyle}"
                        Margin="24,16,24,24"/>
         </StackPanel>

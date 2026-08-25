@@ -717,6 +717,51 @@ namespace Unison.Uwp.Data
             }
         }
 
+        /// <inheritdoc />
+        public async Task<int> DeleteForChatKeysAsync(IReadOnlyList<string> chatJids)
+        {
+            var keys = NormalizeChatKeys(chatJids);
+            if (keys.Count == 0)
+            {
+                return 0;
+            }
+
+            await EnsureInitializedAsync().ConfigureAwait(false);
+            await _writeLock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                var placeholders = new StringBuilder();
+                var args = new object[keys.Count];
+                for (int i = 0; i < keys.Count; i++)
+                {
+                    if (i > 0)
+                    {
+                        placeholders.Append(',');
+                    }
+
+                    placeholders.Append('?');
+                    args[i] = keys[i];
+                }
+
+                string filter = " WHERE ChatJid IN (" + placeholders + ")";
+                int removed = await _connection
+                    .ExecuteAsync("DELETE FROM history_message" + filter, args)
+                    .ConfigureAwait(false);
+                await _connection
+                    .ExecuteAsync("DELETE FROM history_message_reaction" + filter, args)
+                    .ConfigureAwait(false);
+
+                Debug.WriteLine(
+                    "[HistoryMessageStore] Deleted " + removed + " row(s) for " + keys.Count + " key(s)");
+
+                return removed;
+            }
+            finally
+            {
+                _writeLock.Release();
+            }
+        }
+
         private async Task EnsureInitializedAsync()
         {
             if (!_initialized)

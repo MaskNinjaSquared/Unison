@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -415,12 +415,6 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   </data>
   <data name="ChatDetail_SelectForGroupInfo" xml:space="preserve">
     <value>toque aqui para info do grupo</value>
-  </data>
-  <data name="ImageViewer_Download" xml:space="preserve">
-    <value>Baixar</value>
-  </data>
-  <data name="ImageViewer_Share" xml:space="preserve">
-    <value>Compartilhar</value>
   </data>
   <data name="ImageViewer_UnknownSender" xml:space="preserve">
     <value>Contato</value>
@@ -842,20 +836,6 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="ChatList_UnpinChat.Text" xml:space="preserve">
     <value>Desafixar conversa</value>
   </data>
-  <data name="ChatDetailInfo_PinChatAppBarLabel" xml:space="preserve">
-    <value>Fixar
-conversa</value>
-  </data>
-  <data name="ChatDetailInfo_UnpinChatAppBarLabel" xml:space="preserve">
-    <value>Desafixar
-conversa</value>
-  </data>
-  <data name="ChatDetailInfo_Files" xml:space="preserve">
-    <value>Arquivos</value>
-  </data>
-  <data name="ChatDetailInfo_Media" xml:space="preserve">
-    <value>Mídia</value>
-  </data>
   <data name="ChatDetail_Search.Text" xml:space="preserve">
     <value>Pesquisar</value>
   </data>
@@ -865,20 +845,11 @@ conversa</value>
   <data name="ChatDetailInfo_Phone" xml:space="preserve">
     <value>Telefone</value>
   </data>
-  <data name="ChatDetailInfo_CallsEmpty" xml:space="preserve">
-    <value>As chamadas que você fizer e receber aparecerão aqui.</value>
-  </data>
   <data name="ChatDetail_GroupMedia.Text" xml:space="preserve">
     <value>Mídia do grupo</value>
   </data>
-  <data name="ChatDetailInfo_MediaEmpty" xml:space="preserve">
-    <value>Fotos, vídeos e áudios aparecerão aqui.</value>
-  </data>
   <data name="ChatDetail_MuteNotifications.Text" xml:space="preserve">
     <value>Silenciar notificações</value>
-  </data>
-  <data name="ChatDetailInfo_MembersEmpty" xml:space="preserve">
-    <value>Os membros do grupo aparecerão aqui.</value>
   </data>
   <data name="ChatDetailInfo_Admin.Text" xml:space="preserve">
     <value>Admin</value>
@@ -886,18 +857,8 @@ conversa</value>
   <data name="ChatDetailInfo_GroupsInCommon" xml:space="preserve">
     <value>Grupos em comum</value>
   </data>
-  <data name="ChatDetailInfo_GroupsInCommonEmpty" xml:space="preserve">
-    <value>Nenhum grupo em comum.</value>
-  </data>
-  <data name="ChatDetailInfo_UnpinAppBarLabel" xml:space="preserve">
-    <value>Desafixar do
-Início</value>
-  </data>
   <data name="ChatDetailInfo_Notifications" xml:space="preserve">
     <value>Notificações</value>
-  </data>
-  <data name="ChatDetailInfo_GroupInfo" xml:space="preserve">
-    <value>Info do grupo</value>
   </data>
   <data name="ChatDetail_PinToStart.Text" xml:space="preserve">
     <value>Fixar no Início</value>
@@ -914,21 +875,14 @@ Início</value>
   <data name="ChatDetailInfo_MemberCountSingular" xml:space="preserve">
     <value>1 membro</value>
   </data>
-  <data name="ChatDetailInfo_Profile" xml:space="preserve">
-    <value>Perfil</value>
-  </data>
   <data name="ChatDetail_ShowContact.Text" xml:space="preserve">
     <value>Ver contato</value>
   </data>
   <data name="ChatDetail_AddContact.Text" xml:space="preserve">
     <value>Adicionar contato</value>
   </data>
-  <data name="ChatDetailInfo_AddContactAppBarLabel" xml:space="preserve">
-    <value>Adicionar
-contato</value>
-  </data>
-  <data name="ChatDetailInfo_Calls" xml:space="preserve">
-    <value>Chamadas</value>
+  <data name="ChatDetail_AddContactLink.Content" xml:space="preserve">
+    <value>Adicionar contato</value>
   </data>
   <data name="ChatDetailInfo_NotificationsOn" xml:space="preserve">
     <value>Ativado</value>
@@ -942,9 +896,6 @@ contato</value>
   <data name="ChatDetailInfo_MemberCount" xml:space="preserve">
     <value>{0} membros</value>
   </data>
-  <data name="ChatDetailInfo_FilesEmpty" xml:space="preserve">
-    <value>Os documentos aparecerão aqui.</value>
-  </data>
   <data name="ChatDetailInfo_Status" xml:space="preserve">
     <value>Recado</value>
   </data>
@@ -957,20 +908,121 @@ contato</value>
   <data name="ChatDetail_MuteForever.Text" xml:space="preserve">
     <value>Sempre</value>
   </data>
-  <data name="ChatDetailInfo_Members" xml:space="preserve">
-    <value>Membros</value>
-  </data>
   <data name="ChatDetail_GroupInfo.Text" xml:space="preserve">
     <value>Info do grupo</value>
   </data>
   <data name="ChatDetail_MediaLinksDocs.Text" xml:space="preserve">
     <value>Mídia, links e docs</value>
   </data>
-  <data name="ChatDetailInfo_PinAppBarLabel" xml:space="preserve">
-    <value>Fixar no
-Início</value>
-  </data>
   <data name="ChatDetail_UnpinFromStart.Text" xml:space="preserve">
     <value>Desafixar do Início</value>
+  </data>
+  <data name="ChatList_DeleteChat.Text" xml:space="preserve">
+    <value>Apagar conversa</value>
+  </data>
+  <data name="ChatDetail_DeleteChat.Text" xml:space="preserve">
+    <value>Apagar conversa</value>
+  </data>
+  <data name="Chat_DeleteChatTitle" xml:space="preserve">
+    <value>Apagar conversa?</value>
+  </data>
+  <data name="Chat_DeleteChatBody" xml:space="preserve">
+    <value>"{0}" e suas mensagens serão apagadas neste telefone e nos seus outros dispositivos. Não é possível desfazer.</value>
+  </data>
+  <data name="Chat_DeleteChatConfirm" xml:space="preserve">
+    <value>Apagar</value>
+  </data>
+  <data name="Chat_DeleteChatFailedTitle" xml:space="preserve">
+    <value>Conversa não apagada</value>
+  </data>
+  <data name="Chat_DeleteChatFailedBody" xml:space="preserve">
+    <value>O WhatsApp não aceitou a alteração, então a conversa foi mantida. Tente novamente quando estiver conectado.</value>
+  </data>
+  <data name="ChatDetailInfo_NameLabel.Text" xml:space="preserve">
+    <value>NOME</value>
+  </data>
+  <data name="ChatDetailInfo_GroupNameLabel.Text" xml:space="preserve">
+    <value>NOME DO GRUPO</value>
+  </data>
+  <data name="ChatDetailInfo_PhoneLabel.Text" xml:space="preserve">
+    <value>TELEFONE</value>
+  </data>
+  <data name="ChatDetailInfo_StatusLabel.Text" xml:space="preserve">
+    <value>RECADO</value>
+  </data>
+  <data name="ChatDetailInfo_DescriptionLabel.Text" xml:space="preserve">
+    <value>DESCRIÇÃO</value>
+  </data>
+  <data name="ChatDetailInfo_NotificationsLabel.Text" xml:space="preserve">
+    <value>NOTIFICAÇÕES</value>
+  </data>
+  <data name="ChatDetailInfo_MembersLabel.Text" xml:space="preserve">
+    <value>PARTICIPANTES</value>
+  </data>
+  <data name="ChatDetailInfo_GroupsInCommonLabel.Text" xml:space="preserve">
+    <value>GRUPOS EM COMUM</value>
+  </data>
+  <data name="ChatDetailInfo_Profile.Header" xml:space="preserve">
+    <value>PERFIL</value>
+  </data>
+  <data name="ChatDetailInfo_GroupInfo.Header" xml:space="preserve">
+    <value>DADOS DO GRUPO</value>
+  </data>
+  <data name="ChatDetailInfo_Media.Header" xml:space="preserve">
+    <value>MÍDIA</value>
+  </data>
+  <data name="ChatDetailInfo_Files.Header" xml:space="preserve">
+    <value>ARQUIVOS</value>
+  </data>
+  <data name="ChatDetailInfo_Members.Header" xml:space="preserve">
+    <value>PARTICIPANTES</value>
+  </data>
+  <data name="ChatDetailInfo_Calls.Header" xml:space="preserve">
+    <value>CHAMADAS</value>
+  </data>
+  <data name="ChatDetailInfo_MediaEmpty.Text" xml:space="preserve">
+    <value>Fotos, vídeos e áudios aparecerão aqui.</value>
+  </data>
+  <data name="ChatDetailInfo_FilesEmpty.Text" xml:space="preserve">
+    <value>Os documentos aparecerão aqui.</value>
+  </data>
+  <data name="ChatDetailInfo_CallsEmpty.Text" xml:space="preserve">
+    <value>As chamadas que você fizer e receber aparecerão aqui.</value>
+  </data>
+  <data name="ChatDetailInfo_MembersEmpty.Text" xml:space="preserve">
+    <value>Os membros do grupo aparecerão aqui.</value>
+  </data>
+  <data name="ChatDetailInfo_GroupsInCommonEmpty.Text" xml:space="preserve">
+    <value>Nenhum grupo em comum.</value>
+  </data>
+  <data name="ChatDetailInfo_NotificationsToggle.OnContent" xml:space="preserve">
+    <value>Ativadas</value>
+  </data>
+  <data name="ChatDetailInfo_NotificationsToggle.OffContent" xml:space="preserve">
+    <value>Desativadas</value>
+  </data>
+  <data name="ImageViewer_Download.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Baixar</value>
+  </data>
+  <data name="ImageViewer_Share.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Compartilhar</value>
+  </data>
+  <data name="ChatDetailInfo_PinChatAppBarLabel.Text" xml:space="preserve">
+    <value>Fixar&#x0a;conversa</value>
+  </data>
+  <data name="ChatDetailInfo_UnpinChatAppBarLabel.Text" xml:space="preserve">
+    <value>Desafixar&#x0a;conversa</value>
+  </data>
+  <data name="ChatDetailInfo_PinAppBarLabel.Text" xml:space="preserve">
+    <value>Fixar no&#x0a;Início</value>
+  </data>
+  <data name="ChatDetailInfo_UnpinAppBarLabel.Text" xml:space="preserve">
+    <value>Desafixar do&#x0a;Início</value>
+  </data>
+  <data name="ChatDetailInfo_AddContactAppBarLabel.Text" xml:space="preserve">
+    <value>Adicionar&#x0a;contato</value>
+  </data>
+  <data name="ChatDetailInfo_DeleteChatBar.Text" xml:space="preserve">
+    <value>Apagar&#x0a;conversa</value>
   </data>
 </root>

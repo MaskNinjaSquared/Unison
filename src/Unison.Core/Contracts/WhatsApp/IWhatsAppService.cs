@@ -230,6 +230,14 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         Task ApplyChatPinAsync(string jid, bool pinned);
 
+        /// <summary>
+        /// Removes a conversation from the list, the in-memory timeline and local storage, without
+        /// telling the server. Prefer <see cref="IChatService.DeleteChatAsync"/>, which is what
+        /// actually deletes the chat for the account; this is the local half of it, and also the
+        /// path taken when the phone is the one that deleted it.
+        /// </summary>
+        Task ApplyChatDeletionAsync(string jid);
+
         /// <summary>Subscribes to presence for a 1:1 JID when the socket is connected; no-op otherwise.</summary>
         Task PresenceSubscribeAsync(string jid);
 

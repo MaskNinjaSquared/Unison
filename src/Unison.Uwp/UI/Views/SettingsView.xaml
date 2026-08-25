@@ -87,7 +87,7 @@
                                 <FontIcon FontSize="16" FontFamily="{StaticResource IconFont}"
                                           Glyph="&#xE72B;"/>
                             </Button>
-                            <TextBlock x:Uid="Settings_Title" Text="Configurações"
+                            <TextBlock x:Uid="Settings_Title" Text="Settings"
                                        FontWeight="SemiBold" Margin="5,0,0,0" FontSize="20"
                                        VerticalAlignment="Center"
                                        Foreground="{ThemeResource SettingsHeroForegroundBrush}"
@@ -164,9 +164,9 @@
                                 HorizontalAlignment="Center"
                                 Padding="15,12,15,30"
                                 Background="{ThemeResource SettingsPageBackgroundBrush}">
-                        <controls:SettingsSectionHeader Glyph="&#xE713;"
-                                                        Title="Geral"
-                                                        LocalizationUid="Settings_General"
+                        <controls:SettingsSectionHeader x:Uid="Settings_General"
+                                                        Text="General"
+                                                        Glyph="&#xE713;"
                                                         Margin="5,12,0,5"/>
 
                         <controls:SettingBox LocalizationUid="Settings_Notifications"
@@ -209,9 +209,9 @@
                             </controls:SettingBox.Control>
                         </controls:SettingBox>
 
-                        <controls:SettingsSectionHeader Glyph="&#xE790;"
-                                                        Title="Personalização"
-                                                        LocalizationUid="Settings_Customization"/>
+                        <controls:SettingsSectionHeader x:Uid="Settings_Customization"
+                                                        Text="Customization"
+                                                        Glyph="&#xE790;"/>
 
                         <controls:SettingBox LocalizationUid="Settings_Language"
                                              Margin="5"
@@ -271,9 +271,9 @@
                             </controls:SettingBox.Control>
                         </controls:SettingBox>
 
-                        <controls:SettingsSectionHeader Glyph="&#xE7BA;"
-                                                        Title="Advanced Settings"
-                                                        LocalizationUid="Settings_Advanced"/>
+                        <controls:SettingsSectionHeader x:Uid="Settings_Advanced"
+                                                        Text="Advanced Settings"
+                                                        Glyph="&#xE7BA;"/>
 
                         <controls:SettingBox LocalizationUid="Settings_KeepAlive"
                                              Margin="5"
@@ -338,7 +338,7 @@
                     <FontIcon FontSize="16" FontWeight="ExtraBold" FontFamily="{StaticResource IconFont}"
                               Glyph="&#xE72B;"/>
                 </Button>
-                <TextBlock x:Uid="Settings_Title" Text="Configurações"
+                <TextBlock x:Uid="Settings_Title" Text="Settings"
                            FontWeight="SemiBold" Margin="5,0,0,0" FontSize="18"
                            VerticalAlignment="Center"
                            Foreground="{ThemeResource WhatsAppTextHighBrush}"

@@ -83,6 +83,13 @@ namespace Unison.Core.Contracts
 
         Task ClearAsync(string reason = null);
 
+        /// <summary>
+        /// Drops every row for the given conversation keys (PN / LID / canonical) and their
+        /// reactions. Used when a chat is deleted: the preview tombstone hides the conversation,
+        /// this is what stops the messages from being reachable again if it returns.
+        /// </summary>
+        Task<int> DeleteForChatKeysAsync(IReadOnlyList<string> chatJids);
+
         event EventHandler<HistoryMessageChunkEventArgs> ChunkPersisted;
     }
 }

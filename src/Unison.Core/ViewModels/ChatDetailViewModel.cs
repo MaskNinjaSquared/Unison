@@ -204,6 +204,9 @@ namespace Unison.Core.ViewModels
             PinToStartCommand = new RelayCommand(
                 () => _ = ToggleWidgetPinAsync(),
                 () => ActiveChat != null && !string.IsNullOrWhiteSpace(ActiveChat.JID) && _shortcutService != null && _chatStore != null);
+            DeleteChatCommand = new RelayCommand(
+                () => _ = DeleteActiveChatAsync(),
+                () => CanDeleteActiveChat());
             MuteFor8HoursCommand = new RelayCommand(
                 () => _ = SetLocalMuteAsync(ChatMuteHelper.FromNow(ChatMuteHelper.EightHours)),
                 () => CanMuteActiveChat());
@@ -629,6 +632,12 @@ namespace Unison.Core.ViewModels
         /// <summary>Pins/unpins the active chat Start live tile (toggles SQLite + SecondaryTile).</summary>
         public ICommand PinToStartCommand { get; }
 
+        /// <summary>
+        /// Deletes the open conversation for the account after asking, then leaves the surface -
+        /// there is nothing behind it once the messages are gone.
+        /// </summary>
+        public ICommand DeleteChatCommand { get; }
+
         public ICommand MuteFor8HoursCommand { get; }
         public ICommand MuteFor1WeekCommand { get; }
         public ICommand MuteForeverCommand { get; }
@@ -645,24 +654,8 @@ namespace Unison.Core.ViewModels
 
         public ICommand AddContactCommand { get; }
 
-        /// <summary>Label for the live-tile pin menu (localized via string service when bound in code).</summary>
-        public string LiveTilePinMenuLabel
-        {
-            get
-            {
-                bool pinned = ActiveChat != null && ActiveChat.IsWidgetPinned;
-                if (pinned)
-                {
-                    return _strings != null
-                        ? _strings.Get("ChatDetail_UnpinFromStart.Text", "Unpin from Start")
-                        : "Unpin from Start";
-                }
-
-                return _strings != null
-                    ? _strings.Get("ChatDetail_PinToStart.Text", "Pin to Start")
-                    : "Pin to Start";
-            }
-        }
+        /// <summary>Whether the Start tile for this chat is pinned (drives pin/unpin menu Visibility).</summary>
+        public bool IsWidgetPinned => ActiveChat != null && ActiveChat.IsWidgetPinned;
 
         /// <summary>True when mute submenu should show duration options (not unmuted→unmute-only).</summary>
         public bool ShowMuteDurationOptions => ActiveChat != null && !ActiveChat.IsMutedLocally;
@@ -675,11 +668,6 @@ namespace Unison.Core.ViewModels
             !ActiveChat.IsGroup &&
             !ActiveChat.IsPersonal &&
             _contactService.CanAddToAddressBook(ActiveChat.JID);
-
-        public string AddContactLabel =>
-            _strings != null
-                ? _strings.Get("ChatDetail_AddContact.Text", "Add contact")
-                : "Add contact";
 
         /// <summary>
         /// Re-reads the local chat row before the overflow menu is built. Mute can be changed from
@@ -707,7 +695,7 @@ namespace Unison.Core.ViewModels
 
             OnPropertyChanged(nameof(ShowMuteDurationOptions));
             OnPropertyChanged(nameof(ShowUnmuteOption));
-            OnPropertyChanged(nameof(LiveTilePinMenuLabel));
+            OnPropertyChanged(nameof(IsWidgetPinned));
             RaiseMuteCommandsCanExecuteChanged();
             RaiseCanAddToAddressBook();
         }
@@ -726,7 +714,6 @@ namespace Unison.Core.ViewModels
         private void RaiseCanAddToAddressBook()
         {
             OnPropertyChanged(nameof(CanAddToAddressBook));
-            OnPropertyChanged(nameof(AddContactLabel));
             (AddContactCommand as RelayCommand)?.RaiseCanExecuteChanged();
         }
 
@@ -777,14 +764,10 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
-            ChatDetailInfoViewModel previous = ChatDetailInfo;
-            ChatDetailInfoViewModel next = chat.IsGroup
+            ShowInfoPane(chat.IsGroup
                 ? _infoFactory.CreateGroup(chat)
-                : _infoFactory.CreateUser(chat);
+                : _infoFactory.CreateUser(chat));
 
-            ChatDetailInfo = next;
-            IsChatDetailInfoOpen = true;
-            previous?.Detach();
             (OpenChatDetailInfoCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (OpenChatDetailInfoFromAvatarCommand as RelayCommand)?.RaiseCanExecuteChanged();
         }
@@ -797,10 +780,39 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
+            ShowInfoPane(_infoFactory.CreateUser(contact));
+        }
+
+        /// <summary>
+        /// Swaps the pane, taking the previous one down first. The delete hook is attached here
+        /// rather than at each call site so a pane can never be shown without it.
+        /// </summary>
+        private void ShowInfoPane(ChatDetailInfoViewModel next)
+        {
             ChatDetailInfoViewModel previous = ChatDetailInfo;
-            ChatDetailInfo = _infoFactory.CreateUser(contact);
-            IsChatDetailInfoOpen = true;
+            if (previous != null)
+            {
+                previous.ChatDeleted -= ChatDetailInfo_ChatDeleted;
+            }
+
+            if (next != null)
+            {
+                next.ChatDeleted += ChatDetailInfo_ChatDeleted;
+            }
+
+            ChatDetailInfo = next;
+            IsChatDetailInfoOpen = next != null;
             previous?.Detach();
+        }
+
+        /// <summary>
+        /// The info pane deleted the conversation it was describing, so the whole surface goes -
+        /// closing only the pane would leave an empty timeline for a chat that is gone.
+        /// </summary>
+        private void ChatDetailInfo_ChatDeleted(object sender, EventArgs e)
+        {
+            CloseChatDetailInfo();
+            BackRequested?.Invoke(this, EventArgs.Empty);
         }
 
         /// <summary>Opens the group-member profile pane (media/files filtered to that author).</summary>
@@ -819,10 +831,7 @@ namespace Unison.Core.ViewModels
                 _personStore,
                 nameHint);
 
-            ChatDetailInfoViewModel previous = ChatDetailInfo;
-            ChatDetailInfo = _infoFactory.CreateGroupMember(ActiveChat, member);
-            IsChatDetailInfoOpen = true;
-            previous?.Detach();
+            ShowInfoPane(_infoFactory.CreateGroupMember(ActiveChat, member));
         }
 
         /// <summary>
@@ -996,6 +1005,11 @@ namespace Unison.Core.ViewModels
             }
 
             ChatDetailInfoViewModel previous = ChatDetailInfo;
+            if (previous != null)
+            {
+                previous.ChatDeleted -= ChatDetailInfo_ChatDeleted;
+            }
+
             IsChatDetailInfoOpen = false;
             ChatDetailInfo = null;
             previous?.Detach();
@@ -1058,7 +1072,7 @@ namespace Unison.Core.ViewModels
             RaiseMuteCommandsCanExecuteChanged();
             (OpenChatDetailInfoCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (OpenChatDetailInfoFromAvatarCommand as RelayCommand)?.RaiseCanExecuteChanged();
-            OnPropertyChanged(nameof(LiveTilePinMenuLabel));
+            OnPropertyChanged(nameof(IsWidgetPinned));
             OnPropertyChanged(nameof(ShowMuteDurationOptions));
             OnPropertyChanged(nameof(ShowUnmuteOption));
             OnPropertyChanged(nameof(IsGroupLockedForMessages));
@@ -1158,7 +1172,7 @@ namespace Unison.Core.ViewModels
                 await _dispatcher.RunAsync(() =>
                 {
                     RaiseMuteCommandsCanExecuteChanged();
-                    OnPropertyChanged(nameof(LiveTilePinMenuLabel));
+                    OnPropertyChanged(nameof(IsWidgetPinned));
                     OnPropertyChanged(nameof(ShowMuteDurationOptions));
                     OnPropertyChanged(nameof(ShowUnmuteOption));
                 }).ConfigureAwait(false);
@@ -1174,6 +1188,31 @@ namespace Unison.Core.ViewModels
             return ActiveChat != null &&
                    !string.IsNullOrWhiteSpace(ActiveChat.JID) &&
                    _chatStore != null;
+        }
+
+        private bool CanDeleteActiveChat()
+        {
+            return ActiveChat != null &&
+                   !string.IsNullOrWhiteSpace(ActiveChat.JID) &&
+                   _chatService != null;
+        }
+
+        /// <summary>
+        /// The timeline is closed on success rather than emptied: the conversation no longer
+        /// exists, so a chat detail still open on it would be showing a chat that is gone.
+        /// </summary>
+        private async Task DeleteActiveChatAsync()
+        {
+            bool deleted = await ChatDeletionPrompt.ConfirmAndDeleteAsync(
+                ActiveChat,
+                _chatService,
+                _dialogs,
+                _strings);
+
+            if (deleted)
+            {
+                BackRequested?.Invoke(this, EventArgs.Empty);
+            }
         }
 
         private async Task ToggleWidgetPinAsync()
@@ -1204,7 +1243,7 @@ namespace Unison.Core.ViewModels
                     chat.IsWidgetPinned,
                     chat.IsChatPinned,
                     chat.MutedUntil);
-                OnPropertyChanged(nameof(LiveTilePinMenuLabel));
+                OnPropertyChanged(nameof(IsWidgetPinned));
             }
             catch (Exception ex)
             {
@@ -1719,6 +1758,7 @@ namespace Unison.Core.ViewModels
         private void RaisePinToStartCanExecuteChanged()
         {
             (PinToStartCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (DeleteChatCommand as RelayCommand)?.RaiseCanExecuteChanged();
             RaiseMuteCommandsCanExecuteChanged();
         }
 

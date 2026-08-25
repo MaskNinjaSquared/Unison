@@ -216,6 +216,20 @@ namespace Unison.Uwp.UI.Views
             }
         }
 
+        /// <summary>Context flyout on a row: delete the conversation (asks first).</summary>
+        internal void DeleteChat(ChatItem chat)
+        {
+            if (chat == null || ViewModel?.DeleteChatCommand == null)
+            {
+                return;
+            }
+
+            if (ViewModel.DeleteChatCommand.CanExecute(chat))
+            {
+                ViewModel.DeleteChatCommand.Execute(chat);
+            }
+        }
+
         /// <summary>Context flyout on a row: mute until a moment, or unmute with null.</summary>
         internal void SetLocalMute(ChatItem chat, long? mutedUntilUnixSeconds)
         {

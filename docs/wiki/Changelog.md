@@ -4,6 +4,26 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Delete chat (app state + local tombstone)
+
+- Outgoing **`DeleteChatAsync`** on `IWhatsAppSocket` / `SocketBridge` → `AppStatePatchFactory.DeleteChat` (RC14 `chatModify({ delete })`)
+- **`IChatService.DeleteChatAsync`** / `ChatFacade`: patch first (with message range), then local wipe; offline or empty timeline stays local-only
+- Incoming / local wipe: `ApplyAppStateDeleteChatAsync` tombstones `history_chat_preview.DeletedAtUtc` (schema v5) and deletes `history_message` for PN/LID keys so a restart does not resurrect the row
+- Upsert of previews **keeps** the tombstone unless the incoming tip is newer than the deletion (new message brings the chat back)
+- UI: list context menu, chat overflow (1:1 + group), and chat-info green bar (**Apagar conversa** after the two pin actions, 1:1 + group) — all confirm via `ChatDeletionPrompt` (strings in every shipped locale)
+
+---
+
+## Static UI copy: View → `x:Uid` (not ViewModel Loc)
+
+- Pin/unpin and mute menus: two `MenuFlyoutItem`s with `x:Uid`; Opening only toggles Visibility (UWP MenuFlyout bindings are unreliable)
+- Chat info pane: section labels, pivot headers, empties, ToggleSwitch On/Off, app-bar pin labels via `x:Uid` + Visibility on bools (`IsWidgetPinned` / `IsChatPinned`)
+- Login Show/Hide log and Enable/Disable log: paired buttons + Visibility
+- About description/branch and image/video download/share tooltips: `x:Uid`
+- Left in ViewModels: presence, sync progress, dialogs, formatted counts, bubble copy
+
+---
+
 ## German (`de-DE`) locale
 
 - New UI pack `Strings/de-DE/Resources.resw` (parity with `en-US`; download draft + 92 missing keys filled)

@@ -41,7 +41,7 @@
             <Border Width="60" Height="44" Background="Transparent" IsHitTestVisible="False"/>
         </Pivot.RightHeader>
 
-        <PivotItem x:Name="ProfilePivotItem">
+        <PivotItem x:Name="ProfilePivotItem" x:Uid="ChatDetailInfo_GroupInfo" Header="GROUP INFO">
             <ScrollViewer x:Name="ProfileScrollViewer"
                           VerticalScrollBarVisibility="Auto"
                           HorizontalScrollBarVisibility="Disabled"
@@ -55,24 +55,27 @@
                                                 Height="220"
                                                 HorizontalAlignment="Center"
                                                 Margin="0,16,0,24"/>
-                    <TextBlock x:Name="NameLabel" Style="{StaticResource ChatDetailInfoSectionLabelStyle}" Text="GROUP NAME"/>
+                    <TextBlock x:Name="NameLabel" x:Uid="ChatDetailInfo_GroupNameLabel" Style="{StaticResource ChatDetailInfoSectionLabelStyle}" Text="GROUP NAME"/>
                     <TextBlock x:Name="NameValue" Style="{StaticResource ChatDetailInfoSectionValueStyle}"/>
-                    <TextBlock x:Name="StatusLabel" Margin="0,20,0,0" Style="{StaticResource ChatDetailInfoSectionLabelStyle}" Text="DESCRIPTION"/>
+                    <TextBlock x:Name="StatusLabel" x:Uid="ChatDetailInfo_DescriptionLabel" Margin="0,20,0,0" Style="{StaticResource ChatDetailInfoSectionLabelStyle}" Text="DESCRIPTION"/>
                     <TextBlock x:Name="StatusValue" Style="{StaticResource ChatDetailInfoSectionValueStyle}"/>
-                    <TextBlock x:Name="NotificationsLabel" Margin="0,20,0,0" Style="{StaticResource ChatDetailInfoSectionLabelStyle}" Text="NOTIFICATIONS"/>
+                    <TextBlock x:Name="NotificationsLabel" x:Uid="ChatDetailInfo_NotificationsLabel" Margin="0,20,0,0" Style="{StaticResource ChatDetailInfoSectionLabelStyle}" Text="NOTIFICATIONS"/>
                     <ToggleSwitch x:Name="NotificationsToggle"
+                                  x:Uid="ChatDetailInfo_NotificationsToggle"
+                                  OnContent="On"
+                                  OffContent="Off"
                                   Margin="0,4,0,0"
                                   HorizontalAlignment="Left"
                                   MinWidth="0"
                                   RequestedTheme="Dark"
                                   Toggled="NotificationsToggle_Toggled"/>
-                    <TextBlock x:Name="MembersLabel" Margin="0,20,0,0" Style="{StaticResource ChatDetailInfoSectionLabelStyle}" Text="MEMBERS"/>
+                    <TextBlock x:Name="MembersLabel" x:Uid="ChatDetailInfo_MembersLabel" Margin="0,20,0,0" Style="{StaticResource ChatDetailInfoSectionLabelStyle}" Text="MEMBERS"/>
                     <TextBlock x:Name="MembersValue" Style="{StaticResource ChatDetailInfoSectionValueStyle}"/>
                 </StackPanel>
             </ScrollViewer>
         </PivotItem>
 
-        <PivotItem x:Name="MembersPivotItem">
+        <PivotItem x:Name="MembersPivotItem" x:Uid="ChatDetailInfo_Members" Header="MEMBERS">
             <Grid x:Name="MembersHost" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -87,7 +90,11 @@
                              Foreground="White"
                              Background="Transparent"
                              Visibility="Collapsed"/>
-                <TextBlock x:Name="MembersEmptyText" Grid.Row="1" Style="{StaticResource ChatDetailInfoEmptyTextStyle}"/>
+                <TextBlock x:Name="MembersEmptyText"
+                           x:Uid="ChatDetailInfo_MembersEmpty"
+                           Text="Group members will appear here."
+                           Grid.Row="1"
+                           Style="{StaticResource ChatDetailInfoEmptyTextStyle}"/>
                 <ListView x:Name="MembersList"
                           Grid.Row="1"
                           Visibility="Collapsed"
@@ -140,11 +147,11 @@
             </Grid>
         </PivotItem>
 
-        <PivotItem x:Name="MediaPivotItem">
+        <PivotItem x:Name="MediaPivotItem" x:Uid="ChatDetailInfo_Media" Header="MEDIA">
             <controls:ChatInfoMediaPane x:Name="MediaPane"/>
         </PivotItem>
 
-        <PivotItem x:Name="FilesPivotItem">
+        <PivotItem x:Name="FilesPivotItem" x:Uid="ChatDetailInfo_Files" Header="FILES">
             <controls:ChatInfoFilesPane x:Name="FilesPane"/>
         </PivotItem>
     </Pivot>

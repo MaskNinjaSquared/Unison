@@ -7,7 +7,7 @@
     mc:Ignorable="d"
     Margin="5,20,0,5">
 
-    <!-- Reusable icon + title row used by Settings / Debug surfaces. -->
+    <!-- Icon + title row; parent sets x:Uid + English Text fallback (MRT → {uid}.Text). -->
     <StackPanel Orientation="Horizontal">
         <FontIcon x:Name="IconElement"
                   FontFamily="{StaticResource IconFont}"
@@ -16,7 +16,7 @@
                   Glyph="{x:Bind Glyph, Mode=OneWay}"
                   Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
         <TextBlock x:Name="TitleElement"
-                   Text="{x:Bind Title, Mode=OneWay}"
+                   Text="{x:Bind Text, Mode=OneWay}"
                    FontWeight="SemiBold"
                    FontSize="17"
                    Foreground="{ThemeResource WhatsAppTextHighBrush}"

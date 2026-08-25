@@ -128,44 +128,47 @@ namespace Unison.Uwp.UI.Controls
             {
                 bool canAdd = vm.CanAddToAddressBook;
                 AddContactButton.Visibility = canAdd ? Visibility.Visible : Visibility.Collapsed;
-                if (canAdd)
-                {
-                    string addLabel = vm.AddContactAppBarLabel ?? "Add\ncontact";
-                    if (AddContactButtonLabel != null)
-                    {
-                        AddContactButtonLabel.Text = addLabel;
-                    }
-
-                    ToolTipService.SetToolTip(
-                        AddContactButton,
-                        addLabel.Replace('\n', ' ').Replace("  ", " ").Trim());
-                    AddContactButton.IsEnabled = vm.AddContactCommand?.CanExecute(null) == true;
-                }
+                AddContactButton.IsEnabled = canAdd && vm.AddContactCommand?.CanExecute(null) == true;
             }
 
             if (PinButton != null)
             {
-                string pinLabel = vm.PinMenuLabel ?? "Pin to\nStart";
+                bool widgetPinned = vm.IsWidgetPinned;
                 if (PinButtonLabel != null)
                 {
-                    PinButtonLabel.Text = pinLabel;
+                    PinButtonLabel.Visibility = widgetPinned ? Visibility.Collapsed : Visibility.Visible;
                 }
 
-                string tip = pinLabel.Replace('\n', ' ').Replace("  ", " ").Trim();
-                ToolTipService.SetToolTip(PinButton, tip);
+                if (UnpinButtonLabel != null)
+                {
+                    UnpinButtonLabel.Visibility = widgetPinned ? Visibility.Visible : Visibility.Collapsed;
+                }
+
                 PinButton.IsEnabled = vm.PinToStartCommand?.CanExecute(null) == true;
             }
 
             if (ChatPinButton != null)
             {
-                string chatPinLabel = vm.ChatPinLabel ?? "Pin\nchat";
+                bool chatPinned = vm.IsChatPinned;
                 if (ChatPinButtonLabel != null)
                 {
-                    ChatPinButtonLabel.Text = chatPinLabel;
+                    ChatPinButtonLabel.Visibility = chatPinned ? Visibility.Collapsed : Visibility.Visible;
                 }
 
-                ToolTipService.SetToolTip(ChatPinButton, chatPinLabel.Replace('\n', ' ').Replace("  ", " ").Trim());
+                if (ChatUnpinButtonLabel != null)
+                {
+                    ChatUnpinButtonLabel.Visibility = chatPinned ? Visibility.Visible : Visibility.Collapsed;
+                }
+
                 ChatPinButton.IsEnabled = vm.PinChatCommand?.CanExecute(null) == true;
+            }
+
+            Button deleteChatButton = DeleteChatButton ?? FindCommandBarButton("DeleteChatButton");
+            if (deleteChatButton != null)
+            {
+                deleteChatButton.Visibility = vm.DeleteChatCommand?.CanExecute(null) == true
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
             }
         }
 
@@ -202,6 +205,56 @@ namespace Unison.Uwp.UI.Controls
             {
                 cmd.Execute(null);
             }
+        }
+
+        private void DeleteChatButton_Click(object sender, RoutedEventArgs e)
+        {
+            var cmd = InfoViewModel?.DeleteChatCommand;
+            if (cmd?.CanExecute(null) == true)
+            {
+                cmd.Execute(null);
+            }
+        }
+
+        /// <summary>
+        /// XamlPreCompile can omit generated UserControl fields; resolve by walking the green bar.
+        /// </summary>
+        private Button FindCommandBarButton(string name)
+        {
+            if (string.IsNullOrEmpty(name))
+            {
+                return null;
+            }
+
+            Panel bar = InfoCommandBarButtons as Panel;
+            if (bar == null)
+            {
+                var root = Content as Panel;
+                if (root != null && root.Children.Count > 1)
+                {
+                    var commandRow = root.Children[1] as Panel;
+                    if (commandRow != null && commandRow.Children.Count > 0)
+                    {
+                        bar = commandRow.Children[0] as Panel;
+                    }
+                }
+            }
+
+            if (bar == null)
+            {
+                return null;
+            }
+
+            foreach (var child in bar.Children)
+            {
+                var button = child as Button;
+                if (button != null && button.Name == name)
+                {
+                    return button;
+                }
+            }
+
+            return null;
         }
     }
 }
