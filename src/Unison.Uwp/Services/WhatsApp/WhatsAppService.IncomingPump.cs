@@ -2416,15 +2416,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         // and should not create a badge or toast for themselves.
                         if (!isActuallyFromMe && !IsActiveChatJid(jid))
                         {
-                            var unreadRows = GetChatRowsForCanonicalJid(jid);
-                            int nextUnread = unreadRows.Count == 0
-                                ? Math.Max(0, chat.UnreadCount) + 1
-                                : unreadRows.Max(row => Math.Max(0, row.UnreadCount)) + 1;
-                            foreach (var unreadRow in unreadRows)
-                            {
-                                unreadRow.UnreadCount = nextUnread;
-                            }
-                            chat.UnreadCount = nextUnread;
+                            ChatUnreadTally.Bump(chat, GetChatRowsForCanonicalJid(jid), 1);
                         }
 
                         notificationChat = chat;
@@ -2639,15 +2631,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
                         if (summary.UnreadDelta > 0 && !IsActiveChatJid(summary.Jid))
                         {
-                            int currentUnread = rows.Count == 0
-                                ? Math.Max(0, preferred.UnreadCount)
-                                : rows.Max(row => Math.Max(0, row.UnreadCount));
-                            int nextUnread = currentUnread + summary.UnreadDelta;
-                            foreach (var row in rows)
-                            {
-                                row.UnreadCount = nextUnread;
-                            }
-                            preferred.UnreadCount = nextUnread;
+                            ChatUnreadTally.Bump(preferred, rows, summary.UnreadDelta);
                             unreadAdded += summary.UnreadDelta;
                         }
                     }

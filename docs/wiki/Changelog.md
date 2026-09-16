@@ -4,6 +4,31 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Unread counts — one rule instead of two copies
+
+`WhatsAppService.IncomingPump` incremented unread counts in two places: once for a single arriving
+message, once for the batch replayed after a reconnect. Same logic, written twice, differing only in
+whether it added one or a delta — the exact shape that had already produced a real behaviour drift
+earlier in this refactor. Both now call `ChatUnreadTally.Bump` in `Unison.Core/Helpers`.
+
+The rule is worth a name because it is not obvious. A conversation's unread count is not stored once:
+the same conversation can be listed under both its PN and its LID form, so the number lives mirrored
+across several rows and the badge the user sees is whichever row the list renders. So a count is never
+read from a single row and never incremented in place. Every write takes the **highest** value among
+the sibling rows and stamps that one result onto all of them. The highest wins rather than the newest
+because rows are not updated in lockstep — a row that missed a mutation is stale, not authoritative,
+and taking its lower value would silently drop unread messages.
+
+`AppStateChatMutation.ResolveUnreadCount` was reading that same maximum with its own loop, so it now
+calls `ChatUnreadTally.HighestAmong` instead. Its existing tests passed untouched, which is the proof
+the two readings really were the same.
+
+13 tests. The ones carrying the weight: every row of a conversation ends up showing the same number, a
+stale sibling cannot drag the count backwards, and a count that had somehow gone negative is repaired
+on the next message rather than needing to climb back through zero.
+
+---
+
 ## Chat identity — JidHelper.Normalize covered, and a seam mismatch found
 
 `JidHelper.Normalize` decides whether two addresses are the same conversation. Which row a message

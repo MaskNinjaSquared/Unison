@@ -55,20 +55,7 @@ namespace Unison.Core.Helpers
                 return 0;
             }
 
-            int highest = 0;
-            if (rows != null)
-            {
-                for (int i = 0; i < rows.Count; i++)
-                {
-                    ChatItem row = rows[i];
-                    if (row != null && row.UnreadCount > highest)
-                    {
-                        highest = row.UnreadCount;
-                    }
-                }
-            }
-
-            return Math.Max(1, highest);
+            return Math.Max(1, ChatUnreadTally.HighestAmong(rows));
         }
 
         /// <summary>
