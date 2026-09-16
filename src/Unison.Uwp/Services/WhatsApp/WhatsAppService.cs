@@ -35,6 +35,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.State;
 using Unison.Uwp.Services.WhatsApp.Contacts;
+using Unison.Uwp.Services.WhatsApp.Groups;
 using Unison.Socket.UseCases.Contacts;
 using Unison.Uwp.Helpers;
 using Microsoft.Extensions.DependencyInjection;
@@ -251,6 +252,13 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly IAvatarCache _avatarCache;
         private readonly IUsyncGate _usyncGate;
         private readonly AvatarFetcher _avatarFetcher;
+
+        /// <summary>
+        /// Built here rather than injected: it needs canonical JIDs and self-recognition, and both
+        /// still read tables this class owns until phase 3.7. Taking them as functions keeps the
+        /// reader itself free of the client.
+        /// </summary>
+        private readonly GroupMetadataReader _groupMetadata;
         private IMessageService _messageService;
         private IContactService _contactService;
         private IPersonStore _personStore;
@@ -2164,6 +2172,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _avatarCache = avatarCache ?? throw new ArgumentNullException(nameof(avatarCache));
             _usyncGate = usyncGate ?? throw new ArgumentNullException(nameof(usyncGate));
             _avatarFetcher = avatarFetcher ?? throw new ArgumentNullException(nameof(avatarFetcher));
+            _groupMetadata = new GroupMetadataReader(GetCanonicalJid, IsSelfLinkedJid);
             _chatState.Chats.CollectionChanged += (s, e) => InvalidateChatRowIndex();
             JidAlias = new NotifyingJidAliasMap(InvalidateChatRowIndex);
         }
@@ -4264,34 +4273,6 @@ namespace Unison.Uwp.Services.WhatsApp
             Debug.WriteLine($"[WhatsAppService] Avatar refresh failed without clearing existing image for {chat.JID}: target={result.TargetJid}, lookup={result.TokenLookupJid}, reason={chat.AvatarFetchFailureReason}");
         }
 
-        private BinaryNode FindGroupNode(BinaryNode response, string groupJid)
-        {
-            if (response == null)
-            {
-                return null;
-            }
-
-            string normalizedTarget = NormalizeJid(groupJid);
-            var groups = response.FindAllDescendants("group");
-            foreach (var group in groups)
-            {
-                if (group?.Attrs == null)
-                {
-                    continue;
-                }
-
-                group.Attrs.TryGetValue("id", out var id);
-                string normalizedId = NormalizeGroupJidCandidate(id);
-                if (string.IsNullOrWhiteSpace(normalizedId) ||
-                    string.Equals(normalizedId, normalizedTarget, StringComparison.OrdinalIgnoreCase))
-                {
-                    return group;
-                }
-            }
-
-            return response.GetChild("group");
-        }
-
         private List<string> GetAvatarLookupCandidates(ChatItem chat)
         {
             var candidates = new List<string>();
@@ -4333,56 +4314,6 @@ namespace Unison.Uwp.Services.WhatsApp
         Task IWhatsAppService.EnsureGroupRosterLoadedFromStoreAsync(string groupJid) =>
             EnsureGroupRosterLoadedFromStoreAsync(groupJid);
 
-        private GroupParticipantRole ResolveMyGroupRole(BinaryNode groupNode)
-        {
-            if (groupNode == null)
-            {
-                return GroupParticipantRole.Member;
-            }
-
-            foreach (BinaryNode participantNode in groupNode.GetChildren("participant"))
-            {
-                if (participantNode?.Attrs == null)
-                {
-                    continue;
-                }
-
-                string jid = participantNode.Attrs.GetDictionaryValueOrDefault("jid", string.Empty);
-                string phone = participantNode.Attrs.GetDictionaryValueOrDefault("phone_number", string.Empty);
-                string lid = participantNode.Attrs.GetDictionaryValueOrDefault("lid", string.Empty);
-                if (!IsSelfLinkedJid(jid) && !IsSelfLinkedJid(phone) && !IsSelfLinkedJid(lid))
-                {
-                    continue;
-                }
-
-                return ParseParticipantAdminRole(
-                    participantNode.Attrs.GetDictionaryValueOrDefault("admin", string.Empty));
-            }
-
-            return GroupParticipantRole.Member;
-        }
-
-        private static GroupParticipantRole ParseParticipantAdminRole(string adminAttr)
-        {
-            if (string.IsNullOrWhiteSpace(adminAttr))
-            {
-                return GroupParticipantRole.Member;
-            }
-
-            if (string.Equals(adminAttr, "superadmin", StringComparison.OrdinalIgnoreCase))
-            {
-                return GroupParticipantRole.SuperAdmin;
-            }
-
-            if (string.Equals(adminAttr, "admin", StringComparison.OrdinalIgnoreCase))
-            {
-                return GroupParticipantRole.Admin;
-            }
-
-            return GroupParticipantRole.Member;
-        }
-
-        private const int MaxPersistedGroupMembers = 512;
 
         private IEnumerable<string> EnumerateMembershipPersonKeys(GroupMember member)
         {

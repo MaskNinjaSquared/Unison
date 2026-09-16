@@ -326,7 +326,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private List<string> ExtractGroupAvatarFallbackJids(BinaryNode response, string groupJid)
         {
             var candidates = new List<string>();
-            var group = FindGroupNode(response, groupJid);
+            var group = _groupMetadata.FindGroupNode(response, groupJid);
             if (group == null)
             {
                 return candidates;
@@ -356,34 +356,13 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 if (node.Attrs.TryGetValue(key, out var raw))
                 {
-                    string jid = NormalizeGroupJidCandidate(raw);
+                    string jid = _groupMetadata.NormalizeGroupJid(raw);
                     if (!string.IsNullOrWhiteSpace(jid))
                     {
                         candidates.Add(jid);
                     }
                 }
             }
-        }
-
-        private string NormalizeGroupJidCandidate(string raw)
-        {
-            if (string.IsNullOrWhiteSpace(raw))
-            {
-                return null;
-            }
-
-            string value = raw.Trim();
-            if (value.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase))
-            {
-                return NormalizeJid(value);
-            }
-
-            if (value.IndexOf('@') < 0 && value.All(char.IsDigit))
-            {
-                return NormalizeJid(value + "@g.us");
-            }
-
-            return null;
         }
 
         public void MarkAvatarImageLoadFailed(ChatItem chat, string reason)

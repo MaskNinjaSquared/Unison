@@ -4,6 +4,17 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## WhatsAppService extraction — phase 3.2a (group protocol reading)
+
+- New `GroupMetadataReader` turns a `w:g2` response into plain objects: subject, announce-only, member count, participant drafts, my participant role, and the picture-lookup candidate order
+- It also took the roster list algebra (`RosterJidSetsEqual`, `MergeInPlace`) and the group-id placeholder test. `GroupListingEntry` and `GroupMemberDraft` moved out of the client with it
+- Holds no socket, no chat state, no dispatcher — the first part of the group cluster that can be exercised without the UI thread
+- Out of `WhatsAppService`: `ReadGroupMemberDrafts`, `CountGroupMembers`, `FindGroupNode`, `ExtractGroupSubject`, `ResolveMyGroupRole`, `ParseParticipantAdminRole`, `NormalizeGroupJidCandidate`, `GetGroupMemberPictureCandidates`, `IsGroupIdPlaceholder`, `RosterJidSetsEqual`, `MergeGroupMembersInPlace` — 383 lines net
+- The reader takes canonical-JID and is-self as functions instead of `IJidResolver`, because self-recognition reads the PN/LID alias table the client still owns until 3.7. Reimplementing it would have silently changed the role the composer trusts in announce-only groups
+- Applying metadata to chat rows stays in the client: it is blocked on 3.6 (`ContactNames`), 3.7 (alias table) and 3.9 (`Chats` + persist), not on itself
+
+---
+
 ## WhatsAppService extraction — phase 3.1b (avatar fetch)
 
 - New `IUsyncGate` / `UsyncGate` replaces the client's private `_usyncLock`. Contact name resolution and profile picture lookups share one rate-limited directory surface, so they keep sharing one gate now that they are moving to different owners

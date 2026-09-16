@@ -154,6 +154,7 @@
     <Compile Include="Services\WhatsApp\Contacts\ContactNameResolver.cs" />
     <Compile Include="Services\WhatsApp\Chats\ChatFacade.cs" />
     <Compile Include="Services\WhatsApp\Groups\GroupFacade.cs" />
+    <Compile Include="Services\WhatsApp\Groups\GroupMetadataReader.cs" />
     <Compile Include="Services\WhatsApp\History\HistoryFacade.cs" />
     <Compile Include="Services\WhatsApp\History\HistoryThumbnailMaterializer.cs" />
     <Compile Include="Services\WhatsApp\Status\StatusFacade.cs" />

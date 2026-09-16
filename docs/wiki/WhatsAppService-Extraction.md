@@ -170,7 +170,8 @@ Self-contained first. List/persist last.
 | 3.1a | Avatar cache (done) | `IAvatarCache` / `AvatarCacheService` |
 | 3.1b | Avatar fetch (done) | `AvatarFetcher`, behind `IUsyncGate` |
 | 3.1c | Avatar apply to the row | with 3.2 (group fallback) and 3.9 (row + persist) |
-| 3.2 | `.Groups.cs` | new `IGroupService` / `GroupFacade`; prefer Socket use cases via `IWhatsAppSessionProvider`, not raw `BinaryNode` on the client |
+| 3.2a | Group protocol reading (done) | `GroupMetadataReader` |
+| 3.2b | Group apply + roster persist | `GroupFacade`, after 3.6 / 3.7 / 3.9 |
 | 3.3 | `.Media.cs` | `MessageFacade` + a UWP `MediaCacheService`. Contract already has `Ensure*AvailableAsync` |
 | 3.4 | Send (main file) | `MessageFacade` over use cases; client only “send this node” |
 | 3.5 | `.Receipts.cs` | `MessageFacade` / `ChatFacade` |
@@ -209,6 +210,25 @@ What is left of avatars in the client is the **apply**, and it is deliberately p
 `ChatItem` rows on the UI thread and calls `SchedulePersist` (3.9), and the group-avatar fallback is
 group-metadata protocol (3.2). Also staying is `ShouldDeferAvatarFetch` — it reads history backfill
 and on-demand state, so it is history gating wearing an avatar name, and belongs with 3.9/3.10.
+
+**3.2a is done: the parser left, the apply stayed.** `GroupMetadataReader` turns a `w:g2` response
+into plain objects — subject, announce-only, member count, participant drafts, my role — plus the
+list algebra the roster merge needs (`RosterJidSetsEqual`, `MergeInPlace`) and the placeholder-name
+test. It holds no socket, no chat state and no dispatcher, so it is the first piece of the group
+cluster that can be checked without watching rows change. `GroupListingEntry` and `GroupMemberDraft`
+moved with it.
+
+It takes **two functions** rather than `IJidResolver`: canonical JID, and "is this the logged-in
+account". The second one reads the PN/LID alias table, which is still the client's until 3.7 — a
+participant row can carry a device-suffixed PN whose base LID is the account's real identity, and
+`IsSelfLinkedJid` is the only place that knows it. Reimplementing that in the reader would have been
+a silent behaviour change in the role the composer trusts for announce-only groups. At 3.7 both
+functions collapse into the resolver.
+
+The rest of `.Groups.cs` is apply and orchestration, and it is blocked on three other steps, not on
+itself: it walks `Chats` on the UI thread and calls `SchedulePersist` (3.9), writes `ContactNames`
+and calls `ResolveDisplayName` (3.6), and canonicalises through the client's alias table (3.7). Move
+it when those land, not before.
 
 **Thread affinity:** today the client mutates `Chats` on the UI thread; VMs read on the UI thread; `ChatStateStore`’s extra dictionaries are protected by that, not only by the lock. Any code moved to a façade that runs off-thread must use `UpsertChatsAsync` / `UpsertMessagesAsync` (or `IDispatcher`). Do not split 3.9 into half-moves.
 
