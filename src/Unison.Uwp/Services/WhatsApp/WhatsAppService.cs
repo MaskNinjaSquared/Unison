@@ -1308,6 +1308,7 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         private readonly GroupReceiptTally _groupReceipts = new GroupReceiptTally();
+        private readonly ContactLabelSanitizer _contactLabels = new ContactLabelSanitizer(new SelfMarkerNaming());
         private readonly Dictionary<string, GroupRecipientCountCacheEntry> _groupRecipientCountByChat =
             new Dictionary<string, GroupRecipientCountCacheEntry>(StringComparer.OrdinalIgnoreCase);
 
@@ -7382,94 +7383,58 @@ namespace Unison.Uwp.Services.WhatsApp
             return SelfChatDisplayHelper.IsSelfMarkerLabel(label);
         }
 
-        private static bool IsMaskedPhoneLabel(string label)
-        {
-            if (string.IsNullOrWhiteSpace(label)) return false;
-
-            string trimmed = label.Trim();
-            if (trimmed.StartsWith("~", StringComparison.Ordinal))
-            {
-                trimmed = trimmed.Substring(1).Trim();
-            }
-
-            bool hasMaskGlyph =
-                trimmed.IndexOf('\u2022') >= 0 ||
-                trimmed.IndexOf('\u2219') >= 0 ||
-                trimmed.IndexOf('\u00B7') >= 0 ||
-                trimmed.IndexOf('\u25CF') >= 0 ||
-                trimmed.IndexOf('\u25E6') >= 0 ||
-                trimmed.IndexOf('\u2026') >= 0 ||
-                trimmed.IndexOf('\uFFFD') >= 0 ||
-                trimmed.IndexOf('*') >= 0;
-
-            if (!hasMaskGlyph)
-            {
-                return false;
-            }
-
-            int digits = ExtractDigitsOnly(trimmed).Length;
-            bool phoneLike = trimmed.StartsWith("+", StringComparison.Ordinal) || digits >= 2;
-            return phoneLike && digits > 0 && digits <= 6;
-        }
+        private static bool IsMaskedPhoneLabel(string label) =>
+            ContactLabelSanitizer.IsMaskedPhoneLabel(label);
 
         private string SanitizeContactLabel(string label, string contextJid)
         {
-            if (string.IsNullOrWhiteSpace(label)) return null;
+            ContactLabelResult result = _contactLabels.Sanitize(label, contextJid);
 
-            string trimmed = label.Trim();
-            if (trimmed.Length == 0) return null;
-
-            if (IsMaskedPhoneLabel(trimmed))
+            if (!string.IsNullOrEmpty(contextJid))
             {
-                if (!string.IsNullOrEmpty(contextJid))
-                {
-                    Debug.WriteLine($"[WhatsAppService] Ignoring masked phone label for {NormalizeJid(contextJid)}: '{trimmed}'");
-                }
-                return null;
+                LogContactLabelDecision(result, contextJid);
             }
 
-            if (SelfChatDisplayHelper.IsSelfMarkerLabel(trimmed))
+            return result.IsUsable ? result.Label : null;
+        }
+
+        /// <summary>
+        /// Says what was turned down and why. Kept out of the rule itself, which has to stay
+        /// reachable from tests, but kept verbatim: these lines are how a wrong name in the
+        /// list gets traced back to the source that offered it.
+        /// </summary>
+        private void LogContactLabelDecision(ContactLabelResult result, string contextJid)
+        {
+            string jid = NormalizeJid(contextJid);
+
+            switch (result.Rejection)
             {
-                if (!string.IsNullOrEmpty(contextJid))
-                {
+                case ContactLabelRejection.MaskedPhone:
+                    Debug.WriteLine($"[WhatsAppService] Ignoring masked phone label for {jid}: '{result.Original}'");
+                    break;
+
+                case ContactLabelRejection.SelfMarker:
                     if (IsSelfJid(contextJid))
                     {
-                        Log($"[WhatsAppService] Explicit self fallback label observed for SELF JID {NormalizeJid(contextJid)}. Ignoring and keeping numeric identity.");
+                        Log($"[WhatsAppService] Explicit self fallback label observed for SELF JID {jid}. Ignoring and keeping numeric identity.");
                     }
                     else
                     {
-                        Log($"[WhatsAppService] Ignoring PushName self-fallback for NON-SELF JID {NormalizeJid(contextJid)} (spoof prevention).");
+                        Log($"[WhatsAppService] Ignoring PushName self-fallback for NON-SELF JID {jid} (spoof prevention).");
                     }
-                }
-                return null;
-            }
+                    break;
 
-            string strippedMarker = SelfChatDisplayHelper.StripSelfMarker(trimmed);
-            if (strippedMarker != null && !string.Equals(strippedMarker, trimmed.Trim(), StringComparison.Ordinal))
-            {
-                if (!string.IsNullOrEmpty(contextJid))
-                {
-                    Log($"[WhatsAppService] Sanitized self marker suffix in name for {NormalizeJid(contextJid)}: '{trimmed}' -> '{strippedMarker}'");
-                }
-                return string.IsNullOrEmpty(strippedMarker) ? null : strippedMarker;
-            }
+                case ContactLabelRejection.PhoneEcho:
+                    Debug.WriteLine($"[WhatsAppService] Ignoring phone-echo label for {jid}: '{result.Original}'");
+                    break;
 
-            string normalizedContext = NormalizeJid(contextJid);
-            if (!string.IsNullOrWhiteSpace(normalizedContext))
-            {
-                string contextDigits = ExtractDigitsOnly(normalizedContext);
-                string labelDigits = ExtractDigitsOnly(trimmed);
-                bool hasLetters = trimmed.Any(char.IsLetter);
-                if (!hasLetters &&
-                    contextDigits.Length >= 7 &&
-                    string.Equals(labelDigits, contextDigits, StringComparison.Ordinal))
-                {
-                    Debug.WriteLine($"[WhatsAppService] Ignoring phone-echo label for {normalizedContext}: '{trimmed}'");
-                    return null;
-                }
+                default:
+                    if (result.MarkerStripped)
+                    {
+                        Log($"[WhatsAppService] Sanitized self marker suffix in name for {jid}: '{result.Original}' -> '{result.Label}'");
+                    }
+                    break;
             }
-
-            return trimmed;
         }
 
         private static string ExtractDigitsOnly(string value)

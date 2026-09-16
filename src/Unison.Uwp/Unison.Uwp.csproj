@@ -132,6 +132,7 @@
     </Compile>
     <Compile Include="Helpers\LocalizedStrings.cs" />
     <Compile Include="Helpers\SelfChatDisplayHelper.cs" />
+    <Compile Include="Helpers\SelfMarkerNaming.cs" />
     <Compile Include="Helpers\LocalSettingsAccess.cs" />
     <Compile Include="Helpers\WebPHelpers.cs" />
     <Compile Include="Helpers\WebPDecoder.cs" />
