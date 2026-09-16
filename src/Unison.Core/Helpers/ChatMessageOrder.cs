@@ -96,6 +96,41 @@ namespace Unison.Core.Helpers
             return WhatsAppMapper.ToUtc(timestamp);
         }
 
+        /// <summary>
+        /// The newest timestamp in a set of messages, normalized for comparison, or
+        /// <see cref="DateTime.MinValue"/> when there is nothing to read.
+        /// </summary>
+        /// <remarks>
+        /// Exists so callers stop reaching for <c>Max(m =&gt; m.Timestamp)</c>, which compares
+        /// raw values. A list holding both live messages and rows read back from SQLite holds
+        /// both <see cref="DateTimeKind.Utc"/> and <see cref="DateTimeKind.Unspecified"/>, and
+        /// comparing those directly is off by the local offset.
+        /// </remarks>
+        public static DateTime NewestComparableUtc(IEnumerable<ChatMessage> messages)
+        {
+            DateTime newest = DateTime.MinValue;
+            if (messages == null)
+            {
+                return newest;
+            }
+
+            foreach (ChatMessage message in messages)
+            {
+                if (message == null)
+                {
+                    continue;
+                }
+
+                DateTime candidate = ToComparableUtc(message.Timestamp);
+                if (candidate > newest)
+                {
+                    newest = candidate;
+                }
+            }
+
+            return newest;
+        }
+
         private static int CompareMessages(ChatMessage left, ChatMessage right)
         {
             if (ReferenceEquals(left, right))

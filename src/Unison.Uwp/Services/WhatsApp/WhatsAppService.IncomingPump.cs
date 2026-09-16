@@ -1045,8 +1045,8 @@ namespace Unison.Uwp.Services.WhatsApp
             await SaveMessageAsync(canonical, target);
 
             if (IsActiveChatJid(canonical)) QueueChatMessagesChanged(canonical);
-            var latest = MessagesByChat.ContainsKey(canonical)
-                ? MessagesByChat[canonical].Where(m => m != null).OrderBy(m => m.Timestamp).LastOrDefault()
+            var latest = MessagesByChat.TryGetValue(canonical, out var canonicalMessages)
+                ? ChatPreviewTip.PickLatest(canonicalMessages)
                 : null;
             if (latest != null && string.Equals(latest.Id, target.Id, StringComparison.Ordinal))
             {
@@ -2775,10 +2775,8 @@ namespace Unison.Uwp.Services.WhatsApp
                         continue;
                     }
 
-                    var latest = messages
-                        .Where(m => m != null && IsValidMessageTimestamp(m.Timestamp))
-                        .OrderByDescending(m => m.Timestamp)
-                        .FirstOrDefault();
+                    var latest = ChatPreviewTip.PickLatest(
+                        messages.Where(m => m != null && IsValidMessageTimestamp(m.Timestamp)).ToList());
                     if (latest == null)
                     {
                         continue;
@@ -2824,10 +2822,8 @@ namespace Unison.Uwp.Services.WhatsApp
                         continue;
                     }
 
-                    var latest = kvp.Value
-                        .Where(m => m != null && IsValidMessageTimestamp(m.Timestamp))
-                        .OrderByDescending(m => m.Timestamp)
-                        .FirstOrDefault();
+                    var latest = ChatPreviewTip.PickLatest(
+                        kvp.Value.Where(m => m != null && IsValidMessageTimestamp(m.Timestamp)).ToList());
                     if (latest == null)
                     {
                         continue;

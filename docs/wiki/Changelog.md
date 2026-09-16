@@ -4,6 +4,34 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Audit — raw DateTime comparisons in the chat list
+
+Swept the client for the defect found while extracting `ChatPreviewTip.PickLatest`, on the rule now
+in `WhatsAppService-Extraction.md`: comparing `ChatMessage.Timestamp` values directly is wrong
+wherever the list can hold both live messages and rows read back from SQLite. Live rows are
+`DateTimeKind.Utc`; stored rows are `Unspecified` and already UTC wall-clock. Compared raw, a stored
+row looks a local offset newer than it is — three hours in Brazil.
+
+Four more sites, all deciding which message a chat row displays:
+
+- **Chat deduplication** (`DeduplicateChatsAsync`) took `Max(m => m.Timestamp)` raw while, three lines
+  below in the same comparison, the `LastMessageTimestampUtc` branch went through `ToComparableUtc`. One
+  expression normalising one side and not the other. This decides which of two duplicate rows' preview
+  survives the merge
+- **Replay preview refresh** and **two catch-up sweeps** in `.IncomingPump.cs` picked the newest message
+  with `OrderBy`/`OrderByDescending` on the raw value
+
+New `ChatMessageOrder.NewestComparableUtc` for the timestamp, `ChatPreviewTip.PickLatest` for the
+message; the two are tested against each other so they cannot disagree about which message is newest.
+10 tests, written around the defect rather than the method — including that the fix does not overshoot
+into always preferring live messages.
+
+Left alone deliberately: the offline-replay UI summaries in `.IncomingPump.cs` compare timestamps raw
+too, but those are built on one path that already normalises upstream, and there was no evidence of
+mixed kinds. Not changed without it.
+
+---
+
 ## WhatsAppService extraction — 3.9b closed, 3.5b and 3.1c done
 
 - **3.9b closed.** `ChatPreviewTip` gained `PickLatest` and `Clear`, the two rules inside the delete appliers. What stays in `.AppState.cs` is the tombstone write and the SQLite delete, whose rule and I/O are not separable

@@ -7593,21 +7593,16 @@ namespace Unison.Uwp.Services.WhatsApp
                                 primary.AvatarFetchFailureReason = secondary.AvatarFetchFailureReason;
                             }
 
-                            DateTime primaryLatestMessageTimestamp = DateTime.MinValue;
-                            if (MessagesByChat.TryGetValue(primaryNorm, out var primaryPreviewMessages) &&
-                                primaryPreviewMessages != null &&
-                                primaryPreviewMessages.Count > 0)
-                            {
-                                primaryLatestMessageTimestamp = primaryPreviewMessages.Max(m => m?.Timestamp ?? DateTime.MinValue);
-                            }
+                            // Both sides go through ToComparableUtc, like the LastMessageTimestampUtc
+                            // branch below: these lists mix live messages with rows read back from
+                            // SQLite, so the raw timestamps are not comparable to each other.
+                            MessagesByChat.TryGetValue(primaryNorm, out var primaryPreviewMessages);
+                            DateTime primaryLatestMessageTimestamp =
+                                ChatMessageOrder.NewestComparableUtc(primaryPreviewMessages);
 
-                            DateTime secondaryLatestMessageTimestamp = DateTime.MinValue;
-                            if (MessagesByChat.TryGetValue(secondaryNorm, out var secondaryPreviewMessages) &&
-                                secondaryPreviewMessages != null &&
-                                secondaryPreviewMessages.Count > 0)
-                            {
-                                secondaryLatestMessageTimestamp = secondaryPreviewMessages.Max(m => m?.Timestamp ?? DateTime.MinValue);
-                            }
+                            MessagesByChat.TryGetValue(secondaryNorm, out var secondaryPreviewMessages);
+                            DateTime secondaryLatestMessageTimestamp =
+                                ChatMessageOrder.NewestComparableUtc(secondaryPreviewMessages);
 
                             DateTime primaryPreviewTimestamp = primary.LastMessageTimestampUtc.HasValue
                                 ? ToComparableUtc(primary.LastMessageTimestampUtc.Value)
