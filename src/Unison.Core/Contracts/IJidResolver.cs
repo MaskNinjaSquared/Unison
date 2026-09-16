@@ -24,6 +24,13 @@ namespace Unison.Core.Contracts
         /// </summary>
         bool TryGetAlias(string jid, out string alias);
 
+        /// <summary>
+        /// Whether the JID is the logged-in account, counting aliases and device-suffixed forms.
+        /// Not the same as comparing against <see cref="Self"/>: one account is reachable under
+        /// several addresses, and the caller rarely knows which one it is holding.
+        /// </summary>
+        bool IsSelfLinked(string jid);
+
         /// <summary>The logged-in account, or null before pairing.</summary>
         Profile Self { get; }
     }

@@ -4,6 +4,17 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## WhatsAppService extraction — phase 3.7a (JID alias table)
+
+- New `JidAliasTable` in `Unison.Core/State`: the LID/PN map plus the rules that read it — `GetCanonicalJid`, `IsSelfLinked`, `IsSelfJid`, `IsLidLike`, `GetCanonicalSelfPnJid`, all moved verbatim
+- Out of `WhatsAppService`: the nested `NotifyingJidAliasMap`, `IsSelfLinkedJid`, `IsSelfJid`, `IsLidLikeJid`, `GetBaseUserPart`, `GetCanonicalSelfPnJid`, `GetCanonicalForLidLikeSWhatsappJid` — 469 lines. The client keeps one-line forwards, so no call site changed
+- `JidResolver` reads the table directly instead of wrapping the client; only `Self` still goes to the session, and through `IWhatsAppService` rather than the concrete class
+- `IJidResolver` gained `IsSelfLinked`; `GroupMetadataReader` drops the two delegates from 3.2a and takes the resolver
+- The table learns the account via `BindSelf(Func, Func)` — the own LID is written in place on the auth state after pairing, so a snapshot would miss it and the self-poisoning guards would stop firing
+- **Not** folded into `LidMappingStore` as originally planned: that store is async while canonicalization is synchronous and sits behind XAML bindings, and the two disagree on key shape (user part vs. whole JID). Reconciling is 3.7b, now a storage swap behind this seam
+
+---
+
 ## WhatsAppService extraction — phase 3.3a (media cache)
 
 - New `IMediaCache` / `MediaCacheService` over `LocalFolder/MediaCache/{Images,Audio,Documents,Video,VideoPosters}`: `SaveAsync`, `TryGetUriAsync`, `TryReadAsync`, `SanitizeFileBase`

@@ -50,21 +50,11 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
         /// </summary>
         private const int MaxMembers = 512;
 
-        private readonly Func<string, string> _canonical;
-        private readonly Func<string, bool> _isSelfLinked;
+        private readonly IJidResolver _jids;
 
-        /// <summary>
-        /// Identity arrives as two functions rather than <see cref="IJidResolver"/> because the
-        /// PN/LID alias table is still inside the client until phase 3.7, and recognising the
-        /// logged-in account reads it: a participant row can carry a device-suffixed PN whose
-        /// base LID is what the account is actually known by. Reimplementing that here to avoid
-        /// the seam would mean guessing at the role the composer trusts. At 3.7 both collapse
-        /// into a single resolver.
-        /// </summary>
-        internal GroupMetadataReader(Func<string, string> canonical, Func<string, bool> isSelfLinked)
+        internal GroupMetadataReader(IJidResolver jids)
         {
-            _canonical = canonical ?? throw new ArgumentNullException(nameof(canonical));
-            _isSelfLinked = isSelfLinked ?? throw new ArgumentNullException(nameof(isSelfLinked));
+            _jids = jids ?? throw new ArgumentNullException(nameof(jids));
         }
 
         /// <summary>
@@ -95,7 +85,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
                 string subject;
                 node.Attrs.TryGetValue("subject", out subject);
 
-                parsed[_canonical(JidHelper.Normalize(jid))] = new GroupListingEntry
+                parsed[_jids.GetCanonicalJid(JidHelper.Normalize(jid))] = new GroupListingEntry
                 {
                     Jid = jid,
                     Subject = subject,
@@ -292,7 +282,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
                 string jid = participant.Attrs.GetDictionaryValueOrDefault("jid", string.Empty);
                 string phone = participant.Attrs.GetDictionaryValueOrDefault("phone_number", string.Empty);
                 string lid = participant.Attrs.GetDictionaryValueOrDefault("lid", string.Empty);
-                if (!_isSelfLinked(jid) && !_isSelfLinked(phone) && !_isSelfLinked(lid))
+                if (!_jids.IsSelfLinked(jid) && !_jids.IsSelfLinked(phone) && !_jids.IsSelfLinked(lid))
                 {
                     continue;
                 }
@@ -326,11 +316,11 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
             };
 
             add(member.PhoneNumber);
-            add(_canonical(member.PhoneNumber));
-            add(_canonical(member.Jid));
+            add(_jids.GetCanonicalJid(member.PhoneNumber));
+            add(_jids.GetCanonicalJid(member.Jid));
             add(member.Jid);
             add(member.Lid);
-            add(_canonical(member.Lid));
+            add(_jids.GetCanonicalJid(member.Lid));
             return candidates;
         }
 

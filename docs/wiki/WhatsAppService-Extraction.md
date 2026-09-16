@@ -177,7 +177,8 @@ Self-contained first. List/persist last.
 | 3.4 | Send (main file) | `MessageFacade` over use cases; client only “send this node” |
 | 3.5 | `.Receipts.cs` | `MessageFacade` / `ChatFacade` |
 | 3.6 | Names / usync (`.Identity.cs`) | `ContactFacade` / `ContactDirectory`. Masked `*****` labels stay “no name” so projection can fill |
-| 3.7 | Alias LID/PN + canonical | Fold session alias into existing `LidMappingStore`; `IJidResolver` already reads the client — move the table behind it. |
+| 3.7a | Alias LID/PN + canonical (done) | `JidAliasTable` (Core), read through `IJidResolver` |
+| 3.7b | Converge onto `LidMappingStore` | Blocked: that store is async, canonicalization is not. See below |
 | 3.8 | `.AppState.cs` | Each applier → the façade of that fact (subject → groups, contact name → contacts, read/pin/flags → chats, delete message → messages). `AppStateSyncService` talks to façades, not the concrete client |
 | 3.9 | `.Persistence.cs` + list sort/preview | `ChatFacade` + `ChatStateStore` + `IChatStore` / `IMessageStore`. Close the transitional public dictionaries on `ChatStateStore` |
 | 3.10 | `.IncomingPump.cs` | Decode/dispatch stays with connection; apply (row, preview, unread, toast) goes to façades |
@@ -249,6 +250,36 @@ Two follow-ups, both real:
 - `TryTranscodeOggOpusToM4aAsync` still opens the Audio folder itself, because `MediaTranscoder`
   encodes into a `StorageFile` it is handed and there is no WinRT-free way to express that on a Core
   interface. It borrows `SanitizeFileBase` so the naming cannot drift. That is 3.3b's problem.
+
+**3.7a is done, and it did not fold into `LidMappingStore`.** The plan above said to merge the
+session alias map into `LidMappingStore`, whose own header says it exists to replace exactly that.
+The endpoint is right; one step is not how to get there, for two reasons.
+
+`LidMappingStore` is async throughout (`GetLidForPnAsync`, `GetPnForLidAsync`). Canonicalization is
+synchronous, sits on the incoming-message path, and is reached from ViewModels and XAML code-behind
+— roughly ninety call sites inside the client and sixty outside, with `IJidResolver.GetCanonicalJid`
+synchronous in the Core contract. Converting that means making all of it async, or blocking on async
+on the UI thread, or keeping a synchronous cache in front — and the third is what the alias map
+already was. Separately, the two disagree on keys: `LidMappingStore` keys by user part and
+re-attaches the device suffix on read, while the alias map holds whole normalized JIDs and carries
+special handling for LID-shaped `@s.whatsapp.net` identifiers plus the self-poisoning guards.
+Merging without reconciling that changes canonicalization, which is what decides chat identity and
+duplicate chats.
+
+So 3.7a extracted instead: `JidAliasTable` in `Unison.Core/State` owns the map *and* the rules that
+read it — `GetCanonicalJid`, `IsSelfLinked`, `IsSelfJid`, `IsLidLike`, `GetCanonicalSelfPnJid`. Both
+moved verbatim. The client keeps its private methods as one-line forwards, so no call site changed.
+`JidResolver` now reads the table directly rather than wrapping the client, and `IJidResolver` gained
+`IsSelfLinked` — which let `GroupMetadataReader` drop the two delegates 3.2a gave it and take the
+resolver, closing that note.
+
+The table learns the logged-in account through `BindSelf`, two functions rather than two strings.
+The account's own LID arrives after pairing and is written in place on the existing auth state, so a
+snapshot taken at construction would be a snapshot of null and the self-poisoning guards would
+quietly stop firing.
+
+3.7b is the storage swap behind this seam: reconcile the key shapes, then let the table read
+`LidMappingStore` through its memory cache. Nothing above it has to change again.
 
 **Thread affinity:** today the client mutates `Chats` on the UI thread; VMs read on the UI thread; `ChatStateStore`’s extra dictionaries are protected by that, not only by the lock. Any code moved to a façade that runs off-thread must use `UpsertChatsAsync` / `UpsertMessagesAsync` (or `IDispatcher`). Do not split 3.9 into half-moves.
 

@@ -230,6 +230,7 @@ namespace Unison.Uwp
 
             services.AddSingleton<IAvatarCache, AvatarCacheService>();
             services.AddSingleton<IMediaCache, MediaCacheService>();
+            services.AddSingleton<JidAliasTable>();
             // Contacts and avatars query the same rate-limited directory surface, so they queue
             // behind one gate even after they stop sharing an owner.
             services.AddSingleton<IUsyncGate, UsyncGate>();
@@ -247,11 +248,14 @@ namespace Unison.Uwp
                     sp.GetRequiredService<IAvatarCache>(),
                     sp.GetRequiredService<IUsyncGate>(),
                     sp.GetRequiredService<AvatarFetcher>(),
-                    sp.GetRequiredService<IMediaCache>()));
+                    sp.GetRequiredService<IMediaCache>(),
+                    sp.GetRequiredService<JidAliasTable>()));
             // Asking "is this the same person?" no longer means naming the client. The table is
             // still built there; only the question moved.
             services.AddSingleton<IJidResolver>(
-                sp => new JidResolver((WhatsAppService)sp.GetRequiredService<IWhatsAppService>()));
+                sp => new JidResolver(
+                    sp.GetRequiredService<JidAliasTable>(),
+                    sp.GetRequiredService<IWhatsAppService>()));
 #if DEBUG
             // Dev-only tooling: file-watch based debug send. Never attached/started in Release.
             services.AddSingleton<IDebugSendService, DebugSendService>();

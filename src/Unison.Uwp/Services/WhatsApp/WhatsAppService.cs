@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -1199,195 +1199,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private DateTime _lastGroupQueryUtc = DateTime.MinValue;
 
-        public NotifyingJidAliasMap JidAlias { get; }
-
-        /// <summary>
-        /// The LID/phone map. A dictionary in every respect, except that it reports when it
-        /// changed - which is what lets caches keyed by canonical address know they went stale.
-        /// </summary>
-        /// <remarks>
-        /// A plain dictionary with the callers bumping a counter would do the same, and did not:
-        /// the map is written from twenty-odd places, and the one that is added next is the one
-        /// that forgets. Here there is nowhere to forget it.
-        /// </remarks>
-        public sealed class NotifyingJidAliasMap : IDictionary<string, string>, IReadOnlyDictionary<string, string>
-        {
-            private readonly object _sync = new object();
-            private readonly Dictionary<string, string> _inner = new Dictionary<string, string>();
-            private readonly Action _changed;
-
-            internal NotifyingJidAliasMap(Action changed)
-            {
-                _changed = changed;
-            }
-
-            /// <summary>Thread-safe copy for persist / socket handoff.</summary>
-            public Dictionary<string, string> Snapshot()
-            {
-                lock (_sync)
-                {
-                    return new Dictionary<string, string>(_inner, StringComparer.OrdinalIgnoreCase);
-                }
-            }
-
-            public string this[string key]
-            {
-                get
-                {
-                    lock (_sync)
-                    {
-                        return _inner[key];
-                    }
-                }
-                set
-                {
-                    bool notify = false;
-                    lock (_sync)
-                    {
-                        string existing;
-                        if (_inner.TryGetValue(key, out existing) &&
-                            string.Equals(existing, value, StringComparison.Ordinal))
-                        {
-                            return;
-                        }
-
-                        _inner[key] = value;
-                        notify = true;
-                    }
-
-                    if (notify)
-                    {
-                        _changed();
-                    }
-                }
-            }
-
-            public int Count
-            {
-                get { lock (_sync) { return _inner.Count; } }
-            }
-
-            public bool IsReadOnly => false;
-
-            public ICollection<string> Keys
-            {
-                get { lock (_sync) { return _inner.Keys.ToList(); } }
-            }
-
-            public ICollection<string> Values
-            {
-                get { lock (_sync) { return _inner.Values.ToList(); } }
-            }
-
-            IEnumerable<string> IReadOnlyDictionary<string, string>.Keys => Keys;
-            IEnumerable<string> IReadOnlyDictionary<string, string>.Values => Values;
-
-            public bool ContainsKey(string key)
-            {
-                lock (_sync)
-                {
-                    return _inner.ContainsKey(key);
-                }
-            }
-
-            public bool TryGetValue(string key, out string value)
-            {
-                lock (_sync)
-                {
-                    return _inner.TryGetValue(key, out value);
-                }
-            }
-
-            public bool Contains(KeyValuePair<string, string> item)
-            {
-                lock (_sync)
-                {
-                    return ((ICollection<KeyValuePair<string, string>>)_inner).Contains(item);
-                }
-            }
-
-            public void CopyTo(KeyValuePair<string, string>[] array, int arrayIndex)
-            {
-                lock (_sync)
-                {
-                    ((ICollection<KeyValuePair<string, string>>)_inner).CopyTo(array, arrayIndex);
-                }
-            }
-
-            public IEnumerator<KeyValuePair<string, string>> GetEnumerator()
-            {
-                return Snapshot().GetEnumerator();
-            }
-
-            System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
-            {
-                return GetEnumerator();
-            }
-
-            public void Add(string key, string value)
-            {
-                lock (_sync)
-                {
-                    _inner.Add(key, value);
-                }
-
-                _changed();
-            }
-
-            public void Add(KeyValuePair<string, string> item) => Add(item.Key, item.Value);
-
-            public bool Remove(string key)
-            {
-                bool removed;
-                lock (_sync)
-                {
-                    removed = _inner.Remove(key);
-                }
-
-                if (!removed)
-                {
-                    return false;
-                }
-
-                _changed();
-                return true;
-            }
-
-            public bool Remove(KeyValuePair<string, string> item)
-            {
-                bool removed;
-                lock (_sync)
-                {
-                    removed = ((ICollection<KeyValuePair<string, string>>)_inner).Remove(item);
-                }
-
-                if (!removed)
-                {
-                    return false;
-                }
-
-                _changed();
-                return true;
-            }
-
-            public void Clear()
-            {
-                bool hadItems;
-                lock (_sync)
-                {
-                    hadItems = _inner.Count > 0;
-                    if (hadItems)
-                    {
-                        _inner.Clear();
-                    }
-                }
-
-                if (hadItems)
-                {
-                    _changed();
-                }
-            }
-        }
+        public JidAliasTable JidAlias { get; }
 
         /// <summary>
         /// Long enough to swallow a history chunk's worth of pairs, short enough that a single
@@ -2161,7 +1973,8 @@ namespace Unison.Uwp.Services.WhatsApp
             IAvatarCache avatarCache,
             IUsyncGate usyncGate,
             AvatarFetcher avatarFetcher,
-            IMediaCache mediaCache)
+            IMediaCache mediaCache,
+            JidAliasTable jidAlias)
         {
             if (chatState == null)
             {
@@ -2175,9 +1988,11 @@ namespace Unison.Uwp.Services.WhatsApp
             _usyncGate = usyncGate ?? throw new ArgumentNullException(nameof(usyncGate));
             _avatarFetcher = avatarFetcher ?? throw new ArgumentNullException(nameof(avatarFetcher));
             _mediaCache = mediaCache ?? throw new ArgumentNullException(nameof(mediaCache));
-            _groupMetadata = new GroupMetadataReader(GetCanonicalJid, IsSelfLinkedJid);
+            _groupMetadata = new GroupMetadataReader(new JidResolver(JidAlias, this));
             _chatState.Chats.CollectionChanged += (s, e) => InvalidateChatRowIndex();
-            JidAlias = new NotifyingJidAliasMap(InvalidateChatRowIndex);
+            JidAlias = jidAlias ?? throw new ArgumentNullException(nameof(jidAlias));
+            JidAlias.BindSelf(() => _authState?.Me?.Id, () => _authState?.Me?.Lid);
+            JidAlias.Changed += (s, e) => InvalidateChatRowIndex();
         }
 
         /// <summary>
@@ -2191,10 +2006,11 @@ namespace Unison.Uwp.Services.WhatsApp
             IAvatarCache avatarCache,
             IUsyncGate usyncGate,
             AvatarFetcher avatarFetcher,
-            IMediaCache mediaCache)
+            IMediaCache mediaCache,
+            JidAliasTable jidAlias)
         {
             return _instance ?? (_instance = new WhatsAppService(
-                chatState, historyMessages, chatPreviews, avatarCache, usyncGate, avatarFetcher, mediaCache));
+                chatState, historyMessages, chatPreviews, avatarCache, usyncGate, avatarFetcher, mediaCache, jidAlias));
         }
 
         /// <summary>
@@ -7395,27 +7211,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 : null;
         }
 
-        private bool IsLidLikeJid(string jid)
-        {
-            string normalized = NormalizeJid(jid);
-            if (string.IsNullOrWhiteSpace(normalized))
-            {
-                return false;
-            }
-
-            if (normalized.EndsWith("@lid", StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-
-            if (!normalized.EndsWith("@s.whatsapp.net", StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-
-            string user = normalized.Split('@')[0];
-            return user.Contains(".");
-        }
+        private bool IsLidLikeJid(string jid) => JidAlias.IsLidLike(jid);
 
         /// <summary>
         /// Proactively merges duplicate chats when a new identity mapping is found.
@@ -7693,16 +7489,7 @@ namespace Unison.Uwp.Services.WhatsApp
             return null;
         }
 
-        private bool IsSelfJid(string jid)
-        {
-            if (string.IsNullOrEmpty(jid) || _authState?.Me == null) return false;
-
-            string normalized = NormalizeJid(jid);
-            string meId = NormalizeJid(_authState.Me.Id);
-            string meLid = NormalizeJid(_authState.Me.Lid);
-
-            return normalized == meId || (!string.IsNullOrEmpty(meLid) && normalized == meLid);
-        }
+        private bool IsSelfJid(string jid) => JidAlias.IsSelfJid(jid);
 
         /// <summary>Direct / Group / Personal (self PN or LID, including aliases).</summary>
         private ChatKind ResolveChatKind(string jid)
@@ -7722,32 +7509,6 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 ApplyChatKind(chat);
             }
-        }
-
-        private static string GetBaseUserPart(string jid)
-        {
-            if (string.IsNullOrWhiteSpace(jid))
-            {
-                return null;
-            }
-
-            string trimmed = jid.Trim();
-            int atIndex = trimmed.IndexOf('@');
-            string user = atIndex > 0 ? trimmed.Substring(0, atIndex) : trimmed;
-
-            int colonIndex = user.IndexOf(':');
-            if (colonIndex > 0)
-            {
-                user = user.Substring(0, colonIndex);
-            }
-
-            int dotIndex = user.IndexOf('.');
-            if (dotIndex > 0)
-            {
-                user = user.Substring(0, dotIndex);
-            }
-
-            return user;
         }
 
         /// <summary>
@@ -7789,51 +7550,7 @@ namespace Unison.Uwp.Services.WhatsApp
             return deliverable ? ChatMessage.StatusRead : status;
         }
 
-        private bool IsSelfLinkedJid(string jid)
-        {
-            if (string.IsNullOrWhiteSpace(jid) || _authState?.Me == null)
-            {
-                return false;
-            }
-
-            string normalized = NormalizeJid(jid);
-            if (IsSelfJid(normalized))
-            {
-                return true;
-            }
-
-            if (JidAlias.TryGetValue(normalized, out var alias) && IsSelfJid(alias))
-            {
-                return true;
-            }
-
-            if (normalized.EndsWith("@s.whatsapp.net", StringComparison.OrdinalIgnoreCase) &&
-                normalized.Split('@')[0].Contains("."))
-            {
-                string user = normalized.Split('@')[0];
-                int dotIndex = user.IndexOf('.');
-                if (dotIndex > 0)
-                {
-                    string baseLid = $"{user.Substring(0, dotIndex)}@lid";
-                    if (JidAlias.TryGetValue(baseLid, out var baseAlias) && IsSelfJid(baseAlias))
-                    {
-                        return true;
-                    }
-                }
-            }
-
-            string candidateUser = GetBaseUserPart(normalized);
-            if (string.IsNullOrWhiteSpace(candidateUser))
-            {
-                return false;
-            }
-
-            string meIdUser = GetBaseUserPart(NormalizeJid(_authState.Me.Id));
-            string meLidUser = GetBaseUserPart(NormalizeJid(_authState.Me.Lid));
-
-            return string.Equals(candidateUser, meIdUser, StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(candidateUser, meLidUser, StringComparison.OrdinalIgnoreCase);
-        }
+        private bool IsSelfLinkedJid(string jid) => JidAlias.IsSelfLinked(jid);
 
         private bool IsSelfMarkerLabel(string label)
         {
