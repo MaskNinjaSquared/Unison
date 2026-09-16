@@ -4,6 +4,17 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## WhatsAppService extraction — phase 3.9b (background display-name table)
+
+- New `BackgroundDisplayNameTable.Build` in `Unison.Core/Helpers`: the address-to-name map handed to the background task, out of `PersistBackgroundDisplayNamesAsync` — 57 lines down to 6
+- This is what a toast shows while the app is not running, so a mistake here reads as a notification from `+55 11 98888-8888` instead of from Ana. Nowhere near a log
+- The precedence between its four sources used to be implied by the order of four loops and by which of them guarded with `ContainsKey`. Now stated: chat labels are the baseline, WhatsApp-learned names fill gaps only, the device address book overrides both, and PN/LID aliases mirror a name onto the identity form that lacks one without ever overwriting
+- Named `Table`, not `Snapshot`: `Unison.Background.BackgroundDisplayNameSnapshot` already exists and is the serialized envelope. This builds the `Names` map inside it
+- 18 tests, including that mirroring carries whichever name won the earlier rounds, and that an alias between two unknown addresses invents nothing
+- The client keeps what is genuinely its own: copying the live UI-thread collections before handing them over, and the write
+
+---
+
 ## WhatsAppService extraction — phase 3.9b (chat name replacement rule)
 
 - New `ChatNameReplacement.ShouldReplace` in `Unison.Core/Helpers`: whether a freshly resolved name should be written over the label a chat row is showing

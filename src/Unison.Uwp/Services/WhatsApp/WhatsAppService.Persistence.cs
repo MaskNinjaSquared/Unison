@@ -176,63 +176,12 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             try
             {
-                var displayNames =
-                    new Dictionary<string, string>(
-                        StringComparer.OrdinalIgnoreCase);
-                foreach (ChatItem chat in Chats.ToList())
-                {
-                    if (chat == null ||
-                        string.IsNullOrWhiteSpace(chat.JID) ||
-                        string.IsNullOrWhiteSpace(chat.Name))
-                    {
-                        continue;
-                    }
-                    displayNames[chat.JID] = chat.Name;
-                }
-
-                // Group participants are not necessarily present as chat rows.
-                // Include names learned from WhatsApp and prefer the user's local
-                // address-book label when both are available.
-                foreach (var pair in ContactNames.ToList())
-                {
-                    if (!string.IsNullOrWhiteSpace(pair.Key) &&
-                        !string.IsNullOrWhiteSpace(pair.Value) &&
-                        !displayNames.ContainsKey(pair.Key))
-                    {
-                        displayNames[pair.Key] = pair.Value;
-                    }
-                }
-                foreach (var pair in PhoneContactNamesByJid.ToList())
-                {
-                    if (!string.IsNullOrWhiteSpace(pair.Key) &&
-                        !string.IsNullOrWhiteSpace(pair.Value))
-                    {
-                        displayNames[pair.Key] = pair.Value;
-                    }
-                }
-
-                // Mirror known PN/LID aliases so the external envelope can resolve
-                // whichever identity form the server used for this message.
-                foreach (var alias in JidAlias.ToList())
-                {
-                    if (string.IsNullOrWhiteSpace(alias.Key) ||
-                        string.IsNullOrWhiteSpace(alias.Value))
-                    {
-                        continue;
-                    }
-
-                    string name;
-                    if (displayNames.TryGetValue(alias.Key, out name) &&
-                        !displayNames.ContainsKey(alias.Value))
-                    {
-                        displayNames[alias.Value] = name;
-                    }
-                    else if (displayNames.TryGetValue(alias.Value, out name) &&
-                             !displayNames.ContainsKey(alias.Key))
-                    {
-                        displayNames[alias.Key] = name;
-                    }
-                }
+                // Copies first: these are live UI-thread collections.
+                var displayNames = BackgroundDisplayNameTable.Build(
+                    Chats.ToList(),
+                    ContactNames.ToList(),
+                    PhoneContactNamesByJid.ToList(),
+                    JidAlias.ToList());
 
                 await BackgroundDisplayNameStore.SaveAsync(
                     displayNames,
