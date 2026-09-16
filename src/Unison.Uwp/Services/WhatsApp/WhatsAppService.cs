@@ -1301,21 +1301,13 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly Dictionary<string, Dictionary<string, PendingPinState>> _pendingPinStateByChat =
             new Dictionary<string, Dictionary<string, PendingPinState>>(StringComparer.OrdinalIgnoreCase);
 
-        private sealed class GroupReceiptState
-        {
-            public HashSet<string> DeliveredParticipants { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            public HashSet<string> ReadParticipants { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            public DateTime UpdatedUtc { get; set; } = DateTime.UtcNow;
-        }
-
         private sealed class GroupRecipientCountCacheEntry
         {
             public int RecipientCount { get; set; }
             public DateTime FetchedUtc { get; set; }
         }
 
-        private readonly Dictionary<string, GroupReceiptState> _groupReceiptStateByMessageId =
-            new Dictionary<string, GroupReceiptState>(StringComparer.Ordinal);
+        private readonly GroupReceiptTally _groupReceipts = new GroupReceiptTally();
         private readonly Dictionary<string, GroupRecipientCountCacheEntry> _groupRecipientCountByChat =
             new Dictionary<string, GroupRecipientCountCacheEntry>(StringComparer.OrdinalIgnoreCase);
 

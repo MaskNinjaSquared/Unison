@@ -98,58 +98,12 @@ namespace Unison.Uwp.Services.WhatsApp
             string status,
             int expectedRecipients)
         {
-            if (string.IsNullOrWhiteSpace(messageId) ||
-                string.IsNullOrWhiteSpace(participant) ||
-                expectedRecipients <= 0)
-            {
-                return null;
-            }
-
-            lock (_messageStateLock)
-            {
-                if (!_groupReceiptStateByMessageId.TryGetValue(messageId, out var state))
-                {
-                    state = new GroupReceiptState();
-                    _groupReceiptStateByMessageId[messageId] = state;
-                }
-
-                state.UpdatedUtc = DateTime.UtcNow;
-                if (string.Equals(status, ChatMessage.StatusRead, StringComparison.OrdinalIgnoreCase))
-                {
-                    state.ReadParticipants.Add(participant);
-                    state.DeliveredParticipants.Add(participant);
-                }
-                else if (string.Equals(status, ChatMessage.StatusDelivered, StringComparison.OrdinalIgnoreCase))
-                {
-                    state.DeliveredParticipants.Add(participant);
-                }
-
-                if (state.ReadParticipants.Count >= expectedRecipients)
-                {
-                    _groupReceiptStateByMessageId.Remove(messageId);
-                    return ChatMessage.StatusRead;
-                }
-
-                if (state.DeliveredParticipants.Count >= expectedRecipients)
-                {
-                    return ChatMessage.StatusDelivered;
-                }
-
-                // Bound the receipt cache. Completed read entries are removed above;
-                // stale entries are discarded if the user sends to many groups.
-                if (_groupReceiptStateByMessageId.Count > 500)
-                {
-                    DateTime cutoff = DateTime.UtcNow.AddDays(-1);
-                    var staleIds = _groupReceiptStateByMessageId
-                        .Where(pair => pair.Value == null || pair.Value.UpdatedUtc < cutoff)
-                        .Select(pair => pair.Key)
-                        .Take(100)
-                        .ToList();
-                    foreach (var staleId in staleIds) _groupReceiptStateByMessageId.Remove(staleId);
-                }
-            }
-
-            return null;
+            return _groupReceipts.Register(
+                messageId,
+                participant,
+                status,
+                expectedRecipients,
+                DateTime.UtcNow);
         }
 
         private async Task<int> GetExpectedGroupRecipientCountAsync(string groupJid)
