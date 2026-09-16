@@ -1990,13 +1990,16 @@ namespace Unison.Uwp.Services.WhatsApp
             _usyncGate = usyncGate ?? throw new ArgumentNullException(nameof(usyncGate));
             _avatarFetcher = avatarFetcher ?? throw new ArgumentNullException(nameof(avatarFetcher));
             _mediaCache = mediaCache ?? throw new ArgumentNullException(nameof(mediaCache));
+            JidAlias = jidAlias ?? throw new ArgumentNullException(nameof(jidAlias));
+            JidAlias.BindSelf(() => _authState?.Me?.Id, () => _authState?.Me?.Lid);
+            JidAlias.Changed += (s, e) => InvalidateChatRowIndex();
+
+            // After JidAlias: the readers below capture the table now rather than calling back
+            // into this instance later, so the property has to be set before they are built.
             var jidResolver = new JidResolver(JidAlias, this);
             _groupMetadata = new GroupMetadataReader(jidResolver);
             _receipts = new ReceiptReader(jidResolver);
             _chatState.Chats.CollectionChanged += (s, e) => InvalidateChatRowIndex();
-            JidAlias = jidAlias ?? throw new ArgumentNullException(nameof(jidAlias));
-            JidAlias.BindSelf(() => _authState?.Me?.Id, () => _authState?.Me?.Lid);
-            JidAlias.Changed += (s, e) => InvalidateChatRowIndex();
         }
 
         /// <summary>
