@@ -167,7 +167,8 @@ Self-contained first. List/persist last.
 
 | Step | Partial / area | Destination |
 |---|---|---|
-| 3.1 | `.Avatars.cs` | `ContactFacade` / `ChatAvatarPolicy` (already owns **when**; take **how**) |
+| 3.1a | Avatar cache (done) | `IAvatarCache` / `AvatarCacheService` |
+| 3.1b | Avatar fetch + apply | `ContactFacade` / `ChatAvatarPolicy` (already owns **when**; take **how**) — blocked, see below |
 | 3.2 | `.Groups.cs` | new `IGroupService` / `GroupFacade`; prefer Socket use cases via `IWhatsAppSessionProvider`, not raw `BinaryNode` on the client |
 | 3.3 | `.Media.cs` | `MessageFacade` + a UWP `MediaCacheService`. Contract already has `Ensure*AvailableAsync` |
 | 3.4 | Send (main file) | `MessageFacade` over use cases; client only “send this node” |
@@ -177,6 +178,23 @@ Self-contained first. List/persist last.
 | 3.8 | `.AppState.cs` | Each applier → the façade of that fact (subject → groups, contact name → contacts, read/pin/flags → chats, delete message → messages). `AppStateSyncService` talks to façades, not the concrete client |
 | 3.9 | `.Persistence.cs` + list sort/preview | `ChatFacade` + `ChatStateStore` + `IChatStore` / `IMessageStore`. Close the transitional public dictionaries on `ChatStateStore` |
 | 3.10 | `.IncomingPump.cs` | Decode/dispatch stays with connection; apply (row, preview, unread, toast) goes to façades |
+
+**3.1a is done.** The avatar half of `MediaCache` is `IAvatarCache` / `AvatarCacheService`: `TryGet`,
+`SaveAsync`, `DeleteIfCached`. It took `BuildSafeAvatarFileName`, `TryGetCachedAvatarUri`,
+`DownloadAndCacheAvatarAsync`, the static `AvatarHttpClient` and the file delete that was inline in
+`MarkAvatarImageLoadFailed`. Callers now pass an `AvatarVariant` instead of the `"_high"` suffix.
+`ProfileFacade` takes the cache directly, which let `CacheRemoteAvatarAsync` leave `IWhatsAppService`.
+
+**3.1b is blocked on `_usyncLock`.** The client holds one `SemaphoreSlim` over every directory-style
+IQ, and it is shared across two clusters: profile-picture lookups (3.1b — the avatars partial, the
+group-member fetch in `.Groups.cs`, and `FetchBestProfilePictureResultAsync`) and usync contact
+resolution (3.6 — `.Identity.cs` and `ResolveContactsAsync`). Moving avatar fetch out while names
+stay behind would either leave the lock in the client and force a half-move, or give the avatar path
+its own lock — which lets two IQ streams run concurrently against the surface the lock exists to
+rate-limit. The fix is to extract the gate into a small shared service (a disposable lease reads
+better than the `WaitAsync` / `lockTaken` / `Release` triples at all five sites) and inject it into
+both sides, but building it before 3.1b actually consumes it would be an abstraction with one caller.
+Do 3.1b and the gate together.
 
 **Thread affinity:** today the client mutates `Chats` on the UI thread; VMs read on the UI thread; `ChatStateStore`’s extra dictionaries are protected by that, not only by the lock. Any code moved to a façade that runs off-thread must use `UpsertChatsAsync` / `UpsertMessagesAsync` (or `IDispatcher`). Do not split 3.9 into half-moves.
 

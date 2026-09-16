@@ -4,6 +4,16 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## WhatsAppService extraction — phase 3.1a (avatar cache)
+
+- New `IAvatarCache` / `AvatarCacheService`: `TryGet`, `SaveAsync`, `DeleteIfCached` over `LocalFolder/MediaCache/Avatars`
+- Out of `WhatsAppService`: `BuildSafeAvatarFileName`, `TryGetCachedAvatarUri`, `DownloadAndCacheAvatarAsync`, the static `AvatarHttpClient`, and the file delete inlined in `MarkAvatarImageLoadFailed`
+- Callers pass an `AvatarVariant` (`Preview` / `HighResolution`) instead of a `"_high"` filename suffix
+- `ProfileFacade` takes the cache directly, so `CacheRemoteAvatarAsync` left `IWhatsAppService`
+- Avatar **fetch** policy is unchanged and still in the client; only the storage moved
+
+---
+
 ## WhatsAppService extraction — phase 2 (invert `Attach*`)
 
 - `WhatsAppService` reports instead of calling up: new `OnStreamError`, `OnInvalidSessionSuspected`, `OnLiveStatusReceived`, `OnBackgroundHistorySyncBounced`, `OnAvatarCached` and `OnJidAliasResolved` on `IWhatsAppService`, each subscribed by the façade that owns the subject
