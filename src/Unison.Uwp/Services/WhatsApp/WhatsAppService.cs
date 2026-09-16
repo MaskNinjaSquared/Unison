@@ -1446,16 +1446,12 @@ namespace Unison.Uwp.Services.WhatsApp
                 ? ToComparableUtc(chat.LastMessageTimestampUtc.Value)
                 : DateTime.MinValue;
 
-            if (!force && candidateUtc == DateTime.MinValue)
+            if (!ChatPreviewStaleness.ShouldAccept(chat.LastMessageTimestampUtc, timestamp, force))
             {
-                // Unknown timestamp: retain the message in its chat, but never let it
-                // replace a trustworthy conversation preview or jump to the top.
-                return false;
-            }
-
-            if (!force && currentUtc != DateTime.MinValue && candidateUtc < currentUtc)
-            {
-                Debug.WriteLine($"[WhatsAppService] Ignored stale preview for {chat.JID}: candidate={candidateUtc:O}, current={currentUtc:O}");
+                if (candidateUtc != DateTime.MinValue)
+                {
+                    Debug.WriteLine($"[WhatsAppService] Ignored stale preview for {chat.JID}: candidate={candidateUtc:O}, current={currentUtc:O}");
+                }
                 return false;
             }
 

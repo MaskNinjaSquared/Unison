@@ -4,6 +4,23 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Chat preview staleness gate
+
+- New `ChatPreviewStaleness.ShouldAccept` in `Unison.Core/Helpers`: the time check every preview write in `ApplyChatPreviewIfNewer` passes through, and it had no test
+- It matters because previews arrive from four directions — live messages, history catch-up, offline replay, SQLite reconciliation — and not in order. Without it, a history chunk delivered after a live message rewrites the list with something older, which reads as the conversation going backwards
+- Three behaviours were load-bearing and undeclared: an equal instant is *accepted*, because the same message often arrives again carrying a receipt or a caption it did not have the first time; a message with no usable instant is refused even on an empty row, since accepting it would also move the chat to the top on no evidence; and `force` skips everything, because a row whose stored instant is wrong would otherwise refuse the correction meant to fix it
+- 14 tests, including the pair that differs only by the `force` flag, and the store-vs-live kind cases
+
+**Found and deliberately not changed.** The no-op check below the gate compares the row's text against
+`Normalize(preview)`, while the write a few lines later sets it from `Normalize(raw)` — where `raw` has
+had an author prefix peeled off when no explicit `authorPrefix` was passed. When a group preview carries
+its author inline, those two are different strings, so the check cannot match and the row is rewritten
+with identical content. That is a wasted change notification and a repaint, not wrong output. Left alone:
+it needs the device pass to confirm the repaint is real before restructuring a normalization path that
+four callers depend on.
+
+---
+
 ## Audit — raw DateTime comparisons in the chat list
 
 Swept the client for the defect found while extracting `ChatPreviewTip.PickLatest`, on the rule now
