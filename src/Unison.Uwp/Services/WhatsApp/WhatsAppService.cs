@@ -806,6 +806,12 @@ namespace Unison.Uwp.Services.WhatsApp
             public bool IsFromMe { get; set; }
             public int UnreadDelta { get; set; }
             public ChatPreviewKind Kind { get; set; }
+
+            /// <summary>
+            /// Delivery status of the message this summary describes, so the list shows the
+            /// ticks the message actually has after a replay rather than assuming "sent".
+            /// </summary>
+            public string Status { get; set; }
         }
 
         private readonly object _offlineReplayUiLock = new object();
@@ -5515,29 +5521,12 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private static int GetMessageStatusRank(string status)
         {
-            switch ((status ?? string.Empty).ToLowerInvariant())
-            {
-                case ChatMessage.StatusPending: return 0;
-                case ChatMessage.StatusSent: return 1;
-                case ChatMessage.StatusDelivered: return 2;
-                case ChatMessage.StatusRead: return 3;
-                case ChatMessage.StatusFailed: return -1;
-                default: return 0;
-            }
+            return MessageStatusProgression.Rank(status);
         }
 
         private static bool ShouldApplyMessageStatus(string current, string incoming)
         {
-            if (string.IsNullOrWhiteSpace(incoming)) return false;
-            if (string.Equals(current, incoming, StringComparison.OrdinalIgnoreCase)) return false;
-
-            if (string.Equals(incoming, ChatMessage.StatusFailed, StringComparison.OrdinalIgnoreCase))
-            {
-                // A late error cannot undo proof that the recipient already received/read it.
-                return GetMessageStatusRank(current) < GetMessageStatusRank(ChatMessage.StatusDelivered);
-            }
-
-            return GetMessageStatusRank(incoming) > GetMessageStatusRank(current);
+            return MessageStatusProgression.ShouldApply(current, incoming);
         }
 
         private static string MapWebMessageStatus(Proto.WebMessageInfo message)

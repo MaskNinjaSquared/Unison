@@ -2181,7 +2181,8 @@ namespace Unison.Uwp.Services.WhatsApp
                             isGroup,
                             isActuallyFromMe,
                             countUnread: false,
-                            previewKind);
+                            previewKind,
+                            chatMessage.Status);
                     }
                     if (!e.IsOffline)
                     {
@@ -2250,7 +2251,8 @@ namespace Unison.Uwp.Services.WhatsApp
                             isGroup,
                             isActuallyFromMe,
                             countUnread: false,
-                            previewKind);
+                            previewKind,
+                            chatMessage.Status);
                     }
                     if (!e.IsOffline)
                     {
@@ -2277,7 +2279,8 @@ namespace Unison.Uwp.Services.WhatsApp
                         isGroup,
                         isActuallyFromMe,
                         countUnread: true,
-                        previewKind);
+                        previewKind,
+                        chatMessage.Status);
                     QueueOfflineReplayMessageForPersist(jid, chatMessage);
 
                     if (IsActiveChatJid(jid))
@@ -2478,7 +2481,8 @@ namespace Unison.Uwp.Services.WhatsApp
             bool isGroup,
             bool isFromMe,
             bool countUnread,
-            ChatPreviewKind kind = ChatPreviewKind.Text)
+            ChatPreviewKind kind = ChatPreviewKind.Text,
+            string status = null)
         {
             string canonical = GetCanonicalJid(NormalizeJid(jid));
             if (string.IsNullOrWhiteSpace(canonical))
@@ -2512,6 +2516,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     summary.IsGroup = isGroup;
                     summary.IsFromMe = isFromMe;
                     summary.Kind = kind;
+                    summary.Status = status;
                 }
 
                 if (countUnread && !isFromMe && !IsActiveChatJid(canonical))
@@ -2618,9 +2623,7 @@ namespace Unison.Uwp.Services.WhatsApp
                                     null,
                                     null,
                                     summary.IsFromMe,
-                                    summary.IsFromMe
-                                        ? MessageSendState.Sent
-                                        : MessageSendState.NotApplicable))
+                                    HistoryLiveMessageMapper.FromStatus(summary.Status, summary.IsFromMe)))
                             {
                                 updated++;
                             }
@@ -2669,9 +2672,15 @@ namespace Unison.Uwp.Services.WhatsApp
                             if (ChatMessageOrder.ToComparableUtc(pair.Value.Timestamp) >
                                 ChatMessageOrder.ToComparableUtc(current.Timestamp))
                             {
+                                // Every field describing the preview has to move with it.
+                                // Leaving authorship or kind behind pairs one message's text
+                                // with another message's ticks.
                                 current.Timestamp = pair.Value.Timestamp;
                                 current.Preview = pair.Value.Preview;
                                 current.IsGroup = pair.Value.IsGroup;
+                                current.IsFromMe = pair.Value.IsFromMe;
+                                current.Kind = pair.Value.Kind;
+                                current.Status = pair.Value.Status;
                             }
                             current.UnreadDelta += pair.Value.UnreadDelta;
                         }

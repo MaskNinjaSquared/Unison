@@ -4,6 +4,32 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Send status — the ticks rule, and two defects in the replay path
+
+`ShouldApplyMessageStatus` and `GetMessageStatusRank` are now `MessageStatusProgression` in
+`Unison.Core/Helpers`, with 20 tests. They decide the ticks on every message the user sends and were
+consulted from four places without a single test.
+
+The rule is a ratchet, not an assignment, and the tests are written as the sequences that actually
+arrive: receipts are not ordered, so a delivery receipt can land after the read receipt it preceded,
+and taking the latest would flicker the ticks backwards in front of the user. The asymmetry worth
+knowing is failure — a late error cannot undo proof that the message arrived, so it is believed while
+the message might still be in flight and ignored once delivered or read. A failed message can still
+recover, because failure sits below the ladder rather than on it.
+
+**Ticks were wrong after an offline replay.** `ApplyOfflineReplayUiSummariesAsync` hardcoded
+`MessageSendState.Sent` for anything the user had sent, ignoring the status the message actually
+carried — so after reconnecting, a message already read showed one tick, and a failed one showed as
+sent. The replay summary did not carry the status at all; it does now, and the list asks
+`HistoryLiveMessageMapper.FromStatus` like every other path does.
+
+**The replay rollback merge moved half a preview.** When two summaries for the same conversation were
+reconciled, the newer one's text and timestamp were copied over but its authorship and kind were left
+behind — pairing one message's text with another message's ticks. All the fields describing the preview
+now move together.
+
+---
+
 ## Seven defects found by auditing the incoming path
 
 An audit of `IncomingPump`, `Media`/send and `Groups`/usync turned up more defects than extraction
