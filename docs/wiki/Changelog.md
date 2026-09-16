@@ -4,6 +4,30 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Media preview markers — one source, and a reported bug that was not one
+
+The `[Image]` / `[Voice Message]` markers were being assembled by hand in six places across
+`IncomingPump`, `WhatsAppService` and `ChatPreviewMessageFactory`. They are now `MediaPreviewTag` in
+`Unison.Core/Helpers`.
+
+These look like display strings but behave like a wire format: `BackgroundNotification` matches them —
+including their legacy Portuguese spellings — to choose an icon and a localized label, and
+`HistoryMessageMapper` strips them when reading old rows so they never resurface as a caption.
+Rewording one does not change what the user sees; it silently stops the marker being recognised and
+leaks the raw text into a notification. The tests assert the exact spellings for that reason.
+`Unison.Background` keeps its own copy because it cannot reference `Unison.Core`; the two lists have to
+move together, and that is now written down in both.
+
+**The audio/voice bug that prompted this does not exist.** The audit reported that
+`ChatPreviewMessageFactory` mapped both `Voice` and `Audio` to `[Voice Message]`, so a shared music file
+would be announced as a voice note. Following it through: `ChatPreviewKind` has no `Audio` member at
+all — both land on `Voice` deliberately, because that enum drives the list icon and template, where the
+two are presented identically. The distinction is carried alongside in `IsVoiceNote`, which
+`HistoryMessageMapper` reads to recover the real kind. The `Audio` branch is unreachable through that
+factory, and the behaviour is by design. Recorded as a test so the next reader does not re-open it.
+
+---
+
 ## Send status — the ticks rule, and two defects in the replay path
 
 `ShouldApplyMessageStatus` and `GetMessageStatusRank` are now `MessageStatusProgression` in

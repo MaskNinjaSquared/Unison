@@ -91,16 +91,17 @@ namespace Unison.Core.Helpers
             switch (kind)
             {
                 case ChatMessageKind.Image:
-                    return "[Image]";
+                    return MediaPreviewTag.Image;
                 case ChatMessageKind.Video:
-                    return "[Video]";
+                    return MediaPreviewTag.Video;
                 case ChatMessageKind.Sticker:
-                    return "[Sticker]";
+                    return MediaPreviewTag.Sticker;
                 case ChatMessageKind.Voice:
+                    return MediaPreviewTag.Voice;
                 case ChatMessageKind.Audio:
-                    return "[Voice Message]";
+                    return MediaPreviewTag.Audio;
                 case ChatMessageKind.Document:
-                    return "[Document]";
+                    return MediaPreviewTag.Document;
                 default:
                     return string.Empty;
             }

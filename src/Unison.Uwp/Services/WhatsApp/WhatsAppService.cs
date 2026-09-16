@@ -6072,7 +6072,7 @@ namespace Unison.Uwp.Services.WhatsApp
             string normJid = NormalizeJid(jid);
 
             string msgId = await Task.Run(async () => await _socket.SendImageMessageAsync(jid, imageBytes, caption));
-            string preview = string.IsNullOrWhiteSpace(caption) ? "[Image]" : $"[Image] {caption}";
+            string preview = MediaPreviewTag.ForImage(caption);
             string localUri = await SaveImageBytesToCacheAsync(imageBytes, msgId + "_out", "image/jpeg");
 
             var msg = new ChatMessage
@@ -6110,7 +6110,7 @@ namespace Unison.Uwp.Services.WhatsApp
             if (audioBytes == null || audioBytes.Length == 0) throw new ArgumentException("Audio payload is empty", nameof(audioBytes));
             string normJid = GetCanonicalJid(NormalizeJid(jid));
             string msgId = await _socket.SendAudioMessageAsync(jid, audioBytes, mimeType, durationSeconds, isVoiceMessage);
-            string preview = isVoiceMessage ? "[Voice Message]" : "[Audio]";
+            string preview = MediaPreviewTag.ForAudio(isVoiceMessage);
             string localUri = await SaveAudioBytesToCacheAsync(audioBytes, msgId + "_out", mimeType);
             var msg = new ChatMessage
             {

@@ -1079,7 +1079,7 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 return new MessageRenderInfo
                 {
-                    Content = "[Sticker]",
+                    Content = MediaPreviewTag.Sticker,
                     IsSticker = true,
                     StickerMessage = unwrapped.StickerMessage
                 };
@@ -1089,7 +1089,7 @@ namespace Unison.Uwp.Services.WhatsApp
             if (unwrapped.ImageMessage != null)
             {
                 string caption = unwrapped.ImageMessage.Caption ?? "";
-                string preview = string.IsNullOrWhiteSpace(caption) ? "[Image]" : $"[Image] {caption}";
+                string preview = MediaPreviewTag.ForImage(caption);
                 return new MessageRenderInfo
                 {
                     Content = preview,
@@ -1104,9 +1104,7 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 return new MessageRenderInfo
                 {
-                    Content = !string.IsNullOrEmpty(unwrapped.VideoMessage.Caption)
-                        ? $"[Video] {unwrapped.VideoMessage.Caption}"
-                        : "[Video]",
+                    Content = MediaPreviewTag.ForVideo(unwrapped.VideoMessage.Caption),
                     IsVideo = true,
                     Caption = unwrapped.VideoMessage.Caption ?? "",
                     VideoMessage = unwrapped.VideoMessage
@@ -1118,9 +1116,7 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 return new MessageRenderInfo
                 {
-                    Content = !string.IsNullOrEmpty(unwrapped.DocumentMessage.FileName)
-                        ? $"[Document] {unwrapped.DocumentMessage.FileName}"
-                        : "[Document]",
+                    Content = MediaPreviewTag.ForDocument(unwrapped.DocumentMessage.FileName),
                     IsDocument = true,
                     DocumentMessage = unwrapped.DocumentMessage
                 };
@@ -1132,7 +1128,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 bool isVoice = unwrapped.AudioMessage.Ptt == true;
                 return new MessageRenderInfo
                 {
-                    Content = isVoice ? "[Voice Message]" : "[Audio]",
+                    Content = MediaPreviewTag.ForAudio(isVoice),
                     IsAudio = true,
                     IsVoice = isVoice,
                     AudioMessage = unwrapped.AudioMessage
