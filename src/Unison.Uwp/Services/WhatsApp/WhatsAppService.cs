@@ -247,6 +247,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private IMessageStore _messageStore = new MessageStore();
         private readonly IHistoryMessageStore _historyMessages;
         private readonly IHistoryChatPreviewStore _chatPreviews;
+        private readonly IAvatarCache _avatarCache;
         private IMessageService _messageService;
         private IContactService _contactService;
         private IPersonStore _personStore;
@@ -758,7 +759,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private static readonly TimeSpan AvatarFetchNextBatchDelay = TimeSpan.FromSeconds(20);
         // Also used by ContactService (duplicated) when composing an avatar-miss failure reason.
         private const string GroupAvatarFallbackMissReason = "group-avatar-fallback-miss";
-        private static readonly System.Net.Http.HttpClient AvatarHttpClient = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
         private DateTime _replayDrainCompletedUtc = DateTime.MinValue;
         private DateTime _lastPostReplayLiveActivityUtc = DateTime.MinValue;
         private static readonly TimeSpan[] PostReplayAppStateFollowUpDelays =
@@ -2146,7 +2146,8 @@ namespace Unison.Uwp.Services.WhatsApp
         private WhatsAppService(
             ChatStateStore chatState,
             IHistoryMessageStore historyMessages,
-            IHistoryChatPreviewStore chatPreviews)
+            IHistoryChatPreviewStore chatPreviews,
+            IAvatarCache avatarCache)
         {
             if (chatState == null)
             {
@@ -2156,6 +2157,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _chatState = chatState;
             _historyMessages = historyMessages ?? throw new ArgumentNullException(nameof(historyMessages));
             _chatPreviews = chatPreviews ?? throw new ArgumentNullException(nameof(chatPreviews));
+            _avatarCache = avatarCache ?? throw new ArgumentNullException(nameof(avatarCache));
             _chatState.Chats.CollectionChanged += (s, e) => InvalidateChatRowIndex();
             JidAlias = new NotifyingJidAliasMap(InvalidateChatRowIndex);
         }
@@ -2167,9 +2169,11 @@ namespace Unison.Uwp.Services.WhatsApp
         internal static WhatsAppService Create(
             ChatStateStore chatState,
             IHistoryMessageStore historyMessages,
-            IHistoryChatPreviewStore chatPreviews)
+            IHistoryChatPreviewStore chatPreviews,
+            IAvatarCache avatarCache)
         {
-            return _instance ?? (_instance = new WhatsAppService(chatState, historyMessages, chatPreviews));
+            return _instance ?? (_instance =
+                new WhatsAppService(chatState, historyMessages, chatPreviews, avatarCache));
         }
 
         /// <summary>
@@ -4167,74 +4171,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 !string.IsNullOrWhiteSpace(c.AvatarUrl));
         }
 
-        private static bool TryGetCachedAvatarUri(string jid, out string localUri, out DateTime fetchedAtUtc, string suffix = null)
-        {
-            localUri = null;
-            fetchedAtUtc = DateTime.MinValue;
-
-            if (string.IsNullOrWhiteSpace(jid))
-            {
-                return false;
-            }
-
-            try
-            {
-                string fileName = BuildSafeAvatarFileName(jid, suffix);
-                string filePath = System.IO.Path.Combine(
-                    ApplicationData.Current.LocalFolder.Path,
-                    "MediaCache",
-                    "Avatars",
-                    fileName);
-
-                if (!System.IO.File.Exists(filePath))
-                {
-                    return false;
-                }
-
-                localUri = $"ms-appdata:///local/MediaCache/Avatars/{fileName}";
-                fetchedAtUtc = System.IO.File.GetLastWriteTimeUtc(filePath);
-                if (fetchedAtUtc == DateTime.MinValue)
-                {
-                    fetchedAtUtc = DateTime.UtcNow;
-                }
-
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WhatsAppService] Failed to check cached avatar for {jid}: {ex.Message}");
-                return false;
-            }
-        }
-
-        private async Task<string> DownloadAndCacheAvatarAsync(string jid, string remoteUrl, CancellationToken token, string suffix = null)
-        {
-            if (string.IsNullOrWhiteSpace(remoteUrl))
-            {
-                return null;
-            }
-
-            token.ThrowIfCancellationRequested();
-            byte[] bytes = await AvatarHttpClient.GetByteArrayAsync(remoteUrl);
-            token.ThrowIfCancellationRequested();
-
-            if (bytes == null || bytes.Length == 0)
-            {
-                return null;
-            }
-
-            var local = ApplicationData.Current.LocalFolder;
-            var mediaFolder = await local.CreateFolderAsync("MediaCache", CreationCollisionOption.OpenIfExists);
-            var avatarFolder = await mediaFolder.CreateFolderAsync("Avatars", CreationCollisionOption.OpenIfExists);
-            string fileName = BuildSafeAvatarFileName(jid, suffix);
-            var file = await avatarFolder.CreateFileAsync(fileName, CreationCollisionOption.ReplaceExisting);
-            await FileIO.WriteBytesAsync(file, bytes);
-
-            string localUri = $"ms-appdata:///local/MediaCache/Avatars/{fileName}";
-            Debug.WriteLine($"[WhatsAppService] Cached avatar image for {jid}: bytes={bytes.Length}, file={file.Path}, uri={localUri}");
-            return localUri;
-        }
-
         private async Task ApplyAvatarResultAsync(ChatItem chat, ProfilePictureResult result, CancellationToken token)
         {
             if (chat == null || result == null)
@@ -4248,7 +4184,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 string localUri = null;
                 try
                 {
-                    localUri = await DownloadAndCacheAvatarAsync(chat.JID, result.Url, token);
+                    localUri = await _avatarCache.SaveAsync(chat.JID, result.Url, AvatarVariant.Preview, token);
                 }
                 catch (Exception ex)
                 {

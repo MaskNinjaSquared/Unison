@@ -1102,9 +1102,10 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 if (!string.IsNullOrWhiteSpace(result?.Url))
                 {
-                    string localUri = await DownloadAndCacheAvatarAsync(
+                    string localUri = await _avatarCache.SaveAsync(
                         member.Jid,
                         result.Url,
+                        AvatarVariant.Preview,
                         token);
                     if (!string.IsNullOrWhiteSpace(localUri))
                     {

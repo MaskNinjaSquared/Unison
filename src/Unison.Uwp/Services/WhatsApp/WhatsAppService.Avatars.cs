@@ -79,7 +79,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             string cached;
             DateTime fetchedAtUtc;
-            if (TryGetCachedAvatarUri(chat.JID, out cached, out fetchedAtUtc, "_high"))
+            if (_avatarCache.TryGet(chat.JID, AvatarVariant.HighResolution, out cached, out fetchedAtUtc))
             {
                 await RunOnUiThreadAsync(() => chat.AvatarHighUrl = cached);
                 return;
@@ -116,11 +116,11 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 try
                 {
-                    string localUri = await DownloadAndCacheAvatarAsync(
+                    string localUri = await _avatarCache.SaveAsync(
                         chat.JID,
                         result.Url,
-                        CancellationToken.None,
-                        "_high");
+                        AvatarVariant.HighResolution,
+                        CancellationToken.None);
                     if (string.IsNullOrWhiteSpace(localUri))
                     {
                         continue;
@@ -211,7 +211,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     {
                         string localUri;
                         DateTime fetchedAtUtc;
-                        if (TryGetCachedAvatarUri(candidate.Jid, out localUri, out fetchedAtUtc))
+                        if (_avatarCache.TryGet(candidate.Jid, AvatarVariant.Preview, out localUri, out fetchedAtUtc))
                         {
                             previewHits[candidate.Jid] = Tuple.Create(localUri, fetchedAtUtc);
                         }
@@ -221,7 +221,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     {
                         string highUri;
                         DateTime highFetchedAtUtc;
-                        if (TryGetCachedAvatarUri(candidate.Jid, out highUri, out highFetchedAtUtc, "_high"))
+                        if (_avatarCache.TryGet(candidate.Jid, AvatarVariant.HighResolution, out highUri, out highFetchedAtUtc))
                         {
                             highHits[candidate.Jid] = highUri;
                         }
@@ -276,39 +276,6 @@ namespace Unison.Uwp.Services.WhatsApp
             public bool NeedsHigh;
         }
 
-        private static string BuildSafeAvatarFileName(string jid, string suffix = null)
-        {
-            string source = string.IsNullOrWhiteSpace(jid) ? Guid.NewGuid().ToString("N") : jid;
-            var chars = source
-                .Select(c => char.IsLetterOrDigit(c) ? c : '_')
-                .ToArray();
-            string safe = new string(chars).Trim('_');
-            if (string.IsNullOrWhiteSpace(safe))
-            {
-                safe = Guid.NewGuid().ToString("N");
-            }
-            if (safe.Length > 96)
-            {
-                safe = safe.Substring(0, 96);
-            }
-
-            if (!string.IsNullOrWhiteSpace(suffix))
-            {
-                return safe + suffix + ".jpg";
-            }
-
-            return safe + ".jpg";
-        }
-
-        /// <summary>
-        /// Downloads a remote avatar into LocalFolder/MediaCache/Avatars (JID-named file).
-        /// Used by chat avatar batch and <see cref="ProfileFacade"/>.
-        /// </summary>
-        public Task<string> CacheRemoteAvatarAsync(string jid, string remoteUrl, CancellationToken token)
-        {
-            return DownloadAndCacheAvatarAsync(jid, remoteUrl, token);
-        }
-
         private async Task<bool> TryApplyGroupAvatarFallbackAsync(ChatItem chat, ProfilePictureResult originalResult, CancellationToken token)
         {
             if (chat == null || !chat.IsGroup || _socket == null || !ShouldTryGroupAvatarFallback(originalResult))
@@ -351,7 +318,11 @@ namespace Unison.Uwp.Services.WhatsApp
                         continue;
                     }
 
-                    string localUri = await DownloadAndCacheAvatarAsync(chat.JID, fallbackResult.Url, token);
+                    string localUri = await _avatarCache.SaveAsync(
+                        chat.JID,
+                        fallbackResult.Url,
+                        AvatarVariant.Preview,
+                        token);
                     if (string.IsNullOrWhiteSpace(localUri))
                     {
                         continue;
@@ -490,31 +461,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            string failedUrl = chat.AvatarUrl;
-            if (!string.IsNullOrWhiteSpace(failedUrl) &&
-                failedUrl.StartsWith("ms-appdata:///local/MediaCache/Avatars/", StringComparison.OrdinalIgnoreCase))
-            {
-                try
-                {
-                    int slashIndex = failedUrl.LastIndexOf('/');
-                    string fileName = slashIndex >= 0 && slashIndex < failedUrl.Length - 1
-                        ? failedUrl.Substring(slashIndex + 1)
-                        : BuildSafeAvatarFileName(chat.JID);
-                    string filePath = System.IO.Path.Combine(
-                        ApplicationData.Current.LocalFolder.Path,
-                        "MediaCache",
-                        "Avatars",
-                        fileName);
-                    if (System.IO.File.Exists(filePath))
-                    {
-                        System.IO.File.Delete(filePath);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[WhatsAppService] Failed to remove broken avatar cache for {chat.JID}: {ex.Message}");
-                }
-            }
+            _avatarCache.DeleteIfCached(chat.AvatarUrl);
 
             // Nao mantenha uma URI local quebrada nem aplique o backoff de 30 minutos:
             // isso fazia a foto desaparecer durante toda a sessao. A linha visivel pede
@@ -575,7 +522,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             try
             {
-                return await DownloadAndCacheAvatarAsync(jid, result.Url, CancellationToken.None);
+                return await _avatarCache.SaveAsync(jid, result.Url, AvatarVariant.Preview, CancellationToken.None);
             }
             catch (Exception ex)
             {

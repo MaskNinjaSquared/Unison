@@ -228,11 +228,13 @@ namespace Unison.Uwp
             services.AddSingleton<IHistoryMessageStore, HistoryMessageStore>();
             services.AddSingleton<IHistoryStatusStore, HistoryStatusStore>();
 
+            services.AddSingleton<IAvatarCache, AvatarCacheService>();
             services.AddSingleton<IWhatsAppService>(
                 sp => WhatsAppService.Create(
                     sp.GetRequiredService<ChatStateStore>(),
                     sp.GetRequiredService<IHistoryMessageStore>(),
-                    sp.GetRequiredService<IHistoryChatPreviewStore>()));
+                    sp.GetRequiredService<IHistoryChatPreviewStore>(),
+                    sp.GetRequiredService<IAvatarCache>()));
             // Asking "is this the same person?" no longer means naming the client. The table is
             // still built there; only the question moved.
             services.AddSingleton<IJidResolver>(
@@ -247,7 +249,8 @@ namespace Unison.Uwp
 
             services.AddSingleton<IProfileService>(sp => new ProfileFacade(
                 sp.GetRequiredService<IWhatsAppSessionProvider>(),
-                sp.GetRequiredService<IWhatsAppService>()));
+                sp.GetRequiredService<IWhatsAppService>(),
+                sp.GetRequiredService<IAvatarCache>()));
 
             // Falls back to the service's own resync when the socket is down and the session
             // provider has nothing to give it.

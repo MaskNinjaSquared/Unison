@@ -334,9 +334,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>Delegates to <see cref="IContactService"/> (owns batch/backoff policy); kept for legacy callers.</summary>
         Task RetrieveContactPicturesCoreAsync(CancellationToken cancellationToken = default(CancellationToken));
 
-        /// <summary>Downloads a remote avatar URL into local MediaCache.</summary>
-        Task<string> CacheRemoteAvatarAsync(string jid, string remoteUrl, CancellationToken cancellationToken = default(CancellationToken));
-
         /// <summary>True when the noise handshake completed and IQ calls are safe.</summary>
         bool IsTransportReady { get; }
 
