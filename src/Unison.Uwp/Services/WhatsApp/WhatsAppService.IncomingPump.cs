@@ -830,26 +830,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private static Proto.ContextInfo GetContextInfo(Proto.Message unwrapped)
         {
-            if (unwrapped == null)
-            {
-                return null;
-            }
-
-            return unwrapped.ExtendedTextMessage?.ContextInfo
-                ?? unwrapped.ImageMessage?.ContextInfo
-                ?? unwrapped.VideoMessage?.ContextInfo
-                ?? unwrapped.AudioMessage?.ContextInfo
-                ?? unwrapped.DocumentMessage?.ContextInfo
-                ?? unwrapped.StickerMessage?.ContextInfo
-                ?? unwrapped.ButtonsMessage?.ContextInfo
-                ?? unwrapped.ButtonsResponseMessage?.ContextInfo
-                ?? unwrapped.TemplateButtonReplyMessage?.ContextInfo
-                ?? unwrapped.ListMessage?.ContextInfo
-                ?? unwrapped.ListResponseMessage?.ContextInfo
-                ?? unwrapped.InteractiveMessage?.ContextInfo
-                ?? unwrapped.ContactMessage?.ContextInfo
-                ?? unwrapped.LocationMessage?.ContextInfo
-                ?? unwrapped.LiveLocationMessage?.ContextInfo;
+            return HistorySyncContentFilter.GetContextInfo(unwrapped);
         }
 
         private void ApplyContextInfoExtras(

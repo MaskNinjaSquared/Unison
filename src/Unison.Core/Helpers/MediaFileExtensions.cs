@@ -91,5 +91,50 @@ namespace Unison.Core.Helpers
             return uri.EndsWith(".ogg", StringComparison.OrdinalIgnoreCase) ||
                    uri.EndsWith(".opus", StringComparison.OrdinalIgnoreCase);
         }
+
+        /// <summary>
+        /// Containers the platform media player can open directly.
+        /// </summary>
+        private static readonly string[] PlayableAudioExtensions = { ".m4a", ".mp3", ".mp4", ".wav" };
+
+        /// <summary>
+        /// Whether a file at this address can be played without conversion.
+        /// </summary>
+        public static bool IsAlreadyPlayableAudio(string uri)
+        {
+            if (string.IsNullOrWhiteSpace(uri))
+            {
+                return false;
+            }
+
+            for (int i = 0; i < PlayableAudioExtensions.Length; i++)
+            {
+                if (uri.EndsWith(PlayableAudioExtensions[i], StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Whether a voice note has to be converted before it can be played.
+        /// </summary>
+        /// <remarks>
+        /// WhatsApp sends voice notes as Ogg/Opus, which Windows Phone cannot open. The
+        /// address is checked after the mime type because a file already converted keeps
+        /// the original mime while sitting in a playable container — converting it again
+        /// would be wasted work on every replay.
+        /// </remarks>
+        public static bool NeedsAudioTranscode(string mimeType, string uri)
+        {
+            if (!IsOggOpusMime(mimeType) && !LooksLikeOggUri(uri))
+            {
+                return false;
+            }
+
+            return !IsAlreadyPlayableAudio(uri);
+        }
     }
 }

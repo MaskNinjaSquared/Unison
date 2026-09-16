@@ -2453,8 +2453,8 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private static string ToBase64Url(byte[] data)
         {
-            if (data == null || data.Length == 0) return Guid.NewGuid().ToString("N");
-            return Convert.ToBase64String(data).Replace("+", "-").Replace("/", "_").TrimEnd('=');
+            string encoded = MediaCacheNaming.ToUrlSafeBase64(data);
+            return string.IsNullOrEmpty(encoded) ? Guid.NewGuid().ToString("N") : encoded;
         }
 
         private static ChatPreviewKind ResolvePreviewKind(ChatMessage message, MessageRenderInfo renderInfo)
@@ -5887,12 +5887,8 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         private static bool IsTransportFailure(Exception ex, IWhatsAppSocket socket)
         {
-            if (ex is TimeoutException || ex is IOException || ex is TaskCanceledException)
-            {
-                return true;
-            }
-
-            return socket == null || !socket.IsConnected || !socket.IsHandshakeComplete;
+            bool socketUsable = socket != null && socket.IsConnected && socket.IsHandshakeComplete;
+            return OutgoingFailureClassification.IsTransportFailure(ex, socketUsable);
         }
 
         private void InvalidateCurrentSocket(IWhatsAppSocket socket, string reason)
@@ -7337,16 +7333,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </remarks>
         private string ApplyChatStatusPolicy(string chatJid, string status)
         {
-            if (string.IsNullOrWhiteSpace(status) || !IsSelfLinkedJid(chatJid))
-            {
-                return status;
-            }
-
-            bool deliverable =
-                string.Equals(status, ChatMessage.StatusSent, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(status, ChatMessage.StatusDelivered, StringComparison.OrdinalIgnoreCase);
-
-            return deliverable ? ChatMessage.StatusRead : status;
+            return SelfChatStatusPolicy.Resolve(status, IsSelfLinkedJid(chatJid));
         }
 
         private bool IsSelfLinkedJid(string jid) => JidAlias.IsSelfLinked(jid);

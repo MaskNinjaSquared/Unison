@@ -4,6 +4,41 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Batch: five duplicated rules from the media and send paths
+
+One pass over the remaining audit findings that were confirmed pure and testable. The large ones
+(`ExtractMessageRenderInfo`, the two parallel usync pipelines) are deliberately not here — those change
+control flow and belong with a device pass.
+
+**`MediaCacheNaming`** — the name a cached media file gets on disk, previously written by hand in six
+places in two variants that had drifted in their fallbacks. The name derives from the message's
+encrypted-content hash rather than its id, so the same photo forwarded into two conversations is one
+file instead of two, and base64 is rewritten into the URL-safe alphabet because `/` would otherwise read
+as a directory separator. The tests cover what fails silently: stability (an unstable name re-downloads
+on every open), uniqueness (a shared name serves the wrong file), and that a path traversal cannot
+survive sanitizing, since these names partly derive from server-supplied values.
+
+**`MediaFileExtensions.NeedsAudioTranscode`** — whether a voice note has to be converted before it can
+play. The order of the two checks is load-bearing and now has a test saying why: a file already
+converted keeps its original Ogg mime while sitting in a playable container, so testing the mime alone
+would re-transcode it on every replay.
+
+**`SelfChatStatusPolicy`** — in the conversation a user has with themselves there is no second party to
+deliver to, so anything that reached the server shows as read rather than waiting forever on a receipt
+that will never arrive. Pending and failed pass through, because whether it got out at all is still a
+real question.
+
+**`OutgoingFailureClassification.IsTransportFailure`** — whether a failed send condemns the connection
+or just the message. Both directions are expensive: tearing down a healthy socket over one refused
+message makes every other conversation pay for it, while calling a dead connection a message problem
+leaves every later send failing the same way.
+
+**`GetContextInfo`** — a fourteen-branch chain duplicated verbatim in `IncomingPump` and
+`HistorySyncContentFilter`. Deleted the local copy; the live path now calls Core, as `UnwrapMessage`
+directly above it already did.
+
+---
+
 ## Media preview markers — one source, and a reported bug that was not one
 
 The `[Image]` / `[Voice Message]` markers were being assembled by hand in six places across

@@ -344,17 +344,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return sourceUri;
             }
 
-            bool needsTranscode = IsOggOpusMime(message.AudioMimeType) || LooksLikeOggUri(sourceUri);
-            if (!needsTranscode)
-            {
-                return sourceUri;
-            }
-
-            // Already on a playable container.
-            if (sourceUri.EndsWith(".m4a", StringComparison.OrdinalIgnoreCase) ||
-                sourceUri.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase) ||
-                sourceUri.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase) ||
-                sourceUri.EndsWith(".wav", StringComparison.OrdinalIgnoreCase))
+            if (!MediaFileExtensions.NeedsAudioTranscode(message.AudioMimeType, sourceUri))
             {
                 return sourceUri;
             }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
+using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Windows.Storage;
 
@@ -198,10 +199,8 @@ namespace Unison.Uwp.Services.WhatsApp.History
                 return null;
             }
 
-            string fileBase = SanitizeCacheFileBase(
-                !string.IsNullOrWhiteSpace(fileEncSha256Base64)
-                    ? ToBase64Url(fileEncSha256Base64) + "_thumb"
-                    : (messageId ?? Guid.NewGuid().ToString("N")) + "_thumb");
+            string fileBase = MediaCacheNaming.Sanitize(
+                MediaCacheNaming.ResolveFileBase(fileEncSha256Base64, messageId) + "_thumb");
             string ext = png ? ".png" : ".jpg";
             string fileName = fileBase + ext;
             string path = Path.Combine(folder, fileName);
@@ -223,35 +222,5 @@ namespace Unison.Uwp.Services.WhatsApp.History
                    bytes[3] == 0x47;
         }
 
-        private static string ToBase64Url(string standardBase64)
-        {
-            if (string.IsNullOrWhiteSpace(standardBase64))
-            {
-                return string.Empty;
-            }
-
-            return standardBase64.Trim().Replace('+', '-').Replace('/', '_').TrimEnd('=');
-        }
-
-        private static string SanitizeCacheFileBase(string fileBase)
-        {
-            if (string.IsNullOrWhiteSpace(fileBase))
-            {
-                return Guid.NewGuid().ToString("N");
-            }
-
-            char[] chars = fileBase.ToCharArray();
-            for (int i = 0; i < chars.Length; i++)
-            {
-                char c = chars[i];
-                if (!(char.IsLetterOrDigit(c) || c == '-' || c == '_'))
-                {
-                    chars[i] = '_';
-                }
-            }
-
-            string sanitized = new string(chars);
-            return sanitized.Length > 80 ? sanitized.Substring(0, 80) : sanitized;
-        }
     }
 }
