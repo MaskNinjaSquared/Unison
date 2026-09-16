@@ -583,7 +583,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     })
                     .OrderBy(candidate => candidate.PlaceholderRequestCount)
                     .ThenByDescending(IsPeerOrSelfMissingMessage)
-                    .ThenByDescending(candidate => candidate.MessageTimestamp)
+                    .ThenByDescending(candidate => ChatMessageOrder.ToComparableUtc(candidate.MessageTimestamp))
                     .ThenByDescending(candidate => candidate.LastSeenUtc)
                     .ToList();
 
@@ -716,7 +716,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     var messages = group
                         .Select(item => item.Message)
                         .Where(message => message != null)
-                        .OrderBy(message => message.Timestamp)
+                        .OrderBy(message => ChatMessageOrder.ToComparableUtc(message.Timestamp))
                         .ToList();
                     if (messages.Count == 0)
                     {
@@ -947,17 +947,14 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private static bool IsValidMessageTimestamp(DateTime timestamp)
         {
-            return timestamp != DateTime.MinValue &&
-                   timestamp.Year >= 2009 &&
-                   timestamp <= DateTime.UtcNow.AddDays(2);
+            return MessageTimestampValidity.IsValid(timestamp, DateTime.UtcNow);
         }
 
         private static DateTime NormalizeIncomingTimestamp(DateTime timestamp, bool isOffline)
         {
-            if (IsValidMessageTimestamp(timestamp)) return timestamp;
             // Never turn a replayed server event without a timestamp into a new message.
             // Outgoing bubbles stamp DateTime.UtcNow before entering this path.
-            return DateTime.MinValue;
+            return MessageTimestampValidity.KeepOrDiscard(timestamp, DateTime.UtcNow);
         }
 
         private static byte[] DecodeBase64Safe(string value)
@@ -1054,7 +1051,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     canonical,
                     target.Content,
                     target.Timestamp,
-                    canonical.EndsWith("@g.us"),
+                    JidHelper.IsGroupJid(canonical),
                     target.IsFromMe,
                     ChatPreviewNormalizer.InferKindFromMessage(target));
             }
@@ -1366,7 +1363,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 MessageId = webMessage.Key?.Id,
                 Message = webMessage.Message,
                 Timestamp = webMessage.MessageTimestamp > 0
-                    ? DateTimeOffset.FromUnixTimeSeconds((long)webMessage.MessageTimestamp).LocalDateTime
+                    ? DateTimeOffset.FromUnixTimeSeconds((long)webMessage.MessageTimestamp).UtcDateTime
                     : DateTime.MinValue,
                 IsFromMe = webMessage.Key?.FromMe ?? false,
                 PushName = webMessage.PushName,
@@ -1785,7 +1782,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     return;
                 }
 
-                bool isGroup = normalizedFromJid.EndsWith("@g.us");
+                bool isGroup = JidHelper.IsGroupJid(normalizedFromJid);
 
                 // -- FAST PATH: offline replay duplicate detection --
                 // When draining the offline batch (1000+ messages), skip the expensive
@@ -1824,7 +1821,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     jid = GetCanonicalJid(e.FromJid);
                     routingReason = routingReason ?? "fallback-from";
                 }
-                isGroup = jid.EndsWith("@g.us");
+                isGroup = JidHelper.IsGroupJid(jid);
 
                 if (!isGroup)
                 {
@@ -2669,7 +2666,8 @@ namespace Unison.Uwp.Services.WhatsApp
                                 continue;
                             }
 
-                            if (pair.Value.Timestamp > current.Timestamp)
+                            if (ChatMessageOrder.ToComparableUtc(pair.Value.Timestamp) >
+                                ChatMessageOrder.ToComparableUtc(current.Timestamp))
                             {
                                 current.Timestamp = pair.Value.Timestamp;
                                 current.Preview = pair.Value.Preview;
@@ -2813,7 +2811,8 @@ namespace Unison.Uwp.Services.WhatsApp
                         continue;
                     }
 
-                    var chat = Chats.FirstOrDefault(c => GetCanonicalJid(c.JID) == canonicalJid);
+                    var chat = Chats.FirstOrDefault(c =>
+                        string.Equals(GetCanonicalJid(c.JID), canonicalJid, StringComparison.OrdinalIgnoreCase));
                     if (chat == null)
                     {
                         chat = new ChatItem

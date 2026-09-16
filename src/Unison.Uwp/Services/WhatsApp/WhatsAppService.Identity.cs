@@ -976,7 +976,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             // If the chat still has no avatar, fetch it through the dedicated
                             // profile-picture IQ path once we know the JID is valid.
                             var chatNeedingAvatar = Chats.FirstOrDefault(c => NormalizeJid(c.JID) == normalizedUser && string.IsNullOrEmpty(c.AvatarUrl));
-                            if (chatNeedingAvatar != null && !normalizedUser.EndsWith("@g.us"))
+                            if (chatNeedingAvatar != null && !JidHelper.IsGroupJid(normalizedUser))
                             {
                                 _ = Task.Run(async () =>
                                 {

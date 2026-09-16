@@ -4,6 +4,45 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Seven defects found by auditing the incoming path
+
+An audit of `IncomingPump`, `Media`/send and `Groups`/usync turned up more defects than extraction
+candidates, so the defects were fixed first.
+
+**Recovered messages were timestamped in local time.** `UpsertRecoveredWebMessageInfoAsync` built its
+timestamp with `DateTimeOffset.FromUnixTimeSeconds(...).LocalDateTime` while the entire pipeline treats
+message times as UTC. The value is persisted and read back from SQLite as `DateTimeKind.Unspecified`,
+which `ToComparableUtc` correctly interprets as UTC wall-clock — so a message recovered through
+placeholder resend was permanently displaced by the machine's offset. At UTC-3 it sorted three hours
+into the past, taking the conversation's ordering and preview with it. Now `.UtcDateTime`.
+
+**Group messages could be routed as direct messages.** Four places decided "is this a group?" with
+`EndsWith("@g.us")`, case-sensitive, including the live routing decision in `HandleDecryptedMessageAsync`.
+`JidHelper.Normalize` deliberately does not lowercase group addresses — the asymmetry recorded when it
+was covered with tests — so a mixed-case `@g.us` would take the direct-message path: wrong routing,
+wrong participant handling, wrong preview. All four now call `JidHelper.IsGroupJid`, which compares
+case-insensitively.
+
+**Three more timestamp comparisons made without normalizing** — the offline replay rollback merge, the
+placeholder resend priority ordering, and the pending journal recovery ordering. Same recurring defect
+as before: a list holding both live (`Utc`) and stored (`Unspecified`) values compares off by the local
+offset.
+
+**A chat lookup that disagreed with its own live path.** `ReconcileChatListFromStoredMessagesAsync`
+matched a canonical JID with `==` while the live path used `OrdinalIgnoreCase`, so reconciliation could
+fail to find a row the live path had just created, and create a duplicate.
+
+**`IsValidMessageTimestamp` is now `MessageTimestampValidity` in Core**, with 13 tests. It read
+`DateTime.UtcNow` internally, which made its boundaries untestable, and compared a raw timestamp to that
+clock — so near the future cut-off the verdict depended on the machine's time zone. The tests pin what
+matters: a rejected timestamp becomes `DateTime.MinValue` and never `UtcNow`, because substituting the
+current time would promote a replayed old event to the newest message in the conversation.
+
+The remaining findings are extraction candidates rather than defects and are listed in
+`WhatsAppService-Extraction.md`.
+
+---
+
 ## Connection health — one rule, two named profiles
 
 Deciding when to tear down a live socket was spread across `WhatsAppService.Connection.cs` in two
