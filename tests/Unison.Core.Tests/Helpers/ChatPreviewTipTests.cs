@@ -98,6 +98,88 @@ namespace Unison.Core.Tests.Helpers
             Assert.Same(remembered, ChatPreviewTip.PickNewer(stored, remembered));
         }
 
+        // --- PickLatest ------------------------------------------------------
+
+        [Fact]
+        public void The_newest_remaining_message_becomes_the_preview()
+        {
+            var messages = new[] { Msg("a", 0), Msg("c", 30), Msg("b", 10) };
+
+            Assert.Equal("c", ChatPreviewTip.PickLatest(messages)?.Id);
+        }
+
+        [Fact]
+        public void A_chat_emptied_of_messages_has_no_latest()
+        {
+            Assert.Null(ChatPreviewTip.PickLatest(new ChatMessage[0]));
+            Assert.Null(ChatPreviewTip.PickLatest(null));
+        }
+
+        [Fact]
+        public void Gaps_in_the_list_are_skipped_rather_than_chosen()
+        {
+            var messages = new[] { null, Msg("a", 5), null };
+
+            Assert.Equal("a", ChatPreviewTip.PickLatest(messages)?.Id);
+        }
+
+        [Fact]
+        public void A_kind_less_timestamp_does_not_jump_the_queue()
+        {
+            // Rows read back from SQLite arrive Unspecified. Ordering on the raw DateTime
+            // let one of them appear a local offset newer than it is, which promoted the
+            // wrong message to the preview after a delete.
+            var fromStore = new ChatMessage
+            {
+                Id = "store",
+                Timestamp = new DateTime(2026, 1, 5, 12, 0, 0, DateTimeKind.Unspecified)
+            };
+            var live = Msg("live", seconds: 1);
+
+            Assert.Equal("live", ChatPreviewTip.PickLatest(new[] { fromStore, live })?.Id);
+        }
+
+        [Fact]
+        public void The_only_message_left_wins_even_without_a_timestamp()
+        {
+            var undated = new ChatMessage { Id = "only", Timestamp = DateTime.MinValue };
+
+            Assert.Equal("only", ChatPreviewTip.PickLatest(new[] { undated })?.Id);
+        }
+
+        // --- Clear ------------------------------------------------------------
+
+        [Fact]
+        public void Clearing_blanks_everything_the_row_was_showing()
+        {
+            var chat = new ChatItem
+            {
+                LastMessage = "Oi",
+                LastMessageAuthor = "Ana",
+                LastMessageMentionedJids = new System.Collections.Generic.List<string> { "x@s.whatsapp.net" },
+                LastMessageKind = ChatPreviewKind.Image,
+                LastMessageId = "m1",
+                Timestamp = "12:00",
+                LastMessageTimestampUtc = T0
+            };
+
+            ChatPreviewTip.Clear(chat);
+
+            Assert.Equal(string.Empty, chat.LastMessage);
+            Assert.Equal(string.Empty, chat.LastMessageAuthor);
+            Assert.Null(chat.LastMessageMentionedJids);
+            Assert.Equal(ChatPreviewKind.Text, chat.LastMessageKind);
+            Assert.Null(chat.LastMessageId);
+            Assert.Equal(string.Empty, chat.Timestamp);
+            Assert.Null(chat.LastMessageTimestampUtc);
+        }
+
+        [Fact]
+        public void Clearing_a_missing_row_is_not_an_error()
+        {
+            ChatPreviewTip.Clear(null);
+        }
+
         // --- IsAlreadyShowing ------------------------------------------------
 
         private static ChatItem Row(string? lastId, string lastMessage, bool fromMe = false) =>

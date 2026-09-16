@@ -272,7 +272,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 var chat = Chats.FirstOrDefault(c => GetCanonicalJid(c.JID) == canonical);
                     if (chat != null)
                     {
-                        var latest = messages.OrderByDescending(m => m?.Timestamp ?? DateTime.MinValue).FirstOrDefault();
+                        var latest = ChatPreviewTip.PickLatest(messages);
                         if (latest != null)
                         {
                             bool isGroup = canonical.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase) || chat.IsGroup;
@@ -290,13 +290,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         }
                         else
                         {
-                            chat.LastMessage = string.Empty;
-                            chat.LastMessageAuthor = string.Empty;
-                            chat.LastMessageMentionedJids = null;
-                            chat.LastMessageKind = ChatPreviewKind.Text;
-                            chat.LastMessageId = null;
-                            chat.Timestamp = string.Empty;
-                            chat.LastMessageTimestampUtc = null;
+                            ChatPreviewTip.Clear(chat);
                         }
                     }
 

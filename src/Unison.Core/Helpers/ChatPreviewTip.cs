@@ -11,6 +11,7 @@
 // think to report as a bug.
 // =============================================================================
 using System;
+using System.Collections.Generic;
 using Unison.Core.Models;
 
 namespace Unison.Core.Helpers
@@ -61,6 +62,63 @@ namespace Unison.Core.Helpers
                 fromStore.Id ?? string.Empty);
 
             return idComparison > 0 ? fromMemory : fromStore;
+        }
+
+        /// <summary>
+        /// The newest of a chat's remaining messages — the one that should become the
+        /// preview after whatever was on top got deleted.
+        /// </summary>
+        public static ChatMessage PickLatest(IReadOnlyList<ChatMessage> messages)
+        {
+            if (messages == null)
+            {
+                return null;
+            }
+
+            ChatMessage latest = null;
+            DateTime latestUtc = DateTime.MinValue;
+
+            for (int i = 0; i < messages.Count; i++)
+            {
+                ChatMessage candidate = messages[i];
+                if (candidate == null)
+                {
+                    continue;
+                }
+
+                DateTime candidateUtc = ChatMessageOrder.ToComparableUtc(candidate.Timestamp);
+                if (latest == null || candidateUtc > latestUtc)
+                {
+                    latest = candidate;
+                    latestUtc = candidateUtc;
+                }
+            }
+
+            return latest;
+        }
+
+        /// <summary>
+        /// Blanks the preview of a chat with nothing left to show.
+        /// </summary>
+        /// <remarks>
+        /// Deliberately leaves <c>LastMessageIsFromMe</c> and the delivery status alone: they
+        /// are what the previous code did, and they are only read alongside the text this
+        /// clears. Worth revisiting together rather than one at a time.
+        /// </remarks>
+        public static void Clear(ChatItem chat)
+        {
+            if (chat == null)
+            {
+                return;
+            }
+
+            chat.LastMessage = string.Empty;
+            chat.LastMessageAuthor = string.Empty;
+            chat.LastMessageMentionedJids = null;
+            chat.LastMessageKind = ChatPreviewKind.Text;
+            chat.LastMessageId = null;
+            chat.Timestamp = string.Empty;
+            chat.LastMessageTimestampUtc = null;
         }
 
         /// <summary>
