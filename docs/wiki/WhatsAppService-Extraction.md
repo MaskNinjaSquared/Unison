@@ -178,7 +178,7 @@ Self-contained first. List/persist last.
 | 3.4 | Send (main file) | `MessageFacade` over use cases; client only “send this node” |
 | 3.5a | Receipt reading (done) | `ReceiptReader` |
 | 3.5b | Receipt aggregation state (done) | `GroupReceiptTally` (Core) |
-| 3.6 | Names / usync (`.Identity.cs`) | `ContactFacade` / `ContactDirectory`. Masked `*****` labels stay “no name” so projection can fill |
+| 3.6 | Names / usync (`.Identity.cs`) | `ContactFacade` / `ContactDirectory`. **Name rules out — see below.** usync + merge remain |
 | 3.7a | Alias LID/PN + canonical (done) | `JidAliasTable` (Core), read through `IJidResolver` |
 | 3.7b | Converge onto `LidMappingStore` | Blocked: that store is async, canonicalization is not. See below |
 | 3.8 | `.AppState.cs` | **Rewritten — the premise was stale.** See below |
@@ -451,8 +451,32 @@ onto façades, with the socket and the UI thread on both sides. 3.2b still waits
 façade move too. The test suite does not reach any of them, because they are all in the UWP head.
 
 **None of this has been run.** Every slice from the pending message queue onward is compile-checked
-and test-covered and has not been on a device. That debt is now nine slices deep and is the next thing
-to spend time on, ahead of any further extraction.
+and test-covered and has not been on a device. That debt keeps growing and is the next thing to spend
+time on, ahead of any further extraction.
+
+### 3.6 — the name rules are out; usync is not
+
+Two pieces moved, and they are the two that decide what the user reads.
+
+`ContactLabelSanitizer` answers whether an offered name is a name at all. Four sources feed names in
+and they did not agree on what one is: a push name the contact chose, an address-book entry the user
+typed, and a label WhatsApp masked before storing. It rejects masked numbers, phone echoes and
+self-marker spoofs, and strips marker suffixes. **The self-marker rule is spoof prevention** — a
+contact can set their push name to "(You)" and, without it, their messages render as the user's own.
+That had no test.
+
+`DisplayNameResolution` is the precedence between the survivors: what the app learned, then the
+device address book, then the contact's own push name, then the number. Only the third gets the `~`,
+and not in groups or above message bubbles.
+
+Both take the shape this extraction keeps arriving at. The marker is localized, so recognising it
+stays in the UWP head behind `ISelfMarkerNaming`; the lookups stay too, because they warm a SQLite
+cache as a side effect. What moved is the decision.
+
+What remains in `.Identity.cs` is the larger half and is not this shape: `ResolveContactsAsync` and
+`RefreshContactNamesAsync` (usync over the socket, ~380 lines), `MergeTransientDirectChatIntoCanonicalAsync`
+(~145 lines of chat surgery), and the alias follow-up scheduling. Those are 3.6's move onto
+`ContactFacade`, not a rule to lift out of a method.
 
 **One regression, and it was not in the moved code.** `MediaDerivationService` was registered with
 `AddSingleton<MediaDerivationService>()` in 3.3b while its constructor is `internal`, so the container

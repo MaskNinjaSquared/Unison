@@ -198,36 +198,44 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
             }
 
-            if (PhoneContactNamesByJid.TryGetValue(canonical, out var phoneName) && !string.IsNullOrWhiteSpace(phoneName))
+            return DisplayNameResolution.Resolve(new DisplayNameSources
             {
-                string cleanPhoneName = SanitizeContactLabel(phoneName, canonical);
-                if (!string.IsNullOrWhiteSpace(cleanPhoneName))
-                {
-                    return cleanPhoneName;
-                }
-            }
-            if (PhoneContactNamesByJid.TryGetValue(normalized, out var phoneNameNorm) && !string.IsNullOrWhiteSpace(phoneNameNorm))
+                PersonName = personName,
+                PhoneContactName = FindPhoneContactName(canonical, normalized),
+                WhatsAppName = GetBestWhatsAppName(canonical, normalized),
+                CanonicalJid = canonical,
+                IsGroup = isGroup,
+                IsSenderContext = string.Equals(context, "sender", StringComparison.OrdinalIgnoreCase)
+            });
+        }
+
+        /// <summary>
+        /// The address book's name for either form of the address, once sanitized. Both forms
+        /// are tried because a contact saved under a phone number has to be found from a LID.
+        /// </summary>
+        private string FindPhoneContactName(string canonical, string normalized)
+        {
+            string fromCanonical = LookupSanitizedPhoneContactName(canonical);
+            if (!string.IsNullOrWhiteSpace(fromCanonical))
             {
-                string cleanPhoneName = SanitizeContactLabel(phoneNameNorm, normalized);
-                if (!string.IsNullOrWhiteSpace(cleanPhoneName))
-                {
-                    return cleanPhoneName;
-                }
+                return fromCanonical;
             }
 
-            string waName = GetBestWhatsAppName(canonical, normalized);
-            if (!string.IsNullOrWhiteSpace(waName))
+            return string.Equals(canonical, normalized, StringComparison.OrdinalIgnoreCase)
+                ? null
+                : LookupSanitizedPhoneContactName(normalized);
+        }
+
+        private string LookupSanitizedPhoneContactName(string jid)
+        {
+            if (string.IsNullOrWhiteSpace(jid) ||
+                !PhoneContactNamesByJid.TryGetValue(jid, out var raw) ||
+                string.IsNullOrWhiteSpace(raw))
             {
-                string clean = waName.Trim();
-                bool senderContext = string.Equals(context, "sender", StringComparison.OrdinalIgnoreCase);
-                if (!senderContext && !isGroup && !clean.StartsWith("~", StringComparison.Ordinal))
-                {
-                    return "~" + clean;
-                }
-                return clean;
+                return null;
             }
 
-            return canonical.Split('@')[0];
+            return SanitizeContactLabel(raw, jid);
         }
 
         private async Task PersistPersonNameAsync(string jid, string displayName)
