@@ -643,18 +643,12 @@ namespace Unison.Uwp.Services.WhatsApp
                         if (chat == null) continue;
 
                         string resolved = ResolveDisplayName(chat.JID, "chat");
-                        bool existingMeaningful = IsMeaningfulChatLabel(chat.Name, chat.JID, chat.IsGroup);
-                        bool resolvedMeaningful = IsMeaningfulChatLabel(resolved, chat.JID, chat.IsGroup);
-                        bool shouldReplace = !string.IsNullOrEmpty(resolved) &&
-                                             !string.Equals(chat.Name, resolved, StringComparison.Ordinal) &&
-                                             (chat.IsGroup
-                                                 ? GroupNameSyncBlacklist.ShouldApplySyncedSubject(
-                                                     resolved,
-                                                     resolvedMeaningful,
-                                                     existingMeaningful)
-                                                 : (resolvedMeaningful || !existingMeaningful));
-
-                        if (shouldReplace)
+                        if (ChatNameReplacement.ShouldReplace(
+                                chat.Name,
+                                resolved,
+                                resolvedMeaningful: IsMeaningfulChatLabel(resolved, chat.JID, chat.IsGroup),
+                                existingMeaningful: IsMeaningfulChatLabel(chat.Name, chat.JID, chat.IsGroup),
+                                isGroup: chat.IsGroup))
                         {
                             string oldName = chat.Name;
                             chat.Name = resolved;

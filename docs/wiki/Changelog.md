@@ -4,6 +4,16 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## WhatsAppService extraction — phase 3.9b (chat name replacement rule)
+
+- New `ChatNameReplacement.ShouldReplace` in `Unison.Core/Helpers`: whether a freshly resolved name should be written over the label a chat row is showing
+- **The rule was written out twice**, in `ApplyResolvedNamesToChatsAsync` and in `NormalizePersistedChatNamesAsync` — eleven near-identical lines in each
+- **The two copies had already drifted**, and this changes behaviour on one of them. `ApplyResolvedNamesToChatsAsync` guarded with `IsNullOrWhiteSpace`; `NormalizePersistedChatNamesAsync` used `IsNullOrEmpty`, so on that path a whitespace-only resolved name could be written over a placeholder label — `IsMeaningfulChatLabel` rejects whitespace, which made `resolvedMeaningful` false, but the `!existingMeaningful` branch still let it through. Unified on the stricter check
+- Takes the "is this label meaningful" answers as booleans rather than working them out, since that needs the contact directory and the session's own address. Same split `GroupNameSyncBlacklist` already uses, so `ResolveDisplayName` and `IsMeaningfulChatLabel` stay in the client for 3.6
+- 14 tests, including that the invite-link blacklist applies to group subjects only — a contact is entitled to a name containing one of its tokens — and that group and contact behave identically for every other input
+
+---
+
 ## WhatsAppService extraction — phase 3.9b (persist scheduler)
 
 - New `PersistScheduler` in `Unison.Core/State`: whether the catalogue owes a save, whether startup is still warming up, and which of two elapsed timers actually runs the write
