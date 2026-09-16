@@ -276,6 +276,16 @@ namespace Unison.Uwp.UI.Views
             {
                 await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
                 {
+                    // MediaOpened arrives on a Media Foundation thread, so TearDownPlayer can
+                    // dispose the player between the event and this callback — unsubscribing the
+                    // handler does not cancel a callback already queued here. A disposed player
+                    // throws E_ABORT rather than reporting that it is gone, so check the field
+                    // instead: teardown also runs on this thread and cannot interleave with us.
+                    if (_mediaPlayer == null || _mediaPlayer != sender)
+                    {
+                        return;
+                    }
+
                     // Source assignment clears DisplayUpdater — re-apply after open (same as voice).
                     ApplySmtcMetadata(_viewModel);
 
@@ -283,7 +293,7 @@ namespace Unison.Uwp.UI.Views
                     try
                     {
                         PlayerSlider.Minimum = 0;
-                        double max = sender.PlaybackSession.NaturalDuration.TotalSeconds;
+                        double max = _mediaPlayer.PlaybackSession.NaturalDuration.TotalSeconds;
                         PlayerSlider.Maximum = max > 0 && !double.IsNaN(max) ? max : 1;
                         PlayerSlider.Value = 0;
                     }
