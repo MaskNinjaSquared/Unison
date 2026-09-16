@@ -61,6 +61,26 @@ determines the orientation and answers in one call. Each caller keeps its own lo
 merge still merges the rows and withholds only the alias; the mapped-LID path still only fires the first
 time it sees an address.
 
+### The restore path is now stricter than the live one, and the reason is authority
+
+Testing the gate turned up the mirrored direction: our own LID paired with a *contact's* number. It is
+accepted, and once filed it spreads — that contact's number then reads as ours, so their own legitimate
+pair is refused as poison and they are left with no alias at all.
+
+The obvious move is to refuse it. That would have been a regression: live, this pair is how identity
+healing works. The server reports which number our LID belongs to, `Me.Id` is corrected to match, and
+refusing it would break that repair at the only moment it ever runs — when `Me.Id` is already wrong.
+
+So the pair is not what distinguishes the two cases; where it came from is. A usync answer is the server
+telling us something. A row read back from our own file is only telling us what we believed last time,
+and a wrong belief there has no way to correct itself. `IsUnsafeToRestore` is the stricter check the
+restore path uses, and it is order-agnostic because a pair is written both ways and either entry can be
+the one the loop reaches first.
+
+It deliberately ignores shape, unlike the live check. The restore path lets malformed rows through — the
+file predates that validation, and dropping merely unusual entries would cost real identities — so a
+pair is no less wrong for being malformed if it hangs our address off someone else's.
+
 **One weakness left standing.** The mirrored half of a poisoned pair vouches for it. Pairs are filed both ways, so a poisoned pair comes
 back from disk as two entries, and the mirrored one (`selfPn -> contactLid`) is not refused by this
 policy — its phone side is not self-linked, so the guard exits immediately. Restored first, it is

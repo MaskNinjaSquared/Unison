@@ -123,6 +123,58 @@ namespace Unison.Core.Helpers
         }
 
         /// <summary>
+        /// Whether a pair restored from disk may be filed.
+        /// </summary>
+        /// <remarks>
+        /// Stricter than the live check, because the two sources do not have the same
+        /// authority. A usync answer is the server telling us something; a row read back
+        /// from our own file is only telling us what we believed last time, and if what we
+        /// believed was wrong it has no way to correct itself.
+        ///
+        /// The difference is the mirrored direction: our own LID paired with someone else's
+        /// phone address. Live, that is how identity healing works — the server reports
+        /// which number our LID belongs to, and <c>Me.Id</c> is corrected to match. From
+        /// disk it is the same corruption running in reverse, and it spreads: once filed,
+        /// that contact's number reads as ours, so the contact's own legitimate pair is then
+        /// refused as poison and they are left with no alias at all.
+        ///
+        /// Order-agnostic, because a pair is written both ways and either entry can be the
+        /// one the restore loop reaches first.
+        /// </remarks>
+        public static bool IsUnsafeToRestore(string first, string second, JidAliasTable table)
+        {
+            if (table == null)
+            {
+                return false;
+            }
+
+            string a = JidHelper.Normalize(first);
+            string b = JidHelper.Normalize(second);
+
+            return WouldPutAContactUnderOurIdentity(a, b, table) ||
+                   WouldPutAContactUnderOurIdentity(b, a, table) ||
+                   WouldRedefineOurOwnIdentity(a, b, table) ||
+                   WouldRedefineOurOwnIdentity(b, a, table);
+        }
+
+        /// <summary>
+        /// Whether the pair claims our own LID belongs to someone else's phone address.
+        /// </summary>
+        /// <remarks>
+        /// Only meaningful once we know our own identity. Until then nothing can be said to
+        /// contradict an identity we do not have yet, and the guard stays out of the way.
+        ///
+        /// Shape is deliberately not consulted. The restore path does not filter on shape —
+        /// the file predates that validation and dropping unusual-but-harmless rows would
+        /// cost real identities — so a malformed pair still reaches the table, and one that
+        /// hangs our own address off someone else's is no less wrong for being malformed.
+        /// </remarks>
+        private static bool WouldRedefineOurOwnIdentity(string ours, string theirs, JidAliasTable table)
+        {
+            return table.IsSelfLinked(ours) && !table.IsSelfLinked(theirs);
+        }
+
+        /// <summary>
         /// Whether the table already records the phone address pointing back at this LID.
         /// </summary>
         /// <remarks>

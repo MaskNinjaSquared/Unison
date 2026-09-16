@@ -472,7 +472,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </remarks>
         private bool IsSelfPoisoningAliasPair(string aliasKey, string aliasValue)
         {
-            return AliasPairPolicy.WouldPutAContactUnderOurIdentity(aliasKey, aliasValue, JidAlias);
+            return AliasPairPolicy.IsUnsafeToRestore(aliasKey, aliasValue, JidAlias);
         }
 
         /// <summary>

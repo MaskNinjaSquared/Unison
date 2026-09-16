@@ -466,12 +466,12 @@ namespace Unison.Uwp.Services.WhatsApp
                         continue;
                     }
 
-                    // Only the self-poisoning check, not the full live validation: the table is
+                    // Only the identity checks, not the full live validation: the table is
                     // also written by paths that predate that validation, and rejecting their
                     // entries here would drop identities that are merely unusual, not wrong.
                     if (IsSelfPoisoningAliasPair(aliasKey, aliasValue))
                     {
-                        Debug.WriteLine($"[WhatsAppService] Dropping persisted alias that files a contact under our own identity: {aliasKey} -> {aliasValue}");
+                        Debug.WriteLine($"[WhatsAppService] Dropping persisted alias that confuses our own identity: {aliasKey} -> {aliasValue}");
                         poisonedAliases++;
                         continue;
                     }

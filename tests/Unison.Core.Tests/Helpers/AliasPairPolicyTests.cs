@@ -462,5 +462,96 @@ namespace Unison.Core.Tests.Helpers
             Assert.Equal(SelfLidDotted, lid);
             Assert.Equal(SelfPn, pn);
         }
+
+        // --- IsUnsafeToRestore: the same pair, judged by where it came from -------
+        //
+        // A usync answer is the server telling us something. A row read back from our
+        // own file is only telling us what we believed last time, and if that belief was
+        // wrong it cannot correct itself. So one direction is allowed live and refused
+        // from disk.
+
+        [Theory]
+        [InlineData(SelfLid, ContactPn)]
+        [InlineData(ContactPn, SelfLid)]
+        public void Our_own_LID_claimed_by_a_contacts_number_is_allowed_live_but_not_from_disk(
+            string first, string second)
+        {
+            // Live this is identity healing: the server reports which number our LID belongs
+            // to and Me.Id is corrected to match. Refusing it would break that repair exactly
+            // when Me.Id is wrong, which is the only time it runs.
+            Assert.True(AliasPairPolicy.TryAcceptPair(first, second, Bound(), out _, out _));
+
+            // From disk it is the same corruption running backwards, and it spreads: once
+            // filed, that contact's number reads as ours, so the contact's own legitimate
+            // pair is refused as poison and they end up with no alias at all.
+            Assert.True(AliasPairPolicy.IsUnsafeToRestore(first, second, Bound()));
+        }
+
+        [Theory]
+        [InlineData(SelfLid, SelfPn)]
+        [InlineData(SelfPn, SelfLid)]
+        public void Our_own_pair_restores_from_disk_whichever_entry_is_read_first(
+            string first, string second)
+        {
+            // Both halves are on disk and the loop reaches them in dictionary order, so
+            // refusing either one would cost the user the link to their own identity.
+            Assert.False(AliasPairPolicy.IsUnsafeToRestore(first, second, Bound()));
+        }
+
+        [Theory]
+        [InlineData(ContactLid, SelfPn)]
+        [InlineData(SelfPn, ContactLid)]
+        public void A_contact_filed_under_our_identity_is_refused_from_disk_in_either_direction(
+            string first, string second)
+        {
+            // The original bug: a pair like this reaching disk came back on every launch and
+            // merged that contact's conversation into the self chat.
+            Assert.True(AliasPairPolicy.IsUnsafeToRestore(first, second, Bound()));
+        }
+
+        [Theory]
+        [InlineData(ContactLid, ContactPn)]
+        [InlineData(OtherContactLid, OtherContactPn)]
+        public void An_ordinary_contact_pair_restores_untouched(string first, string second)
+        {
+            // The guard has to stay out of the way of the entries that make up almost the
+            // whole file, or a launch would drop the alias table it just read.
+            Assert.False(AliasPairPolicy.IsUnsafeToRestore(first, second, Bound()));
+        }
+
+        [Fact]
+        public void Before_our_own_LID_is_known_nothing_can_contradict_it()
+        {
+            // Nothing can be said to conflict with an identity we do not have yet, so the
+            // stricter half of the restore check stays silent rather than guessing.
+            var unbound = Bound(selfId: null, selfLid: null);
+
+            Assert.False(AliasPairPolicy.IsUnsafeToRestore(SelfLid, ContactPn, unbound));
+        }
+
+        [Fact]
+        public void A_malformed_pair_that_touches_our_identity_is_still_refused()
+        {
+            // Shape is not consulted here, on purpose. The restore path lets malformed rows
+            // through — the file predates that validation and dropping merely unusual ones
+            // would cost real identities — so a pair is no less wrong for being malformed if
+            // it hangs our address off someone else's.
+            Assert.True(AliasPairPolicy.IsUnsafeToRestore(SelfPn, OtherContactPn, Bound()));
+        }
+
+        [Fact]
+        public void Half_a_pair_reaching_for_our_identity_is_refused_rather_than_assumed_ours()
+        {
+            // Nothing can prove a missing address is ours, and the conservative answer is
+            // the cheap one: the restore loop already skips empty rows, so refusing here
+            // costs nothing and guessing the other way costs the self chat.
+            Assert.True(AliasPairPolicy.IsUnsafeToRestore(null!, SelfPn, Bound()));
+        }
+
+        [Fact]
+        public void With_no_table_there_is_nothing_to_judge_against()
+        {
+            Assert.False(AliasPairPolicy.IsUnsafeToRestore(SelfLid, ContactPn, null!));
+        }
     }
 }
