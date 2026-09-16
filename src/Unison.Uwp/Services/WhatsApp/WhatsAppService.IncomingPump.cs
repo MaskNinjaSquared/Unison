@@ -1729,15 +1729,15 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
                 // Build PN/LID alias from message metadata immediately (works even when usync times out).
-                if (!string.IsNullOrEmpty(e.SenderLid) && !string.IsNullOrEmpty(e.FromJid) && e.FromJid.EndsWith("@s.whatsapp.net"))
+                if (!string.IsNullOrEmpty(e.SenderLid) && JidHelper.IsPhoneJid(e.FromJid))
                 {
                     RegisterAliasMapping(e.SenderLid, e.FromJid, "sender_lid");
                 }
-                if (!string.IsNullOrEmpty(e.PeerRecipientPn) && !string.IsNullOrEmpty(e.FromJid) && e.FromJid.EndsWith("@lid"))
+                if (!string.IsNullOrEmpty(e.PeerRecipientPn) && JidHelper.IsLidJid(e.FromJid))
                 {
                     RegisterAliasMapping(e.FromJid, e.PeerRecipientPn, "peer_recipient_pn");
                 }
-                if (!string.IsNullOrEmpty(e.PeerRecipientLid) && !string.IsNullOrEmpty(e.RecipientJid) && e.RecipientJid.EndsWith("@s.whatsapp.net"))
+                if (!string.IsNullOrEmpty(e.PeerRecipientLid) && JidHelper.IsPhoneJid(e.RecipientJid))
                 {
                     RegisterAliasMapping(e.PeerRecipientLid, e.RecipientJid, "peer_recipient_lid");
                 }
@@ -2329,8 +2329,11 @@ namespace Unison.Uwp.Services.WhatsApp
                             // If this JID is a PN that has a mapped LID, or vice-versa, trigger a merge scan
                             if (JidAlias.TryGetValue(jid, out var alias))
                             {
-                                string lid = jid.EndsWith("@lid") ? jid : alias;
-                                string pn = jid.EndsWith("@s.whatsapp.net") ? jid : alias;
+                                // Sorting the pair by casing-sensitive suffix put the same
+                                // address on both sides when the server varied the case,
+                                // and the merge scan then compared a chat with itself.
+                                string lid = JidHelper.IsLidJid(jid) ? jid : alias;
+                                string pn = JidHelper.IsPhoneJid(jid) ? jid : alias;
                                 _ = CheckAndMergeDuplicateChatsAsync(lid, pn);
                             }
 
@@ -2548,7 +2551,8 @@ namespace Unison.Uwp.Services.WhatsApp
                             IsGroup = pair.Value.IsGroup,
                             IsFromMe = pair.Value.IsFromMe,
                             UnreadDelta = pair.Value.UnreadDelta,
-                            Kind = pair.Value.Kind
+                            Kind = pair.Value.Kind,
+                            Status = pair.Value.Status
                         },
                         StringComparer.OrdinalIgnoreCase);
 

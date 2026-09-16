@@ -287,5 +287,94 @@ namespace Unison.Core.Tests.Helpers
 
             Assert.False(ChatPreviewTip.ShouldStampMissingMessageId(chat, undated));
         }
+
+        // --- ShowsOutgoingMessage --------------------------------------------
+        //
+        // Which message the strip is showing, and therefore whose delivery state it
+        // should follow. Getting it wrong pulls a strip backwards from read to sent.
+
+        private static readonly TimeSpan Window = TimeSpan.FromSeconds(2);
+
+        private static ChatItem SentRow(string? lastId, int? seconds = 0) => new ChatItem
+        {
+            LastMessageIsFromMe = true,
+            LastMessageId = lastId,
+            LastMessageTimestampUtc = seconds.HasValue ? T0.AddSeconds(seconds.Value) : (DateTime?)null
+        };
+
+        [Fact]
+        public void The_id_decides_whenever_the_row_has_one()
+        {
+            var row = SentRow("m2", seconds: 10);
+
+            Assert.True(ChatPreviewTip.ShowsOutgoingMessage(row, Msg("m2", 10, fromMe: true), Window));
+            Assert.False(ChatPreviewTip.ShowsOutgoingMessage(row, Msg("m1", 10, fromMe: true), Window));
+        }
+
+        [Fact]
+        public void Two_messages_sent_a_second_apart_are_told_apart_by_id_not_by_clock()
+        {
+            // The regression this rule exists for. Sending twice in quick succession is
+            // ordinary, and a clock-only match let the older message's receipt land on the
+            // newer message's strip -- the visible symptom being a double tick dropping
+            // back to a single one on its own.
+            var row = SentRow("m2", seconds: 11);
+            var older = Msg("m1", seconds: 10, fromMe: true);
+
+            Assert.False(ChatPreviewTip.ShowsOutgoingMessage(row, older, Window));
+        }
+
+        [Fact]
+        public void A_row_from_before_ids_were_stored_still_falls_back_to_the_clock()
+        {
+            // Rows written by an older schema have no id to match on, and refusing them
+            // outright would freeze their tick forever.
+            var legacy = SentRow(null, seconds: 10);
+
+            Assert.True(ChatPreviewTip.ShowsOutgoingMessage(legacy, Msg("m1", 11, fromMe: true), Window));
+            Assert.False(ChatPreviewTip.ShowsOutgoingMessage(legacy, Msg("m1", 30, fromMe: true), Window));
+        }
+
+        [Fact]
+        public void The_clock_fallback_measures_distance_in_both_directions()
+        {
+            var legacy = SentRow(null, seconds: 10);
+
+            Assert.True(ChatPreviewTip.ShowsOutgoingMessage(legacy, Msg(null, 8, fromMe: true), Window));
+            Assert.False(ChatPreviewTip.ShowsOutgoingMessage(legacy, Msg(null, 5, fromMe: true), Window));
+        }
+
+        [Fact]
+        public void With_no_clock_on_either_side_the_strip_is_assumed_to_be_this_message()
+        {
+            // Nothing left to disagree with, and the alternative is a row whose tick can
+            // never move again.
+            var undated = SentRow(null, seconds: null);
+
+            Assert.True(ChatPreviewTip.ShowsOutgoingMessage(undated, Msg(null, 0, fromMe: true), Window));
+        }
+
+        [Fact]
+        public void A_strip_showing_someone_elses_message_never_follows_our_receipt()
+        {
+            var theirs = new ChatItem { LastMessageIsFromMe = false, LastMessageId = "m1" };
+
+            Assert.False(ChatPreviewTip.ShowsOutgoingMessage(theirs, Msg("m1", 0, fromMe: true), Window));
+        }
+
+        [Fact]
+        public void An_incoming_message_is_not_ours_to_report_on()
+        {
+            var row = SentRow("m1", seconds: 0);
+
+            Assert.False(ChatPreviewTip.ShowsOutgoingMessage(row, Msg("m1", 0, fromMe: false), Window));
+        }
+
+        [Fact]
+        public void Nothing_to_compare_is_not_a_match()
+        {
+            Assert.False(ChatPreviewTip.ShowsOutgoingMessage(null, Msg("m1", 0, fromMe: true), Window));
+            Assert.False(ChatPreviewTip.ShowsOutgoingMessage(SentRow("m1"), null, Window));
+        }
     }
 }

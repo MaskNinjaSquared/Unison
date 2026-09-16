@@ -108,6 +108,31 @@ namespace Unison.Core.Helpers
         }
 
         /// <summary>
+        /// Whether the address is a LID — the identity WhatsApp uses in place of a number.
+        /// </summary>
+        public static bool IsLidJid(string jid)
+        {
+            string normalized = Normalize(jid);
+            return !string.IsNullOrEmpty(normalized) &&
+                   normalized.EndsWith("@lid", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Whether the address is a phone-number JID.
+        /// </summary>
+        /// <remarks>
+        /// Asked together with <see cref="IsLidJid"/> to sort a pair into its two sides, so
+        /// both have to agree on casing. The server is not consistent about it, and a
+        /// case-sensitive test here sorts a pair into two copies of the same address.
+        /// </remarks>
+        public static bool IsPhoneJid(string jid)
+        {
+            string normalized = Normalize(jid);
+            return !string.IsNullOrEmpty(normalized) &&
+                   normalized.EndsWith("@s.whatsapp.net", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
         /// Resolves list category: Group → Personal (self) → Direct.
         /// </summary>
         public static ChatKind ResolveKind(string jid, bool isSelfChat)

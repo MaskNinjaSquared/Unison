@@ -61,6 +61,33 @@ determines the orientation and answers in one call. Each caller keeps its own lo
 merge still merges the rows and withholds only the alias; the mapped-LID path still only fires the first
 time it sees an address.
 
+### Four defects in the outgoing path, found by mapping it before touching it
+
+**A receipt could pull a double tick back to a single one.** `ApplyListPreviewSendState` worked out
+which message the list strip was showing by comparing clocks with a two-second tolerance, ignoring the
+`LastMessageId` sitting right there. Two messages sent to the same chat seconds apart — ordinary — are
+indistinguishable that way, so the older one's receipt landed on the newer one's strip. The rule is now
+`ChatPreviewTip.ShowsOutgoingMessage`: the id answers it whenever the row has one, and the clock stays
+only as a fallback for rows written before ids were stored, where refusing outright would freeze the
+tick forever.
+
+**The offline replay fix from earlier was being undone one line away.** `OfflineReplayChatSummary`
+gained a `Status` field so the list would show the ticks a replayed message actually has instead of
+assuming "sent" — but the snapshot that hands those summaries to the UI never copied it, so the mapper
+received `null` every time. The corrected copy in the `catch` block had been right all along, which is
+what made it look done.
+
+**A sent photo showed a clock in the list and a tick in the bubble, at the same time.** The strip for a
+local send was hardcoded to `Pending`. That is true for text, which starts pending, but media is already
+sent by the time it gets there, and in a chat with yourself it is read on arrival — with no receipt ever
+coming to correct the wrong guess, so it stayed wrong.
+
+**A pair could be sorted with the same address on both sides.** Three alias registrations and the merge
+scan tested JID suffixes case-sensitively, sitting a few lines from a block that normalizes and compares
+case-insensitively. When the server varied the case, `lid` and `pn` both fell through to the alias and
+the merge scan compared a chat with itself. `JidHelper` gained `IsLidJid` and `IsPhoneJid` next to
+`IsGroupJid`; they are asked together to sort a pair, so they have to agree on casing.
+
 ### The restore path is now stricter than the live one, and the reason is authority
 
 Testing the gate turned up the mirrored direction: our own LID paired with a *contact's* number. It is

@@ -5668,6 +5668,10 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
+        // Only reached for rows an older schema left without a message id; the id answers it
+        // otherwise. See ChatPreviewTip.ShowsOutgoingMessage.
+        private static readonly TimeSpan ListPreviewClockFallbackWindow = TimeSpan.FromSeconds(2);
+
         private void ApplyListPreviewSendState(string chatJid, ChatMessage message, string status)
         {
             if (message == null || !message.IsFromMe)
@@ -5675,21 +5679,11 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            DateTime messageUtc = ToComparableUtc(message.Timestamp);
             var rows = GetChatRowsForCanonicalJid(GetCanonicalJid(NormalizeJid(chatJid)));
             for (int i = 0; i < rows.Count; i++)
             {
                 ChatItem chat = rows[i];
-                if (chat == null || !chat.LastMessageIsFromMe)
-                {
-                    continue;
-                }
-
-                DateTime previewUtc = chat.LastMessageTimestampUtc.HasValue
-                    ? ToComparableUtc(chat.LastMessageTimestampUtc.Value)
-                    : DateTime.MinValue;
-                if (previewUtc != DateTime.MinValue && messageUtc != DateTime.MinValue &&
-                    Math.Abs((previewUtc - messageUtc).TotalSeconds) > 2)
+                if (!ChatPreviewTip.ShowsOutgoingMessage(chat, message, ListPreviewClockFallbackWindow))
                 {
                     continue;
                 }
@@ -6014,7 +6008,7 @@ namespace Unison.Uwp.Services.WhatsApp
             ChatMessageOrder.InsertSorted(MessagesByChat[normJid], msg);
             TrimInMemoryMessageWindow(normJid);
             RegisterMessageId(normJid, msg.Id);
-            await UpdateChatPreviewForLocalSendAsync(normJid, text, msg.Timestamp, ChatPreviewKind.Text, msg.MentionedJids, msg.Id);
+            await UpdateChatPreviewForLocalSendAsync(normJid, text, msg.Timestamp, ChatPreviewKind.Text, msg.MentionedJids, msg.Id, msg.Status);
 
             // Make the bubble visible immediately, then persist it in the small durable
             // outbox. This avoids rewriting the entire chat JSON before every send.
@@ -6094,7 +6088,7 @@ namespace Unison.Uwp.Services.WhatsApp
             ChatMessageOrder.InsertSorted(MessagesByChat[normJid], msg);
             TrimInMemoryMessageWindow(normJid);
             RegisterMessageId(normJid, msg.Id);
-            await UpdateChatPreviewForLocalSendAsync(normJid, preview, msg.Timestamp, ChatPreviewKind.Image, null, msg.Id);
+            await UpdateChatPreviewForLocalSendAsync(normJid, preview, msg.Timestamp, ChatPreviewKind.Image, null, msg.Id, msg.Status);
 
             QueueOfflineReplayMessageForPersist(normJid, msg);
             SchedulePersist();
@@ -6131,7 +6125,7 @@ namespace Unison.Uwp.Services.WhatsApp
             ChatMessageOrder.InsertSorted(MessagesByChat[normJid], msg);
             TrimInMemoryMessageWindow(normJid);
             RegisterMessageId(normJid, msg.Id);
-            await UpdateChatPreviewForLocalSendAsync(normJid, preview, msg.Timestamp, ChatPreviewKind.Voice, null, msg.Id);
+            await UpdateChatPreviewForLocalSendAsync(normJid, preview, msg.Timestamp, ChatPreviewKind.Voice, null, msg.Id, msg.Status);
             QueueOfflineReplayMessageForPersist(normJid, msg);
             SchedulePersist();
             QueueChatMessagesChanged(normJid);
@@ -6177,7 +6171,8 @@ namespace Unison.Uwp.Services.WhatsApp
             DateTime timestamp,
             ChatPreviewKind? kindHint = null,
             System.Collections.Generic.IList<string> mentionedJids = null,
-            string messageId = null)
+            string messageId = null,
+            string status = null)
         {
             string canonicalJid = GetCanonicalJid(NormalizeJid(jid));
             if (string.IsNullOrWhiteSpace(canonicalJid))
@@ -6206,8 +6201,11 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 foreach (var row in matchingRows)
                 {
+                    // The bubble's own status, not an assumed one: media is already sent by
+                    // the time it gets here, and in a self chat it is read on arrival with
+                    // no receipt ever coming to correct a wrong guess.
                     ApplyChatPreviewIfNewer(row, preview, timestamp, true, kindHint, null, mentionedJids,
-                        true, MessageSendState.Pending, messageId);
+                        true, HistoryLiveMessageMapper.FromStatus(status ?? ChatMessage.StatusPending, true), messageId);
                 }
 
                 var preferred = matchingRows

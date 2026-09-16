@@ -187,4 +187,57 @@ namespace Unison.Core.Tests.Helpers
             Assert.False(JidHelper.IsStatusBroadcast("5511988887777@s.whatsapp.net"));
         }
     }
+
+    public class JidHelperSuffixTests
+    {
+        // The two halves of a PN/LID pair. They are asked together to sort a pair into its
+        // sides, so a casing disagreement between them files the same address twice.
+
+        [Theory]
+        [InlineData("100200300@lid")]
+        [InlineData("100200300@LID")]
+        [InlineData("100200300@Lid")]
+        public void A_LID_is_recognised_whatever_case_the_server_used(string jid)
+        {
+            Assert.True(JidHelper.IsLidJid(jid));
+            Assert.False(JidHelper.IsPhoneJid(jid));
+        }
+
+        [Theory]
+        [InlineData("5511999999999@s.whatsapp.net")]
+        [InlineData("5511999999999@S.WHATSAPP.NET")]
+        [InlineData("5511999999999@s.WhatsApp.net")]
+        public void A_number_is_recognised_whatever_case_the_server_used(string jid)
+        {
+            Assert.True(JidHelper.IsPhoneJid(jid));
+            Assert.False(JidHelper.IsLidJid(jid));
+        }
+
+        [Theory]
+        [InlineData("120363000000000000@g.us")]
+        [InlineData("120363000000000000@G.US")]
+        [InlineData("status@broadcast")]
+        [InlineData("")]
+        [InlineData(null)]
+        public void Anything_else_belongs_to_neither_side(string? jid)
+        {
+            Assert.False(JidHelper.IsLidJid(jid!));
+            Assert.False(JidHelper.IsPhoneJid(jid!));
+        }
+
+        [Theory]
+        [InlineData("100200300@LID")]
+        [InlineData("5511999999999@S.WHATSAPP.NET")]
+        public void A_pair_never_sorts_the_same_address_onto_both_sides(string oddlyCased)
+        {
+            // The bug this replaced: the odd-cased address matched neither suffix, so both
+            // sides fell through to the alias and the merge scan compared a chat to itself.
+            const string alias = "other@s.whatsapp.net";
+
+            string lid = JidHelper.IsLidJid(oddlyCased) ? oddlyCased : alias;
+            string pn = JidHelper.IsPhoneJid(oddlyCased) ? oddlyCased : alias;
+
+            Assert.NotEqual(lid, pn);
+        }
+    }
 }

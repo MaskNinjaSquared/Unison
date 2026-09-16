@@ -139,6 +139,44 @@ namespace Unison.Core.Helpers
         }
 
         /// <summary>
+        /// Whether the row's strip is showing this outgoing message, and so should follow
+        /// its delivery state.
+        /// </summary>
+        /// <remarks>
+        /// The id is the answer whenever the row has one. The clock is only a fallback for
+        /// rows an older schema left without an id, and a poor one: two messages sent to the
+        /// same chat seconds apart are indistinguishable by time, so a receipt for the older
+        /// one would pull the strip back from read to sent. Narrow window, common case.
+        /// </remarks>
+        public static bool ShowsOutgoingMessage(ChatItem chat, ChatMessage message, TimeSpan clockFallbackWindow)
+        {
+            if (chat == null || message == null || !message.IsFromMe || !chat.LastMessageIsFromMe)
+            {
+                return false;
+            }
+
+            if (!string.IsNullOrWhiteSpace(chat.LastMessageId) && !string.IsNullOrWhiteSpace(message.Id))
+            {
+                return string.Equals(chat.LastMessageId, message.Id, StringComparison.Ordinal);
+            }
+
+            DateTime messageUtc = ChatMessageOrder.ToComparableUtc(message.Timestamp);
+            DateTime stripUtc = chat.LastMessageTimestampUtc.HasValue
+                ? ChatMessageOrder.ToComparableUtc(chat.LastMessageTimestampUtc.Value)
+                : DateTime.MinValue;
+
+            // With no clock on either side there is nothing to disagree with, so the strip
+            // is assumed to be this message rather than left stuck.
+            if (messageUtc == DateTime.MinValue || stripUtc == DateTime.MinValue)
+            {
+                return true;
+            }
+
+            TimeSpan apart = stripUtc > messageUtc ? stripUtc - messageUtc : messageUtc - stripUtc;
+            return apart <= clockFallbackWindow;
+        }
+
+        /// <summary>
         /// Whether a row left without a message id by an older schema should have one
         /// stamped from the tip.
         /// </summary>
