@@ -1958,8 +1958,9 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 _persistTimer?.Dispose();
                 _persistTimer = null;
-                _persistPending = false;
             }
+
+            _persistScheduler.Reset();
 
             // This tiny append-only write is the only mandatory suspend operation.
             await PrepareForSuspendAsync();

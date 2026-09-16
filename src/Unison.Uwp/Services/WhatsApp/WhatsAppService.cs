@@ -702,7 +702,6 @@ namespace Unison.Uwp.Services.WhatsApp
             TimeSpan.FromSeconds(15),
             TimeSpan.FromSeconds(30)
         };
-        private bool _suppressStartupScheduledPersist = true;
         private readonly SemaphoreSlim _initLock = new SemaphoreSlim(1, 1);
         private readonly SemaphoreSlim _persistedUiLoadLock = new SemaphoreSlim(1, 1);
         private volatile bool _persistedUiStateLoaded;
@@ -784,8 +783,10 @@ namespace Unison.Uwp.Services.WhatsApp
 
         // Debounce timer for persisting data (5 seconds)
         private System.Threading.Timer _persistTimer;
-        private bool _persistPending = false;
         private readonly object _persistLock = new object();
+
+        /// <summary>Whether the catalogue owes a save, and whether startup is still warming up.</summary>
+        private readonly PersistScheduler _persistScheduler = new PersistScheduler();
         private readonly SemaphoreSlim _persistRunLock = new SemaphoreSlim(1, 1);
         private readonly SemaphoreSlim _offlineReplayFlushLock = new SemaphoreSlim(1, 1);
         private readonly object _offlineReplayTimerLock = new object();
@@ -1091,10 +1092,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 snapshot.IncomingPumpStageUtc = DiagnosticsDateTime(_incomingMessagePumpStageUtcTicks);
             }
 
-            lock (_persistLock)
-            {
-                snapshot.PersistPending = _persistPending;
-            }
+            snapshot.PersistPending = _persistScheduler.IsPending;
 
             snapshot.OfflinePersistPendingMessageCount = _pendingMessages.PendingCount;
             snapshot.OfflineReplayFlushRequested = _pendingMessages.IsFlushClaimed;

@@ -4,6 +4,16 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## WhatsAppService extraction — phase 3.9b (persist scheduler)
+
+- New `PersistScheduler` in `Unison.Core/State`: whether the catalogue owes a save, whether startup is still warming up, and which of two elapsed timers actually runs the write
+- Out of the client: `_persistPending`, `_suppressStartupScheduledPersist` and the check-then-act inside `SchedulePersist` / `EnableScheduledPersist`. The `Timer` stays, same seam as the message queue — `Request` answers with a `PersistScheduleAction` and the host arms the debounce
+- **Fixes a real race, not just a move.** `_suppressStartupScheduledPersist` was read inside `_persistLock` in `SchedulePersist` but read *and written outside it* in `EnableScheduledPersist`, next to a `_persistPending` read that was inside. Two callers lifting suppression at once could both conclude they owed the deferred save. Lifting is now one atomic step
+- `EnableAfterStartup` returns `PersistEnableResult` rather than a bool so both startup log lines survive: suppression lifted, and separately, a deferred save being settled
+- 13 tests: startup deferral, collapsing many requests into one save, the second elapsed timer becoming a no-op, a request arriving mid-write not being swallowed, and shutdown not re-arming startup suppression
+
+---
+
 ## WhatsAppService extraction — phase 3.9b, first slice (pending message queue)
 
 - New `PendingMessageQueue` in `Unison.Core/State`: the messages accepted but not yet written to SQLite, plus the rule for when to write them. 143 lines out of the client against 42 back in

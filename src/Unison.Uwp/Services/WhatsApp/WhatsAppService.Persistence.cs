@@ -102,18 +102,15 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private void EnableScheduledPersist(string reason)
         {
-            bool shouldFlushPendingPersist = false;
-            if (_suppressStartupScheduledPersist)
+            var result = _persistScheduler.EnableAfterStartup();
+            if (result == PersistEnableResult.AlreadyEnabled)
             {
-                _suppressStartupScheduledPersist = false;
-                lock (_persistLock)
-                {
-                    shouldFlushPendingPersist = _persistPending;
-                }
-                Debug.WriteLine($"[WhatsAppService] Startup persist suppression lifted: {reason}");
+                return;
             }
 
-            if (shouldFlushPendingPersist)
+            Debug.WriteLine($"[WhatsAppService] Startup persist suppression lifted: {reason}");
+
+            if (result == PersistEnableResult.LiftedWithDeferredSave)
             {
                 Debug.WriteLine($"[WhatsAppService] Flushing deferred persist after startup warm-up: {reason}");
                 SchedulePersist();
@@ -497,27 +494,23 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         private void SchedulePersist()
         {
+            if (_persistScheduler.Request() == PersistScheduleAction.Deferred)
+            {
+                Debug.WriteLine("[WhatsAppService] SchedulePersist skipped during startup warm-up");
+                return;
+            }
+
             lock (_persistLock)
             {
-                if (_suppressStartupScheduledPersist)
-                {
-                    _persistPending = true;
-                    Debug.WriteLine("[WhatsAppService] SchedulePersist skipped during startup warm-up");
-                    return;
-                }
-
-                _persistPending = true;
-                
                 // Cancel existing timer and restart with 3 second delay
                 _persistTimer?.Dispose();
                 _persistTimer = new System.Threading.Timer(async _ =>
                 {
-                    lock (_persistLock)
+                    if (!_persistScheduler.TryBeginPersist())
                     {
-                        if (!_persistPending) return;
-                        _persistPending = false;
+                        return;
                     }
-                    
+
                     await PersistDataAsync();
                 }, null, 3000, Timeout.Infinite);
             }

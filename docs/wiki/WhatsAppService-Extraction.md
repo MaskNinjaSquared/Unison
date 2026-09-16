@@ -395,6 +395,17 @@ cleanly and surfaces as messages that never land, and it is only takeable now be
 deterministic given a clock reading and therefore testable. Thirty tests cover it. What is still in
 the client is genuinely platform: the `Timer`, the SQLite write, the diagnostics.
 
+**The persist debounce followed, and closed a race.** `PersistScheduler` owns whether the catalogue
+owes a save and whether startup is still warming up. Those two flags used to disagree about their
+lock: `SchedulePersist` read the suppression flag inside `_persistLock`, while `EnableScheduledPersist`
+read *and wrote* it outside, beside a `_persistPending` read that was inside. Two callers lifting
+suppression together could both decide they owed the deferred save. Lifting is now one atomic step,
+and the three outcomes are a return value rather than a flag the caller has to re-derive.
+
+Both slices leave the same residue in the client, and it is the right residue: a `System.Threading.Timer`
+and a database call. The rule about *whether* to act is in Core with tests; the platform work that
+follows is in the host.
+
 **Thread affinity:** today the client mutates `Chats` on the UI thread; VMs read on the UI thread; `ChatStateStore`’s extra dictionaries are protected by that, not only by the lock. Any code moved to a façade that runs off-thread must use `UpsertChatsAsync` / `UpsertMessagesAsync` (or `IDispatcher`). Do not split 3.9 into half-moves.
 
 **Canonical JID:** introduce `IJidResolver` in phase 1 as a thin wrapper so 3.2 / 3.6 / 3.7 do not all rewrite aliasing at once.
