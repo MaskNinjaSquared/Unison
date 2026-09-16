@@ -2703,18 +2703,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        private void MarkOfflineReplayChatDirty(string jid)
-        {
-            if (string.IsNullOrWhiteSpace(jid))
-            {
-                return;
-            }
-
-            lock (_offlineReplayPersistLock)
-            {
-                _offlineReplayDirtyChats.Add(jid);
-            }
-        }
+        private void MarkOfflineReplayChatDirty(string jid) => _pendingMessages.MarkDirty(jid);
 
         private async Task RefreshChatPreviewFromReplayAsync(
             string jid,

@@ -183,7 +183,7 @@ Self-contained first. List/persist last.
 | 3.7b | Converge onto `LidMappingStore` | Blocked: that store is async, canonicalization is not. See below |
 | 3.8 | `.AppState.cs` | **Rewritten — the premise was stale.** See below |
 | 3.9a | List display order (done) | `ChatDisplayOrder` (Core) |
-| 3.9b | `.Persistence.cs` + preview reconcile + the appliers from 3.8 | `ChatFacade` + `ChatStateStore` + `IChatStore` / `IMessageStore`. Close the transitional public dictionaries on `ChatStateStore` |
+| 3.9b | `.Persistence.cs` + preview reconcile + the appliers from 3.8 | `ChatFacade` + `ChatStateStore` + `IChatStore` / `IMessageStore`. Close the transitional public dictionaries on `ChatStateStore`. **Pending message queue done — see below** |
 | 3.10 | `.IncomingPump.cs` | Decode/dispatch stays with connection; apply (row, preview, unread, toast) goes to façades |
 
 **3.1a is done.** The avatar half of `MediaCache` is `IAvatarCache` / `AvatarCacheService`: `TryGet`,
@@ -379,6 +379,21 @@ by canonical address, so it inherits whatever this table says. That is the regre
 tests fail if the move changes what the user sees in the list. It is not full cover — persistence
 and the appliers are in the UWP head and out of its reach — so 3.9b still wants a device pass. It is
 the difference between a silent reorder and a red test.
+
+**3.9b has started: the pending message queue is out.** `PendingMessageQueue` (`Unison.Core/State`)
+owns what is queued for SQLite and the rule for when to write it, replacing seven fields and a lock
+that were spread across three files. The dedupe rule that was written twice — queue and requeue — is
+now in one method.
+
+The seam is the return value: `Add` answers with a `PendingFlushAction` and the host runs the timer
+or the flush. That keeps the decision atomic inside the queue's lock while the platform work happens
+outside it, which is the general shape for the rest of 3.9b — the rule moves to Core, the I/O and the
+UI thread stay in the host.
+
+Taking this one first was deliberate. It is the message persistence path, where a mistake compiles
+cleanly and surfaces as messages that never land, and it is only takeable now because the queue is
+deterministic given a clock reading and therefore testable. Thirty tests cover it. What is still in
+the client is genuinely platform: the `Timer`, the SQLite write, the diagnostics.
 
 **Thread affinity:** today the client mutates `Chats` on the UI thread; VMs read on the UI thread; `ChatStateStore`’s extra dictionaries are protected by that, not only by the lock. Any code moved to a façade that runs off-thread must use `UpsertChatsAsync` / `UpsertMessagesAsync` (or `IDispatcher`). Do not split 3.9 into half-moves.
 

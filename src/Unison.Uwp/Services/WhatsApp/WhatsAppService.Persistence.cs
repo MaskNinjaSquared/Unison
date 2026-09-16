@@ -267,26 +267,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private List<ChatMessage> GetPendingPersistMessagesSnapshot(string chatJid)
         {
-            string canonical = GetCanonicalJid(NormalizeJid(chatJid));
-            var result = new List<ChatMessage>();
-
-            lock (_offlineReplayPersistLock)
-            {
-                foreach (var pair in _offlineReplayPendingMessagesByChat)
-                {
-                    if (!string.Equals(GetCanonicalJid(NormalizeJid(pair.Key)), canonical, StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
-
-                    if (pair.Value != null)
-                    {
-                        result.AddRange(pair.Value.Where(m => m != null));
-                    }
-                }
-            }
-
-            return result;
+            return _pendingMessages.SnapshotFor(chatJid, jid => GetCanonicalJid(NormalizeJid(jid)));
         }
 
         private async Task PersistLiveMessagesAsync(string chatJid, IList<ChatMessage> messages)
@@ -328,67 +309,15 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            var batch = messages.Where(m => m != null).ToList();
-            if (batch.Count == 0)
-            {
-                return;
-            }
+            var action = _pendingMessages.Add(jid, messages, DateTime.UtcNow, scheduleFlush);
 
-            bool shouldFlush = false;
-            lock (_offlineReplayPersistLock)
-            {
-                if (!_offlineReplayPendingMessagesByChat.TryGetValue(jid, out var pending))
-                {
-                    pending = new List<ChatMessage>();
-                    _offlineReplayPendingMessagesByChat[jid] = pending;
-                }
-
-                int addedToPending = 0;
-                foreach (var message in batch)
-                {
-                    if (message == null) continue;
-
-                    int existingIndex = !string.IsNullOrWhiteSpace(message.Id)
-                        ? pending.FindIndex(m => string.Equals(m?.Id, message.Id, StringComparison.Ordinal))
-                        : -1;
-                    if (existingIndex >= 0)
-                    {
-                        pending[existingIndex] = message;
-                    }
-                    else
-                    {
-                        pending.Add(message);
-                        addedToPending++;
-                    }
-                }
-
-                _offlineReplayDirtyChats.Add(jid);
-                _offlineReplayPendingMessageCount += addedToPending;
-
-                var now = DateTime.UtcNow;
-                bool thresholdReached = _offlineReplayPendingMessageCount >= OfflineReplayFlushMessageThreshold ||
-                    (_lastOfflineReplayFlushUtc != DateTime.MinValue &&
-                     now - _lastOfflineReplayFlushUtc >= OfflineReplayFlushInterval);
-
-                if (scheduleFlush && thresholdReached && !_offlineReplayFlushRequested)
-                {
-                    _offlineReplayFlushRequested = true;
-                    shouldFlush = true;
-                }
-                else if (scheduleFlush)
-                {
-                    ScheduleOfflineReplayFlushTimer_NoLock();
-                }
-
-                if (_lastOfflineReplayFlushUtc == DateTime.MinValue)
-                {
-                    _lastOfflineReplayFlushUtc = now;
-                }
-            }
-
-            if (shouldFlush)
+            if (action == PendingFlushAction.FlushNow)
             {
                 _ = FlushOfflineReplayMessagesAsync("message-batch-threshold");
+            }
+            else if (action == PendingFlushAction.ScheduleTimer)
+            {
+                ScheduleOfflineReplayFlushTimer();
             }
         }
 
@@ -397,24 +326,14 @@ namespace Unison.Uwp.Services.WhatsApp
             await _offlineReplayFlushLock.WaitAsync();
             try
             {
-                Dictionary<string, List<ChatMessage>> snapshot;
-                HashSet<string> dirtyChats;
-                lock (_offlineReplayPersistLock)
+                var drain = _pendingMessages.Drain(DateTime.UtcNow);
+                if (drain == null)
                 {
-                    if (_offlineReplayPendingMessageCount == 0)
-                    {
-                        return;
-                    }
+                    return;
+                }
 
-                    snapshot = _offlineReplayPendingMessagesByChat.ToDictionary(
-                        kvp => kvp.Key,
-                        kvp => kvp.Value.ToList(),
-                        StringComparer.OrdinalIgnoreCase);
-                    dirtyChats = new HashSet<string>(_offlineReplayDirtyChats, StringComparer.OrdinalIgnoreCase);
-                    _offlineReplayPendingMessagesByChat.Clear();
-                    _offlineReplayDirtyChats.Clear();
-                    _offlineReplayPendingMessageCount = 0;
-                    _lastOfflineReplayFlushUtc = DateTime.UtcNow;
+                lock (_offlineReplayTimerLock)
+                {
                     _offlineReplayFlushTimer?.Dispose();
                     _offlineReplayFlushTimer = null;
                 }
@@ -424,23 +343,14 @@ namespace Unison.Uwp.Services.WhatsApp
                     int saved = 0;
                     var outgoingIdsToRemove = new HashSet<string>(StringComparer.Ordinal);
                     var incomingIdsToRemove = new HashSet<string>(StringComparer.Ordinal);
-                    foreach (var kvp in snapshot)
+                    foreach (var kvp in drain.MessagesByChat)
                     {
                         if (kvp.Value == null || kvp.Value.Count == 0)
                         {
                             continue;
                         }
 
-                        var batchMessages = kvp.Value
-                            .Where(m => m != null)
-                            .GroupBy(
-                                m => string.IsNullOrWhiteSpace(m.Id) ? Guid.NewGuid().ToString() : m.Id,
-                                StringComparer.Ordinal)
-                            .Select(g => g.Last())
-                            .OrderByDescending(m => m.Timestamp)
-                            .Take(MaxPersistMessagesPerChatBatch)
-                            .OrderBy(m => m.Timestamp)
-                            .ToList();
+                        var batchMessages = _pendingMessages.SelectBatch(kvp.Value);
 
                         await PersistLiveMessagesAsync(kvp.Key, batchMessages);
 
@@ -476,7 +386,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         await _messageStore.RemovePendingIncomingAsync(incomingIdsToRemove);
                     }
 
-                    Debug.WriteLine($"[WhatsAppService] Flushed {saved} queued message(s) across {snapshot.Count} chat(s), dirtyChats={dirtyChats.Count}, reason={reason}");
+                    Debug.WriteLine($"[WhatsAppService] Flushed {saved} queued message(s) across {drain.ChatCount} chat(s), dirtyChats={drain.DirtyChats.Count}, reason={reason}");
                     if (!reason.StartsWith("shutdown", StringComparison.OrdinalIgnoreCase))
                     {
                         SchedulePersist();
@@ -484,57 +394,20 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
                 catch (Exception ex)
                 {
-                    lock (_offlineReplayPersistLock)
-                    {
-                        foreach (var kvp in snapshot)
-                        {
-                            if (!_offlineReplayPendingMessagesByChat.TryGetValue(kvp.Key, out var pending))
-                            {
-                                pending = new List<ChatMessage>();
-                                _offlineReplayPendingMessagesByChat[kvp.Key] = pending;
-                            }
-
-                            foreach (var message in kvp.Value.Where(m => m != null))
-                            {
-                                int existingIndex = !string.IsNullOrWhiteSpace(message.Id)
-                                    ? pending.FindIndex(m => string.Equals(m?.Id, message.Id, StringComparison.Ordinal))
-                                    : -1;
-                                if (existingIndex >= 0)
-                                {
-                                    pending[existingIndex] = message;
-                                }
-                                else
-                                {
-                                    pending.Add(message);
-                                    _offlineReplayPendingMessageCount++;
-                                }
-                            }
-                        }
-
-                        foreach (var jid in dirtyChats)
-                        {
-                            _offlineReplayDirtyChats.Add(jid);
-                        }
-                    }
+                    _pendingMessages.Restore(drain);
 
                     RuntimeDiagnosticsService.Instance.RecordException(
                         "messages",
                         "message-batch-flush-deferred",
                         ex,
-                        "reason=" + reason + "; chats=" + snapshot.Count);
+                        "reason=" + reason + "; chats=" + drain.ChatCount);
                 }
             }
             finally
             {
-                bool scheduleAnother = false;
-                lock (_offlineReplayPersistLock)
+                if (_pendingMessages.CompleteFlush())
                 {
-                    _offlineReplayFlushRequested = false;
-                    scheduleAnother = _offlineReplayPendingMessageCount > 0;
-                    if (scheduleAnother)
-                    {
-                        ScheduleOfflineReplayFlushTimer_NoLock();
-                    }
+                    ScheduleOfflineReplayFlushTimer();
                 }
 
                 _offlineReplayFlushLock.Release();

@@ -787,18 +787,18 @@ namespace Unison.Uwp.Services.WhatsApp
         private bool _persistPending = false;
         private readonly object _persistLock = new object();
         private readonly SemaphoreSlim _persistRunLock = new SemaphoreSlim(1, 1);
-        private readonly object _offlineReplayPersistLock = new object();
         private readonly SemaphoreSlim _offlineReplayFlushLock = new SemaphoreSlim(1, 1);
+        private readonly object _offlineReplayTimerLock = new object();
         private System.Threading.Timer _offlineReplayFlushTimer;
-        private readonly Dictionary<string, List<ChatMessage>> _offlineReplayPendingMessagesByChat =
-            new Dictionary<string, List<ChatMessage>>(StringComparer.OrdinalIgnoreCase);
-        private readonly HashSet<string> _offlineReplayDirtyChats = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        private int _offlineReplayPendingMessageCount = 0;
-        private bool _offlineReplayFlushRequested = false;
-        private DateTime _lastOfflineReplayFlushUtc = DateTime.MinValue;
         private const int OfflineReplayFlushMessageThreshold = 12;
         private const int MaxPersistMessagesPerChatBatch = 1500;
         private static readonly TimeSpan OfflineReplayFlushInterval = TimeSpan.FromMilliseconds(750);
+
+        /// <summary>Messages accepted but not yet written, and the rule for when to write them.</summary>
+        private readonly PendingMessageQueue _pendingMessages = new PendingMessageQueue(
+            OfflineReplayFlushMessageThreshold,
+            OfflineReplayFlushInterval,
+            MaxPersistMessagesPerChatBatch);
         private CancellationTokenSource _postReplayMaintenanceCts;
         private CancellationTokenSource _postMessageEnrichmentCts;
         private int _postMessageEnrichmentStarted;
@@ -1096,11 +1096,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 snapshot.PersistPending = _persistPending;
             }
 
-            lock (_offlineReplayPersistLock)
-            {
-                snapshot.OfflinePersistPendingMessageCount = _offlineReplayPendingMessageCount;
-                snapshot.OfflineReplayFlushRequested = _offlineReplayFlushRequested;
-            }
+            snapshot.OfflinePersistPendingMessageCount = _pendingMessages.PendingCount;
+            snapshot.OfflineReplayFlushRequested = _pendingMessages.IsFlushClaimed;
 
             var socket = _socket;
             if (socket != null)
@@ -2493,22 +2490,19 @@ namespace Unison.Uwp.Services.WhatsApp
             return ChatPreviewNormalizer.InferKindFromMessage(message);
         }
 
-        private void ScheduleOfflineReplayFlushTimer_NoLock()
+        /// <summary>
+        /// Restarts the idle timer. Serialized on its own lock: the queue no longer holds one
+        /// while the caller does this, and two threads swapping the field could otherwise
+        /// dispose a timer that is mid-callback.
+        /// </summary>
+        private void ScheduleOfflineReplayFlushTimer()
         {
-            _offlineReplayFlushTimer?.Dispose();
-            _offlineReplayFlushTimer = new System.Threading.Timer(async _ =>
+            lock (_offlineReplayTimerLock)
             {
-                bool shouldRun = false;
-                lock (_offlineReplayPersistLock)
-                {
-                    if (_offlineReplayPendingMessageCount > 0 && !_offlineReplayFlushRequested)
-                    {
-                        _offlineReplayFlushRequested = true;
-                        shouldRun = true;
-                    }
-                }
-
-                if (!shouldRun)
+                _offlineReplayFlushTimer?.Dispose();
+                _offlineReplayFlushTimer = new System.Threading.Timer(async _ =>
+            {
+                if (!_pendingMessages.TryClaimFlush())
                 {
                     return;
                 }
@@ -2521,7 +2515,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 {
                     Debug.WriteLine($"[WhatsAppService] Non-fatal message batch flush failure: {ex.Message}");
                 }
-            }, null, (int)OfflineReplayFlushInterval.TotalMilliseconds, Timeout.Infinite);
+                }, null, (int)OfflineReplayFlushInterval.TotalMilliseconds, Timeout.Infinite);
+            }
         }
 
         /// <summary>

@@ -4,6 +4,20 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## WhatsAppService extraction — phase 3.9b, first slice (pending message queue)
+
+- New `PendingMessageQueue` in `Unison.Core/State`: the messages accepted but not yet written to SQLite, plus the rule for when to write them. 143 lines out of the client against 42 back in
+- Replaces a cluster of seven fields, three constants and one lock spread across `WhatsAppService.cs`, `.Persistence.cs` and `.IncomingPump.cs` — `_offlineReplayPendingMessagesByChat`, `_offlineReplayDirtyChats`, `_offlineReplayPendingMessageCount`, `_offlineReplayFlushRequested`, `_lastOfflineReplayFlushUtc` and `_offlineReplayPersistLock`
+- **The dedupe rule was written twice**, once when queueing and once when putting a failed batch back. Now `MergeIntoChat_NoLock`, in one place
+- The queue decides what is pending and whether someone should write; it does not own the timer or the database. `Add` returns a `PendingFlushAction` and the host acts on it, so the flush decision stays atomic under one lock while the platform work happens outside it
+- Takes the clock as a parameter rather than reading `DateTime.UtcNow`, which is what makes the 750ms interval rule testable
+- 30 tests. The threshold rule, the interval starting at the first message rather than at construction, single-claim on the flush, drain, requeue and the per-chat batch cap
+- **Recorded, not endorsed:** a restored message overwrites a newer one queued while the write was in flight. Carried over from the original requeue; the loss is bounded, since the older copy stays queued and the next flush writes it
+- `ScheduleOfflineReplayFlushTimer` gained its own lock. The queue lock no longer covers the timer swap, and two threads replacing that field could otherwise dispose a timer mid-callback
+- This is the slice of 3.9b the new test project made safe to take: it is the message persistence path, where a mistake compiles cleanly and shows up as messages that silently never land
+
+---
+
 ## JidAliasTable under test — and a self-aliasing finding
 
 - 32 more tests (120 total): canonicalization, `IsSelfLinked`, `IsLidLike`, `GetCanonicalSelfPnJid`, and the `Changed` contract including the silence on a restated pair
