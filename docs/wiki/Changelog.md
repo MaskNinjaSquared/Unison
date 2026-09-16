@@ -4,6 +4,17 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## JidAliasTable under test — and a self-aliasing finding
+
+- 32 more tests (120 total): canonicalization, `IsSelfLinked`, `IsLidLike`, `GetCanonicalSelfPnJid`, and the `Changed` contract including the silence on a restated pair
+- **Finding, pre-existing, not fixed here.** The guard in `GetCanonicalJid` is commented "never canonicalize a non-self contact to our own JID". It cannot fire when a contact's LID is aliased straight to our id: the guard's own `IsSelfLinked(normalized)` consults the alias being validated, reports true, and switches the guard off. Confirmed by probe — `GetCanonicalJid` returns our own address for that contact
+- The effective protection is upstream, in `WhatsAppService.TryRecordAliasMapping`, which refuses to write such a pair. The guard in the table is narrower than it reads: it only catches an alias that is self-*linked* without being self-*jid*, e.g. a device-suffixed form of our own number. That case is tested and does hold
+- **The gap that matters:** the startup restore in `WhatsAppService.Connection.cs` writes persisted aliases into the table directly, normalizing but skipping `TryRecordAliasMapping`. A poisoned pair that ever reached disk is reloaded unvalidated on every launch, and the contact's chat merges into the self chat
+- Both behaviours are pinned by tests that say they are recorded rather than endorsed, so a fix flips a red test instead of silently changing canonical keys
+- Separately noted: `_inner` uses the default case-sensitive comparer while `Snapshot()` rebuilds with `OrdinalIgnoreCase`. Writers normalize, and normalization lowercases the server, so it does not bite today — but `Snapshot()` would throw rather than degrade if two keys ever differed only by case
+
+---
+
 ## Test project for Unison.Core
 
 - New `tests/Unison.Core.Tests` (net9.0, xUnit). 88 characterization tests, ~30ms. Run with `dotnet test tests/Unison.Core.Tests/Unison.Core.Tests.csproj`

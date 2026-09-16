@@ -364,7 +364,15 @@ appeared at runtime, and `CountRecipients` collapsing "no group node" into "zero
 caught by re-reading the diff *after* a green build.
 
 So `tests/Unison.Core.Tests` now exists (net9.0, xUnit, `dotnet test`). It pins the order rule, the
-name blacklist, the extension mapping and `ToUtc`. That is the regression net for 3.9b: the order
+name blacklist, the extension mapping, `ToUtc` and the `JidAliasTable` canonicalization rules.
+
+Writing the alias tests turned up something 3.9b and 3.7b both need to know. The self-poisoning guard
+in `GetCanonicalJid` does not cover the case its comment claims: when a contact's LID is aliased
+straight to our id, the guard's own `IsSelfLinked` call consults that alias, returns true, and
+disables the guard. The pair is refused upstream by `TryRecordAliasMapping`, so the live path is
+protected — but the startup restore in `.Connection.cs` writes persisted aliases into the table
+directly, without that check. Any 3.9b work that re-keys persisted rows by canonical address inherits
+this. Both behaviours are pinned by tests marked as recorded rather than endorsed. That is the regression net for 3.9b: the order
 tests fail if the move changes what the user sees in the list. It is not full cover — persistence
 and the appliers are in the UWP head and out of its reach — so 3.9b still wants a device pass. It is
 the difference between a silent reorder and a red test.
