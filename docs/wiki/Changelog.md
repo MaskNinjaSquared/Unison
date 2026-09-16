@@ -4,6 +4,36 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Chat identity — JidHelper.Normalize covered, and a seam mismatch found
+
+`JidHelper.Normalize` decides whether two addresses are the same conversation. Which row a message
+lands in, whether the list shows one chat or two, which history keys are queried — all of it inherits
+its answer, and it had no tests. Now 26, written as characterization: they record today's behaviour so
+that a later change to chat identity has to be deliberate.
+
+What they pin, beyond the obvious: a device suffix is dropped so one contact writing from phone and
+desktop stays one chat; a LID loses its instance suffix; a `.0` alias on `@s.whatsapp.net` collapses
+while a `.5` is kept whole, because that one is a different identity rather than an instance. And
+normalizing is idempotent — load-bearing, since the same address is normalized repeatedly as it moves
+between socket, store and list, and a second pass that altered it would make identity depend on how
+many times a value had been handled.
+
+**The finding, recorded and not acted on.** Group addresses take an early return, before the line that
+lowercases the server part. So `@G.US` and `@g.us` normalize to two different strings, which is
+harmless only while every consumer compares group addresses case-insensitively. `WhatsAppService` does.
+`ChatStateStore` does not — it keys `_messagesByChat`, `_pushNames` and `_addressBookNames` with
+`StringComparer.Ordinal` and `FindChat` compares with `StringComparison.Ordinal`. `FindChat` is what
+`UpsertChats` asks before deciding whether a chat is new, so a mixed-case `@g.us` reaching the store
+becomes two rows for one group, while the client still sees one.
+
+The store is internally consistent, so this is a mismatch across the Core/UWP seam rather than a bug
+inside either side, and whether it fires depends on whether the server ever varies that case — which
+cannot be established from the code. Not changed: making chat identity case-insensitive is a one-line
+edit with the blast radius of merging or splitting conversations, and it belongs with the device pass.
+The test says so at the assertion.
+
+---
+
 ## Chat preview staleness gate
 
 - New `ChatPreviewStaleness.ShouldAccept` in `Unison.Core/Helpers`: the time check every preview write in `ApplyChatPreviewIfNewer` passes through, and it had no test

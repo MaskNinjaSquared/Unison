@@ -298,6 +298,17 @@ quietly stop firing.
 3.7b is the storage swap behind this seam: reconcile the key shapes, then let the table read
 `LidMappingStore` through its memory cache. Nothing above it has to change again.
 
+**Before attempting 3.7b, settle this.** `JidHelper.Normalize` now has characterization tests, and
+writing them surfaced a mismatch 3.7b will run straight into. Group addresses take an early return
+before the server part is lowercased, so `@G.US` and `@g.us` normalize to different strings. The client
+compares group addresses case-insensitively and does not care; `ChatStateStore` keys chats and messages
+with `StringComparer.Ordinal` and does. `FindChat` is what `UpsertChats` consults before deciding a chat
+is new, so a mixed-case `@g.us` reaching the store is two rows for one group.
+
+That is the same class of question 3.7b exists to answer — the two stores disagree on key shape — and
+it is why 3.7b is not a mechanical swap. Decide the case rule for the whole seam first, with a device
+pass behind it, then move the storage.
+
 **3.5a is done: reading left, the tally stayed.** `ReceiptReader` turns a `<receipt>` node into
 `ReceiptFacts` — status, message ids, chat, participant, whether it is a group — and counts how many
 distinct other people a group message has to reach. It takes `IJidResolver`, which 3.7a made a real
