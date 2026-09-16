@@ -58,6 +58,42 @@ namespace Unison.Uwp.Services.WhatsApp
         private static bool IsGroupIdPlaceholder(string label, string groupJid) =>
             GroupMetadataReader.IsIdPlaceholder(label, groupJid);
 
+        /// <summary>
+        /// Whether we already hold a usable name for this group, counting the label on the
+        /// row as well as the cached one.
+        /// </summary>
+        /// <remarks>
+        /// The row counts because a name can reach it before it reaches the cache. Written
+        /// three ways across the group paths and only one consulted the row, so a synced
+        /// subject that the blacklist would otherwise hold back could overwrite a good name
+        /// through one path and not the other.
+        /// </remarks>
+        private bool HasMeaningfulGroupLabel(string groupJid, string rowName)
+        {
+            string cached;
+            if (ContactNames.TryGetValue(groupJid, out cached) &&
+                IsMeaningfulChatLabel(cached, groupJid, true))
+            {
+                return true;
+            }
+
+            return IsMeaningfulChatLabel(rowName, groupJid, true);
+        }
+
+        private string FindGroupRowName(string groupJid)
+        {
+            var rows = GetChatRowsForCanonicalJid(GetCanonicalJid(groupJid));
+            for (int i = 0; i < rows.Count; i++)
+            {
+                if (rows[i] != null && !string.IsNullOrWhiteSpace(rows[i].Name))
+                {
+                    return rows[i].Name;
+                }
+            }
+
+            return null;
+        }
+
         public Task QueryAllGroupsAsync() => QueryAllGroupsAsync(false);
 
         /// <param name="force">
@@ -374,19 +410,9 @@ namespace Unison.Uwp.Services.WhatsApp
                     if (!string.IsNullOrWhiteSpace(subject) &&
                         !IsGroupIdPlaceholder(subject, chat.JID))
                     {
-                        string existingCached;
-                        bool existingCacheMeaningful =
-                            ContactNames.TryGetValue(chat.JID, out existingCached) &&
-                            IsMeaningfulChatLabel(existingCached, chat.JID, true);
-                        if (!existingCacheMeaningful)
-                        {
-                            existingCacheMeaningful =
-                                IsMeaningfulChatLabel(chat.Name, chat.JID, true);
-                        }
-
                         if (GroupNameSyncBlacklist.ShouldCacheSyncedSubject(
                                 subject,
-                                existingCacheMeaningful))
+                                HasMeaningfulGroupLabel(chat.JID, chat.Name)))
                         {
                             ContactNames[chat.JID] = subject;
                             resolved++;
@@ -499,13 +525,9 @@ namespace Unison.Uwp.Services.WhatsApp
                     if (!string.IsNullOrWhiteSpace(entry.Subject) &&
                         !IsGroupIdPlaceholder(entry.Subject, entry.Jid))
                     {
-                        string existingCached;
-                        bool existingCacheMeaningful =
-                            ContactNames.TryGetValue(entry.Jid, out existingCached) &&
-                            IsMeaningfulChatLabel(existingCached, entry.Jid, true);
                         if (GroupNameSyncBlacklist.ShouldCacheSyncedSubject(
                                 entry.Subject,
-                                existingCacheMeaningful))
+                                HasMeaningfulGroupLabel(entry.Jid, FindGroupRowName(entry.Jid))))
                         {
                             ContactNames[entry.Jid] = entry.Subject;
                             Debug.WriteLine($"[WhatsAppService] Group resolved: {entry.Jid} -> {entry.Subject}");

@@ -6819,13 +6819,9 @@ namespace Unison.Uwp.Services.WhatsApp
                 {
                     if (entry.IsSubject)
                     {
-                        string existingCached;
-                        bool existingCacheMeaningful =
-                            ContactNames.TryGetValue(entry.Canonical, out existingCached) &&
-                            IsMeaningfulChatLabel(existingCached, entry.Canonical, true);
                         if (!GroupNameSyncBlacklist.ShouldCacheSyncedSubject(
                                 entry.Name,
-                                existingCacheMeaningful))
+                                HasMeaningfulGroupLabel(entry.Canonical, FindGroupRowName(entry.Canonical))))
                         {
                             continue;
                         }

@@ -61,6 +61,25 @@ determines the orientation and answers in one call. Each caller keeps its own lo
 merge still merges the rows and withholds only the alias; the mapped-LID path still only fires the first
 time it sees an address.
 
+### Reading on the phone left the pinned tile showing the old count
+
+The same event — a conversation became read — is handled twice, once for a local read and once for the
+phone telling us. The local one moved off `SchedulePersist` a while back, with a comment explaining why:
+rewriting every chat preview plus three JSON maps is fine on an SSD and costs several seconds on Mobile
+eMMC. It also tells `IShortcutService` so a pinned tile follows along. The app-state copy was left on the
+old shape, so reading on the phone paid the expensive persist and left the tile stale.
+
+It now tracks which rows actually changed and writes only those, the same way, and reports the resolved
+count to the shortcut service. Not a straight call into the local path: this one also raises the count
+back up when the phone marks a chat unread.
+
+### One more group-name rule written three ways
+
+"Do we already hold a usable name for this group?" existed in three copies and only one of them looked at
+the label on the row. A name reaches the row before it reaches the cache, so through the other two a
+synced subject the invite blacklist would normally hold back could overwrite a good name — and whether it
+did depended on which path saw the group first.
+
 ### A group's name could come from a different group
 
 `GroupMetadataReader` asked "is this node the group I asked about?" in two places and completed the id

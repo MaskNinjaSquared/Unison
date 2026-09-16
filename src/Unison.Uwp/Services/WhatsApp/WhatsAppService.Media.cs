@@ -304,22 +304,10 @@ namespace Unison.Uwp.Services.WhatsApp
                 fileBase,
                 MediaFileExtensions.ForImage(mimeType));
 
-        /// <summary>
-        /// Re-encode via the platform <see cref="Windows.Graphics.Imaging.BitmapDecoder"/> when present.
-        /// </summary>
-        private static Task<byte[]> TryEncodeImageBytesAsPngAsync(byte[] imageBytes) =>
-            MediaDerivationService.TryEncodeAsPngAsync(imageBytes);
-
         private Task<string> SaveStickerBytesToCacheAsync(byte[] imageBytes, string fileBase, string mimeType)
         {
             return SaveImageBytesForDisplayAsync(imageBytes, fileBase, mimeType ?? "image/webp");
         }
-
-        private static bool IsOggOpusMime(string mimeType) =>
-            MediaFileExtensions.IsOggOpusMime(mimeType);
-
-        private static bool LooksLikeOggUri(string uri) =>
-            MediaFileExtensions.LooksLikeOggUri(uri);
 
         private Task<string> SaveAudioBytesToCacheAsync(byte[] audioBytes, string fileBase, string mimeType) =>
             _mediaCache.SaveAsync(
@@ -787,9 +775,6 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        private static string GetDocumentFileExtension(string fileName, string mimeType) =>
-            MediaFileExtensions.ForDocument(fileName, mimeType);
-
         private Task<string> SaveDocumentBytesToCacheAsync(
             byte[] documentBytes,
             string fileBase,
@@ -1015,7 +1000,5 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        private static string GetImageFileExtension(string mimeType) =>
-            MediaFileExtensions.ForImage(mimeType);
     }
 }

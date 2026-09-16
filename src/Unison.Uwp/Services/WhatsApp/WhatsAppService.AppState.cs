@@ -109,6 +109,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
+            List<ChatItem> dirty = null;
+            int resolved = 0;
             await RunOnUiThreadAsync(() =>
             {
                 var rows = GetChatRowsForCanonicalJid(canonical);
@@ -122,13 +124,52 @@ namespace Unison.Uwp.Services.WhatsApp
                     };
                     Chats.Add(created);
                     rows.Add(created);
+                    dirty = new List<ChatItem> { created };
                 }
 
-                int value = AppStateChatMutation.ResolveUnreadCount(rows, read);
-                foreach (var row in rows) row.UnreadCount = value;
+                resolved = AppStateChatMutation.ResolveUnreadCount(rows, read);
+                foreach (var row in rows)
+                {
+                    if (row.UnreadCount == resolved)
+                    {
+                        continue;
+                    }
+
+                    row.UnreadCount = resolved;
+                    if (dirty == null)
+                    {
+                        dirty = new List<ChatItem>();
+                    }
+
+                    if (!dirty.Contains(row))
+                    {
+                        dirty.Add(row);
+                    }
+                }
             });
+
+            if (dirty == null || dirty.Count == 0)
+            {
+                return;
+            }
+
             NotificationService.Instance.UpdateBadge(GetTotalUnreadCount());
-            SchedulePersist();
+
+            // Reading on the phone left the pinned tile showing the old count: only the
+            // local read path told the shortcut service, and this one is the same event
+            // arriving from the other direction.
+            try
+            {
+                App.Services?.GetService<IShortcutService>()?.UpdateChatUnread(canonical, resolved);
+            }
+            catch
+            {
+            }
+
+            // A slice, not a full persist. The local read path moved off SchedulePersist
+            // because rewriting every preview plus three JSON maps costs seconds on Mobile
+            // eMMC, and nothing about this copy makes it cheaper.
+            _ = PersistChatCatalogSliceAsync(dirty);
         }
 
         /// <summary>
