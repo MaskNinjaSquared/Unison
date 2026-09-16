@@ -354,6 +354,21 @@ This was picked as the first slice of 3.9 because it is the half the compiler ca
 rest — persistence, preview reconciliation, and the app-state appliers folded in from 3.8 — all
 write chat state under the client's locks, and that is 3.9b.
 
+**Before starting 3.9b, read this.** Phases 3.1a through 3.9a were all chosen on one criterion:
+the compiler could vouch for them. A moved pure function that loses a caller does not build. That
+criterion is exhausted — everything left (3.9b, 3.6, 3.10) writes mutable state under the client's
+locks, where a mistake builds cleanly and shows up as a chat that stopped saving.
+
+Two misses in the extraction bear this out: the constructor-ordering crash in 3.7a, which only
+appeared at runtime, and `CountRecipients` collapsing "no group node" into "zero recipients" in 3.5a,
+caught by re-reading the diff *after* a green build.
+
+So `tests/Unison.Core.Tests` now exists (net9.0, xUnit, `dotnet test`). It pins the order rule, the
+name blacklist, the extension mapping and `ToUtc`. That is the regression net for 3.9b: the order
+tests fail if the move changes what the user sees in the list. It is not full cover — persistence
+and the appliers are in the UWP head and out of its reach — so 3.9b still wants a device pass. It is
+the difference between a silent reorder and a red test.
+
 **Thread affinity:** today the client mutates `Chats` on the UI thread; VMs read on the UI thread; `ChatStateStore`’s extra dictionaries are protected by that, not only by the lock. Any code moved to a façade that runs off-thread must use `UpsertChatsAsync` / `UpsertMessagesAsync` (or `IDispatcher`). Do not split 3.9 into half-moves.
 
 **Canonical JID:** introduce `IJidResolver` in phase 1 as a thin wrapper so 3.2 / 3.6 / 3.7 do not all rewrite aliasing at once.

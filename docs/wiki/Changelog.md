@@ -4,6 +4,17 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Test project for Unison.Core
+
+- New `tests/Unison.Core.Tests` (net9.0, xUnit). 88 characterization tests, ~30ms. Run with `dotnet test tests/Unison.Core.Tests/Unison.Core.Tests.csproj`
+- Covers what phases 3.x moved into Core and left unguarded: `ChatDisplayOrder` (pin/recency/name order, `Reposition`, `SortInPlace`), `GroupNameSyncBlacklist`, `MediaFileExtensions`, `WhatsAppMapper.ToUtc`
+- **Characterization, not specification.** They record what the code does today so that 3.9b fails loudly instead of silently. Where current behaviour is arguably wrong it is pinned down and labelled as such — see the substring match in `GroupNameSyncBlacklistTests`
+- Two regressions are pinned explicitly: `ToUtc` must not treat `Unspecified` as local (the Brazil UTC−3 +3h strip shift), and `SortInPlace` must raise no `CollectionChanged` when the list is already ordered
+- **Deliberately not in `Unison.slnx`.** The solution carries ARM/ARM64/x86 platform configs for the UWP head; adding a net9.0 project to it risks the existing build and deploy flow for no gain. `dotnet test` finds it directly
+- Reaches `Unison.Core` only. `ReceiptReader` and `GroupMetadataReader` live in the UWP head and stay uncovered until something moves or the head grows a test story
+
+---
+
 ## WhatsAppService extraction — phase 3.3b (derived media renditions)
 
 - New `MediaDerivationService`: WebP to PNG display sibling, platform PNG re-encode, Ogg/Opus to M4A transcode, first-frame video poster — 216 lines out of `.Media.cs`
