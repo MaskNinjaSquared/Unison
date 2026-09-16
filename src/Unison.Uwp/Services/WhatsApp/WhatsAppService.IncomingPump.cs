@@ -1675,11 +1675,12 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         /// <summary>
-        /// Status is not a chat: persist on <c>history_status</c> and skip ChatItem routing.
+        /// Status is not a chat: report the decoded row and skip ChatItem routing. Persistence is
+        /// StatusFacade's, on <c>history_status</c>.
         /// </summary>
-        private async Task IngestLiveStatusAsync(Client.DecryptedMessageEventArgs e)
+        private void IngestLiveStatus(Client.DecryptedMessageEventArgs e)
         {
-            if (_statusService == null || e?.Message == null)
+            if (e?.Message == null)
             {
                 return;
             }
@@ -1708,14 +1709,9 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            try
-            {
-                await _statusService.TryIngestLiveAsync(row).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[WhatsAppService] Live status ingest failed: " + ex.Message);
-            }
+            RaiseReport(
+                () => OnLiveStatusReceived?.Invoke(this, row),
+                nameof(OnLiveStatusReceived));
         }
 
         /// <summary>
@@ -1785,7 +1781,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 if (JidHelper.IsStatusBroadcast(normalizedFromJid) ||
                     JidHelper.IsStatusBroadcast(e.FromJid))
                 {
-                    await IngestLiveStatusAsync(e).ConfigureAwait(false);
+                    IngestLiveStatus(e);
                     return;
                 }
 

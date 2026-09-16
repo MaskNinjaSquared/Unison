@@ -248,10 +248,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly IHistoryMessageStore _historyMessages;
         private readonly IHistoryChatPreviewStore _chatPreviews;
         private IMessageService _messageService;
-        private IStatusService _statusService;
         private IContactService _contactService;
-        private IConnectionService _connectionService;
-        private IHistoryService _historyService;
         private IPersonStore _personStore;
         private IGroupRosterStore _groupRosterStore;
         private IChatStore _chatStore;
@@ -267,35 +264,13 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         /// <summary>
-        /// Wired from App DI so FULL_HISTORY solicitations can bounce the background toast gate.
-        /// </summary>
-        public void AttachHistoryService(IHistoryService historyService)
-        {
-            _historyService = historyService;
-        }
-
-        /// <summary>
-        /// Wired from App DI so live status@broadcast items skip the chat list.
-        /// </summary>
-        public void AttachStatusService(IStatusService statusService)
-        {
-            _statusService = statusService;
-        }
-
-        /// <summary>
-        /// Wired from App DI for local contacts overlay + Person avatar upserts.
+        /// Wired from App DI so the legacy <see cref="IWhatsAppService"/> contact members still
+        /// resolve. Only pass-throughs are left here — the notifications this used to push at the
+        /// facade are events now (see <see cref="OnAvatarCached"/>, <see cref="OnJidAliasResolved"/>).
         /// </summary>
         public void AttachContactService(IContactService contactService)
         {
             _contactService = contactService;
-        }
-
-        /// <summary>
-        /// Wired from App DI for stream-error classification (logged-out â†’ shell QR).
-        /// </summary>
-        public void AttachConnectionService(IConnectionService connectionService)
-        {
-            _connectionService = connectionService;
         }
 
         /// <summary>
@@ -2099,6 +2074,46 @@ namespace Unison.Uwp.Services.WhatsApp
         public event EventHandler OnDisplayNamesUpdated;
         public event EventHandler<string> OnChatMessagesChanged;
         public event EventHandler<PresenceUpdateEventArgs> OnPresenceUpdate;
+        public event EventHandler<string> OnStreamError;
+        public event EventHandler<string> OnInvalidSessionSuspected;
+        public event EventHandler<HistoryStatus> OnLiveStatusReceived;
+        public event EventHandler OnBackgroundHistorySyncBounced;
+        public event EventHandler<AvatarCachedEventArgs> OnAvatarCached;
+        public event EventHandler<JidAliasResolvedEventArgs> OnJidAliasResolved;
+
+        /// <summary>
+        /// These are raised from the socket's own threads, so a facade that throws would otherwise
+        /// take the read loop down with it. The client reports and keeps going either way.
+        /// </summary>
+        private static void RaiseReport(Action raise, string name)
+        {
+            try
+            {
+                raise();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[WhatsAppService] " + name + " subscriber failed: " + ex.Message);
+            }
+        }
+
+        private void ReportStreamError(string code)
+        {
+            RaiseReport(() => OnStreamError?.Invoke(this, code), nameof(OnStreamError));
+        }
+
+        private void ReportAvatarCached(string jid, string localAvatarUrl)
+        {
+            if (string.IsNullOrWhiteSpace(jid) || string.IsNullOrWhiteSpace(localAvatarUrl))
+            {
+                return;
+            }
+
+            RaiseReport(
+                () => OnAvatarCached?.Invoke(this, new AvatarCachedEventArgs(jid, localAvatarUrl)),
+                nameof(OnAvatarCached));
+        }
+
         public string CurrentConnectionStatus { get; private set; }
         private void PublishInitialSyncProgress(bool active, bool completed, int processed, int total, string stage)
         {
@@ -4264,10 +4279,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         chat.AvatarFetchFailureReason = null;
                         StampGroupMemberAvatars(chat.JID, localUri);
                     });
-                if (_contactService != null)
-                {
-                    await _contactService.NotifyAvatarCachedAsync(chat.JID, localUri);
-                }
+                ReportAvatarCached(chat.JID, localUri);
                 return;
             }
 
@@ -5598,15 +5610,9 @@ namespace Unison.Uwp.Services.WhatsApp
                     BeginHistoryCatchUpBanner(reason);
                 }
 
-                try
-                {
-                    _historyService?.NoteBackgroundHistorySyncBounce();
-                }
-                catch (Exception bounceEx)
-                {
-                    Debug.WriteLine(
-                        "[WhatsAppService] History sync bounce notify failed: " + bounceEx.Message);
-                }
+                RaiseReport(
+                    () => OnBackgroundHistorySyncBounced?.Invoke(this, EventArgs.Empty),
+                    nameof(OnBackgroundHistorySyncBounced));
 
                 return true;
             }

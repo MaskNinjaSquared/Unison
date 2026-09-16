@@ -87,6 +87,28 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                     Debug.WriteLine("[ContactFacade] DisplayNamesUpdated handler failed: " + ex.Message);
                 }
             };
+            _whatsAppService.OnAvatarCached += Client_OnAvatarCached;
+            _whatsAppService.OnJidAliasResolved += Client_OnJidAliasResolved;
+        }
+
+        /// <summary>
+        /// Not awaited: the write swallows its own failures and the client has nothing to do with
+        /// the result.
+        /// </summary>
+        private void Client_OnAvatarCached(object sender, AvatarCachedEventArgs e)
+        {
+            _ = NotifyAvatarCachedAsync(e.Jid, e.LocalAvatarUrl);
+        }
+
+        /// <summary>
+        /// An earlier lookup may have asked under only the LID or only the PN and stamped a false
+        /// "no-picture". Now that the pair is known, let the rows without an avatar retry at once.
+        /// </summary>
+        private void Client_OnJidAliasResolved(object sender, JidAliasResolvedEventArgs e)
+        {
+            ClearAvatarAttempted(e.LidJid);
+            ClearAvatarAttempted(e.PhoneJid);
+            ClearAvatarAttempted(_jids.GetCanonicalJid(e.PhoneJid));
         }
 
         public event EventHandler DisplayNamesUpdated;
@@ -506,7 +528,8 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             _avatars.RequestRefresh(chat, force);
         }
 
-        public void ClearAvatarAttempted(string jid)
+        /// <summary>Clears the "already attempted this session" marker so a JID can be retried at once.</summary>
+        private void ClearAvatarAttempted(string jid)
         {
             _avatars.ClearAttempted(jid);
         }

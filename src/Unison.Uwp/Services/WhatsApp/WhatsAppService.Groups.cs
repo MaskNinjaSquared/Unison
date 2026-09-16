@@ -206,7 +206,7 @@ namespace Unison.Uwp.Services.WhatsApp
             try
             {
                 var response = await socket.QueryGroupMetadataAsync(canonical);
-                await ApplyGroupMetadataFromResponseAsync(response, canonical, hydrateAvatars: false);
+                await ApplyGroupMetadataFromResponseAsync(response, canonical);
             }
             catch (Exception ex)
             {
@@ -454,13 +454,10 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         private void ApplyGroupSendPermissionsFromMetadata(BinaryNode response, string groupJid)
         {
-            _ = ApplyGroupMetadataFromResponseAsync(response, groupJid, hydrateAvatars: false);
+            _ = ApplyGroupMetadataFromResponseAsync(response, groupJid);
         }
 
-        private async Task ApplyGroupMetadataFromResponseAsync(
-            BinaryNode response,
-            string groupJid,
-            bool hydrateAvatars)
+        private async Task ApplyGroupMetadataFromResponseAsync(BinaryNode response, string groupJid)
         {
             if (response == null || string.IsNullOrWhiteSpace(groupJid))
             {
@@ -503,11 +500,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 ApplyGroupMembersToChat(chat, ReadGroupMemberDrafts(groupNode));
                 SchedulePersist();
             });
-
-            if (hydrateAvatars && _contactService != null)
-            {
-                await _contactService.HydrateGroupMemberAvatarsAsync(canonical);
-            }
         }
 
         private string ExtractGroupSubject(BinaryNode response, string groupJid)

@@ -133,7 +133,7 @@ namespace Unison.Uwp.Services.WhatsApp.Connection
             HookClient(whatsApp);
         }
 
-        public void NotifyStreamError(string code)
+        private void NotifyStreamError(string code)
         {
             EvaluateAndMaybeUnlink(ClassifyStreamError(code), code, "stream-error");
         }
@@ -144,7 +144,7 @@ namespace Unison.Uwp.Services.WhatsApp.Connection
         /// for deleting credentials that the phone may still consider perfectly valid. It stops
         /// the reconnect loop and leaves the decision to unlink with the user.
         /// </summary>
-        public void NotifySuspectedInvalidSession(string trigger)
+        private void NotifySuspectedInvalidSession(string trigger)
         {
             EvaluateAndMaybeUnlink(DisconnectReason.BadSession, "500", trigger ?? "suspected-invalid");
         }
@@ -427,6 +427,8 @@ namespace Unison.Uwp.Services.WhatsApp.Connection
             whatsApp.OnSessionInitialized += Client_OnSessionInitialized;
             whatsApp.OnSessionCleared += Client_OnSessionCleared;
             whatsApp.OnError += Client_OnError;
+            whatsApp.OnStreamError += Client_OnStreamError;
+            whatsApp.OnInvalidSessionSuspected += Client_OnInvalidSessionSuspected;
         }
 
         private void UnhookClient(IWhatsAppService whatsApp)
@@ -442,6 +444,18 @@ namespace Unison.Uwp.Services.WhatsApp.Connection
             whatsApp.OnSessionInitialized -= Client_OnSessionInitialized;
             whatsApp.OnSessionCleared -= Client_OnSessionCleared;
             whatsApp.OnError -= Client_OnError;
+            whatsApp.OnStreamError -= Client_OnStreamError;
+            whatsApp.OnInvalidSessionSuspected -= Client_OnInvalidSessionSuspected;
+        }
+
+        private void Client_OnStreamError(object sender, string code)
+        {
+            NotifyStreamError(code);
+        }
+
+        private void Client_OnInvalidSessionSuspected(object sender, string trigger)
+        {
+            NotifySuspectedInvalidSession(trigger);
         }
 
         private void Client_OnQrCodeReceived(object sender, string qr)

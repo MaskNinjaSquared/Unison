@@ -121,6 +121,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
             _appState.OnHistorySyncReceived += (s, sync) => Relay(() => HistorySyncReceived?.Invoke(this, sync), "HistorySyncReceived");
             _appState.OnInitialSyncProgress += (s, e) => Relay(() => InitialSyncProgress?.Invoke(this, e), "InitialSyncProgress");
             _appState.OnSessionCleared += (s, e) => { _ = ResetHistorySqliteAsync("session-cleared"); };
+            _appState.OnBackgroundHistorySyncBounced += (s, e) => NoteBackgroundHistorySyncBounce();
             if (_chatPreviewStore != null)
             {
                 _chatPreviewStore.ChunkPersisted += (s, e) =>
@@ -287,8 +288,11 @@ namespace Unison.Uwp.Services.WhatsApp.History
             }
         }
 
-        /// <inheritdoc />
-        public void NoteBackgroundHistorySyncBounce()
+        /// <summary>
+        /// Counts a background FULL_HISTORY solicitation. After more than two bounces in this
+        /// process, shows one toast (no per-session reset — app restart clears it).
+        /// </summary>
+        private void NoteBackgroundHistorySyncBounce()
         {
             // Foreground already shows the catch-up banner; do not spend the one-toast budget.
             if (Unison.Uwp.App.IsWindowVisible)

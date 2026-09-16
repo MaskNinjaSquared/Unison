@@ -264,10 +264,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 if (IsExplicitLogoutStreamCode(fatalCode))
                 {
                     LatchFatalSession("health-" + fatalCode);
-                    if (_connectionService != null)
-                    {
-                        _connectionService.NotifyStreamError(fatalCode);
-                    }
+                    ReportStreamError(fatalCode);
 
                     return;
                 }
@@ -1302,10 +1299,9 @@ namespace Unison.Uwp.Services.WhatsApp
                         if (streak >= PreSessionCloseFatalThreshold)
                         {
                             // Report only â€” ConnectionFacade decides auto-unlink policy.
-                            if (_connectionService != null)
-                            {
-                                _connectionService.NotifySuspectedInvalidSession("pre-session-close-streak");
-                            }
+                            RaiseReport(
+                                () => OnInvalidSessionSuspected?.Invoke(this, "pre-session-close-streak"),
+                                nameof(OnInvalidSessionSuspected));
 
                             if (_fatalSessionEnded)
                             {
@@ -1414,14 +1410,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     LatchFatalSession("stream-" + (code ?? "logout"));
                 }
 
-                if (_connectionService != null)
-                {
-                    _connectionService.NotifyStreamError(code);
-                }
-                else
-                {
-                    Debug.WriteLine("[WhatsAppService] stream:error " + code + " (no IConnectionService)");
-                }
+                ReportStreamError(code);
             };
 
             socket.OnError += async (s, ex) => 
@@ -1447,9 +1436,9 @@ namespace Unison.Uwp.Services.WhatsApp
                     LatchFatalSession("error-" + fatalCode);
                 }
 
-                if (fatalCode != null && _connectionService != null)
+                if (fatalCode != null)
                 {
-                    _connectionService.NotifyStreamError(fatalCode);
+                    ReportStreamError(fatalCode);
                 }
 
                 if (_suppressReconnect || _fatalSessionEnded)

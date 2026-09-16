@@ -87,11 +87,56 @@ under `src/Unison.Uwp/UI` and `src/Unison.Uwp/Shell`.
 
 ---
 
+## Done: phase 2 — invert `Attach*` (the reportable half)
+
+Each `AttachFoo` is a place the flow is born in the client. Where the call was a **report** —
+fire-and-forget, no return value, no ordering the client depends on — it is now an event the client
+raises and the façade subscribes to in its own constructor.
+
+| Client event | Subscriber | Replaced |
+|---|---|---|
+| `OnStreamError` | `ConnectionFacade` | `AttachConnectionService` (gone) |
+| `OnInvalidSessionSuspected` | `ConnectionFacade` | same |
+| `OnLiveStatusReceived` | `StatusFacade` | `AttachStatusService` (gone) |
+| `OnBackgroundHistorySyncBounced` | `HistoryFacade` | `AttachHistoryService` (gone) |
+| `OnAvatarCached` | `ContactFacade` | part of `AttachContactService` |
+| `OnJidAliasResolved` | `ContactFacade` | part of `AttachContactService` |
+
+That let the push-in doors close on the contracts too. `NotifyStreamError`,
+`NotifySuspectedInvalidSession`, `TryIngestLiveAsync`, `NoteBackgroundHistorySyncBounce` and
+`ClearAvatarAttempted` are private to their façades now, because the client was their only caller.
+`StatusFacade` gained an `IWhatsAppService` constructor parameter so it has something to subscribe
+to; the other three façades already had one.
+
+`ApplyGroupMetadataFromResponseAsync` lost its `hydrateAvatars` parameter: both call sites passed
+`false`, so the `HydrateGroupMemberAvatarsAsync` branch behind it had never run.
+
+### What phase 2 could not do
+
+The original plan also listed `AttachMessageService`, `AttachPersonStore` and `AttachChatStore`
+here. They do not invert, because those calls are not reports:
+
+- `AttachMessageService` — two of the three call sites are **queries** the incoming pump branches
+  on: `TryHandleReaction`, which answers through an `out` parameter, and `GetChatMessage`, which
+  returns the mapped message. An event cannot return a value. The third blocks history apply until
+  it completes. Inverting these means moving the pump's mapping out of the client, which is
+  3.4 / 3.10.
+- `AttachPersonStore` / `AttachChatStore` / `AttachGroupRosterStore` — the writes are interleaved
+  with client state; roster replace and group membership persist both sit inside the group-metadata
+  apply. Moving them *is* 3.2 / 3.8 / 3.9.
+
+`AttachContactService` survives too, reduced from nine call sites to the two deferred-startup
+maintenance ones (`RefreshPhoneContactOverlayAsync`, `RetrieveContactPicturesAsync`) plus the
+`IWhatsAppService` pass-throughs. Those are orchestration: the client sequences them and depends on
+the order.
+
+---
+
 ## Current coupling (start here next session)
 
 ### Facades still depend on the client
 
-`ContactFacade`, `MessageFacade`, `ChatFacade`, `GroupFacade`, `HistoryFacade`, `ProfileFacade`, `ConnectionFacade` take `IWhatsAppService` (or `AttachWhatsAppService`). Policy is already on the façade; **primitives** (fetch avatar, send bytes, persist, canonical JID) still run inside the client.
+`ContactFacade`, `MessageFacade`, `ChatFacade`, `GroupFacade`, `HistoryFacade`, `ProfileFacade`, `StatusFacade`, `ConnectionFacade` take `IWhatsAppService` (or `AttachWhatsAppService`). Policy is already on the façade; **primitives** (fetch avatar, send bytes, persist, canonical JID) still run inside the client.
 
 Helpers under `Contacts/` (`ContactNameResolver`, `ChatAvatarPolicy`, `GroupRosterPolicy`, `AddressBookOverlay`) are the largest non-UI consumers of client members (`RunOnUiThreadAsync`, `SchedulePersistPublic`, `RaiseSyncStatus`, `FetchAndApplyAvatarAsync`, `FetchGroupMemberAvatarAsync`, `IsTransportReady`, …). Extracting avatars/names is mostly moving those primitives so the helpers stop needing the god client.
 
@@ -99,10 +144,10 @@ Helpers under `Contacts/` (`ContactNameResolver`, `ChatAvatarPolicy`, `GroupRost
 
 After `BuildServiceProvider`, `App.ConfigureServices` does:
 
-- `AttachMessageService` / `AttachStatusService` / `AttachContactService` / `AttachConnectionService`
-- `AttachPersonStore` / `AttachChatStore` / `AttachGroupRosterStore` / `AttachHistoryService`
+- `AttachMessageService` / `AttachContactService`
+- `AttachPersonStore` / `AttachChatStore` / `AttachGroupRosterStore`
 
-That is the wrong direction: live ingest (status, names) **starts** in `WhatsAppService` and calls up. Phase 2 inverts it (client publishes; façade subscribes).
+That is the wrong direction: live ingest (status, names) **starts** in `WhatsAppService` and calls up. Phase 2 inverted the reportable half of it (client publishes; façade subscribes); the rest is blocked on phase 3 and is described below.
 
 ### What still holds the client
 
@@ -114,17 +159,7 @@ Raw `IWhatsAppService` **events** are façade-only; ViewModels should not subscr
 
 ## Remaining phases
 
-Do them in order. Phase 3.9 (list + persist) is last among the body moves because `ChatStateStore` still exposes transitional dictionaries that the client mutates on the UI thread.
-
-### Phase 2 — Invert `Attach*`
-
-Each `AttachFoo` is a place the flow is born in the client. Replace with events the façade already owns (or add):
-
-- `AttachStatusService` → `StatusFacade` subscribes to decrypted `status@broadcast` (today `IngestLiveStatusAsync` in the incoming pump)
-- `AttachContactService` / `AttachMessageService` → same pattern
-- `AttachPersonStore` / `AttachChatStore` → writes (`PersistPersonNameAsync`, group membership persist) move to the façade that already owns the store
-
-**Done when:** no `(WhatsAppService)` cast in `App` for wiring; no `AttachMessageService` / `AttachContactService` / `AttachStatusService` / `AttachPersonStore` / `AttachChatStore`. `AttachWhatsAppService` on `IConnectionService` can stay until the connection façade owns the socket.
+Do them in order. Phase 3.9 (list + persist) is last among the body moves because `ChatStateStore` still exposes transitional dictionaries that the client mutates on the UI thread. The `Attach*` calls phase 2 could not invert are folded into the steps that own them (3.2 / 3.4 / 3.8 / 3.9 / 3.10).
 
 ### Phase 3 — Move the clusters (the volume)
 

@@ -66,6 +66,25 @@ namespace Unison.Core.Contracts.WhatsApp
         event EventHandler<InitialSyncProgressEventArgs> OnInitialSyncProgress;
         /// <summary>Presence / chatstate for the subscribed contact (forwards SocketClient).</summary>
         event EventHandler<PresenceUpdateEventArgs> OnPresenceUpdate;
+        /// <summary>
+        /// A stream error arrived with this code. Reporting only: the client does not classify it
+        /// and does not decide whether the session should be dropped — see
+        /// <see cref="IConnectionService.ClassifyStreamError"/>.
+        /// </summary>
+        event EventHandler<string> OnStreamError;
+        /// <summary>
+        /// The shape of the failures looks like a bad session (repeated closes before login). A
+        /// guess, not a verdict, and deliberately not acted on here.
+        /// </summary>
+        event EventHandler<string> OnInvalidSessionSuspected;
+        /// <summary>A live status@broadcast item was decoded. It is not a chat and never routes to one.</summary>
+        event EventHandler<HistoryStatus> OnLiveStatusReceived;
+        /// <summary>A background FULL_HISTORY solicitation went out; the toast gate counts these.</summary>
+        event EventHandler OnBackgroundHistorySyncBounced;
+        /// <summary>An avatar file was written to the local cache for a JID.</summary>
+        event EventHandler<AvatarCachedEventArgs> OnAvatarCached;
+        /// <summary>A phone JID and a LID were newly paired.</summary>
+        event EventHandler<JidAliasResolvedEventArgs> OnJidAliasResolved;
 
         /// <summary>Active pairing helper after ConnectAsync; may be null before connect.</summary>
         IPairingService Pairing { get; }

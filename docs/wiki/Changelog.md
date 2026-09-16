@@ -4,6 +4,18 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## WhatsAppService extraction — phase 2 (invert `Attach*`)
+
+- `WhatsAppService` reports instead of calling up: new `OnStreamError`, `OnInvalidSessionSuspected`, `OnLiveStatusReceived`, `OnBackgroundHistorySyncBounced`, `OnAvatarCached` and `OnJidAliasResolved` on `IWhatsAppService`, each subscribed by the façade that owns the subject
+- `AttachConnectionService`, `AttachStatusService` and `AttachHistoryService` removed; `AttachContactService` reduced from nine call sites to the two deferred-startup-maintenance ones
+- Contracts lost the notify-in doors whose only caller was the client: `IConnectionService.NotifyStreamError` / `NotifySuspectedInvalidSession`, `IStatusService.TryIngestLiveAsync`, `IHistoryService.NoteBackgroundHistorySyncBounce`, `IContactService.ClearAvatarAttempted`
+- `StatusFacade` now takes `IWhatsAppService` so it has something to subscribe to
+- Dead branch removed: `ApplyGroupMetadataFromResponseAsync` had a `hydrateAvatars` parameter both call sites passed as `false`
+- `AttachMessageService` and the three store attaches stay — those calls return values or interleave with client state, so they move with phases 3.2 / 3.4 / 3.8 / 3.9 / 3.10
+- No behaviour change: the reports were already fire-and-forget with their failures swallowed
+
+---
+
 ## WhatsAppService extraction — phase 1 (UI frontier)
 
 - ViewModels and views no longer take `IWhatsAppService`: `ShellViewModel`, `ChatListViewModel`, `ChatDetailViewModel`, `ChatDetailInfoViewModel`, `DebugViewModel`, `ChatDetailInfoViewModelFactory`, both `ChatDetailView` code-behinds, `ChatAvatarControl`

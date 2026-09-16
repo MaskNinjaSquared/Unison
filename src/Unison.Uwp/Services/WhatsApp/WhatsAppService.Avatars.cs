@@ -366,10 +366,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             chat.AvatarFetchFailureReason = null;
                         });
 
-                    if (_contactService != null)
-                    {
-                        await _contactService.NotifyAvatarCachedAsync(chat.JID, localUri);
-                    }
+                    ReportAvatarCached(chat.JID, localUri);
 
                     Debug.WriteLine($"[WhatsAppService] Group avatar fallback cached {chat.JID} from {fallbackJid}");
                     return true;
@@ -404,10 +401,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     chat.AvatarFetchFailureReason = null;
                 });
 
-            if (_contactService != null && !string.IsNullOrWhiteSpace(sourceAvatar))
-            {
-                await _contactService.NotifyAvatarCachedAsync(chat.JID, sourceAvatar);
-            }
+            ReportAvatarCached(chat.JID, sourceAvatar);
 
             Debug.WriteLine($"[WhatsAppService] Group avatar sibling fallback copied {chat.JID} from same-subject group {sourceJid}");
             return true;

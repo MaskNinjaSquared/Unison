@@ -25,12 +25,21 @@ namespace Unison.Uwp.Services.WhatsApp.Status
         internal StatusFacade(
             IHistoryStatusStore store,
             IPersonStore people,
-            IMessageService messages)
+            IMessageService messages,
+            IWhatsAppService client)
         {
             _store = store ?? throw new ArgumentNullException(nameof(store));
             _people = people ?? throw new ArgumentNullException(nameof(people));
             _messages = messages ?? throw new ArgumentNullException(nameof(messages));
+            if (client == null)
+            {
+                throw new ArgumentNullException(nameof(client));
+            }
+
             _store.Changed += Store_Changed;
+
+            // Both live as long as the app does, so there is nothing to unhook from.
+            client.OnLiveStatusReceived += Client_OnLiveStatusReceived;
         }
 
         public event EventHandler StatusUpdated;
@@ -153,7 +162,28 @@ namespace Unison.Uwp.Services.WhatsApp.Status
             return null;
         }
 
-        public async Task<bool> TryIngestLiveAsync(HistoryStatus item)
+        /// <summary>
+        /// Not awaited by the client on purpose: the store serialises its own writes and distinct
+        /// status rows are independent upserts, so there is no order to preserve here.
+        /// </summary>
+        private void Client_OnLiveStatusReceived(object sender, HistoryStatus row)
+        {
+            _ = IngestLiveSafeAsync(row);
+        }
+
+        private async Task IngestLiveSafeAsync(HistoryStatus row)
+        {
+            try
+            {
+                await TryIngestLiveAsync(row).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[StatusFacade] Live status ingest failed: " + ex.Message);
+            }
+        }
+
+        private async Task<bool> TryIngestLiveAsync(HistoryStatus item)
         {
             if (item == null ||
                 string.IsNullOrWhiteSpace(item.AuthorJid) ||

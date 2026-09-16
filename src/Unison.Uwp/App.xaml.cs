@@ -267,7 +267,8 @@ namespace Unison.Uwp
             services.AddSingleton(sp => new StatusFacade(
                 sp.GetRequiredService<IHistoryStatusStore>(),
                 sp.GetRequiredService<IPersonStore>(),
-                sp.GetRequiredService<IMessageService>()));
+                sp.GetRequiredService<IMessageService>(),
+                sp.GetRequiredService<IWhatsAppService>()));
             services.AddSingleton<IStatusService>(sp => sp.GetRequiredService<StatusFacade>());
 
             services.AddSingleton<IChatAuthorProjection, ChatAuthorProjection>();
@@ -362,16 +363,13 @@ namespace Unison.Uwp
             whatsAppImpl.AttachUiDispatcher(rootFrame?.Dispatcher);
             whatsAppImpl.AttachSystemInfoProvider(Services.GetRequiredService<ISystemInfoProvider>());
             whatsAppImpl.AttachMessageService(Services.GetRequiredService<IMessageService>());
-            whatsAppImpl.AttachStatusService(Services.GetRequiredService<IStatusService>());
             whatsAppImpl.AttachContactService(Services.GetRequiredService<IContactService>());
-            whatsAppImpl.AttachConnectionService(Services.GetRequiredService<IConnectionService>());
             Services.GetRequiredService<IConnectionService>().AttachWhatsAppService(whatsApp);
-            // The remaining facades relay client events to the screens, and they can only relay
-            // what they were around to hear. Build them now rather than when a screen first asks.
+            // The remaining facades subscribe to client events in their constructors, and they can
+            // only hear what they were around for. Build them now rather than when a screen first asks.
             Services.GetRequiredService<IProfileService>();
             Services.GetRequiredService<IHistoryService>();
             Services.GetRequiredService<IStatusService>();
-            whatsAppImpl.AttachHistoryService(Services.GetRequiredService<IHistoryService>());
             whatsAppImpl.AttachPersonStore(Services.GetRequiredService<IPersonStore>());
             whatsAppImpl.AttachGroupRosterStore(Services.GetRequiredService<IGroupRosterStore>());
             whatsAppImpl.AttachChatStore(Services.GetRequiredService<IChatStore>());

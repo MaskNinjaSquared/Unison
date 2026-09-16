@@ -87,12 +87,6 @@ namespace Unison.Core.Contracts.WhatsApp
         void NotifySqliteHistoryChunkApplied(string syncType, int conversationCount);
 
         /// <summary>
-        /// Counts a background FULL_HISTORY solicitation or chunk. After more than two bounces
-        /// in this process, shows one toast (no per-session reset — app restart clears it).
-        /// </summary>
-        void NoteBackgroundHistorySyncBounce();
-
-        /// <summary>
         /// History message rows were committed to SQLite for a chunk (open detail may hydrate).
         /// </summary>
         event EventHandler<HistoryMessageChunkEventArgs> HistoryMessageChunkPersisted;

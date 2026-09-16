@@ -673,15 +673,9 @@ namespace Unison.Uwp.Services.WhatsApp
                 return false;
             }
 
-            // Uma consulta anterior pode ter usado somente o LID ou somente o PN e
-            // gravado um falso "no-picture". Ao descobrir o par correto, permita
-            // uma nova tentativa imediatamente para as linhas sem avatar.
-            if (_contactService != null)
-            {
-                _contactService.ClearAvatarAttempted(lid);
-                _contactService.ClearAvatarAttempted(pn);
-                _contactService.ClearAvatarAttempted(GetCanonicalJid(pn));
-            }
+            RaiseReport(
+                () => OnJidAliasResolved?.Invoke(this, new JidAliasResolvedEventArgs(pn, lid)),
+                nameof(OnJidAliasResolved));
 
             lock (_aliasFollowUpGate)
             {
