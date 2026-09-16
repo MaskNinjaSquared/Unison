@@ -168,7 +168,7 @@ namespace Unison.Core.Helpers
         /// Whether the label is just the contact's own number written back at us, which
         /// carries no more information than the address already does.
         /// </summary>
-        private static bool IsPhoneEcho(string trimmed, string contextJid)
+        public static bool IsPhoneEcho(string trimmed, string contextJid)
         {
             string normalizedContext = JidHelper.Normalize(contextJid);
             if (string.IsNullOrWhiteSpace(normalizedContext))

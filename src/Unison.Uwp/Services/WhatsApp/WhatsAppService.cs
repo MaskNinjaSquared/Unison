@@ -1302,6 +1302,8 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         private readonly GroupReceiptTally _groupReceipts = new GroupReceiptTally();
+        // Field initializers run in declaration order, so _selfMarkers is set before it is read below.
+        private readonly ISelfMarkerNaming _selfMarkers = new SelfMarkerNaming();
         private readonly ContactLabelSanitizer _contactLabels = new ContactLabelSanitizer(new SelfMarkerNaming());
         private readonly Dictionary<string, GroupRecipientCountCacheEntry> _groupRecipientCountByChat =
             new Dictionary<string, GroupRecipientCountCacheEntry>(StringComparer.OrdinalIgnoreCase);

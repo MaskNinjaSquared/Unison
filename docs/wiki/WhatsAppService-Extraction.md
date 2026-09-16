@@ -484,10 +484,17 @@ Both take the shape this extraction keeps arriving at. The marker is localized, 
 stays in the UWP head behind `ISelfMarkerNaming`; the lookups stay too, because they warm a SQLite
 cache as a side effect. What moved is the decision.
 
+`MergeTransientDirectChatIntoCanonicalAsync` then gave up its decision too. The method is chat surgery
+— UI thread, SQLite, two collections — but underneath it answers one question: when the same contact
+turns out to occupy two rows, which side of each field survives. That is `TransientChatMerge`, and
+stating it separately exposed a gap: the transient row's name was checked for blank and for
+number-as-name but not for a self-marker, so a contact pushing "(You)" could be copied onto the
+canonical row during a merge even though the sanitizer blocks that everywhere else. The orchestration
+stays; only the decision left.
+
 What remains in `.Identity.cs` is the larger half and is not this shape: `ResolveContactsAsync` and
-`RefreshContactNamesAsync` (usync over the socket, ~380 lines), `MergeTransientDirectChatIntoCanonicalAsync`
-(~145 lines of chat surgery), and the alias follow-up scheduling. Those are 3.6's move onto
-`ContactFacade`, not a rule to lift out of a method.
+`RefreshContactNamesAsync` (usync over the socket, ~380 lines) and the alias follow-up scheduling.
+Those are 3.6's move onto `ContactFacade`, not a rule to lift out of a method.
 
 **One regression, and it was not in the moved code.** `MediaDerivationService` was registered with
 `AddSingleton<MediaDerivationService>()` in 3.3b while its constructor is `internal`, so the container

@@ -4,6 +4,112 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## `AliasPairPolicy` — the identity guard, which existed twice and did not agree
+
+The alias table is what decides that two addresses are the same person, so a wrong entry there does not
+produce a wrong label — it merges two conversations. The guard against the worst version of that (a pair
+filing some contact under the user's own identity, after which every message from that contact lands in
+the self chat) was written in two places: the live path in `TryRecordAliasMapping`, and
+`IsSelfPoisoningAliasPair`, added later for the startup restore after a stored bad pair was found coming
+back on every launch.
+
+The two did not agree, and the difference is a false positive in the newer one. Both allow the one
+legitimate pair that reaches the guard — the user's own LID and phone address pointing at each other —
+by looking for the reverse entry already in the table. The live path reduces a dotted LID carried on the
+phone domain (`123.45@s.whatsapp.net`) to the plain `123@lid` the table files it under before comparing.
+The restore path compared the dotted form as it stood, so it never matched, and discarded the user's own
+legitimate alias on every launch that had one stored that way.
+
+Both now call `AliasPairPolicy`. The pair-shape check moved with it: a LID-like address sitting on the
+phone domain is still a LID and cannot stand on the phone side, or the canonicalization that depends on
+the phone address being canonical is inverted.
+
+Testing the unified rule then found the same bug surviving on the other end of that comparison: only the
+argument was being reduced, never the value read back from the table. Since the dotted form is accepted
+on the LID side of a pair, it is also what can have been stored — so a legitimate self alias written
+that way was still discarded on every launch. Both sides are reduced now.
+
+**Two open weaknesses, recorded rather than fixed.** Neither is new, and both want a device pass.
+
+The guard is advice, not a gate. Four places write straight into `JidAlias[...]` without consulting it:
+two in the usync path (`.Identity.cs`) and two more in `WhatsAppService.cs`. That is the most likely
+route by which a poisoned pair reached disk in the first place, which is worth more than any refinement
+of the check that runs afterwards.
+
+The mirrored half of a poisoned pair vouches for it. Pairs are filed both ways, so a poisoned pair comes
+back from disk as two entries, and the mirrored one (`selfPn -> contactLid`) is not refused by this
+policy — its phone side is not self-linked, so the guard exits immediately. Restored first, it is
+indistinguishable from the reverse entry that proves the user's own identity, and it validates the
+poisoned half. Which entry the restore loop reaches first is dictionary order over a file. The clean fix
+is to anchor on `_authState.Me.Lid` instead of on whatever the table happens to hold, but that trades a
+forgeable proof for one that is unavailable exactly when the LID is not yet known — where it would
+discard legitimate self aliases instead. Characterized in `AliasPairPolicyTests` as
+`The_other_half_of_a_poisoned_pair_vouches_for_it`.
+
+---
+
+## `TransientChatMerge` — what survives when one contact turns out to be two rows
+
+A conversation can be opened against a LID before we know who is behind it. A usync or an app-state
+alias later reveals it is a contact already in the list under their phone number, and the two rows have
+to collapse into one. `MergeTransientDirectChatIntoCanonicalAsync` did the deciding inline, mixed with
+the UI-thread work and the SQLite writes.
+
+The rule is not "the canonical row wins", which is why it is worth stating on its own. The transient row
+is usually the one the user has actually been reading, so its preview and unread count are the newer
+facts; but it also has the weaker identity, so it must not overwrite what the canonical row already
+knows. Each field resolves that differently: the preview moves when it is newer (all of its fields
+together — half a preview renders a message that was never sent), the unread count takes the higher of
+the two rather than the sum (both rows were counting the same conversation), the avatar only fills a gap
+because a newer picture is not a better one, and the name moves only when the canonical row is not
+really named.
+
+The message lists merge through `AppendMissingMessages`. The overlap between the two conversations is
+the normal case rather than the exception, since whatever arrived before the alias was known was written
+to whichever address the sender happened to use.
+
+### Four behaviour changes, all pre-existing gaps the extraction exposed
+
+Writing the rule down separately, and then testing it against its own stated terms rather than against
+its implementation, turned up four things the inline version got wrong. None is a regression from this
+refactor; all four were in the old merge.
+
+**A contact could spoof their way onto the canonical row.** The old code checked the canonical side for
+a self-marker but checked the transient side only for blank and number-as-name. So a contact whose push
+name is "(You)" could not take over a row by the normal path, but *could* be copied onto one during a
+merge — the exact spoof `ContactLabelSanitizer` exists to stop, through a door it did not cover. Both
+sides go through the same test now.
+
+**The preview and its message id came apart.** Everywhere else in Core the id travels with the preview:
+`ChatStateStore.CopyInto` copies it alongside, `ChatPreviewTip.Clear` clears it alongside, and
+`HistoryChatPreviewApplier` compares it alongside when timestamps tie. The merge left it behind, so a
+row that took the transient preview ended up showing one message and claiming the id of another, and
+being persisted that way. Nothing downstream repairs it: `ShouldStampMissingMessageId` fills the id in
+only when it is *missing*, never when it is wrong.
+
+**A row could end up wearing two different faces.** The avatar gap was tested on `AvatarUrl` alone while
+`AvatarHighUrl` was neither tested nor copied. A canonical row holding only the full-size picture would
+therefore accept the transient row's preview, leaving one identity's face in the list and another's in
+the info pane — `GetAvatarUrl` falls back between the two resolutions, so which one appears depends on
+the surface asking. The two urls are one fact and now move together.
+
+**A name that was really a number passed as a name.** Each row was measured for namelessness against its
+own address, which is right on its own terms but not across a merge: a LID row is frequently labelled
+with the very number the canonical row is addressed by, so that label read as a name on one side and as
+no name at all once it landed on the other. Both rows are measured against both addresses now — the
+first correction here was asymmetric, and the asymmetry had the same bug on the other side, where a
+canonical row wearing the LID's digits counted as named and refused the real name being offered to it.
+
+The echo test itself also borrows `ContactLabelSanitizer.IsPhoneEcho` rather than comparing the label to
+the address verbatim, so a number is recognised as a number after being formatted. The plain comparison
+stays alongside it: `IsPhoneEcho` ignores anything shorter than a phone number, on the grounds that
+short numeric nicknames are legitimate, and a LID is frequently shorter than that.
+
+A fifth finding — that a row with nothing to show accepts an older preview and moves down the list — was
+left alone. Showing something old beats showing nothing, which is what the rule already says.
+
+---
+
 ## Batch: five duplicated rules from the media and send paths
 
 One pass over the remaining audit findings that were confirmed pure and testable. The large ones

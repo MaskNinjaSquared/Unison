@@ -318,23 +318,10 @@ namespace Unison.Uwp.Services.WhatsApp
                         MessagesByChat[normalizedCanonical] = canonicalMessages;
                     }
 
-                    var canonicalIds = GetOrBuildMessageIdIndex(normalizedCanonical);
-                    foreach (var msg in transientMessages.ToList())
-                    {
-                        if (msg == null) continue;
-
-                        if (string.IsNullOrEmpty(msg.Id))
-                        {
-                            if (!canonicalMessages.Contains(msg))
-                            {
-                                canonicalMessages.Add(msg);
-                            }
-                        }
-                        else if (canonicalIds.Add(msg.Id))
-                        {
-                            canonicalMessages.Add(msg);
-                        }
-                    }
+                    TransientChatMerge.AppendMissingMessages(
+                        canonicalMessages,
+                        transientMessages.ToList(),
+                        GetOrBuildMessageIdIndex(normalizedCanonical));
 
                     MessagesByChat.Remove(normalizedTransient);
                     _messageIdIndexByChat.Remove(normalizedTransient);
@@ -355,45 +342,12 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
                     else
                     {
-                        DateTime canonicalPreviewUtc = canonicalChat.LastMessageTimestampUtc.HasValue
-                            ? ToComparableUtc(canonicalChat.LastMessageTimestampUtc.Value)
-                            : DateTime.MinValue;
-                        DateTime transientPreviewUtc = transientChat.LastMessageTimestampUtc.HasValue
-                            ? ToComparableUtc(transientChat.LastMessageTimestampUtc.Value)
-                            : DateTime.MinValue;
-                        if ((transientPreviewUtc > canonicalPreviewUtc || string.IsNullOrWhiteSpace(canonicalChat.LastMessage)) &&
-                            !string.IsNullOrWhiteSpace(transientChat.LastMessage))
-                        {
-                            canonicalChat.LastMessage = transientChat.LastMessage;
-                            canonicalChat.LastMessageKind = transientChat.LastMessageKind;
-                            canonicalChat.LastPreview.CopyFrom(transientChat.LastPreview);
-                            canonicalChat.Timestamp = transientChat.Timestamp;
-                            canonicalChat.LastMessageTimestampUtc = transientChat.LastMessageTimestampUtc;
-                        }
-
-                        if (canonicalChat.UnreadCount < transientChat.UnreadCount)
-                        {
-                            canonicalChat.UnreadCount = transientChat.UnreadCount;
-                        }
-
-                        if (string.IsNullOrWhiteSpace(canonicalChat.AvatarUrl) && !string.IsNullOrWhiteSpace(transientChat.AvatarUrl))
-                        {
-                            canonicalChat.AvatarUrl = transientChat.AvatarUrl;
-                            canonicalChat.AvatarFetchedAtUtc = transientChat.AvatarFetchedAtUtc;
-                            canonicalChat.AvatarFetchFailedAtUtc = transientChat.AvatarFetchFailedAtUtc;
-                            canonicalChat.AvatarFetchFailureReason = transientChat.AvatarFetchFailureReason;
-                        }
-
-                        string canonicalBare = normalizedCanonical.Split('@')[0];
-                        string transientBare = normalizedTransient.Split('@')[0];
-                        if ((string.IsNullOrWhiteSpace(canonicalChat.Name) ||
-                             canonicalChat.Name == canonicalBare ||
-                             IsSelfMarkerLabel(canonicalChat.Name)) &&
-                            !string.IsNullOrWhiteSpace(transientChat.Name) &&
-                            transientChat.Name != transientBare)
-                        {
-                            canonicalChat.Name = transientChat.Name;
-                        }
+                        TransientChatMerge.Apply(
+                            canonicalChat,
+                            transientChat,
+                            normalizedCanonical,
+                            normalizedTransient,
+                            _selfMarkers);
 
                         Chats.Remove(transientChat);
                     }
@@ -518,14 +472,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </remarks>
         private bool IsSelfPoisoningAliasPair(string aliasKey, string aliasValue)
         {
-            if (!IsSelfLinkedJid(aliasValue) || IsSelfLinkedJid(aliasKey))
-            {
-                return false;
-            }
-
-            // Our own LID and phone address point at each other; that pair is legitimate.
-            return !(JidAlias.TryGetValue(aliasValue, out var reverseAlias) &&
-                     string.Equals(NormalizeJid(reverseAlias), aliasKey, StringComparison.OrdinalIgnoreCase));
+            return AliasPairPolicy.WouldPutAContactUnderOurIdentity(aliasKey, aliasValue, JidAlias);
         }
 
         /// <summary>
@@ -536,30 +483,12 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             string lid = NormalizeJid(lidJid);
             string pn = NormalizeJid(pnJid);
-            if (string.IsNullOrEmpty(lid) || string.IsNullOrEmpty(pn)) return false;
-            bool lidAccepted = lid.EndsWith("@lid", StringComparison.OrdinalIgnoreCase) || IsLidLikeJid(lid);
-            bool pnAccepted = pn.EndsWith("@s.whatsapp.net", StringComparison.OrdinalIgnoreCase) && !IsLidLikeJid(pn);
-            if (!lidAccepted || !pnAccepted) return false;
-
-            // Guard against identity poisoning: never map a foreign LID to our own phone JID.
-            // Dotted @s.whatsapp.net LID aliases for our own account are allowed and collapse to self chat.
-            string guardLidKey = lid;
-            if (IsLidLikeJid(lid) && lid.EndsWith("@s.whatsapp.net", StringComparison.OrdinalIgnoreCase))
+            if (!AliasPairPolicy.IsWellFormedPair(lid, pn, JidAlias))
             {
-                string lidUser = lid.Split('@')[0];
-                int dotIndex = lidUser.IndexOf('.');
-                if (dotIndex > 0)
-                {
-                    guardLidKey = $"{lidUser.Substring(0, dotIndex)}@lid";
-                }
+                return false;
             }
 
-            bool isKnownSelfAlias =
-                IsSelfLinkedJid(pn) &&
-                JidAlias.TryGetValue(pn, out var reverseAlias) &&
-                string.Equals(NormalizeJid(reverseAlias), guardLidKey, StringComparison.OrdinalIgnoreCase);
-
-            if (!IsSelfLinkedJid(lid) && IsSelfLinkedJid(pn) && !isKnownSelfAlias)
+            if (AliasPairPolicy.WouldPutAContactUnderOurIdentity(lid, pn, JidAlias))
             {
                 Debug.WriteLine($"[WhatsAppService] Skipping suspicious alias from {source}: {lid} -> {pn}");
                 return false;
