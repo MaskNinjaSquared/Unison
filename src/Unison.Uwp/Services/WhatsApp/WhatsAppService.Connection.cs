@@ -1565,16 +1565,16 @@ namespace Unison.Uwp.Services.WhatsApp
                         // socket thread caused RPC_E_WRONG_THREAD after reconnect.
                         _ = RunOnUiThreadAsync(() =>
                         {
-                            foreach (var chat in Chats)
+                            // Matched on the normalized address and stopped at the first hit.
+                            // A contact is listed under both PN and LID, so a notify arriving
+                            // by one address never reached the row filed under the other --
+                            // which went on showing the phone number with the name in hand.
+                            foreach (var chat in GetChatRowsForCanonicalJid(GetCanonicalJid(normalizedNotifyTarget)))
                             {
-                                if (NormalizeJid(chat.JID) == normalizedNotifyTarget)
+                                if (chat != null &&
+                                    PlaceholderChatLabel.IsPlaceholder(chat.Name, chat.JID, IsSelfMarkerLabel(chat.Name)))
                                 {
-                                    string bareJid = PlaceholderChatLabel.BareUser(chat.JID);
-                                    if (PlaceholderChatLabel.IsPlaceholder(chat.Name, chat.JID, IsSelfMarkerLabel(chat.Name)))
-                                    {
-                                        chat.Name = sanitizedNotify ?? bareJid;
-                                    }
-                                    break;
+                                    chat.Name = sanitizedNotify;
                                 }
                             }
                         });

@@ -120,9 +120,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
 
                 string id;
                 group.Attrs.TryGetValue("id", out id);
-                string normalizedId = NormalizeGroupJid(id);
-                if (string.IsNullOrWhiteSpace(normalizedId) ||
-                    string.Equals(normalizedId, target, StringComparison.OrdinalIgnoreCase))
+                if (MatchesGroup(id, target))
                 {
                     return group;
                 }
@@ -131,6 +129,26 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
             // A response whose group nodes are nested somewhere the descendant walk did not reach
             // still usually has one directly under the root.
             return response.GetChild("group");
+        }
+
+        /// <summary>
+        /// Whether a group node's <c>id</c> attribute refers to the group being asked about.
+        /// </summary>
+        /// <remarks>
+        /// The server writes the id bare, without the <c>@g.us</c>, so it has to be completed
+        /// before comparing. Asking this with a plain normalize — which does not add the
+        /// suffix — never matched, and the caller fell through to the first group node in the
+        /// response. On a single-group answer that is the right node by luck; on a community
+        /// reply it is a different group's name.
+        ///
+        /// An id-less node still matches, because a single-group query answers without
+        /// echoing the id back.
+        /// </remarks>
+        private bool MatchesGroup(string id, string normalizedTarget)
+        {
+            string normalizedId = NormalizeGroupJid(id);
+            return string.IsNullOrWhiteSpace(normalizedId) ||
+                   string.Equals(normalizedId, normalizedTarget, StringComparison.OrdinalIgnoreCase);
         }
 
         public string ExtractSubject(BinaryNode response, string groupJid)
@@ -156,11 +174,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
                     continue;
                 }
 
-                if (string.IsNullOrWhiteSpace(id) ||
-                    string.Equals(
-                        JidHelper.Normalize(id),
-                        JidHelper.Normalize(groupJid),
-                        StringComparison.OrdinalIgnoreCase))
+                if (MatchesGroup(id, JidHelper.Normalize(groupJid)))
                 {
                     return subject;
                 }

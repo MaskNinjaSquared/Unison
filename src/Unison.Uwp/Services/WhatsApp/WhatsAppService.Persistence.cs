@@ -333,10 +333,14 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
 
                     Debug.WriteLine($"[WhatsAppService] Flushed {saved} queued message(s) across {drain.ChatCount} chat(s), dirtyChats={drain.DirtyChats.Count}, reason={reason}");
-                    if (!reason.StartsWith("shutdown", StringComparison.OrdinalIgnoreCase))
-                    {
-                        SchedulePersist();
-                    }
+
+                    // Guarded against a "shutdown" reason no caller passes. Suspension does
+                    // not come through here at all and is not meant to: it flushes the
+                    // append-only journal, which is what keeps these messages, and skips the
+                    // per-chat rewrite that would blow the suspend deadline. Recovery is
+                    // PrepareForSuspendAsync on the way out and incoming-journal-recovery on
+                    // the way back in.
+                    SchedulePersist();
                 }
                 catch (Exception ex)
                 {

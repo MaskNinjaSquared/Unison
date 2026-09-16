@@ -72,6 +72,15 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
+            // Both interfaces declare this a no-op for 1:1 chats and the guard was missing,
+            // so every visible direct chat spent a second CDN round trip on a file nothing
+            // reads: the cache hydration that restores AvatarHighUrl between sessions is
+            // itself group-only, so a contact's high file was fetched and then forgotten.
+            if (!chat.IsGroup)
+            {
+                return;
+            }
+
             if (!string.IsNullOrWhiteSpace(chat.AvatarHighUrl))
             {
                 return;

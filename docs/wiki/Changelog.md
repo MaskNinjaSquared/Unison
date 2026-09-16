@@ -61,6 +61,41 @@ determines the orientation and answers in one call. Each caller keeps its own lo
 merge still merges the rows and withholds only the alias; the mapped-LID path still only fires the first
 time it sees an address.
 
+### A group's name could come from a different group
+
+`GroupMetadataReader` asked "is this node the group I asked about?" in two places and completed the id
+differently. The server writes it bare, without the `@g.us`, and `FindGroupNode` adds the suffix before
+comparing while `ExtractSubject` used a plain normalize, which does not. So `ExtractSubject` never
+matched a node that had an id, fell through to the first `group` node in the response, and returned its
+subject. On a single-group answer that is the right node by luck. On a community reply it is a different
+group's name. Both now go through one `MatchesGroup`.
+
+### Every direct chat was fetching a profile picture nothing would read
+
+`IWhatsAppService` and `IGroupService` both declare `EnsureHighQualityGroupAvatarAsync` a no-op for 1:1
+chats. The implementation had no such guard, and the avatar policy calls it for every visible row. So
+each direct chat spent a second CDN round trip on the full-size file — and the cache hydration that
+restores `AvatarHighUrl` between sessions is itself group-only, so the file was fetched and then
+forgotten. On metered mobile data that is the cost the comment above the policy says it is avoiding.
+
+### A captured name reached only one of a contact's two rows
+
+The `notify` handler matched rows on the normalized address and stopped at the first hit. A contact is
+listed under both PN and LID, so a name arriving by one address never reached the row filed under the
+other, which went on showing the phone number with the name already in hand. It now walks the canonical
+rows like the rest of the service.
+
+### The shutdown branch in the message flush was dead, and that is correct
+
+Left over from an earlier design: `FlushOfflineReplayMessagesAsync` skipped its scheduled persist for a
+"shutdown" reason no caller passes. Worth chasing down rather than deleting on sight, because the
+alternative explanation was that suspension had stopped calling the flush and messages were being lost.
+
+It is not. Suspension deliberately does not come through here: `PrepareForSuspendAsync` flushes the
+append-only journal, which is what actually keeps these messages, and skips the per-chat rewrite that
+would blow the Windows Phone suspend deadline. Recovery is `incoming-journal-recovery` on the way back
+in. The branch is gone and the reasoning is now in the code, where the next reader will find it.
+
 ### A message deleted on the phone came back
 
 `ApplyAppStateDeleteMessageAsync` dropped the message from memory and from the id index, fixed up the
