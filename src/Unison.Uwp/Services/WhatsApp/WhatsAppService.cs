@@ -690,18 +690,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly object _reconnectStateLock = new object();
         private CancellationTokenSource _connectionHealthCts;
         private Task _connectionHealthTask = Task.CompletedTask;
-        private static readonly TimeSpan ConnectionHealthInterval = TimeSpan.FromSeconds(25);
-        private static readonly TimeSpan ConnectionFreshnessLimit = TimeSpan.FromSeconds(55);
-        private static readonly TimeSpan NodeProcessingStallLimit = TimeSpan.FromSeconds(75);
-        private static readonly TimeSpan[] ReconnectBackoff =
-        {
-            TimeSpan.FromSeconds(1),
-            TimeSpan.FromSeconds(2),
-            TimeSpan.FromSeconds(4),
-            TimeSpan.FromSeconds(8),
-            TimeSpan.FromSeconds(15),
-            TimeSpan.FromSeconds(30)
-        };
         private readonly SemaphoreSlim _initLock = new SemaphoreSlim(1, 1);
         private readonly SemaphoreSlim _persistedUiLoadLock = new SemaphoreSlim(1, 1);
         private volatile bool _persistedUiStateLoaded;

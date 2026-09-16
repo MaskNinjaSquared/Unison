@@ -4,6 +4,38 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Connection health — one rule, two named profiles
+
+Deciding when to tear down a live socket was spread across `WhatsAppService.Connection.cs` in two
+places — the background health monitor and `IsCurrentSocketHealthyAsync` — plus five thresholds, two of
+which were bare literals sitting inline (`TimeSpan.FromSeconds(18)`, `ProbeConnectionAsync(9000)`). Now
+in `ConnectionHealthPolicy` (`Unison.Core/Helpers`). Policy only: performing the reconnect stays in the
+host, per the architecture rule.
+
+The two call sites used **different numbers** for the same question — 55s vs 45s of staleness, 9000ms
+vs 10000ms of probe. That looks like drift, and on the evidence it is not: the background monitor runs
+unattended every 25s on a phone battery, while the on-demand check runs with the user waiting on the
+answer, where acting on a dead socket costs more than a probe does. So they are now `ConnectionHealthProfile.Background`
+and `.OnDemand`, with the trade written down, rather than two accidental constants.
+
+The rule itself is worth stating because it is counterintuitive: **a stalled node queue is never
+probed.** A socket whose ordered queue has stopped making progress still answers probes, so probing it
+returns "healthy" and the stall survives the health check while user messages never reach the app. It
+goes straight to reconnect, and freshness does not override it.
+
+One latent crash fixed on the way: the backoff ladder was indexed with `ReconnectBackoff[Math.Min(attempt, Length - 1)]`,
+which clamps the top but not the bottom — a negative attempt number would index out of bounds.
+`ReconnectDelay` clamps both ends.
+
+14 tests. The interesting half assert *relationships* rather than values, since restating a constant
+proves nothing: the monitor must look more often than a connection takes to go stale (otherwise every
+cycle probes, turning a health check into a keep-alive), a connection must be called stale well before
+its queue is called stalled (so the cheap diagnosis gets its chance before the expensive one), the
+message pump must be given up on sooner than the socket (the cheap recovery cannot fix the expensive
+failure, so it has to be tried first), and a probe must fit inside one monitor cycle.
+
+---
+
 ## Unread counts — one rule instead of two copies
 
 `WhatsAppService.IncomingPump` incremented unread counts in two places: once for a single arriving

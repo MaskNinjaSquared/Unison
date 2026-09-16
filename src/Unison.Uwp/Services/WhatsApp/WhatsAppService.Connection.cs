@@ -172,7 +172,7 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 while (!token.IsCancellationRequested && !_suppressReconnect && !_fatalSessionEnded)
                 {
-                    await Task.Delay(ConnectionHealthInterval, token);
+                    await Task.Delay(ConnectionHealthPolicy.CheckInterval, token);
                     if (token.IsCancellationRequested || _suppressReconnect || _fatalSessionEnded || !ReferenceEquals(_socket, socket))
                     {
                         return;
@@ -189,7 +189,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     // The application-level message pump can stall even while frames,
                     // decryption and IQ traffic continue normally. Recover that queue
                     // independently instead of tearing down a healthy WhatsApp socket.
-                    if (IsIncomingMessagePumpStalled(TimeSpan.FromSeconds(18)))
+                    if (IsIncomingMessagePumpStalled(ConnectionHealthPolicy.IncomingPumpStallLimit))
                     {
                         RuntimeDiagnosticsService.Instance.Write(
                             "messages",
@@ -199,16 +199,20 @@ namespace Unison.Uwp.Services.WhatsApp
                         RestartIncomingMessagePumpIfNeeded();
                     }
 
-                    bool stalled = socket.HasStalledNodeProcessing(NodeProcessingStallLimit);
-                    if (!stalled && socket.HasFreshConnection(ConnectionFreshnessLimit))
+                    var profile = ConnectionHealthProfile.Background;
+                    bool stalled = socket.HasStalledNodeProcessing(ConnectionHealthPolicy.NodeProcessingStallLimit);
+                    var action = ConnectionHealthPolicy.Evaluate(
+                        stalled,
+                        socket.HasFreshConnection(profile.FreshnessLimit));
+                    if (action == ConnectionHealthAction.Idle)
                     {
                         continue;
                     }
 
                     bool healthy = false;
-                    if (!stalled)
+                    if (action == ConnectionHealthAction.Probe)
                     {
-                        healthy = await socket.ProbeConnectionAsync(9000);
+                        healthy = await socket.ProbeConnectionAsync(profile.ProbeTimeoutMs);
                     }
 
                     if (healthy)
@@ -904,18 +908,22 @@ namespace Unison.Uwp.Services.WhatsApp
             // twenty seconds. Fresh frames alone are not sufficient when the ordered
             // protocol queue stopped making progress: in that state the socket can
             // answer pings while user messages never reach the application.
-            if (socket.HasStalledNodeProcessing(NodeProcessingStallLimit))
+            var profile = ConnectionHealthProfile.OnDemand;
+            var action = ConnectionHealthPolicy.Evaluate(
+                socket.HasStalledNodeProcessing(ConnectionHealthPolicy.NodeProcessingStallLimit),
+                socket.HasFreshConnection(profile.FreshnessLimit));
+
+            if (action == ConnectionHealthAction.Reconnect)
             {
                 Debug.WriteLine($"[WhatsAppService] Socket node queue is stalled (depth={socket.QueuedNodeProcessingCount})");
             }
-            else if (socket.HasFreshConnection(TimeSpan.FromSeconds(45)))
+            else if (action == ConnectionHealthAction.Idle)
             {
                 return true;
             }
 
-            bool healthy = !socket.HasStalledNodeProcessing(NodeProcessingStallLimit) &&
-                           await socket.ProbeConnectionAsync(10000);
-            if (healthy)
+            if (action == ConnectionHealthAction.Probe &&
+                await socket.ProbeConnectionAsync(profile.ProbeTimeoutMs))
             {
                 return true;
             }
@@ -1801,7 +1809,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     return;
                 }
 
-                TimeSpan delay = ReconnectBackoff[Math.Min(attempt, ReconnectBackoff.Length - 1)];
+                TimeSpan delay = ConnectionHealthPolicy.ReconnectDelay(attempt);
                 PublishConnectionUpdate("reconnecting");
                 Debug.WriteLine($"[WhatsAppService] Reconnect attempt {attempt + 1} in {delay.TotalSeconds:F0}s (trigger={trigger})");
 
