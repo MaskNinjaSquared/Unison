@@ -232,13 +232,16 @@ namespace Unison.Uwp.Services.WhatsApp
             catch (Exception ex)
             {
                 Debug.WriteLine($"[WhatsAppService] Group avatar fallback metadata query failed for {chat.JID}: {ex.Message}");
-                return false;
+                return await TryApplySiblingGroupAvatarFallbackAsync(chat, token);
             }
 
+            // The sibling attempt used to sit only after this loop, so it was unreachable for
+            // any group without a community above it -- which is most of them, and exactly
+            // the shape the sibling case is about.
             if (fallbackJids.Count == 0)
             {
                 Debug.WriteLine($"[WhatsAppService] Group avatar fallback has no parent/community candidate for {chat.JID}");
-                return false;
+                return await TryApplySiblingGroupAvatarFallbackAsync(chat, token);
             }
 
             foreach (var fallbackJid in fallbackJids)
@@ -294,11 +297,19 @@ namespace Unison.Uwp.Services.WhatsApp
             token.ThrowIfCancellationRequested();
             string sourceJid = source.JID;
             string sourceAvatar = source.AvatarUrl;
+            // Same group, so the sibling's high-resolution file is this row's too. Leaving it
+            // behind sent the row straight back out for a second fetch of a file we hold.
+            string sourceAvatarHigh = source.AvatarHighUrl;
             DateTime nowUtc = DateTime.UtcNow;
 
             await RunOnUiThreadAsync(() =>
                 {
                     chat.AvatarUrl = sourceAvatar;
+                    if (!string.IsNullOrWhiteSpace(sourceAvatarHigh))
+                    {
+                        chat.AvatarHighUrl = sourceAvatarHigh;
+                    }
+
                     chat.AvatarFetchedAtUtc = nowUtc;
                     chat.AvatarFetchFailedAtUtc = null;
                     chat.AvatarFetchFailureReason = null;

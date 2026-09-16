@@ -159,10 +159,15 @@ namespace Unison.Uwp.Services.WhatsApp
 
             await RunOnUiThreadAsync(() =>
             {
-                var chat = Chats.FirstOrDefault(c => GetCanonicalJid(c.JID) == canonical);
-                if (chat != null)
+                // Both rows, for the same reason the storage side already expands the key:
+                // the conversation is listed under PN and under LID, and removing one left
+                // the other behind as an empty row until the next launch.
+                foreach (var chat in GetChatRowsForCanonicalJid(canonical))
                 {
-                    Chats.Remove(chat);
+                    if (chat != null)
+                    {
+                        Chats.Remove(chat);
+                    }
                 }
 
                 MessagesByChat.Remove(canonical);
@@ -269,36 +274,58 @@ namespace Unison.Uwp.Services.WhatsApp
                     idSet.Remove(messageId);
                 }
 
-                var chat = Chats.FirstOrDefault(c => GetCanonicalJid(c.JID) == canonical);
-                    if (chat != null)
+                // Every row sharing this identity, not just the first: a conversation is
+                // listed under both PN and LID, and correcting one left the other showing a
+                // preview of the message that was just deleted.
+                foreach (var chat in GetChatRowsForCanonicalJid(canonical))
+                {
+                    if (chat == null)
                     {
-                        var latest = ChatPreviewTip.PickLatest(messages);
-                        if (latest != null)
-                        {
-                            bool isGroup = canonical.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase) || chat.IsGroup;
-                            ApplyChatPreviewIfNewer(
-                                chat,
-                                ChatPreviewNormalizer.FormatListPreview(latest, isGroup),
-                                latest.Timestamp,
-                                true,
-                                ChatPreviewNormalizer.InferKindFromMessage(latest),
-                                ChatPreviewNormalizer.FormatListAuthorPrefix(latest, isGroup, SelfListDisplayName()),
-                                latest.MentionedJids,
-                                latest.IsFromMe,
-                                HistoryLiveMessageMapper.FromStatus(latest.Status, latest.IsFromMe),
-                                latest.Id);
-                        }
-                        else
-                        {
-                            ChatPreviewTip.Clear(chat);
-                        }
+                        continue;
                     }
+
+                    var latest = ChatPreviewTip.PickLatest(messages);
+                    if (latest != null)
+                    {
+                        bool isGroup = JidHelper.IsGroupJid(canonical) || chat.IsGroup;
+                        ApplyChatPreviewIfNewer(
+                            chat,
+                            ChatPreviewNormalizer.FormatListPreview(latest, isGroup),
+                            latest.Timestamp,
+                            true,
+                            ChatPreviewNormalizer.InferKindFromMessage(latest),
+                            ChatPreviewNormalizer.FormatListAuthorPrefix(latest, isGroup, SelfListDisplayName()),
+                            latest.MentionedJids,
+                            latest.IsFromMe,
+                            HistoryLiveMessageMapper.FromStatus(latest.Status, latest.IsFromMe),
+                            latest.Id);
+                    }
+                    else
+                    {
+                        ChatPreviewTip.Clear(chat);
+                    }
+                }
 
                 removed = true;
             });
 
             if (removed)
             {
+                // Dropping the in-memory row is only the visible half, the same way it is for
+                // a deleted chat: SQLite is what the timeline is rebuilt from, so a message
+                // cleared from RAM alone comes back on the next load of this conversation.
+                if (_messageStore != null)
+                {
+                    try
+                    {
+                        await _messageStore.DeleteMessageAsync(canonical, messageId);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"[WhatsAppService] Deleting {messageId} from storage failed: {ex.Message}");
+                    }
+                }
+
                 QueueChatMessagesChanged(canonical);
             }
 

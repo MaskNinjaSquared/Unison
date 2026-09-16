@@ -1230,7 +1230,9 @@ namespace Unison.Uwp.Services.WhatsApp
             RuntimeDiagnosticsService.Instance.Write(
                 "connection",
                 reuseLoadedKeyState ? "fast-resume-key-store-reused" : "key-store-cold-loaded",
-                "sessions=" + _authState.Sessions.Count + "; prekeys=" + _authState.PreKeys.Count);
+                    // The local copy, like the line that decided reuse above: a session wipe
+                    // running alongside this nulls the field, and an await just happened.
+                    "sessions=" + auth.Sessions.Count + "; prekeys=" + auth.PreKeys.Count);
             socket.OnAuthStateUpdate += async (s, e) =>
             {
                 if (!IsCurrentSocket(s)) return;

@@ -3821,23 +3821,7 @@ namespace Unison.Uwp.Services.WhatsApp
         // group-avatar fallback protocol path below) and is duplicated in ContactService for its own policy check.
         private ChatItem FindSiblingGroupAvatarSource(ChatItem chat)
         {
-            if (chat == null || !chat.IsGroup || string.IsNullOrWhiteSpace(chat.Name))
-            {
-                return null;
-            }
-
-            string targetName = chat.Name.Trim();
-            if (targetName.Length == 0)
-            {
-                return null;
-            }
-
-            return Chats.FirstOrDefault(c =>
-                c != null &&
-                c.IsGroup &&
-                !string.Equals(NormalizeJid(c.JID), NormalizeJid(chat.JID), StringComparison.OrdinalIgnoreCase) &&
-                string.Equals((c.Name ?? string.Empty).Trim(), targetName, StringComparison.OrdinalIgnoreCase) &&
-                !string.IsNullOrWhiteSpace(c.AvatarUrl));
+            return SiblingGroupAvatar.Find(chat, Chats);
         }
 
         private async Task ApplyAvatarResultAsync(ChatItem chat, ProfilePictureResult result, CancellationToken token)

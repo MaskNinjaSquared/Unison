@@ -61,6 +61,45 @@ determines the orientation and answers in one call. Each caller keeps its own lo
 merge still merges the rows and withholds only the alias; the mapped-LID path still only fires the first
 time it sees an address.
 
+### A message deleted on the phone came back
+
+`ApplyAppStateDeleteMessageAsync` dropped the message from memory and from the id index, fixed up the
+preview, and stopped there. It never told `MessageStore`. SQLite is what a conversation is rebuilt from,
+so the message returned on the next load of that chat — next launch, or just switching away and back.
+
+The sibling routine for deleting a whole chat documents this exact trap in its own XML comment and does
+both halves; the revoke path already calls `DeleteMessageAsync`. Only this one was missing it.
+
+Two more in the same pair of routines: both picked the row to update with `FirstOrDefault`, while every
+other app-state mutation in the file uses `GetChatRowsForCanonicalJid`, because a conversation is listed
+under both its PN and its LID. Deleting a chat left the second row behind as an empty entry, and
+deleting a message corrected the preview on one row while the other went on showing the message that had
+just been deleted.
+
+### The avatar queue could spin forever on a group in two places
+
+Three faults compounding. The sibling fallback — copy the picture from the other row for the same group
+— was only reached after trying parent and community candidates, so for any group without a community
+above it, which is most of them, it was unreachable. Failing stamped a reason meaning "sibling tried and
+failed", and the retry policy reads that reason to decide the row deserves another pass. Meanwhile the
+two copies of "does this sibling have a picture" disagreed: the policy accepted a row holding only the
+high-resolution file, the fetch copies `AvatarUrl` and would have copied nothing.
+
+So the policy had proof a retry was worthwhile, the fetch could never act on it, and the row went back
+in the queue on every pass at two IQs a round. On a phone on mobile data that is a battery bug.
+
+`SiblingGroupAvatar` is now the single answer, and it is the restrictive one, because the caller that
+acts on it can only copy what it can read. The sibling attempt now also runs when there are no community
+candidates, and it carries the high-resolution file across — same group, so it is this row's picture
+too, and leaving it behind sent the row straight back out to fetch a file already on disk.
+
+### A session wipe during connect could take the connection down
+
+`ConnectAsync` read `_authState.Sessions.Count` for a diagnostics line, three lines below the code that
+had already captured the same state into a local precisely because a wipe running alongside nulls the
+field — and with an `await` in between. `ClearSessionAsync` does not take the connect lock. The
+exception unwound into the outer handler and tore down the socket that had just been created.
+
 ### "Is this label still a stand-in?" was answered five different ways
 
 Five copies across `WhatsAppService` and its partials, no two alike. Two omitted the self-marker check,

@@ -363,23 +363,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         /// </summary>
         private ChatItem FindSiblingGroupAvatarSource(ChatItem chat)
         {
-            if (chat == null || !chat.IsGroup || string.IsNullOrWhiteSpace(chat.Name))
-            {
-                return null;
-            }
-
-            string targetName = chat.Name.Trim();
-            if (targetName.Length == 0)
-            {
-                return null;
-            }
-
-            return _whatsAppService.Chats.FirstOrDefault(c =>
-                c != null &&
-                c.IsGroup &&
-                !string.Equals(JidHelper.Normalize(c.JID), JidHelper.Normalize(chat.JID), StringComparison.OrdinalIgnoreCase) &&
-                string.Equals((c.Name ?? string.Empty).Trim(), targetName, StringComparison.OrdinalIgnoreCase) &&
-                !string.IsNullOrWhiteSpace(c.GetAvatarUrl(preferHigh: false)));
+            return SiblingGroupAvatar.Find(chat, _whatsAppService.Chats);
         }
 
         private static bool IsLegacyGroupMissReason(string reason)
