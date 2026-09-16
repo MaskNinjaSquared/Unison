@@ -418,8 +418,20 @@ what the user sees is a handful of predicates over `ChatItem` and `ChatMessage`.
 
 **What is left in `.Persistence.cs` should stay there.** After four slices the file is orchestration:
 snapshot the live collections on the UI thread, await a store, write a diagnostic. There is no rule
-left to lift that would not amount to moving I/O into Core. The next 3.9b work is the appliers folded
-in from 3.8, not this file.
+left to lift that would not amount to moving I/O into Core.
+
+**The appliers from 3.8 have started.** `AppStateChatMutation` took the first two: the unread count
+when the account marks a conversation read or unread, and the archive / pin / mute flags. Note where
+the difficulty actually lives — not in the flags themselves but in the fact that one mutation lands on
+every row sharing a canonical identity. "Mark as unread" carries no number, so it reads the highest
+count across the alias rows before falling back to 1; an unpin writes `0` rather than null, so a row
+that has not received the mutation yet cannot resurrect the pin through dedupe. Both are now tests
+rather than comments.
+
+What remains in `.AppState.cs` is heavier than what came out: `ApplyAppStateDeleteChatAsync` and
+`ApplyAppStateDeleteMessageAsync` both reach into SQLite and write tombstones, and their rule and
+their I/O are not separable the way the flags were. They want the device pass this document has been
+asking for since 3.9b began, not another compile-checked move.
 
 **One regression, and it was not in the moved code.** `MediaDerivationService` was registered with
 `AddSingleton<MediaDerivationService>()` in 3.3b while its constructor is `internal`, so the container

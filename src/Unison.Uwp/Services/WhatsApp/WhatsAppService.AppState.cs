@@ -124,7 +124,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     rows.Add(created);
                 }
 
-                int value = read ? 0 : Math.Max(1, rows.Max(c => Math.Max(0, c.UnreadCount)));
+                int value = AppStateChatMutation.ResolveUnreadCount(rows, read);
                 foreach (var row in rows) row.UnreadCount = value;
             });
             NotificationService.Instance.UpdateBadge(GetTotalUnreadCount());
@@ -333,6 +333,15 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
+            var change = new ChatFlagChange
+            {
+                Archived = archived,
+                Pinned = pinned,
+                PinnedTimestamp = pinnedTimestamp,
+                MuteEndTimestamp = muteEndTimestamp,
+                AppliesMute = applyMute
+            };
+
             List<ChatItem> touched = null;
             await RunOnUiThreadAsync(() =>
             {
@@ -349,40 +358,19 @@ namespace Unison.Uwp.Services.WhatsApp
                     rows.Add(created);
                 }
 
-                long effectivePinnedTimestamp = pinnedTimestamp ??
-                    DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                long nowUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
                 touched = new List<ChatItem>();
                 foreach (var chat in rows)
                 {
-                    if (archived.HasValue)
-                    {
-                        chat.IsArchived = archived.Value;
-                    }
-
-                    if (pinned.HasValue)
-                    {
-                        chat.IsChatPinned = pinned.Value;
-                        // 0 marks an explicit unpin so PN/LID dedupe cannot resurrect the pin
-                        // from an alias row that has not received the same mutation yet.
-                        chat.PinnedTimestamp = pinned.Value
-                            ? (long?)(pinnedTimestamp ?? chat.PinnedTimestamp ?? effectivePinnedTimestamp)
-                            : 0;
-                    }
-
-                    if (applyMute)
-                    {
-                        // null = unmuted; WhatsApp forever may arrive as 0.
-                        chat.MutedUntil = muteEndTimestamp;
-                    }
-
+                    AppStateChatMutation.ApplyFlags(chat, change, nowUnixMs);
                     touched.Add(chat);
                 }
 
                 SortChatsForDisplay();
             });
 
-            if (touched != null && _chatStore != null && (archived.HasValue || pinned.HasValue || applyMute))
+            if (touched != null && _chatStore != null && change.TouchesAnything)
             {
                 foreach (var chat in touched)
                 {

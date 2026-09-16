@@ -4,6 +4,16 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## WhatsAppService extraction — phase 3.9b (app-state chat mutations)
+
+- New `AppStateChatMutation` in `Unison.Core/Helpers`: what a mutation arriving from the account does to a chat row — the unread count on mark read/unread, and the archive / pin / mute flags. First slice of the appliers folded in from 3.8
+- These land on *every* row sharing a canonical identity, because one conversation can be listed under both its PN and its LID form. That is the whole reason the rules are non-obvious, and it is now stated rather than implied
+- Two of them would be easy to get wrong in a way nobody reports. "Mark as unread" carries no number, so the highest count among the alias rows is kept and only falls back to 1 — otherwise a chat that really had seven waiting would come back showing one. And an unpin writes `0` rather than null, so an alias row that has not received the mutation yet cannot resurrect the pin through dedupe
+- `ChatFlagChange` replaces five optional parameters, and `AppliesMute` earns its place: `null` is a *value* for `MutedUntil`, meaning unmuted, so absence had to be spelled separately. It also removed a duplicated `archived.HasValue || pinned.HasValue || applyMute` that decided whether the store write was worth doing
+- 20 tests. The client keeps creating the placeholder row, the UI thread, the badge, the store write and the sort
+
+---
+
 ## Startup crash — MediaDerivationService could not be constructed
 
 - `MediaDerivationService` was registered with `AddSingleton<MediaDerivationService>()`, but its constructor is `internal`. Type activation only considers public constructors, and a declared constructor suppresses the implicit parameterless one, so the container had nothing to call
