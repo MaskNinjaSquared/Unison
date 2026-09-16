@@ -4,6 +4,16 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## WhatsAppService extraction — phase 3.3b (derived media renditions)
+
+- New `MediaDerivationService`: WebP to PNG display sibling, platform PNG re-encode, Ogg/Opus to M4A transcode, first-frame video poster — 216 lines out of `.Media.cs`
+- Grouped because they share one cause: Windows 10 Mobile ships fewer codecs than the desktop and WhatsApp sends for the desktop. The original payload always stays on disk; these sit next to it
+- Takes the concrete `MediaCacheService`, closing the gap 3.3a left open — `MediaTranscoder` encodes into a `StorageFile` it is handed, which a Core interface cannot produce. Both sides are UWP, so nothing is being abstracted away
+- DI now registers `MediaCacheService` concretely and maps `IMediaCache` onto the same instance
+- Still in the client (3.3c): `Ensure*AvailableAsync`, `EnsureWebPDisplayUriAsync`, `EnsurePlayableAudioUriAsync` — they read, write and persist `ChatMessage`
+
+---
+
 ## WhatsAppService extraction — phase 3.9a (chat list order)
 
 - New `ChatDisplayOrder` in `Unison.Core/Helpers`: `Compare`, `Reposition`, `SortInPlace`. Sibling of `ChatMessageOrder`, which already owned the same job for messages

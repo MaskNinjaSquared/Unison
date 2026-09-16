@@ -269,30 +269,8 @@ namespace Unison.Uwp.Services.WhatsApp
             return displayUri;
         }
 
-        private async Task<string> ConvertWebPBytesToDisplayPngAsync(byte[] imageBytes, string fileBase)
-        {
-            string displayFileBase =
-                (string.IsNullOrWhiteSpace(fileBase) ? Guid.NewGuid().ToString("N") : fileBase) + "_display";
-
-            var existingDisplay = await TryGetCachedImageUriAsync(displayFileBase, "image/png");
-            if (!string.IsNullOrWhiteSpace(existingDisplay))
-            {
-                return existingDisplay;
-            }
-
-            byte[] png = await WebPDecoder.TryDecodeToPngAsync(imageBytes);
-            if (png == null || png.Length == 0)
-            {
-                png = await TryEncodeImageBytesAsPngAsync(imageBytes);
-            }
-
-            if (png == null || png.Length == 0)
-            {
-                return null;
-            }
-
-            return await SaveImageBytesToCacheAsync(png, displayFileBase, "image/png");
-        }
+        private Task<string> ConvertWebPBytesToDisplayPngAsync(byte[] imageBytes, string fileBase) =>
+            _mediaDerivation.EnsurePngDisplayCopyAsync(imageBytes, fileBase);
 
         private static bool IsWebPCacheUri(string uri)
         {
@@ -329,50 +307,8 @@ namespace Unison.Uwp.Services.WhatsApp
         /// <summary>
         /// Re-encode via the platform <see cref="Windows.Graphics.Imaging.BitmapDecoder"/> when present.
         /// </summary>
-        private static async Task<byte[]> TryEncodeImageBytesAsPngAsync(byte[] imageBytes)
-        {
-            if (imageBytes == null || imageBytes.Length == 0)
-            {
-                return null;
-            }
-
-            try
-            {
-                using (var input = new Windows.Storage.Streams.InMemoryRandomAccessStream())
-                {
-                    await input.WriteAsync(imageBytes.AsBuffer());
-                    input.Seek(0);
-                    var decoder = await Windows.Graphics.Imaging.BitmapDecoder.CreateAsync(input);
-                    using (var output = new Windows.Storage.Streams.InMemoryRandomAccessStream())
-                    {
-                        var encoder = await Windows.Graphics.Imaging.BitmapEncoder.CreateAsync(
-                            Windows.Graphics.Imaging.BitmapEncoder.PngEncoderId,
-                            output);
-                        var pixelData = await decoder.GetPixelDataAsync();
-                        encoder.SetPixelData(
-                            decoder.BitmapPixelFormat,
-                            decoder.BitmapAlphaMode,
-                            decoder.OrientedPixelWidth,
-                            decoder.OrientedPixelHeight,
-                            decoder.DpiX,
-                            decoder.DpiY,
-                            pixelData.DetachPixelData());
-                        await encoder.FlushAsync();
-                        output.Seek(0);
-                        var reader = new Windows.Storage.Streams.DataReader(output.GetInputStreamAt(0));
-                        await reader.LoadAsync((uint)output.Size);
-                        byte[] png = new byte[output.Size];
-                        reader.ReadBytes(png);
-                        return png;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[WhatsAppService] PNG re-encode failed: " + ex.Message);
-                return null;
-            }
-        }
+        private static Task<byte[]> TryEncodeImageBytesAsPngAsync(byte[] imageBytes) =>
+            MediaDerivationService.TryEncodeAsPngAsync(imageBytes);
 
         private Task<string> SaveStickerBytesToCacheAsync(byte[] imageBytes, string fileBase, string mimeType)
         {
@@ -397,87 +333,8 @@ namespace Unison.Uwp.Services.WhatsApp
         /// WhatsApp voice notes are often Ogg/Opus â€” fine on desktop MediaPlayer, often fails on W10 Mobile.
         /// Renaming the extension alone does not change the codec; re-encode to AAC/.m4a when possible.
         /// </summary>
-        private async Task<string> TryTranscodeOggOpusToM4aAsync(string sourceUri, string fileBase)
-        {
-            if (string.IsNullOrWhiteSpace(sourceUri)) return null;
-
-            StorageFile sourceFile = null;
-            try
-            {
-                if (sourceUri.StartsWith("ms-appdata:", StringComparison.OrdinalIgnoreCase))
-                {
-                    sourceFile = await StorageFile.GetFileFromApplicationUriAsync(new Uri(sourceUri));
-                }
-                else if (File.Exists(sourceUri))
-                {
-                    sourceFile = await StorageFile.GetFileFromPathAsync(sourceUri);
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[WhatsAppService] Open ogg for transcode failed: " + ex.Message);
-                return null;
-            }
-
-            if (sourceFile == null) return null;
-
-            try
-            {
-                var local = ApplicationData.Current.LocalFolder;
-                var mediaFolder = await local.CreateFolderAsync("MediaCache", CreationCollisionOption.OpenIfExists);
-                var audioFolder = await mediaFolder.CreateFolderAsync("Audio", CreationCollisionOption.OpenIfExists);
-                string safeBase = _mediaCache.SanitizeFileBase(
-                    string.IsNullOrWhiteSpace(fileBase) ? null : fileBase + "_play");
-                string destName = safeBase + ".m4a";
-                var destFile = await audioFolder.CreateFileAsync(destName, CreationCollisionOption.ReplaceExisting);
-
-                var transcoder = new Windows.Media.Transcoding.MediaTranscoder();
-                var profile = Windows.Media.MediaProperties.MediaEncodingProfile.CreateM4a(
-                    Windows.Media.MediaProperties.AudioEncodingQuality.Auto);
-                if (profile == null)
-                {
-                    SessionLogger.Instance.WriteAlways("[Audio/transcode] CreateM4a returned null src=" + sourceUri);
-                    try { await destFile.DeleteAsync(); } catch { }
-                    return null;
-                }
-
-                var prepared = await transcoder.PrepareFileTranscodeAsync(sourceFile, destFile, profile);
-                if (prepared == null)
-                {
-                    SessionLogger.Instance.WriteAlways("[Audio/transcode] PrepareFileTranscodeAsync returned null src=" + sourceUri);
-                    try { await destFile.DeleteAsync(); } catch { }
-                    return null;
-                }
-
-                if (!prepared.CanTranscode)
-                {
-                    SessionLogger.Instance.WriteAlways(
-                        "[Audio/transcode] CanTranscode=false reason=" + prepared.FailureReason +
-                        " src=" + sourceUri);
-                    try { await destFile.DeleteAsync(); } catch { }
-                    return null;
-                }
-
-                await prepared.TranscodeAsync();
-                string uri = "ms-appdata:///local/MediaCache/Audio/" + destName;
-                SessionLogger.Instance.WriteAlways(
-                    "[Audio/transcode] ok src=" + sourceUri + " dest=" + uri);
-                return uri;
-            }
-            catch (Exception ex)
-            {
-                try
-                {
-                    SessionLogger.Instance.WriteErrorAlways("[Audio/transcode] failed src=" + sourceUri, ex);
-                }
-                catch
-                {
-                }
-
-                Debug.WriteLine("[WhatsAppService] Audio transcode failed: " + ex.Message);
-                return null;
-            }
-        }
+        private Task<string> TryTranscodeOggOpusToM4aAsync(string sourceUri, string fileBase) =>
+            _mediaDerivation.TryTranscodeOggOpusToM4aAsync(sourceUri, fileBase);
 
         /// <summary>If source is ogg/opus, prefer m4a (MF) then WAV (Concentus) for Mobile playback.</summary>
         private async Task<string> EnsurePlayableAudioUriAsync(ChatMessage message, string sourceUri)
@@ -962,65 +819,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 MediaFileExtensions.ForVideo(mimeType),
                 videoBytes);
 
-        /// <summary>First-frame JPEG via MediaComposition (bubble poster after download).</summary>
-        private async Task<string> TryCreateVideoPosterAsync(string videoUri, string fileBase)
-        {
-            if (string.IsNullOrWhiteSpace(videoUri)) return null;
-
-            StorageFile videoFile = null;
-            try
-            {
-                if (videoUri.StartsWith("ms-appdata:", StringComparison.OrdinalIgnoreCase))
-                {
-                    videoFile = await StorageFile.GetFileFromApplicationUriAsync(new Uri(videoUri));
-                }
-                else if (File.Exists(videoUri))
-                {
-                    videoFile = await StorageFile.GetFileFromPathAsync(videoUri);
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[WhatsAppService] Open video for poster failed: " + ex.Message);
-                return null;
-            }
-
-            if (videoFile == null) return null;
-
-            try
-            {
-                var clip = await Windows.Media.Editing.MediaClip.CreateFromFileAsync(videoFile);
-                var composition = new Windows.Media.Editing.MediaComposition();
-                composition.Clips.Add(clip);
-                using (var thumbStream = await composition.GetThumbnailAsync(
-                    TimeSpan.Zero,
-                    640,
-                    640,
-                    Windows.Media.Editing.VideoFramePrecision.NearestFrame))
-                {
-                    if (thumbStream == null || thumbStream.Size == 0) return null;
-
-                    thumbStream.Seek(0);
-                    var reader = new Windows.Storage.Streams.DataReader(thumbStream.GetInputStreamAt(0));
-                    await reader.LoadAsync((uint)thumbStream.Size);
-                    byte[] jpeg = new byte[thumbStream.Size];
-                    reader.ReadBytes(jpeg);
-                    reader.Dispose();
-
-                    return await _mediaCache.SaveAsync(
-                        MediaCacheKind.VideoPoster,
-                        string.IsNullOrWhiteSpace(fileBase) ? null : fileBase + "_poster",
-                        ".jpg",
-                        jpeg,
-                        reuseExisting: false);
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[WhatsAppService] Create video poster failed: " + ex.Message);
-                return null;
-            }
-        }
+        private Task<string> TryCreateVideoPosterAsync(string videoUri, string fileBase) =>
+            _mediaDerivation.TryCreateVideoPosterAsync(videoUri, fileBase);
 
         private async Task HydrateImageForMessageAsync(ChatMessage chatMessage, Proto.Message.Types.ImageMessage imageMessage, string messageId, string chatJid)
         {

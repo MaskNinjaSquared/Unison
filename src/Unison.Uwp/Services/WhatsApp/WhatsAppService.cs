@@ -254,6 +254,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly IUsyncGate _usyncGate;
         private readonly AvatarFetcher _avatarFetcher;
         private readonly IMediaCache _mediaCache;
+        private readonly MediaDerivationService _mediaDerivation;
         private readonly ReceiptReader _receipts;
 
         /// <summary>
@@ -1863,7 +1864,8 @@ namespace Unison.Uwp.Services.WhatsApp
             IUsyncGate usyncGate,
             AvatarFetcher avatarFetcher,
             IMediaCache mediaCache,
-            JidAliasTable jidAlias)
+            JidAliasTable jidAlias,
+            MediaDerivationService mediaDerivation)
         {
             if (chatState == null)
             {
@@ -1877,6 +1879,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _usyncGate = usyncGate ?? throw new ArgumentNullException(nameof(usyncGate));
             _avatarFetcher = avatarFetcher ?? throw new ArgumentNullException(nameof(avatarFetcher));
             _mediaCache = mediaCache ?? throw new ArgumentNullException(nameof(mediaCache));
+            _mediaDerivation = mediaDerivation ?? throw new ArgumentNullException(nameof(mediaDerivation));
             JidAlias = jidAlias ?? throw new ArgumentNullException(nameof(jidAlias));
             JidAlias.BindSelf(() => _authState?.Me?.Id, () => _authState?.Me?.Lid);
             JidAlias.Changed += (s, e) => InvalidateChatRowIndex();
@@ -1901,10 +1904,11 @@ namespace Unison.Uwp.Services.WhatsApp
             IUsyncGate usyncGate,
             AvatarFetcher avatarFetcher,
             IMediaCache mediaCache,
-            JidAliasTable jidAlias)
+            JidAliasTable jidAlias,
+            MediaDerivationService mediaDerivation)
         {
             return _instance ?? (_instance = new WhatsAppService(
-                chatState, historyMessages, chatPreviews, avatarCache, usyncGate, avatarFetcher, mediaCache, jidAlias));
+                chatState, historyMessages, chatPreviews, avatarCache, usyncGate, avatarFetcher, mediaCache, jidAlias, mediaDerivation));
         }
 
         /// <summary>

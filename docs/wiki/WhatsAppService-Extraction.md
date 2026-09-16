@@ -173,7 +173,8 @@ Self-contained first. List/persist last.
 | 3.2a | Group protocol reading (done) | `GroupMetadataReader` |
 | 3.2b | Group apply + roster persist | `GroupFacade`, after 3.6 / 3.7 / 3.9 |
 | 3.3a | Media cache + file naming (done) | `IMediaCache` / `MediaCacheService`, `MediaFileExtensions` |
-| 3.3b | Download orchestration + transcode / poster / WebP | `MessageFacade`. Contract already has `Ensure*AvailableAsync` |
+| 3.3b | Derived renditions — transcode / poster / WebP (done) | `MediaDerivationService` |
+| 3.3c | Download orchestration | `MessageFacade`. Contract already has `Ensure*AvailableAsync` |
 | 3.4 | Send (main file) | `MessageFacade` over use cases; client only “send this node” |
 | 3.5a | Receipt reading (done) | `ReceiptReader` |
 | 3.5b | Receipt aggregation state | `MessageFacade` / `ChatFacade`, after 3.9 |
@@ -249,9 +250,23 @@ Two follow-ups, both real:
 - The same folder boilerplate is still duplicated in `OggOpusToWavConverter`,
   `OggOpusHandlerService` and `HistoryThumbnailMaterializer`. They should take `IMediaCache`. Left
   out of 3.3a deliberately — the audio path is the fragile one on Mobile and deserves its own change.
-- `TryTranscodeOggOpusToM4aAsync` still opens the Audio folder itself, because `MediaTranscoder`
-  encodes into a `StorageFile` it is handed and there is no WinRT-free way to express that on a Core
-  interface. It borrows `SanitizeFileBase` so the naming cannot drift. That is 3.3b's problem.
+- ~~`TryTranscodeOggOpusToM4aAsync` still opens the Audio folder itself.~~ Resolved in 3.3b.
+
+**3.3b is done: the second renditions left.** `MediaDerivationService` owns the four things that
+exist only because Windows 10 Mobile ships a narrower set of codecs than the desktop, and WhatsApp
+sends for the desktop: the PNG sibling of a WebP, the platform PNG re-encode, the Ogg/Opus to M4A
+transcode, and the first-frame video poster. 216 lines out of `.Media.cs`. The original payload
+always stays on disk; every one of these is an addition next to it.
+
+It takes `MediaCacheService` rather than `IMediaCache`, which is the point 3.3a could not reach:
+`MediaTranscoder` encodes into a `StorageFile` it is handed, and a Core interface cannot produce one.
+Both sides are UWP, so there was never anything to abstract — the only reason it looked like a
+problem in 3.3a was that the holder was the client, which talks to Core contracts. The container now
+registers the concrete type and maps `IMediaCache` onto it.
+
+What is left in the client is 3.3c: `Ensure*AvailableAsync`, `EnsureWebPDisplayUriAsync` and
+`EnsurePlayableAudioUriAsync`. Those read and write `ChatMessage` and persist it, so they follow
+message state rather than media.
 
 **3.7a is done, and it did not fold into `LidMappingStore`.** The plan above said to merge the
 session alias map into `LidMappingStore`, whose own header says it exists to replace exactly that.

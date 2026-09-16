@@ -111,6 +111,12 @@ namespace Unison.Uwp.Services
             }
         }
 
+        /// <summary>
+        /// The folder for the one caller that cannot hand over bytes: the audio transcoder encodes
+        /// into a <see cref="StorageFile"/> it is given, so it creates its own destination here.
+        /// </summary>
+        internal Task<StorageFolder> GetFolderAsync(MediaCacheKind kind) => OpenFolderAsync(kind);
+
         public string SanitizeFileBase(string fileBase) =>
             string.IsNullOrWhiteSpace(fileBase) ? Guid.NewGuid().ToString("N") : Sanitize(fileBase);
 

@@ -140,6 +140,7 @@
     <Compile Include="Services\DialogService.cs" />
     <Compile Include="Services\AvatarCacheService.cs" />
     <Compile Include="Services\MediaCacheService.cs" />
+    <Compile Include="Services\MediaDerivationService.cs" />
     <Compile Include="Services\WhatsApp\Messages\ReceiptReader.cs" />
     <Compile Include="Services\UsyncGate.cs" />
     <Compile Include="Services\WhatsApp\Contacts\AvatarFetcher.cs" />
