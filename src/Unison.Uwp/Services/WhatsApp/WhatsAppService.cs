@@ -1538,127 +1538,14 @@ namespace Unison.Uwp.Services.WhatsApp
             return true;
         }
 
-        private static int CompareChatsForDisplay(ChatItem left, ChatItem right)
-        {
-            if (ReferenceEquals(left, right))
-            {
-                return 0;
-            }
+        private static int CompareChatsForDisplay(ChatItem left, ChatItem right) =>
+            ChatDisplayOrder.Compare(left, right);
 
-            if (left == null)
-            {
-                return 1;
-            }
-            if (right == null)
-            {
-                return -1;
-            }
+        private void RepositionChatForDisplay(ChatItem chat) =>
+            ChatDisplayOrder.Reposition(Chats, chat);
 
-            if (left.IsChatPinned != right.IsChatPinned)
-            {
-                return left.IsChatPinned ? -1 : 1;
-            }
-
-            if (left.IsChatPinned)
-            {
-                long leftPin = left.PinnedTimestamp ?? 0;
-                long rightPin = right.PinnedTimestamp ?? 0;
-                int pinCompare = rightPin.CompareTo(leftPin);
-                if (pinCompare != 0)
-                {
-                    return pinCompare;
-                }
-            }
-
-            DateTime leftTime = left.LastMessageTimestampUtc.HasValue
-                ? ToComparableUtc(left.LastMessageTimestampUtc.Value)
-                : DateTime.MinValue;
-            DateTime rightTime = right.LastMessageTimestampUtc.HasValue
-                ? ToComparableUtc(right.LastMessageTimestampUtc.Value)
-                : DateTime.MinValue;
-
-            int timeCompare = rightTime.CompareTo(leftTime);
-            if (timeCompare != 0)
-            {
-                return timeCompare;
-            }
-
-            return string.Compare(left.Name, right.Name, StringComparison.CurrentCultureIgnoreCase);
-        }
-
-        private void RepositionChatForDisplay(ChatItem chat)
-        {
-            if (chat == null || !Chats.Contains(chat))
-            {
-                return;
-            }
-
-            int targetIndex = 0;
-            foreach (var other in Chats)
-            {
-                if (ReferenceEquals(other, chat))
-                {
-                    continue;
-                }
-
-                if (CompareChatsForDisplay(other, chat) < 0)
-                {
-                    targetIndex++;
-                }
-            }
-
-            int currentIndex = Chats.IndexOf(chat);
-            if (currentIndex >= 0 && currentIndex != targetIndex)
-            {
-                Chats.Move(currentIndex, targetIndex);
-            }
-        }
-
-        private void SortChatsForDisplay()
-        {
-            if (Chats.Count < 2)
-            {
-                return;
-            }
-
-            var desired = Chats.OrderBy(c => c, Comparer<ChatItem>.Create(CompareChatsForDisplay)).ToList();
-
-            // The list is usually already in order - a preview that did not change position, a
-            // name that was filled in - and every Move below is a collection-changed notification
-            // the ListView has to act on. Finding that out costs one pass.
-            int firstOutOfPlace = -1;
-            for (int i = 0; i < desired.Count; i++)
-            {
-                if (!ReferenceEquals(Chats[i], desired[i]))
-                {
-                    firstOutOfPlace = i;
-                    break;
-                }
-            }
-
-            if (firstOutOfPlace < 0)
-            {
-                return;
-            }
-
-            for (int i = firstOutOfPlace; i < desired.Count; i++)
-            {
-                if (ReferenceEquals(Chats[i], desired[i]))
-                {
-                    continue;
-                }
-
-                // Everything before i is already in its final place, so the search starts there.
-                for (int j = i + 1; j < Chats.Count; j++)
-                {
-                    if (ReferenceEquals(Chats[j], desired[i]))
-                    {
-                        Chats.Move(j, i);
-                        break;
-                    }
-                }
-            }
-        }
+        private void SortChatsForDisplay() =>
+            ChatDisplayOrder.SortInPlace(Chats);
 
         private DateTime GetNewestStoredMessageUtc()
         {

@@ -4,6 +4,16 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## WhatsAppService extraction — phase 3.9a (chat list order)
+
+- New `ChatDisplayOrder` in `Unison.Core/Helpers`: `Compare`, `Reposition`, `SortInPlace`. Sibling of `ChatMessageOrder`, which already owned the same job for messages
+- Out of `WhatsAppService`: `CompareChatsForDisplay`, `RepositionChatForDisplay`, `SortChatsForDisplay` — 122 lines. The client keeps one-line forwards, so no caller changed
+- Order rule unchanged: pinned first and by pin time, then last message, then name as tie-break
+- `SortInPlace` keeps its first-out-of-place scan; the list is usually already ordered and every `Move` is a collection-changed notification the `ListView` acts on
+- Picked as the first slice of 3.9 because it is the half the compiler can vouch for. Persistence, preview reconciliation and the 3.8 appliers all write chat state under the client's locks — that is 3.9b
+
+---
+
 ## WhatsAppService extraction — phase 3.5a (receipt reading)
 
 - New `ReceiptReader` + `ReceiptFacts`: parses a `<receipt>` node into status, message ids, chat, participant and group flag, and counts group recipients. Takes `IJidResolver`

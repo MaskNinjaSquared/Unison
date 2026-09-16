@@ -181,7 +181,8 @@ Self-contained first. List/persist last.
 | 3.7a | Alias LID/PN + canonical (done) | `JidAliasTable` (Core), read through `IJidResolver` |
 | 3.7b | Converge onto `LidMappingStore` | Blocked: that store is async, canonicalization is not. See below |
 | 3.8 | `.AppState.cs` | **Rewritten — the premise was stale.** See below |
-| 3.9 | `.Persistence.cs` + list sort/preview | `ChatFacade` + `ChatStateStore` + `IChatStore` / `IMessageStore`. Close the transitional public dictionaries on `ChatStateStore` |
+| 3.9a | List display order (done) | `ChatDisplayOrder` (Core) |
+| 3.9b | `.Persistence.cs` + preview reconcile + the appliers from 3.8 | `ChatFacade` + `ChatStateStore` + `IChatStore` / `IMessageStore`. Close the transitional public dictionaries on `ChatStateStore` |
 | 3.10 | `.IncomingPump.cs` | Decode/dispatch stays with connection; apply (row, preview, unread, toast) goes to façades |
 
 **3.1a is done.** The avatar half of `MediaCache` is `IAvatarCache` / `AvatarCacheService`: `TryGet`,
@@ -322,6 +323,21 @@ the message stores. Moving them *is* moving chat state, which is 3.9.
 
 **3.8 is therefore folded into 3.9** rather than sequenced before it. Nothing is lost: the appliers
 were always going to follow the state they write.
+
+**3.9a is done: the order left, the state did not.** `ChatDisplayOrder` in `Unison.Core/Helpers`
+owns `Compare`, `Reposition` and `SortInPlace` — sibling to `ChatMessageOrder`, which already did the
+same job one level down for messages. Ordering is a rule about `ChatItem`, and `ChatStateStore`,
+which owns the collection, is in Core too; only the client was in the way.
+
+Moved verbatim, including the part that is easy to mistake for an optimisation worth rewriting:
+`SortInPlace` scans for the first out-of-place row before touching anything, because the list is
+usually already ordered and every `Move` is a collection-changed notification the `ListView` has to
+act on. On a phone with a few hundred chats that check is the difference between a sync that scrolls
+and one that stutters.
+
+This was picked as the first slice of 3.9 because it is the half the compiler can vouch for. The
+rest — persistence, preview reconciliation, and the app-state appliers folded in from 3.8 — all
+write chat state under the client's locks, and that is 3.9b.
 
 **Thread affinity:** today the client mutates `Chats` on the UI thread; VMs read on the UI thread; `ChatStateStore`’s extra dictionaries are protected by that, not only by the lock. Any code moved to a façade that runs off-thread must use `UpsertChatsAsync` / `UpsertMessagesAsync` (or `IDispatcher`). Do not split 3.9 into half-moves.
 
