@@ -3865,10 +3865,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 catch (Exception ex)
                 {
                     await RunOnUiThreadAsync(() =>
-                        {
-                            chat.AvatarFetchFailedAtUtc = nowUtc;
-                            chat.AvatarFetchFailureReason = "download:" + ex.Message;
-                        });
+                        ChatAvatarOutcome.RecordFailure(chat, "download:" + ex.Message, nowUtc));
                     Debug.WriteLine($"[WhatsAppService] Avatar download/cache failed for {chat.JID}: target={result.TargetJid}, reason={ex.Message}");
                     return;
                 }
@@ -3876,19 +3873,13 @@ namespace Unison.Uwp.Services.WhatsApp
                 if (string.IsNullOrWhiteSpace(localUri))
                 {
                     await RunOnUiThreadAsync(() =>
-                        {
-                            chat.AvatarFetchFailedAtUtc = nowUtc;
-                            chat.AvatarFetchFailureReason = "download:empty";
-                        });
+                        ChatAvatarOutcome.RecordFailure(chat, "download:empty", nowUtc));
                     return;
                 }
 
                 await RunOnUiThreadAsync(() =>
                     {
-                        chat.AvatarUrl = localUri;
-                        chat.AvatarFetchedAtUtc = nowUtc;
-                        chat.AvatarFetchFailedAtUtc = null;
-                        chat.AvatarFetchFailureReason = null;
+                        ChatAvatarOutcome.RecordCached(chat, localUri, nowUtc);
                         StampGroupMemberAvatars(chat.JID, localUri);
                     });
                 ReportAvatarCached(chat.JID, localUri);
@@ -3909,12 +3900,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
                 await RunOnUiThreadAsync(() =>
-                    {
-                        chat.AvatarUrl = null;
-                        chat.AvatarFetchedAtUtc = nowUtc;
-                        chat.AvatarFetchFailedAtUtc = null;
-                        chat.AvatarFetchFailureReason = failureReason;
-                    });
+                    ChatAvatarOutcome.RecordAbsent(chat, failureReason, nowUtc));
                 Debug.WriteLine($"[WhatsAppService] Avatar confirmed absent for {chat.JID}: target={result.TargetJid}, reason={failureReason}");
                 return;
             }
@@ -3925,10 +3911,10 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             await RunOnUiThreadAsync(() =>
-                {
-                    chat.AvatarFetchFailedAtUtc = nowUtc;
-                    chat.AvatarFetchFailureReason = result.FailureReason ?? (result.IsTimeout ? "timeout" : "transient");
-            });
+                ChatAvatarOutcome.RecordFailure(
+                    chat,
+                    result.FailureReason ?? (result.IsTimeout ? "timeout" : "transient"),
+                    nowUtc));
             Debug.WriteLine($"[WhatsAppService] Avatar refresh failed without clearing existing image for {chat.JID}: target={result.TargetJid}, lookup={result.TokenLookupJid}, reason={chat.AvatarFetchFailureReason}");
         }
 

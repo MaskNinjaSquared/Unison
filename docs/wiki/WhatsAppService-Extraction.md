@@ -169,7 +169,7 @@ Self-contained first. List/persist last.
 |---|---|---|
 | 3.1a | Avatar cache (done) | `IAvatarCache` / `AvatarCacheService` |
 | 3.1b | Avatar fetch (done) | `AvatarFetcher`, behind `IUsyncGate` |
-| 3.1c | Avatar apply to the row | with 3.2 (group fallback) and 3.9 (row + persist) |
+| 3.1c | Avatar apply to the row (done) | `ChatAvatarOutcome` (Core); fallback + fetch stay in the client |
 | 3.2a | Group protocol reading (done) | `GroupMetadataReader` |
 | 3.2b | Group apply + roster persist | `GroupFacade`, after 3.6 / 3.7 / 3.9 |
 | 3.3a | Media cache + file naming (done) | `IMediaCache` / `MediaCacheService`, `MediaFileExtensions` |
@@ -177,7 +177,7 @@ Self-contained first. List/persist last.
 | 3.3c | Download orchestration | `MessageFacade`. Contract already has `Ensure*AvailableAsync` |
 | 3.4 | Send (main file) | `MessageFacade` over use cases; client only “send this node” |
 | 3.5a | Receipt reading (done) | `ReceiptReader` |
-| 3.5b | Receipt aggregation state | `MessageFacade` / `ChatFacade`, after 3.9 |
+| 3.5b | Receipt aggregation state (done) | `GroupReceiptTally` (Core) |
 | 3.6 | Names / usync (`.Identity.cs`) | `ContactFacade` / `ContactDirectory`. Masked `*****` labels stay “no name” so projection can fill |
 | 3.7a | Alias LID/PN + canonical (done) | `JidAliasTable` (Core), read through `IJidResolver` |
 | 3.7b | Converge onto `LidMappingStore` | Blocked: that store is async, canonicalization is not. See below |
@@ -428,10 +428,31 @@ count across the alias rows before falling back to 1; an unpin writes `0` rather
 that has not received the mutation yet cannot resurrect the pin through dedupe. Both are now tests
 rather than comments.
 
-What remains in `.AppState.cs` is heavier than what came out: `ApplyAppStateDeleteChatAsync` and
-`ApplyAppStateDeleteMessageAsync` both reach into SQLite and write tombstones, and their rule and
-their I/O are not separable the way the flags were. They want the device pass this document has been
-asking for since 3.9b began, not another compile-checked move.
+**3.9b is closed.** The delete appliers gave up two rules — `ChatPreviewTip.PickLatest` and `.Clear`,
+the "what does the row show now" half — and kept the rest. `ApplyAppStateDeleteChatAsync` and
+`ApplyAppStateDeleteMessageAsync` still write tombstones and delete from SQLite, and that is where they
+belong: the decision and the I/O genuinely are the same statement there.
+
+Pulling `PickLatest` out found a live bug worth recording, because it is the third sighting of the same
+shape. The replacement preview after a delete was chosen with `OrderByDescending` on the raw `DateTime`,
+while every other ordering path in the app normalises through `ToComparableUtc` first. Rows read back
+from SQLite arrive `Unspecified`. **Treat an un-normalised `DateTime` comparison as a defect on sight**
+— `ChatDisplayOrder`, `ChatPreviewTip` and now this have all had it.
+
+**3.5b and 3.1c followed, both unblocked by 3.9b closing.** `GroupReceiptTally` owns the per-message
+tally of who received and who read; `ChatAvatarOutcome` records how an avatar lookup ended. The second
+is small but load-bearing: *no photo* is an answer and stamps the fetch time so the row stops being
+asked, while *could not reach it* must not, and must leave any existing image alone. Those two were
+four separate field-writes scattered through one method, which is exactly how they would have drifted.
+
+**What is left is no longer shaped like these.** 3.4 (send), 3.6 (names / usync) and 3.10
+(`IncomingPump`) are not extractions of a rule from a method — they are moves of whole responsibilities
+onto façades, with the socket and the UI thread on both sides. 3.2b still waits on 3.6; 3.3c is a
+façade move too. The test suite does not reach any of them, because they are all in the UWP head.
+
+**None of this has been run.** Every slice from the pending message queue onward is compile-checked
+and test-covered and has not been on a device. That debt is now nine slices deep and is the next thing
+to spend time on, ahead of any further extraction.
 
 **One regression, and it was not in the moved code.** `MediaDerivationService` was registered with
 `AddSingleton<MediaDerivationService>()` in 3.3b while its constructor is `internal`, so the container

@@ -4,6 +4,18 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## WhatsAppService extraction — 3.9b closed, 3.5b and 3.1c done
+
+- **3.9b closed.** `ChatPreviewTip` gained `PickLatest` and `Clear`, the two rules inside the delete appliers. What stays in `.AppState.cs` is the tombstone write and the SQLite delete, whose rule and I/O are not separable
+- **Fixed on the way through:** deleting the top message picked its replacement with `OrderByDescending` on the raw `DateTime`, while `ChatDisplayOrder` and `ChatPreviewTip.PickNewer` both normalise through `ToComparableUtc` first. Rows read back from SQLite arrive `Unspecified`, so a stored message could look a local offset newer than it was and be promoted over a genuinely newer one — the same three-hour drift this project has hit before
+- **3.5b done.** `GroupReceiptTally` (`Unison.Core/State`) owns the per-message tally of who received and who read, completing 3.5 alongside the `ReceiptReader` from 3.5a. It takes its own lock rather than sharing `_messageStateLock`, which guarded several unrelated dictionaries; the state it replaces was touched nowhere else
+- Check marks were previously only observable by sending to a real group from a second phone. Now pinned: that reading implies receiving, so a group where one member reads and another only receives still reaches delivered; that a repeated receipt from one participant does not count twice; that read is terminal and stops being tracked; and that the eviction sweep spares messages still being reported on
+- **3.1c done.** `ChatAvatarOutcome` (`Unison.Core/Helpers`) records how an avatar lookup ended — four fields, three outcomes, written four different ways across `ApplyAvatarResultAsync`
+- The distinction it exists to protect: *no photo* is an answer and is stamped as one, so the row stops being asked; *could not reach it* is not, and deliberately leaves the fetch time and any existing image alone. Collapsing them either way is a bug with no error attached — one direction is a blank circle forever, the other is re-asking the server on every sweep
+- 45 tests across the three. Suite at 268
+
+---
+
 ## WhatsAppService extraction — phase 3.9b (app-state chat mutations)
 
 - New `AppStateChatMutation` in `Unison.Core/Helpers`: what a mutation arriving from the account does to a chat row — the unread count on mark read/unread, and the archive / pin / mute flags. First slice of the appliers folded in from 3.8
