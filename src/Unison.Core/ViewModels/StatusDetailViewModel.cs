@@ -36,6 +36,7 @@ namespace Unison.Core.ViewModels
         private bool _waitingForNaturalDuration;
         private CancellationTokenSource _timerCts;
         private int _openGeneration;
+        private DateTime _itemShownUtc;
 
         public StatusDetailViewModel(IStatusService status, IDispatcher dispatcher)
         {
@@ -224,7 +225,8 @@ namespace Unison.Core.ViewModels
             }
 
             _waitingForNaturalDuration = false;
-            double duration = seconds > 0.2 ? seconds : PhotoDisplaySeconds;
+            // W10M often reports 0 / tiny NaturalDuration for broken or still-opening streams.
+            double duration = seconds >= 1d ? seconds : PhotoDisplaySeconds;
             StartTimer(TimeSpan.FromSeconds(duration));
         }
 
@@ -232,6 +234,19 @@ namespace Unison.Core.ViewModels
         public void NotifyVideoEnded()
         {
             if (!IsVideo || !HasOpenAuthor)
+            {
+                return;
+            }
+
+            // Spurious MediaEnded on open (unsupported codec / zero-length) used to Close() instantly.
+            if (_waitingForNaturalDuration)
+            {
+                _waitingForNaturalDuration = false;
+                StartTimer(TimeSpan.FromSeconds(PhotoDisplaySeconds));
+                return;
+            }
+
+            if ((DateTime.UtcNow - _itemShownUtc).TotalSeconds < 0.75)
             {
                 return;
             }
@@ -286,10 +301,12 @@ namespace Unison.Core.ViewModels
             MediaUri = uri;
             IsVideo = isVideo && !string.IsNullOrWhiteSpace(uri);
             IsImage = isImage && !string.IsNullOrWhiteSpace(uri) && !IsVideo;
+            _itemShownUtc = DateTime.UtcNow;
 
             if (IsVideo)
             {
-                if (item.MediaDurationSeconds > 0)
+                // Proto seconds &lt; 1 are treated as unknown (often bad/zero-ish payloads).
+                if (item.MediaDurationSeconds >= 1)
                 {
                     StartTimer(TimeSpan.FromSeconds(item.MediaDurationSeconds));
                 }
@@ -300,6 +317,7 @@ namespace Unison.Core.ViewModels
             }
             else
             {
+                // Photo, sticker, text, or failed media — always give a readable beat.
                 StartTimer(TimeSpan.FromSeconds(PhotoDisplaySeconds));
             }
         }
@@ -333,7 +351,7 @@ namespace Unison.Core.ViewModels
         private void StartTimer(TimeSpan duration)
         {
             StopTimer();
-            if (duration <= TimeSpan.Zero)
+            if (duration.TotalSeconds < 1d)
             {
                 duration = TimeSpan.FromSeconds(PhotoDisplaySeconds);
             }

@@ -4,11 +4,275 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## WhatsAppService extraction — phase 1 (UI frontier)
+
+- ViewModels and views no longer take `IWhatsAppService`: `ShellViewModel`, `ChatListViewModel`, `ChatDetailViewModel`, `ChatDetailInfoViewModel`, `DebugViewModel`, `ChatDetailInfoViewModelFactory`, both `ChatDetailView` code-behinds, `ChatAvatarControl`
+- New `IGroupService` / `GroupFacade`: send permissions, roster hydrate, high-quality group avatar (forwards to the client until phase 3.2)
+- `IChatService` gains active chat, unread total, list-row persist and SQLite preview reconcile; `IHistoryService` gains the initial-sync counters and `PreferFrugalSyncBudget`; `IConnectionService` gains the startup order and `IsConnected`; `IContactService` gains `PhoneContactNamesByJid` and `MarkAvatarImageLoadFailed`
+- Verbose logging toggle moved to `IDiagnosticsConsole` → `IRuntimeDiagnostics` (not `IDebugSendService`, which is `#if DEBUG`-only)
+- `WhatsAppService.Instance` fallback removed from `ChatAvatarControl`; `AttachUiDispatcher` moved out of `BootView` / `MainView` into `App.ConfigureServices`
+- No behaviour change: every member still runs where it did, only the caller's address changed
+
+---
+
+## Frugal sync budget (universal)
+
+- Removed `ForceDesktopSyncBehaviorOnMobile`; timings follow `PreferFrugalSyncBudget` (memory ≠ Low, or Mobile while catalog/sync is heavy)
+- Chat list: longer refresh debounce + capped Moves per turn under frugal (continue on next tick)
+- Automatic FULL_HISTORY catch-up: short ~1.5s quiet floor for both frugal and generous (not a 10s frugal-only delay); manual wipe unchanged
+- Avatar batches: 4 + viewport-priority ordering when frugal; generous keeps larger batches
+- **Disk avatar hydrate** runs right after catalog load / at the start of deferred maintenance (before quiet, memory gate, and history catch-up); network fetches stay behind history
+- Background history toast: bounce counter in `HistoryFacade` (no mid-session reset); toast once when bounce &gt; 2 and the window is not visible
+- FULL_HISTORY continue: idle **35s** (frugal **45s**), poll **8s**, reconnect delay **12s**, cooldown **15s**
+- Catch-up pagination insists while receiving: after each quiet lot, adjacent FULL_HISTORY on the live socket (soft-reconnect only as fallback); offline-drain re-evaluates on every release while catch-up is active; empty tip-fresh drains still retry until stagnant
+
+---
+
+## Group author names on first open
+
+- Bubbles: do not cache short-JID placeholders; drop bad cache/hints so roster/Person can win; re-run layout on `DisplayNamesUpdated` and on `MentionLookup` (in-place roster merge)
+- Strip: push-name bare keys only for PN (`@s.whatsapp.net`); `ChatAuthorProjection` only replaces unusable strip labels (not a random other name)
+- **Phone-as-name:** digit-only labels (≥7) are not usable display names — stops LID participants sticking on the phone number until leave/reenter, and lets the strip upgrade when a real name arrives
+
+---
+
+## Shell apply on toast / resume (Mobile Settings)
+
+- Toast activation skips `OnLaunched`; now calls `ApplyFromSettings` after DI so strategy/Theme.xaml and the pending “Shell applied” toast run when reopening via notification
+- Same apply on `OnResuming` (process often survives shell-change `Exit` on W10M)
+
+---
+
+## Phone call from chat info (tel:)
+
+- `CallPhoneCommand` on `ChatDetailViewModel` / `ChatDetailInfoViewModel` (1:1 + member): confirm dialog, then `tel:+digits` via `IUriLauncher`
+- Info phone row: phone icon + accent hyperlink number (same command)
+- Strings: `ChatDetail_CallPhoneTitle` / `Body` / `Confirm` in all locales
+
+## Chat-list pins on cold load
+
+- `RefreshVisibleChats` applies ChatStore pin/mute before sort (was missing → pins appeared only after opening a chat)
+- Attach awaits `ChatStore.WarmAsync`, then re-applies + re-sorts; canonical-JID fallback when the pin row key differs from the list JID
+
+---
+
+## Unison ChatDetail / Chats pages (W10M-safe split)
+
+- Separate Unison shell pages under `Shell/Unison/Views/` (`ChatsView`, `ArchivedChatsView`, `ChatDetailView`) — own visual trees, shared `ChatDetailViewModel`
+- `UnisonThemeStrategy` navigates to Unison Chats/Archived; WhatsApp keeps `UI/Views`
+- Unison detail: header `ShadowOpacity=0`; full-height left `DropShadowPanel` cast (same blur/opacity as former top shadow)
+- `IChatDetailSurface` / `IConversationShellPage` so templates and MainView resolve either shell without wrapping views
+
+---
+
+## Status checkmarks via UnisonIcons font
+
+- Added `EA03` (single check) and `EA04` (double check) to `UnisonIcons.ttf`; regen: `scripts/icons/generate-unison-icons.ps1`
+- Message footer + chat-list preview use `FontIcon` with theme brushes (`ChatDetailStatusCheck*`, `ChatListStatusCheck*`) so Unison read ticks stay white on green (no blue PNG washout)
+
+---
+
+## Unison chat list: edge-to-edge rows
+
+- `WhatsAppChatListItemStyle` in Unison theme: `CornerRadius 0`, horizontal margin `0` (keeps `0,2` vertical) for future swipe
+
+---
+
+## Unison light sent bubble `#79DB8B`
+
+- Light theme sent bubble (and matching received media-circle fill / sent reaction chip) use `#79DB8B`
+
+---
+
+## Unison sent media button glyph `#00B090`
+
+- Sent-bubble media circle glyph `#00B090`; background is a lighter gray (`#4A4A4A` dark / `#E8E8E8` light) for contrast
+
+---
+
+## Unison media circle buttons (audio + image/video/doc)
+
+- Renamed `UnisonAudioCircleButtonStyle` / audio brushes → `UnisonMediaCircleButtonStyle` / `ChatDetail*MediaButton*Brush`
+- `ChatMediaCircleButtonHost` + `UnisonMediaCircleButton` shared by audio, image, video, and document download
+- WhatsApp image/video keep dark ellipse via `UseOverlayChrome`; Unison always uses the brand 30×30 circle
+
+---
+
+## Unison sent bubble `#007862`
+
+- Sent bubble (and matching audio/reaction tokens) use `#007862` across Unison light/dark
+- Audio buttons keep swap pattern: sent glyph / received circle fill track the sent bubble color
+
+---
+
+## Unison dark audio / sent bubble colors
+
+- Unison round audio buttons **30×30**
+- Dark normal: sent circle = received bubble + **glyph = sent bubble** (`#005C4B`); received circle = sent bubble + white glyph
+- Keeps Unison round button size **30×30**
+- PointerOver/Pressed: Unison green fill + white glyph
+
+---
+
+## Unison sent reactions: left-aligned
+
+- Sent reaction chips use `ChatDetailSentReactionChipButtonStyle`: Unison **Left** (clears bottom-right tip); WhatsApp stays **Right**. Received chips unchanged (right of gutter / under bubble).
+
+---
+
+## Shell split: Unison vs WhatsApp audio chrome
+
+- Dedicated Unison controls (`UnisonChatAudioBubbleBar`, `UnisonChatAudioActionButton`, `UnisonAudioCircleButtonStyle` + audio brushes only in Unison theme)
+- WhatsApp keeps icon-only `ChatAudioBubbleBar` / `WhatsAppIconButtonStyle`
+- Shared templates use hosts that **create** the active shell control (no Transparent brush stubs, no shared morph style)
+- `ShellUi` + `ChatAudioTransportPresenter` shared helpers; bubble chrome host uses `ShellUi` too
+
+---
+
+## Unison audio buttons: round brand colors
+
+- Play / download audio buttons are round (`UnisonAudioCircleButtonStyle`)
+- Light + dark (for now): received = Unison green fill + white glyph; sent = white fill + green glyph
+
+---
+
+## Unison tips: first received, last sent
+
+- Received (1:1 + group): tip on **first** of run — 1:1 up, group left toward avatar
+- Sent (1:1 + group): tip on **last** of run, **below** (group no longer uses top-right side tip)
+
+---
+
+## Unison group tips: right triangle
+
+- Group side tips were isosceles (`L0,6` mid-point); now right-triangle Paths like 1:1 (received left / sent right)
+
+---
+
+## Message runs: no mid-sequence Unison tips
+
+- 1:1 sequences no longer split when `ParticipantJid` is empty vs LID vs PN — only the **last** bubble keeps the tip
+- Group runs still match on normalized participant / sender name; default `IsRunEnd` is false until layout runs
+
+---
+
+## Chat list pins stay on top during sync
+
+- Batch release applies ChatStore pin/mute **before** SortForDisplay (was sorting unpinned, then ApplyTo too late)
+- While the list is already full mid-sync, VisibleChats is re-ordered in place so tip updates cannot bury pinned chats until you open one
+- PN/LID dedupe carries `IsChatPinned` / `PinnedTimestamp` onto the surviving row
+
+---
+
+## Unison bubbles: tip on last of run, flush edges
+
+- Unison tip only on **last** bubble of a consecutive run (`IsRunEnd`); WhatsApp still uses first (`IsRunStart`)
+- Path tips flush to the bubble edge (no left/right/top inset)
+
+---
+
+## Unison bubbles: group vs 1:1 tails + preview reconcile crash
+
+- Unison tails: **1:1** received tip up (top-left), sent tip **below** pointing down (right); **group** received tip left toward avatar, sent tip right at top
+- `FindNewestInMemoryForChat` snapshots `MessagesByChat` / message lists so concurrent unload no longer throws mid-enumerate during SQLite preview reconcile
+
+---
+
+## Unison shell: square message bubbles
+
+- New `UnisonMessageBubbleChrome`: **CornerRadius 0**, Path tails (received **top-left up**, sent **bottom-right down**); WhatsApp keeps rounded `MessageBubbleChrome`
+- `MessageBubbleChromeHost` picks chrome from `SelectedShell` so templates stay shared
+
+---
+
+## Settings: Notifications section + toast sounds
+
+- New **Notifications** settings section (glyph `E91C`) in Unison and WhatsApp shells; system notifications toggle moved out of General
+- **Message notifications** / **Group notifications** ComboBoxes persist `NotificationSound` (`SystemDefault` for now); toast audio reads those keys (`Notification.Default`)
+- Catch-up continue idle shortened to **15s** (poll 5s, reconnect delay 6s) for faster next-lot soft-reconnects
+
+---
+
+## FULL_HISTORY catch-up: faster continue cycles
+
+- Idle quiet before continue: **35s** (was 90); poll **8s**; soft-reconnect delay **12s** (was 45); cooldown **15s**
+- Max continue rounds raised to **60** so deeper backlogs can finish under the shorter cycle (~47s wait vs ~135s)
+- Same path helps reconnect catch-up and long initial/history catch-up while the tip is still advancing
+
+---
+
+## FULL_HISTORY catch-up: continue soft-reconnect
+
+- After a quiet FULL_HISTORY lot, compare the newest tip watermark: if still stale and the tip is advancing, **soft-reconnect** for the next offline batch while keeping **Synchronizing history…**
+- Stop automatically after **2** stagnant cycles (tip did not move) or max continue rounds; enrichment then runs normally
+- Replaces idle-abort → failure reconnect (20 min cooldown) as the primary deep-catch-up path
+
+---
+
+## FULL_HISTORY catch-up: progress-aware idle abort
+
+- Replaced the fixed **2-minute** post-ack `full-history-no-payload` abort with an idle watchdog: abort only after **5 minutes without progress** (tips / SQLite chunks / offline apply / ack), polled every 20s; absolute hard timeout raised to **15 minutes**
+- Progress stamps reset the idle clock; diagnostics journal adds `catch-up-watchdog-*`, `catch-up-progress`, `catch-up-idle-abort`, `catch-up-hard-timeout`
+- Snapshot now shows FULL_HISTORY ack + last progress reason/time/signal count
+
+---
+
+## FULL_HISTORY catch-up banner + mobile diagnostics dialog
+
+- After a freshness `FULL_HISTORY_SYNC_ON_DEMAND` request, the chat-list banner sticks on **Synchronizing history…** (`phase:historycatchup`) and ignores enrichment clears until SQLite quiet-finalize / idle abort / hard timeout / reject
+- Hold or right-click the **Chats** header (same gesture on the login QR) opens a runtime diagnostics ContentDialog: snapshot + recent journal, **Save to disk** writes under `LocalState/Diagnostics` (picker fallback still available via Debug page export)
+- Snapshot fields now include FULL_HISTORY pending id/trigger, catch-up banner latch, last history sync type/time, and SQLite chunk accumulation
+
+---
+
+## History SQLite delta apply
+
+- History sync chunks no longer blindly rewrite every chat/message already in SQLite
+- **Chats (`history_chat_preview`):** preload light lifecycle/tip columns; insert new JIDs fully; existing rows only update archived/deleted flags and tip when the incoming last message is newer
+- **Messages (`history_message`):** `PreferDeltaSkipExistingBodies` preloads MessageIds for touched chats and skips existing bodies; pins / reactions / revokes still apply
+- UI reload (`MessageChatJids`) only covers chats that actually got a new body or a side effect
+
+---
+
+## Reconnect: messages before names/groups
+
+- After offline drain, post-replay work is **message-only** (SQLite Last Message reconcile); USync / groups / avatars no longer run on that path
+- If freshness is still stale, reconnect requests `FULL_HISTORY_SYNC_ON_DEMAND` and **holds** name/group enrichment until that heavy sync (or until idle/hard abort)
+- When already fresh, enrichment runs once after messages settle; freshness also reads `ChatItem.LastMessageTimestampUtc` so cold start is not stuck on empty `MessagesByChat`
+
+---
+
+## IJidResolver (WhatsAppService extraction, phase A)
+
+- New `IJidResolver` in Core (`GetCanonicalJid`, `TryGetAlias`, `Self`); UWP `JidResolver` wraps the live client table
+- Core helpers (`SelfIdentity`, `GroupParticipantLookup` / `GroupParticipantResolver` + `ParticipantResolutionContext`), ViewModels, UI (`ChatDetailView`, `ChatsView`, `ArchivedChatsView`, `CommentRichService`), and façades/helpers under `Contacts/` / `ChatFacade` / `MessageFacade` ask the resolver instead of `IWhatsAppService`
+- `IContactService.ResolveDisplayName` added so mention/participant name lookup does not need the client
+- `GetCanonicalJid` and `JidAlias` removed from `IWhatsAppService` (table stays on the concrete client until a later phase)
+
+---
+
+## Archived chats + persisted lifecycle
+
+- `history_chat_preview` schema v6 persists `ChatStatus` (`Active`, `Deleted`, `Archived`) while retaining `DeletedAtUtc` for delete/revival ordering
+- History bootstrap maps `Conversation.Archived`; inbound `ArchiveChatAction` persists archive/unarchive immediately
+- New `archived` shell route uses standalone `ArchivedChatsView` (own XAML + master-detail layout, `ChatListScope.Archived`); shares `ChatListView` / `ChatDetailView`; active and archived lists update when status changes
+
+---
+
+## Shell strategy navigation (`feature/shell-strategy`)
+
+- `NavigationDestination` enum in Core; `INavigator` takes destinations (not raw strings) for root/shell
+- **Settings:** `OpenSettings()` — Unison page; WhatsApp `SettingsDialog`. Phone handset (`IsMobile && !Continuum`): `FullSizeDesired` + no `BackgroundElement` sizing (Imgur); desktop keeps 600/800 chrome + Overlay/Inline
+- Other shell sections still use the strategy page map (`Chats` / `Status` / `Debug` stay under shared `UI/Views`)
+- `IShellNavigationStrategy` + `ShellThemeService` own the Unison vs WhatsApp maps alongside chrome
+
+---
+
 ## Delete chat (app state + local tombstone)
 
 - Outgoing **`DeleteChatAsync`** on `IWhatsAppSocket` / `SocketBridge` → `AppStatePatchFactory.DeleteChat` (RC14 `chatModify({ delete })`)
 - **`IChatService.DeleteChatAsync`** / `ChatFacade`: patch first (with message range), then local wipe; offline or empty timeline stays local-only
-- Incoming / local wipe: `ApplyAppStateDeleteChatAsync` tombstones `history_chat_preview.DeletedAtUtc` (schema v5) and deletes `history_message` for PN/LID keys so a restart does not resurrect the row
+- Incoming / local wipe: `ApplyAppStateDeleteChatAsync` writes `ChatStatus.Deleted` plus `history_chat_preview.DeletedAtUtc` (schema v6) and deletes `history_message` for PN/LID keys so a restart does not resurrect the row
 - Upsert of previews **keeps** the tombstone unless the incoming tip is newer than the deletion (new message brings the chat back)
 - UI: list context menu, chat overflow (1:1 + group), and chat-info green bar (**Apagar conversa** after the two pin actions, 1:1 + group) — all confirm via `ChatDeletionPrompt` (strings in every shipped locale)
 

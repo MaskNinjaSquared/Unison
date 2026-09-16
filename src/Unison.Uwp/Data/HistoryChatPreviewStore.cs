@@ -20,7 +20,7 @@ namespace Unison.Uwp.Data
     {
         private static readonly string DatabaseFileName = "unison.db";
 
-        public const int CurrentSchemaVersion = 5;
+        public const int CurrentSchemaVersion = 6;
 
         private readonly SemaphoreSlim _initLock = new SemaphoreSlim(1, 1);
         private readonly SemaphoreSlim _writeLock = new SemaphoreSlim(1, 1);
@@ -53,6 +53,11 @@ namespace Unison.Uwp.Data
                 await _connection.CreateTableAsync<HistoryChatPreviewRow>().ConfigureAwait(false);
                 await EnsureColumnAsync("LastMessageId", "TEXT").ConfigureAwait(false);
                 await EnsureColumnAsync("DeletedAtUtc", "DATETIME").ConfigureAwait(false);
+                await EnsureColumnAsync("Status", "INTEGER NOT NULL DEFAULT 0").ConfigureAwait(false);
+                await _connection.ExecuteAsync(
+                        "UPDATE history_chat_preview SET Status = ? WHERE DeletedAtUtc IS NOT NULL",
+                        (int)ChatStatus.Deleted)
+                    .ConfigureAwait(false);
                 _initialized = true;
                 Debug.WriteLine("[HistoryChatPreviewStore] Initialized at " + dbPath);
             }
@@ -71,14 +76,19 @@ namespace Unison.Uwp.Data
 
             await EnsureInitializedAsync().ConfigureAwait(false);
 
-            // A row replaced wholesale would lose its tombstone, and the chat the user deleted
-            // would be back on the next sync chunk.
+            // Light snapshot: enough to decide insert vs lifecycle/tip delta without loading bodies.
+            var existing = await LoadLifecycleSnapshotAsync().ConfigureAwait(false);
             var tombstones = await LoadTombstonesAsync().ConfigureAwait(false);
 
             await _writeLock.WaitAsync().ConfigureAwait(false);
             string syncId = null;
             string syncType = null;
             int upserted = 0;
+            int inserted = 0;
+            int flagUpdates = 0;
+            int tipUpdates = 0;
+            int skipped = 0;
+            var notified = new List<HistoryChatPreview>();
             try
             {
                 await _connection.RunInTransactionAsync(conn =>
@@ -90,10 +100,69 @@ namespace Unison.Uwp.Data
                             continue;
                         }
 
+                        string jid = model.Jid;
                         syncId = model.SyncId ?? syncId;
                         syncType = model.SyncType ?? syncType;
-                        conn.InsertOrReplace(ToRow(model, CarriedTombstone(tombstones, model)));
-                        upserted++;
+                        DateTime? carried = CarriedTombstone(tombstones, model);
+                        ChatStatus status = ResolveStatus(tombstones, model, carried);
+
+                        LifecycleSnapshot prior;
+                        if (!existing.TryGetValue(jid, out prior))
+                        {
+                            conn.InsertOrReplace(ToRow(model, carried, status));
+                            upserted++;
+                            inserted++;
+                            notified.Add(CloneForNotify(model, status));
+                            existing[jid] = new LifecycleSnapshot
+                            {
+                                Jid = jid,
+                                Status = (int)status,
+                                DeletedAtUtc = carried,
+                                LastMessageTimestampUtc = model.LastMessageTimestampUtc,
+                                LastMessageId = model.LastMessageId,
+                                UnreadCount = Math.Max(0, model.UnreadCount)
+                            };
+                            continue;
+                        }
+
+                        bool tipNewer = IsIncomingTipNewer(prior, model);
+                        bool statusChanged = prior.Status != (int)status ||
+                                             !NullableDateEquals(prior.DeletedAtUtc, carried);
+                        bool unreadChanged = tipNewer && prior.UnreadCount != Math.Max(0, model.UnreadCount);
+
+                        if (!tipNewer && !statusChanged && !unreadChanged)
+                        {
+                            skipped++;
+                            continue;
+                        }
+
+                        if (tipNewer)
+                        {
+                            // Tip moved: rewrite the list strip (and lifecycle) in one pass.
+                            conn.InsertOrReplace(ToRow(model, carried, status));
+                            tipUpdates++;
+                            upserted++;
+                            notified.Add(CloneForNotify(model, status));
+                            prior.LastMessageTimestampUtc = model.LastMessageTimestampUtc;
+                            prior.LastMessageId = model.LastMessageId;
+                            prior.UnreadCount = Math.Max(0, model.UnreadCount);
+                        }
+                        else
+                        {
+                            // Same tip: only archived / deleted / revived flags.
+                            conn.Execute(
+                                "UPDATE history_chat_preview SET Status = ?, DeletedAtUtc = ?, UpdatedAtUtc = ? WHERE Jid = ?",
+                                (int)status,
+                                carried,
+                                DateTime.UtcNow,
+                                jid);
+                            flagUpdates++;
+                            upserted++;
+                            notified.Add(CloneForNotify(model, status));
+                        }
+
+                        prior.Status = (int)status;
+                        prior.DeletedAtUtc = carried;
                     }
                 }).ConfigureAwait(false);
             }
@@ -105,21 +174,144 @@ namespace Unison.Uwp.Data
             if (upserted > 0)
             {
                 Debug.WriteLine(
-                    "[HistoryChatPreviewStore] Upserted " + upserted +
+                    "[HistoryChatPreviewStore] Delta upserted=" + upserted +
+                    " inserted=" + inserted +
+                    " tip=" + tipUpdates +
+                    " flags=" + flagUpdates +
+                    " skipped=" + skipped +
                     " syncId=" + (syncId ?? "") +
                     " type=" + (syncType ?? "") +
                     " notify=" + notifyChunk);
-                if (notifyChunk)
+                if (notifyChunk && notified.Count > 0)
                 {
                     ChunkPersisted?.Invoke(this, new HistoryChatPreviewChunkEventArgs
                     {
                         SyncId = syncId ?? string.Empty,
                         SyncType = syncType ?? string.Empty,
                         UpsertedCount = upserted,
-                        Rows = rows
+                        Rows = notified
                     });
                 }
             }
+            else if (skipped > 0)
+            {
+                Debug.WriteLine(
+                    "[HistoryChatPreviewStore] Delta no-op skipped=" + skipped +
+                    " type=" + (syncType ?? ""));
+            }
+        }
+
+        private async Task<Dictionary<string, LifecycleSnapshot>> LoadLifecycleSnapshotAsync()
+        {
+            var map = new Dictionary<string, LifecycleSnapshot>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                var rows = await _connection
+                    .QueryAsync<LifecycleSnapshot>(
+                        "SELECT Jid, Status, DeletedAtUtc, LastMessageTimestampUtc, LastMessageId, UnreadCount " +
+                        "FROM history_chat_preview")
+                    .ConfigureAwait(false);
+                if (rows != null)
+                {
+                    for (int i = 0; i < rows.Count; i++)
+                    {
+                        LifecycleSnapshot row = rows[i];
+                        if (row != null && !string.IsNullOrWhiteSpace(row.Jid))
+                        {
+                            map[row.Jid] = row;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[HistoryChatPreviewStore] LoadLifecycleSnapshot failed: " + ex.Message);
+            }
+
+            return map;
+        }
+
+        private static bool IsIncomingTipNewer(LifecycleSnapshot prior, HistoryChatPreview model)
+        {
+            if (prior == null || model == null)
+            {
+                return true;
+            }
+
+            DateTime? incoming = model.LastMessageTimestampUtc;
+            DateTime? existing = prior.LastMessageTimestampUtc;
+            if (incoming.HasValue && (!existing.HasValue || incoming.Value > existing.Value))
+            {
+                return true;
+            }
+
+            if (incoming.HasValue &&
+                existing.HasValue &&
+                incoming.Value == existing.Value &&
+                !string.IsNullOrWhiteSpace(model.LastMessageId) &&
+                !string.Equals(model.LastMessageId, prior.LastMessageId, StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool NullableDateEquals(DateTime? left, DateTime? right)
+        {
+            if (!left.HasValue && !right.HasValue)
+            {
+                return true;
+            }
+
+            if (!left.HasValue || !right.HasValue)
+            {
+                return false;
+            }
+
+            return left.Value == right.Value;
+        }
+
+        private static HistoryChatPreview CloneForNotify(HistoryChatPreview model, ChatStatus status)
+        {
+            return new HistoryChatPreview
+            {
+                Jid = model.Jid,
+                LidJid = model.LidJid,
+                PnJid = model.PnJid,
+                Name = model.Name,
+                IsGroup = model.IsGroup,
+                Status = status,
+                UnreadCount = model.UnreadCount,
+                LastMessage = model.LastMessage,
+                LastMessageAuthor = model.LastMessageAuthor,
+                LastMessageIsFromMe = model.LastMessageIsFromMe,
+                LastMessageSenderName = model.LastMessageSenderName,
+                LastMessageParticipantJid = model.LastMessageParticipantJid,
+                LastMessageKind = model.LastMessageKind,
+                LastMessageSendState = model.LastMessageSendState,
+                LastMessageMentionedJids = model.LastMessageMentionedJids,
+                LastMessageTimestampUtc = model.LastMessageTimestampUtc,
+                LastMessageId = model.LastMessageId,
+                SyncId = model.SyncId,
+                SyncType = model.SyncType,
+                UpdatedAtUtc = model.UpdatedAtUtc
+            };
+        }
+
+        private sealed class LifecycleSnapshot
+        {
+            public string Jid { get; set; }
+
+            public int Status { get; set; }
+
+            public DateTime? DeletedAtUtc { get; set; }
+
+            public DateTime? LastMessageTimestampUtc { get; set; }
+
+            public string LastMessageId { get; set; }
+
+            public int UnreadCount { get; set; }
         }
 
         public async Task<IReadOnlyList<HistoryChatPreview>> GetAllAsync(string syncId = null)
@@ -129,7 +321,7 @@ namespace Unison.Uwp.Data
             if (string.IsNullOrWhiteSpace(syncId))
             {
                 rows = await _connection.Table<HistoryChatPreviewRow>()
-                    .Where(r => r.DeletedAtUtc == null)
+                    .Where(r => r.Status != (int)ChatStatus.Deleted)
                     .OrderByDescending(r => r.LastMessageTimestampUtc)
                     .ToListAsync()
                     .ConfigureAwait(false);
@@ -137,7 +329,7 @@ namespace Unison.Uwp.Data
             else
             {
                 rows = await _connection.Table<HistoryChatPreviewRow>()
-                    .Where(r => r.SyncId == syncId && r.DeletedAtUtc == null)
+                    .Where(r => r.SyncId == syncId && r.Status != (int)ChatStatus.Deleted)
                     .OrderByDescending(r => r.LastMessageTimestampUtc)
                     .ToListAsync()
                     .ConfigureAwait(false);
@@ -158,13 +350,13 @@ namespace Unison.Uwp.Data
             if (string.IsNullOrWhiteSpace(syncId))
             {
                 return await _connection.Table<HistoryChatPreviewRow>()
-                    .Where(r => r.DeletedAtUtc == null)
+                    .Where(r => r.Status != (int)ChatStatus.Deleted)
                     .CountAsync()
                     .ConfigureAwait(false);
             }
 
             return await _connection.Table<HistoryChatPreviewRow>()
-                .Where(r => r.SyncId == syncId && r.DeletedAtUtc == null)
+                .Where(r => r.SyncId == syncId && r.Status != (int)ChatStatus.Deleted)
                 .CountAsync()
                 .ConfigureAwait(false);
         }
@@ -204,13 +396,46 @@ namespace Unison.Uwp.Data
                     }
 
                     marked += await _connection.ExecuteAsync(
-                            "UPDATE history_chat_preview SET DeletedAtUtc = ? WHERE Jid = ?",
+                            "UPDATE history_chat_preview SET DeletedAtUtc = ?, Status = ? WHERE Jid = ?",
                             deletedAtUtc,
+                            (int)ChatStatus.Deleted,
                             jid)
                         .ConfigureAwait(false);
                 }
 
                 Debug.WriteLine("[HistoryChatPreviewStore] Tombstoned " + marked + " row(s)");
+            }
+            finally
+            {
+                _writeLock.Release();
+            }
+        }
+
+        public async Task SetStatusAsync(IReadOnlyList<string> jids, ChatStatus status)
+        {
+            if (jids == null || jids.Count == 0 || status == ChatStatus.Deleted)
+            {
+                return;
+            }
+
+            await EnsureInitializedAsync().ConfigureAwait(false);
+            await _writeLock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                foreach (string jid in jids)
+                {
+                    if (string.IsNullOrWhiteSpace(jid))
+                    {
+                        continue;
+                    }
+
+                    // A valid deletion tombstone wins over archive/unarchive app-state.
+                    await _connection.ExecuteAsync(
+                            "UPDATE history_chat_preview SET Status = ? WHERE Jid = ? AND DeletedAtUtc IS NULL",
+                            (int)status,
+                            jid)
+                        .ConfigureAwait(false);
+                }
             }
             finally
             {
@@ -275,6 +500,25 @@ namespace Unison.Uwp.Data
             return incoming.HasValue && incoming.Value > deletedAt ? (DateTime?)null : deletedAt;
         }
 
+        private static ChatStatus ResolveStatus(
+            Dictionary<string, DateTime> tombstones,
+            HistoryChatPreview model,
+            DateTime? carriedTombstone)
+        {
+            if (carriedTombstone.HasValue)
+            {
+                return ChatStatus.Deleted;
+            }
+
+            // A message newer than the tombstone explicitly revives the conversation.
+            if (!string.IsNullOrWhiteSpace(model.Jid) && tombstones.ContainsKey(model.Jid))
+            {
+                return ChatStatus.Active;
+            }
+
+            return model.Status;
+        }
+
         private sealed class TombstoneRow
         {
             public string Jid { get; set; }
@@ -330,7 +574,10 @@ namespace Unison.Uwp.Data
             public string type { get; set; }
         }
 
-        private static HistoryChatPreviewRow ToRow(HistoryChatPreview model, DateTime? deletedAtUtc)
+        private static HistoryChatPreviewRow ToRow(
+            HistoryChatPreview model,
+            DateTime? deletedAtUtc,
+            ChatStatus status)
         {
             return new HistoryChatPreviewRow
             {
@@ -340,6 +587,7 @@ namespace Unison.Uwp.Data
                 PnJid = model.PnJid,
                 Name = model.Name,
                 IsGroup = model.IsGroup,
+                Status = (int)status,
                 UnreadCount = Math.Max(0, model.UnreadCount),
                 LastMessage = model.LastMessage,
                 LastMessageAuthor = model.LastMessageAuthor,
@@ -383,6 +631,10 @@ namespace Unison.Uwp.Data
                 sendState = MessageSendState.NotApplicable;
             }
 
+            ChatStatus status = Enum.IsDefined(typeof(ChatStatus), row.Status)
+                ? (ChatStatus)row.Status
+                : ChatStatus.Active;
+
             return new HistoryChatPreview
             {
                 Jid = row.Jid,
@@ -390,6 +642,7 @@ namespace Unison.Uwp.Data
                 PnJid = row.PnJid,
                 Name = row.Name,
                 IsGroup = row.IsGroup,
+                Status = status,
                 UnreadCount = row.UnreadCount,
                 LastMessage = row.LastMessage,
                 LastMessageAuthor = row.LastMessageAuthor,

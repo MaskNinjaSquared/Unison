@@ -19,6 +19,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
@@ -30,22 +31,26 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
     {
         private static readonly TimeSpan AvatarRefreshInterval = TimeSpan.FromDays(7);
         private static readonly TimeSpan AvatarFetchFailureBackoff = TimeSpan.FromMinutes(30);
-        private static readonly TimeSpan AvatarFetchInterRequestDelayDesktop = TimeSpan.FromMilliseconds(900);
-        private static readonly TimeSpan AvatarFetchInterRequestDelayMobile = TimeSpan.FromMilliseconds(400);
-        private const int AvatarFetchBatchSizeDesktop = 12;
-        private const int AvatarFetchBatchSizeMobile = 8;
+        private static readonly TimeSpan AvatarFetchInterRequestDelayGenerous = TimeSpan.FromMilliseconds(900);
+        private static readonly TimeSpan AvatarFetchInterRequestDelayFrugal = TimeSpan.FromMilliseconds(750);
+        private const int AvatarFetchBatchSizeGenerous = 12;
+        private const int AvatarFetchBatchSizeFrugal = 4;
         private const int AvatarStatusProgressStride = 3;
         private const string GroupAvatarFallbackMissReason = "group-avatar-fallback-miss";
 
         private readonly IWhatsAppService _whatsAppService;
+        private readonly IJidResolver _jids;
 
         private readonly object _requestLock = new object();
         private readonly HashSet<string> _inFlight = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> _attemptedThisSession = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        /// <summary>JIDs realized on screen; background batches pull these first.</summary>
+        private readonly HashSet<string> _viewportPriority = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        internal ChatAvatarPolicy(IWhatsAppService whatsAppService)
+        internal ChatAvatarPolicy(IWhatsAppService whatsAppService, IJidResolver jids)
         {
             _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
+            _jids = jids ?? throw new ArgumentNullException(nameof(jids));
         }
 
         /// <summary>
@@ -54,11 +59,11 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         /// </summary>
         public async Task RetrieveBatchAsync(CancellationToken token = default(CancellationToken))
         {
-            bool isMobile = SystemInfoProvider.DetectIsMobile();
-            int batchSize = isMobile ? AvatarFetchBatchSizeMobile : AvatarFetchBatchSizeDesktop;
-            TimeSpan interRequestDelay = isMobile
-                ? AvatarFetchInterRequestDelayMobile
-                : AvatarFetchInterRequestDelayDesktop;
+            bool frugal = _whatsAppService.PreferFrugalSyncBudget;
+            int batchSize = frugal ? AvatarFetchBatchSizeFrugal : AvatarFetchBatchSizeGenerous;
+            TimeSpan interRequestDelay = frugal
+                ? AvatarFetchInterRequestDelayFrugal
+                : AvatarFetchInterRequestDelayGenerous;
 
             // Progress only after the first completed fetch — "0 of N" is noise on Mobile StatusBar.
             // Bare phase:avatars is also skipped; hydrate/disk work stays silent.
@@ -67,16 +72,23 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
             DateTime nowUtc = DateTime.UtcNow;
 
+            HashSet<string> viewportSnapshot;
+            lock (_requestLock)
+            {
+                viewportSnapshot = new HashSet<string>(_viewportPriority, StringComparer.OrdinalIgnoreCase);
+            }
+
             var snapshot = await SnapshotChatsAsync();
             var batch = snapshot
                 .Where(c => NeedsRefresh(c, nowUtc) && !IsBackoffActive(c, nowUtc))
-                .OrderBy(c => c.AvatarFetchFailedAtUtc ?? DateTime.MinValue)
+                .OrderByDescending(c => IsViewportPriority(c, viewportSnapshot))
+                .ThenBy(c => c.AvatarFetchFailedAtUtc ?? DateTime.MinValue)
                 .Take(batchSize)
                 .ToList();
 
             int available = snapshot.Count(c => NeedsRefresh(c, nowUtc) && !IsBackoffActive(c, nowUtc));
             Debug.WriteLine(
-                $"[ChatAvatarPolicy] Batch={batch.Count}, available={available}, batchSize={batchSize}, mobile={isMobile}");
+                $"[ChatAvatarPolicy] Batch={batch.Count}, available={available}, batchSize={batchSize}, frugal={frugal}, viewportPriority={viewportSnapshot.Count}");
 
             // The user's own avatar is ProfileFacade's, fetched at shell startup.
 
@@ -101,6 +113,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                     await _whatsAppService.FetchAndApplyAvatarAsync(chat, token, fetchHighQuality: false);
                     anyUpdated = true;
                     fetched++;
+                    ClearViewportPriority(chat);
 
                     if (available > 0 && ShouldRaiseAvatarProgress(fetched, batch.Count))
                     {
@@ -120,6 +133,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                         chat.AvatarFetchFailureReason = ex.GetType().Name + ":" + ex.Message;
                     });
                     anyUpdated = true;
+                    ClearViewportPriority(chat);
                 }
             }
 
@@ -157,11 +171,16 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             }
 
             DateTime nowUtc = DateTime.UtcNow;
-            string requestKey = _whatsAppService.GetCanonicalJid(chat.JID) ?? JidHelper.Normalize(chat.JID);
+            string requestKey = _jids.GetCanonicalJid(chat.JID) ?? JidHelper.Normalize(chat.JID);
             bool missingAvatar = string.IsNullOrWhiteSpace(chat.GetAvatarUrl(preferHigh: false));
 
             lock (_requestLock)
             {
+                if (!string.IsNullOrWhiteSpace(requestKey))
+                {
+                    _viewportPriority.Add(requestKey);
+                }
+
                 // A picture that is missing gets one attempt per session regardless of the
                 // interval, because the reason it is missing is usually a failure we no longer
                 // remember rather than a picture that does not exist.
@@ -187,6 +206,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 {
                     await _whatsAppService.FetchAndApplyAvatarAsync(chat, CancellationToken.None, fetchHighQuality: true);
                     _whatsAppService.SchedulePersistPublic();
+                    ClearViewportPriority(chat);
                 }
                 catch (Exception ex)
                 {
@@ -249,6 +269,36 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             await _whatsAppService.RunOnUiThreadAsync(
                 () => snapshot = _whatsAppService.Chats.Where(c => c != null).ToList());
             return snapshot ?? new List<ChatItem>();
+        }
+
+        private bool IsViewportPriority(ChatItem chat, HashSet<string> viewportSnapshot)
+        {
+            if (chat == null || viewportSnapshot == null || viewportSnapshot.Count == 0)
+            {
+                return false;
+            }
+
+            string key = _jids.GetCanonicalJid(chat.JID) ?? JidHelper.Normalize(chat.JID);
+            return !string.IsNullOrWhiteSpace(key) && viewportSnapshot.Contains(key);
+        }
+
+        private void ClearViewportPriority(ChatItem chat)
+        {
+            if (chat == null)
+            {
+                return;
+            }
+
+            string key = _jids.GetCanonicalJid(chat.JID) ?? JidHelper.Normalize(chat.JID);
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return;
+            }
+
+            lock (_requestLock)
+            {
+                _viewportPriority.Remove(key);
+            }
         }
 
         private static bool ShouldRaiseAvatarProgress(int fetchedSoFar, int batchCount)

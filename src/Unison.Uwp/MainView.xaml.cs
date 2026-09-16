@@ -26,8 +26,6 @@ namespace Unison.Uwp
         /// <summary>Matches SettingsView ExtendedWide AdaptiveTrigger.</summary>
         private const double ExtendedWideMinWidth = 1000;
 
-        public IWhatsAppService Service => App.GetWhatsAppService();
-
         private bool _uiEventsAttached;
         private bool _vmHooked;
         private bool _orientationHooked;
@@ -125,12 +123,12 @@ namespace Unison.Uwp
         /// </summary>
         private void Navigator_ShellNavigated(object sender, string route)
         {
-            var chats = ShellContentFrame?.Content as ChatsView;
+            var conversation = ShellContentFrame?.Content as IConversationShellPage;
             var status = ShellContentFrame?.Content as StatusView;
             Debug.WriteLine(
                 "[MainView] ShellNavigated route=" + (route ?? "?") +
                 " content=" + (ShellContentFrame?.Content?.GetType().Name ?? "null"));
-            WireChatsViewMenu(chats);
+            WireConversationShellMenu(conversation);
             WireStatusViewMenu(status);
         }
 
@@ -144,10 +142,10 @@ namespace Unison.Uwp
             {
             }
 
-            var chats = ShellContentFrame?.Content as ChatsView;
-            if (chats != null)
+            var conversation = ShellContentFrame?.Content as IConversationShellPage;
+            if (conversation != null)
             {
-                _ = chats.ResetForLoggedOutAsync();
+                _ = conversation.ResetForLoggedOutAsync();
             }
 
             try
@@ -184,7 +182,6 @@ namespace Unison.Uwp
 
         private void MainView_Loaded(object sender, RoutedEventArgs e)
         {
-            (Service as WhatsAppService)?.AttachUiDispatcher(Dispatcher);
             AttachUiEvents();
 
             if (_shellViewModel == null && App.Services != null)
@@ -214,36 +211,36 @@ namespace Unison.Uwp
         {
             if (ShellContentFrame.Content != null)
             {
-                WireChatsViewMenu(ShellContentFrame.Content as ChatsView);
+                WireConversationShellMenu(ShellContentFrame.Content as IConversationShellPage);
                 WireStatusViewMenu(ShellContentFrame.Content as StatusView);
                 return;
             }
 
             string section = ViewModel?.ActiveSection ?? NavigationRoutes.Chats;
             ViewModel?.NavigateToSectionCommand.Execute(section);
-            WireChatsViewMenu(ShellContentFrame.Content as ChatsView);
+            WireConversationShellMenu(ShellContentFrame.Content as IConversationShellPage);
             WireStatusViewMenu(ShellContentFrame.Content as StatusView);
         }
 
-        private ChatsView _wiredChatsMenu;
+        private IConversationShellPage _wiredConversationMenu;
         private StatusView _wiredStatusMenu;
 
-        private void WireChatsViewMenu(ChatsView chats)
+        private void WireConversationShellMenu(IConversationShellPage page)
         {
-            if (_wiredChatsMenu != null)
+            if (_wiredConversationMenu != null)
             {
-                _wiredChatsMenu.MenuClicked -= ChatsView_MenuClicked;
-                _wiredChatsMenu = null;
+                _wiredConversationMenu.MenuClicked -= ChatsView_MenuClicked;
+                _wiredConversationMenu = null;
             }
 
-            if (chats == null)
+            if (page == null)
             {
                 return;
             }
 
-            chats.MenuClicked += ChatsView_MenuClicked;
-            _wiredChatsMenu = chats;
-            Debug.WriteLine("[MainView] WireChatsViewMenu attached");
+            page.MenuClicked += ChatsView_MenuClicked;
+            _wiredConversationMenu = page;
+            Debug.WriteLine("[MainView] WireConversationShellMenu attached");
         }
 
         private void WireStatusViewMenu(StatusView status)
@@ -290,7 +287,7 @@ namespace Unison.Uwp
                 // Handset must stay Overlay — VSM Extended may flip DisplayMode to Inline
                 // after Settings, and SyncInlineSidebar would immediately close an open pane.
                 EnsurePhoneHandsetOverlayMode();
-                WireChatsViewMenu(ShellContentFrame.Content as ChatsView);
+                WireConversationShellMenu(ShellContentFrame.Content as IConversationShellPage);
                 WireStatusViewMenu(ShellContentFrame.Content as StatusView);
                 if (!IsPhoneHandset())
                 {
@@ -322,9 +319,9 @@ namespace Unison.Uwp
             {
                 ViewModel.NavigateToSectionCommand.Execute(NavigationRoutes.Chats);
                 EnsureShellContent();
-                var chats = ShellContentFrame?.Content as ChatsView;
-                WireChatsViewMenu(chats);
-                chats?.RequestOpenPendingDeepLink();
+                var conversation = ShellContentFrame?.Content as IConversationShellPage;
+                WireConversationShellMenu(conversation);
+                conversation?.RequestOpenPendingDeepLink();
             }
             catch (Exception ex)
             {
@@ -335,16 +332,41 @@ namespace Unison.Uwp
         private void ApplySystemBackButton()
         {
             bool show = ViewModel?.ShowSystemBackButton == true;
-            var chats = ShellContentFrame.Content as ChatsView;
-            if (!show && chats != null && ViewModel != null &&
-                ((ViewModel.IsNarrowWindow && ViewModel.ChatPane == ShellViewModel.PaneNarrowDetail) ||
-                 (!ViewModel.IsNarrowWindow && ViewModel.HasActiveChat)))
+            if (!show && ViewModel != null && ShouldShowChatShellBackButton(ShellContentFrame.Content))
             {
                 show = true;
             }
 
             SystemNavigationManager.GetForCurrentView().AppViewBackButtonVisibility =
                 show ? AppViewBackButtonVisibility.Visible : AppViewBackButtonVisibility.Collapsed;
+        }
+
+        private bool ShouldShowChatShellBackButton(object content)
+        {
+            if (ViewModel == null)
+            {
+                return false;
+            }
+
+            bool hasActiveShellChat =
+                (ViewModel.IsNarrowWindow && ViewModel.ChatPane == ShellViewModel.PaneNarrowDetail) ||
+                (!ViewModel.IsNarrowWindow && ViewModel.HasActiveChat);
+
+            if (content is IConversationShellPage)
+            {
+                return hasActiveShellChat;
+            }
+
+            // Status uses the same ChatPane NarrowDetail flip as chats (SelectStatusDetail).
+            var status = content as StatusView;
+            if (status != null)
+            {
+                return ViewModel.IsNarrowWindow &&
+                       (status.HasOpenStatusDetail ||
+                        string.Equals(ViewModel.ChatPane, ShellViewModel.PaneNarrowDetail, StringComparison.Ordinal));
+            }
+
+            return false;
         }
 
         private void SyncNavSelection()
@@ -408,8 +430,8 @@ namespace Unison.Uwp
             }
 
             // Chat / Status detail chrome first.
-            var chats = ShellContentFrame.Content as ChatsView;
-            if (chats != null && chats.TryHandleBack())
+            var conversation = ShellContentFrame.Content as IConversationShellPage;
+            if (conversation != null && conversation.TryHandleBack())
             {
                 e.Handled = true;
                 return;
@@ -659,7 +681,8 @@ namespace Unison.Uwp
                 return true;
             }
 
-            return ShellContentFrame?.Content is SettingsView;
+            return App.Services?.GetService<Unison.Uwp.Services.Themes.IShellNavigationStrategy>()
+                       ?.IsSettingsPage(ShellContentFrame?.Content) == true;
         }
 
         private void SetPaneOpen(bool open)

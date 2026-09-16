@@ -8,6 +8,18 @@ How the compatibility client becomes **connection-only** on this side of the bou
 
 ---
 
+## Done: phase A — `IJidResolver`
+
+Callers that only needed “is this the same person?” no longer name the client.
+
+- Contract: `Unison.Core/Contracts/IJidResolver.cs` (`GetCanonicalJid`, `TryGetAlias`, `Self`)
+- UWP: `JidResolver` wraps the concrete `WhatsAppService` alias table (table move is still later)
+- Switched: Core helpers + `ParticipantResolutionContext`, ViewModels, UI shells, `ContactFacade` / policy helpers, `ChatFacade`, `MessageFacade`, `DebugSendService`, `CommentRichService`
+- `IContactService.ResolveDisplayName` for name lookup without the client
+- **Removed from `IWhatsAppService`:** `GetCanonicalJid`, `JidAlias`
+
+---
+
 ## Done: phase 0 (mechanical)
 
 No behaviour change for users. Prep so later diffs are one cluster, not a 16k-line blob.
@@ -39,11 +51,47 @@ No behaviour change for users. Prep so later diffs are one cluster, not a 16k-li
 
 ---
 
+## Done: phase 1 — the UI frontier
+
+No logic moved. The UI stopped naming the client; every member below is still implemented in
+`WhatsAppService` and reached through a façade that forwards.
+
+| Was on `IWhatsAppService` | New owner |
+|---|---|
+| `Chats` | `IChatStateStore.Chats` |
+| `GetCanonicalJid`, `JidAlias` | `IJidResolver` (phase A; table still on the concrete client until 3.7) |
+| `ResolveDisplayName`, `PhoneContactNamesByJid`, `MarkAvatarImageLoadFailed` | `IContactService` |
+| `RefreshGroupSendPermissionsAsync`, `EnsureGroupRosterLoadedFromStoreAsync`, `EnsureHighQualityGroupAvatarAsync` | new `IGroupService` / `GroupFacade` |
+| `ClearUnreadForChatAsync`, `SetActiveChatJid`, `GetTotalUnreadCount`, `PersistChatListRowsPublic`, `ReconcileChatPreviewsFromSqliteAsync` | `IChatService` |
+| `IsInitialSyncSafeMode`, `InitialSync*`, `IsLoadingPersistedChats`, `PreferFrugalSyncBudget` | `IHistoryService` |
+| `InitializeConnectionStateAsync`, `IsRegisteredAsync`, `EnsureConnectedAsync`, `LoadPersistedUiStateAsync`, `StartDeferredStartupMaintenance`, `IsConnected` | `IConnectionService` |
+| `ClearSessionAsync` (debug wipe) | `IConnectionService.ClearLocalSessionAsync` (already existed) |
+| `VerboseLogging`, `SetVerboseLogging` | `IDiagnosticsConsole` → `IRuntimeDiagnostics` |
+
+Two deviations from the original plan, both deliberate:
+
+- Verbose logging went to `IDiagnosticsConsole`, **not** `IDebugSendService`. That service is
+  registered under `#if DEBUG`, so a Release `DebugViewModel` could not have taken it. The console
+  is the debug pane's surface and already exposes `IsCaptureEnabled` the same way.
+- `BootView` / `MainView` no longer attach the UI dispatcher. `AttachUiDispatcher` needs a WinRT
+  `CoreDispatcher`, which `IDispatcher` does not carry, so rather than widen that contract the
+  attach moved to `App.ConfigureServices`, which already holds the root frame. The views stopped
+  doing infrastructure wiring, which was the point.
+
+`WhatsAppService.Instance` is gone from `ChatAvatarControl`. Note there are **two** compiled
+`ChatDetailView` code-behinds (`UI/Views` and `Shell/Unison/Views`); both were converted.
+
+**Verified:** `IWhatsAppService` appears in `src/Unison.Core` only as its own contract,
+`IConnectionService.AttachWhatsAppService` (stays until phase 4) and two doc comments. Zero hits
+under `src/Unison.Uwp/UI` and `src/Unison.Uwp/Shell`.
+
+---
+
 ## Current coupling (start here next session)
 
 ### Facades still depend on the client
 
-`ContactFacade`, `MessageFacade`, `ChatFacade`, `HistoryFacade`, `ProfileFacade`, `ConnectionFacade` take `IWhatsAppService` (or `AttachWhatsAppService`). Policy is already on the façade; **primitives** (fetch avatar, send bytes, persist, canonical JID) still run inside the client.
+`ContactFacade`, `MessageFacade`, `ChatFacade`, `GroupFacade`, `HistoryFacade`, `ProfileFacade`, `ConnectionFacade` take `IWhatsAppService` (or `AttachWhatsAppService`). Policy is already on the façade; **primitives** (fetch avatar, send bytes, persist, canonical JID) still run inside the client.
 
 Helpers under `Contacts/` (`ContactNameResolver`, `ChatAvatarPolicy`, `GroupRosterPolicy`, `AddressBookOverlay`) are the largest non-UI consumers of client members (`RunOnUiThreadAsync`, `SchedulePersistPublic`, `RaiseSyncStatus`, `FetchAndApplyAvatarAsync`, `FetchGroupMemberAvatarAsync`, `IsTransportReady`, …). Extracting avatars/names is mostly moving those primitives so the helpers stop needing the god client.
 
@@ -52,28 +100,13 @@ Helpers under `Contacts/` (`ContactNameResolver`, `ChatAvatarPolicy`, `GroupRost
 After `BuildServiceProvider`, `App.ConfigureServices` does:
 
 - `AttachMessageService` / `AttachStatusService` / `AttachContactService` / `AttachConnectionService`
-- `AttachPersonStore` / `AttachChatStore`
+- `AttachPersonStore` / `AttachChatStore` / `AttachGroupRosterStore` / `AttachHistoryService`
 
 That is the wrong direction: live ingest (status, names) **starts** in `WhatsAppService` and calls up. Phase 2 inverts it (client publishes; façade subscribes).
 
-### UI still on `IWhatsAppService`
+### What still holds the client
 
-| Consumer | Members still used |
-|---|---|
-| `ChatDetailViewModel` | `GetCanonicalJid`, `ResolveDisplayName`, `ClearUnreadForChatAsync`, `RefreshGroupSendPermissionsAsync`, `IsConnected`, `Chats` |
-| `ChatDetailInfoViewModel` | `RefreshGroupSendPermissionsAsync`, `EnsureHighQualityGroupAvatarAsync`, `ResolveDisplayName`, `GetCanonicalJid`, `Chats` |
-| `ChatListViewModel` | `IsInitialSyncSafeMode`, `InitialSyncProcessedConversations` / `Total`, `IsLoadingPersistedChats`, `ResolveDisplayName`, `GetCanonicalJid` |
-| `ShellViewModel` | `InitializeConnectionStateAsync`, `IsRegisteredAsync`, `StartDeferredStartupMaintenance`, `EnsureConnectedAsync`, `LoadPersistedUiStateAsync`, `GetTotalUnreadCount` |
-| `DebugViewModel` | `VerboseLogging`, `SetVerboseLogging`, `ClearSessionAsync` |
-| `MessageReactionsViewModel`, `ChatAuthorProjection` | `GetCanonicalJid` |
-| `ChatDetailView` | `SetActiveChatJid`, `GetCanonicalJid`, `Chats`, `SchedulePersistPublic`, `ResolveDisplayName` |
-| `ChatsView` | `GetCanonicalJid` |
-| `ChatAvatarControl` | `Chats`, `MarkAvatarImageLoadFailed`, fallback `WhatsAppService.Instance` |
-| `CommentRichService` | `GetCanonicalJid` (mentioned-JID overlay), `ResolveDisplayName` (lookup miss) |
-| `BootView` | concrete `AttachUiDispatcher` |
-| `App.xaml.cs` | lifecycle: `ResumeAsync`, `TransferActiveSocketToBrokerAsync`, `PrepareForSuspendAsync`, `ShutdownAsync`, `ReleaseMemoryAsync`, `IsConnected` |
-
-`Chats` on the client is already a pass-through of `ChatStateStore.Chats`. `GetCanonicalJid` is the most-shared primitive (phase 1 wraps it; phase 3.7 moves the table).
+`App.xaml.cs` for lifecycle (`ResumeAsync`, `TransferActiveSocketToBrokerAsync`, `PrepareForSuspendAsync`, `ShutdownAsync`, `ReleaseMemoryAsync`, `IsConnected`, `AttachUiDispatcher`), the façades and their policy helpers, and `RuntimeDiagnosticsService` for health snapshots.
 
 Raw `IWhatsAppService` **events** are façade-only; ViewModels should not subscribe there.
 
@@ -82,27 +115,6 @@ Raw `IWhatsAppService` **events** are façade-only; ViewModels should not subscr
 ## Remaining phases
 
 Do them in order. Phase 3.9 (list + persist) is last among the body moves because `ChatStateStore` still exposes transitional dictionaries that the client mutates on the UI thread.
-
-### Phase 1 — Close the UI frontier
-
-No logic move. Change **who the UI calls**.
-
-| Today on `IWhatsAppService` | New owner |
-|---|---|
-| `Chats` | `IChatStateStore.Chats` |
-| `GetCanonicalJid`, `JidAlias` | new `IJidResolver` (Core), thin wrapper over the client until 3.7 |
-| `ResolveDisplayName` | `IContactService` |
-| `RefreshGroupSendPermissionsAsync`, `EnsureHighQualityGroupAvatarAsync` | new `IGroupService` (can forward until 3.2) |
-| `ClearUnreadForChatAsync`, `SetActiveChatJid`, `GetTotalUnreadCount` | `IChatService` |
-| `IsInitialSyncSafeMode`, `InitialSync*`, `IsLoadingPersistedChats` | `IHistoryService` |
-| `InitializeConnectionStateAsync`, `IsRegisteredAsync`, `EnsureConnectedAsync`, `LoadPersistedUiStateAsync`, `StartDeferredStartupMaintenance`, `ClearSessionAsync`, `IsConnected` | `IConnectionService` |
-| `MarkAvatarImageLoadFailed` | `IContactService` |
-| `VerboseLogging`, `SetVerboseLogging` | `IDebugSendService` |
-| `SchedulePersistPublic` | nobody — the writer persists |
-
-Kill `WhatsAppService.Instance` fallback in `ChatAvatarControl`. `BootView.AttachUiDispatcher` should use `IDispatcher`, not the concrete client.
-
-**Done when:** `IWhatsAppService` does not appear in `src/Unison.Core` or `src/Unison.Uwp/UI`. Remaining: `App`, façades, diagnostics.
 
 ### Phase 2 — Invert `Attach*`
 
@@ -126,7 +138,7 @@ Self-contained first. List/persist last.
 | 3.4 | Send (main file) | `MessageFacade` over use cases; client only “send this node” |
 | 3.5 | `.Receipts.cs` | `MessageFacade` / `ChatFacade` |
 | 3.6 | Names / usync (`.Identity.cs`) | `ContactFacade` / `ContactDirectory`. Masked `*****` labels stay “no name” so projection can fill |
-| 3.7 | Alias LID/PN + canonical | Fold session alias into existing `LidMappingStore`; `IJidResolver` reads it. Drop `JidAlias` from `IWhatsAppService` |
+| 3.7 | Alias LID/PN + canonical | Fold session alias into existing `LidMappingStore`; `IJidResolver` already reads the client — move the table behind it. |
 | 3.8 | `.AppState.cs` | Each applier → the façade of that fact (subject → groups, contact name → contacts, read/pin/flags → chats, delete message → messages). `AppStateSyncService` talks to façades, not the concrete client |
 | 3.9 | `.Persistence.cs` + list sort/preview | `ChatFacade` + `ChatStateStore` + `IChatStore` / `IMessageStore`. Close the transitional public dictionaries on `ChatStateStore` |
 | 3.10 | `.IncomingPump.cs` | Decode/dispatch stays with connection; apply (row, preview, unread, toast) goes to façades |

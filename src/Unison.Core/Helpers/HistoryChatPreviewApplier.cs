@@ -60,6 +60,7 @@ namespace Unison.Core.Helpers
                 Jid = jid,
                 Name = chat.Name,
                 IsGroup = chat.IsGroup || JidHelper.IsGroupJid(jid),
+                Status = chat.Status,
                 UnreadCount = Math.Max(0, chat.UnreadCount),
                 LastMessage = chat.LastMessage,
                 LastMessageAuthor = chat.LastMessageAuthor,
@@ -113,7 +114,8 @@ namespace Unison.Core.Helpers
                 LastMessageMentionedJids = CopyMentioned(preview.LastMessageMentionedJids),
                 LastMessageTimestampUtc = preview.LastMessageTimestampUtc,
                 LastMessageId = preview.LastMessageId,
-                UnreadCount = Math.Max(0, preview.UnreadCount)
+                UnreadCount = Math.Max(0, preview.UnreadCount),
+                Status = preview.Status
             };
             chat.IsGroup = preview.IsGroup;
             return chat;
@@ -166,6 +168,7 @@ namespace Unison.Core.Helpers
                 LastMessageTimestampUtc = preview.LastMessageTimestampUtc,
                 LastMessageId = preview.LastMessageId,
                 UnreadCount = Math.Max(0, preview.UnreadCount),
+                Status = preview.Status,
                 Timestamp = WhatsAppMapper.FormatTimestamp(preview.LastMessageTimestampUtc, yesterdayLabel)
             };
             chat.IsGroup = preview.IsGroup;
@@ -214,6 +217,12 @@ namespace Unison.Core.Helpers
             }
 
             bool changed = false;
+            if (preview.Status != ChatStatus.Deleted && target.Status != preview.Status)
+            {
+                target.Status = preview.Status;
+                changed = true;
+            }
+
             DateTime incomingTs = preview.LastMessageTimestampUtc.HasValue
                 ? WhatsAppMapper.ToUtc(preview.LastMessageTimestampUtc.Value)
                 : DateTime.MinValue;
@@ -239,8 +248,19 @@ namespace Unison.Core.Helpers
                  (incomingTs >= existingTs && incomingTs != DateTime.MinValue && !string.IsNullOrWhiteSpace(preview.Name))))
             {
                 // Prefer a non-empty name; overwrite on newer/equal only when existing looks empty/weak.
-                if (string.IsNullOrWhiteSpace(target.Name) ||
-                    (incomingTs >= existingTs && incomingTs != DateTime.MinValue))
+                // Group subjects matching the sync blacklist only fill a blank label.
+                bool existingHasName = !string.IsNullOrWhiteSpace(target.Name);
+                bool allowName =
+                    !preview.IsGroup ||
+                    GroupNameSyncBlacklist.ShouldApplySyncedSubject(
+                        preview.Name,
+                        incomingMeaningful: !GroupNameSyncBlacklist.IsBlacklisted(preview.Name) &&
+                                            !string.IsNullOrWhiteSpace(preview.Name),
+                        existingMeaningful: existingHasName);
+
+                if (allowName &&
+                    (string.IsNullOrWhiteSpace(target.Name) ||
+                     (incomingTs >= existingTs && incomingTs != DateTime.MinValue)))
                 {
                     if (!string.Equals(target.Name, preview.Name, StringComparison.Ordinal))
                     {

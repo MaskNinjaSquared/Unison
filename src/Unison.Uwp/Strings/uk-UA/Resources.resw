@@ -665,11 +665,32 @@
   <data name="Settings_General.Text" xml:space="preserve">
     <value>Загальні</value>
   </data>
+  <data name="Settings_NotificationsSection.Text" xml:space="preserve">
+    <value>Сповіщення</value>
+  </data>
   <data name="Settings_Notifications.Header" xml:space="preserve">
     <value>Сповіщення</value>
   </data>
   <data name="Settings_Notifications.Text" xml:space="preserve">
     <value>Показувати спливаючі сповіщення та значок для нових повідомлень.</value>
+  </data>
+  <data name="Settings_MessageNotificationSound.Header" xml:space="preserve">
+    <value>Сповіщення повідомлень</value>
+  </data>
+  <data name="Settings_MessageNotificationSound.Text" xml:space="preserve">
+    <value>Звук тостів для чатів 1:1.</value>
+  </data>
+  <data name="Settings_GroupNotificationSound.Header" xml:space="preserve">
+    <value>Сповіщення груп</value>
+  </data>
+  <data name="Settings_GroupNotificationSound.Text" xml:space="preserve">
+    <value>Звук тостів для групових повідомлень.</value>
+  </data>
+  <data name="Settings_NotificationSound_SystemDefault.Content" xml:space="preserve">
+    <value>Системний за замовчуванням</value>
+  </data>
+  <data name="Settings_NotificationSound_SystemDefaultGroup.Content" xml:space="preserve">
+    <value>Системний за замовчуванням</value>
   </data>
   <data name="Settings_LiveTiles.Header" xml:space="preserve">
     <value>Живі плитки</value>
@@ -800,7 +821,12 @@
   <data name="Settings_AppBranch.Text" xml:space="preserve">
     <value>Реліз</value>
   </data>
-  <data name="Toast_DisconnectedTitle" xml:space="preserve">
+  <data name="Toast_HistorySyncTitle" xml:space="preserve">
+    <value>Синхронізація історії</value>
+  </data>
+  <data name="Toast_HistorySyncBody" xml:space="preserve">
+    <value>Unison підтягує розмови у фоні.</value>
+  </data>  <data name="Toast_DisconnectedTitle" xml:space="preserve">
     <value>Unison відключено</value>
   </data>
   <data name="Toast_DisconnectedBody" xml:space="preserve">
@@ -881,6 +907,21 @@
   <data name="ChatDetail_ShowContact.Text" xml:space="preserve">
     <value>Переглянути контакт</value>
   </data>
+  <data name="ChatDetail_VoiceCall.Text" xml:space="preserve">
+    <value>Голосовий виклик</value>
+  </data>
+  <data name="ChatDetail_VideoCall.Text" xml:space="preserve">
+    <value>Відеодзвінок</value>
+  </data>
+  <data name="ChatDetail_CallPhoneTitle" xml:space="preserve">
+    <value>Почати телефонний дзвінок?</value>
+  </data>
+  <data name="ChatDetail_CallPhoneBody" xml:space="preserve">
+    <value>Почати телефонний дзвінок {0}?</value>
+  </data>
+  <data name="ChatDetail_CallPhoneConfirm" xml:space="preserve">
+    <value>Зателефонувати</value>
+  </data>
   <data name="ChatDetail_AddContact.Text" xml:space="preserve">
     <value>Додати контакт</value>
   </data>
@@ -919,6 +960,18 @@
   </data>
   <data name="ChatList_DeleteChat.Text" xml:space="preserve">
     <value>Видалити чат</value>
+  </data>
+  <data name="ChatList_ArchiveChat.Text" xml:space="preserve">
+    <value>Архівувати чат</value>
+  </data>
+  <data name="ChatList_UnarchiveChat.Text" xml:space="preserve">
+    <value>Розархівувати чат</value>
+  </data>
+  <data name="ChatDetail_ArchiveChat.Text" xml:space="preserve">
+    <value>Архівувати чат</value>
+  </data>
+  <data name="ChatDetail_UnarchiveChat.Text" xml:space="preserve">
+    <value>Розархівувати чат</value>
   </data>
   <data name="ChatDetail_DeleteChat.Text" xml:space="preserve">
     <value>Видалити чат</value>
@@ -1024,5 +1077,20 @@
   </data>
   <data name="ChatDetailInfo_DeleteChatBar.Text" xml:space="preserve">
     <value>Видалити&#x0a;чат</value>
+  </data>
+  <data name="Debug_RuntimeDialog.PrimaryButtonText" xml:space="preserve">
+    <value>Зберегти на диск</value>
+  </data>
+  <data name="Debug_RuntimeDialog.CloseButtonText" xml:space="preserve">
+    <value>Закрити</value>
+  </data>
+  <data name="ChatList_SyncingHistory" xml:space="preserve">
+    <value>Синхронізація історії…</value>
+  </data>
+  <data name="Debug_RuntimeDialogHint.Text" xml:space="preserve">
+    <value>Утримуйте / ПКМ по Чати (або QR), щоб відкрити. Без тексту повідомлень.</value>
+  </data>
+  <data name="Debug_RuntimeDialog.Title" xml:space="preserve">
+    <value>Діагностика середовища виконання</value>
   </data>
 </root>

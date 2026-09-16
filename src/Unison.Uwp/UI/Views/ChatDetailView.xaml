@@ -106,6 +106,30 @@
                 </VisualState>
             </VisualStateGroup>
 
+            <!-- < 400px: hide header call buttons; items appear in the ⋯ menu instead. -->
+            <VisualStateGroup x:Name="HeaderCallButtonStates">
+                <VisualState x:Name="HeaderCallsInMenu">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="0"/>
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="ContactVideoCallButton.Visibility" Value="Collapsed"/>
+                        <Setter Target="ContactAudioCallButton.Visibility" Value="Collapsed"/>
+                        <Setter Target="GroupVideoCallButton.Visibility" Value="Collapsed"/>
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="HeaderCallsInBar">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="400"/>
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="ContactVideoCallButton.Visibility" Value="Visible"/>
+                        <Setter Target="ContactAudioCallButton.Visibility" Value="Visible"/>
+                        <Setter Target="GroupVideoCallButton.Visibility" Value="Visible"/>
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+
             <VisualStateGroup x:Name="ChatDetailInfoStates">
                 <VisualState x:Name="InfoClosed">
                     <VisualState.Setters>
@@ -271,7 +295,7 @@
                         </Button>
                         <Button x:Name="ContactAudioCallButton"
                                 Style="{StaticResource WhatsAppIconButtonStyle}"
-                                IsEnabled="False"
+                                Command="{Binding CallPhoneCommand}"
                                 Width="40" Height="40" Margin="0,0,2,0"
                                 Foreground="{ThemeResource ChatDetailHeaderTitleBrush}"
                                 ToolTipService.ToolTip="Voice call">
@@ -289,6 +313,26 @@
                                     <MenuFlyoutItem x:Uid="ChatDetail_ShowContact" Text="View contact"
                                                     Command="{Binding OpenChatDetailInfoCommand}"
                                                     Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
+                                    <MenuFlyoutItem Tag="headerVoiceCall"
+                                                    x:Uid="ChatDetail_VoiceCall"
+                                                    Text="Voice call"
+                                                    Command="{Binding CallPhoneCommand}"
+                                                    Visibility="Collapsed"
+                                                    Style="{StaticResource ModernMenuFlyoutItemStyle}">
+                                        <MenuFlyoutItem.Icon>
+                                            <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE717;"/>
+                                        </MenuFlyoutItem.Icon>
+                                    </MenuFlyoutItem>
+                                    <MenuFlyoutItem Tag="headerVideoCall"
+                                                    x:Uid="ChatDetail_VideoCall"
+                                                    Text="Video call"
+                                                    IsEnabled="False"
+                                                    Visibility="Collapsed"
+                                                    Style="{StaticResource ModernMenuFlyoutItemStyle}">
+                                        <MenuFlyoutItem.Icon>
+                                            <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE714;"/>
+                                        </MenuFlyoutItem.Icon>
+                                    </MenuFlyoutItem>
                                     <MenuFlyoutItem Tag="addContact"
                                                     x:Uid="ChatDetail_AddContact"
                                                     Text="Add contact"
@@ -339,6 +383,25 @@
                                                     Command="{Binding PinToStartCommand}"
                                                     Visibility="Collapsed"
                                                     Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
+                                    <MenuFlyoutItem Tag="archiveChat"
+                                                    x:Uid="ChatDetail_ArchiveChat"
+                                                    Text="Archive chat"
+                                                    Command="{Binding ArchiveChatCommand}"
+                                                    Style="{StaticResource ModernMenuFlyoutItemStyle}">
+                                        <MenuFlyoutItem.Icon>
+                                            <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE7B8;"/>
+                                        </MenuFlyoutItem.Icon>
+                                    </MenuFlyoutItem>
+                                    <MenuFlyoutItem Tag="unarchiveChat"
+                                                    x:Uid="ChatDetail_UnarchiveChat"
+                                                    Text="Unarchive chat"
+                                                    Command="{Binding UnarchiveChatCommand}"
+                                                    Visibility="Collapsed"
+                                                    Style="{StaticResource ModernMenuFlyoutItemStyle}">
+                                        <MenuFlyoutItem.Icon>
+                                            <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE7B8;"/>
+                                        </MenuFlyoutItem.Icon>
+                                    </MenuFlyoutItem>
                                     <MenuFlyoutSeparator/>
                                     <MenuFlyoutItem x:Uid="ChatDetail_DeleteChat"
                                                     Text="Delete chat"
@@ -379,6 +442,16 @@
                                     <MenuFlyoutItem x:Uid="ChatDetail_GroupInfo" Text="Group info"
                                                     Command="{Binding OpenChatDetailInfoCommand}"
                                                     Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
+                                    <MenuFlyoutItem Tag="headerVideoCall"
+                                                    x:Uid="ChatDetail_VideoCall"
+                                                    Text="Video call"
+                                                    IsEnabled="False"
+                                                    Visibility="Collapsed"
+                                                    Style="{StaticResource ModernMenuFlyoutItemStyle}">
+                                        <MenuFlyoutItem.Icon>
+                                            <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE714;"/>
+                                        </MenuFlyoutItem.Icon>
+                                    </MenuFlyoutItem>
                                     <MenuFlyoutItem x:Uid="ChatDetail_Search" Text="Search" IsEnabled="False"
                                                     Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
                                     <MenuFlyoutItem x:Uid="ChatDetail_GroupMedia" Text="Group media" IsEnabled="False"
@@ -423,6 +496,25 @@
                                                     Command="{Binding PinToStartCommand}"
                                                     Visibility="Collapsed"
                                                     Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
+                                    <MenuFlyoutItem Tag="archiveChat"
+                                                    x:Uid="ChatDetail_ArchiveChat"
+                                                    Text="Archive chat"
+                                                    Command="{Binding ArchiveChatCommand}"
+                                                    Style="{StaticResource ModernMenuFlyoutItemStyle}">
+                                        <MenuFlyoutItem.Icon>
+                                            <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE7B8;"/>
+                                        </MenuFlyoutItem.Icon>
+                                    </MenuFlyoutItem>
+                                    <MenuFlyoutItem Tag="unarchiveChat"
+                                                    x:Uid="ChatDetail_UnarchiveChat"
+                                                    Text="Unarchive chat"
+                                                    Command="{Binding UnarchiveChatCommand}"
+                                                    Visibility="Collapsed"
+                                                    Style="{StaticResource ModernMenuFlyoutItemStyle}">
+                                        <MenuFlyoutItem.Icon>
+                                            <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE7B8;"/>
+                                        </MenuFlyoutItem.Icon>
+                                    </MenuFlyoutItem>
                                     <MenuFlyoutSeparator/>
                                     <MenuFlyoutItem x:Uid="ChatDetail_DeleteChat"
                                                     Text="Delete chat"

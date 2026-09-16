@@ -9,6 +9,7 @@ using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Navigation;
 using Microsoft.Extensions.DependencyInjection;
 using Unison.Core.Constants;
+using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Models;
 using Unison.Core.ViewModels;
@@ -16,7 +17,7 @@ using Unison.Core.ViewModels;
 namespace Unison.Uwp.UI.Views
 {
     /// <summary>Shell content: chat list + detail (master-detail VisualStates).</summary>
-    public sealed partial class ChatsView : Page
+    public partial class ChatsView : Page, IConversationShellPage
     {
         private ShellViewModel _shell;
         private bool _hooked;
@@ -32,6 +33,7 @@ namespace Unison.Uwp.UI.Views
         public ChatsView()
         {
             InitializeComponent();
+            ChatListPart.ConfigureScope(ChatListScope.Active);
             NavigationCacheMode = NavigationCacheMode.Disabled;
             PaneSplitter.Width = ChatPaneLayoutConstants.SplitterWidth;
             Column0.MinWidth = ChatPaneLayoutConstants.MinListWidth;
@@ -68,7 +70,7 @@ namespace Unison.Uwp.UI.Views
             }
         }
 
-        /// <summary>Logout / session wipe — clear detail + selection before shell is torn down.</summary>
+        /// <summary>Logout / session wipe â€” clear detail + selection before shell is torn down.</summary>
         public async Task ResetForLoggedOutAsync()
         {
             try
@@ -88,8 +90,13 @@ namespace Unison.Uwp.UI.Views
             _shell?.ClearChat();
         }
 
-        /// <summary>Called when local chats are wiped (resync) — leave NarrowDetail empty state.</summary>
-        internal async void NotifyLocalConversationsCleared()
+        /// <summary>Called when local chats are wiped (resync) â€” leave NarrowDetail empty state.</summary>
+        public void NotifyLocalConversationsCleared()
+        {
+            _ = NotifyLocalConversationsClearedAsync();
+        }
+
+        private async Task NotifyLocalConversationsClearedAsync()
         {
             try
             {
@@ -137,7 +144,7 @@ namespace Unison.Uwp.UI.Views
 
         /// <summary>
         /// Minimal: if chat space is visible with no open intent / no chat, close it and show the list.
-        /// Do not tear down while <see cref="ShellViewModel.PendingChat"/> is set — that means we
+        /// Do not tear down while <see cref="ShellViewModel.PendingChat"/> is set â€” that means we
         /// deliberately opened NarrowDetail (UI HasActiveChat can lag one frame behind SelectChat).
         /// </summary>
         private void ReconcileMinimalEmptyDetail()
@@ -152,7 +159,7 @@ namespace Unison.Uwp.UI.Views
                 return;
             }
 
-            // Opening or open: shell still owns a chat — leave NarrowDetail alone.
+            // Opening or open: shell still owns a chat â€” leave NarrowDetail alone.
             if (_shell.PendingChat != null && _shell.HasActiveChat)
             {
                 return;
@@ -551,12 +558,12 @@ namespace Unison.Uwp.UI.Views
                 }
                 else if (ChatDetailPart.HasActiveChat)
                 {
-                    // Open race/cancel while another (or same) chat remains visible — keep it.
+                    // Open race/cancel while another (or same) chat remains visible â€” keep it.
                     TryRecoverListSelectionFromActiveChat();
                 }
                 else
                 {
-                    // Genuine failed open — leave empty, but try restoring list highlight by jid.
+                    // Genuine failed open â€” leave empty, but try restoring list highlight by jid.
                     Debug.WriteLine("[ChatsView] Open chat did not activate UI for " + selected.JID);
                     ChatListPart.HighlightChatQuiet(selected);
                 }
@@ -599,12 +606,12 @@ namespace Unison.Uwp.UI.Views
 
             try
             {
-                var service = App.Services?.GetService<IWhatsAppService>();
-                if (service != null)
+                var jids = App.Services?.GetService<IJidResolver>();
+                if (jids != null)
                 {
                     return string.Equals(
-                        service.GetCanonicalJid(active.JID),
-                        service.GetCanonicalJid(chat.JID),
+                        jids.GetCanonicalJid(active.JID),
+                        jids.GetCanonicalJid(chat.JID),
                         StringComparison.OrdinalIgnoreCase);
                 }
             }
@@ -637,14 +644,14 @@ namespace Unison.Uwp.UI.Views
         private void ChatListPart_MenuClicked(object sender, EventArgs e)
         {
             int handlers = MenuClicked?.GetInvocationList()?.Length ?? 0;
-            Debug.WriteLine("[ChatsView] ChatListPart_MenuClicked → shell handlers=" + handlers);
+            Debug.WriteLine("[ChatsView] ChatListPart_MenuClicked â†’ shell handlers=" + handlers);
             if (MenuClicked != null)
             {
                 MenuClicked.Invoke(this, EventArgs.Empty);
                 return;
             }
 
-            // Fallback if MainView missed WireChatsViewMenu after Settings→Chats.
+            // Fallback if MainView missed WireChatsViewMenu after Settingsâ†’Chats.
             TryToggleShellPaneFallback();
         }
 

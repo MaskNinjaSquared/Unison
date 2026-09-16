@@ -26,7 +26,7 @@ namespace Unison.Uwp.Data.Entities
 
 
 
-        /// <summary><see cref="Unison.Core.Models.ChatLocalStatus"/> as int.</summary>
+        /// <summary><see cref="Unison.Core.Models.ChatStatus"/> as int.</summary>
 
         public int Status { get; set; }
 

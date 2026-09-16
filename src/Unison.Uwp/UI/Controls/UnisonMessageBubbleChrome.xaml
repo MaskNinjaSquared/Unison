@@ -1,0 +1,66 @@
+<UserControl
+    x:Class="Unison.Uwp.UI.Controls.UnisonMessageBubbleChrome"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    d:DesignHeight="64"
+    d:DesignWidth="240">
+
+    <!--
+      Unison shell: square corners.
+      Received tip on first of run; sent tip on last of run.
+      Tips flush to the bubble edge (no inset margin).
+      Received — 1:1: top-left up; group: top-left left (toward avatar).
+      Sent — 1:1 and group: bottom-right down.
+    -->
+    <Grid x:Name="RootGrid">
+        <Grid x:Name="OutgoingHost" Visibility="Collapsed">
+            <Border Background="{ThemeResource ChatDetailSentBubbleBrush}" CornerRadius="0"/>
+
+            <!-- Sent (1:1 + group): flush right edge, tip below. -->
+            <Grid x:Name="OutgoingTailBelow"
+                  Width="12"
+                  Height="10"
+                  VerticalAlignment="Bottom"
+                  HorizontalAlignment="Right"
+                  Margin="0,0,0,-10"
+                  Visibility="Collapsed">
+                <Path Stretch="Fill"
+                      Fill="{ThemeResource ChatDetailSentBubbleBrush}"
+                      Data="M0,0 L12,0 L12,10 Z"/>
+            </Grid>
+        </Grid>
+
+        <Grid x:Name="IncomingHost" Visibility="Collapsed">
+            <Border Background="{ThemeResource ChatDetailReceivedBubbleBrush}" CornerRadius="0"/>
+
+            <!-- 1:1 received: flush left edge, tip above (first of run). -->
+            <Grid x:Name="IncomingTailUp"
+                  Width="12"
+                  Height="10"
+                  VerticalAlignment="Top"
+                  HorizontalAlignment="Left"
+                  Margin="0,-10,0,0"
+                  Visibility="Collapsed">
+                <Path Stretch="Fill"
+                      Fill="{ThemeResource ChatDetailReceivedBubbleBrush}"
+                      Data="M0,10 L12,10 L0,0 Z"/>
+            </Grid>
+
+            <!-- Group received: flush top-left, tip left toward avatar (first of run). -->
+            <Grid x:Name="IncomingTailSide"
+                  Width="10"
+                  Height="12"
+                  VerticalAlignment="Top"
+                  HorizontalAlignment="Left"
+                  Margin="-10,0,0,0"
+                  Visibility="Collapsed">
+                <Path Stretch="Fill"
+                      Fill="{ThemeResource ChatDetailReceivedBubbleBrush}"
+                      Data="M10,0 L10,12 L0,0 Z"/>
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>

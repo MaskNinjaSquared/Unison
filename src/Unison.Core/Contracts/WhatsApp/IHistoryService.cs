@@ -22,6 +22,28 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         event EventHandler<string> SyncStatusChanged;
 
+        /// <summary>True while the saved list snapshot is being read back after launch.</summary>
+        bool IsLoadingPersistedChats { get; }
+
+        /// <summary>
+        /// True while the first sync after login is still arriving in bulk, which is when the list
+        /// has to release rows in batches instead of drawing everything it is handed.
+        /// </summary>
+        bool IsInitialSyncSafeMode { get; }
+
+        /// <summary>
+        /// True when startup and sync work should use smaller batches, longer quiet floors and
+        /// gentler list updates. Driven by memory pressure and how hot the sync is, not by
+        /// form factor alone.
+        /// </summary>
+        bool PreferFrugalSyncBudget { get; }
+
+        /// <summary>How many conversations of the first sync are in, for the progress line.</summary>
+        int InitialSyncProcessedConversations { get; }
+
+        /// <summary>How many the first sync said there would be. Zero until it says.</summary>
+        int InitialSyncTotalConversations { get; }
+
         /// <summary>
         /// A chunk of history was applied. Null payload means "something changed, reload" -
         /// which is all any listener does with it anyway.
@@ -63,6 +85,12 @@ namespace Unison.Core.Contracts.WhatsApp
         /// (forwards to the compatibility client). Prefer <see cref="PersistHistorySqliteChunkAsync"/>.
         /// </summary>
         void NotifySqliteHistoryChunkApplied(string syncType, int conversationCount);
+
+        /// <summary>
+        /// Counts a background FULL_HISTORY solicitation or chunk. After more than two bounces
+        /// in this process, shows one toast (no per-session reset — app restart clears it).
+        /// </summary>
+        void NoteBackgroundHistorySyncBounce();
 
         /// <summary>
         /// History message rows were committed to SQLite for a chunk (open detail may hydrate).

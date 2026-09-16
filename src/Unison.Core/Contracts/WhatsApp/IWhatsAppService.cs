@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Threading;
@@ -13,8 +13,6 @@ namespace Unison.Core.Contracts.WhatsApp
     public interface IWhatsAppService
     {
         ObservableCollection<ChatItem> Chats { get; }
-        /// <summary>Session-local JID aliasing (PN/LID pairs), read-only for consumers.</summary>
-        IReadOnlyDictionary<string, string> JidAlias { get; }
         string CurrentConnectionStatus { get; }
         string CurrentUserName { get; set; }
         /// <summary>Account phone digits from the PN JID — placeholder when the push name is unknown.</summary>
@@ -26,6 +24,11 @@ namespace Unison.Core.Contracts.WhatsApp
         bool IsConnected { get; }
         bool IsLoadingPersistedChats { get; }
         bool IsInitialSyncSafeMode { get; }
+        /// <summary>
+        /// True when startup/sync work should use smaller batches, longer quiet floors and
+        /// gentler list updates. Driven by memory pressure and hot sync, not form-factor alone.
+        /// </summary>
+        bool PreferFrugalSyncBudget { get; }
         int InitialSyncProcessedConversations { get; }
         int InitialSyncTotalConversations { get; }
 
@@ -122,7 +125,6 @@ namespace Unison.Core.Contracts.WhatsApp
 
         /// <summary>Prefer <see cref="IContactService.RefreshContactNamesAsync"/> from ViewModels.</summary>
         Task RefreshContactNamesAsync(bool includeGroups, bool force);
-        string GetCanonicalJid(string jid);
         string ResolveDisplayName(string jid, string context);
 
         /// <summary>Raw usync query for a batch of JIDs (name resolution primitive used by <see cref="IContactService"/>).</summary>
@@ -145,6 +147,12 @@ namespace Unison.Core.Contracts.WhatsApp
         /// and applies it to the matching <see cref="ChatItem"/> (for composer lock UI).
         /// </summary>
         Task RefreshGroupSendPermissionsAsync(string groupJid);
+
+        /// <summary>
+        /// Hydrates <see cref="ChatItem.GroupMembers"/> from the local roster store when empty.
+        /// Does not hit the network; Members pivot / chat open use this before a background IQ.
+        /// </summary>
+        Task EnsureGroupRosterLoadedFromStoreAsync(string groupJid);
 
         /// <summary>True while a reconnect/history replay drain is in progress; background refreshes should back off.</summary>
         bool IsReplayDrainActive { get; }

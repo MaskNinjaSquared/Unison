@@ -92,10 +92,39 @@ namespace Unison.Core.Models
             _isFromMe &&
             _sendState != MessageSendState.NotApplicable &&
             _sendState != MessageSendState.Failed &&
-            !string.IsNullOrEmpty(StatusCheckmarkUri);
+            !string.IsNullOrEmpty(StatusGlyph);
 
         public bool ShowSendFailed => _isFromMe && _sendState == MessageSendState.Failed;
 
+        public bool IsReadStatus => _sendState == MessageSendState.Read;
+
+        public bool ShowReadStatusCheckmark => ShowStatusCheckmark && IsReadStatus;
+
+        public bool ShowUnreadStatusCheckmark => ShowStatusCheckmark && !IsReadStatus;
+
+        /// <summary>UnisonIcons PUA glyph (EA03 / EA04) for outgoing ticks.</summary>
+        public string StatusGlyph
+        {
+            get
+            {
+                if (!_isFromMe || _sendState == MessageSendState.NotApplicable ||
+                    _sendState == MessageSendState.Failed)
+                {
+                    return string.Empty;
+                }
+
+                switch (_sendState)
+                {
+                    case MessageSendState.Delivered:
+                    case MessageSendState.Read:
+                        return "\uEA04";
+                    default:
+                        return "\uEA03";
+                }
+            }
+        }
+
+        /// <summary>Legacy PNG URI; prefer <see cref="StatusGlyph"/>.</summary>
         public string StatusCheckmarkUri
         {
             get
@@ -137,7 +166,14 @@ namespace Unison.Core.Models
 
         private void RaiseStatusUi()
         {
-            RaiseProperties(nameof(ShowStatusCheckmark), nameof(ShowSendFailed), nameof(StatusCheckmarkUri));
+            RaiseProperties(
+                nameof(ShowStatusCheckmark),
+                nameof(ShowSendFailed),
+                nameof(StatusCheckmarkUri),
+                nameof(StatusGlyph),
+                nameof(IsReadStatus),
+                nameof(ShowReadStatusCheckmark),
+                nameof(ShowUnreadStatusCheckmark));
         }
     }
 }

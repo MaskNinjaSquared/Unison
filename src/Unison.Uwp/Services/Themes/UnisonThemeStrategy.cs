@@ -1,10 +1,13 @@
 using System;
 using System.Threading.Tasks;
 using Unison.Core.Contracts;
+using Unison.Core.Models;
 using Windows.Foundation.Metadata;
 using Windows.Graphics.Display;
 using Windows.UI;
 using Windows.UI.ViewManagement;
+using Windows.UI.Xaml.Controls;
+using UnisonChats = global::Unison.Uwp.Shell.Unison.Views;
 
 namespace Unison.Uwp.Services.Themes
 {
@@ -95,6 +98,46 @@ namespace Unison.Uwp.Services.Themes
             {
                 System.Diagnostics.Debug.WriteLine("[UnisonTheme] SetMobileStatusBar: " + ex.Message);
             }
+        }
+
+        public override Type ResolveShellPage(NavigationDestination destination)
+        {
+            switch (destination)
+            {
+                case NavigationDestination.Chats:
+                    return typeof(UnisonChats.ChatsView);
+                case NavigationDestination.Archived:
+                    return typeof(UnisonChats.ArchivedChatsView);
+                default:
+                    return base.ResolveShellPage(destination);
+            }
+        }
+
+        public override bool TryResolveShellDestination(object content, out NavigationDestination destination)
+        {
+            if (content is UnisonChats.ChatsView)
+            {
+                destination = NavigationDestination.Chats;
+                return true;
+            }
+
+            if (content is UnisonChats.ArchivedChatsView)
+            {
+                destination = NavigationDestination.Archived;
+                return true;
+            }
+
+            return base.TryResolveShellDestination(content, out destination);
+        }
+
+        public override void OpenSettings(Frame shellFrame)
+        {
+            NavigateShellFrame(shellFrame, typeof(UnisonChats.SettingsView));
+        }
+
+        public override bool IsSettingsPage(object content)
+        {
+            return content is UnisonChats.SettingsView;
         }
     }
 }

@@ -114,9 +114,30 @@ namespace Unison.Uwp.UI.Controls
                     : Visibility.Collapsed;
             }
 
+            string phoneText = string.IsNullOrWhiteSpace(vm.PhoneValue) ? "—" : vm.PhoneValue;
+            bool canCall = vm.CanCallPhone;
+
+            if (PhoneCallButton != null)
+            {
+                PhoneCallButton.Command = vm.CallPhoneCommand;
+                PhoneCallButton.Visibility = canCall ? Visibility.Visible : Visibility.Collapsed;
+            }
+
             if (PhoneValue != null)
             {
-                PhoneValue.Text = string.IsNullOrWhiteSpace(vm.PhoneValue) ? "—" : vm.PhoneValue;
+                PhoneValue.Text = phoneText;
+            }
+
+            if (PhoneValueFallback != null)
+            {
+                PhoneValueFallback.Text = phoneText;
+                PhoneValueFallback.Visibility = (!canCall && vm.HasPhone) || (!vm.HasPhone && vm.CanAddToAddressBook)
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+                if (!vm.HasPhone)
+                {
+                    PhoneValueFallback.Text = "—";
+                }
             }
 
             if (AddContactButton != null)

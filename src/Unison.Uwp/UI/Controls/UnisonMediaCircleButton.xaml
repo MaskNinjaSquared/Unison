@@ -1,0 +1,39 @@
+<UserControl
+    x:Class="Unison.Uwp.UI.Controls.UnisonMediaCircleButton"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Width="30"
+    Height="30">
+
+    <!-- Shared Unison download/play circle. Diameter 30 (audio) or 56 (image/video overlay like play). -->
+    <Grid>
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="DirectionStates">
+                <VisualState x:Name="Received">
+                    <VisualState.Setters>
+                        <Setter Target="ActionButton.Background" Value="{ThemeResource ChatDetailReceivedMediaButtonBackgroundBrush}"/>
+                        <Setter Target="ActionButton.Foreground" Value="{ThemeResource ChatDetailReceivedMediaButtonGlyphBrush}"/>
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="Sent">
+                    <VisualState.Setters>
+                        <Setter Target="ActionButton.Background" Value="{ThemeResource ChatDetailSentMediaButtonBackgroundBrush}"/>
+                        <Setter Target="ActionButton.Foreground" Value="{ThemeResource ChatDetailSentMediaButtonGlyphBrush}"/>
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
+        <Button x:Name="ActionButton"
+                Style="{StaticResource UnisonMediaCircleButtonStyle}"
+                Width="30"
+                Height="30"
+
+                Background="{ThemeResource ChatDetailReceivedMediaButtonBackgroundBrush}"
+                Foreground="{ThemeResource ChatDetailReceivedMediaButtonGlyphBrush}"
+                FontFamily="{StaticResource IconFont}"
+                FontSize="14"
+                Content="&#xE896;"
+                Click="ActionButton_Click"/>
+    </Grid>
+</UserControl>

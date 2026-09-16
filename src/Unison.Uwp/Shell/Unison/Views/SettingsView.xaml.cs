@@ -1,8 +1,8 @@
 using System;
 using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
-using Unison.Core.Constants;
-using Unison.Core.ViewModels;
+using global::Unison.Core.Constants;
+using global::Unison.Core.ViewModels;
 using Windows.ApplicationModel;
 using Windows.Foundation;
 using Windows.UI.Xaml;
@@ -11,10 +11,10 @@ using Windows.UI.Xaml.Media;
 using Windows.UI.Xaml.Media.Animation;
 using Windows.UI.Xaml.Navigation;
 
-namespace Unison.Uwp.UI.Views
+namespace Unison.Uwp.Shell.Unison.Views
 {
     /// <summary>
-    /// Settings surface: profile hero in scroll + sticky compact title bar (Imgur AccountView-style).
+    /// Unison shell settings page (hero + sticky title). Opened via <c>INavigator.OpenSettings</c>.
     /// </summary>
     public sealed partial class SettingsView : Page
     {

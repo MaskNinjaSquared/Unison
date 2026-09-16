@@ -635,11 +635,32 @@ Wyłącz po zakończeniu diagnozy: pozostawienie włączonego spowalnia aplikacj
   <data name="Settings_General.Text" xml:space="preserve">
     <value>Ogólne</value>
   </data>
+  <data name="Settings_NotificationsSection.Text" xml:space="preserve">
+    <value>Powiadomienia</value>
+  </data>
   <data name="Settings_Notifications.Header" xml:space="preserve">
     <value>Powiadomienia</value>
   </data>
   <data name="Settings_Notifications.Text" xml:space="preserve">
     <value>Pokaż powiadomienia i etykietę dla przychodzących wiadomości.</value>
+  </data>
+  <data name="Settings_MessageNotificationSound.Header" xml:space="preserve">
+    <value>Powiadomienia o wiadomościach</value>
+  </data>
+  <data name="Settings_MessageNotificationSound.Text" xml:space="preserve">
+    <value>Dźwięk toastów wiadomości 1:1.</value>
+  </data>
+  <data name="Settings_GroupNotificationSound.Header" xml:space="preserve">
+    <value>Powiadomienia grupowe</value>
+  </data>
+  <data name="Settings_GroupNotificationSound.Text" xml:space="preserve">
+    <value>Dźwięk toastów wiadomości grupowych.</value>
+  </data>
+  <data name="Settings_NotificationSound_SystemDefault.Content" xml:space="preserve">
+    <value>Domyślny systemowy</value>
+  </data>
+  <data name="Settings_NotificationSound_SystemDefaultGroup.Content" xml:space="preserve">
+    <value>Domyślny systemowy</value>
   </data>
   <data name="Settings_LiveTiles.Header" xml:space="preserve">
     <value>Żywe kafelki</value>
@@ -806,7 +827,12 @@ Wyłącz po zakończeniu diagnozy: pozostawienie włączonego spowalnia aplikacj
   <data name="Toast_DisconnectedBody" xml:space="preserve">
     <value>Otwórz aplikację, aby przywrócić połączenie z WhatsApp.</value>
   </data>
-  <data name="Toast_DisconnectedTitle" xml:space="preserve">
+  <data name="Toast_HistorySyncTitle" xml:space="preserve">
+    <value>Synchronizowanie historii</value>
+  </data>
+  <data name="Toast_HistorySyncBody" xml:space="preserve">
+    <value>Unison dogania rozmowy w tle.</value>
+  </data>  <data name="Toast_DisconnectedTitle" xml:space="preserve">
     <value>Unison rozłączony</value>
   </data>
   <data name="Toast_LoggedOutTitle" xml:space="preserve">
@@ -878,6 +904,21 @@ Wyłącz po zakończeniu diagnozy: pozostawienie włączonego spowalnia aplikacj
   <data name="ChatDetail_ShowContact.Text" xml:space="preserve">
     <value>Zobacz kontakt</value>
   </data>
+  <data name="ChatDetail_VoiceCall.Text" xml:space="preserve">
+    <value>Połączenie głosowe</value>
+  </data>
+  <data name="ChatDetail_VideoCall.Text" xml:space="preserve">
+    <value>Połączenie wideo</value>
+  </data>
+  <data name="ChatDetail_CallPhoneTitle" xml:space="preserve">
+    <value>Rozpocząć rozmowę telefoniczną?</value>
+  </data>
+  <data name="ChatDetail_CallPhoneBody" xml:space="preserve">
+    <value>Czy chcesz rozpocząć rozmowę telefoniczną z {0}?</value>
+  </data>
+  <data name="ChatDetail_CallPhoneConfirm" xml:space="preserve">
+    <value>Zadzwoń</value>
+  </data>
   <data name="ChatDetail_AddContact.Text" xml:space="preserve">
     <value>Dodaj kontakt</value>
   </data>
@@ -919,6 +960,18 @@ Wyłącz po zakończeniu diagnozy: pozostawienie włączonego spowalnia aplikacj
   </data>
   <data name="ChatList_DeleteChat.Text" xml:space="preserve">
     <value>Usuń czat</value>
+  </data>
+  <data name="ChatList_ArchiveChat.Text" xml:space="preserve">
+    <value>Archiwizuj czat</value>
+  </data>
+  <data name="ChatList_UnarchiveChat.Text" xml:space="preserve">
+    <value>Przywróć z archiwum</value>
+  </data>
+  <data name="ChatDetail_ArchiveChat.Text" xml:space="preserve">
+    <value>Archiwizuj czat</value>
+  </data>
+  <data name="ChatDetail_UnarchiveChat.Text" xml:space="preserve">
+    <value>Przywróć z archiwum</value>
   </data>
   <data name="ChatDetail_DeleteChat.Text" xml:space="preserve">
     <value>Usuń czat</value>
@@ -1024,5 +1077,20 @@ Wyłącz po zakończeniu diagnozy: pozostawienie włączonego spowalnia aplikacj
   </data>
   <data name="ChatDetailInfo_DeleteChatBar.Text" xml:space="preserve">
     <value>Usuń&#x0a;czat</value>
+  </data>
+  <data name="Debug_RuntimeDialog.PrimaryButtonText" xml:space="preserve">
+    <value>Zapisz na dysku</value>
+  </data>
+  <data name="Debug_RuntimeDialog.CloseButtonText" xml:space="preserve">
+    <value>Zamknij</value>
+  </data>
+  <data name="ChatList_SyncingHistory" xml:space="preserve">
+    <value>Synchronizowanie historii…</value>
+  </data>
+  <data name="Debug_RuntimeDialogHint.Text" xml:space="preserve">
+    <value>Przytrzymaj / kliknij prawym Czaty (lub QR), aby otworzyć. Bez treści wiadomości.</value>
+  </data>
+  <data name="Debug_RuntimeDialog.Title" xml:space="preserve">
+    <value>Diagnostyka środowiska</value>
   </data>
 </root>

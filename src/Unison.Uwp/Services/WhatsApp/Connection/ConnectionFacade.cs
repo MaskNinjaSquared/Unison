@@ -69,6 +69,58 @@ namespace Unison.Uwp.Services.WhatsApp.Connection
         public bool AutoUnlinkOnLogoutEnabled =>
             _localSettings.Get<bool>(LocalSettingsConstants.AutoUnlinkOnLogoutEnabled);
 
+        // ---------------------------------------------------------------------
+        // Startup
+        //
+        // Forwarding, and deliberately so: the shell drives launch in a fixed order and needs one
+        // thing to drive it through. Until the socket moves here (phase 4) the client is still
+        // what answers, but the shell no longer has to know that.
+        //
+        // A missing client is treated as "not connected, not registered, nothing saved" rather
+        // than as an error. The facade is built before the client is attached, and a screen that
+        // asks in that window should fall through to pairing, not throw.
+        // ---------------------------------------------------------------------
+
+        public bool IsConnected
+        {
+            get
+            {
+                var whatsApp = _whatsApp;
+                return whatsApp != null && whatsApp.IsConnected;
+            }
+        }
+
+        public Task InitializeConnectionStateAsync()
+        {
+            var whatsApp = _whatsApp;
+            return whatsApp == null ? Task.CompletedTask : whatsApp.InitializeConnectionStateAsync();
+        }
+
+        public Task<bool> IsRegisteredAsync()
+        {
+            var whatsApp = _whatsApp;
+            return whatsApp == null ? Task.FromResult(false) : whatsApp.IsRegisteredAsync();
+        }
+
+        public Task EnsureConnectedAsync(int timeoutMs = 35000, bool forceFreshTransport = false)
+        {
+            var whatsApp = _whatsApp;
+            return whatsApp == null
+                ? Task.CompletedTask
+                : whatsApp.EnsureConnectedAsync(timeoutMs, forceFreshTransport);
+        }
+
+        public Task LoadPersistedUiStateAsync()
+        {
+            var whatsApp = _whatsApp;
+            return whatsApp == null ? Task.CompletedTask : whatsApp.LoadPersistedUiStateAsync();
+        }
+
+        public void StartDeferredStartupMaintenance()
+        {
+            _whatsApp?.StartDeferredStartupMaintenance();
+        }
+
         public void AttachWhatsAppService(IWhatsAppService whatsApp)
         {
             if (ReferenceEquals(_whatsApp, whatsApp))

@@ -60,9 +60,10 @@ namespace Unison.Uwp.UI.Controls
 
         private void Info_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
-            if (e.PropertyName == nameof(ChatDetailInfoViewModel.IsMembersAvatarsLoading))
+            if (e.PropertyName == nameof(ChatDetailInfoViewModel.IsMembersAvatarsLoading) ||
+                e.PropertyName == nameof(ChatDetailInfoViewModel.IsMembersRosterLoading))
             {
-                ApplyMembersAvatarsLoading();
+                ApplyMembersLoadingUi();
                 return;
             }
 
@@ -85,20 +86,61 @@ namespace Unison.Uwp.UI.Controls
 
             if (InfoPivot?.SelectedItem == MembersPivotItem && InfoViewModel != null)
             {
-                _ = InfoViewModel.EnsureMembersAvatarsHydratedAsync();
-                ApplyMembersAvatarsLoading();
+                _ = InfoViewModel.EnsureMembersPivotReadyAsync();
+                ApplyMembersLoadingUi();
             }
         }
 
-        private void ApplyMembersAvatarsLoading()
+        private void ApplyMembersLoadingUi()
         {
-            if (MembersAvatarsProgress == null)
+            var vm = InfoViewModel;
+            bool rosterLoading = vm?.IsMembersRosterLoading == true;
+            bool avatarsLoading = vm?.IsMembersAvatarsLoading == true;
+
+            if (MembersRosterLoadingRing != null)
             {
-                return;
+                MembersRosterLoadingRing.IsActive = rosterLoading;
+                MembersRosterLoadingRing.Visibility =
+                    rosterLoading ? Visibility.Visible : Visibility.Collapsed;
             }
 
-            bool loading = InfoViewModel?.IsMembersAvatarsLoading == true;
-            MembersAvatarsProgress.Visibility = loading ? Visibility.Visible : Visibility.Collapsed;
+            if (MembersAvatarsProgress != null)
+            {
+                MembersAvatarsProgress.Visibility =
+                    avatarsLoading && !rosterLoading ? Visibility.Visible : Visibility.Collapsed;
+            }
+
+            // Empty / list while roster IQ is in flight — avoid a false "no members" flash.
+            if (rosterLoading)
+            {
+                if (MembersEmptyText != null)
+                {
+                    MembersEmptyText.Visibility = Visibility.Collapsed;
+                }
+
+                if (MembersList != null)
+                {
+                    MembersList.Visibility = Visibility.Collapsed;
+                }
+            }
+            else if (vm != null)
+            {
+                ApplyMembersListVisibility(vm);
+            }
+        }
+
+        private void ApplyMembersListVisibility(ChatDetailInfoViewModel vm)
+        {
+            if (MembersEmptyText != null)
+            {
+                MembersEmptyText.Visibility = vm.HasMembers ? Visibility.Collapsed : Visibility.Visible;
+            }
+
+            if (MembersList != null)
+            {
+                MembersList.ItemsSource = vm.HasMembers ? vm.Members : null;
+                MembersList.Visibility = vm.HasMembers ? Visibility.Visible : Visibility.Collapsed;
+            }
         }
 
         private void NotificationsToggle_Toggled(object sender, RoutedEventArgs e)
@@ -141,15 +183,21 @@ namespace Unison.Uwp.UI.Controls
                 return;
             }
 
-            if (MembersEmptyText != null)
+            if (vm.IsMembersRosterLoading)
             {
-                MembersEmptyText.Visibility = vm.HasMembers ? Visibility.Collapsed : Visibility.Visible;
-            }
+                if (MembersEmptyText != null)
+                {
+                    MembersEmptyText.Visibility = Visibility.Collapsed;
+                }
 
-            if (MembersList != null)
+                if (MembersList != null)
+                {
+                    MembersList.Visibility = Visibility.Collapsed;
+                }
+            }
+            else
             {
-                MembersList.ItemsSource = vm.HasMembers ? vm.Members : null;
-                MembersList.Visibility = vm.HasMembers ? Visibility.Visible : Visibility.Collapsed;
+                ApplyMembersListVisibility(vm);
             }
 
             MediaPane?.AttachPaging(vm, isFilesPane: false);
@@ -182,7 +230,7 @@ namespace Unison.Uwp.UI.Controls
                 MembersValue.Text = vm.MembersCountText ?? "—";
             }
 
-            ApplyMembersAvatarsLoading();
+            ApplyMembersLoadingUi();
         }
 
         private void BindMediaPanes()

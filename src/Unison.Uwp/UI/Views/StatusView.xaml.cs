@@ -14,12 +14,11 @@ using Unison.Core.ViewModels;
 
 namespace Unison.Uwp.UI.Views
 {
-    /// <summary>Shell content: Status list + viewer (same pane geometry as ChatsView).</summary>
+    /// <summary>Shell content: status list + detail (same ChatPaneStates as ChatsView).</summary>
     public sealed partial class StatusView : Page
     {
         private ShellViewModel _shell;
         private bool _hooked;
-        private bool _hasSelectedAuthor;
         private bool _splitterDragging;
         private bool _splitterHover;
         private double _dragStartX;
@@ -39,6 +38,9 @@ namespace Unison.Uwp.UI.Views
             Loaded += StatusView_Loaded;
         }
 
+        /// <summary>True while Minimal/narrow shows the status viewer full-screen.</summary>
+        public bool HasOpenStatusDetail => _shell != null && _shell.HasOpenStatusDetail;
+
         protected override void OnNavigatedTo(NavigationEventArgs e)
         {
             base.OnNavigatedTo(e);
@@ -51,7 +53,8 @@ namespace Unison.Uwp.UI.Views
                 _hooked = true;
             }
 
-            ApplyPaneState();
+            _shell?.EnterStatusSurface();
+            ApplyChatPaneState();
         }
 
         protected override void OnNavigatedFrom(NavigationEventArgs e)
@@ -66,18 +69,20 @@ namespace Unison.Uwp.UI.Views
             }
 
             _ = StatusDetailPart.ClearAsync();
+            _shell?.LeaveStatusSurface();
         }
 
         private void StatusView_Loaded(object sender, RoutedEventArgs e)
         {
-            ApplyPaneState();
+            ApplyChatPaneState();
         }
 
         private void Shell_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
-            if (e.PropertyName == nameof(ShellViewModel.IsNarrowWindow))
+            if (e.PropertyName == nameof(ShellViewModel.ChatPane) ||
+                e.PropertyName == nameof(ShellViewModel.IsNarrowWindow))
             {
-                ApplyPaneState();
+                ApplyChatPaneState();
             }
             else if (e.PropertyName == nameof(ShellViewModel.ChatListPaneWidth) && IsWideBoth())
             {
@@ -86,18 +91,20 @@ namespace Unison.Uwp.UI.Views
             }
         }
 
-        private void ApplyPaneState()
+        private void ApplyChatPaneState()
         {
-            bool narrow = _shell != null && _shell.IsNarrowWindow;
-            string state = !narrow
-                ? ShellViewModel.PaneWideBoth
-                : (_hasSelectedAuthor ? ShellViewModel.PaneNarrowDetail : ShellViewModel.PaneNarrowList);
-            VisualStateManager.GoToState(this, state, false);
+            if (_shell == null)
+            {
+                return;
+            }
 
-            bool wideBoth = string.Equals(state, ShellViewModel.PaneWideBoth, StringComparison.Ordinal);
+            string pane = _shell.ChatPane;
+            VisualStateManager.GoToState(this, pane, false);
+
+            bool wideBoth = string.Equals(pane, ShellViewModel.PaneWideBoth, StringComparison.Ordinal);
             if (wideBoth)
             {
-                ApplyListWidth(_shell != null ? _shell.ChatListPaneWidth : ChatPaneLayoutConstants.DefaultListWidth);
+                ApplyListWidth(_shell.ChatListPaneWidth);
                 UpdateSplitterPosition();
                 UpdateSplitterChrome();
             }
@@ -128,6 +135,7 @@ namespace Unison.Uwp.UI.Views
         {
             return _shell != null &&
                    !_shell.IsNarrowWindow &&
+                   string.Equals(_shell.ChatPane, ShellViewModel.PaneWideBoth, StringComparison.Ordinal) &&
                    PaneSplitter.Visibility == Visibility.Visible;
         }
 
@@ -348,6 +356,7 @@ namespace Unison.Uwp.UI.Views
 
         private async void StatusListPart_AuthorSelected(object sender, StatusAuthorSelectedEventArgs e)
         {
+            // Same shape as ChatsView ChatListPart_ChatSelected → SelectChat + ApplyChatPaneState.
             if (e?.Author == null)
             {
                 return;
@@ -355,13 +364,32 @@ namespace Unison.Uwp.UI.Views
 
             try
             {
+                _shell?.SelectStatusDetail(true);
+                ApplyChatPaneState();
+
                 await StatusDetailPart.OpenAuthorAsync(e.Author);
-                _hasSelectedAuthor = StatusDetailPart.HasOpenAuthor;
-                ApplyPaneState();
+                if (!StatusDetailPart.HasOpenAuthor)
+                {
+                    Debug.WriteLine("[StatusView] Open status did not activate UI for " + e.Author.Jid);
+                    StatusListPart.ClearSelection();
+                    _shell?.SelectStatusDetail(false);
+                    ApplyChatPaneState();
+                }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine("[StatusView] Failed to open status: " + ex.Message);
+                Debug.WriteLine("[StatusView] Failed to open status: " + ex);
+                try
+                {
+                    StatusListPart.ClearSelection();
+                    await StatusDetailPart.ClearAsync();
+                }
+                catch
+                {
+                }
+
+                _shell?.SelectStatusDetail(false);
+                ApplyChatPaneState();
             }
         }
 
@@ -374,11 +402,11 @@ namespace Unison.Uwp.UI.Views
             }
             catch (Exception ex)
             {
-                Debug.WriteLine("[StatusView] Failed to clear status: " + ex.Message);
+                Debug.WriteLine("[StatusView] Failed to clear status: " + ex);
             }
 
-            _hasSelectedAuthor = false;
-            ApplyPaneState();
+            _shell?.SelectStatusDetail(false);
+            ApplyChatPaneState();
         }
 
         private void StatusListPart_MenuClicked(object sender, EventArgs e)
@@ -405,7 +433,10 @@ namespace Unison.Uwp.UI.Views
 
         public bool TryHandleBack()
         {
-            if (_hasSelectedAuthor)
+            if (HasOpenStatusDetail ||
+                (_shell != null &&
+                 _shell.IsNarrowWindow &&
+                 string.Equals(_shell.ChatPane, ShellViewModel.PaneNarrowDetail, StringComparison.Ordinal)))
             {
                 _ = CloseDetailAsync();
                 return true;

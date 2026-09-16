@@ -1,5 +1,5 @@
 using System;
-using Unison.Core.Contracts.WhatsApp;
+using Unison.Core.Contracts;
 using Unison.Core.Models;
 
 namespace Unison.Core.Helpers
@@ -11,21 +11,21 @@ namespace Unison.Core.Helpers
     {
         public static bool IsSelf(
             string participantJid,
-            IWhatsAppService whatsApp,
+            IJidResolver jids,
             Profile me = null)
         {
-            if (string.IsNullOrWhiteSpace(participantJid) || whatsApp == null)
+            if (string.IsNullOrWhiteSpace(participantJid) || jids == null)
             {
                 return false;
             }
 
-            me = me ?? whatsApp.CurrentProfile;
+            me = me ?? jids.Self;
             if (me == null)
             {
                 return false;
             }
 
-            string probe = whatsApp.GetCanonicalJid(participantJid)
+            string probe = jids.GetCanonicalJid(participantJid)
                            ?? JidHelper.Normalize(participantJid);
             string probeNorm = JidHelper.Normalize(participantJid) ?? participantJid;
             if (string.IsNullOrWhiteSpace(probe) && string.IsNullOrWhiteSpace(probeNorm))
@@ -33,8 +33,8 @@ namespace Unison.Core.Helpers
                 return false;
             }
 
-            if (Matches(probe, probeNorm, me.Id, whatsApp)
-                || Matches(probe, probeNorm, me.Lid, whatsApp))
+            if (Matches(probe, probeNorm, me.Id, jids)
+                || Matches(probe, probeNorm, me.Lid, jids))
             {
                 return true;
             }
@@ -53,7 +53,7 @@ namespace Unison.Core.Helpers
             string probeCanonical,
             string probeNormalized,
             string selfRaw,
-            IWhatsAppService whatsApp)
+            IJidResolver jids)
         {
             if (string.IsNullOrWhiteSpace(selfRaw))
             {
@@ -61,8 +61,8 @@ namespace Unison.Core.Helpers
             }
 
             string selfNorm = JidHelper.Normalize(selfRaw) ?? selfRaw;
-            string selfCanonical = whatsApp != null
-                ? (whatsApp.GetCanonicalJid(selfRaw) ?? selfNorm)
+            string selfCanonical = jids != null
+                ? (jids.GetCanonicalJid(selfRaw) ?? selfNorm)
                 : selfNorm;
 
             return (!string.IsNullOrWhiteSpace(probeNormalized) &&

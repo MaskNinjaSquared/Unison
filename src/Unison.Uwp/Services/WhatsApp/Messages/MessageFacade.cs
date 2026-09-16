@@ -24,6 +24,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
         private readonly IReactionMapper _reactionMapper;
         private readonly HistoryFacade _history;
         private readonly IHistoryMessageStore _historyMessageStore;
+        private readonly IJidResolver _jids;
         private readonly int _sqlOpenPageSize;
         private readonly int _sqlLoadMorePageSize;
         private readonly int _thinTimelineThreshold;
@@ -35,8 +36,10 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             IReactionMapper reactionMapper,
             HistoryFacade history,
             IHistoryMessageStore historyMessageStore,
+            IJidResolver jids,
             ISystemInfoProvider systemInfo = null)
         {
+            _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
             _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
             _chatMessageMapper = chatMessageMapper ?? throw new ArgumentNullException(nameof(chatMessageMapper));
@@ -44,10 +47,12 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             _history = history ?? throw new ArgumentNullException(nameof(history));
             _historyMessageStore = historyMessageStore
                 ?? throw new ArgumentNullException(nameof(historyMessageStore));
+            // systemInfo kept in the ctor for DI compatibility; page sizes match desktop on all devices.
+            _ = systemInfo;
 
-            bool mobile = systemInfo != null && systemInfo.IsMobile();
-            _sqlOpenPageSize = mobile ? 30 : 50;
-            _sqlLoadMorePageSize = mobile ? 20 : 30;
+            // Same SQLite page sizes as desktop (Mobile used to use 30/20).
+            _sqlOpenPageSize = 50;
+            _sqlLoadMorePageSize = 30;
             _thinTimelineThreshold = Math.Max(5, _sqlOpenPageSize - ThinTimelineOnDemandMargin);
 
             // Both live as long as the app does, so there is nothing to unhook from.
@@ -315,7 +320,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             AddKey(jid);
             try
             {
-                AddKey(_whatsAppService.GetCanonicalJid(jid));
+                AddKey(_jids.GetCanonicalJid(jid));
             }
             catch
             {
@@ -325,8 +330,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             {
                 string norm = JidHelper.Normalize(jid);
                 if (!string.IsNullOrWhiteSpace(norm) &&
-                    _whatsAppService.JidAlias != null &&
-                    _whatsAppService.JidAlias.TryGetValue(norm, out string alias))
+                    _jids.TryGetAlias(norm, out string alias))
                 {
                     AddKey(alias);
                 }

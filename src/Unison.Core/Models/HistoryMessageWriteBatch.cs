@@ -28,6 +28,12 @@ namespace Unison.Core.Models
         /// </summary>
         public List<string> ReactionOwnerMessageIds { get; } = new List<string>();
 
+        /// <summary>
+        /// When true, message bodies already in SQLite are left alone (history reconnect delta).
+        /// Pins / reactions / revokes in this batch still apply. Live upserts leave this false.
+        /// </summary>
+        public bool PreferDeltaSkipExistingBodies { get; set; }
+
         public bool IsEmpty
         {
             get

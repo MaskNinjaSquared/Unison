@@ -126,12 +126,12 @@ namespace Unison.Uwp.UI.Controls
             host.OpenInfoImage(vm);
         }
 
-        public static ChatDetailView FindChatDetail(DependencyObject start)
+        public static IChatDetailSurface FindChatDetail(DependencyObject start)
         {
             var current = start;
             while (current != null)
             {
-                var view = current as ChatDetailView;
+                var view = current as IChatDetailSurface;
                 if (view != null)
                 {
                     return view;

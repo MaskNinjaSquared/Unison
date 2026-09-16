@@ -123,7 +123,8 @@ namespace Unison.Core.Helpers
         /// <summary>
         /// Push names travel in <see cref="HistorySync.Pushnames"/>, not on every envelope, so a
         /// history chunk's <c>WebMessageInfo.PushName</c> is usually empty. Indexed by normalized
-        /// JID and by bare phone/user so a LID participant still matches its PN entry.
+        /// JID. Bare phone keys are added only for PN (@s.whatsapp.net) so LID bare digits cannot
+        /// steal another person's push name.
         /// </summary>
         public static Dictionary<string, string> BuildPushNameMap(HistorySync sync)
         {
@@ -147,10 +148,15 @@ namespace Unison.Core.Helpers
                     map[jid] = name;
                 }
 
-                string bare = BareUser(jid);
-                if (!string.IsNullOrWhiteSpace(bare) && !map.ContainsKey(bare))
+                // PN only: bare phone → name. Never index @lid user parts (collides across people).
+                if (!string.IsNullOrWhiteSpace(jid) &&
+                    jid.EndsWith("@s.whatsapp.net", StringComparison.OrdinalIgnoreCase))
                 {
-                    map[bare] = name;
+                    string bare = BareUser(jid);
+                    if (!string.IsNullOrWhiteSpace(bare) && !map.ContainsKey(bare))
+                    {
+                        map[bare] = name;
+                    }
                 }
             }
 
@@ -179,17 +185,27 @@ namespace Unison.Core.Helpers
             }
 
             string name;
+            string normalized = JidHelper.Normalize(participantJid) ?? participantJid;
+            if (pushNamesByJid.TryGetValue(normalized, out name) && !string.IsNullOrWhiteSpace(name))
+            {
+                return name.Trim();
+            }
+
             if (pushNamesByJid.TryGetValue(participantJid, out name) && !string.IsNullOrWhiteSpace(name))
             {
                 return name.Trim();
             }
 
-            string bare = BareUser(participantJid);
-            if (!string.IsNullOrWhiteSpace(bare) &&
-                pushNamesByJid.TryGetValue(bare, out name) &&
-                !string.IsNullOrWhiteSpace(name))
+            // Bare lookup only for PN participants (phone digits). LID bare must not hit PN map.
+            if (normalized.EndsWith("@s.whatsapp.net", StringComparison.OrdinalIgnoreCase))
             {
-                return name.Trim();
+                string bare = BareUser(normalized);
+                if (!string.IsNullOrWhiteSpace(bare) &&
+                    pushNamesByJid.TryGetValue(bare, out name) &&
+                    !string.IsNullOrWhiteSpace(name))
+                {
+                    return name.Trim();
+                }
             }
 
             return null;

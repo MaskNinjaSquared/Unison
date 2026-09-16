@@ -26,12 +26,14 @@ namespace Unison.Core.ViewModels
         public const string PaneNarrowList = "NarrowList";
         public const string PaneNarrowDetail = "NarrowDetail";
 
-        private readonly IWhatsAppService _whatsAppService;
-
         /// <summary>The chat list, read from its owner rather than from the service that fills it.</summary>
         private readonly IChatStateStore _chatState;
 
+        /// <summary>Launch order, registration and the socket. The shell drives all three.</summary>
         private readonly IConnectionService _connectionService;
+
+        /// <summary>Only for the unread total behind the tile badge.</summary>
+        private readonly IChatService _chatService;
         private readonly IProfileService _profileService;
         private readonly IDispatcher _dispatcher;
         private readonly INotificationService _notificationService;
@@ -53,6 +55,7 @@ namespace Unison.Core.ViewModels
         private string _chatPane = PaneWideBoth;
         private bool _isNarrowWindow;
         private bool _hasActiveChat;
+        private bool _statusDetailOpen;
         private ChatItem _pendingChat;
         private string _pendingOpenChatJid;
         private bool _initialized;
@@ -68,9 +71,9 @@ namespace Unison.Core.ViewModels
         public bool SuppressRootNavigation { get; set; }
 
         public ShellViewModel(
-            IWhatsAppService whatsAppService,
             IChatStateStore chatState,
             IConnectionService connectionService,
+            IChatService chatService,
             IProfileService profileService,
             IDispatcher dispatcher,
             INotificationService notificationService,
@@ -83,9 +86,9 @@ namespace Unison.Core.ViewModels
             ISessionLogger sessionLogger = null,
             IBackgroundAccessPrompt backgroundAccessPrompt = null)
         {
-            _whatsAppService = whatsAppService;
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
-            _connectionService = connectionService;
+            _connectionService = connectionService ?? throw new ArgumentNullException(nameof(connectionService));
+            _chatService = chatService;
             _profileService = profileService;
             _dispatcher = dispatcher;
             _notificationService = notificationService;
@@ -291,6 +294,47 @@ namespace Unison.Core.ViewModels
             (!IsNarrowWindow && HasActiveChat);
 
         /// <summary>
+        /// Status viewer open/close — same ChatPane NarrowDetail/NarrowList flip as <see cref="SelectChat"/>.
+        /// </summary>
+        public void SelectStatusDetail(bool open)
+        {
+            _statusDetailOpen = open;
+            if (IsNarrowWindow)
+            {
+                ChatPane = open ? PaneNarrowDetail : PaneNarrowList;
+            }
+
+            RaiseSystemBackButtonChanged();
+        }
+
+        /// <summary>Entering Status shell page: default to list (or WideBoth).</summary>
+        public void EnterStatusSurface()
+        {
+            _statusDetailOpen = false;
+            SyncStatusPane();
+        }
+
+        /// <summary>Leaving Status: restore chat list/detail pane rules.</summary>
+        public void LeaveStatusSurface()
+        {
+            _statusDetailOpen = false;
+            // ActiveSection may still be Status during NavigatedFrom — do not call SyncChatPane.
+            if (IsNarrowWindow)
+            {
+                bool showDetail = HasActiveChat && PendingChat != null;
+                ChatPane = showDetail ? PaneNarrowDetail : PaneNarrowList;
+            }
+            else
+            {
+                ChatPane = PaneWideBoth;
+            }
+
+            RaiseSystemBackButtonChanged();
+        }
+
+        public bool HasOpenStatusDetail => _statusDetailOpen;
+
+        /// <summary>
         /// Chat the page should open in ChatDetail (set by SelectChat / cleared by ClearChat).
         /// </summary>
         public ChatItem PendingChat
@@ -409,12 +453,12 @@ namespace Unison.Core.ViewModels
                     return;
                 }
 
-                await _whatsAppService.InitializeConnectionStateAsync();
+                await _connectionService.InitializeConnectionStateAsync();
 
                 // Cold start: profile from auth / memory (no network).
                 ApplyProfile(_profileService.GetCurrentProfile());
 
-                if (await _whatsAppService.IsRegisteredAsync())
+                if (await _connectionService.IsRegisteredAsync())
                 {
                     EnterConnectedSurface();
                     _diagnostics.Write("startup", "fast-connect-dispatched");
@@ -447,7 +491,7 @@ namespace Unison.Core.ViewModels
         {
             try
             {
-                if (await _whatsAppService.IsRegisteredAsync())
+                if (await _connectionService.IsRegisteredAsync())
                 {
                     EnterConnectedSurface();
                     return;
@@ -570,7 +614,7 @@ namespace Unison.Core.ViewModels
             {
                 try
                 {
-                    _navigator.NavigateAndClear(NavigationRoutes.Login);
+                    _navigator.NavigateAndClear(NavigationDestination.Login);
                 }
                 catch (Exception ex)
                 {
@@ -581,7 +625,7 @@ namespace Unison.Core.ViewModels
 
             try
             {
-                _navigator.NavigateAndClear(NavigationRoutes.Start);
+                _navigator.NavigateAndClear(NavigationDestination.Start);
             }
             catch (Exception ex)
             {
@@ -601,7 +645,7 @@ namespace Unison.Core.ViewModels
         {
             try
             {
-                _navigator.NavigateAndClear(NavigationRoutes.Boot, "postPairing");
+                _navigator.NavigateAndClear(NavigationDestination.Boot, "postPairing");
                 PairingTrace("NavigateAndClear(Boot postPairing) OK");
             }
             catch (Exception ex)
@@ -622,7 +666,7 @@ namespace Unison.Core.ViewModels
 
             try
             {
-                _navigator.NavigateAndClear(NavigationRoutes.AppShell);
+                _navigator.NavigateAndClear(NavigationDestination.AppShell);
                 PairingTrace("NavigateAndClear(AppShell) OK");
             }
             catch (Exception ex)
@@ -649,7 +693,7 @@ namespace Unison.Core.ViewModels
 
             try
             {
-                _navigator.NavigateAndClear(NavigationRoutes.Start);
+                _navigator.NavigateAndClear(NavigationDestination.Start);
             }
             catch (Exception ex)
             {
@@ -694,7 +738,7 @@ namespace Unison.Core.ViewModels
             // is the flash before QR; NavigateAndClear tears the shell down anyway.
             try
             {
-                _navigator.NavigateAndClear(NavigationRoutes.Login);
+                _navigator.NavigateAndClear(NavigationDestination.Login);
                 PairingTrace("EnterLoginSurface NavigateAndClear(Login) startPairing=" + startPairing);
             }
             catch (Exception ex)
@@ -763,19 +807,23 @@ namespace Unison.Core.ViewModels
                 // re-wire when the route string was already applied.)
                 if (string.Equals(section, NavigationRoutes.Settings, StringComparison.OrdinalIgnoreCase))
                 {
-                    _navigator.NavigateInShell(NavigationRoutes.Settings);
+                    _navigator.OpenSettings();
                 }
                 else if (string.Equals(section, NavigationRoutes.Debug, StringComparison.OrdinalIgnoreCase))
                 {
-                    _navigator.NavigateInShell(NavigationRoutes.Debug);
+                    _navigator.NavigateInShell(NavigationDestination.Debug);
                 }
                 else if (string.Equals(section, NavigationRoutes.Status, StringComparison.OrdinalIgnoreCase))
                 {
-                    _navigator.NavigateInShellAndClear(NavigationRoutes.Status);
+                    _navigator.NavigateInShellAndClear(NavigationDestination.Status);
+                }
+                else if (string.Equals(section, NavigationRoutes.Archived, StringComparison.OrdinalIgnoreCase))
+                {
+                    _navigator.NavigateInShellAndClear(NavigationDestination.Archived);
                 }
                 else
                 {
-                    _navigator.NavigateInShellAndClear(NavigationRoutes.Chats);
+                    _navigator.NavigateInShellAndClear(NavigationDestination.Chats);
                 }
             }
             catch (Exception ex)
@@ -912,6 +960,12 @@ namespace Unison.Core.ViewModels
 
         public void SyncChatPane()
         {
+            if (string.Equals(ActiveSection, NavigationRoutes.Status, StringComparison.OrdinalIgnoreCase))
+            {
+                SyncStatusPane();
+                return;
+            }
+
             if (IsNarrowWindow)
             {
                 // Minimal: chat space only with an open intent (PendingChat) and active flag.
@@ -919,6 +973,20 @@ namespace Unison.Core.ViewModels
                 // cleared PendingChat while SelectChat was switching to NarrowDetail.
                 bool showDetail = HasActiveChat && PendingChat != null;
                 ChatPane = showDetail ? PaneNarrowDetail : PaneNarrowList;
+            }
+            else
+            {
+                ChatPane = PaneWideBoth;
+            }
+
+            RaiseSystemBackButtonChanged();
+        }
+
+        private void SyncStatusPane()
+        {
+            if (IsNarrowWindow)
+            {
+                ChatPane = _statusDetailOpen ? PaneNarrowDetail : PaneNarrowList;
             }
             else
             {
@@ -1035,7 +1103,7 @@ namespace Unison.Core.ViewModels
                 PairingTrace("SessionEstablished → EnterConnectedSurface");
                 Debug.WriteLine("[ShellViewModel] SessionEstablished → AppShell");
                 EnterConnectedSurface();
-                _whatsAppService.StartDeferredStartupMaintenance();
+                _connectionService.StartDeferredStartupMaintenance();
             });
         }
 
@@ -1078,7 +1146,7 @@ namespace Unison.Core.ViewModels
             bool registered;
             try
             {
-                registered = await _whatsAppService.IsRegisteredAsync().ConfigureAwait(false);
+                registered = await _connectionService.IsRegisteredAsync().ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -1113,7 +1181,7 @@ namespace Unison.Core.ViewModels
                 EnterConnectedSurface();
                 try
                 {
-                    _whatsAppService.StartDeferredStartupMaintenance();
+                    _connectionService.StartDeferredStartupMaintenance();
                 }
                 catch (Exception ex)
                 {
@@ -1131,7 +1199,7 @@ namespace Unison.Core.ViewModels
         {
             try
             {
-                await _whatsAppService.EnsureConnectedAsync();
+                await _connectionService.EnsureConnectedAsync();
             }
             catch (Exception ex)
             {
@@ -1157,8 +1225,11 @@ namespace Unison.Core.ViewModels
             try
             {
                 await Task.Delay(120);
-                await _whatsAppService.LoadPersistedUiStateAsync();
-                _notificationService.UpdateBadge(_whatsAppService.GetTotalUnreadCount());
+                await _connectionService.LoadPersistedUiStateAsync();
+                if (_chatService != null)
+                {
+                    _notificationService.UpdateBadge(_chatService.GetTotalUnreadCount());
+                }
                 if (_shortcutService != null)
                 {
                     await _shortcutService.RefreshPinnedUnreadAsync(_chatState.Chats);

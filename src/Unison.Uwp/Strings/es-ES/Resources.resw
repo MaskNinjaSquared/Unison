@@ -606,11 +606,32 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   <data name="Settings_General.Text" xml:space="preserve">
     <value>General</value>
   </data>
+  <data name="Settings_NotificationsSection.Text" xml:space="preserve">
+    <value>Notificaciones</value>
+  </data>
   <data name="Settings_Notifications.Header" xml:space="preserve">
     <value>Notificaciones</value>
   </data>
   <data name="Settings_Notifications.Text" xml:space="preserve">
     <value>Mostrar avisos emergentes y distintivo para mensajes entrantes.</value>
+  </data>
+  <data name="Settings_MessageNotificationSound.Header" xml:space="preserve">
+    <value>Notificaciones de mensajes</value>
+  </data>
+  <data name="Settings_MessageNotificationSound.Text" xml:space="preserve">
+    <value>Sonido de los toasts de chats 1:1.</value>
+  </data>
+  <data name="Settings_GroupNotificationSound.Header" xml:space="preserve">
+    <value>Notificaciones de grupos</value>
+  </data>
+  <data name="Settings_GroupNotificationSound.Text" xml:space="preserve">
+    <value>Sonido de los toasts de mensajes de grupo.</value>
+  </data>
+  <data name="Settings_NotificationSound_SystemDefault.Content" xml:space="preserve">
+    <value>Predeterminado del sistema</value>
+  </data>
+  <data name="Settings_NotificationSound_SystemDefaultGroup.Content" xml:space="preserve">
+    <value>Predeterminado del sistema</value>
   </data>
   <data name="Settings_LiveTiles.Header" xml:space="preserve">
     <value>Live Tiles</value>
@@ -741,7 +762,12 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   <data name="Settings_AppBranch.Text" xml:space="preserve">
     <value>Versión final (Release)</value>
   </data>
-  <data name="Toast_DisconnectedTitle" xml:space="preserve">
+  <data name="Toast_HistorySyncTitle" xml:space="preserve">
+    <value>Sincronizando historial</value>
+  </data>
+  <data name="Toast_HistorySyncBody" xml:space="preserve">
+    <value>Unison está recuperando conversaciones en segundo plano.</value>
+  </data>  <data name="Toast_DisconnectedTitle" xml:space="preserve">
     <value>Unison desconectado</value>
   </data>
   <data name="Toast_DisconnectedBody" xml:space="preserve">
@@ -819,6 +845,21 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   <data name="ChatDetail_ShowContact.Text" xml:space="preserve">
     <value>Ver contacto</value>
   </data>
+  <data name="ChatDetail_VoiceCall.Text" xml:space="preserve">
+    <value>Llamada de voz</value>
+  </data>
+  <data name="ChatDetail_VideoCall.Text" xml:space="preserve">
+    <value>Videollamada</value>
+  </data>
+  <data name="ChatDetail_CallPhoneTitle" xml:space="preserve">
+    <value>¿Iniciar llamada telefónica?</value>
+  </data>
+  <data name="ChatDetail_CallPhoneBody" xml:space="preserve">
+    <value>¿Desea iniciar una llamada telefónica a {0}?</value>
+  </data>
+  <data name="ChatDetail_CallPhoneConfirm" xml:space="preserve">
+    <value>Llamar</value>
+  </data>
   <data name="ChatDetail_AddContact.Text" xml:space="preserve">
     <value>Añadir contacto</value>
   </data>
@@ -860,6 +901,18 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   </data>
   <data name="ChatList_DeleteChat.Text" xml:space="preserve">
     <value>Eliminar chat</value>
+  </data>
+  <data name="ChatList_ArchiveChat.Text" xml:space="preserve">
+    <value>Archivar chat</value>
+  </data>
+  <data name="ChatList_UnarchiveChat.Text" xml:space="preserve">
+    <value>Desarchivar chat</value>
+  </data>
+  <data name="ChatDetail_ArchiveChat.Text" xml:space="preserve">
+    <value>Archivar chat</value>
+  </data>
+  <data name="ChatDetail_UnarchiveChat.Text" xml:space="preserve">
+    <value>Desarchivar chat</value>
   </data>
   <data name="ChatDetail_DeleteChat.Text" xml:space="preserve">
     <value>Eliminar chat</value>
@@ -965,5 +1018,20 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   </data>
   <data name="ChatDetailInfo_DeleteChatBar.Text" xml:space="preserve">
     <value>Eliminar&#x0a;chat</value>
+  </data>
+  <data name="Debug_RuntimeDialog.PrimaryButtonText" xml:space="preserve">
+    <value>Guardar en disco</value>
+  </data>
+  <data name="Debug_RuntimeDialog.CloseButtonText" xml:space="preserve">
+    <value>Cerrar</value>
+  </data>
+  <data name="ChatList_SyncingHistory" xml:space="preserve">
+    <value>Sincronizando historial…</value>
+  </data>
+  <data name="Debug_RuntimeDialogHint.Text" xml:space="preserve">
+    <value>Mantén pulsado / clic derecho en Chats (o el QR) para abrir. Sin texto de mensajes.</value>
+  </data>
+  <data name="Debug_RuntimeDialog.Title" xml:space="preserve">
+    <value>Diagnóstico en tiempo de ejecución</value>
   </data>
 </root>

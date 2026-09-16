@@ -162,6 +162,14 @@
         </Setter>
     </Style>
 
+    <!-- Sent reactions: stay on the right (WhatsApp tip is on the first bubble / top). -->
+    <Style x:Key="ChatDetailSentReactionChipButtonStyle"
+           TargetType="Button"
+           BasedOn="{StaticResource ChatDetailReactionChipButtonStyle}">
+        <Setter Property="HorizontalAlignment" Value="Right"/>
+        <Setter Property="Margin" Value="0,-4,4,0"/>
+    </Style>
+
     <!-- Full-area transparent button (media download overlay; no chrome). -->
     <Style x:Key="TransparentMediaButtonStyle" TargetType="Button">
         <Setter Property="helpers:DesktopCursor.CursorKind" Value="Hand"/>
@@ -1218,5 +1226,14 @@
             </Setter.Value>
         </Setter>
     </Style>
+
+    <!--
+        Zero-padding ContentDialogs (Imgur/Giuraffe): do NOT replace the ControlTemplate.
+        On the dialog, set ContentDialog.Resources:
+          <Thickness x:Key="ContentDialogPadding">0</Thickness>
+          <x:Double x:Key="ContentDialogMaxWidth">960</x:Double>
+        Keep FullSizeDesired="False" and VerticalAlignment="Center".
+        Never set MinWidth/MaxWidth/Width on ContentDialog (breaks horizontal center).
+    -->
 
 </ResourceDictionary>

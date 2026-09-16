@@ -70,26 +70,30 @@ namespace Unison.Core.Models
             }
         }
 
+        /// <summary>
+        /// UnisonIcons PUA glyph for outgoing ticks (EA03 single / EA04 double). Empty when N/A.
+        /// </summary>
         [JsonIgnore]
         public string StatusGlyph
         {
             get
             {
-                // Kept for callers that still expect a glyph string; UI uses StatusCheckmarkUri.
                 if (!IsFromMe || IsSendFailed) return string.Empty;
                 switch ((Status ?? string.Empty).ToLowerInvariant())
                 {
-                    case StatusPending: return "?";
-                    case StatusDelivered: return "??";
-                    case StatusRead: return "??";
+                    case StatusDelivered:
+                    case StatusRead:
+                        return "\uEA04";
+                    case StatusPending:
                     case StatusSent:
-                    default: return "?";
+                    default:
+                        return "\uEA03";
                 }
             }
         }
 
         /// <summary>
-        /// Asset URI for outgoing message ticks (sent / delivered / read).
+        /// Legacy PNG URI for outgoing ticks. Prefer <see cref="StatusGlyph"/> + UnisonIconFont.
         /// </summary>
         [JsonIgnore]
         public string StatusCheckmarkUri
@@ -117,10 +121,16 @@ namespace Unison.Core.Models
         }
 
         [JsonIgnore]
-        public bool HasStatusCheckmark => !string.IsNullOrEmpty(StatusCheckmarkUri);
+        public bool HasStatusCheckmark => !string.IsNullOrEmpty(StatusGlyph);
 
         [JsonIgnore]
         public bool IsReadStatus => string.Equals(Status, StatusRead, StringComparison.OrdinalIgnoreCase);
+
+        [JsonIgnore]
+        public bool ShowReadStatusCheckmark => HasStatusCheckmark && IsReadStatus;
+
+        [JsonIgnore]
+        public bool ShowUnreadStatusCheckmark => HasStatusCheckmark && !IsReadStatus;
 
         [JsonIgnore]
         public bool IsSendFailed => string.Equals(Status, StatusFailed, StringComparison.OrdinalIgnoreCase);
@@ -756,7 +766,7 @@ namespace Unison.Core.Models
             }
         }
 
-        private bool _isRunEnd = true;
+        private bool _isRunEnd;
         public bool IsRunEnd
         {
             get => _isRunEnd;
@@ -770,6 +780,7 @@ namespace Unison.Core.Models
 
         public bool HasImage => !string.IsNullOrWhiteSpace(ImageUri);
         public bool HasCaption => !string.IsNullOrWhiteSpace(Caption);
+        /// <summary>WhatsApp chrome tip (first of run). Unison uses <see cref="IsRunEnd"/>.</summary>
         public bool ShowTail => IsRunStart;
 
         private bool _isFirstOfDay;
@@ -1003,6 +1014,8 @@ namespace Unison.Core.Models
                 nameof(StatusCheckmarkUri),
                 nameof(HasStatusCheckmark),
                 nameof(IsReadStatus),
+                nameof(ShowReadStatusCheckmark),
+                nameof(ShowUnreadStatusCheckmark),
                 nameof(IsSendFailed));
         }
 

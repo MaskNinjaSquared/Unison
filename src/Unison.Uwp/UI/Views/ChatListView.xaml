@@ -29,8 +29,8 @@
         <!-- Title | sync (clipped/ellipsis) | icon cluster — sync must never push or paint over icons. -->
         <Grid Grid.Row="0"  Padding="16,12,16,12" Background="Transparent">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*" MinWidth="0"/>
+                <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             
@@ -41,12 +41,19 @@
                        Foreground="{ThemeResource WhatsAppTextHighBrush}"
                        FontFamily="{StaticResource MainFontSemibold}" 
                        FontWeight="SemiBold"
-                       VerticalAlignment="Center"/>
+                       VerticalAlignment="Center"
+                       TextWrapping="NoWrap"
+                       TextTrimming="CharacterEllipsis"
+                       MaxLines="1"
+                       IsRightTapEnabled="True"
+                       Holding="HeaderTitle_Holding"
+                       RightTapped="HeaderTitle_RightTapped"/>
 
             <Grid x:Name="SyncStatusPanel" Grid.Column="1"
                   
-                  VerticalAlignment="Center" HorizontalAlignment="Stretch"
+                  VerticalAlignment="Center" HorizontalAlignment="Left"
                   Margin="10,0,8,0"
+                  MaxWidth="140"
                   SizeChanged="SyncStatusPanel_SizeChanged"
                   Visibility="{x:Bind ViewModel.ShowSyncStatusInUi, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <Grid.ColumnDefinitions>

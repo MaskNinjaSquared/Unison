@@ -14,6 +14,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
+using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
@@ -30,6 +31,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
         private readonly IWhatsAppService _whatsAppService;
         private readonly IContactService _contacts;
+        private readonly IJidResolver _jids;
 
         private readonly object _gate = new object();
         private readonly HashSet<string> _groupsInFlight = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -39,10 +41,11 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             new Dictionary<string, CancellationTokenSource>(StringComparer.OrdinalIgnoreCase);
         private int _fullHydrateInFlight;
 
-        internal GroupRosterPolicy(IWhatsAppService whatsAppService, IContactService contacts)
+        internal GroupRosterPolicy(IWhatsAppService whatsAppService, IContactService contacts, IJidResolver jids)
         {
             _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
             _contacts = contacts ?? throw new ArgumentNullException(nameof(contacts));
+            _jids = jids ?? throw new ArgumentNullException(nameof(jids));
         }
 
         /// <summary>True while a full-roster <see cref="HydrateAsync"/> pass is running.</summary>
@@ -78,7 +81,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 return;
             }
 
-            string canonical = _whatsAppService.GetCanonicalJid(groupJid);
+            string canonical = _jids.GetCanonicalJid(groupJid);
             if (string.IsNullOrWhiteSpace(canonical))
             {
                 canonical = JidHelper.Normalize(groupJid);
@@ -158,7 +161,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 return;
             }
 
-            string canonical = _whatsAppService.GetCanonicalJid(groupJid);
+            string canonical = _jids.GetCanonicalJid(groupJid);
             if (string.IsNullOrWhiteSpace(canonical))
             {
                 canonical = JidHelper.Normalize(groupJid);
@@ -377,7 +380,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                     continue;
                 }
 
-                string key = _whatsAppService.GetCanonicalJid(raw);
+                string key = _jids.GetCanonicalJid(raw);
                 if (string.IsNullOrWhiteSpace(key))
                 {
                     key = JidHelper.Normalize(raw);
@@ -441,7 +444,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
             if (!string.IsNullOrWhiteSpace(member.Lid))
             {
-                string lidKey = _whatsAppService.GetCanonicalJid(member.Lid);
+                string lidKey = _jids.GetCanonicalJid(member.Lid);
                 if (string.IsNullOrWhiteSpace(lidKey))
                 {
                     lidKey = JidHelper.Normalize(member.Lid);
@@ -503,7 +506,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
         private string MemberKey(GroupMember member)
         {
-            string canonical = _whatsAppService.GetCanonicalJid(member.Jid);
+            string canonical = _jids.GetCanonicalJid(member.Jid);
             if (string.IsNullOrWhiteSpace(canonical))
             {
                 canonical = JidHelper.Normalize(member.Jid);
@@ -522,7 +525,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 }
 
                 if (string.Equals(
-                    _whatsAppService.GetCanonicalJid(chat.JID),
+                    _jids.GetCanonicalJid(chat.JID),
                     groupJid,
                     StringComparison.OrdinalIgnoreCase))
                 {

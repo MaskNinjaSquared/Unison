@@ -26,6 +26,18 @@ namespace Unison.Core.Constants
         /// <summary>Toast notifications for incoming messages (foreground).</summary>
         public const string NotificationsEnabled = "NotificationsEnabled";
 
+        /// <summary>
+        /// Toast sound for 1:1 messages (<see cref="NotificationSound"/> as int).
+        /// Same key string is read by Unison.Background.
+        /// </summary>
+        public const string MessageNotificationSound = "MessageNotificationSound";
+
+        /// <summary>
+        /// Toast sound for group messages (<see cref="NotificationSound"/> as int).
+        /// Same key string is read by Unison.Background.
+        /// </summary>
+        public const string GroupNotificationSound = "GroupNotificationSound";
+
         /// <summary>Primary Live Tile updates.</summary>
         public const string LiveTilesEnabled = "LiveTilesEnabled";
 
@@ -107,6 +119,8 @@ namespace Unison.Core.Constants
                 { SocketBrokerTaskRegistrationMarker, "" },
                 { ReconnectToastActive, false },
                 { NotificationsEnabled, true },
+                { MessageNotificationSound, (int)NotificationSound.SystemDefault },
+                { GroupNotificationSound, (int)NotificationSound.SystemDefault },
                 { LiveTilesEnabled, true },
                 { LocationKeepAliveEnabled, false },
                 { AutoUnlinkOnLogoutEnabled, false },

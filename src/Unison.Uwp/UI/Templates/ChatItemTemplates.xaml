@@ -94,6 +94,25 @@
                             <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE74F;"/>
                         </MenuFlyoutItem.Icon>
                     </MenuFlyoutItem>
+                    <MenuFlyoutItem Tag="archiveChat"
+                                   x:Uid="ChatList_ArchiveChat"
+                                   Text="Archive chat"
+                                   Style="{StaticResource ModernMenuFlyoutItemStyle}"
+                                   Click="ArchiveChat_Click">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE7B8;"/>
+                        </MenuFlyoutItem.Icon>
+                    </MenuFlyoutItem>
+                    <MenuFlyoutItem Tag="unarchiveChat"
+                                   x:Uid="ChatList_UnarchiveChat"
+                                   Text="Unarchive chat"
+                                   Visibility="Collapsed"
+                                   Style="{StaticResource ModernMenuFlyoutItemStyle}"
+                                   Click="UnarchiveChat_Click">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE7B8;"/>
+                        </MenuFlyoutItem.Icon>
+                    </MenuFlyoutItem>
                     <MenuFlyoutSeparator/>
                     <MenuFlyoutItem Tag="deleteChat"
                                    x:Uid="ChatList_DeleteChat"

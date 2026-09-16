@@ -19,7 +19,7 @@ namespace Unison.Core.State
     {
         private readonly IChatStateStore _chatState;
         private readonly IPersonStore _personStore;
-        private readonly IWhatsAppService _whatsApp;
+        private readonly IJidResolver _jids;
         private readonly IStringResources _strings;
         private readonly IDispatcher _dispatcher;
 
@@ -39,13 +39,13 @@ namespace Unison.Core.State
         public ChatAuthorProjection(
             IChatStateStore chatState,
             IPersonStore personStore,
-            IWhatsAppService whatsApp,
+            IJidResolver jids,
             IStringResources strings,
             IDispatcher dispatcher)
         {
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
-            _whatsApp = whatsApp;
+            _jids = jids;
             _strings = strings;
             _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
         }
@@ -132,7 +132,8 @@ namespace Unison.Core.State
                 }
 
                 string resolved = ResolveParticipantDisplayName(participant);
-                if (string.IsNullOrWhiteSpace(resolved))
+                if (string.IsNullOrWhiteSpace(resolved) ||
+                    !IsUsableParticipantLabel(resolved, participant))
                 {
                     // Nothing in memory. The name may still be on disk from an earlier session.
                     if (MarkForWarmUp(participant))
@@ -143,7 +144,15 @@ namespace Unison.Core.State
                     continue;
                 }
 
-                if (string.Equals(resolved, chat.LastMessageSenderName, StringComparison.Ordinal))
+                // Keep a real human strip label; phone/LID placeholders must upgrade when a name arrives.
+                string current = chat.LastMessageSenderName;
+                if (IsUsableParticipantLabel(current, participant) &&
+                    !string.Equals(current, resolved, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (string.Equals(resolved, current, StringComparison.Ordinal))
                 {
                     continue;
                 }
@@ -200,7 +209,7 @@ namespace Unison.Core.State
                         continue;
                     }
 
-                    string canonical = _whatsApp?.GetCanonicalJid(jid);
+                    string canonical = _jids?.GetCanonicalJid(jid);
                     if (string.IsNullOrWhiteSpace(canonical) ||
                         string.Equals(canonical, jid, StringComparison.OrdinalIgnoreCase))
                     {
@@ -237,7 +246,7 @@ namespace Unison.Core.State
                 return name;
             }
 
-            string canonical = _whatsApp?.GetCanonicalJid(participantJid);
+            string canonical = _jids?.GetCanonicalJid(participantJid);
             if (!string.IsNullOrWhiteSpace(canonical) &&
                 !string.Equals(canonical, participantJid, StringComparison.OrdinalIgnoreCase))
             {
@@ -279,18 +288,25 @@ namespace Unison.Core.State
         }
 
         /// <summary>
-        /// A label equal to the JID's own digits is not a name — using it would just re-print the
-        /// LID we are trying to replace.
+        /// Real display name only — not empty, not a raw JID/user part, not a phone-like digit string.
+        /// Phone vs LID bare used to look "usable" and then blocked upgrades to the real name.
         /// </summary>
-        private static bool IsUsableParticipantLabel(string candidate, string jid)
+        private bool IsUsableParticipantLabel(string candidate, string jid)
         {
-            if (string.IsNullOrWhiteSpace(candidate))
+            if (!GroupParticipantResolver.IsUsableDisplayLabel(candidate, jid))
             {
                 return false;
             }
 
-            string bare = (jid ?? string.Empty).Split('@')[0].Split(':')[0];
-            return !string.Equals(candidate.Trim(), bare, StringComparison.OrdinalIgnoreCase);
+            string canonical = _jids?.GetCanonicalJid(jid);
+            if (!string.IsNullOrWhiteSpace(canonical) &&
+                !string.Equals(canonical, jid, StringComparison.OrdinalIgnoreCase) &&
+                !GroupParticipantResolver.IsUsableDisplayLabel(candidate, canonical))
+            {
+                return false;
+            }
+
+            return true;
         }
     }
 }

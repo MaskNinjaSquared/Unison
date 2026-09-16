@@ -1,7 +1,8 @@
 using System;
-using System.Collections.Generic;
 using Unison.Core.Constants;
 using Unison.Core.Contracts;
+using Unison.Core.Models;
+using Unison.Uwp.Services.Themes;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Navigation;
 
@@ -10,30 +11,13 @@ namespace Unison.Uwp.Services
     public class NavigatorService : INavigator
     {
         private readonly Frame _rootFrame;
+        private readonly IShellNavigationStrategy _shellNav;
         private Frame _shellFrame;
 
-        private static readonly Dictionary<string, Type> RootRoutes =
-            new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
-            {
-                { NavigationRoutes.Boot, typeof(UI.Views.BootView) },
-                { NavigationRoutes.Start, typeof(UI.Views.StartView) },
-                { NavigationRoutes.Login, typeof(UI.Views.LoginView) },
-                { NavigationRoutes.AppShell, typeof(MainView) },
-                { NavigationRoutes.Main, typeof(MainView) },
-            };
-
-        private static readonly Dictionary<string, Type> ShellRoutes =
-            new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
-            {
-                { NavigationRoutes.Chats, typeof(UI.Views.ChatsView) },
-                { NavigationRoutes.Status, typeof(UI.Views.StatusView) },
-                { NavigationRoutes.Settings, typeof(UI.Views.SettingsView) },
-                { NavigationRoutes.Debug, typeof(UI.Views.DebugView) },
-            };
-
-        public NavigatorService(Frame frame)
+        public NavigatorService(Frame frame, IShellNavigationStrategy shellNav)
         {
             _rootFrame = frame ?? throw new ArgumentNullException(nameof(frame));
+            _shellNav = shellNav ?? throw new ArgumentNullException(nameof(shellNav));
         }
 
         public bool CanGoBack => _rootFrame?.CanGoBack ?? false;
@@ -60,14 +44,14 @@ namespace Unison.Uwp.Services
             }
         }
 
-        public void Navigate(string destination, object parameter = null)
+        public void Navigate(NavigationDestination destination, object parameter = null)
         {
-            NavigateCore(_rootFrame, RootRoutes, destination, parameter, clearStack: false);
+            NavigateCore(_rootFrame, _shellNav.ResolveRootPage(destination), parameter, clearStack: false);
         }
 
-        public void NavigateAndClear(string destination, object parameter = null)
+        public void NavigateAndClear(NavigationDestination destination, object parameter = null)
         {
-            NavigateCore(_rootFrame, RootRoutes, destination, parameter, clearStack: true);
+            NavigateCore(_rootFrame, _shellNav.ResolveRootPage(destination), parameter, clearStack: true);
         }
 
         public void GoBack()
@@ -83,14 +67,37 @@ namespace Unison.Uwp.Services
             ClearFrameBackStack(_rootFrame);
         }
 
-        public void NavigateInShell(string destination, object parameter = null)
+        public void NavigateInShell(NavigationDestination destination, object parameter = null)
         {
-            NavigateCore(_shellFrame, ShellRoutes, destination, parameter, clearStack: false);
+            if (destination == NavigationDestination.Settings)
+            {
+                OpenSettings();
+                return;
+            }
+
+            NavigateCore(_shellFrame, _shellNav.ResolveShellPage(destination), parameter, clearStack: false);
         }
 
-        public void NavigateInShellAndClear(string destination, object parameter = null)
+        public void NavigateInShellAndClear(NavigationDestination destination, object parameter = null)
         {
-            NavigateCore(_shellFrame, ShellRoutes, destination, parameter, clearStack: true);
+            if (destination == NavigationDestination.Settings)
+            {
+                OpenSettings();
+                return;
+            }
+
+            NavigateCore(_shellFrame, _shellNav.ResolveShellPage(destination), parameter, clearStack: true);
+        }
+
+        public void OpenSettings()
+        {
+            if (_shellFrame == null)
+            {
+                throw new InvalidOperationException("Shell frame is not ready for OpenSettings.");
+            }
+
+            _shellNav.OpenSettings(_shellFrame);
+            RaiseShellNavigated();
         }
 
         public void GoBackInShell()
@@ -132,31 +139,11 @@ namespace Unison.Uwp.Services
             ShellNavigated?.Invoke(this, CurrentShellRoute);
         }
 
-        private static string ResolveShellRoute(object content)
+        private string ResolveShellRoute(object content)
         {
-            if (content == null)
+            if (_shellNav.TryResolveShellDestination(content, out NavigationDestination destination))
             {
-                return null;
-            }
-
-            if (content is UI.Views.SettingsView)
-            {
-                return NavigationRoutes.Settings;
-            }
-
-            if (content is UI.Views.DebugView)
-            {
-                return NavigationRoutes.Debug;
-            }
-
-            if (content is UI.Views.StatusView)
-            {
-                return NavigationRoutes.Status;
-            }
-
-            if (content is UI.Views.ChatsView)
-            {
-                return NavigationRoutes.Chats;
+                return NavigationRoutes.ToRouteKey(destination);
             }
 
             return null;
@@ -164,19 +151,18 @@ namespace Unison.Uwp.Services
 
         private static void NavigateCore(
             Frame frame,
-            Dictionary<string, Type> routes,
-            string destination,
+            Type pageType,
             object parameter,
             bool clearStack)
         {
             if (frame == null)
             {
-                throw new InvalidOperationException("Navigation frame is not ready for '" + destination + "'.");
+                throw new InvalidOperationException("Navigation frame is not ready.");
             }
 
-            if (!routes.TryGetValue(destination, out var pageType))
+            if (pageType == null)
             {
-                throw new ArgumentException("Unknown route: '" + destination + "'");
+                throw new ArgumentNullException(nameof(pageType));
             }
 
             // Same page already showing — still remount when clearing so logout → login → shell

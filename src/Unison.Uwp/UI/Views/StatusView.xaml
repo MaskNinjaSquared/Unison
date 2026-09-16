@@ -8,10 +8,12 @@
     <Grid x:Name="RootContentGrid"
           Background="{ThemeResource WhatsAppBackgroundBrush}"
           SizeChanged="RootContentGrid_SizeChanged">
+        <!-- ChatPaneStates: pane modes (not LayoutStates Minimal/Extended/ExtendedWide). -->
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup x:Name="ChatPaneStates">
                 <VisualState x:Name="WideBoth">
                     <VisualState.Setters>
+                        <!-- Geometry: ChatPaneLayoutConstants (min/max/splitter). -->
                         <Setter Target="Column0.MinWidth" Value="280"/>
                         <Setter Target="Column0.MaxWidth" Value="720"/>
                         <Setter Target="Column1.Width" Value="*"/>
@@ -58,6 +60,7 @@
                               AuthorSelected="StatusListPart_AuthorSelected"/>
         <views:StatusDetailView x:Name="StatusDetailPart" Grid.Column="1"/>
 
+        <!-- Side-by-side resize grip (ChatPaneLayoutConstants.SplitterWidth / Overlap*). -->
         <Border x:Name="PaneSplitter"
                 Grid.ColumnSpan="2"
                 Width="10"

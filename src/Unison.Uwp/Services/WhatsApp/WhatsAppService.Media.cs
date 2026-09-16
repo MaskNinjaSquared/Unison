@@ -22,6 +22,7 @@ using Windows.Storage;
 using Windows.ApplicationModel.Core;
 using Windows.Networking.Sockets;
 using System.Runtime.InteropServices.WindowsRuntime;
+using Unison.Uwp.Helpers;
 
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
@@ -191,8 +192,209 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         /// <summary>
-        /// Stickers are often WebP; BitmapImage on older UWP builds may fail silently.
-        /// Re-encode to PNG when the platform decoder can read the payload.
+        /// Always keeps the original payload on disk. When the OS has no WebP codec
+        /// (typical on W10M), also writes a PNG display sibling via libwebp and returns
+        /// that URI for <see cref="ChatMessage.ImageUri"/>.
+        /// </summary>
+        private async Task<string> SaveImageBytesForDisplayAsync(byte[] imageBytes, string fileBase, string mimeType)
+        {
+            if (imageBytes == null || imageBytes.Length == 0)
+            {
+                return null;
+            }
+
+            string effectiveMime = mimeType;
+            bool isWebP = WebPHelpers.IsWebPMime(effectiveMime) || WebPHelpers.IsWebPPayload(imageBytes);
+            if (isWebP && !WebPHelpers.IsWebPMime(effectiveMime))
+            {
+                effectiveMime = "image/webp";
+            }
+
+            string originalUri = await SaveImageBytesToCacheAsync(
+                imageBytes,
+                fileBase,
+                effectiveMime ?? "image/jpeg");
+            if (string.IsNullOrWhiteSpace(originalUri))
+            {
+                return null;
+            }
+
+            if (!isWebP)
+            {
+                return originalUri;
+            }
+
+            // Always derive a PNG display sibling when there is no system WebP codec (W10M).
+            // Desktop with codec keeps the original .webp URI.
+            if (WebPHelpers.HasWebPCodec)
+            {
+                return originalUri;
+            }
+
+            return await ConvertWebPBytesToDisplayPngAsync(imageBytes, fileBase) ?? originalUri;
+        }
+
+        /// <summary>
+        /// When <see cref="ChatMessage.ImageUri"/> still points at a cached .webp and the OS
+        /// cannot decode WebP, rebuild <c>{base}_display.png</c> from that file and retarget the URI.
+        /// </summary>
+        private async Task<string> EnsureWebPDisplayUriAsync(ChatMessage message)
+        {
+            if (message == null)
+            {
+                return null;
+            }
+
+            string uri = message.ImageUri;
+            if (string.IsNullOrWhiteSpace(uri))
+            {
+                return uri;
+            }
+
+            if (WebPHelpers.HasWebPCodec || !IsWebPCacheUri(uri))
+            {
+                return uri;
+            }
+
+            string fileName = uri;
+            int slash = uri.LastIndexOf('/');
+            if (slash >= 0 && slash < uri.Length - 1)
+            {
+                fileName = uri.Substring(slash + 1);
+            }
+
+            string fileBase = Path.GetFileNameWithoutExtension(fileName);
+            if (string.IsNullOrWhiteSpace(fileBase))
+            {
+                return uri;
+            }
+
+            // Already a display sibling name — nothing to do.
+            if (fileBase.EndsWith("_display", StringComparison.OrdinalIgnoreCase))
+            {
+                return uri;
+            }
+
+            string displayFileBase = fileBase + "_display";
+            var existingDisplay = await TryGetCachedImageUriAsync(displayFileBase, "image/png");
+            if (!string.IsNullOrWhiteSpace(existingDisplay))
+            {
+                if (!string.Equals(message.ImageUri, existingDisplay, StringComparison.OrdinalIgnoreCase))
+                {
+                    message.ImageUri = existingDisplay;
+                    await PersistMessageImageUriAsync(message);
+                }
+
+                return existingDisplay;
+            }
+
+            byte[] webpBytes = await TryReadCachedImageBytesAsync(uri);
+            if (webpBytes == null || webpBytes.Length == 0)
+            {
+                Debug.WriteLine("[WhatsAppService] WebP repair: could not read " + uri);
+                return uri;
+            }
+
+            string displayUri = await ConvertWebPBytesToDisplayPngAsync(webpBytes, fileBase);
+            if (string.IsNullOrWhiteSpace(displayUri))
+            {
+                Debug.WriteLine("[WhatsAppService] WebP repair: convert failed for " + uri);
+                return uri;
+            }
+
+            message.ImageUri = displayUri;
+            await PersistMessageImageUriAsync(message);
+            return displayUri;
+        }
+
+        private async Task<string> ConvertWebPBytesToDisplayPngAsync(byte[] imageBytes, string fileBase)
+        {
+            string displayFileBase =
+                (string.IsNullOrWhiteSpace(fileBase) ? Guid.NewGuid().ToString("N") : fileBase) + "_display";
+
+            var existingDisplay = await TryGetCachedImageUriAsync(displayFileBase, "image/png");
+            if (!string.IsNullOrWhiteSpace(existingDisplay))
+            {
+                return existingDisplay;
+            }
+
+            byte[] png = await WebPDecoder.TryDecodeToPngAsync(imageBytes);
+            if (png == null || png.Length == 0)
+            {
+                png = await TryEncodeImageBytesAsPngAsync(imageBytes);
+            }
+
+            if (png == null || png.Length == 0)
+            {
+                return null;
+            }
+
+            return await SaveImageBytesToCacheAsync(png, displayFileBase, "image/png");
+        }
+
+        private static bool IsWebPCacheUri(string uri)
+        {
+            return !string.IsNullOrWhiteSpace(uri)
+                && uri.EndsWith(".webp", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private async Task<byte[]> TryReadCachedImageBytesAsync(string msAppDataUri)
+        {
+            try
+            {
+                var file = await StorageFile.GetFileFromApplicationUriAsync(new Uri(msAppDataUri));
+                var buffer = await FileIO.ReadBufferAsync(file);
+                return buffer.ToArray();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[WhatsAppService] Read cache failed: " + ex.Message);
+                return null;
+            }
+        }
+
+        private async Task PersistMessageImageUriAsync(ChatMessage message)
+        {
+            try
+            {
+                string chatJid = GetCanonicalJid(message.RemoteJid);
+                if (!string.IsNullOrWhiteSpace(chatJid))
+                {
+                    await SaveMessageAsync(chatJid, message);
+                    QueueChatMessagesChanged(chatJid);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[WhatsAppService] Persist ImageUri failed: " + ex.Message);
+            }
+        }
+
+        private async Task<string> TryGetCachedImageUriAsync(string fileBase, string mimeType)
+        {
+            try
+            {
+                var local = ApplicationData.Current.LocalFolder;
+                var mediaFolder = await local.CreateFolderAsync("MediaCache", CreationCollisionOption.OpenIfExists);
+                var imageFolder = await mediaFolder.CreateFolderAsync("Images", CreationCollisionOption.OpenIfExists);
+                string safeBase = SanitizeCacheFileBase(fileBase);
+                string fileName = safeBase + GetImageFileExtension(mimeType);
+                var existing = await imageFolder.TryGetItemAsync(fileName) as StorageFile;
+                if (existing != null)
+                {
+                    return $"ms-appdata:///local/MediaCache/Images/{fileName}";
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[WhatsAppService] Cache lookup failed: " + ex.Message);
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Re-encode via the platform <see cref="Windows.Graphics.Imaging.BitmapDecoder"/> when present.
         /// </summary>
         private static async Task<byte[]> TryEncodeImageBytesAsPngAsync(byte[] imageBytes)
         {
@@ -239,16 +441,9 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        private async Task<string> SaveStickerBytesToCacheAsync(byte[] imageBytes, string fileBase, string mimeType)
+        private Task<string> SaveStickerBytesToCacheAsync(byte[] imageBytes, string fileBase, string mimeType)
         {
-            byte[] png = await TryEncodeImageBytesAsPngAsync(imageBytes);
-            if (png != null && png.Length > 0)
-            {
-                return await SaveImageBytesToCacheAsync(png, fileBase + "_png", "image/png");
-            }
-
-            // Fall back to original bytes (may still render on newer OS builds).
-            return await SaveImageBytesToCacheAsync(imageBytes, fileBase, mimeType ?? "image/webp");
+            return SaveImageBytesForDisplayAsync(imageBytes, fileBase, mimeType ?? "image/webp");
         }
 
         private static string GetAudioFileExtension(string mimeType)
@@ -543,7 +738,11 @@ namespace Unison.Uwp.Services.WhatsApp
             if (message == null) return null;
             bool isSticker = message.Kind == ChatMessageKind.Sticker;
             if (!message.IsImage && !isSticker) return null;
-            if (!string.IsNullOrWhiteSpace(message.ImageUri)) return message.ImageUri;
+            if (!string.IsNullOrWhiteSpace(message.ImageUri))
+            {
+                // Cached .webp from before / failed display path: convert on open when OS has no codec.
+                return await EnsureWebPDisplayUriAsync(message);
+            }
             await EnsureConnectedAsync();
 
             byte[] mediaKey = DecodeBase64Safe(message.ImageMediaKeyBase64);
@@ -568,7 +767,10 @@ namespace Unison.Uwp.Services.WhatsApp
             await MediaDownloadLock.WaitAsync();
             try
             {
-                if (!string.IsNullOrWhiteSpace(message.ImageUri)) return message.ImageUri;
+                if (!string.IsNullOrWhiteSpace(message.ImageUri))
+                {
+                    return await EnsureWebPDisplayUriAsync(message);
+                }
 
                 var bytes = await _socket.DownloadAndDecryptMediaAsync(
                     message.ImageUrl,
@@ -576,9 +778,10 @@ namespace Unison.Uwp.Services.WhatsApp
                     mediaKey,
                     mediaType,
                     expected);
-                string uri = isSticker
-                    ? await SaveStickerBytesToCacheAsync(bytes, mediaKeyId, message.ImageMimeType ?? defaultMime)
-                    : await SaveImageBytesToCacheAsync(bytes, mediaKeyId, message.ImageMimeType ?? defaultMime);
+                string uri = await SaveImageBytesForDisplayAsync(
+                    bytes,
+                    mediaKeyId,
+                    message.ImageMimeType ?? defaultMime);
                 if (string.IsNullOrWhiteSpace(uri))
                 {
                     if (isSticker)
@@ -1004,7 +1207,11 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
             }
 
-            if (!string.IsNullOrWhiteSpace(chatMessage.ImageUri)) return;
+            if (!string.IsNullOrWhiteSpace(chatMessage.ImageUri))
+            {
+                await EnsureWebPDisplayUriAsync(chatMessage);
+                return;
+            }
 
             await MediaDownloadLock.WaitAsync();
             try
@@ -1023,7 +1230,10 @@ namespace Unison.Uwp.Services.WhatsApp
                             "image",
                             expectedEncSha);
 
-                        var uri = await SaveImageBytesToCacheAsync(decryptedBytes, mediaKeyId, imageMessage.Mimetype);
+                        var uri = await SaveImageBytesForDisplayAsync(
+                            decryptedBytes,
+                            mediaKeyId,
+                            imageMessage.Mimetype);
                         if (!string.IsNullOrWhiteSpace(uri))
                         {
                             chatMessage.ImageUri = uri;
@@ -1073,7 +1283,11 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             if (chatMessage == null || stickerMessage == null || _socket == null) return;
             ApplyStickerMetadata(chatMessage, stickerMessage);
-            if (!string.IsNullOrWhiteSpace(chatMessage.ImageUri)) return;
+            if (!string.IsNullOrWhiteSpace(chatMessage.ImageUri))
+            {
+                await EnsureWebPDisplayUriAsync(chatMessage);
+                return;
+            }
 
             if (stickerMessage.IsLottie)
             {

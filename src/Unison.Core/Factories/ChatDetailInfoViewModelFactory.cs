@@ -1,7 +1,9 @@
 using System;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
+using Unison.Core.Helpers;
 using Unison.Core.Models;
+using Unison.Core.State;
 using Unison.Core.ViewModels;
 
 namespace Unison.Core.Factories
@@ -15,25 +17,31 @@ namespace Unison.Core.Factories
         private readonly IChatService _chatService;
         private readonly IMessageStore _messageStore;
         private readonly IChatMessageVmFactory _messageVmFactory;
-        private readonly IWhatsAppService _whatsApp;
+        private readonly IGroupService _groups;
+        private readonly IChatStateStore _chatState;
         private readonly IPersonStore _personStore;
         private readonly IMessageService _messages;
         private readonly IContactService _contacts;
         private readonly IDialogService _dialogs;
+        private readonly IUriLauncher _uriLauncher;
+        private readonly ParticipantResolutionContext _participants;
 
         public ChatDetailInfoViewModelFactory(
             IShortcutService shortcutService,
             IChatStore chatStore,
             IDispatcher dispatcher,
             IStringResources strings,
+            IJidResolver jids,
+            IChatStateStore chatState,
             IChatService chatService = null,
             IMessageStore messageStore = null,
             IChatMessageVmFactory messageVmFactory = null,
-            IWhatsAppService whatsApp = null,
+            IGroupService groups = null,
             IPersonStore personStore = null,
             IMessageService messages = null,
             IContactService contacts = null,
-            IDialogService dialogs = null)
+            IDialogService dialogs = null,
+            IUriLauncher uriLauncher = null)
         {
             _shortcutService = shortcutService;
             _chatStore = chatStore;
@@ -42,11 +50,14 @@ namespace Unison.Core.Factories
             _chatService = chatService;
             _messageStore = messageStore;
             _messageVmFactory = messageVmFactory;
-            _whatsApp = whatsApp;
+            _groups = groups;
+            _chatState = chatState;
             _personStore = personStore;
             _messages = messages;
             _contacts = contacts;
             _dialogs = dialogs;
+            _uriLauncher = uriLauncher;
+            _participants = new ParticipantResolutionContext(jids, contacts, chatState, personStore);
         }
 
         public ChatDetailInfoViewModel CreateUser(ChatItem contact)
@@ -96,12 +107,15 @@ namespace Unison.Core.Factories
                 _chatService,
                 _messageStore,
                 _messageVmFactory,
-                _whatsApp,
+                _groups,
                 member,
                 _personStore,
                 _messages,
                 _contacts,
-                _dialogs);
+                _dialogs,
+                _participants,
+                _uriLauncher,
+                _chatState);
         }
     }
 }

@@ -61,7 +61,9 @@ namespace Unison.Core.Helpers
                     continue;
                 }
 
-                string name = FirstNonEmpty(conv.DisplayName, conv.Name, conv.Username);
+                string name = isGroup
+                    ? PreferNonBlacklistedGroupName(conv.DisplayName, conv.Name, conv.Username)
+                    : FirstNonEmpty(conv.DisplayName, conv.Name, conv.Username);
                 if (string.IsNullOrWhiteSpace(name) && !isGroup)
                 {
                     name = JidHelper.TryPhoneFromJid(jid)
@@ -94,6 +96,7 @@ namespace Unison.Core.Helpers
                     PnJid = string.IsNullOrWhiteSpace(conv.PnJid) ? null : JidHelper.Normalize(conv.PnJid),
                     Name = name,
                     IsGroup = isGroup,
+                    Status = conv.Archived ? ChatStatus.Archived : ChatStatus.Active,
                     UnreadCount = unread,
                     LastMessage = normalizedText,
                     LastMessageAuthor = author,
@@ -130,6 +133,40 @@ namespace Unison.Core.Helpers
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// Prefers a real subject over invite-link placeholders; falls back to a blacklisted
+        /// label only when nothing else is available.
+        /// </summary>
+        private static string PreferNonBlacklistedGroupName(params string[] values)
+        {
+            if (values == null)
+            {
+                return null;
+            }
+
+            string blacklistedFallback = null;
+            foreach (string value in values)
+            {
+                if (string.IsNullOrWhiteSpace(value))
+                {
+                    continue;
+                }
+
+                string trimmed = value.Trim();
+                if (!GroupNameSyncBlacklist.IsBlacklisted(trimmed))
+                {
+                    return trimmed;
+                }
+
+                if (blacklistedFallback == null)
+                {
+                    blacklistedFallback = trimmed;
+                }
+            }
+
+            return blacklistedFallback;
         }
     }
 }

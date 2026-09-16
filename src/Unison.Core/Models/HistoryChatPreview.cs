@@ -18,6 +18,8 @@ namespace Unison.Core.Models
 
         public bool IsGroup { get; set; }
 
+        public ChatStatus Status { get; set; } = ChatStatus.Active;
+
         public int UnreadCount { get; set; }
 
         public string LastMessage { get; set; }

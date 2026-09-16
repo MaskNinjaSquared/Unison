@@ -16,6 +16,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
@@ -36,6 +37,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly IWhatsAppService _whatsAppService;
         private readonly AddressBookOverlay _addressBook;
         private readonly ContactDirectory _directory;
+        private readonly IJidResolver _jids;
 
         private DateTime _lastRefreshUtc = DateTime.MinValue;
         private volatile bool _isRunning;
@@ -43,11 +45,13 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         internal ContactNameResolver(
             IWhatsAppService whatsAppService,
             AddressBookOverlay addressBook,
-            ContactDirectory directory)
+            ContactDirectory directory,
+            IJidResolver jids)
         {
             _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
             _addressBook = addressBook ?? throw new ArgumentNullException(nameof(addressBook));
             _directory = directory ?? throw new ArgumentNullException(nameof(directory));
+            _jids = jids ?? throw new ArgumentNullException(nameof(jids));
         }
 
         public bool IsRunning => _isRunning;
@@ -268,7 +272,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 // The name may be published under the LID rather than the phone number, so a
                 // known alias is worth asking about too.
                 string normJid = JidHelper.Normalize(chat.JID);
-                if (_whatsAppService.JidAlias.TryGetValue(normJid, out var aliasJid))
+                if (_jids.TryGetAlias(normJid, out var aliasJid))
                 {
                     jidsToResolve.Add(aliasJid);
                     Debug.WriteLine($"[ContactNameResolver]   Adding LID for resolution: {chat.JID} -> {aliasJid}");

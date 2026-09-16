@@ -148,9 +148,9 @@ Facades extracted **policy** around it (pairing/logout, pin/mark-read, contact o
 | `SqliteLidMappingStorage` | SQLite | PN ↔ LID map for the rc14 addressing model |
 | `ChatStore` / `PersonStore` | SQLite | Local chat flags (mute/pin) and people |
 | `MessageStore` | App data JSON | Leftover identity sidecars (contact names / aliases); chat/message JSON no longer the live path |
-| `HistoryChatPreviewStore` | SQLite `history_chat_preview` | List catalog (history chunks + live persist); UI hydrates via `ChatPreviewChunkPersisted` |
+| `HistoryChatPreviewStore` | SQLite `history_chat_preview` | List catalog, schema 6: `ChatStatus` Active/Deleted/Archived plus `DeletedAtUtc` tombstone; history chunks apply as **delta** (insert new / update lifecycle + tip when newer); UI hydrates via `ChatPreviewChunkPersisted` |
 | `HistoryMigrationStore` | SQLite `history_migration` | Gate: history batch landed for current MessageStore epoch |
-| `HistoryMessageStore` | SQLite `history_message` + `history_message_reaction` | Timeline bodies, quote/pin/revoke, reactions; schema 5 |
+| `HistoryMessageStore` | SQLite `history_message` + `history_message_reaction` | Timeline bodies, quote/pin/revoke, reactions; schema 5; history chunks skip existing bodies (`PreferDeltaSkipExistingBodies`) while still applying side effects |
 | Broker journal | `broker-frame-*.bin` (UBJ2 / UBD3) | Ordered frames + Noise checkpoint while backgrounded |
 
 ## Where to go next

@@ -16,6 +16,10 @@ namespace Unison.Core.Contracts
         Task InitializeAsync();
 
         /// <summary>Insert or replace rows; raises <see cref="ChunkPersisted"/> when <paramref name="notifyChunk"/> is true.</summary>
+        /// <remarks>
+        /// Existing chats are merged as a delta: new JIDs insert fully; known JIDs only update
+        /// lifecycle (archived / deleted / revived) and the tip when the incoming last message is newer.
+        /// </remarks>
         Task UpsertManyAsync(IReadOnlyList<HistoryChatPreview> rows, bool notifyChunk = true);
 
         Task<IReadOnlyList<HistoryChatPreview>> GetAllAsync(string syncId = null);
@@ -32,6 +36,9 @@ namespace Unison.Core.Contracts
         /// which is how a deleted chat comes back when someone writes.
         /// </summary>
         Task MarkDeletedAsync(IReadOnlyList<string> jids, DateTime deletedAtUtc);
+
+        /// <summary>Updates archive lifecycle without changing messages or preview content.</summary>
+        Task SetStatusAsync(IReadOnlyList<string> jids, ChatStatus status);
 
         event EventHandler<HistoryChatPreviewChunkEventArgs> ChunkPersisted;
     }

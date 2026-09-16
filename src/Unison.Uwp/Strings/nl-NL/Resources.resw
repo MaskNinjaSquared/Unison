@@ -665,11 +665,32 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   <data name="Settings_General.Text" xml:space="preserve">
     <value>Algemeen</value>
   </data>
+  <data name="Settings_NotificationsSection.Text" xml:space="preserve">
+    <value>Meldingen</value>
+  </data>
   <data name="Settings_Notifications.Header" xml:space="preserve">
     <value>Meldingen</value>
   </data>
   <data name="Settings_Notifications.Text" xml:space="preserve">
     <value>Banners en meldingen in actiecentrum weergeven voor inkomende berichten</value>
+  </data>
+  <data name="Settings_MessageNotificationSound.Header" xml:space="preserve">
+    <value>Berichtmeldingen</value>
+  </data>
+  <data name="Settings_MessageNotificationSound.Text" xml:space="preserve">
+    <value>Geluid voor 1:1-berichttoasts.</value>
+  </data>
+  <data name="Settings_GroupNotificationSound.Header" xml:space="preserve">
+    <value>Groepsmeldingen</value>
+  </data>
+  <data name="Settings_GroupNotificationSound.Text" xml:space="preserve">
+    <value>Geluid voor groepsberichttoasts.</value>
+  </data>
+  <data name="Settings_NotificationSound_SystemDefault.Content" xml:space="preserve">
+    <value>Systeemstandaard</value>
+  </data>
+  <data name="Settings_NotificationSound_SystemDefaultGroup.Content" xml:space="preserve">
+    <value>Systeemstandaard</value>
   </data>
   <data name="Settings_LiveTiles.Header" xml:space="preserve">
     <value>Live Tegels</value>
@@ -800,7 +821,12 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   <data name="Settings_AppBranch.Text" xml:space="preserve">
     <value>Release</value>
   </data>
-  <data name="Toast_DisconnectedTitle" xml:space="preserve">
+  <data name="Toast_HistorySyncTitle" xml:space="preserve">
+    <value>Geschiedenis synchroniseren</value>
+  </data>
+  <data name="Toast_HistorySyncBody" xml:space="preserve">
+    <value>Unison haalt gesprekken op de achtergrond in.</value>
+  </data>  <data name="Toast_DisconnectedTitle" xml:space="preserve">
     <value>Unison verbinding verbroken</value>
   </data>
   <data name="Toast_DisconnectedBody" xml:space="preserve">
@@ -878,6 +904,21 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   <data name="ChatDetail_ShowContact.Text" xml:space="preserve">
     <value>Contact bekijken</value>
   </data>
+  <data name="ChatDetail_VoiceCall.Text" xml:space="preserve">
+    <value>Spraakoproep</value>
+  </data>
+  <data name="ChatDetail_VideoCall.Text" xml:space="preserve">
+    <value>Videogesprek</value>
+  </data>
+  <data name="ChatDetail_CallPhoneTitle" xml:space="preserve">
+    <value>Telefoongesprek starten?</value>
+  </data>
+  <data name="ChatDetail_CallPhoneBody" xml:space="preserve">
+    <value>Wil je een telefoongesprek starten met {0}?</value>
+  </data>
+  <data name="ChatDetail_CallPhoneConfirm" xml:space="preserve">
+    <value>Bellen</value>
+  </data>
   <data name="ChatDetail_AddContact.Text" xml:space="preserve">
     <value>Contact toevoegen</value>
   </data>
@@ -919,6 +960,18 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   </data>
   <data name="ChatList_DeleteChat.Text" xml:space="preserve">
     <value>Chat verwijderen</value>
+  </data>
+  <data name="ChatList_ArchiveChat.Text" xml:space="preserve">
+    <value>Chat archiveren</value>
+  </data>
+  <data name="ChatList_UnarchiveChat.Text" xml:space="preserve">
+    <value>Chat dearchiveren</value>
+  </data>
+  <data name="ChatDetail_ArchiveChat.Text" xml:space="preserve">
+    <value>Chat archiveren</value>
+  </data>
+  <data name="ChatDetail_UnarchiveChat.Text" xml:space="preserve">
+    <value>Chat dearchiveren</value>
   </data>
   <data name="ChatDetail_DeleteChat.Text" xml:space="preserve">
     <value>Chat verwijderen</value>
@@ -1024,5 +1077,20 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   </data>
   <data name="ChatDetailInfo_DeleteChatBar.Text" xml:space="preserve">
     <value>Chat&#x0a;verwijderen</value>
+  </data>
+  <data name="Debug_RuntimeDialog.PrimaryButtonText" xml:space="preserve">
+    <value>Opslaan op schijf</value>
+  </data>
+  <data name="Debug_RuntimeDialog.CloseButtonText" xml:space="preserve">
+    <value>Sluiten</value>
+  </data>
+  <data name="ChatList_SyncingHistory" xml:space="preserve">
+    <value>Geschiedenis synchroniseren…</value>
+  </data>
+  <data name="Debug_RuntimeDialogHint.Text" xml:space="preserve">
+    <value>Houd vast / rechtsklik op Chats (of QR) om te openen. Geen berichttekst.</value>
+  </data>
+  <data name="Debug_RuntimeDialog.Title" xml:space="preserve">
+    <value>Runtime-diagnostiek</value>
   </data>
 </root>

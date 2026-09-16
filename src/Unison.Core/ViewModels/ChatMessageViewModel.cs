@@ -338,7 +338,11 @@ namespace Unison.Core.ViewModels
         }
 
         public string StatusCheckmarkUri => Model.StatusCheckmarkUri;
+        public string StatusGlyph => Model.StatusGlyph;
         public bool HasStatusCheckmark => Model.HasStatusCheckmark;
+        public bool IsReadStatus => Model.IsReadStatus;
+        public bool ShowReadStatusCheckmark => Model.ShowReadStatusCheckmark;
+        public bool ShowUnreadStatusCheckmark => Model.ShowUnreadStatusCheckmark;
         public bool IsSendFailed => Model.IsSendFailed;
         public string SenderName => Model.SenderName;
         public ChatMessageKind Kind => Model.Kind;
@@ -976,6 +980,17 @@ namespace Unison.Core.ViewModels
         }
 
         public bool ShowTail => Model.ShowTail;
+
+        /// <summary>True when <see cref="RemoteJid"/> is a group (@g.us).</summary>
+        public bool IsGroupChat
+        {
+            get
+            {
+                string jid = Model?.RemoteJid;
+                return !string.IsNullOrWhiteSpace(jid) &&
+                       jid.IndexOf("@g.us", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+        }
 
         public bool IsFirstOfDay
         {

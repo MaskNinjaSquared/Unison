@@ -102,6 +102,18 @@ namespace Unison.Uwp.UI.Templates
 
                     menuItem.Visibility = canAdd ? Visibility.Visible : Visibility.Collapsed;
                 }
+                else if (string.Equals(tag, "archiveChat", StringComparison.Ordinal) && menuItem != null)
+                {
+                    menuItem.Visibility = chat.Status == ChatStatus.Active
+                        ? Visibility.Visible
+                        : Visibility.Collapsed;
+                }
+                else if (string.Equals(tag, "unarchiveChat", StringComparison.Ordinal) && menuItem != null)
+                {
+                    menuItem.Visibility = chat.Status == ChatStatus.Archived
+                        ? Visibility.Visible
+                        : Visibility.Collapsed;
+                }
             }
         }
 
@@ -198,6 +210,18 @@ namespace Unison.Uwp.UI.Templates
             {
                 FindChatList(sender)?.DeleteChat(chat);
             }
+        }
+
+        private void ArchiveChat_Click(object sender, RoutedEventArgs e)
+        {
+            var chat = ResolveChat(sender as FrameworkElement);
+            FindChatList(sender)?.ArchiveChat(chat);
+        }
+
+        private void UnarchiveChat_Click(object sender, RoutedEventArgs e)
+        {
+            var chat = ResolveChat(sender as FrameworkElement);
+            FindChatList(sender)?.UnarchiveChat(chat);
         }
 
         private static ChatItem ResolveChat(FrameworkElement element)

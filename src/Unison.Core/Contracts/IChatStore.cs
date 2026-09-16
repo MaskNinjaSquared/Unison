@@ -42,7 +42,7 @@ namespace Unison.Core.Contracts
 
             string jid,
 
-            ChatLocalStatus status,
+            ChatStatus status,
 
             bool isWidgetPinned,
 

@@ -21,6 +21,9 @@ namespace Unison.Uwp.Data.Entities
 
         public bool IsGroup { get; set; }
 
+        /// <summary><see cref="ChatStatus"/> as INTEGER.</summary>
+        public int Status { get; set; }
+
         public int UnreadCount { get; set; }
 
         public string LastMessage { get; set; }

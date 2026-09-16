@@ -2667,6 +2667,10 @@ namespace Unison.Uwp.Services.WhatsApp
                         "; created=" + created +
                         "; previews=" + updated +
                         "; unreadAdded=" + unreadAdded);
+                    NoteFullHistoryCatchUpProgress(
+                        "offline-summary:" + reason +
+                        ":chats=" + snapshot.Count +
+                        ":previews=" + updated);
                 });
 
                 SchedulePersist();

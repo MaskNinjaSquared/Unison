@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 using Unison.Core.Models;
 
 namespace Unison.Core.Contracts.WhatsApp
@@ -20,6 +21,39 @@ namespace Unison.Core.Contracts.WhatsApp
         /// True when the device reports an active internet path (not local-offline).
         /// </summary>
         bool HasInternetAccess { get; }
+
+        /// <summary>True when the socket is up and usable right now.</summary>
+        bool IsConnected { get; }
+
+        // ---------------------------------------------------------------------
+        // Startup
+        //
+        // The order the shell needs and nothing more: know whether there are credentials before
+        // deciding which surface to show, read the saved list before asking the network for a
+        // newer one, and leave everything that can wait until after the first frame.
+        // ---------------------------------------------------------------------
+
+        /// <summary>Reads auth and session state without opening a socket, so launch stays fast.</summary>
+        Task InitializeConnectionStateAsync();
+
+        /// <summary>True when this device already holds credentials, so pairing can be skipped.</summary>
+        Task<bool> IsRegisteredAsync();
+
+        /// <summary>
+        /// Waits for a healthy socket, opening one if needed. Give up after
+        /// <paramref name="timeoutMs"/>; <paramref name="forceFreshTransport"/> throws away the
+        /// current transport first.
+        /// </summary>
+        Task EnsureConnectedAsync(int timeoutMs = 35000, bool forceFreshTransport = false);
+
+        /// <summary>Loads the saved chat list and UI snapshot, once auth is known.</summary>
+        Task LoadPersistedUiStateAsync();
+
+        /// <summary>
+        /// Starts the post-connect work that must not hold up first paint: names, group metadata,
+        /// avatars, and the rest of the catch-up.
+        /// </summary>
+        void StartDeferredStartupMaintenance();
 
         /// <summary>
         /// User setting: automatically clear session and return to QR on logout/revocation.

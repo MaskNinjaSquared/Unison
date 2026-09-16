@@ -55,13 +55,30 @@ namespace Unison.Core.Contracts
         /// </summary>
         Task<bool> ShowImageSendPreviewAsync(byte[] imageBytes, string infoText);
 
-        /// <summary>Fullscreen pairing QR preview (tap on login QR). No-op if payload empty.</summary>
+        /// <summary>
+        /// Fullscreen pairing QR preview (tap on login QR). Subscribes to
+        /// <see cref="LoginViewModel.QrFullscreenDismissRequested"/> so the dialog closes when
+        /// pairing succeeds. No-op if payload empty.
+        /// </summary>
+        Task ShowQrFullscreenAsync(LoginViewModel loginVm);
+
+        /// <summary>Fullscreen QR preview from a raw payload (debug / socket slice). No dismiss listener.</summary>
         Task ShowQrFullscreenAsync(string qrData);
+
+        /// <summary>
+        /// WhatsApp-shell settings overlay (SplitView sections). Unison keeps the full-page SettingsView.
+        /// </summary>
+        Task ShowWhatsAppSettingsAsync(SettingsViewModel settingsVm);
 
         /// <summary>
         /// Read-only list of who reacted to <paramref name="messageVm"/>. No-op when the bubble has
         /// no reactions.
         /// </summary>
         Task ShowReactionsDialogAsync(ChatMessageViewModel messageVm);
+
+        /// <summary>
+        /// Mobile-friendly runtime health dialog (snapshot + recent journal + save to disk).
+        /// </summary>
+        Task ShowRuntimeDiagnosticsAsync();
     }
 }

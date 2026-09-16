@@ -72,12 +72,12 @@ namespace Unison.Core.Helpers
 
                 if (!isRunStart)
                 {
-                    isRunStart = !IsSameMessageRun(messages[i - 1], current);
+                    isRunStart = !IsSameMessageRun(messages[i - 1], current, isGroup);
                 }
 
                 if (!isRunEnd)
                 {
-                    isRunEnd = !IsSameMessageRun(current, messages[i + 1]);
+                    isRunEnd = !IsSameMessageRun(current, messages[i + 1], isGroup);
                 }
 
                 current.IsRunStart = isRunStart;
@@ -145,7 +145,7 @@ namespace Unison.Core.Helpers
             }
         }
 
-        public static bool IsSameMessageRun(ChatMessage left, ChatMessage right)
+        public static bool IsSameMessageRun(ChatMessage left, ChatMessage right, bool isGroup)
         {
             if (left == null || right == null)
             {
@@ -157,22 +157,46 @@ namespace Unison.Core.Helpers
                 return false;
             }
 
+            // Own bubbles are always one run (no participant identity to mismatch).
             if (left.IsFromMe)
             {
                 return true;
             }
 
-            string leftParticipant = left.ParticipantJid ?? string.Empty;
-            string rightParticipant = right.ParticipantJid ?? string.Empty;
-            if (!string.IsNullOrEmpty(leftParticipant) && !string.IsNullOrEmpty(rightParticipant))
+            // 1:1 peer is a single counterparty — LID/PN/empty ParticipantJid must not split the run
+            // or middle bubbles incorrectly get IsRunEnd (Unison tip) / IsRunStart (avatar).
+            if (!isGroup)
             {
-                return string.Equals(leftParticipant, rightParticipant, StringComparison.OrdinalIgnoreCase);
+                return true;
             }
 
+            string leftParticipant = JidHelper.Normalize(left.ParticipantJid) ?? string.Empty;
+            string rightParticipant = JidHelper.Normalize(right.ParticipantJid) ?? string.Empty;
+            if (!string.IsNullOrEmpty(leftParticipant) && !string.IsNullOrEmpty(rightParticipant))
+            {
+                if (string.Equals(leftParticipant, rightParticipant, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+
+                // LID vs PN (or device alias) for the same person: merge only when both names match.
+                string leftName = left.SenderName ?? string.Empty;
+                string rightName = right.SenderName ?? string.Empty;
+                return !string.IsNullOrWhiteSpace(leftName) &&
+                       string.Equals(leftName, rightName, StringComparison.OrdinalIgnoreCase);
+            }
+
+            // One side missing participant (common on history rows): keep the run when names match.
             return string.Equals(
                 left.SenderName ?? string.Empty,
                 right.SenderName ?? string.Empty,
                 StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>Backward-compatible overload (treats as group identity rules).</summary>
+        public static bool IsSameMessageRun(ChatMessage left, ChatMessage right)
+        {
+            return IsSameMessageRun(left, right, isGroup: true);
         }
     }
 }

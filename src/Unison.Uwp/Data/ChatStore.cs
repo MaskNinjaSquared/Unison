@@ -254,7 +254,7 @@ namespace Unison.Uwp.Data
 
             string jid,
 
-            ChatLocalStatus status,
+            ChatStatus status,
 
             bool isWidgetPinned,
 
@@ -350,7 +350,12 @@ namespace Unison.Uwp.Data
 
 
 
-            chat.LocalStatus = state.Status;
+            // history_chat_preview is authoritative. The Chat table is a fallback when
+            // app-state arrives before a catalogue row has been persisted.
+            if (chat.Status == ChatStatus.Active && state.Status != ChatStatus.Active)
+            {
+                chat.Status = state.Status;
+            }
 
             chat.IsWidgetPinned = state.IsWidgetPinned;
 
@@ -504,13 +509,13 @@ namespace Unison.Uwp.Data
 
 
 
-            ChatLocalStatus status = ChatLocalStatus.Active;
+            ChatStatus status = ChatStatus.Active;
 
-            if (Enum.IsDefined(typeof(ChatLocalStatus), row.Status))
+            if (Enum.IsDefined(typeof(ChatStatus), row.Status))
 
             {
 
-                status = (ChatLocalStatus)row.Status;
+                status = (ChatStatus)row.Status;
 
             }
 

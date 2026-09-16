@@ -144,6 +144,16 @@
                         </DataTemplate>
                     </ListView.ItemTemplate>
                 </ListView>
+                <ProgressRing x:Name="MembersRosterLoadingRing"
+                             Grid.Row="1"
+                             Width="48"
+                             Height="48"
+                             HorizontalAlignment="Center"
+                             VerticalAlignment="Center"
+                             Foreground="White"
+                             IsActive="False"
+                             Visibility="Collapsed"
+                             IsHitTestVisible="False"/>
             </Grid>
         </PivotItem>
 

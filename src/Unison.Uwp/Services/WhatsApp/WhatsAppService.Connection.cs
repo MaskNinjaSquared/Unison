@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -627,6 +627,17 @@ namespace Unison.Uwp.Services.WhatsApp
             // 6. Wipe messages, chats, and contact names from disk (epoch rotate Ã¢â‚¬â€ non-blocking for QR).
             await _messageStore.WipeAllDataAsync();
             // history_migration / history_chat_preview: HistoryFacade listens to OnSessionCleared.
+            if (_groupRosterStore != null)
+            {
+                try
+                {
+                    await _groupRosterStore.ClearAllAsync().ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Log("[WhatsAppService] Warning: group roster wipe failed: " + ex.Message);
+                }
+            }
 
             // 7. Clear in-memory state
             await RunOnUiThreadAsync(() =>
@@ -1078,6 +1089,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 _sessionEstablishedTcs = CreateSessionEstablishedTcs();
                 _historyIdentityRefreshTriggeredThisSession = false;
                 _qrDeliveredThisConnection = false;
+                Interlocked.Exchange(ref _postMessageEnrichmentStarted, 0);
+                Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 0);
 
                 _isConnecting = true;
                 
@@ -1594,8 +1607,9 @@ namespace Unison.Uwp.Services.WhatsApp
                     else
                     {
                         _historyIdentityRefreshTriggeredThisSession = true;
-                        Debug.WriteLine("[WhatsAppService] Scheduling one-shot identity refresh after first non-empty history sync.");
-                        SchedulePostReplayMaintenance(0);
+                        Debug.WriteLine("[WhatsAppService] Scheduling post-message enrichment after first non-empty history sync.");
+                        ReleaseEnrichmentAfterHeavyHistory(
+                            sync?.SyncType.ToString() ?? "history-sync");
                     }
                 }
                 OnHistorySyncReceived?.Invoke(this, sync);
@@ -1664,23 +1678,29 @@ namespace Unison.Uwp.Services.WhatsApp
                 {
                     Debug.WriteLine($"[WhatsAppService] Non-fatal offline replay UI summary failure after offline drain: {ex.Message}");
                 }
-                // The per-chat replay summaries already updated the affected rows.
-                // Global scans of every chat file used to run here on the critical
-                // startup path, competing with input, key storage and replay persistence.
-                // Schedule optional repair/enrichment only after the app is settled.
+                // Message-path repair/enrichment only after the app is settled.
+                // Names/groups wait for post-message enrichment (after heavy history when stale).
                 SchedulePostReplayMaintenance(offlineCount);
 
                 if (firstRelease)
                 {
                     PublishConnectionUpdate("synced");
                     EnableScheduledPersist($"offline completion ({offlineCount} messages)");
-                    LogHistoryFreshnessAfterOfflineDrain(offlineCount);
                     _ = TryConsumeMessageStoreForceHistoryRepairAsync($"offline-complete:{offlineCount}");
                     SchedulePendingPlaceholderResendDrain($"offline-complete:{offlineCount}", maxRequests: 8);
                 }
 
-                // Name/contact/avatar work is part of the delayed maintenance job.
-                // It must never contend with the first visible messages after launch.
+                // Soft-reconnect catch-up pages must re-evaluate / re-request FULL_HISTORY even
+                // when this is not the first offline release of the process.
+                bool catchUpActive =
+                    Volatile.Read(ref _historyCatchUpBannerActive) == 1 ||
+                    _catchUpContinueRound > 0;
+                if (firstRelease || catchUpActive)
+                {
+                    LogHistoryFreshnessAfterOfflineDrain(offlineCount);
+                }
+
+                // Name/contact/avatar work must never contend with catch-up messages after launch.
             };
 
             // Dirty bits and server_sync are answered inside the session now: the socket layer

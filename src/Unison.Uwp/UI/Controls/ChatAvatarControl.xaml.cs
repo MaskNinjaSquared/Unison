@@ -1,6 +1,8 @@
 using System;
 using System.Linq;
-using Unison.Uwp.Services.WhatsApp;
+using Microsoft.Extensions.DependencyInjection;
+using Unison.Core.Contracts.WhatsApp;
+using Unison.Core.State;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Media.Imaging;
@@ -174,8 +176,17 @@ namespace Unison.Uwp.UI.Controls
 
             try
             {
-                var whatsApp = App.GetWhatsAppService() as WhatsAppService ?? WhatsAppService.Instance;
-                var chat = whatsApp.Chats
+                // The control is handed a URL, not a chat, so the row has to be found by the
+                // picture it is showing. All four candidates are checked because the header and
+                // the list ask for different qualities of the same avatar.
+                var chatState = App.Services?.GetService<IChatStateStore>();
+                var contacts = App.Services?.GetService<IContactService>();
+                if (chatState == null || contacts == null)
+                {
+                    return;
+                }
+
+                var chat = chatState.Chats
                     .FirstOrDefault(c =>
                         string.Equals(c.AvatarUrl, url, StringComparison.Ordinal) ||
                         string.Equals(c.AvatarHighUrl, url, StringComparison.Ordinal) ||
@@ -183,7 +194,7 @@ namespace Unison.Uwp.UI.Controls
                         string.Equals(c.GetAvatarUrl(true), url, StringComparison.Ordinal));
                 if (chat != null)
                 {
-                    whatsApp.MarkAvatarImageLoadFailed(chat, "ui-brush-failed:" + (e?.ErrorMessage ?? "unknown"));
+                    contacts.MarkAvatarImageLoadFailed(chat, "ui-brush-failed:" + (e?.ErrorMessage ?? "unknown"));
                 }
             }
             catch

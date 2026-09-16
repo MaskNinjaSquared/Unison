@@ -9,7 +9,7 @@ namespace Unison.Core.Models
     {
         public string Jid { get; set; }
 
-        public ChatLocalStatus Status { get; set; } = ChatLocalStatus.Active;
+        public ChatStatus Status { get; set; } = ChatStatus.Active;
 
         /// <summary>WhatsApp chat-list pin mirrored during history/app-state sync.</summary>
         public bool IsChatPinned { get; set; }

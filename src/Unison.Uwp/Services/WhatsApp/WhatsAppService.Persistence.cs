@@ -143,6 +143,19 @@ namespace Unison.Uwp.Services.WhatsApp
                     "persisted-ui-loaded",
                     "chatRows=" + Chats.Count);
 
+                // Local avatar files are free for the socket; bind them before history catch-up
+                // or enrichment so the list shows faces while tips/names settle.
+                try
+                {
+                    await HydrateCachedAvatarUrisAsync("persisted-ui-loaded")
+                        .ConfigureAwait(false);
+                }
+                catch (Exception exHydrate)
+                {
+                    Debug.WriteLine(
+                        "[WhatsAppService] Startup avatar hydrate failed: " + exHydrate.Message);
+                }
+
                 // Catalog came from history_chat_preview; fix Last Message from history_message
                 // when the preview row is stale (deferred maintenance may have run with empty Chats).
                 try
@@ -768,7 +781,12 @@ namespace Unison.Uwp.Services.WhatsApp
                         bool resolvedMeaningful = IsMeaningfulChatLabel(resolved, chat.JID, chat.IsGroup);
                         bool shouldReplace = !string.IsNullOrEmpty(resolved) &&
                                              !string.Equals(chat.Name, resolved, StringComparison.Ordinal) &&
-                                             (resolvedMeaningful || !existingMeaningful);
+                                             (chat.IsGroup
+                                                 ? GroupNameSyncBlacklist.ShouldApplySyncedSubject(
+                                                     resolved,
+                                                     resolvedMeaningful,
+                                                     existingMeaningful)
+                                                 : (resolvedMeaningful || !existingMeaningful));
 
                         if (shouldReplace)
                         {

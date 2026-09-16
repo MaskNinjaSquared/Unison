@@ -79,6 +79,7 @@ namespace Unison.Core.ViewModels
             _connection.QrExpired += Connection_QrExpired;
             _connection.StatusChanged += Connection_StatusChanged;
             _connection.Failed += Connection_Failed;
+            _connection.SessionEstablished += Connection_SessionEstablished;
             _connectionHooked = true;
         }
 
@@ -97,6 +98,7 @@ namespace Unison.Core.ViewModels
             _connection.QrExpired -= Connection_QrExpired;
             _connection.StatusChanged -= Connection_StatusChanged;
             _connection.Failed -= Connection_Failed;
+            _connection.SessionEstablished -= Connection_SessionEstablished;
             _connectionHooked = false;
         }
 
@@ -131,7 +133,19 @@ namespace Unison.Core.ViewModels
                 // QR should stop waiting, but it must not surface a cancellation on top of the
                 // message that already explains what happened.
                 _qrWaitTcs?.TrySetResult(null);
+                RaiseQrFullscreenDismissRequested();
             });
+        }
+
+        private void Connection_SessionEstablished(object sender, EventArgs e)
+        {
+            _sessionLogger.WriteAlways("[Pairing] Session established — dismiss QR preview if open");
+            _ = _dispatcher.RunAsync(RaiseQrFullscreenDismissRequested);
+        }
+
+        private void RaiseQrFullscreenDismissRequested()
+        {
+            QrFullscreenDismissRequested?.Invoke(this, EventArgs.Empty);
         }
 
         private void Connection_StatusChanged(object sender, string status)
@@ -233,6 +247,11 @@ namespace Unison.Core.ViewModels
         /// <summary>Opens the current QR payload in a fullscreen preview dialog.</summary>
         public ICommand ShowQrFullscreenCommand { get; }
 
+        /// <summary>
+        /// Fullscreen QR dialog should close — pairing succeeded (device linked) or the code expired.
+        /// </summary>
+        public event EventHandler QrFullscreenDismissRequested;
+
         /// <summary>Shows or hides the full-screen diagnostic log overlay.</summary>
         public ICommand ToggleLogPanelCommand { get; }
 
@@ -249,7 +268,7 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
-            await _dialogService.ShowQrFullscreenAsync(QRData);
+            await _dialogService.ShowQrFullscreenAsync(this);
         }
 
         public async Task ResetSessionForDevAsync()

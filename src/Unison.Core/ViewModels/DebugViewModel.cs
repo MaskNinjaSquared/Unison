@@ -17,8 +17,8 @@ namespace Unison.Core.ViewModels
     {
         private const int MaxDisplayedLogCharacters = 60000;
 
-        private readonly IWhatsAppService _whatsAppService;
         private readonly IDiagnosticsConsole _console;
+        private readonly IConnectionService _connectionService;
         private readonly IDialogService _dialogService;
         private readonly IStringResources _strings;
 
@@ -35,18 +35,18 @@ namespace Unison.Core.ViewModels
         private readonly StringBuilder _socketSliceLines = new StringBuilder();
 
         public DebugViewModel(
-            IWhatsAppService whatsAppService,
             IDiagnosticsConsole console,
+            IConnectionService connectionService,
             IDialogService dialogService,
             IStringResources strings)
         {
-            _whatsAppService = whatsAppService;
             _console = console;
+            _connectionService = connectionService;
             _dialogService = dialogService;
             _strings = strings;
 
             _isSessionLoggingEnabled = console.IsCaptureEnabled;
-            _isVerboseLoggingEnabled = whatsAppService.VerboseLogging;
+            _isVerboseLoggingEnabled = console.IsVerboseLoggingEnabled;
             _logText = TrimDisplayedLog(console.GetCapturedLog());
             _runtimeHealthText = _strings.Get("Debug_Collecting.Text", "Collecting runtime state...");
             _runtimeExportStatusText = string.Empty;
@@ -117,7 +117,7 @@ namespace Unison.Core.ViewModels
         public void RefreshFromServices()
         {
             IsSessionLoggingEnabled = _console.IsCaptureEnabled;
-            IsVerboseLoggingEnabled = _whatsAppService.VerboseLogging;
+            IsVerboseLoggingEnabled = _console.IsVerboseLoggingEnabled;
             LogText = TrimDisplayedLog(_console.GetCapturedLog());
         }
 
@@ -158,7 +158,7 @@ namespace Unison.Core.ViewModels
             {
                 if (Set(ref _isVerboseLoggingEnabled, value))
                 {
-                    _whatsAppService.SetVerboseLogging(value, nameof(DebugViewModel));
+                    _console.SetVerboseLogging(value, nameof(DebugViewModel));
                 }
             }
         }
@@ -327,7 +327,7 @@ namespace Unison.Core.ViewModels
 
             if (confirmed)
             {
-                await _whatsAppService.ClearSessionAsync();
+                await _connectionService.ClearLocalSessionAsync();
             }
         }
 

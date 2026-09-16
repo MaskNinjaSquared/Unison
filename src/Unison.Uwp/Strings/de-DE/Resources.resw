@@ -665,11 +665,32 @@ Nach der Diagnose deaktivieren: Wenn es aktiviert bleibt, wird die App langsamer
   <data name="Settings_General.Text" xml:space="preserve">
     <value>Allgemein</value>
   </data>
+  <data name="Settings_NotificationsSection.Text" xml:space="preserve">
+    <value>Benachrichtigungen</value>
+  </data>
   <data name="Settings_Notifications.Header" xml:space="preserve">
     <value>Benachrichtigungen</value>
   </data>
   <data name="Settings_Notifications.Text" xml:space="preserve">
     <value>Bannerbenachrichtigungen und Kennzeichen für eingehende Nachrichten anzeigen.</value>
+  </data>
+  <data name="Settings_MessageNotificationSound.Header" xml:space="preserve">
+    <value>Nachrichtbenachrichtigungen</value>
+  </data>
+  <data name="Settings_MessageNotificationSound.Text" xml:space="preserve">
+    <value>Ton für 1:1-Nachrichtentoasts.</value>
+  </data>
+  <data name="Settings_GroupNotificationSound.Header" xml:space="preserve">
+    <value>Gruppenbenachrichtigungen</value>
+  </data>
+  <data name="Settings_GroupNotificationSound.Text" xml:space="preserve">
+    <value>Ton für Gruppennachrichtentoasts.</value>
+  </data>
+  <data name="Settings_NotificationSound_SystemDefault.Content" xml:space="preserve">
+    <value>Systemstandard</value>
+  </data>
+  <data name="Settings_NotificationSound_SystemDefaultGroup.Content" xml:space="preserve">
+    <value>Systemstandard</value>
   </data>
   <data name="Settings_LiveTiles.Header" xml:space="preserve">
     <value>Live-Kacheln</value>
@@ -800,7 +821,12 @@ Nach der Diagnose deaktivieren: Wenn es aktiviert bleibt, wird die App langsamer
   <data name="Settings_AppBranch.Text" xml:space="preserve">
     <value>Veröffentlichung</value>
   </data>
-  <data name="Toast_DisconnectedTitle" xml:space="preserve">
+  <data name="Toast_HistorySyncTitle" xml:space="preserve">
+    <value>Verlauf wird synchronisiert</value>
+  </data>
+  <data name="Toast_HistorySyncBody" xml:space="preserve">
+    <value>Unison holt Unterhaltungen im Hintergrund nach.</value>
+  </data>  <data name="Toast_DisconnectedTitle" xml:space="preserve">
     <value>Unison getrennt</value>
   </data>
   <data name="Toast_DisconnectedBody" xml:space="preserve">
@@ -881,6 +907,21 @@ Nach der Diagnose deaktivieren: Wenn es aktiviert bleibt, wird die App langsamer
   <data name="ChatDetail_ShowContact.Text" xml:space="preserve">
     <value>Kontakt anzeigen</value>
   </data>
+  <data name="ChatDetail_VoiceCall.Text" xml:space="preserve">
+    <value>Sprachanruf</value>
+  </data>
+  <data name="ChatDetail_VideoCall.Text" xml:space="preserve">
+    <value>Videoanruf</value>
+  </data>
+  <data name="ChatDetail_CallPhoneTitle" xml:space="preserve">
+    <value>Telefonanruf starten?</value>
+  </data>
+  <data name="ChatDetail_CallPhoneBody" xml:space="preserve">
+    <value>Möchten Sie {0} anrufen?</value>
+  </data>
+  <data name="ChatDetail_CallPhoneConfirm" xml:space="preserve">
+    <value>Anrufen</value>
+  </data>
   <data name="ChatDetail_AddContact.Text" xml:space="preserve">
     <value>Kontakt hinzufügen</value>
   </data>
@@ -919,6 +960,18 @@ Nach der Diagnose deaktivieren: Wenn es aktiviert bleibt, wird die App langsamer
   </data>
   <data name="ChatList_DeleteChat.Text" xml:space="preserve">
     <value>Chat löschen</value>
+  </data>
+  <data name="ChatList_ArchiveChat.Text" xml:space="preserve">
+    <value>Chat archivieren</value>
+  </data>
+  <data name="ChatList_UnarchiveChat.Text" xml:space="preserve">
+    <value>Chat entarchivieren</value>
+  </data>
+  <data name="ChatDetail_ArchiveChat.Text" xml:space="preserve">
+    <value>Chat archivieren</value>
+  </data>
+  <data name="ChatDetail_UnarchiveChat.Text" xml:space="preserve">
+    <value>Chat entarchivieren</value>
   </data>
   <data name="ChatDetail_DeleteChat.Text" xml:space="preserve">
     <value>Chat löschen</value>
@@ -1024,5 +1077,20 @@ Nach der Diagnose deaktivieren: Wenn es aktiviert bleibt, wird die App langsamer
   </data>
   <data name="ChatDetailInfo_DeleteChatBar.Text" xml:space="preserve">
     <value>Chat&#x0a;löschen</value>
+  </data>
+  <data name="Debug_RuntimeDialog.PrimaryButtonText" xml:space="preserve">
+    <value>Auf Datenträger speichern</value>
+  </data>
+  <data name="Debug_RuntimeDialog.CloseButtonText" xml:space="preserve">
+    <value>Schließen</value>
+  </data>
+  <data name="ChatList_SyncingHistory" xml:space="preserve">
+    <value>Verlauf wird synchronisiert…</value>
+  </data>
+  <data name="Debug_RuntimeDialogHint.Text" xml:space="preserve">
+    <value>Gedrückt halten / Rechtsklick auf Chats (oder QR) zum Öffnen. Kein Nachrichtentext.</value>
+  </data>
+  <data name="Debug_RuntimeDialog.Title" xml:space="preserve">
+    <value>Laufzeitdiagnose</value>
   </data>
 </root>

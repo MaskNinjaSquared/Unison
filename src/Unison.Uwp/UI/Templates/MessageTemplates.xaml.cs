@@ -52,6 +52,30 @@ namespace Unison.Uwp.UI.Templates
             FindChatDetail(sender)?.OnVideoOpenButtonClick(sender, e);
         }
 
+        /// <summary>
+        /// Keep download/play media tiles square while MaxWidth=300 shrinks on narrow phones.
+        /// </summary>
+        private void MediaPlaceholder_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            var grid = sender as FrameworkElement;
+            if (grid == null)
+            {
+                return;
+            }
+
+            double width = e.NewSize.Width;
+            if (width <= 0 || double.IsNaN(width))
+            {
+                return;
+            }
+
+            double side = width > 300 ? 300 : width;
+            if (System.Math.Abs(grid.Height - side) > 0.5)
+            {
+                grid.Height = side;
+            }
+        }
+
         private void DocumentReady_RightTapped(object sender, RightTappedRoutedEventArgs e)
         {
             FindChatDetail(sender)?.OnDocumentReadyContextRequested(sender, e);
@@ -62,12 +86,12 @@ namespace Unison.Uwp.UI.Templates
             FindChatDetail(sender)?.OnDocumentReadyHolding(sender, e);
         }
 
-        private static ChatDetailView FindChatDetail(object sender)
+        private static IChatDetailSurface FindChatDetail(object sender)
         {
             var current = sender as DependencyObject;
             while (current != null)
             {
-                var view = current as ChatDetailView;
+                var view = current as IChatDetailSurface;
                 if (view != null)
                 {
                     return view;

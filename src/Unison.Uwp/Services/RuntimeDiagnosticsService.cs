@@ -75,6 +75,25 @@ namespace Unison.Uwp.Services
             _whatsAppService = whatsAppService;
         }
 
+        /// <summary>
+        /// The gate itself lives on the client, which owns both the setting and the sink it
+        /// silences. Answering false before the client is attached is correct rather than
+        /// defensive: nothing is being traced yet either.
+        /// </summary>
+        public bool IsVerboseLoggingEnabled
+        {
+            get
+            {
+                var whatsApp = _whatsAppService;
+                return whatsApp != null && whatsApp.VerboseLogging;
+            }
+        }
+
+        public void SetVerboseLogging(bool enabled, string source)
+        {
+            _whatsAppService?.SetVerboseLogging(enabled, source ?? "diagnostics");
+        }
+
         public void Start()
         {
             if (Interlocked.Exchange(ref _started, 1) != 0)
@@ -176,7 +195,13 @@ namespace Unison.Uwp.Services
                     return new RuntimeDiagnosticsSnapshot
                     {
                         CapturedUtc = DateTime.UtcNow,
-                        ConnectionStatus = "whatsapp-not-attached"
+                        ConnectionStatus = "whatsapp-not-attached",
+                        WebPSupportEnabled = Helpers.WebPHelpers.HasWebPCodec,
+                        WebPApiContract7 = Helpers.WebPHelpers.HasApiContract7,
+                        WebPDecoderIdListed = Helpers.WebPHelpers.WebPDecoderIdListed,
+                        WebPDecodeStatus = Helpers.WebPDecoder.LastDecodeStatus,
+                        WebPLibInPackage = Helpers.WebPDecoder.LibWebPInPackage,
+                        WebPSharpYuvInPackage = Helpers.WebPDecoder.LibSharpYuvInPackage
                     };
                 }
 
@@ -257,25 +282,62 @@ namespace Unison.Uwp.Services
                 Write("diagnostics", "export-requested");
                 await FlushAsync("export");
 
-                var picker = new FileSavePicker();
-                picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
-                picker.FileTypeChoices.Add("Text report", new List<string> { ".txt" });
-                picker.SuggestedFileName = "unison_diagnostics_" + DateTime.Now.ToString("yyyyMMdd_HHmmss");
-                StorageFile destination = await picker.PickSaveFileAsync();
-                if (destination == null)
+                string report = await BuildFullReportAsync();
+
+                try
                 {
-                    return "Cancelled";
+                    var picker = new FileSavePicker();
+                    picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
+                    picker.FileTypeChoices.Add("Text report", new List<string> { ".txt" });
+                    picker.SuggestedFileName = "unison_diagnostics_" + DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                    StorageFile destination = await picker.PickSaveFileAsync();
+                    if (destination != null)
+                    {
+                        await FileIO.WriteTextAsync(destination, report);
+                        return destination.Path;
+                    }
+                }
+                catch (Exception pickerEx)
+                {
+                    RecordException("diagnostics", "export-picker-failed", pickerEx);
                 }
 
-                string report = await BuildFullReportAsync();
-                await FileIO.WriteTextAsync(destination, report);
-                return destination.Path;
+                // Mobile / picker cancelled: always land a copy under LocalState.
+                return await WriteReportToLocalFolderAsync(report);
             }
             catch (Exception ex)
             {
                 RecordException("diagnostics", "export-failed", ex);
                 return "Error: " + ex.Message;
             }
+        }
+
+        public async Task<string> SaveReportToLocalFolderAsync()
+        {
+            try
+            {
+                Write("diagnostics", "save-local-requested");
+                await FlushAsync("save-local");
+                string report = await BuildFullReportAsync();
+                return await WriteReportToLocalFolderAsync(report);
+            }
+            catch (Exception ex)
+            {
+                RecordException("diagnostics", "save-local-failed", ex);
+                return "Error: " + ex.Message;
+            }
+        }
+
+        private async Task<string> WriteReportToLocalFolderAsync(string report)
+        {
+            StorageFolder folder = await ApplicationData.Current.LocalFolder.CreateFolderAsync(
+                DiagnosticsFolderName,
+                CreationCollisionOption.OpenIfExists);
+            string name = "unison_diagnostics_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".txt";
+            StorageFile file = await folder.CreateFileAsync(name, CreationCollisionOption.GenerateUniqueName);
+            await FileIO.WriteTextAsync(file, report ?? string.Empty);
+            Write("diagnostics", "save-local-ok", file.Path);
+            return file.Path;
         }
 
         public async Task ClearAsync()

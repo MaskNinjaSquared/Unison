@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -382,7 +382,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 SortChatsForDisplay();
             });
 
-            if (touched != null && _chatStore != null && (pinned.HasValue || applyMute))
+            if (touched != null && _chatStore != null && (archived.HasValue || pinned.HasValue || applyMute))
             {
                 foreach (var chat in touched)
                 {
@@ -390,7 +390,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     {
                         await _chatStore.UpsertAsync(
                             chat.JID,
-                            chat.LocalStatus,
+                            chat.Status,
                             chat.IsWidgetPinned,
                             chat.IsChatPinned,
                             chat.MutedUntil).ConfigureAwait(false);
@@ -399,6 +399,23 @@ namespace Unison.Uwp.Services.WhatsApp
                     {
                         Debug.WriteLine("[WhatsAppService] ChatStore upsert from app-state failed: " + ex.Message);
                     }
+                }
+            }
+
+            if (archived.HasValue && touched != null && touched.Count > 0)
+            {
+                ChatStatus status = archived.Value ? ChatStatus.Archived : ChatStatus.Active;
+                try
+                {
+                    await _chatPreviews.SetStatusAsync(
+                            ExpandHistoryChatKeys(canonical),
+                            status)
+                        .ConfigureAwait(false);
+                    await PersistChatCatalogAsync(touched).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[WhatsAppService] Archive status persist failed: " + ex.Message);
                 }
             }
 

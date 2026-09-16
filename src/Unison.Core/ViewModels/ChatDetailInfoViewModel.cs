@@ -11,6 +11,7 @@ using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Factories;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
+using Unison.Core.State;
 
 namespace Unison.Core.ViewModels
 {
@@ -26,12 +27,21 @@ namespace Unison.Core.ViewModels
         private readonly IMessageStore _messageStore;
         private readonly IMessageService _messages;
         private readonly IChatMessageVmFactory _messageVmFactory;
-        private readonly IWhatsAppService _whatsApp;
+
+        /// <summary>Send permissions, roster and the group picture.</summary>
+        private readonly IGroupService _groups;
+
+        /// <summary>The chat list, for naming the groups this person shares with us.</summary>
+        private readonly IChatStateStore _chatState;
+
+        private readonly ParticipantResolutionContext _participants;
+        private readonly IJidResolver _jids;
         private readonly IPersonStore _personStore;
         private readonly IContactService _contacts;
         private readonly IDispatcher _dispatcher;
         private readonly IStringResources _strings;
         private readonly IDialogService _dialogs;
+        private readonly IUriLauncher _uriLauncher;
         private readonly ChatItem _source;
         private readonly GroupMember _member;
         private readonly bool _isGroup;
@@ -44,6 +54,8 @@ namespace Unison.Core.ViewModels
         private bool _isMediaIndexLoading;
         private bool _membersAvatarsRequested;
         private bool _isMembersAvatarsLoading;
+        private bool _isMembersRosterLoading;
+        private Task _membersRosterEnsureTask;
 
         /// <summary>Tiles materialized per page. Groups hold hundreds of media rows.</summary>
         private const int MediaPageSize = 30;
@@ -69,14 +81,19 @@ namespace Unison.Core.ViewModels
             IChatService chatService = null,
             IMessageStore messageStore = null,
             IChatMessageVmFactory messageVmFactory = null,
-            IWhatsAppService whatsApp = null,
+            IGroupService groups = null,
             GroupMember member = null,
             IPersonStore personStore = null,
             IMessageService messages = null,
             IContactService contacts = null,
-            IDialogService dialogs = null)
+            IDialogService dialogs = null,
+            ParticipantResolutionContext participants = null,
+            IUriLauncher uriLauncher = null,
+            IChatStateStore chatState = null)
         {
             _source = source ?? throw new ArgumentNullException(nameof(source));
+            _participants = participants;
+            _jids = participants?.Jids;
             _member = member;
             _isGroupMember = member != null;
             _isGroup = isGroup && !_isGroupMember;
@@ -86,12 +103,14 @@ namespace Unison.Core.ViewModels
             _messageStore = messageStore;
             _messages = messages;
             _messageVmFactory = messageVmFactory;
-            _whatsApp = whatsApp;
+            _groups = groups;
+            _chatState = chatState;
             _personStore = personStore;
             _contacts = contacts;
             _dispatcher = dispatcher;
             _strings = strings;
             _dialogs = dialogs;
+            _uriLauncher = uriLauncher;
 
             _source.PropertyChanged += Source_PropertyChanged;
             if (_member != null)
@@ -147,19 +166,23 @@ namespace Unison.Core.ViewModels
                 () => _ = AddContactAsync(),
                 () => CanAddToAddressBook);
 
+            CallPhoneCommand = new RelayCommand(
+                () => _ = CallPhoneAsync(),
+                () => CanCallPhone);
+
             RefreshDerived();
             if (_isGroupMember)
             {
                 _ = LoadSharedGroupsAsync();
             }
-            else if (_whatsApp != null)
+            else if (_groups != null)
             {
                 if (_isGroup)
                 {
-                    _ = _whatsApp.RefreshGroupSendPermissionsAsync(_source.JID);
+                    _ = _groups.RefreshGroupSendPermissionsAsync(_source.JID);
                 }
 
-                _ = _whatsApp.EnsureHighQualityGroupAvatarAsync(_source);
+                _ = _groups.EnsureHighQualityGroupAvatarAsync(_source);
             }
         }
 
@@ -189,6 +212,9 @@ namespace Unison.Core.ViewModels
         /// <summary>True while the Members pivot is hydrating roster pictures.</summary>
         public bool IsMembersAvatarsLoading => _isMembersAvatarsLoading;
 
+        /// <summary>True while the Members pivot is fetching the roster metadata base.</summary>
+        public bool IsMembersRosterLoading => _isMembersRosterLoading;
+
         public bool HasSharedGroups => SharedGroups.Count > 0;
 
         public ChatItem Source => _source;
@@ -206,8 +232,7 @@ namespace Unison.Core.ViewModels
                 ? (GroupParticipantResolver.ResolveAvatar(
                     _member?.Jid ?? _member?.Lid ?? _member?.PhoneNumber,
                     _source,
-                    _whatsApp,
-                    _personStore,
+                    _participants,
                     _member) ?? string.Empty)
                 : _source.GetAvatarUrl(preferHigh: true);
 
@@ -221,8 +246,7 @@ namespace Unison.Core.ViewModels
                     return GroupParticipantResolver.ResolveDisplayName(
                         jid,
                         _source,
-                        _whatsApp,
-                        _personStore,
+                        _participants,
                         _member?.DisplayName,
                         _member) ?? string.Empty;
                 }
@@ -267,6 +291,12 @@ namespace Unison.Core.ViewModels
         }
 
         public bool HasPhone => !string.IsNullOrWhiteSpace(PhoneValue);
+
+        /// <summary>Non-group profiles with a phone — drives the dialer hyperlink.</summary>
+        public bool CanCallPhone =>
+            !_isGroup &&
+            _uriLauncher != null &&
+            HasPhone;
 
         public bool CanAddToAddressBook =>
             !_isGroup &&
@@ -337,6 +367,9 @@ namespace Unison.Core.ViewModels
 
         public ICommand AddContactCommand { get; }
 
+        /// <summary>Confirm + open dialer for this profile phone (1:1 or group member).</summary>
+        public ICommand CallPhoneCommand { get; }
+
         public void Detach()
         {
             _detached = true;
@@ -381,6 +414,8 @@ namespace Unison.Core.ViewModels
             _isMediaIndexLoading = false;
             _membersAvatarsRequested = false;
             _isMembersAvatarsLoading = false;
+            _isMembersRosterLoading = false;
+            _membersRosterEnsureTask = null;
         }
 
         /// <summary>
@@ -402,6 +437,114 @@ namespace Unison.Core.ViewModels
             }
 
             _ = RebuildFilteredAsync();
+        }
+
+        /// <summary>
+        /// Members pivot: restore roster from SQLite when empty, sync metadata in the background,
+        /// then hydrate pictures (lazy). Ring only while waiting for a cold network fetch.
+        /// </summary>
+        public Task EnsureMembersPivotReadyAsync()
+        {
+            if (_detached || !_isGroup || string.IsNullOrWhiteSpace(_source?.JID))
+            {
+                return Task.CompletedTask;
+            }
+
+            if (_membersRosterEnsureTask != null)
+            {
+                return _membersRosterEnsureTask;
+            }
+
+            _membersRosterEnsureTask = RunMembersPivotReadyAsync();
+            return _membersRosterEnsureTask;
+        }
+
+        private async Task RunMembersPivotReadyAsync()
+        {
+            try
+            {
+                if (!HasMembers && _groups != null)
+                {
+                    SetMembersRosterLoading(true);
+                    try
+                    {
+                        await _groups.EnsureGroupRosterLoadedFromStoreAsync(_source.JID)
+                            .ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine(
+                            "[ChatDetailInfoViewModel] Members roster store load failed: " + ex.Message);
+                    }
+                    finally
+                    {
+                        SetMembersRosterLoading(false);
+                    }
+                }
+
+                if (_detached)
+                {
+                    return;
+                }
+
+                if (HasMembers)
+                {
+                    _ = RefreshMembersRosterInBackgroundAsync();
+                    await EnsureMembersAvatarsHydratedAsync().ConfigureAwait(false);
+                    return;
+                }
+
+                SetMembersRosterLoading(true);
+                try
+                {
+                    if (_groups != null)
+                    {
+                        await _groups.RefreshGroupSendPermissionsAsync(_source.JID)
+                            .ConfigureAwait(false);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        "[ChatDetailInfoViewModel] Members roster network ensure failed: " + ex.Message);
+                }
+                finally
+                {
+                    SetMembersRosterLoading(false);
+                }
+
+                if (_detached)
+                {
+                    return;
+                }
+
+                if (HasMembers)
+                {
+                    await EnsureMembersAvatarsHydratedAsync().ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                _membersRosterEnsureTask = null;
+            }
+        }
+
+        private async Task RefreshMembersRosterInBackgroundAsync()
+        {
+            if (_groups == null || string.IsNullOrWhiteSpace(_source?.JID))
+            {
+                return;
+            }
+
+            try
+            {
+                await _groups.RefreshGroupSendPermissionsAsync(_source.JID).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[ChatDetailInfoViewModel] Members roster background sync failed: " + ex.Message);
+            }
         }
 
         /// <summary>
@@ -439,6 +582,29 @@ namespace Unison.Core.ViewModels
             finally
             {
                 SetMembersAvatarsLoading(false);
+            }
+        }
+
+        private void SetMembersRosterLoading(bool value)
+        {
+            Action apply = () =>
+            {
+                if (_isMembersRosterLoading == value)
+                {
+                    return;
+                }
+
+                _isMembersRosterLoading = value;
+                OnPropertyChanged(nameof(IsMembersRosterLoading));
+            };
+
+            if (_dispatcher != null)
+            {
+                _ = _dispatcher.RunAsync(apply);
+            }
+            else
+            {
+                apply();
             }
         }
 
@@ -780,8 +946,8 @@ namespace Unison.Core.ViewModels
                 return false;
             }
 
-            string canonical = _whatsApp != null
-                ? _whatsApp.GetCanonicalJid(participant)
+            string canonical = _jids != null
+                ? _jids.GetCanonicalJid(participant)
                 : JidHelper.Normalize(participant);
             if (string.IsNullOrWhiteSpace(canonical))
             {
@@ -800,8 +966,8 @@ namespace Unison.Core.ViewModels
                 return false;
             }
 
-            string other = _whatsApp != null
-                ? _whatsApp.GetCanonicalJid(jid)
+            string other = _jids != null
+                ? _jids.GetCanonicalJid(jid)
                 : JidHelper.Normalize(jid);
             if (string.IsNullOrWhiteSpace(other))
             {
@@ -854,9 +1020,9 @@ namespace Unison.Core.ViewModels
                     string groupJid = pair.Key;
                     string name = groupJid;
                     string avatar = null;
-                    if (_whatsApp?.Chats != null)
+                    if (_chatState?.Chats != null)
                     {
-                        var chat = _whatsApp.Chats.FirstOrDefault(c =>
+                        var chat = _chatState.Chats.FirstOrDefault(c =>
                             c != null &&
                             string.Equals(
                                 JidHelper.Normalize(c.JID),
@@ -867,9 +1033,9 @@ namespace Unison.Core.ViewModels
                             name = chat.GetNameResolved(_strings) ?? chat.Name ?? groupJid;
                             avatar = chat.GetAvatarUrl(preferHigh: false);
                         }
-                        else if (_whatsApp != null)
+                        else if (_contacts != null)
                         {
-                            name = _whatsApp.ResolveDisplayName(groupJid, "chat") ?? groupJid;
+                            name = _contacts.ResolveDisplayName(groupJid, "chat") ?? groupJid;
                         }
                     }
 
@@ -940,15 +1106,15 @@ namespace Unison.Core.ViewModels
             }
 
             Add(member.Jid);
-            if (_whatsApp != null && !string.IsNullOrWhiteSpace(member.Jid))
+            if (_jids != null && !string.IsNullOrWhiteSpace(member.Jid))
             {
-                Add(_whatsApp.GetCanonicalJid(member.Jid));
+                Add(_jids.GetCanonicalJid(member.Jid));
             }
 
             Add(member.Lid);
-            if (_whatsApp != null && !string.IsNullOrWhiteSpace(member.Lid))
+            if (_jids != null && !string.IsNullOrWhiteSpace(member.Lid))
             {
-                Add(_whatsApp.GetCanonicalJid(member.Lid));
+                Add(_jids.GetCanonicalJid(member.Lid));
             }
 
             string phone = member.PhoneNumber;
@@ -1058,8 +1224,32 @@ namespace Unison.Core.ViewModels
         {
             OnPropertyChanged(nameof(PhoneValue));
             OnPropertyChanged(nameof(HasPhone));
+            OnPropertyChanged(nameof(CanCallPhone));
             OnPropertyChanged(nameof(CanAddToAddressBook));
             (AddContactCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (CallPhoneCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        }
+
+        private async Task CallPhoneAsync()
+        {
+            if (!CanCallPhone)
+            {
+                return;
+            }
+
+            string phone = PhoneValue;
+            string label = DisplayName;
+            if (string.IsNullOrWhiteSpace(label))
+            {
+                label = phone;
+            }
+
+            await PhoneCallPrompt.ConfirmAndCallAsync(
+                phone,
+                label,
+                _dialogs,
+                _uriLauncher,
+                _strings).ConfigureAwait(false);
         }
 
         private async Task AddContactAsync()
@@ -1110,7 +1300,7 @@ namespace Unison.Core.ViewModels
                 chat.MutedUntil = mutedUntil;
                 await _chatStore.UpsertAsync(
                     chat.JID,
-                    chat.LocalStatus,
+                    chat.Status,
                     chat.IsWidgetPinned,
                     chat.IsChatPinned,
                     chat.MutedUntil);
@@ -1197,7 +1387,7 @@ namespace Unison.Core.ViewModels
                 chat.IsWidgetPinned = nextPinned;
                 await _chatStore.UpsertAsync(
                     chat.JID,
-                    chat.LocalStatus,
+                    chat.Status,
                     chat.IsWidgetPinned,
                     chat.IsChatPinned,
                     chat.MutedUntil);

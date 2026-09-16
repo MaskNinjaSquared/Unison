@@ -665,11 +665,32 @@ Disable after diagnosing: keeping it on slows the app.</value>
   <data name="Settings_General.Text" xml:space="preserve">
     <value>General</value>
   </data>
+  <data name="Settings_NotificationsSection.Text" xml:space="preserve">
+    <value>Notifications</value>
+  </data>
   <data name="Settings_Notifications.Header" xml:space="preserve">
     <value>Notifications</value>
   </data>
   <data name="Settings_Notifications.Text" xml:space="preserve">
     <value>Show toasts and badge for incoming messages.</value>
+  </data>
+  <data name="Settings_MessageNotificationSound.Header" xml:space="preserve">
+    <value>Message notifications</value>
+  </data>
+  <data name="Settings_MessageNotificationSound.Text" xml:space="preserve">
+    <value>Sound for 1:1 message toasts.</value>
+  </data>
+  <data name="Settings_GroupNotificationSound.Header" xml:space="preserve">
+    <value>Group notifications</value>
+  </data>
+  <data name="Settings_GroupNotificationSound.Text" xml:space="preserve">
+    <value>Sound for group message toasts.</value>
+  </data>
+  <data name="Settings_NotificationSound_SystemDefault.Content" xml:space="preserve">
+    <value>System default</value>
+  </data>
+  <data name="Settings_NotificationSound_SystemDefaultGroup.Content" xml:space="preserve">
+    <value>System default</value>
   </data>
   <data name="Settings_LiveTiles.Header" xml:space="preserve">
     <value>Live Tiles</value>
@@ -800,7 +821,12 @@ Disable after diagnosing: keeping it on slows the app.</value>
   <data name="Settings_AppBranch.Text" xml:space="preserve">
     <value>Release</value>
   </data>
-  <data name="Toast_DisconnectedTitle" xml:space="preserve">
+  <data name="Toast_HistorySyncTitle" xml:space="preserve">
+    <value>Synchronizing history</value>
+  </data>
+  <data name="Toast_HistorySyncBody" xml:space="preserve">
+    <value>Unison is catching up on conversations in the background.</value>
+  </data>  <data name="Toast_DisconnectedTitle" xml:space="preserve">
     <value>Unison disconnected</value>
   </data>
   <data name="Toast_DisconnectedBody" xml:space="preserve">
@@ -881,6 +907,21 @@ Disable after diagnosing: keeping it on slows the app.</value>
   <data name="ChatDetail_ShowContact.Text" xml:space="preserve">
     <value>View contact</value>
   </data>
+  <data name="ChatDetail_VoiceCall.Text" xml:space="preserve">
+    <value>Voice call</value>
+  </data>
+  <data name="ChatDetail_VideoCall.Text" xml:space="preserve">
+    <value>Video call</value>
+  </data>
+  <data name="ChatDetail_CallPhoneTitle" xml:space="preserve">
+    <value>Start phone call?</value>
+  </data>
+  <data name="ChatDetail_CallPhoneBody" xml:space="preserve">
+    <value>Do you want to start a phone call to {0}?</value>
+  </data>
+  <data name="ChatDetail_CallPhoneConfirm" xml:space="preserve">
+    <value>Call</value>
+  </data>
   <data name="ChatDetail_AddContact.Text" xml:space="preserve">
     <value>Add contact</value>
   </data>
@@ -919,6 +960,18 @@ Disable after diagnosing: keeping it on slows the app.</value>
   </data>
   <data name="ChatList_DeleteChat.Text" xml:space="preserve">
     <value>Delete chat</value>
+  </data>
+  <data name="ChatList_ArchiveChat.Text" xml:space="preserve">
+    <value>Archive chat</value>
+  </data>
+  <data name="ChatList_UnarchiveChat.Text" xml:space="preserve">
+    <value>Unarchive chat</value>
+  </data>
+  <data name="ChatDetail_ArchiveChat.Text" xml:space="preserve">
+    <value>Archive chat</value>
+  </data>
+  <data name="ChatDetail_UnarchiveChat.Text" xml:space="preserve">
+    <value>Unarchive chat</value>
   </data>
   <data name="ChatDetail_DeleteChat.Text" xml:space="preserve">
     <value>Delete chat</value>
@@ -1024,5 +1077,20 @@ Disable after diagnosing: keeping it on slows the app.</value>
   </data>
   <data name="ChatDetailInfo_DeleteChatBar.Text" xml:space="preserve">
     <value>Delete&#x0a;chat</value>
+  </data>
+  <data name="Debug_RuntimeDialog.PrimaryButtonText" xml:space="preserve">
+    <value>Save to disk</value>
+  </data>
+  <data name="Debug_RuntimeDialog.CloseButtonText" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="ChatList_SyncingHistory" xml:space="preserve">
+    <value>Synchronizing history…</value>
+  </data>
+  <data name="Debug_RuntimeDialogHint.Text" xml:space="preserve">
+    <value>Hold / right-click Chats (or the QR) to open. No message text is included.</value>
+  </data>
+  <data name="Debug_RuntimeDialog.Title" xml:space="preserve">
+    <value>Runtime diagnostics</value>
   </data>
 </root>

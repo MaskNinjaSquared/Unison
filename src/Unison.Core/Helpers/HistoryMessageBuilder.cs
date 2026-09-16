@@ -29,6 +29,8 @@ namespace Unison.Core.Helpers
             string syncType = sync.SyncType.ToString();
             DateTime now = DateTime.UtcNow;
             var pushNames = HistorySyncContentFilter.BuildPushNameMap(sync);
+            // History reconnect: only insert bodies we do not already have; side effects still apply.
+            batch.PreferDeltaSkipExistingBodies = true;
 
             foreach (var conv in sync.Conversations)
             {

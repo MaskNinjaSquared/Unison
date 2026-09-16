@@ -18,6 +18,16 @@ namespace Unison.Core.Contracts
         /// <summary>Whether protocol traffic is being captured into the session log.</summary>
         bool IsCaptureEnabled { get; set; }
 
+        /// <summary>
+        /// Whether the chatty per-operation tracing is on. Separate from
+        /// <see cref="IsCaptureEnabled"/>: that one decides whether lines are kept, this one
+        /// decides whether they are produced at all.
+        /// </summary>
+        bool IsVerboseLoggingEnabled { get; }
+
+        /// <summary>Turns verbose tracing on or off. <paramref name="source"/> names the caller.</summary>
+        void SetVerboseLogging(bool enabled, string source);
+
         /// <summary>Raised for every line appended to the session log.</summary>
         event EventHandler<string> LogLineAppended;
 
@@ -32,6 +42,9 @@ namespace Unison.Core.Contracts
         string GetRecentRuntimeText();
 
         Task<string> ExportRuntimeReportAsync();
+
+        /// <summary>Saves the report under LocalState/Diagnostics (Mobile-friendly).</summary>
+        Task<string> SaveRuntimeReportToLocalFolderAsync();
 
         Task ClearRuntimeLogAsync();
 

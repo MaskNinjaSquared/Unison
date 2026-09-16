@@ -39,6 +39,8 @@ namespace Unison.Core.ViewModels
         private bool _shellChangeBusy;
         private bool _languageChangeBusy;
         private bool _timeFormatChangeBusy;
+        private bool _messageSoundChangeBusy;
+        private bool _groupSoundChangeBusy;
         private bool _disconnectBusy;
         private bool _publishContactsBusy;
 
@@ -96,6 +98,24 @@ namespace Unison.Core.ViewModels
                 }
 
                 ChangeTimeFormat(index);
+            });
+            ChangeMessageNotificationSoundCommand = new RelayCommand<int>(index =>
+            {
+                if (_messageSoundChangeBusy)
+                {
+                    return;
+                }
+
+                ChangeMessageNotificationSound(index);
+            });
+            ChangeGroupNotificationSoundCommand = new RelayCommand<int>(index =>
+            {
+                if (_groupSoundChangeBusy)
+                {
+                    return;
+                }
+
+                ChangeGroupNotificationSound(index);
             });
             DisconnectCommand = new RelayCommand(() =>
             {
@@ -271,6 +291,36 @@ namespace Unison.Core.ViewModels
         /// <summary>ComboBox SelectedIndex (OneWay). Changes go through <see cref="ChangeTimeFormatCommand"/>.</summary>
         public int SelectedTimeFormatIndex => (int)SelectedTimeFormat;
 
+        /// <summary>Toast sound for 1:1 messages.</summary>
+        public NotificationSound SelectedMessageNotificationSound
+        {
+            get
+            {
+                int raw = _localSettings.Get<int>(LocalSettingsConstants.MessageNotificationSound);
+                return Enum.IsDefined(typeof(NotificationSound), raw)
+                    ? (NotificationSound)raw
+                    : NotificationSound.SystemDefault;
+            }
+        }
+
+        /// <summary>ComboBox SelectedIndex for message toast sound.</summary>
+        public int SelectedMessageNotificationSoundIndex => (int)SelectedMessageNotificationSound;
+
+        /// <summary>Toast sound for group messages.</summary>
+        public NotificationSound SelectedGroupNotificationSound
+        {
+            get
+            {
+                int raw = _localSettings.Get<int>(LocalSettingsConstants.GroupNotificationSound);
+                return Enum.IsDefined(typeof(NotificationSound), raw)
+                    ? (NotificationSound)raw
+                    : NotificationSound.SystemDefault;
+            }
+        }
+
+        /// <summary>ComboBox SelectedIndex for group toast sound.</summary>
+        public int SelectedGroupNotificationSoundIndex => (int)SelectedGroupNotificationSound;
+
         public string AppTitle => "Unison";
 
         public string AppVersion
@@ -298,6 +348,12 @@ namespace Unison.Core.ViewModels
         /// <summary>Applies 24h or 12h clock. Parameter: 0 = 24 Hours, 1 = 12 Hours.</summary>
         public ICommand ChangeTimeFormatCommand { get; }
 
+        /// <summary>Applies message toast sound. Parameter: <see cref="NotificationSound"/> index.</summary>
+        public ICommand ChangeMessageNotificationSoundCommand { get; }
+
+        /// <summary>Applies group toast sound. Parameter: <see cref="NotificationSound"/> index.</summary>
+        public ICommand ChangeGroupNotificationSoundCommand { get; }
+
         /// <summary>Confirms, then wipes local auth/session and returns to pairing.</summary>
         public ICommand DisconnectCommand { get; }
 
@@ -309,6 +365,7 @@ namespace Unison.Core.ViewModels
             RaiseShellSelectionChanged();
             RaiseLanguageSelectionChanged();
             RaiseTimeFormatSelectionChanged();
+            RaiseNotificationSoundSelectionChanged();
             RaiseAboutCopyChanged();
             RaiseProfileHeaderChanged();
         }
@@ -367,6 +424,15 @@ namespace Unison.Core.ViewModels
             RaiseProperties(nameof(SelectedTimeFormat), nameof(SelectedTimeFormatIndex));
         }
 
+        private void RaiseNotificationSoundSelectionChanged()
+        {
+            RaiseProperties(
+                nameof(SelectedMessageNotificationSound),
+                nameof(SelectedMessageNotificationSoundIndex),
+                nameof(SelectedGroupNotificationSound),
+                nameof(SelectedGroupNotificationSoundIndex));
+        }
+
         private void ChangeTimeFormat(int index)
         {
             if (!Enum.IsDefined(typeof(TimeFormat), index))
@@ -390,6 +456,58 @@ namespace Unison.Core.ViewModels
             {
                 _timeFormatChangeBusy = false;
                 RaiseTimeFormatSelectionChanged();
+            }
+        }
+
+        private void ChangeMessageNotificationSound(int index)
+        {
+            if (!Enum.IsDefined(typeof(NotificationSound), index))
+            {
+                return;
+            }
+
+            var sound = (NotificationSound)index;
+            if (sound == SelectedMessageNotificationSound)
+            {
+                return;
+            }
+
+            _messageSoundChangeBusy = true;
+            try
+            {
+                _localSettings.Set(LocalSettingsConstants.MessageNotificationSound, (int)sound);
+                _notificationService.OnNotificationsConfigChanged();
+            }
+            finally
+            {
+                _messageSoundChangeBusy = false;
+                RaiseNotificationSoundSelectionChanged();
+            }
+        }
+
+        private void ChangeGroupNotificationSound(int index)
+        {
+            if (!Enum.IsDefined(typeof(NotificationSound), index))
+            {
+                return;
+            }
+
+            var sound = (NotificationSound)index;
+            if (sound == SelectedGroupNotificationSound)
+            {
+                return;
+            }
+
+            _groupSoundChangeBusy = true;
+            try
+            {
+                _localSettings.Set(LocalSettingsConstants.GroupNotificationSound, (int)sound);
+                _notificationService.OnNotificationsConfigChanged();
+            }
+            finally
+            {
+                _groupSoundChangeBusy = false;
+                RaiseNotificationSoundSelectionChanged();
             }
         }
 

@@ -8,7 +8,7 @@
     -->
     <ResourceDictionary.ThemeDictionaries>
 
-        <!-- Fallback � Dark when theme dictionary resolution needs Default -->
+        <!-- Fallback = Dark when theme dictionary resolution needs Default -->
         <ResourceDictionary x:Key="Default">
             <SolidColorBrush x:Key="WhatsAppBackgroundBrush" Color="#FF2C2C2C"/>
             <SolidColorBrush x:Key="ChatDetailBackgroundBrush" Color="#0F1210"/>
@@ -34,6 +34,8 @@
 
             <SolidColorBrush x:Key="ChatListBackgroundBrush" Color="#FF121212"/>
             <SolidColorBrush x:Key="ChatListSecondaryTextBrush" Color="#FF9F9F9F"/>
+            <SolidColorBrush x:Key="ChatListStatusCheckSentBrush" Color="#FF9F9F9F"/>
+            <SolidColorBrush x:Key="ChatListStatusCheckReadBrush" Color="#FF53BDEB"/>
             <SolidColorBrush x:Key="ChatListUnreadBadgeBrush" Color="#FF20C064"/>
             <SolidColorBrush x:Key="ChatListSyncStatusBrush" Color="#FF20C064"/>
             <SolidColorBrush x:Key="ChatListUnreadBadgeForegroundBrush" Color="#FFFFFFFF"/>
@@ -50,6 +52,10 @@
             <SolidColorBrush x:Key="ChatDetailHeaderStatusBrush" Color="#FF9F9F9F"/>
             <SolidColorBrush x:Key="ChatDetailAvatarFallbackBrush" Color="#FF20C064"/>
             <SolidColorBrush x:Key="ChatDetailAvatarInitialBrush" Color="#FFFFFFFF"/>
+            <!-- Chat list / bubble avatar placeholder (photo missing). -->
+            <SolidColorBrush x:Key="AvatarFallbackBackgroundBrush" Color="#FF2A2A2A"/>
+            <SolidColorBrush x:Key="AvatarFallbackIconBrush" Color="#FF808080"/>
+            <SolidColorBrush x:Key="AvatarBorderBrush" Color="Transparent"/>
             <SolidColorBrush x:Key="ChatDetailAccentBrush" Color="#FF20C064"/>
             <SolidColorBrush x:Key="ChatDetailPaneSeparatorBrush" Color="#FF3B3B3B"/>
             <SolidColorBrush x:Key="ChatDetailPinnedBarBackgroundBrush" Color="#FF32373B"/>
@@ -58,8 +64,8 @@
             <SolidColorBrush x:Key="ChatDetailInputBarTopBorderBrush" Color="Transparent"/>
             <SolidColorBrush x:Key="ChatDetailComposerBackgroundBrush" Color="Transparent"/>
             <SolidColorBrush x:Key="ChatDetailComposerForegroundBrush" Color="#FFE9EDEF"/>
-            <SolidColorBrush x:Key="ChatDetailSentBubbleBrush" Color="#FF005C4B"/>
-            <SolidColorBrush x:Key="ChatDetailSentBubbleHighlightBrush" Color="#FF106656"/>
+            <SolidColorBrush x:Key="ChatDetailSentBubbleBrush" Color="#FF007862"/>
+            <SolidColorBrush x:Key="ChatDetailSentBubbleHighlightBrush" Color="#FF1A8F74"/>
             <SolidColorBrush x:Key="ChatDetailReceivedBubbleBrush" Color="#FF363636"/>
             <SolidColorBrush x:Key="ChatDetailReceivedBubbleHighlightBrush" Color="#FF3E3E3E"/>
             <SolidColorBrush x:Key="ChatDetailSentQuoteBackgroundBrush" Color="#66000000"/>
@@ -72,6 +78,8 @@
             <SolidColorBrush x:Key="ChatDetailReceivedMediaDownloadIconBrush" Color="#FF25D366"/>
             <SolidColorBrush x:Key="ChatDetailSentTextBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailSentMetaBrush" Color="#CCFFFFFF"/>
+            <SolidColorBrush x:Key="ChatDetailStatusCheckSentBrush" Color="#CCFFFFFF"/>
+            <SolidColorBrush x:Key="ChatDetailStatusCheckReadBrush" Color="#FF53BDEB"/>
             <SolidColorBrush x:Key="ChatDetailSendFailedBrush" Color="#FFFF8080"/>
             <SolidColorBrush x:Key="ChatDetailGroupSenderBrush" Color="#FF2695D9"/>
             <SolidColorBrush x:Key="ChatDetailReceivedTextBrush" Color="#FFFFFFFF"/>
@@ -80,6 +88,15 @@
             <SolidColorBrush x:Key="ChatDetailReceivedLinkBrush" Color="#FF53BDEB"/>
             <SolidColorBrush x:Key="ChatDetailSentBubbleButtonBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailReceivedBubbleButtonBrush" Color="#FF20C064"/>
+            <!-- Dark: sent circle = lighter received-gray + glyph #00B090; received circle = sent bubble + white. -->
+            <SolidColorBrush x:Key="ChatDetailSentMediaButtonBackgroundBrush" Color="#00483B"/>
+            <SolidColorBrush x:Key="ChatDetailSentMediaButtonGlyphBrush" Color="#FF00B090"/>
+            <SolidColorBrush x:Key="ChatDetailReceivedMediaButtonBackgroundBrush" Color="#FF007862"/>
+            <SolidColorBrush x:Key="ChatDetailReceivedMediaButtonGlyphBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ChatDetailMediaButtonHoverBackgroundBrush" Color="#FF20C064"/>
+            <SolidColorBrush x:Key="ChatDetailMediaButtonHoverGlyphBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ChatDetailSentAudioSliderFillBrush" Color="#FF20C064"/>
+            <SolidColorBrush x:Key="ChatDetailReceivedAudioSliderFillBrush" Color="#FF20C064"/>
             <SolidColorBrush x:Key="ChatDetailMutedTextBrush" Color="#FF888888"/>
             <SolidColorBrush x:Key="ChatDetailMediaDownloadOverlayBrush" Color="#FF2A2A2A"/>
             <SolidColorBrush x:Key="ChatDetailMediaDownloadIconBrush" Color="#FF25D366"/>
@@ -90,8 +107,8 @@
             <SolidColorBrush x:Key="IconButtonForegroundPointerOverBrush" Color="#FF20C064"/>
             <SolidColorBrush x:Key="ChatDetailReactionChipBrush" Color="#FF363636"/>
             <SolidColorBrush x:Key="ChatDetailReactionChipForegroundBrush" Color="#FFE9EDEF"/>
-            <SolidColorBrush x:Key="ChatDetailReactionChipSentBrush" Color="#FF005C4B"/>
-            <SolidColorBrush x:Key="ChatDetailReactionChipSentBorderBrush" Color="#FF004536"/>
+            <SolidColorBrush x:Key="ChatDetailReactionChipSentBrush" Color="#FF007862"/>
+            <SolidColorBrush x:Key="ChatDetailReactionChipSentBorderBrush" Color="#FF006650"/>
             <SolidColorBrush x:Key="ChatDetailReactionChipReceivedBrush" Color="#FF363636"/>
             <SolidColorBrush x:Key="ChatDetailReactionChipReceivedBorderBrush" Color="#FF282828"/>
             <SolidColorBrush x:Key="ChatDetailReactionChipPointerOverBrush" Color="#FF1F553F"/>
@@ -146,6 +163,8 @@
 
             <SolidColorBrush x:Key="ChatListBackgroundBrush" Color="#FF121212"/>
             <SolidColorBrush x:Key="ChatListSecondaryTextBrush" Color="#FF9F9F9F"/>
+            <SolidColorBrush x:Key="ChatListStatusCheckSentBrush" Color="#FF9F9F9F"/>
+            <SolidColorBrush x:Key="ChatListStatusCheckReadBrush" Color="#FF53BDEB"/>
             <SolidColorBrush x:Key="ChatListUnreadBadgeBrush" Color="#FF20C064"/>
             <SolidColorBrush x:Key="ChatListSyncStatusBrush" Color="#FF20C064"/>
             <SolidColorBrush x:Key="ChatListUnreadBadgeForegroundBrush" Color="#FFFFFFFF"/>
@@ -162,6 +181,10 @@
             <SolidColorBrush x:Key="ChatDetailHeaderStatusBrush" Color="#FF9F9F9F"/>
             <SolidColorBrush x:Key="ChatDetailAvatarFallbackBrush" Color="#FF20C064"/>
             <SolidColorBrush x:Key="ChatDetailAvatarInitialBrush" Color="#FFFFFFFF"/>
+            <!-- Chat list / bubble avatar placeholder (photo missing). OS Dark uses this dict, not Default. -->
+            <SolidColorBrush x:Key="AvatarFallbackBackgroundBrush" Color="#FF2A2A2A"/>
+            <SolidColorBrush x:Key="AvatarFallbackIconBrush" Color="#FF808080"/>
+            <SolidColorBrush x:Key="AvatarBorderBrush" Color="Transparent"/>
             <SolidColorBrush x:Key="ChatDetailAccentBrush" Color="#FF20C064"/>
             <SolidColorBrush x:Key="ChatDetailPaneSeparatorBrush" Color="#FF3B3B3B"/>
             <SolidColorBrush x:Key="ChatDetailPinnedBarBackgroundBrush" Color="#FF32373B"/>
@@ -170,8 +193,8 @@
             <SolidColorBrush x:Key="ChatDetailInputBarTopBorderBrush" Color="Transparent"/>
             <SolidColorBrush x:Key="ChatDetailComposerBackgroundBrush" Color="Transparent"/>
             <SolidColorBrush x:Key="ChatDetailComposerForegroundBrush" Color="#FFE9EDEF"/>
-            <SolidColorBrush x:Key="ChatDetailSentBubbleBrush" Color="#FF005C4B"/>
-            <SolidColorBrush x:Key="ChatDetailSentBubbleHighlightBrush" Color="#FF106656"/>
+            <SolidColorBrush x:Key="ChatDetailSentBubbleBrush" Color="#FF007862"/>
+            <SolidColorBrush x:Key="ChatDetailSentBubbleHighlightBrush" Color="#FF1A8F74"/>
             <SolidColorBrush x:Key="ChatDetailReceivedBubbleBrush" Color="#FF363636"/>
             <SolidColorBrush x:Key="ChatDetailReceivedBubbleHighlightBrush" Color="#FF3E3E3E"/>
             <SolidColorBrush x:Key="ChatDetailSentQuoteBackgroundBrush" Color="#66000000"/>
@@ -184,6 +207,8 @@
             <SolidColorBrush x:Key="ChatDetailReceivedMediaDownloadIconBrush" Color="#FF25D366"/>
             <SolidColorBrush x:Key="ChatDetailSentTextBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailSentMetaBrush" Color="#CCFFFFFF"/>
+            <SolidColorBrush x:Key="ChatDetailStatusCheckSentBrush" Color="#CCFFFFFF"/>
+            <SolidColorBrush x:Key="ChatDetailStatusCheckReadBrush" Color="#FF53BDEB"/>
             <SolidColorBrush x:Key="ChatDetailSendFailedBrush" Color="#FFFF8080"/>
             <SolidColorBrush x:Key="ChatDetailGroupSenderBrush" Color="#FF2695D9"/>
             <SolidColorBrush x:Key="ChatDetailReceivedTextBrush" Color="#FFFFFFFF"/>
@@ -192,6 +217,15 @@
             <SolidColorBrush x:Key="ChatDetailReceivedLinkBrush" Color="#FF53BDEB"/>
             <SolidColorBrush x:Key="ChatDetailSentBubbleButtonBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailReceivedBubbleButtonBrush" Color="#FF20C064"/>
+            <!-- Dark: sent circle = lighter received-gray + glyph #00B090; received circle = sent bubble + white. -->
+            <SolidColorBrush x:Key="ChatDetailSentMediaButtonBackgroundBrush" Color="#00483B"/>
+            <SolidColorBrush x:Key="ChatDetailSentMediaButtonGlyphBrush" Color="#FF00B090"/>
+            <SolidColorBrush x:Key="ChatDetailReceivedMediaButtonBackgroundBrush" Color="#FF007862"/>
+            <SolidColorBrush x:Key="ChatDetailReceivedMediaButtonGlyphBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ChatDetailMediaButtonHoverBackgroundBrush" Color="#FF20C064"/>
+            <SolidColorBrush x:Key="ChatDetailMediaButtonHoverGlyphBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ChatDetailSentAudioSliderFillBrush" Color="#FF20C064"/>
+            <SolidColorBrush x:Key="ChatDetailReceivedAudioSliderFillBrush" Color="#FF20C064"/>
             <SolidColorBrush x:Key="ChatDetailMutedTextBrush" Color="#FF888888"/>
             <SolidColorBrush x:Key="ChatDetailMediaDownloadOverlayBrush" Color="#FF2A2A2A"/>
             <SolidColorBrush x:Key="ChatDetailMediaDownloadIconBrush" Color="#FF25D366"/>
@@ -202,8 +236,8 @@
             <SolidColorBrush x:Key="IconButtonForegroundPointerOverBrush" Color="#FF20C064"/>
             <SolidColorBrush x:Key="ChatDetailReactionChipBrush" Color="#FF363636"/>
             <SolidColorBrush x:Key="ChatDetailReactionChipForegroundBrush" Color="#FFE9EDEF"/>
-            <SolidColorBrush x:Key="ChatDetailReactionChipSentBrush" Color="#FF005C4B"/>
-            <SolidColorBrush x:Key="ChatDetailReactionChipSentBorderBrush" Color="#FF004536"/>
+            <SolidColorBrush x:Key="ChatDetailReactionChipSentBrush" Color="#FF007862"/>
+            <SolidColorBrush x:Key="ChatDetailReactionChipSentBorderBrush" Color="#FF006650"/>
             <SolidColorBrush x:Key="ChatDetailReactionChipReceivedBrush" Color="#FF363636"/>
             <SolidColorBrush x:Key="ChatDetailReactionChipReceivedBorderBrush" Color="#FF282828"/>
             <SolidColorBrush x:Key="ChatDetailReactionChipPointerOverBrush" Color="#FF1F553F"/>
@@ -234,7 +268,7 @@
         <ResourceDictionary x:Key="Light">
             <SolidColorBrush x:Key="WhatsAppBackgroundBrush" Color="#FFF0F2F5"/>
             <SolidColorBrush x:Key="ChatDetailBackgroundBrush" Color="#8A9191"/>
-            <SolidColorBrush x:Key="ChatDetailWallpaperBackgroundBrush" Color="#C7D1D1"/>
+            <SolidColorBrush x:Key="ChatDetailWallpaperBackgroundBrush" Color="#DDE0DB"/>
             <SolidColorBrush x:Key="ChatDetailDateSeparatorBackgroundBrush" Color="#C7D1D1"/>
             <SolidColorBrush x:Key="ChatDetailDateSeparatorForegroundBrush" Color="#FF111B21"/>
             <ImageBrush x:Key="WhatsAppTextureBrush" ImageSource="ms-appx:///Assets/Backgrounds/WhatsAppBackground.png" Stretch="None" Opacity="0.06"/>
@@ -256,6 +290,8 @@
 
             <SolidColorBrush x:Key="ChatListBackgroundBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatListSecondaryTextBrush" Color="#FF667781"/>
+            <SolidColorBrush x:Key="ChatListStatusCheckSentBrush" Color="#FF667781"/>
+            <SolidColorBrush x:Key="ChatListStatusCheckReadBrush" Color="#FF20C064"/>
             <SolidColorBrush x:Key="ChatListUnreadBadgeBrush" Color="#FF20C064"/>
             <SolidColorBrush x:Key="ChatListSyncStatusBrush" Color="#FF20C064"/>
             <SolidColorBrush x:Key="ChatListUnreadBadgeForegroundBrush" Color="#FFFFFFFF"/>
@@ -272,6 +308,10 @@
             <SolidColorBrush x:Key="ChatDetailHeaderStatusBrush" Color="#FF667781"/>
             <SolidColorBrush x:Key="ChatDetailAvatarFallbackBrush" Color="#FF20C064"/>
             <SolidColorBrush x:Key="ChatDetailAvatarInitialBrush" Color="#FFFFFFFF"/>
+            <!-- Chat list / bubble avatar placeholder (photo missing): white fill, same gray glyph. -->
+            <SolidColorBrush x:Key="AvatarFallbackBackgroundBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="AvatarFallbackIconBrush" Color="#FFBABABA"/>
+            <SolidColorBrush x:Key="AvatarBorderBrush" Color="#FFE0E0E0"/>
             <SolidColorBrush x:Key="ChatDetailAccentBrush" Color="#FF20C064"/>
             <SolidColorBrush x:Key="ChatDetailPaneSeparatorBrush" Color="#FFE9EDEF"/>
             <SolidColorBrush x:Key="ChatDetailPinnedBarBackgroundBrush" Color="#FFFFFFFF"/>
@@ -280,28 +320,39 @@
             <SolidColorBrush x:Key="ChatDetailInputBarTopBorderBrush" Color="#FF3B4A54"/>
             <SolidColorBrush x:Key="ChatDetailComposerBackgroundBrush" Color="Transparent"/>
             <SolidColorBrush x:Key="ChatDetailComposerForegroundBrush" Color="#FF3B4A54"/>
-            <SolidColorBrush x:Key="ChatDetailSentBubbleBrush" Color="#FF5BC46A"/>
-            <SolidColorBrush x:Key="ChatDetailSentBubbleHighlightBrush" Color="#FF6BCE7A"/>
+            <SolidColorBrush x:Key="ChatDetailSentBubbleBrush" Color="#27B867"/>
+            <SolidColorBrush x:Key="ChatDetailSentBubbleHighlightBrush" Color="#FF8AE39A"/>
             <SolidColorBrush x:Key="ChatDetailReceivedBubbleBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailReceivedBubbleHighlightBrush" Color="#FFF7F7F7"/>
-            <SolidColorBrush x:Key="ChatDetailSentQuoteBackgroundBrush" Color="#FF3D9A55"/>
+            <SolidColorBrush x:Key="ChatDetailSentQuoteBackgroundBrush" Color="#23A65D"/>
             <SolidColorBrush x:Key="ChatDetailReceivedQuoteBackgroundBrush" Color="#FFF9F9F9"/>
             <SolidColorBrush x:Key="ChatDetailSentMentionBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailReceivedMentionBrush" Color="#FF25D366"/>
-            <SolidColorBrush x:Key="ChatDetailSentMediaDownloadOverlayBrush" Color="#FF3D9A55"/>
+            <SolidColorBrush x:Key="ChatDetailSentMediaDownloadOverlayBrush" Color="#FF5BC46A"/>
             <SolidColorBrush x:Key="ChatDetailReceivedMediaDownloadOverlayBrush" Color="#FFF9F9F9"/>
             <SolidColorBrush x:Key="ChatDetailSentMediaDownloadIconBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailReceivedMediaDownloadIconBrush" Color="#FF20C064"/>
             <SolidColorBrush x:Key="ChatDetailSentTextBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailSentMetaBrush" Color="#CCFFFFFF"/>
+            <SolidColorBrush x:Key="ChatDetailStatusCheckSentBrush" Color="#CCFFFFFF"/>
+            <SolidColorBrush x:Key="ChatDetailStatusCheckReadBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailSendFailedBrush" Color="#FFDE3B3B"/>
             <SolidColorBrush x:Key="ChatDetailGroupSenderBrush" Color="#FF027EB5"/>
             <SolidColorBrush x:Key="ChatDetailReceivedTextBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="ChatDetailReceivedMetaBrush" Color="#FF667781"/>
-            <SolidColorBrush x:Key="ChatDetailSentLinkBrush" Color="#FF027EB5"/>
+            <SolidColorBrush x:Key="ChatDetailSentLinkBrush" Color="#D0FAFF"/>
             <SolidColorBrush x:Key="ChatDetailReceivedLinkBrush" Color="#FF027EB5"/>
             <SolidColorBrush x:Key="ChatDetailSentBubbleButtonBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailReceivedBubbleButtonBrush" Color="#FF20C064"/>
+            <!-- Light: sent circle soft gray + glyph #00B090; received circle = sent bubble + white. -->
+            <SolidColorBrush x:Key="ChatDetailSentMediaButtonBackgroundBrush" Color="#FFE8E8E8"/>
+            <SolidColorBrush x:Key="ChatDetailSentMediaButtonGlyphBrush" Color="#FF00B090"/>
+            <SolidColorBrush x:Key="ChatDetailReceivedMediaButtonBackgroundBrush" Color="#FF79DB8B"/>
+            <SolidColorBrush x:Key="ChatDetailReceivedMediaButtonGlyphBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ChatDetailMediaButtonHoverBackgroundBrush" Color="#26E376"/>
+            <SolidColorBrush x:Key="ChatDetailMediaButtonHoverGlyphBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ChatDetailSentAudioSliderFillBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ChatDetailReceivedAudioSliderFillBrush" Color="#FF20C064"/>
             <SolidColorBrush x:Key="ChatDetailMutedTextBrush" Color="#FF8696A0"/>
             <SolidColorBrush x:Key="ChatDetailMediaDownloadOverlayBrush" Color="#FFAEB0B3"/>
             <SolidColorBrush x:Key="ChatDetailMediaDownloadIconBrush" Color="#FF000000"/>
@@ -313,8 +364,8 @@
             <SolidColorBrush x:Key="ChatDetailReactionChipBrush" Color="#FF363636"/>
             <!-- Both chip fills are light here, so the count reads dark rather than white. -->
             <SolidColorBrush x:Key="ChatDetailReactionChipForegroundBrush" Color="#FF111B21"/>
-            <SolidColorBrush x:Key="ChatDetailReactionChipSentBrush" Color="#FF4FC05F"/>
-            <SolidColorBrush x:Key="ChatDetailReactionChipSentBorderBrush" Color="#FF3AAA4A"/>
+            <SolidColorBrush x:Key="ChatDetailReactionChipSentBrush" Color="#FF79DB8B"/>
+            <SolidColorBrush x:Key="ChatDetailReactionChipSentBorderBrush" Color="#FF5BC46A"/>
             <SolidColorBrush x:Key="ChatDetailReactionChipReceivedBrush" Color="#FFEEEEEE"/>
             <SolidColorBrush x:Key="ChatDetailReactionChipReceivedBorderBrush" Color="#FFE0E0E0"/>
             <SolidColorBrush x:Key="ChatDetailReactionChipPointerOverBrush" Color="#FF7ADE82"/>

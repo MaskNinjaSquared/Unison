@@ -50,11 +50,13 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
         private readonly IWhatsAppSessionProvider _sessions;
         private readonly IWhatsAppService _appState;
         private readonly IChatStore _chatStore;
+        private readonly IJidResolver _jids;
 
         internal ChatFacade(
             IWhatsAppSessionProvider sessions,
             IWhatsAppService appState,
-            IChatStore chatStore)
+            IChatStore chatStore,
+            IJidResolver jids)
         {
             if (sessions == null)
             {
@@ -69,6 +71,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             _sessions = sessions;
             _appState = appState;
             _chatStore = chatStore;
+            _jids = jids ?? throw new ArgumentNullException(nameof(jids));
         }
 
         public async Task SetPinnedAsync(ChatItem chat, bool pinned)
@@ -81,7 +84,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             // RC14's chatModify writes the patch under the chat id exactly as the caller holds
             // it - it never rewrites PN to LID. The canonical JID is the same id the local row
             // and the mark-read path use, so the pin lands in the collection the phone reads.
-            var canonicalJid = _appState.GetCanonicalJid(chat.JID);
+            var canonicalJid = _jids.GetCanonicalJid(chat.JID);
             var wasPinned = chat.IsChatPinned;
 
             await _appState.ApplyChatPinAsync(canonicalJid, pinned).ConfigureAwait(false);
@@ -146,7 +149,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             }
 
             var unread = chat.UnreadCount;
-            var jid = _appState.GetCanonicalJid(chat.JID);
+            var jid = _jids.GetCanonicalJid(chat.JID);
 
             // Cleared first, and unconditionally: the badge is the part the user is looking at, it
             // should not wait for a round trip to disappear, and a PN/LID alias can leave a second
@@ -191,7 +194,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
                 return;
             }
 
-            var jid = _appState.GetCanonicalJid(chat.JID);
+            var jid = _jids.GetCanonicalJid(chat.JID);
 
             // The range is read before anything is removed: it names the tail the deletion covers,
             // and after the local wipe there is nothing left to describe.
@@ -238,6 +241,48 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             }
 
             await _appState.ApplyChatDeletionAsync(jid).ConfigureAwait(false);
+        }
+
+        // ---------------------------------------------------------------------
+        // Local state of the list
+        //
+        // None of these talk to the account. They are the parts of "the chat as a whole" that the
+        // UI asks about without changing anything the phone would need to hear, and they forward
+        // to the client because that is still where the rows live (phase 3.9).
+        // ---------------------------------------------------------------------
+
+        public void SetActiveChatJid(string jid)
+        {
+            _appState.SetActiveChatJid(jid);
+        }
+
+        public Task ClearUnreadForChatAsync(string jid)
+        {
+            return string.IsNullOrWhiteSpace(jid)
+                ? Task.CompletedTask
+                : _appState.ClearUnreadForChatAsync(jid);
+        }
+
+        public int GetTotalUnreadCount()
+        {
+            return _appState.GetTotalUnreadCount();
+        }
+
+        public void PersistChatListRows(IList<ChatItem> chats)
+        {
+            if (chats == null || chats.Count == 0)
+            {
+                return;
+            }
+
+            _appState.PersistChatListRowsPublic(chats);
+        }
+
+        public Task ReconcileChatPreviewsFromSqliteAsync(
+            IReadOnlyList<string> chatJids = null,
+            string reason = null)
+        {
+            return _appState.ReconcileChatPreviewsFromSqliteAsync(chatJids, reason);
         }
 
         /// <summary>

@@ -26,15 +26,18 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly ILocalContactsService _localContacts;
         private readonly IPersonStore _personStore;
         private readonly IWhatsAppService _whatsAppService;
+        private readonly IJidResolver _jids;
 
         internal AddressBookOverlay(
             ILocalContactsService localContacts,
             IPersonStore personStore,
-            IWhatsAppService whatsAppService)
+            IWhatsAppService whatsAppService,
+            IJidResolver jids)
         {
             _localContacts = localContacts ?? throw new ArgumentNullException(nameof(localContacts));
             _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
             _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
+            _jids = jids ?? throw new ArgumentNullException(nameof(jids));
         }
 
         /// <summary>
@@ -203,7 +206,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                         continue;
                     }
 
-                    string canonical = _whatsAppService.GetCanonicalJid(chat.JID) ?? chat.JID;
+                    string canonical = _jids.GetCanonicalJid(chat.JID) ?? chat.JID;
                     if (chat.IsGroup)
                     {
                         if (chat.GroupMembers == null)

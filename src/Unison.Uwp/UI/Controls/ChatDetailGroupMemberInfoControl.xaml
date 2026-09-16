@@ -64,7 +64,29 @@
                                Visibility="Collapsed"/>
                     <StackPanel x:Name="PhoneSection" Margin="0,20,0,0" HorizontalAlignment="Stretch">
                         <TextBlock x:Name="PhoneLabel" x:Uid="ChatDetailInfo_PhoneLabel" Style="{StaticResource ChatDetailInfoSectionLabelStyle}" Text="PHONE"/>
-                        <TextBlock x:Name="PhoneValue" Style="{StaticResource ChatDetailInfoSectionValueStyle}"/>
+                        <HyperlinkButton x:Name="PhoneCallButton"
+                                         Margin="0,0,0,0"
+                                         Padding="0"
+                                         HorizontalAlignment="Left"
+                                         HorizontalContentAlignment="Left"
+                                         Foreground="White"
+                                         Visibility="Collapsed">
+                            <StackPanel Orientation="Horizontal">
+                                <FontIcon Glyph="&#xE717;"
+                                          FontFamily="{StaticResource IconFont}"
+                                          FontSize="16"
+                                          Foreground="White"
+                                          Margin="0,0,10,0"
+                                          VerticalAlignment="Center"/>
+                                <TextBlock x:Name="PhoneValue"
+                                           Style="{StaticResource ChatDetailInfoSectionValueStyle}"
+                                           Foreground="White"
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </HyperlinkButton>
+                        <TextBlock x:Name="PhoneValueFallback"
+                                   Style="{StaticResource ChatDetailInfoSectionValueStyle}"
+                                   Visibility="Collapsed"/>
                         <HyperlinkButton x:Name="AddContactButton"
                                          x:Uid="ChatDetail_AddContactLink"
                                          Content="Add contact"

@@ -1,0 +1,111 @@
+<UserControl
+    x:Class="Unison.Uwp.UI.Controls.UnisonChatAudioBubbleBar"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    x:Name="Root"
+    MinWidth="0"
+    MinHeight="36"
+    HorizontalAlignment="Stretch">
+
+    <!--
+      Unison shell: round brand play/pause.
+      Glyph is Button.Content so hover (green/white) comes from UnisonMediaCircleButtonStyle.
+    -->
+    <Grid MinWidth="0" HorizontalAlignment="Stretch">
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="DirectionStates">
+                <VisualState x:Name="Received">
+                    <VisualState.Setters>
+                        <Setter Target="PlayButton.Background" Value="{ThemeResource ChatDetailReceivedMediaButtonBackgroundBrush}"/>
+                        <Setter Target="PauseButton.Background" Value="{ThemeResource ChatDetailReceivedMediaButtonBackgroundBrush}"/>
+                        <Setter Target="PlayButton.Foreground" Value="{ThemeResource ChatDetailReceivedMediaButtonGlyphBrush}"/>
+                        <Setter Target="PauseButton.Foreground" Value="{ThemeResource ChatDetailReceivedMediaButtonGlyphBrush}"/>
+                        <Setter Target="ReadyLabel.Foreground" Value="{ThemeResource ChatDetailReceivedTextBrush}"/>
+                        <Setter Target="TimestampText.Foreground" Value="{ThemeResource ChatDetailReceivedTextBrush}"/>
+                        <Setter Target="PositionSlider.Foreground" Value="{ThemeResource ChatDetailReceivedAudioSliderFillBrush}"/>
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="Sent">
+                    <VisualState.Setters>
+                        <Setter Target="PlayButton.Background" Value="{ThemeResource ChatDetailSentMediaButtonBackgroundBrush}"/>
+                        <Setter Target="PauseButton.Background" Value="{ThemeResource ChatDetailSentMediaButtonBackgroundBrush}"/>
+                        <Setter Target="PlayButton.Foreground" Value="{ThemeResource ChatDetailSentMediaButtonGlyphBrush}"/>
+                        <Setter Target="PauseButton.Foreground" Value="{ThemeResource ChatDetailSentMediaButtonGlyphBrush}"/>
+                        <Setter Target="ReadyLabel.Foreground" Value="{ThemeResource ChatDetailSentTextBrush}"/>
+                        <Setter Target="TimestampText.Foreground" Value="{ThemeResource ChatDetailSentTextBrush}"/>
+                        <Setter Target="PositionSlider.Foreground" Value="{ThemeResource ChatDetailSentAudioSliderFillBrush}"/>
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*" MinWidth="0"/>
+            <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+
+        <Grid VerticalAlignment="Center" Margin="0,0,6,0" Width="30" Height="30">
+            <Button x:Name="PlayButton"
+                    Click="PlayPause_Click"
+                    Style="{StaticResource UnisonMediaCircleButtonStyle}"
+                    Width="30"
+                    Height="30"
+                    Background="{ThemeResource ChatDetailReceivedMediaButtonBackgroundBrush}"
+                    Foreground="{ThemeResource ChatDetailReceivedMediaButtonGlyphBrush}"
+                    FontFamily="{StaticResource IconFont}"
+                    FontSize="18"
+                    Content="&#xE768;"
+                    Visibility="Collapsed"/>
+            <Button x:Name="PauseButton"
+                    Click="PlayPause_Click"
+                    Style="{StaticResource UnisonMediaCircleButtonStyle}"
+                    Width="30"
+                    Height="30"
+                    Background="{ThemeResource ChatDetailReceivedMediaButtonBackgroundBrush}"
+                    Foreground="{ThemeResource ChatDetailReceivedMediaButtonGlyphBrush}"
+                    FontFamily="{StaticResource IconFont}"
+                    FontSize="18"
+                    Content="&#xE769;"
+                    Visibility="Collapsed"/>
+        </Grid>
+
+        <Grid Grid.Column="1" VerticalAlignment="Center" Margin="0,0,8,0" MinHeight="28" MinWidth="0">
+            <TextBlock x:Name="ReadyLabel"
+                       Text="Voice message"
+                       FontSize="14"
+                       VerticalAlignment="Center"
+                       TextWrapping="NoWrap"
+                       TextTrimming="CharacterEllipsis"
+                       MaxLines="1"
+                       Foreground="{ThemeResource ChatDetailReceivedTextBrush}"
+                       Opacity="1"/>
+            <Slider x:Name="PositionSlider"
+                    Minimum="0"
+                    Maximum="1"
+                    StepFrequency="1"
+                    Opacity="0"
+                    IsHitTestVisible="False"
+                    VerticalAlignment="Center"
+                    Margin="0,2,0,0"
+                    Foreground="{ThemeResource ChatDetailReceivedAudioSliderFillBrush}"
+                    PointerPressed="PositionSlider_PointerPressed"
+                    PointerReleased="PositionSlider_PointerReleased"
+                    PointerCaptureLost="PositionSlider_PointerCaptureLost"
+                    ValueChanged="PositionSlider_ValueChanged"/>
+        </Grid>
+
+        <TextBlock x:Name="TimestampText"
+                   Grid.Column="2"
+                   Text="0:00"
+                   FontSize="12"
+                   FontFamily="{StaticResource MainFont}"
+                   VerticalAlignment="Center"
+                   MaxWidth="48"
+                   TextWrapping="NoWrap"
+                   TextTrimming="CharacterEllipsis"
+                   MaxLines="1"
+                   TextAlignment="Right"
+                   Foreground="{ThemeResource ChatDetailReceivedTextBrush}"/>
+    </Grid>
+</UserControl>
