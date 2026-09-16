@@ -34,6 +34,7 @@ using Unison.Core.Constants;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.State;
+using Unison.Uwp.Services.WhatsApp.Contacts;
 using Unison.Socket.UseCases.Contacts;
 using Unison.Uwp.Helpers;
 using Microsoft.Extensions.DependencyInjection;
@@ -249,6 +250,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly IHistoryChatPreviewStore _chatPreviews;
         private readonly IAvatarCache _avatarCache;
         private readonly IUsyncGate _usyncGate;
+        private readonly AvatarFetcher _avatarFetcher;
         private IMessageService _messageService;
         private IContactService _contactService;
         private IPersonStore _personStore;
@@ -2148,7 +2150,8 @@ namespace Unison.Uwp.Services.WhatsApp
             IHistoryMessageStore historyMessages,
             IHistoryChatPreviewStore chatPreviews,
             IAvatarCache avatarCache,
-            IUsyncGate usyncGate)
+            IUsyncGate usyncGate,
+            AvatarFetcher avatarFetcher)
         {
             if (chatState == null)
             {
@@ -2160,6 +2163,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _chatPreviews = chatPreviews ?? throw new ArgumentNullException(nameof(chatPreviews));
             _avatarCache = avatarCache ?? throw new ArgumentNullException(nameof(avatarCache));
             _usyncGate = usyncGate ?? throw new ArgumentNullException(nameof(usyncGate));
+            _avatarFetcher = avatarFetcher ?? throw new ArgumentNullException(nameof(avatarFetcher));
             _chatState.Chats.CollectionChanged += (s, e) => InvalidateChatRowIndex();
             JidAlias = new NotifyingJidAliasMap(InvalidateChatRowIndex);
         }
@@ -2173,10 +2177,11 @@ namespace Unison.Uwp.Services.WhatsApp
             IHistoryMessageStore historyMessages,
             IHistoryChatPreviewStore chatPreviews,
             IAvatarCache avatarCache,
-            IUsyncGate usyncGate)
+            IUsyncGate usyncGate,
+            AvatarFetcher avatarFetcher)
         {
-            return _instance ?? (_instance =
-                new WhatsAppService(chatState, historyMessages, chatPreviews, avatarCache, usyncGate));
+            return _instance ?? (_instance = new WhatsAppService(
+                chatState, historyMessages, chatPreviews, avatarCache, usyncGate, avatarFetcher));
         }
 
         /// <summary>
@@ -4187,7 +4192,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 string localUri = null;
                 try
                 {
-                    localUri = await _avatarCache.SaveAsync(chat.JID, result.Url, AvatarVariant.Preview, token);
+                    localUri = await _avatarFetcher.CachePreviewAsync(chat.JID, result.Url, token);
                 }
                 catch (Exception ex)
                 {
@@ -4312,44 +4317,6 @@ namespace Unison.Uwp.Services.WhatsApp
             return candidates;
         }
 
-        private async Task<ProfilePictureResult> FetchBestProfilePictureResultAsync(ChatItem chat, IEnumerable<string> lookupCandidates, CancellationToken token)
-        {
-            ProfilePictureResult lastResult = null;
-            foreach (var candidate in lookupCandidates ?? Enumerable.Empty<string>())
-            {
-                token.ThrowIfCancellationRequested();
-
-                // Avatar refreshes are queued in the background and outlive the connection they
-                // were queued against, so the socket can be gone by the time one runs. That is an
-                // ordinary "try again later", not a failure worth crashing over.
-                var socket = _socket;
-                if (socket == null || !socket.IsHandshakeComplete)
-                {
-                    return new ProfilePictureResult
-                    {
-                        TargetJid = candidate,
-                        FailureReason = "not-connected"
-                    };
-                }
-
-                using (await _usyncGate.AcquireAsync(token))
-                {
-                    lastResult = await socket.GetProfilePictureUrlResultAsync(candidate, "preview");
-                }
-
-                Debug.WriteLine($"[WhatsAppService] Avatar candidate result: chat={chat.JID}, candidate={candidate}, target={lastResult?.TargetJid}, hasUrl={!string.IsNullOrWhiteSpace(lastResult?.Url)}, reason={lastResult?.FailureReason}");
-                if (!string.IsNullOrWhiteSpace(lastResult?.Url))
-                {
-                    return lastResult;
-                }
-            }
-
-            return lastResult ?? new ProfilePictureResult
-            {
-                IsNotFound = true,
-                FailureReason = "no-picture-candidates"
-            };
-        }
 
         /// <summary>
         /// Fetches profile pictures for chats that don't have one yet

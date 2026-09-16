@@ -52,7 +52,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             var lookupCandidates = GetAvatarLookupCandidates(chat);
-            var result = await FetchBestProfilePictureResultAsync(chat, lookupCandidates, token);
+            var result = await _avatarFetcher.FetchPreviewAsync(lookupCandidates, token);
             await ApplyAvatarResultAsync(chat, result, token);
             if (fetchHighQuality)
             {
@@ -77,78 +77,21 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            string cached;
-            DateTime fetchedAtUtc;
-            if (_avatarCache.TryGet(chat.JID, AvatarVariant.HighResolution, out cached, out fetchedAtUtc))
-            {
-                await RunOnUiThreadAsync(() => chat.AvatarHighUrl = cached);
-                return;
-            }
-
-            var socket = _socket;
-            if (socket == null || !socket.IsHandshakeComplete)
+            string localUri = await _avatarFetcher.FetchHighResolutionAsync(
+                chat.JID,
+                GetAvatarLookupCandidates(chat),
+                CancellationToken.None);
+            if (string.IsNullOrWhiteSpace(localUri))
             {
                 return;
             }
 
-            foreach (var candidate in GetAvatarLookupCandidates(chat) ?? Enumerable.Empty<string>())
-            {
-                if (string.IsNullOrWhiteSpace(candidate))
-                {
-                    continue;
-                }
-
-                ProfilePictureResult result;
-                using (await _usyncGate.AcquireAsync())
-                {
-                    result = await socket.GetProfilePictureUrlResultAsync(candidate, "image");
-                }
-
-                if (string.IsNullOrWhiteSpace(result?.Url))
-                {
-                    continue;
-                }
-
-                try
-                {
-                    string localUri = await _avatarCache.SaveAsync(
-                        chat.JID,
-                        result.Url,
-                        AvatarVariant.HighResolution,
-                        CancellationToken.None);
-                    if (string.IsNullOrWhiteSpace(localUri))
-                    {
-                        continue;
-                    }
-
-                    await RunOnUiThreadAsync(() => chat.AvatarHighUrl = localUri);
-                    Debug.WriteLine($"[WhatsAppService] Cached high-res group avatar for {chat.JID}");
-                    return;
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[WhatsAppService] High-res group avatar failed for {chat.JID}: {ex.Message}");
-                }
-            }
+            await RunOnUiThreadAsync(() => chat.AvatarHighUrl = localUri);
         }
 
-        public async Task<string> GetProfilePictureUrlAsync(string jid, string type = "preview")
+        public Task<string> GetProfilePictureUrlAsync(string jid, string type = "preview")
         {
-            if (string.IsNullOrWhiteSpace(jid) || _socket == null || !_socket.IsHandshakeComplete)
-            {
-                return null;
-            }
-
-            try
-            {
-                var result = await _socket.GetProfilePictureUrlResultAsync(jid, type).ConfigureAwait(false);
-                return string.IsNullOrWhiteSpace(result?.Url) ? null : result.Url;
-            }
-            catch (Exception ex)
-            {
-                Log($"[WhatsAppService] GetProfilePictureUrlAsync failed for {jid}: {ex.Message}");
-                return null;
-            }
+            return _avatarFetcher.FetchUrlAsync(jid, type);
         }
 
         private async Task HydrateCachedAvatarUrisAsync(string reason)
@@ -305,19 +248,13 @@ namespace Unison.Uwp.Services.WhatsApp
                 try
                 {
                     Debug.WriteLine($"[WhatsAppService] Group avatar fallback trying {chat.JID} -> {fallbackJid} after {originalResult?.FailureReason}");
-                    var fallbackResult = await _socket.GetProfilePictureUrlResultAsync(fallbackJid, "preview");
-                    Debug.WriteLine($"[WhatsAppService] Group avatar fallback result for {chat.JID}: source={fallbackJid}, hasUrl={!string.IsNullOrWhiteSpace(fallbackResult?.Url)}, notFound={fallbackResult?.IsNotFound}, timeout={fallbackResult?.IsTimeout}, reason={fallbackResult?.FailureReason}");
-
-                    if (string.IsNullOrWhiteSpace(fallbackResult?.Url))
+                    string fallbackUrl = await _avatarFetcher.FetchUrlAsync(fallbackJid);
+                    if (string.IsNullOrWhiteSpace(fallbackUrl))
                     {
                         continue;
                     }
 
-                    string localUri = await _avatarCache.SaveAsync(
-                        chat.JID,
-                        fallbackResult.Url,
-                        AvatarVariant.Preview,
-                        token);
+                    string localUri = await _avatarFetcher.CachePreviewAsync(chat.JID, fallbackUrl, token);
                     if (string.IsNullOrWhiteSpace(localUri))
                     {
                         continue;
@@ -505,25 +442,9 @@ namespace Unison.Uwp.Services.WhatsApp
             return null;
         }
 
-        public async Task<string> GetProfilePictureAsync(string jid)
+        public Task<string> GetProfilePictureAsync(string jid)
         {
-            if (string.IsNullOrEmpty(jid) || _socket == null) return null;
-            var result = await _socket.GetProfilePictureUrlResultAsync(jid, "image");
-            if (string.IsNullOrWhiteSpace(result?.Url))
-            {
-                Debug.WriteLine($"[WhatsAppService] GetProfilePictureAsync returned no URL for {jid}: target={result?.TargetJid}, lookup={result?.TokenLookupJid}, reason={result?.FailureReason}");
-                return null;
-            }
-
-            try
-            {
-                return await _avatarCache.SaveAsync(jid, result.Url, AvatarVariant.Preview, CancellationToken.None);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WhatsAppService] GetProfilePictureAsync cache failed for {jid}: {ex.Message}");
-                return result.Url;
-            }
+            return _avatarFetcher.FetchAndCacheAsync(jid, CancellationToken.None);
         }
     }
 }

@@ -4,6 +4,17 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## WhatsAppService extraction — phase 3.1b (avatar fetch)
+
+- New `IUsyncGate` / `UsyncGate` replaces the client's private `_usyncLock`. Contact name resolution and profile picture lookups share one rate-limited directory surface, so they keep sharing one gate now that they are moving to different owners
+- The gate hands out a disposable lease, collapsing the `WaitAsync` / `lockTaken` / `Release` triple at all five call sites — two of which swallowed `ObjectDisposedException` and `SemaphoreFullException` by hand
+- New `AvatarFetcher` owns wire-and-disk: candidate sweep, high-resolution fetch, download. It reaches the socket via `IWhatsAppSessionProvider` and touches no chat state
+- Out of `WhatsAppService`: `FetchBestProfilePictureResultAsync`, `GetProfilePictureAsync`, the high-resolution group loop. `GetProfilePictureUrlAsync` is now a one-line forward
+- Candidate resolution stays in the client: the PN/LID table is 3.7's, and injecting `IJidResolver` into the fetcher would close a DI cycle
+- Still in the client: applying a result to a `ChatItem` (3.9), the group-metadata avatar fallback (3.2), and `ShouldDeferAvatarFetch`, which is history gating rather than avatar policy
+
+---
+
 ## WhatsAppService extraction — phase 3.1a (avatar cache)
 
 - New `IAvatarCache` / `AvatarCacheService`: `TryGet`, `SaveAsync`, `DeleteIfCached` over `LocalFolder/MediaCache/Avatars`

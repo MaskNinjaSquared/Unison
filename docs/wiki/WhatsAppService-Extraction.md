@@ -168,7 +168,8 @@ Self-contained first. List/persist last.
 | Step | Partial / area | Destination |
 |---|---|---|
 | 3.1a | Avatar cache (done) | `IAvatarCache` / `AvatarCacheService` |
-| 3.1b | Avatar fetch + apply | `ContactFacade` / `ChatAvatarPolicy` (already owns **when**; take **how**) — blocked, see below |
+| 3.1b | Avatar fetch (done) | `AvatarFetcher`, behind `IUsyncGate` |
+| 3.1c | Avatar apply to the row | with 3.2 (group fallback) and 3.9 (row + persist) |
 | 3.2 | `.Groups.cs` | new `IGroupService` / `GroupFacade`; prefer Socket use cases via `IWhatsAppSessionProvider`, not raw `BinaryNode` on the client |
 | 3.3 | `.Media.cs` | `MessageFacade` + a UWP `MediaCacheService`. Contract already has `Ensure*AvailableAsync` |
 | 3.4 | Send (main file) | `MessageFacade` over use cases; client only “send this node” |
@@ -185,16 +186,29 @@ Self-contained first. List/persist last.
 `MarkAvatarImageLoadFailed`. Callers now pass an `AvatarVariant` instead of the `"_high"` suffix.
 `ProfileFacade` takes the cache directly, which let `CacheRemoteAvatarAsync` leave `IWhatsAppService`.
 
-**3.1b is blocked on `_usyncLock`.** The client holds one `SemaphoreSlim` over every directory-style
-IQ, and it is shared across two clusters: profile-picture lookups (3.1b — the avatars partial, the
-group-member fetch in `.Groups.cs`, and `FetchBestProfilePictureResultAsync`) and usync contact
-resolution (3.6 — `.Identity.cs` and `ResolveContactsAsync`). Moving avatar fetch out while names
-stay behind would either leave the lock in the client and force a half-move, or give the avatar path
-its own lock — which lets two IQ streams run concurrently against the surface the lock exists to
-rate-limit. The fix is to extract the gate into a small shared service (a disposable lease reads
-better than the `WaitAsync` / `lockTaken` / `Release` triples at all five sites) and inject it into
-both sides, but building it before 3.1b actually consumes it would be an abstraction with one caller.
-Do 3.1b and the gate together.
+**The usync gate came out first.** The client held one `SemaphoreSlim` over every directory-style IQ,
+shared by two clusters that are moving to different owners: profile-picture lookups (3.1) and usync
+contact resolution (3.6). Moving avatar fetch out while names stayed behind would either leave the
+lock in the client and force a half-move, or give avatars their own lock — which lets two IQ streams
+run concurrently against the surface the lock exists to rate-limit. It is now `IUsyncGate` /
+`UsyncGate`, handing out a disposable lease instead of the `WaitAsync` / `lockTaken` / `Release`
+triple that was repeated at all five sites.
+
+**3.1b is done: the fetch left, the apply stayed.** `AvatarFetcher` owns wire-and-disk — candidate
+sweep, the gate, high-resolution, download — reaching the socket through
+`IWhatsAppSessionProvider` so it needs no client reference. It touches no chat state, which is why it
+can be called from a background batch, a row scrolling into view, or the group info pivot without any
+of them agreeing about threads. `FetchBestProfilePictureResultAsync`, `GetProfilePictureAsync` and the
+high-resolution loop are gone from the client; `GetProfilePictureUrlAsync` is a one-line forward.
+
+Candidates are passed in rather than resolved inside, for two reasons: the PN/LID table is still the
+client's until 3.7, and injecting `IJidResolver` here would close a DI cycle (`IJidResolver`
+eagerly resolves `IWhatsAppService`, which now takes the fetcher).
+
+What is left of avatars in the client is the **apply**, and it is deliberately parked: it writes
+`ChatItem` rows on the UI thread and calls `SchedulePersist` (3.9), and the group-avatar fallback is
+group-metadata protocol (3.2). Also staying is `ShouldDeferAvatarFetch` — it reads history backfill
+and on-demand state, so it is history gating wearing an avatar name, and belongs with 3.9/3.10.
 
 **Thread affinity:** today the client mutates `Chats` on the UI thread; VMs read on the UI thread; `ChatStateStore`’s extra dictionaries are protected by that, not only by the lock. Any code moved to a façade that runs off-thread must use `UpsertChatsAsync` / `UpsertMessagesAsync` (or `IDispatcher`). Do not split 3.9 into half-moves.
 

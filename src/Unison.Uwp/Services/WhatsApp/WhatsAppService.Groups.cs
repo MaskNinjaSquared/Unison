@@ -1097,11 +1097,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 if (!string.IsNullOrWhiteSpace(result?.Url))
                 {
-                    string localUri = await _avatarCache.SaveAsync(
-                        member.Jid,
-                        result.Url,
-                        AvatarVariant.Preview,
-                        token);
+                    string localUri = await _avatarFetcher.CachePreviewAsync(member.Jid, result.Url, token);
                     if (!string.IsNullOrWhiteSpace(localUri))
                     {
                         return new GroupMemberAvatarFetchResult { LocalUri = localUri };

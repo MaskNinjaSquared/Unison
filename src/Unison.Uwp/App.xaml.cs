@@ -232,13 +232,20 @@ namespace Unison.Uwp
             // Contacts and avatars query the same rate-limited directory surface, so they queue
             // behind one gate even after they stop sharing an owner.
             services.AddSingleton<IUsyncGate, UsyncGate>();
+            // Reaches the socket through the session provider's lazy accessor, so building it here
+            // does not resolve the client it will eventually be handed to.
+            services.AddSingleton(sp => new AvatarFetcher(
+                sp.GetRequiredService<IWhatsAppSessionProvider>(),
+                sp.GetRequiredService<IUsyncGate>(),
+                sp.GetRequiredService<IAvatarCache>()));
             services.AddSingleton<IWhatsAppService>(
                 sp => WhatsAppService.Create(
                     sp.GetRequiredService<ChatStateStore>(),
                     sp.GetRequiredService<IHistoryMessageStore>(),
                     sp.GetRequiredService<IHistoryChatPreviewStore>(),
                     sp.GetRequiredService<IAvatarCache>(),
-                    sp.GetRequiredService<IUsyncGate>()));
+                    sp.GetRequiredService<IUsyncGate>(),
+                    sp.GetRequiredService<AvatarFetcher>()));
             // Asking "is this the same person?" no longer means naming the client. The table is
             // still built there; only the question moved.
             services.AddSingleton<IJidResolver>(
