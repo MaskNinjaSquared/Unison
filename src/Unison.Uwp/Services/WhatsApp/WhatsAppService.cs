@@ -248,6 +248,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly IHistoryMessageStore _historyMessages;
         private readonly IHistoryChatPreviewStore _chatPreviews;
         private readonly IAvatarCache _avatarCache;
+        private readonly IUsyncGate _usyncGate;
         private IMessageService _messageService;
         private IContactService _contactService;
         private IPersonStore _personStore;
@@ -698,7 +699,6 @@ namespace Unison.Uwp.Services.WhatsApp
         public bool IsLoadingPersistedChats => _isLoadingPersistedChats;
         private readonly SemaphoreSlim _connectLock = new SemaphoreSlim(1, 1);
         private readonly SemaphoreSlim _resumeConnectionLock = new SemaphoreSlim(1, 1);
-        private readonly SemaphoreSlim _usyncLock = new SemaphoreSlim(1, 1);
 
         // SocketClient must not wait for UI, storage or avatar work while it is reading
         // WhatsApp stanzas. Live messages use a priority queue so they can jump ahead
@@ -2147,7 +2147,8 @@ namespace Unison.Uwp.Services.WhatsApp
             ChatStateStore chatState,
             IHistoryMessageStore historyMessages,
             IHistoryChatPreviewStore chatPreviews,
-            IAvatarCache avatarCache)
+            IAvatarCache avatarCache,
+            IUsyncGate usyncGate)
         {
             if (chatState == null)
             {
@@ -2158,6 +2159,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _historyMessages = historyMessages ?? throw new ArgumentNullException(nameof(historyMessages));
             _chatPreviews = chatPreviews ?? throw new ArgumentNullException(nameof(chatPreviews));
             _avatarCache = avatarCache ?? throw new ArgumentNullException(nameof(avatarCache));
+            _usyncGate = usyncGate ?? throw new ArgumentNullException(nameof(usyncGate));
             _chatState.Chats.CollectionChanged += (s, e) => InvalidateChatRowIndex();
             JidAlias = new NotifyingJidAliasMap(InvalidateChatRowIndex);
         }
@@ -2170,10 +2172,11 @@ namespace Unison.Uwp.Services.WhatsApp
             ChatStateStore chatState,
             IHistoryMessageStore historyMessages,
             IHistoryChatPreviewStore chatPreviews,
-            IAvatarCache avatarCache)
+            IAvatarCache avatarCache,
+            IUsyncGate usyncGate)
         {
             return _instance ?? (_instance =
-                new WhatsAppService(chatState, historyMessages, chatPreviews, avatarCache));
+                new WhatsAppService(chatState, historyMessages, chatPreviews, avatarCache, usyncGate));
         }
 
         /// <summary>
@@ -4329,14 +4332,9 @@ namespace Unison.Uwp.Services.WhatsApp
                     };
                 }
 
-                await _usyncLock.WaitAsync(token);
-                try
+                using (await _usyncGate.AcquireAsync(token))
                 {
                     lastResult = await socket.GetProfilePictureUrlResultAsync(candidate, "preview");
-                }
-                finally
-                {
-                    _usyncLock.Release();
                 }
 
                 Debug.WriteLine($"[WhatsAppService] Avatar candidate result: chat={chat.JID}, candidate={candidate}, target={lastResult?.TargetJid}, hasUrl={!string.IsNullOrWhiteSpace(lastResult?.Url)}, reason={lastResult?.FailureReason}");
@@ -8392,34 +8390,33 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            var lockTaken = false;
             try
             {
-                await _usyncLock.WaitAsync().ConfigureAwait(false);
-                lockTaken = true;
-
-                if (_socket == null || !_socket.IsHandshakeComplete)
+                using (await _usyncGate.AcquireAsync().ConfigureAwait(false))
                 {
-                    Debug.WriteLine("[WhatsAppService] ResolveContactsAsync skipped after lock (socket not ready)");
-                    return;
-                }
-
-                var useCase = new ResolveContactNamesUseCase(session.Connection);
-                var timeout = TimeSpan.FromSeconds(lookup.Count > 1 ? 15 : 8);
-                var contacts = await useCase.ExecuteAsync(lookup, "interactive", timeout).ConfigureAwait(false);
-
-                var cacheUpdated = false;
-                foreach (var contact in contacts)
-                {
-                    if (ApplyResolvedContact(contact))
+                    if (_socket == null || !_socket.IsHandshakeComplete)
                     {
-                        cacheUpdated = true;
+                        Debug.WriteLine("[WhatsAppService] ResolveContactsAsync skipped after lock (socket not ready)");
+                        return;
                     }
-                }
 
-                if (cacheUpdated)
-                {
-                    await ApplyResolvedNamesToChatsAsync().ConfigureAwait(false);
+                    var useCase = new ResolveContactNamesUseCase(session.Connection);
+                    var timeout = TimeSpan.FromSeconds(lookup.Count > 1 ? 15 : 8);
+                    var contacts = await useCase.ExecuteAsync(lookup, "interactive", timeout).ConfigureAwait(false);
+
+                    var cacheUpdated = false;
+                    foreach (var contact in contacts)
+                    {
+                        if (ApplyResolvedContact(contact))
+                        {
+                            cacheUpdated = true;
+                        }
+                    }
+
+                    if (cacheUpdated)
+                    {
+                        await ApplyResolvedNamesToChatsAsync().ConfigureAwait(false);
+                    }
                 }
             }
             catch (Exception ex)
@@ -8435,22 +8432,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
                 catch
                 {
-                }
-            }
-            finally
-            {
-                if (lockTaken)
-                {
-                    try
-                    {
-                        _usyncLock.Release();
-                    }
-                    catch (ObjectDisposedException)
-                    {
-                    }
-                    catch (SemaphoreFullException)
-                    {
-                    }
                 }
             }
         }

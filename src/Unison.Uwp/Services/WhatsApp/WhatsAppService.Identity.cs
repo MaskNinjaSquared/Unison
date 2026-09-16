@@ -802,13 +802,12 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             string[] fallbackJids = null;
-            bool lockTaken = false;
+            IDisposable usyncLease = null;
             try
             {
-                await _usyncLock.WaitAsync().ConfigureAwait(false);
-                lockTaken = true;
+                usyncLease = await _usyncGate.AcquireAsync().ConfigureAwait(false);
 
-                // Socket may drop while waiting for the usync lock during sync.
+                // Socket may drop while waiting for the usync gate during sync.
                 if (_socket == null || !_socket.IsHandshakeComplete)
                 {
                     Debug.WriteLine("[WhatsAppService] ResolveContactsAsync skipped after lock (socket not ready)");
@@ -1142,19 +1141,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
             finally
             {
-                if (lockTaken)
-                {
-                    try
-                    {
-                        _usyncLock.Release();
-                    }
-                    catch (ObjectDisposedException)
-                    {
-                    }
-                    catch (SemaphoreFullException)
-                    {
-                    }
-                }
+                usyncLease?.Dispose();
             }
 
             if (fallbackJids == null || fallbackJids.Length == 0)

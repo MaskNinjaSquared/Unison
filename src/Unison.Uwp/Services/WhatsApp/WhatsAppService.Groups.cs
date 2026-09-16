@@ -1081,8 +1081,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 token.ThrowIfCancellationRequested();
 
                 ProfilePictureResult result = null;
-                await _usyncLock.WaitAsync(token);
-                try
+                using (await _usyncGate.AcquireAsync(token))
                 {
                     if (_socket == null || !_socket.IsHandshakeComplete)
                     {
@@ -1094,10 +1093,6 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
 
                     result = await _socket.GetProfilePictureUrlResultAsync(candidate, "preview");
-                }
-                finally
-                {
-                    _usyncLock.Release();
                 }
 
                 if (!string.IsNullOrWhiteSpace(result?.Url))

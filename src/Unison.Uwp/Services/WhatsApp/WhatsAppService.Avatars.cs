@@ -99,14 +99,9 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
                 ProfilePictureResult result;
-                await _usyncLock.WaitAsync();
-                try
+                using (await _usyncGate.AcquireAsync())
                 {
                     result = await socket.GetProfilePictureUrlResultAsync(candidate, "image");
-                }
-                finally
-                {
-                    _usyncLock.Release();
                 }
 
                 if (string.IsNullOrWhiteSpace(result?.Url))
