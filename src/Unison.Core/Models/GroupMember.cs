@@ -7,7 +7,7 @@ namespace Unison.Core.Models
     /// <summary>
     /// One participant of a group chat, persisted on <see cref="ChatItem.GroupMembers"/>.
     /// </summary>
-    public sealed class GroupMember : INotifyPropertyChanged
+    public sealed class GroupMember : INotifyPropertyChanged, IAvatarSubject
     {
         public event PropertyChangedEventHandler PropertyChanged;
 

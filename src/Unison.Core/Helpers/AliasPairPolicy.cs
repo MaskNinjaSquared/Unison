@@ -55,6 +55,56 @@ namespace Unison.Core.Helpers
         }
 
         /// <summary>
+        /// Works out which side of a pair is the LID and answers whether it may be filed.
+        /// </summary>
+        /// <remarks>
+        /// Most callers learn a pair without being told which way round it is — a usync
+        /// answer, a contact record, two chat rows found to be the same person. Leaving each
+        /// of them to decide is how the guard came to be bypassed in four places, so the
+        /// orientation is worked out here and a caller only has to ask.
+        ///
+        /// Note the asymmetry with the table: pairs are *filed* both ways, but they are only
+        /// *valid* one way round, because only one of the two addresses can be canonical.
+        /// </remarks>
+        public static bool TryAcceptPair(
+            string first,
+            string second,
+            JidAliasTable table,
+            out string lid,
+            out string pn)
+        {
+            lid = null;
+            pn = null;
+
+            string a = JidHelper.Normalize(first);
+            string b = JidHelper.Normalize(second);
+
+            if (IsWellFormedPair(a, b, table))
+            {
+                lid = a;
+                pn = b;
+            }
+            else if (IsWellFormedPair(b, a, table))
+            {
+                lid = b;
+                pn = a;
+            }
+            else
+            {
+                return false;
+            }
+
+            if (WouldPutAContactUnderOurIdentity(lid, pn, table))
+            {
+                lid = null;
+                pn = null;
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
         /// Whether filing this pair would put a contact under the user's own identity.
         /// </summary>
         /// <param name="lid">The side being filed as the LID — a contact, or the user.</param>

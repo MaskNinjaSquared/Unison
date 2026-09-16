@@ -148,5 +148,71 @@ namespace Unison.Core.Tests.Helpers
             ChatAvatarOutcome.RecordAbsent(null, "b", Now);
             ChatAvatarOutcome.RecordFailure(null, "c", Now);
         }
+
+        // --- Group participants, which had their own copy of these rules ---------
+        //
+        // A participant and a chat row are the same person seen from two surfaces.
+        // They kept separate appliers, and the group one differed on exactly the
+        // outcome below.
+
+        [Fact]
+        public void A_participant_who_removed_their_photo_stops_showing_the_old_one()
+        {
+            // This is the case the group copy got wrong. It stamped the miss but kept the
+            // url, and a cached url makes NeedsAvatarLookup refuse to ask again -- so the
+            // picture the participant deliberately deleted stayed on screen permanently,
+            // with nothing left that would ever revisit it.
+            var member = new GroupMember
+            {
+                Jid = "5511999990000@s.whatsapp.net",
+                AvatarUrl = "ms-appdata:///local/MediaCache/Avatars/old.jpg",
+                AvatarFetchedAtUtc = Earlier
+            };
+
+            ChatAvatarOutcome.RecordAbsent(member, "no-picture", Now);
+
+            Assert.Null(member.AvatarUrl);
+            Assert.Equal(Now, member.AvatarFetchedAtUtc);
+            Assert.False(member.NeedsAvatarLookup(Now, TimeSpan.FromDays(7), TimeSpan.FromHours(1)));
+        }
+
+        [Fact]
+        public void A_participant_lookup_that_failed_keeps_the_picture_and_asks_again()
+        {
+            // The other half of the distinction, on the group side: a timeout is not an
+            // answer, so the face stays up and the member remains due for another attempt.
+            var member = new GroupMember
+            {
+                Jid = "5511999990000@s.whatsapp.net",
+                AvatarUrl = null,
+                AvatarFetchedAtUtc = null
+            };
+
+            ChatAvatarOutcome.RecordFailure(member, "timeout", Now);
+
+            Assert.Null(member.AvatarFetchedAtUtc);
+            Assert.True(member.NeedsAvatarLookup(Now.AddHours(2), TimeSpan.FromDays(7), TimeSpan.FromHours(1)));
+        }
+
+        [Fact]
+        public void A_participant_and_a_chat_row_record_the_same_outcome_the_same_way()
+        {
+            // The point of the shared applier: the same person on two surfaces must not
+            // disagree about whether they have a picture.
+            var chat = WithPhoto();
+            var member = new GroupMember
+            {
+                AvatarUrl = "ms-appdata:///local/MediaCache/Avatars/ana.jpg",
+                AvatarFetchedAtUtc = Earlier
+            };
+
+            ChatAvatarOutcome.RecordAbsent(chat, "no-picture", Now);
+            ChatAvatarOutcome.RecordAbsent(member, "no-picture", Now);
+
+            Assert.Equal(chat.AvatarUrl, member.AvatarUrl);
+            Assert.Equal(chat.AvatarFetchedAtUtc, member.AvatarFetchedAtUtc);
+            Assert.Equal(chat.AvatarFetchFailedAtUtc, member.AvatarFetchFailedAtUtc);
+            Assert.Equal(chat.AvatarFetchFailureReason, member.AvatarFetchFailureReason);
+        }
     }
 }

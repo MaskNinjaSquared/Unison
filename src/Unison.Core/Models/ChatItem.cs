@@ -6,7 +6,7 @@ using Unison.Core.Helpers;
 
 namespace Unison.Core.Models
 {
-    public class ChatItem : INotifyPropertyChanged
+    public class ChatItem : INotifyPropertyChanged, IAvatarSubject
     {
         public event PropertyChangedEventHandler PropertyChanged;
 

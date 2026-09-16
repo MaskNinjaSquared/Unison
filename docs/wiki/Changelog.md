@@ -4,6 +4,26 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## A participant who deleted their photo went on showing it forever
+
+`ChatAvatarOutcome` (phase 3.1c) records how a picture lookup ended, and the whole reason it exists is
+that "has no photo" and "could not reach it" look identical on screen while meaning opposite things
+about whether to ask again. Group participants had their own copy of those rules, and it differed on
+exactly that outcome: a confirmed miss stamped the answer but kept the old url.
+
+That is not cosmetic, because `GroupMember.NeedsAvatarLookup` returns false as soon as there is a url.
+So the picture a participant deliberately deleted stayed on screen, and the one mechanism that would
+have revisited it was switched off by the very field that should have been cleared. The model's own
+documentation states the intended contract — *"Empty AvatarUrl plus this stamp means 'asked, nobody has
+a picture'"* — which the applier never produced once a photo had been cached.
+
+Rather than fix the copy, the two were merged. `IAvatarSubject` names the four fields as the group they
+are, `ChatItem` and `GroupMember` both carry it, and `ChatAvatarOutcome` now serves both. The same
+person seen from the chat list and from a group roster can no longer disagree about whether they have a
+picture.
+
+---
+
 ## `AliasPairPolicy` — the identity guard, which existed twice and did not agree
 
 The alias table is what decides that two addresses are the same person, so a wrong entry there does not
@@ -29,14 +49,19 @@ argument was being reduced, never the value read back from the table. Since the 
 on the LID side of a pair, it is also what can have been stored — so a legitimate self alias written
 that way was still discarded on every launch. Both sides are reduced now.
 
-**Two open weaknesses, recorded rather than fixed.** Neither is new, and both want a device pass.
+**The guard became a gate.** Four places wrote straight into `JidAlias[...]` without consulting it — two
+in the usync path and two in `WhatsAppService.cs` — which is the most likely route by which a poisoned
+pair reached disk in the first place. Closing that is worth more than any refinement of the check that
+runs afterwards, so it was closed first.
 
-The guard is advice, not a gate. Four places write straight into `JidAlias[...]` without consulting it:
-two in the usync path (`.Identity.cs`) and two more in `WhatsAppService.cs`. That is the most likely
-route by which a poisoned pair reached disk in the first place, which is worth more than any refinement
-of the check that runs afterwards.
+What kept those callers out of the policy was that none of them knows which side of the pair is the LID:
+a usync answer, a contact record and two chat rows found to be the same person all arrive unordered.
+Leaving each caller to work it out is how four of them ended up not doing it at all. `TryAcceptPair`
+determines the orientation and answers in one call. Each caller keeps its own local condition — the row
+merge still merges the rows and withholds only the alias; the mapped-LID path still only fires the first
+time it sees an address.
 
-The mirrored half of a poisoned pair vouches for it. Pairs are filed both ways, so a poisoned pair comes
+**One weakness left standing.** The mirrored half of a poisoned pair vouches for it. Pairs are filed both ways, so a poisoned pair comes
 back from disk as two entries, and the mirrored one (`selfPn -> contactLid`) is not refused by this
 policy — its phone side is not self-linked, so the guard exits immediately. Restored first, it is
 indistinguishable from the reverse entry that proves the user's own identity, and it validates the

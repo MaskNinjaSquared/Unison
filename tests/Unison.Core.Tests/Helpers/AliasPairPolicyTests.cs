@@ -23,9 +23,14 @@ namespace Unison.Core.Tests.Helpers
         private const string SelfLid = "100200300@lid";
         private const string ContactPn = "5511888888888@s.whatsapp.net";
         private const string ContactLid = "400500600@lid";
+        private const string OtherContactPn = "5511777776666@s.whatsapp.net";
+        private const string OtherContactLid = "700800900@lid";
 
         /// <summary>The user's own LID as some devices surface it: on the phone domain, dotted.</summary>
         private const string SelfLidDotted = "100200300.45@s.whatsapp.net";
+
+        /// <summary>The same shape for a contact.</summary>
+        private const string ContactLidDotted = "931777777.11@s.whatsapp.net";
 
         private const string GroupJid = "120363000000000000@g.us";
 
@@ -60,7 +65,7 @@ namespace Unison.Core.Tests.Helpers
             // Some devices hand out LIDs on @s.whatsapp.net, dotted. Accepting one as the
             // phone side would make an internal identifier the canonical address of the
             // conversation, which is the same inversion as reversing the pair.
-            Assert.False(AliasPairPolicy.IsWellFormedPair(ContactLid, "931777777.11@s.whatsapp.net", Bound()));
+            Assert.False(AliasPairPolicy.IsWellFormedPair(ContactLid, ContactLidDotted, Bound()));
         }
 
         [Fact]
@@ -269,6 +274,193 @@ namespace Unison.Core.Tests.Helpers
         public void Without_a_table_an_address_is_returned_as_it_came()
         {
             Assert.Equal(SelfLidDotted, AliasPairPolicy.ReduceToPlainLid(SelfLidDotted, null));
+        }
+
+        // --- TryAcceptPair: which side is the LID -----------------------------
+
+        [Fact]
+        public void A_pair_learned_in_the_natural_order_is_accepted_as_it_stands()
+        {
+            bool accepted = AliasPairPolicy.TryAcceptPair(ContactLid, ContactPn, Bound(), out string lid, out string pn);
+
+            Assert.True(accepted);
+            Assert.Equal(ContactLid, lid);
+            Assert.Equal(ContactPn, pn);
+        }
+
+        [Fact]
+        public void A_pair_learned_backwards_is_turned_the_right_way_round()
+        {
+            // The reason the method exists: a usync answer, a contact record and two rows
+            // found to be one person all arrive without saying which address is which. A
+            // caller left to guess is a caller that files the pair inverted, and then the
+            // phone address resolves to the LID for every reader of the table.
+            bool accepted = AliasPairPolicy.TryAcceptPair(ContactPn, ContactLid, Bound(), out string lid, out string pn);
+
+            Assert.True(accepted);
+            Assert.Equal(ContactLid, lid);
+            Assert.Equal(ContactPn, pn);
+        }
+
+        [Theory]
+        [InlineData("400500600:5@LID", "5511888888888:12@S.WhatsApp.Net")]
+        [InlineData("5511888888888:12@S.WhatsApp.Net", "400500600:5@LID")]
+        public void The_addresses_come_back_in_the_form_the_table_is_keyed_by(string first, string second)
+        {
+            // Device suffixes and case reach these callers straight off the wire. Filed as
+            // they arrive, the entry sits under a key no lookup rebuilds, so the pair is
+            // stored and still invisible.
+            bool accepted = AliasPairPolicy.TryAcceptPair(first, second, Bound(), out string lid, out string pn);
+
+            Assert.True(accepted);
+            Assert.Equal(ContactLid, lid);
+            Assert.Equal(ContactPn, pn);
+        }
+
+        [Fact]
+        public void The_answer_never_depends_on_which_way_round_the_caller_learned_the_pair()
+        {
+            // Swapping the arguments must not change the verdict or the sides, or a caller
+            // that learned the pair backwards could file what the same caller could not file
+            // forwards -- the poisoning guard would be one argument order away from off.
+            string?[] addresses =
+            {
+                SelfPn, SelfLid, SelfLidDotted, ContactPn, ContactLid, OtherContactPn, OtherContactLid,
+                ContactLidDotted, GroupJid, "5511888888888:12@S.WhatsApp.Net", "400500600@LID", "", "   ", null
+            };
+
+            var poisoned = Bound();
+            poisoned[SelfPn] = ContactLid;
+
+            var withOurReverseEntry = Bound(selfLid: null);
+            withOurReverseEntry[SelfPn] = SelfLid;
+
+            foreach (JidAliasTable table in new[] { Bound(), poisoned, withOurReverseEntry })
+            {
+                foreach (string? a in addresses)
+                {
+                    foreach (string? b in addresses)
+                    {
+                        bool forward = AliasPairPolicy.TryAcceptPair(a, b, table, out string forwardLid, out string forwardPn);
+                        bool backward = AliasPairPolicy.TryAcceptPair(b, a, table, out string backwardLid, out string backwardPn);
+
+                        Assert.Equal(forward, backward);
+                        Assert.Equal(forwardLid, backwardLid);
+                        Assert.Equal(forwardPn, backwardPn);
+                    }
+                }
+            }
+        }
+
+        // --- TryAcceptPair: what it turns away --------------------------------
+
+        [Theory]
+        [InlineData(ContactPn, OtherContactPn)]
+        [InlineData(ContactLid, OtherContactLid)]
+        [InlineData(ContactLid, ContactLidDotted)]
+        [InlineData(GroupJid, ContactPn)]
+        [InlineData(ContactPn, GroupJid)]
+        [InlineData(ContactPn, ContactPn)]
+        [InlineData(ContactLid, ContactLid)]
+        public void Two_addresses_that_are_not_a_LID_and_a_phone_number_are_not_a_pair(string first, string second)
+        {
+            // No orientation makes these one person: two phone numbers are two people, two
+            // LIDs are two internal ids with no canonical address between them, and an
+            // address paired with itself is a merge path having found one row twice.
+            Assert.False(AliasPairPolicy.TryAcceptPair(first, second, Bound(), out _, out _));
+        }
+
+        [Theory]
+        [InlineData(null, ContactPn)]
+        [InlineData("", ContactPn)]
+        [InlineData("   ", ContactPn)]
+        [InlineData(ContactLid, null)]
+        [InlineData(ContactLid, "")]
+        [InlineData(ContactLid, "   ")]
+        public void Half_a_pair_is_not_a_pair(string? first, string? second)
+        {
+            Assert.False(AliasPairPolicy.TryAcceptPair(first, second, Bound(), out _, out _));
+        }
+
+        [Fact]
+        public void Without_a_table_no_pair_is_accepted()
+        {
+            Assert.False(AliasPairPolicy.TryAcceptPair(ContactLid, ContactPn, null, out string lid, out string pn));
+            Assert.Null(lid);
+            Assert.Null(pn);
+        }
+
+        [Theory]
+        [InlineData(ContactPn, OtherContactPn)]
+        [InlineData(null, ContactPn)]
+        [InlineData(GroupJid, ContactPn)]
+        public void A_refused_pair_hands_back_nothing_to_file(string? first, string? second)
+        {
+            // A caller that reads the out values without checking the return has to end up
+            // writing nothing rather than writing rubbish, because what it would write goes
+            // to the table that decides who is who.
+            AliasPairPolicy.TryAcceptPair(first, second, Bound(), out string lid, out string pn);
+
+            Assert.Null(lid);
+            Assert.Null(pn);
+        }
+
+        // --- TryAcceptPair: our own identity ----------------------------------
+
+        [Theory]
+        [InlineData(ContactLid, SelfPn)]
+        [InlineData(SelfPn, ContactLid)]
+        public void A_contact_cannot_be_filed_under_our_own_phone_address_from_either_side(string first, string second)
+        {
+            // The pair that merges the contact's conversation into the self chat. A caller
+            // that happens to have learned it phone-first must be refused just the same,
+            // and must be left with nothing to write.
+            bool accepted = AliasPairPolicy.TryAcceptPair(first, second, Bound(), out string lid, out string pn);
+
+            Assert.False(accepted);
+            Assert.Null(lid);
+            Assert.Null(pn);
+        }
+
+        [Theory]
+        [InlineData(ContactLidDotted, SelfPn)]
+        [InlineData(SelfPn, ContactLidDotted)]
+        public void A_contacts_dotted_LID_cannot_be_filed_under_our_phone_address_either(string first, string second)
+        {
+            // The dotted form is welcome on the LID side, which is exactly why it has to be
+            // put through the same poisoning check once the sides are known.
+            Assert.False(AliasPairPolicy.TryAcceptPair(first, second, Bound(), out _, out _));
+        }
+
+        [Theory]
+        [InlineData(SelfLid, SelfPn)]
+        [InlineData(SelfPn, SelfLid)]
+        public void Our_own_pair_is_accepted_from_either_side(string first, string second)
+        {
+            bool accepted = AliasPairPolicy.TryAcceptPair(first, second, Bound(), out string lid, out string pn);
+
+            Assert.True(accepted);
+            Assert.Equal(SelfLid, lid);
+            Assert.Equal(SelfPn, pn);
+        }
+
+        [Theory]
+        [InlineData(SelfLidDotted, SelfPn)]
+        [InlineData(SelfPn, SelfLidDotted)]
+        public void Our_own_dotted_LID_is_accepted_and_comes_back_as_it_will_be_filed(string first, string second)
+        {
+            // The launch-time case: our own LID is not known yet, so the only evidence that
+            // this dotted address is ours is the reverse entry already in the table. The
+            // sides come back normalized but not reduced -- reduction answers "is this the
+            // same LID", it is not the key the pair is filed under.
+            var table = Bound(selfLid: null);
+            table[SelfPn] = SelfLid;
+
+            bool accepted = AliasPairPolicy.TryAcceptPair(first, second, table, out string lid, out string pn);
+
+            Assert.True(accepted);
+            Assert.Equal(SelfLidDotted, lid);
+            Assert.Equal(SelfPn, pn);
         }
     }
 }

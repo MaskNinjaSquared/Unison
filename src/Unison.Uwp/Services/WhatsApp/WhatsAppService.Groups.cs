@@ -895,21 +895,15 @@ namespace Unison.Uwp.Services.WhatsApp
 
                     if (result.HasPicture)
                     {
-                        member.AvatarUrl = result.LocalUri;
-                        member.AvatarFetchedAtUtc = nowUtc;
-                        member.AvatarFetchFailedAtUtc = null;
-                        member.AvatarFetchFailureReason = null;
+                        ChatAvatarOutcome.RecordCached(member, result.LocalUri, nowUtc);
                     }
                     else if (result.IsNotFound)
                     {
-                        member.AvatarFetchedAtUtc = nowUtc;
-                        member.AvatarFetchFailedAtUtc = null;
-                        member.AvatarFetchFailureReason = "no-picture";
+                        ChatAvatarOutcome.RecordAbsent(member, "no-picture", nowUtc);
                     }
                     else
                     {
-                        member.AvatarFetchFailedAtUtc = nowUtc;
-                        member.AvatarFetchFailureReason = result.FailureReason ?? "fetch-failed";
+                        ChatAvatarOutcome.RecordFailure(member, result.FailureReason ?? "fetch-failed", nowUtc);
                     }
                 }
             }

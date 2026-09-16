@@ -7522,12 +7522,20 @@ namespace Unison.Uwp.Services.WhatsApp
                                 ContactNames[primaryNorm] = secondaryName;
                             }
 
-                            JidAlias[secondaryNorm] = primaryNorm;
-                            if (!JidAlias.TryGetValue(primaryNorm, out var existingPrimaryAlias) ||
-                                string.IsNullOrWhiteSpace(existingPrimaryAlias) ||
-                                !NormalizeJid(existingPrimaryAlias).EndsWith("@lid", StringComparison.OrdinalIgnoreCase))
+                            // The rows merge either way; only the alias is withheld when the pair
+                            // is not one we are allowed to file.
+                            if (AliasPairPolicy.TryAcceptPair(secondaryNorm, primaryNorm, JidAlias, out string mergedLid, out string mergedPn))
                             {
-                                JidAlias[primaryNorm] = secondaryNorm;
+                                JidAlias[mergedLid] = mergedPn;
+
+                                // An existing @lid alias on this side is more specific than what
+                                // the merge knows, so it is left in place.
+                                if (!JidAlias.TryGetValue(mergedPn, out var existingPrimaryAlias) ||
+                                    string.IsNullOrWhiteSpace(existingPrimaryAlias) ||
+                                    !NormalizeJid(existingPrimaryAlias).EndsWith("@lid", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    JidAlias[mergedPn] = mergedLid;
+                                }
                             }
 
                             if (primary.UnreadCount < secondary.UnreadCount)
@@ -7813,18 +7821,21 @@ namespace Unison.Uwp.Services.WhatsApp
                 var normalizedLid = NormalizeJid(contact.Lid);
                 var knownAlready = JidAlias.ContainsKey(normalizedLid);
 
-                JidAlias[normalizedUser] = normalizedLid;
-                JidAlias[normalizedLid] = normalizedUser;
-                RegisterSocketAlias(normalizedUser, normalizedLid, "contact-usync");
-                changed = true;
-
-                HealOwnIdentity(normalizedUser, normalizedLid);
-
-                // Two chats for one person, which is what happens when the pair was learned late.
-                // Only worth doing the first time, hence the check before the alias was written.
-                if (!knownAlready)
+                if (AliasPairPolicy.TryAcceptPair(normalizedLid, normalizedUser, JidAlias, out string contactLid, out string contactPn))
                 {
-                    _ = CheckAndMergeDuplicateChatsAsync(normalizedLid, normalizedUser);
+                    JidAlias[contactLid] = contactPn;
+                    JidAlias[contactPn] = contactLid;
+                    RegisterSocketAlias(normalizedUser, normalizedLid, "contact-usync");
+                    changed = true;
+
+                    HealOwnIdentity(normalizedUser, normalizedLid);
+
+                    // Two chats for one person, which is what happens when the pair was learned late.
+                    // Only worth doing the first time, hence the check before the alias was written.
+                    if (!knownAlready)
+                    {
+                        _ = CheckAndMergeDuplicateChatsAsync(normalizedLid, normalizedUser);
+                    }
                 }
             }
 

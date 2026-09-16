@@ -798,8 +798,14 @@ namespace Unison.Uwp.Services.WhatsApp
                             }
 
                             string normalizedTarget = NormalizeJid(targetJid);
-                            JidAlias[normalizedUser] = normalizedTarget;
-                            JidAlias[normalizedTarget] = normalizedUser;
+                            if (!AliasPairPolicy.TryAcceptPair(normalizedUser, normalizedTarget, JidAlias, out string usyncLid, out string usyncPn))
+                            {
+                                Debug.WriteLine($"[WhatsAppService] Refused usync alias {normalizedUser} -> {normalizedTarget}");
+                                continue;
+                            }
+
+                            JidAlias[usyncLid] = usyncPn;
+                            JidAlias[usyncPn] = usyncLid;
                             RegisterSocketAlias(normalizedUser, normalizedTarget, "contact-usync");
                             cacheUpdated = true;
 
@@ -881,10 +887,11 @@ namespace Unison.Uwp.Services.WhatsApp
                             if (!string.IsNullOrEmpty(targetLid))
                             {
                                 string normalizedLid = NormalizeJid(targetLid);
-                                if (!JidAlias.ContainsKey(normalizedLid))
+                                if (!JidAlias.ContainsKey(normalizedLid) &&
+                                    AliasPairPolicy.TryAcceptPair(normalizedLid, normalizedUser, JidAlias, out string mappedLid, out string mappedPn))
                                 {
-                                    JidAlias[normalizedLid] = normalizedUser;
-                                    JidAlias[normalizedUser] = normalizedLid;
+                                    JidAlias[mappedLid] = mappedPn;
+                                    JidAlias[mappedPn] = mappedLid;
                                     RegisterSocketAlias(normalizedLid, normalizedUser, "contact-usync-mapped-lid");
                                     Debug.WriteLine($"[WhatsAppService] usync mapping found: {normalizedLid} -> {normalizedUser}");
                                     
