@@ -752,19 +752,23 @@ namespace Unison.Uwp.Services.WhatsApp
                         foreach (var item in latestByChat)
                         {
                             var message = item.Value;
+                            ChatPreviewKind kind = ChatPreviewNormalizer.InferKindFromMessage(message);
                             string preview = message?.Content;
                             if (string.IsNullOrWhiteSpace(preview))
                             {
-                                preview = message?.IsImage == true ? "[Image]" : "[Message]";
+                                // The kind already knows what arrived. Deciding it again from
+                                // IsImage alone labelled every video, sticker and voice note
+                                // "[Message]".
+                                preview = MediaPreviewTag.ForKind(kind) ?? "[Message]";
                             }
 
                             await RefreshChatPreviewFromReplayAsync(
                                 item.Key,
                                 preview,
                                 message?.Timestamp ?? DateTime.MinValue,
-                                item.Key.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase),
+                                JidHelper.IsGroupJid(item.Key),
                                 message?.IsFromMe == true,
-                                ChatPreviewNormalizer.InferKindFromMessage(message));
+                                kind);
                         }
 
                         RuntimeDiagnosticsService.Instance.Write(
@@ -1927,7 +1931,8 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
 
                     // Update if we don't have a name, or if the current name is just the JID/number
-                    if (!ContactNames.TryGetValue(senderJid, out var existingName) || existingName.Contains("@") || existingName == senderJid.Split('@')[0])
+                    if (!ContactNames.TryGetValue(senderJid, out var existingName) ||
+                        PlaceholderChatLabel.IsPlaceholder(existingName, senderJid, IsSelfMarkerLabel(existingName)))
                     {
                         string sanitized = SanitizeContactLabel(nameFromMsg, senderJid);
                         if (string.IsNullOrEmpty(sanitized))
@@ -2338,8 +2343,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             }
 
                             // If name is still naked, trigger resolution
-                            string bare = chat.JID.Split('@')[0];
-                            if (chat.Name == bare || chat.Name.Contains("@"))
+                            if (PlaceholderChatLabel.IsPlaceholder(chat.Name, chat.JID, IsSelfMarkerLabel(chat.Name)))
                             {
                                 _ = ResolveMissingNamesAsync();
                             }
@@ -2352,7 +2356,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             displayContent,
                             chatMessage.Timestamp,
                             false,
-                            renderInfo?.PreviewKind,
+                            previewKind,
                             listAuthorPrefix,
                             chatMessage.MentionedJids,
                             chatMessage.IsFromMe,
@@ -2367,7 +2371,7 @@ namespace Unison.Uwp.Services.WhatsApp
                                     displayContent,
                                     chatMessage.Timestamp,
                                     false,
-                                    renderInfo?.PreviewKind,
+                                    previewKind,
                                     listAuthorPrefix,
                                     chatMessage.MentionedJids,
                                     chatMessage.IsFromMe,
@@ -2377,7 +2381,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         }
 
                         // If it's a 1-on-1 and name is still a number/JID, try to resolve it with the newly updated name
-                        if (!isGroup && (chat.Name.Contains("@") || chat.Name == jid.Replace("@s.whatsapp.net", "").Replace("@lid", "") || IsSelfMarkerLabel(chat.Name)))
+                        if (!isGroup && PlaceholderChatLabel.IsPlaceholder(chat.Name, jid, IsSelfMarkerLabel(chat.Name)))
                         {
                             var resolvedChatName = ResolveDisplayName(jid, "chat");
                             if (!string.IsNullOrEmpty(resolvedChatName) && !resolvedChatName.Contains("@"))
@@ -2829,7 +2833,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         latest.Id);
                     ApplyChatKind(chat);
 
-                    if (!chat.IsGroup && (chat.Name.Contains("@") || chat.Name == canonicalJid.Replace("@s.whatsapp.net", "").Replace("@lid", "") || IsSelfMarkerLabel(chat.Name)))
+                    if (!chat.IsGroup && PlaceholderChatLabel.IsPlaceholder(chat.Name, canonicalJid, IsSelfMarkerLabel(chat.Name)))
                     {
                         chat.Name = ResolveDisplayName(canonicalJid, "chat");
                     }

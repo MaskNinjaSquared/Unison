@@ -245,11 +245,10 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
             foreach (var chat in chats)
             {
-                string bareJid = chat.JID.Split('@')[0];
-                bool isNaked = string.IsNullOrEmpty(chat.Name) ||
-                               chat.Name == bareJid ||
-                               chat.Name.Contains("@") ||
-                               SelfChatDisplayHelper.IsSelfMarkerLabel(chat.Name);
+                bool isNaked = PlaceholderChatLabel.IsPlaceholder(
+                    chat.Name,
+                    chat.JID,
+                    SelfChatDisplayHelper.IsSelfMarkerLabel(chat.Name));
                 if (!isNaked)
                 {
                     continue;

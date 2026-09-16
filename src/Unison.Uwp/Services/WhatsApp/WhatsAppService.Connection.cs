@@ -1567,8 +1567,8 @@ namespace Unison.Uwp.Services.WhatsApp
                             {
                                 if (NormalizeJid(chat.JID) == normalizedNotifyTarget)
                                 {
-                                    string bareJid = chat.JID.Split('@')[0];
-                                    if (chat.Name == bareJid || chat.Name.Contains("@") || string.IsNullOrEmpty(chat.Name) || IsSelfMarkerLabel(chat.Name))
+                                    string bareJid = PlaceholderChatLabel.BareUser(chat.JID);
+                                    if (PlaceholderChatLabel.IsPlaceholder(chat.Name, chat.JID, IsSelfMarkerLabel(chat.Name)))
                                     {
                                         chat.Name = sanitizedNotify ?? bareJid;
                                     }

@@ -61,6 +61,32 @@ determines the orientation and answers in one call. Each caller keeps its own lo
 merge still merges the rows and withholds only the alias; the mapped-LID path still only fires the first
 time it sees an address.
 
+### "Is this label still a stand-in?" was answered five different ways
+
+Five copies across `WhatsAppService` and its partials, no two alike. Two omitted the self-marker check,
+so a row reading "(You)" counted as named and was never sent for resolution — it stayed that way for the
+life of the row. Two read the bare number by stripping known domains with chained `Replace` calls, which
+covers `@s.whatsapp.net` and `@lid` and silently passes a group id through whole. Three called
+`Contains("@")` on a label they had not tested for null first.
+
+`PlaceholderChatLabel` is the version `ContactNameResolver` already had right, which is the only one
+that tested for null first. It cuts the address at the separator instead of stripping a domain list, so
+an address nobody anticipated still reduces. It takes the self-marker answer as a boolean for the same
+reason `ChatNameReplacement` does — recognising "(You)" needs the localized resources, which are UWP.
+
+### Two more in the preview, from the same sweep
+
+**Every recovered video, sticker and voice note was labelled "[Message]".** The journal recovery path
+decided the placeholder text from `IsImage` alone, even though it computes the message's actual kind on
+the next line to pass along. `MediaPreviewTag.ForKind` answers from the kind, and returns null rather
+than a marker for something that should have carried text, so the caller decides instead of being handed
+a label for media that never arrived.
+
+**`ResolvePreviewKind` was computed and then ignored on the live path.** It exists because render info
+resolving to `Text` is not the last word — the message itself can still say otherwise, and it falls back
+to inferring from the message. Both live call sites passed the raw `renderInfo?.PreviewKind` instead, so
+a message appeared as text while the app was open and as media after a restart.
+
 ### Four defects in the outgoing path, found by mapping it before touching it
 
 **A receipt could pull a double tick back to a single one.** `ApplyListPreviewSendState` worked out

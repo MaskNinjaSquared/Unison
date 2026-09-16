@@ -94,5 +94,33 @@ namespace Unison.Core.Tests.Helpers
             Assert.Equal("[Voice Message]", MediaPreviewTag.Voice);
             Assert.Equal("[Audio]", MediaPreviewTag.Audio);
         }
+
+        // --- ForKind ---------------------------------------------------------
+        //
+        // For the recovery paths, which know the message's kind but not the render info
+        // that normally builds the preview.
+
+        [Theory]
+        [InlineData(ChatPreviewKind.Image, "[Image]")]
+        [InlineData(ChatPreviewKind.Video, "[Video]")]
+        [InlineData(ChatPreviewKind.Sticker, "[Sticker]")]
+        [InlineData(ChatPreviewKind.Document, "[Document]")]
+        [InlineData(ChatPreviewKind.Voice, "[Voice Message]")]
+        public void Each_media_kind_answers_with_its_own_marker(ChatPreviewKind kind, string expected)
+        {
+            // The recovery path this replaced decided from IsImage alone, so a video, a
+            // sticker and a voice note all came back labelled "[Message]".
+            Assert.Equal(expected, MediaPreviewTag.ForKind(kind));
+        }
+
+        [Theory]
+        [InlineData(ChatPreviewKind.Text)]
+        [InlineData(ChatPreviewKind.Reaction)]
+        public void A_kind_that_should_have_carried_text_gets_no_marker(ChatPreviewKind kind)
+        {
+            // Null rather than a marker, so the caller picks what to show instead of being
+            // handed a label for media that never arrived.
+            Assert.Null(MediaPreviewTag.ForKind(kind));
+        }
     }
 }
