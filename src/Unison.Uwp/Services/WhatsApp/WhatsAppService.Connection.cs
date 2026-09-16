@@ -452,14 +452,32 @@ namespace Unison.Uwp.Services.WhatsApp
                 // PN/LID aliases are compact protocol state, not optional UI data. Load
                 // them before ConnectAsync snapshots the alias map for SocketClient.
                 var storedAliases = await _messageStore.LoadJidAliasesAsync();
+                int poisonedAliases = 0;
                 foreach (var kvp in storedAliases)
                 {
                     string aliasKey = NormalizeJid(kvp.Key);
                     string aliasValue = NormalizeJid(kvp.Value);
-                    if (!string.IsNullOrWhiteSpace(aliasKey) && !string.IsNullOrWhiteSpace(aliasValue))
+                    if (string.IsNullOrWhiteSpace(aliasKey) || string.IsNullOrWhiteSpace(aliasValue))
                     {
-                        JidAlias[aliasKey] = aliasValue;
+                        continue;
                     }
+
+                    // Only the self-poisoning check, not the full live validation: the table is
+                    // also written by paths that predate that validation, and rejecting their
+                    // entries here would drop identities that are merely unusual, not wrong.
+                    if (IsSelfPoisoningAliasPair(aliasKey, aliasValue))
+                    {
+                        Debug.WriteLine($"[WhatsAppService] Dropping persisted alias that files a contact under our own identity: {aliasKey} -> {aliasValue}");
+                        poisonedAliases++;
+                        continue;
+                    }
+
+                    JidAlias[aliasKey] = aliasValue;
+                }
+
+                if (poisonedAliases > 0)
+                {
+                    Debug.WriteLine($"[WhatsAppService] Dropped {poisonedAliases} poisoned alias entr(ies) while restoring");
                 }
 
                 // The own PN/LID pair is tiny and required before the socket starts.

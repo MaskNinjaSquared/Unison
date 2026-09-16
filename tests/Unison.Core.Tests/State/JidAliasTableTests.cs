@@ -123,11 +123,12 @@ namespace Unison.Core.Tests.State
             // IsSelfLinked(ContactLid) consults the very alias being validated and so
             // reports true, which switches the guard off.
             //
-            // The real protection is upstream in WhatsAppService.TryRecordAliasMapping,
-            // which refuses to write such a pair. Note that the startup restore in
-            // WhatsAppService.Connection.cs writes persisted aliases into this table
-            // directly, without that check - so a poisoned pair that ever reaches disk
-            // is reloaded unvalidated on every launch.
+            // The protection is upstream, in the two paths that write this table:
+            // WhatsAppService.TryRecordAliasMapping refuses such a pair on the live
+            // path, and the startup restore in WhatsAppService.Connection.cs now drops
+            // it via IsSelfPoisoningAliasPair. Both ask before inserting, which is what
+            // makes the answer meaningful - asked afterwards, as here, the entry is its
+            // own alibi.
             var table = Bound();
             table[ContactLid] = SelfPn;
 

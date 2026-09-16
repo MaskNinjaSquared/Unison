@@ -496,6 +496,31 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         /// <summary>
+        /// Whether filing this pair would put a contact under our own identity.
+        /// </summary>
+        /// <remarks>
+        /// The live path refuses such a pair in <see cref="TryRecordAliasMapping"/>, but persisted
+        /// aliases are written straight into the table on startup, so a bad pair that ever reached
+        /// disk came back on every launch and merged that contact's conversation into the self chat.
+        ///
+        /// This has to be asked *before* the entry is inserted. The guard inside
+        /// <c>JidAliasTable.GetCanonicalJid</c> asks afterwards, and by then
+        /// <see cref="IsSelfLinkedJid"/> reads the poisoned entry itself as evidence that the
+        /// contact is us, which switches that guard off.
+        /// </remarks>
+        private bool IsSelfPoisoningAliasPair(string aliasKey, string aliasValue)
+        {
+            if (!IsSelfLinkedJid(aliasValue) || IsSelfLinkedJid(aliasKey))
+            {
+                return false;
+            }
+
+            // Our own LID and phone address point at each other; that pair is legitimate.
+            return !(JidAlias.TryGetValue(aliasValue, out var reverseAlias) &&
+                     string.Equals(NormalizeJid(reverseAlias), aliasKey, StringComparison.OrdinalIgnoreCase));
+        }
+
+        /// <summary>
         /// The bookkeeping half: validates the pair, files it both ways, and reports whether it
         /// told us anything we did not already know. No UI, no disk, no scans.
         /// </summary>

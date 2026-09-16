@@ -369,10 +369,13 @@ name blacklist, the extension mapping, `ToUtc` and the `JidAliasTable` canonical
 Writing the alias tests turned up something 3.9b and 3.7b both need to know. The self-poisoning guard
 in `GetCanonicalJid` does not cover the case its comment claims: when a contact's LID is aliased
 straight to our id, the guard's own `IsSelfLinked` call consults that alias, returns true, and
-disables the guard. The pair is refused upstream by `TryRecordAliasMapping`, so the live path is
-protected — but the startup restore in `.Connection.cs` writes persisted aliases into the table
-directly, without that check. Any 3.9b work that re-keys persisted rows by canonical address inherits
-this. Both behaviours are pinned by tests marked as recorded rather than endorsed. That is the regression net for 3.9b: the order
+disables the guard. The pair was refused upstream by `TryRecordAliasMapping` on the live path, but
+the startup restore in `.Connection.cs` wrote persisted aliases into the table directly, without that
+check — so anything that reached disk came back on every launch. The restore now drops such a pair
+through `IsSelfPoisoningAliasPair`, which works precisely because it asks *before* inserting; the
+in-table guard asks afterwards, when the entry is its own alibi, and is left as it is. Both
+behaviours are pinned by tests marked as recorded rather than endorsed. 3.9b re-keys persisted rows
+by canonical address, so it inherits whatever this table says. That is the regression net for 3.9b: the order
 tests fail if the move changes what the user sees in the list. It is not full cover — persistence
 and the appliers are in the UWP head and out of its reach — so 3.9b still wants a device pass. It is
 the difference between a silent reorder and a red test.
