@@ -146,50 +146,12 @@ namespace Unison.Uwp.Services.WhatsApp
             target.NotifyVideoDownloadStateChanged();
         }
 
-        private async Task<string> SaveImageBytesToCacheAsync(byte[] imageBytes, string fileBase, string mimeType)
-        {
-            if (imageBytes == null || imageBytes.Length == 0) return null;
-
-            var local = ApplicationData.Current.LocalFolder;
-            var mediaFolder = await local.CreateFolderAsync("MediaCache", CreationCollisionOption.OpenIfExists);
-            var imageFolder = await mediaFolder.CreateFolderAsync("Images", CreationCollisionOption.OpenIfExists);
-
-            string ext = GetImageFileExtension(mimeType);
-            string safeBase = string.IsNullOrWhiteSpace(fileBase) ? Guid.NewGuid().ToString("N") : fileBase;
-            // Base64url / path chars are unsafe in StorageFile names.
-            safeBase = SanitizeCacheFileBase(safeBase);
-            string fileName = $"{safeBase}{ext}";
-
-            var existing = await imageFolder.TryGetItemAsync(fileName) as StorageFile;
-            if (existing == null)
-            {
-                var file = await imageFolder.CreateFileAsync(fileName, CreationCollisionOption.ReplaceExisting);
-                await FileIO.WriteBytesAsync(file, imageBytes);
-            }
-
-            return $"ms-appdata:///local/MediaCache/Images/{fileName}";
-        }
-
-        private static string SanitizeCacheFileBase(string fileBase)
-        {
-            if (string.IsNullOrWhiteSpace(fileBase))
-            {
-                return Guid.NewGuid().ToString("N");
-            }
-
-            var chars = fileBase.ToCharArray();
-            for (int i = 0; i < chars.Length; i++)
-            {
-                char c = chars[i];
-                if (!(char.IsLetterOrDigit(c) || c == '-' || c == '_'))
-                {
-                    chars[i] = '_';
-                }
-            }
-
-            string sanitized = new string(chars);
-            return sanitized.Length > 80 ? sanitized.Substring(0, 80) : sanitized;
-        }
+        private Task<string> SaveImageBytesToCacheAsync(byte[] imageBytes, string fileBase, string mimeType) =>
+            _mediaCache.SaveAsync(
+                MediaCacheKind.Image,
+                fileBase,
+                MediaFileExtensions.ForImage(mimeType),
+                imageBytes);
 
         /// <summary>
         /// Always keeps the original payload on disk. When the OS has no WebP codec
@@ -338,20 +300,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 && uri.EndsWith(".webp", StringComparison.OrdinalIgnoreCase);
         }
 
-        private async Task<byte[]> TryReadCachedImageBytesAsync(string msAppDataUri)
-        {
-            try
-            {
-                var file = await StorageFile.GetFileFromApplicationUriAsync(new Uri(msAppDataUri));
-                var buffer = await FileIO.ReadBufferAsync(file);
-                return buffer.ToArray();
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[WhatsAppService] Read cache failed: " + ex.Message);
-                return null;
-            }
-        }
+        private Task<byte[]> TryReadCachedImageBytesAsync(string msAppDataUri) =>
+            _mediaCache.TryReadAsync(msAppDataUri);
 
         private async Task PersistMessageImageUriAsync(ChatMessage message)
         {
@@ -370,28 +320,11 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        private async Task<string> TryGetCachedImageUriAsync(string fileBase, string mimeType)
-        {
-            try
-            {
-                var local = ApplicationData.Current.LocalFolder;
-                var mediaFolder = await local.CreateFolderAsync("MediaCache", CreationCollisionOption.OpenIfExists);
-                var imageFolder = await mediaFolder.CreateFolderAsync("Images", CreationCollisionOption.OpenIfExists);
-                string safeBase = SanitizeCacheFileBase(fileBase);
-                string fileName = safeBase + GetImageFileExtension(mimeType);
-                var existing = await imageFolder.TryGetItemAsync(fileName) as StorageFile;
-                if (existing != null)
-                {
-                    return $"ms-appdata:///local/MediaCache/Images/{fileName}";
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[WhatsAppService] Cache lookup failed: " + ex.Message);
-            }
-
-            return null;
-        }
+        private Task<string> TryGetCachedImageUriAsync(string fileBase, string mimeType) =>
+            _mediaCache.TryGetUriAsync(
+                MediaCacheKind.Image,
+                fileBase,
+                MediaFileExtensions.ForImage(mimeType));
 
         /// <summary>
         /// Re-encode via the platform <see cref="Windows.Graphics.Imaging.BitmapDecoder"/> when present.
@@ -446,43 +379,19 @@ namespace Unison.Uwp.Services.WhatsApp
             return SaveImageBytesForDisplayAsync(imageBytes, fileBase, mimeType ?? "image/webp");
         }
 
-        private static string GetAudioFileExtension(string mimeType)
-        {
-            string mime = (mimeType ?? string.Empty).ToLowerInvariant();
-            if (mime.Contains("ogg") || mime.Contains("opus")) return ".ogg";
-            if (mime.Contains("mpeg") || mime.Contains("mp3")) return ".mp3";
-            if (mime.Contains("wav")) return ".wav";
-            if (mime.Contains("amr")) return ".amr";
-            if (mime.Contains("aac")) return ".aac";
-            return ".m4a";
-        }
+        private static bool IsOggOpusMime(string mimeType) =>
+            MediaFileExtensions.IsOggOpusMime(mimeType);
 
-        private static bool IsOggOpusMime(string mimeType)
-        {
-            string mime = (mimeType ?? string.Empty).ToLowerInvariant();
-            return mime.Contains("ogg") || mime.Contains("opus");
-        }
+        private static bool LooksLikeOggUri(string uri) =>
+            MediaFileExtensions.LooksLikeOggUri(uri);
 
-        private static bool LooksLikeOggUri(string uri)
-        {
-            if (string.IsNullOrWhiteSpace(uri)) return false;
-            return uri.EndsWith(".ogg", StringComparison.OrdinalIgnoreCase) ||
-                   uri.EndsWith(".opus", StringComparison.OrdinalIgnoreCase);
-        }
-
-        private async Task<string> SaveAudioBytesToCacheAsync(byte[] audioBytes, string fileBase, string mimeType)
-        {
-            if (audioBytes == null || audioBytes.Length == 0) return null;
-            var local = ApplicationData.Current.LocalFolder;
-            var mediaFolder = await local.CreateFolderAsync("MediaCache", CreationCollisionOption.OpenIfExists);
-            var audioFolder = await mediaFolder.CreateFolderAsync("Audio", CreationCollisionOption.OpenIfExists);
-            string safeBase = SanitizeCacheFileBase(
-                string.IsNullOrWhiteSpace(fileBase) ? Guid.NewGuid().ToString("N") : fileBase);
-            string fileName = safeBase + GetAudioFileExtension(mimeType);
-            var file = await audioFolder.CreateFileAsync(fileName, CreationCollisionOption.ReplaceExisting);
-            await FileIO.WriteBytesAsync(file, audioBytes);
-            return "ms-appdata:///local/MediaCache/Audio/" + fileName;
-        }
+        private Task<string> SaveAudioBytesToCacheAsync(byte[] audioBytes, string fileBase, string mimeType) =>
+            _mediaCache.SaveAsync(
+                MediaCacheKind.Audio,
+                fileBase,
+                MediaFileExtensions.ForAudio(mimeType),
+                audioBytes,
+                reuseExisting: false);
 
         /// <summary>
         /// WhatsApp voice notes are often Ogg/Opus â€” fine on desktop MediaPlayer, often fails on W10 Mobile.
@@ -517,8 +426,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 var local = ApplicationData.Current.LocalFolder;
                 var mediaFolder = await local.CreateFolderAsync("MediaCache", CreationCollisionOption.OpenIfExists);
                 var audioFolder = await mediaFolder.CreateFolderAsync("Audio", CreationCollisionOption.OpenIfExists);
-                string safeBase = SanitizeCacheFileBase(
-                    string.IsNullOrWhiteSpace(fileBase) ? Guid.NewGuid().ToString("N") : fileBase + "_play");
+                string safeBase = _mediaCache.SanitizeFileBase(
+                    string.IsNullOrWhiteSpace(fileBase) ? null : fileBase + "_play");
                 string destName = safeBase + ".m4a";
                 var destFile = await audioFolder.CreateFileAsync(destName, CreationCollisionOption.ReplaceExisting);
 
@@ -1031,88 +940,27 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        private static string GetDocumentFileExtension(string fileName, string mimeType)
-        {
-            if (!string.IsNullOrWhiteSpace(fileName))
-            {
-                string name = fileName.Trim();
-                int dot = name.LastIndexOf('.');
-                if (dot > 0 && dot < name.Length - 1)
-                {
-                    string ext = name.Substring(dot);
-                    if (ext.Length <= 12)
-                    {
-                        return ext.ToLowerInvariant();
-                    }
-                }
-            }
+        private static string GetDocumentFileExtension(string fileName, string mimeType) =>
+            MediaFileExtensions.ForDocument(fileName, mimeType);
 
-            string mime = (mimeType ?? string.Empty).ToLowerInvariant();
-            if (mime.Contains("pdf")) return ".pdf";
-            if (mime.Contains("msword") || mime.Contains("wordprocessingml")) return ".docx";
-            if (mime.Contains("vnd.ms-excel") || mime.Contains("spreadsheetml")) return ".xlsx";
-            if (mime.Contains("vnd.ms-powerpoint") || mime.Contains("presentationml")) return ".pptx";
-            if (mime.Contains("zip")) return ".zip";
-            if (mime.Contains("rar")) return ".rar";
-            if (mime.Contains("text/plain")) return ".txt";
-            if (mime.Contains("json")) return ".json";
-            if (mime.Contains("xml")) return ".xml";
-            if (mime.StartsWith("image/")) return GetImageFileExtension(mime);
-            if (mime.StartsWith("audio/")) return GetAudioFileExtension(mime);
-            if (mime.StartsWith("video/")) return GetVideoFileExtension(mime);
-            return ".bin";
-        }
-
-        private async Task<string> SaveDocumentBytesToCacheAsync(
+        private Task<string> SaveDocumentBytesToCacheAsync(
             byte[] documentBytes,
             string fileBase,
             string originalFileName,
-            string mimeType)
-        {
-            if (documentBytes == null || documentBytes.Length == 0)
-            {
-                return null;
-            }
+            string mimeType) =>
+            _mediaCache.SaveAsync(
+                MediaCacheKind.Document,
+                fileBase,
+                MediaFileExtensions.ForDocument(originalFileName, mimeType),
+                documentBytes,
+                reuseExisting: false);
 
-            var local = ApplicationData.Current.LocalFolder;
-            var mediaFolder = await local.CreateFolderAsync("MediaCache", CreationCollisionOption.OpenIfExists);
-            var docFolder = await mediaFolder.CreateFolderAsync("Documents", CreationCollisionOption.OpenIfExists);
-            string safeBase = SanitizeCacheFileBase(
-                string.IsNullOrWhiteSpace(fileBase) ? Guid.NewGuid().ToString("N") : fileBase);
-            string extension = GetDocumentFileExtension(originalFileName, mimeType);
-            string fileName = safeBase + extension;
-            var file = await docFolder.CreateFileAsync(fileName, CreationCollisionOption.ReplaceExisting);
-            await FileIO.WriteBytesAsync(file, documentBytes);
-            return "ms-appdata:///local/MediaCache/Documents/" + fileName;
-        }
-
-        private static string GetVideoFileExtension(string mimeType)
-        {
-            string mime = (mimeType ?? string.Empty).ToLowerInvariant();
-            if (mime.Contains("webm")) return ".webm";
-            if (mime.Contains("3gpp") || mime.Contains("3gp")) return ".3gp";
-            if (mime.Contains("quicktime") || mime.Contains("mov")) return ".mov";
-            return ".mp4";
-        }
-
-        private async Task<string> SaveVideoBytesToCacheAsync(byte[] videoBytes, string fileBase, string mimeType)
-        {
-            if (videoBytes == null || videoBytes.Length == 0) return null;
-            var local = ApplicationData.Current.LocalFolder;
-            var mediaFolder = await local.CreateFolderAsync("MediaCache", CreationCollisionOption.OpenIfExists);
-            var videoFolder = await mediaFolder.CreateFolderAsync("Video", CreationCollisionOption.OpenIfExists);
-            string safeBase = SanitizeCacheFileBase(
-                string.IsNullOrWhiteSpace(fileBase) ? Guid.NewGuid().ToString("N") : fileBase);
-            string fileName = safeBase + GetVideoFileExtension(mimeType);
-            var existing = await videoFolder.TryGetItemAsync(fileName) as StorageFile;
-            if (existing == null)
-            {
-                var file = await videoFolder.CreateFileAsync(fileName, CreationCollisionOption.ReplaceExisting);
-                await FileIO.WriteBytesAsync(file, videoBytes);
-            }
-
-            return "ms-appdata:///local/MediaCache/Video/" + fileName;
-        }
+        private Task<string> SaveVideoBytesToCacheAsync(byte[] videoBytes, string fileBase, string mimeType) =>
+            _mediaCache.SaveAsync(
+                MediaCacheKind.Video,
+                fileBase,
+                MediaFileExtensions.ForVideo(mimeType),
+                videoBytes);
 
         /// <summary>First-frame JPEG via MediaComposition (bubble poster after download).</summary>
         private async Task<string> TryCreateVideoPosterAsync(string videoUri, string fileBase)
@@ -1159,15 +1007,12 @@ namespace Unison.Uwp.Services.WhatsApp
                     reader.ReadBytes(jpeg);
                     reader.Dispose();
 
-                    var local = ApplicationData.Current.LocalFolder;
-                    var mediaFolder = await local.CreateFolderAsync("MediaCache", CreationCollisionOption.OpenIfExists);
-                    var posterFolder = await mediaFolder.CreateFolderAsync("VideoPosters", CreationCollisionOption.OpenIfExists);
-                    string safeBase = SanitizeCacheFileBase(
-                        string.IsNullOrWhiteSpace(fileBase) ? Guid.NewGuid().ToString("N") : fileBase + "_poster");
-                    string fileName = safeBase + ".jpg";
-                    var posterFile = await posterFolder.CreateFileAsync(fileName, CreationCollisionOption.ReplaceExisting);
-                    await FileIO.WriteBytesAsync(posterFile, jpeg);
-                    return "ms-appdata:///local/MediaCache/VideoPosters/" + fileName;
+                    return await _mediaCache.SaveAsync(
+                        MediaCacheKind.VideoPoster,
+                        string.IsNullOrWhiteSpace(fileBase) ? null : fileBase + "_poster",
+                        ".jpg",
+                        jpeg,
+                        reuseExisting: false);
                 }
             }
             catch (Exception ex)
@@ -1380,15 +1225,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        private static string GetImageFileExtension(string mimeType)
-        {
-            if (string.IsNullOrWhiteSpace(mimeType)) return ".jpg";
-            string lower = mimeType.ToLowerInvariant();
-            if (lower.Contains("png")) return ".png";
-            if (lower.Contains("webp")) return ".webp";
-            if (lower.Contains("gif")) return ".gif";
-            if (lower.Contains("bmp")) return ".bmp";
-            return ".jpg";
-        }
+        private static string GetImageFileExtension(string mimeType) =>
+            MediaFileExtensions.ForImage(mimeType);
     }
 }

@@ -172,7 +172,8 @@ Self-contained first. List/persist last.
 | 3.1c | Avatar apply to the row | with 3.2 (group fallback) and 3.9 (row + persist) |
 | 3.2a | Group protocol reading (done) | `GroupMetadataReader` |
 | 3.2b | Group apply + roster persist | `GroupFacade`, after 3.6 / 3.7 / 3.9 |
-| 3.3 | `.Media.cs` | `MessageFacade` + a UWP `MediaCacheService`. Contract already has `Ensure*AvailableAsync` |
+| 3.3a | Media cache + file naming (done) | `IMediaCache` / `MediaCacheService`, `MediaFileExtensions` |
+| 3.3b | Download orchestration + transcode / poster / WebP | `MessageFacade`. Contract already has `Ensure*AvailableAsync` |
 | 3.4 | Send (main file) | `MessageFacade` over use cases; client only “send this node” |
 | 3.5 | `.Receipts.cs` | `MessageFacade` / `ChatFacade` |
 | 3.6 | Names / usync (`.Identity.cs`) | `ContactFacade` / `ContactDirectory`. Masked `*****` labels stay “no name” so projection can fill |
@@ -229,6 +230,25 @@ The rest of `.Groups.cs` is apply and orchestration, and it is blocked on three 
 itself: it walks `Chats` on the UI thread and calls `SchedulePersist` (3.9), writes `ContactNames`
 and calls `ResolveDisplayName` (3.6), and canonicalises through the client's alias table (3.7). Move
 it when those land, not before.
+
+**3.3a is done: storage left, downloading stayed.** `IMediaCache` / `MediaCacheService` owns
+`LocalFolder/MediaCache/{Images,Audio,Documents,Video,VideoPosters}`; `MediaFileExtensions` (Core,
+pure) owns MIME to extension. Callers name a `MediaCacheKind` and a file base and get back an
+`ms-appdata:` URI, instead of writing the "open MediaCache, then open the subfolder, then build the
+URI by concatenation" sequence by hand at every save and lookup — 217 lines out of `.Media.cs`.
+
+`SaveAsync` takes `reuseExisting` because the old call sites disagreed on purpose and the difference
+is worth keeping: an image or a video keyed by message id is byte-identical on redownload, so the
+write is skipped, while documents, posters and transcodes are things we produced and may reproduce.
+
+Two follow-ups, both real:
+
+- The same folder boilerplate is still duplicated in `OggOpusToWavConverter`,
+  `OggOpusHandlerService` and `HistoryThumbnailMaterializer`. They should take `IMediaCache`. Left
+  out of 3.3a deliberately — the audio path is the fragile one on Mobile and deserves its own change.
+- `TryTranscodeOggOpusToM4aAsync` still opens the Audio folder itself, because `MediaTranscoder`
+  encodes into a `StorageFile` it is handed and there is no WinRT-free way to express that on a Core
+  interface. It borrows `SanitizeFileBase` so the naming cannot drift. That is 3.3b's problem.
 
 **Thread affinity:** today the client mutates `Chats` on the UI thread; VMs read on the UI thread; `ChatStateStore`’s extra dictionaries are protected by that, not only by the lock. Any code moved to a façade that runs off-thread must use `UpsertChatsAsync` / `UpsertMessagesAsync` (or `IDispatcher`). Do not split 3.9 into half-moves.
 

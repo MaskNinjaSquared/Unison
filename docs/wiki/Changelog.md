@@ -4,6 +4,17 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## WhatsAppService extraction — phase 3.3a (media cache)
+
+- New `IMediaCache` / `MediaCacheService` over `LocalFolder/MediaCache/{Images,Audio,Documents,Video,VideoPosters}`: `SaveAsync`, `TryGetUriAsync`, `TryReadAsync`, `SanitizeFileBase`
+- New `MediaFileExtensions` (Core, pure) owns MIME to file extension for image / audio / video / document, plus the Ogg-Opus predicates
+- Out of `WhatsAppService.Media`: `SaveImageBytesToCacheAsync`, `SaveAudioBytesToCacheAsync`, `SaveVideoBytesToCacheAsync`, `SaveDocumentBytesToCacheAsync`, `TryGetCachedImageUriAsync`, `TryReadCachedImageBytesAsync`, `SanitizeCacheFileBase` and the four `Get*FileExtension` helpers — 217 lines
+- `SaveAsync` takes `reuseExisting`, preserving a difference the old call sites had on purpose: images and videos keyed by message id skip the rewrite, documents / posters / transcodes do not
+- Still in the client: download orchestration (`Ensure*AvailableAsync`), WebP display conversion, the Ogg-Opus transcode and the video poster. The transcode keeps its own folder handling because `MediaTranscoder` encodes into a `StorageFile`, which a Core interface cannot express
+- Known duplication left alone on purpose: `OggOpusToWavConverter`, `OggOpusHandlerService` and `HistoryThumbnailMaterializer` still build the same folders by hand
+
+---
+
 ## WhatsAppService extraction — phase 3.2a (group protocol reading)
 
 - New `GroupMetadataReader` turns a `w:g2` response into plain objects: subject, announce-only, member count, participant drafts, my participant role, and the picture-lookup candidate order

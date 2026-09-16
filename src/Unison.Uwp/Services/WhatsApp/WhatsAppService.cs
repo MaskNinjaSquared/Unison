@@ -252,6 +252,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly IAvatarCache _avatarCache;
         private readonly IUsyncGate _usyncGate;
         private readonly AvatarFetcher _avatarFetcher;
+        private readonly IMediaCache _mediaCache;
 
         /// <summary>
         /// Built here rather than injected: it needs canonical JIDs and self-recognition, and both
@@ -2159,7 +2160,8 @@ namespace Unison.Uwp.Services.WhatsApp
             IHistoryChatPreviewStore chatPreviews,
             IAvatarCache avatarCache,
             IUsyncGate usyncGate,
-            AvatarFetcher avatarFetcher)
+            AvatarFetcher avatarFetcher,
+            IMediaCache mediaCache)
         {
             if (chatState == null)
             {
@@ -2172,6 +2174,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _avatarCache = avatarCache ?? throw new ArgumentNullException(nameof(avatarCache));
             _usyncGate = usyncGate ?? throw new ArgumentNullException(nameof(usyncGate));
             _avatarFetcher = avatarFetcher ?? throw new ArgumentNullException(nameof(avatarFetcher));
+            _mediaCache = mediaCache ?? throw new ArgumentNullException(nameof(mediaCache));
             _groupMetadata = new GroupMetadataReader(GetCanonicalJid, IsSelfLinkedJid);
             _chatState.Chats.CollectionChanged += (s, e) => InvalidateChatRowIndex();
             JidAlias = new NotifyingJidAliasMap(InvalidateChatRowIndex);
@@ -2187,10 +2190,11 @@ namespace Unison.Uwp.Services.WhatsApp
             IHistoryChatPreviewStore chatPreviews,
             IAvatarCache avatarCache,
             IUsyncGate usyncGate,
-            AvatarFetcher avatarFetcher)
+            AvatarFetcher avatarFetcher,
+            IMediaCache mediaCache)
         {
             return _instance ?? (_instance = new WhatsAppService(
-                chatState, historyMessages, chatPreviews, avatarCache, usyncGate, avatarFetcher));
+                chatState, historyMessages, chatPreviews, avatarCache, usyncGate, avatarFetcher, mediaCache));
         }
 
         /// <summary>

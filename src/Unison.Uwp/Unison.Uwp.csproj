@@ -139,6 +139,7 @@
     <Compile Include="Services\UiThreadDispatcherService.cs" />
     <Compile Include="Services\DialogService.cs" />
     <Compile Include="Services\AvatarCacheService.cs" />
+    <Compile Include="Services\MediaCacheService.cs" />
     <Compile Include="Services\UsyncGate.cs" />
     <Compile Include="Services\WhatsApp\Contacts\AvatarFetcher.cs" />
     <Compile Include="Services\LocalSettingsService.cs" />
