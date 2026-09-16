@@ -180,7 +180,7 @@ Self-contained first. List/persist last.
 | 3.6 | Names / usync (`.Identity.cs`) | `ContactFacade` / `ContactDirectory`. Masked `*****` labels stay “no name” so projection can fill |
 | 3.7a | Alias LID/PN + canonical (done) | `JidAliasTable` (Core), read through `IJidResolver` |
 | 3.7b | Converge onto `LidMappingStore` | Blocked: that store is async, canonicalization is not. See below |
-| 3.8 | `.AppState.cs` | Each applier → the façade of that fact (subject → groups, contact name → contacts, read/pin/flags → chats, delete message → messages). `AppStateSyncService` talks to façades, not the concrete client |
+| 3.8 | `.AppState.cs` | **Rewritten — the premise was stale.** See below |
 | 3.9 | `.Persistence.cs` + list sort/preview | `ChatFacade` + `ChatStateStore` + `IChatStore` / `IMessageStore`. Close the transitional public dictionaries on `ChatStateStore` |
 | 3.10 | `.IncomingPump.cs` | Decode/dispatch stays with connection; apply (row, preview, unread, toast) goes to façades |
 
@@ -299,6 +299,29 @@ Two traps worth recording, because both fail silently rather than loudly:
 - `CountRecipients` returns `int?`, not `int`. A response with no group node and a group that counts
   nobody are different facts: the original cached the second for thirty minutes and retried the
   first. Collapsing them to `0` would have re-queried group metadata on every incoming receipt.
+
+**3.8's premise no longer holds.** The step was written as "each applier goes to the façade of that
+fact, and `AppStateSyncService` talks to façades rather than the concrete client". The second half
+cannot be done: `AppStateSyncService.cs` is **not in the csproj**, exactly like `SocketClient.cs`. It
+takes a `SocketClient` in its constructor, nothing builds it, and the only reference left to it is a
+comment. Repointing it would be a day spent on a file the compiler never sees.
+
+The live path replaced it and is already inside the client — `SocketBridge` calls back in:
+
+```
+bridge.SelfPushNameChanged = name => ApplyAppStateSelfPushNameAsync(name);
+bridge.GroupSubjectChanged = (jid, subject) => ApplyGroupSubjectAsync(jid, subject);
+bridge.ChatDeleted        = jid => ApplyAppStateDeleteChatAsync(jid);
+bridge.MessageDeleted     = key => ApplyAppStateDeleteMessageAsync(key.RemoteJid, key.Id);
+```
+
+So there is no external caller left to repoint, and the first half — moving the appliers themselves —
+is not a separate step either. `ApplyAppStateReadStateAsync`, `ApplyAppStateDeleteChatAsync`,
+`ApplyAppStateChatFlagsAsync` and `ForgetChatInStorageAsync` all mutate `Chats`, unread counts and
+the message stores. Moving them *is* moving chat state, which is 3.9.
+
+**3.8 is therefore folded into 3.9** rather than sequenced before it. Nothing is lost: the appliers
+were always going to follow the state they write.
 
 **Thread affinity:** today the client mutates `Chats` on the UI thread; VMs read on the UI thread; `ChatStateStore`’s extra dictionaries are protected by that, not only by the lock. Any code moved to a façade that runs off-thread must use `UpsertChatsAsync` / `UpsertMessagesAsync` (or `IDispatcher`). Do not split 3.9 into half-moves.
 
