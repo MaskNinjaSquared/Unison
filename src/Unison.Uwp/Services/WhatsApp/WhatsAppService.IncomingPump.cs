@@ -935,7 +935,11 @@ namespace Unison.Uwp.Services.WhatsApp
             return MessageTimestampValidity.IsValid(timestamp, DateTime.UtcNow);
         }
 
-        private static DateTime NormalizeIncomingTimestamp(DateTime timestamp, bool isOffline)
+        // Took an isOffline flag it never read. The replayed case is exactly the one the
+        // rule is written for, so there was nothing for the flag to select -- but a
+        // parameter sitting there implies a distinction, and the next reader has to open
+        // the rule to find out there isn't one.
+        private static DateTime NormalizeIncomingTimestamp(DateTime timestamp)
         {
             // Never turn a replayed server event without a timestamp into a new message.
             // Outgoing bubbles stamp DateTime.UtcNow before entering this path.
@@ -1866,7 +1870,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         ParticipantJid = reactionParticipant,
                         SenderName = reactionSenderName,
                         IsFromMe = e.IsFromMe,
-                        Timestamp = NormalizeIncomingTimestamp(e.Timestamp, e.IsOffline)
+                        Timestamp = NormalizeIncomingTimestamp(e.Timestamp)
                     };
 
                     ChatMessage reactionParent;
@@ -2024,7 +2028,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             ParticipantJid = NormalizeJid(e.Participant),
                             SenderName = senderName,
                             IsFromMe = isActuallyFromMe,
-                            Timestamp = NormalizeIncomingTimestamp(e.Timestamp, e.IsOffline),
+                            Timestamp = NormalizeIncomingTimestamp(e.Timestamp),
                             Status = isActuallyFromMe ? ApplyChatStatusPolicy(jid, ChatMessage.StatusSent) : null
                         },
                         new ChatMessageContentSnapshot
@@ -2062,7 +2066,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             renderInfo?.IsDocument == true),
                         Caption = renderInfo?.Caption ?? "",
                         IsForwarded = isForwarded,
-                        Timestamp = NormalizeIncomingTimestamp(e.Timestamp, e.IsOffline),
+                        Timestamp = NormalizeIncomingTimestamp(e.Timestamp),
                         IsFromMe = isActuallyFromMe,
                         SenderName = senderName,
                         RemoteJid = jid,
@@ -2175,7 +2179,8 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 // Fallback duplicate guard for empty IDs / index drift.
                 if ((!string.IsNullOrEmpty(chatMessage.Id) && HasMessageId(jid, chatMessage.Id)) ||
-                    (!string.IsNullOrEmpty(chatMessage.Id) && MessagesByChat[jid].Any(m => m.Id == chatMessage.Id)) ||
+                    (!string.IsNullOrEmpty(chatMessage.Id) &&
+                     MessagesByChat[jid].Any(m => string.Equals(m?.Id, chatMessage.Id, StringComparison.Ordinal))) ||
                     hasAliasLinkedDuplicate)
                 {
                     var existingMessage = MessagesByChat[jid].FirstOrDefault(m => string.Equals(m?.Id, chatMessage.Id, StringComparison.Ordinal));
