@@ -4,6 +4,25 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Startup crash — MediaDerivationService could not be constructed
+
+- `MediaDerivationService` was registered with `AddSingleton<MediaDerivationService>()`, but its constructor is `internal`. Type activation only considers public constructors, and a declared constructor suppresses the implicit parameterless one, so the container had nothing to call
+- Thrown as `InvalidOperationException` from the `IWhatsAppService` factory, because that is the first thing to ask for it. `BuildServiceProvider` is called without `validateOnBuild`, so a registration this broken survives until the first resolution — which is the launch after the one that introduced it
+- Registered by hand instead, matching `AvatarFetcher` and `BridgeSessionProvider` in the same file. The type and its constructor stay `internal`: it is an implementation detail of `Unison.Uwp`, and widening them to satisfy the container would be the wrong direction
+- Regression from 3.3b. Audited the other registrations added during phase 3: `MediaCacheService`, `AvatarCacheService` and `UsyncGate` declare no constructor at all, so the implicit public one activates fine, and `AvatarFetcher`, `GroupMetadataReader` and `ReceiptReader` are all built by hand. This was the only one
+
+---
+
+## WhatsAppService extraction — phase 3.9b (chat preview tip)
+
+- New `ChatPreviewTip` in `Unison.Core/Helpers`: which message the one-line preview in the chat list should show, and whether the row already shows it
+- Three decisions pulled out of `ReconcileChatPreviewsFromSqliteAsync`, which is otherwise SQLite reads, alias key expansion and diagnostics — none of which can be tested without a database and a UI thread
+- `PickNewer` moved wholesale from `PickNewerPreviewSource`. `IsAlreadyShowing` and `ShouldStampMissingMessageId` were inline conditions in the apply loop; the second is a schema-v4 migration that stamps a missing `LastMessageId` from the store rather than forcing a full history resync to recover it
+- Worth testing because wrong here is wrong where the user only glances: the last-message line. The tie-break that prefers our own message on the same wall-clock second exists for cross-device echoes, and must never beat a strictly newer one — that is now pinned, as is reading a kind-less timestamp as UTC rather than letting it drift three hours
+- 20 tests. The client keeps the querying, the key expansion and the write
+
+---
+
 ## WhatsAppService extraction — phase 3.9b (background display-name table)
 
 - New `BackgroundDisplayNameTable.Build` in `Unison.Core/Helpers`: the address-to-name map handed to the background task, out of `PersistBackgroundDisplayNamesAsync` — 57 lines down to 6

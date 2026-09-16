@@ -183,7 +183,7 @@ Self-contained first. List/persist last.
 | 3.7b | Converge onto `LidMappingStore` | Blocked: that store is async, canonicalization is not. See below |
 | 3.8 | `.AppState.cs` | **Rewritten — the premise was stale.** See below |
 | 3.9a | List display order (done) | `ChatDisplayOrder` (Core) |
-| 3.9b | `.Persistence.cs` + preview reconcile + the appliers from 3.8 | `ChatFacade` + `ChatStateStore` + `IChatStore` / `IMessageStore`. Close the transitional public dictionaries on `ChatStateStore`. **Pending message queue done — see below** |
+| 3.9b | `.Persistence.cs` + preview reconcile + the appliers from 3.8 | `ChatFacade` + `ChatStateStore` + `IChatStore` / `IMessageStore`. Close the transitional public dictionaries on `ChatStateStore`. **Persistence rules out; appliers remain — see below** |
 | 3.10 | `.IncomingPump.cs` | Decode/dispatch stays with connection; apply (row, preview, unread, toast) goes to façades |
 
 **3.1a is done.** The avatar half of `MediaCache` is `IAvatarCache` / `AvatarCacheService`: `TryGet`,
@@ -405,6 +405,29 @@ and the three outcomes are a return value rather than a flag the caller has to r
 Both slices leave the same residue in the client, and it is the right residue: a `System.Threading.Timer`
 and a database call. The rule about *whether* to act is in Core with tests; the platform work that
 follows is in the host.
+
+**Then the two name rules, and the preview tip.** `ChatNameReplacement` and `BackgroundDisplayNameTable`
+took the label rules; `ChatPreviewTip` took the three decisions inside `ReconcileChatPreviewsFromSqliteAsync`
+— which message the list line should show, whether the row already shows it, and whether a row from
+the old schema should have its missing `LastMessageId` stamped from the store. What is left in that
+method is the alias key expansion and the SQLite read, both of which need the client.
+
+That is the same split as the two slices above, and it is worth naming because it is the reason these
+were takeable at all: the reconcile pass looks untestable, and most of it is, but the part that decides
+what the user sees is a handful of predicates over `ChatItem` and `ChatMessage`.
+
+**What is left in `.Persistence.cs` should stay there.** After four slices the file is orchestration:
+snapshot the live collections on the UI thread, await a store, write a diagnostic. There is no rule
+left to lift that would not amount to moving I/O into Core. The next 3.9b work is the appliers folded
+in from 3.8, not this file.
+
+**One regression, and it was not in the moved code.** `MediaDerivationService` was registered with
+`AddSingleton<MediaDerivationService>()` in 3.3b while its constructor is `internal`, so the container
+had no public constructor to call and threw on the first resolution. It is registered by hand now.
+The lesson for the rest of phase 3 is about *when* it surfaced, not what it was: `BuildServiceProvider`
+runs without `validateOnBuild`, so a broken type-activated registration is invisible until launch —
+one launch later than the change that caused it. Anything added to the container by hand is exempt,
+which is most of what this extraction adds.
 
 **Thread affinity:** today the client mutates `Chats` on the UI thread; VMs read on the UI thread; `ChatStateStore`’s extra dictionaries are protected by that, not only by the lock. Any code moved to a façade that runs off-thread must use `UpsertChatsAsync` / `UpsertMessagesAsync` (or `IDispatcher`). Do not split 3.9 into half-moves.
 

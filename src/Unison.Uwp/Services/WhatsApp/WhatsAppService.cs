@@ -2990,10 +2990,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     foreach (var chat in GetChatRowsForCanonicalJid(canonical))
                     {
                         // Tip from DB/memory by TimestampUtc; swap when MessageId differs (or body).
-                        if (!string.IsNullOrWhiteSpace(best.Id) &&
-                            string.Equals(chat.LastMessageId, best.Id, StringComparison.Ordinal) &&
-                            string.Equals(chat.LastMessage, preview, StringComparison.Ordinal) &&
-                            chat.LastMessageIsFromMe == best.IsFromMe)
+                        if (ChatPreviewTip.IsAlreadyShowing(chat, best, preview))
                         {
                             continue;
                         }
@@ -3015,19 +3012,10 @@ namespace Unison.Uwp.Services.WhatsApp
 
                         // Schema v4 upgrade: old preview rows have no LastMessageId. Stamp it from
                         // history_message without a WhatsApp history resync when the tip already matches.
-                        if (!applied &&
-                            string.IsNullOrWhiteSpace(chat.LastMessageId) &&
-                            !string.IsNullOrWhiteSpace(best.Id))
+                        if (!applied && ChatPreviewTip.ShouldStampMissingMessageId(chat, best))
                         {
-                            DateTime tipUtc = ToComparableUtc(best.Timestamp);
-                            DateTime stripUtc = chat.LastMessageTimestampUtc.HasValue
-                                ? ToComparableUtc(chat.LastMessageTimestampUtc.Value)
-                                : DateTime.MinValue;
-                            if (tipUtc != DateTime.MinValue && tipUtc >= stripUtc)
-                            {
-                                chat.LastMessageId = best.Id;
-                                applied = true;
-                            }
+                            chat.LastMessageId = best.Id;
+                            applied = true;
                         }
 
                         if (applied)
@@ -3220,40 +3208,8 @@ namespace Unison.Uwp.Services.WhatsApp
             return best;
         }
 
-        private static ChatMessage PickNewerPreviewSource(ChatMessage sql, ChatMessage memory)
-        {
-            if (sql == null)
-            {
-                return memory;
-            }
-
-            if (memory == null)
-            {
-                return sql;
-            }
-
-            DateTime sqlUtc = ToComparableUtc(sql.Timestamp);
-            DateTime memUtc = ToComparableUtc(memory.Timestamp);
-            if (memUtc > sqlUtc)
-            {
-                return memory;
-            }
-
-            if (sqlUtc > memUtc)
-            {
-                return sql;
-            }
-
-            // Same wall-clock second: prefer fromMe only as a tie-break (cross-device echo),
-            // never over a strictly newer timestamp.
-            if (memory.IsFromMe && !sql.IsFromMe)
-            {
-                return memory;
-            }
-
-            int idCmp = string.CompareOrdinal(memory.Id ?? string.Empty, sql.Id ?? string.Empty);
-            return idCmp > 0 ? memory : sql;
-        }
+        private static ChatMessage PickNewerPreviewSource(ChatMessage sql, ChatMessage memory) =>
+            ChatPreviewTip.PickNewer(sql, memory);
 
         /// <summary>
         /// PN + LID (+ canonical) keys for SQLite history reads — mirrors MessageFacade.ResolveChatKeys.

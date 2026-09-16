@@ -231,7 +231,10 @@ namespace Unison.Uwp
             services.AddSingleton<IAvatarCache, AvatarCacheService>();
             services.AddSingleton<MediaCacheService>();
             services.AddSingleton<IMediaCache>(sp => sp.GetRequiredService<MediaCacheService>());
-            services.AddSingleton<MediaDerivationService>();
+            // Built by hand because the constructor is internal: type activation only sees
+            // public ones, and the transcoder needs the concrete cache for StorageFile access.
+            services.AddSingleton(sp => new MediaDerivationService(
+                sp.GetRequiredService<MediaCacheService>()));
             services.AddSingleton<JidAliasTable>();
             // Contacts and avatars query the same rate-limited directory surface, so they queue
             // behind one gate even after they stop sharing an owner.
