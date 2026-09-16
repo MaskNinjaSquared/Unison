@@ -175,7 +175,8 @@ Self-contained first. List/persist last.
 | 3.3a | Media cache + file naming (done) | `IMediaCache` / `MediaCacheService`, `MediaFileExtensions` |
 | 3.3b | Download orchestration + transcode / poster / WebP | `MessageFacade`. Contract already has `Ensure*AvailableAsync` |
 | 3.4 | Send (main file) | `MessageFacade` over use cases; client only “send this node” |
-| 3.5 | `.Receipts.cs` | `MessageFacade` / `ChatFacade` |
+| 3.5a | Receipt reading (done) | `ReceiptReader` |
+| 3.5b | Receipt aggregation state | `MessageFacade` / `ChatFacade`, after 3.9 |
 | 3.6 | Names / usync (`.Identity.cs`) | `ContactFacade` / `ContactDirectory`. Masked `*****` labels stay “no name” so projection can fill |
 | 3.7a | Alias LID/PN + canonical (done) | `JidAliasTable` (Core), read through `IJidResolver` |
 | 3.7b | Converge onto `LidMappingStore` | Blocked: that store is async, canonicalization is not. See below |
@@ -280,6 +281,24 @@ quietly stop firing.
 
 3.7b is the storage swap behind this seam: reconcile the key shapes, then let the table read
 `LidMappingStore` through its memory cache. Nothing above it has to change again.
+
+**3.5a is done: reading left, the tally stayed.** `ReceiptReader` turns a `<receipt>` node into
+`ReceiptFacts` — status, message ids, chat, participant, whether it is a group — and counts how many
+distinct other people a group message has to reach. It takes `IJidResolver`, which 3.7a made a real
+implementation rather than a wrapper.
+
+`RegisterGroupReceipt` and the recipient-count cache stayed in the client: both live under
+`_messageStateLock` alongside the rest of message state, and moving them means moving that lock,
+which is 3.9.
+
+Two traps worth recording, because both fail silently rather than loudly:
+
+- Recipient counting is **not** `GroupMetadataReader.CountMembers`. That one counts the roster,
+  trusts the `size` attribute and includes the account itself. Reusing it would set a target no set
+  of receipts can meet, and group messages would never show as read.
+- `CountRecipients` returns `int?`, not `int`. A response with no group node and a group that counts
+  nobody are different facts: the original cached the second for thirty minutes and retried the
+  first. Collapsing them to `0` would have re-queried group metadata on every incoming receipt.
 
 **Thread affinity:** today the client mutates `Chats` on the UI thread; VMs read on the UI thread; `ChatStateStore`’s extra dictionaries are protected by that, not only by the lock. Any code moved to a façade that runs off-thread must use `UpsertChatsAsync` / `UpsertMessagesAsync` (or `IDispatcher`). Do not split 3.9 into half-moves.
 

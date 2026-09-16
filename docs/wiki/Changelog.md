@@ -4,6 +4,17 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## WhatsAppService extraction — phase 3.5a (receipt reading)
+
+- New `ReceiptReader` + `ReceiptFacts`: parses a `<receipt>` node into status, message ids, chat, participant and group flag, and counts group recipients. Takes `IJidResolver`
+- Out of `WhatsAppService.Receipts`: the receipt-type mapping, id collection, chat/participant extraction and the recipient count — `HandleMessageReceiptAsync` went from 74 lines to 33
+- Unknown receipt types are still dropped rather than promoted to delivered, now in one named place
+- Recipient counting is deliberately **not** `GroupMetadataReader.CountMembers`: that counts the roster including the account itself, which would set a target receipts can never meet and groups would never show as read
+- `CountRecipients` returns `int?` so "no group in the response" stays distinct from "a group of nobody" — the client caches the second and retries the first, as before
+- Still in the client: `RegisterGroupReceipt` and the recipient-count cache, both under `_messageStateLock`. Moving them is 3.9
+
+---
+
 ## WhatsAppService extraction — phase 3.7a (JID alias table)
 
 - New `JidAliasTable` in `Unison.Core/State`: the LID/PN map plus the rules that read it — `GetCanonicalJid`, `IsSelfLinked`, `IsSelfJid`, `IsLidLike`, `GetCanonicalSelfPnJid`, all moved verbatim

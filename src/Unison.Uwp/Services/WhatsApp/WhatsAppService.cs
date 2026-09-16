@@ -36,6 +36,7 @@ using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.State;
 using Unison.Uwp.Services.WhatsApp.Contacts;
 using Unison.Uwp.Services.WhatsApp.Groups;
+using Unison.Uwp.Services.WhatsApp.Messages;
 using Unison.Socket.UseCases.Contacts;
 using Unison.Uwp.Helpers;
 using Microsoft.Extensions.DependencyInjection;
@@ -253,6 +254,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly IUsyncGate _usyncGate;
         private readonly AvatarFetcher _avatarFetcher;
         private readonly IMediaCache _mediaCache;
+        private readonly ReceiptReader _receipts;
 
         /// <summary>
         /// Built here rather than injected: it needs canonical JIDs and self-recognition, and both
@@ -1988,7 +1990,9 @@ namespace Unison.Uwp.Services.WhatsApp
             _usyncGate = usyncGate ?? throw new ArgumentNullException(nameof(usyncGate));
             _avatarFetcher = avatarFetcher ?? throw new ArgumentNullException(nameof(avatarFetcher));
             _mediaCache = mediaCache ?? throw new ArgumentNullException(nameof(mediaCache));
-            _groupMetadata = new GroupMetadataReader(new JidResolver(JidAlias, this));
+            var jidResolver = new JidResolver(JidAlias, this);
+            _groupMetadata = new GroupMetadataReader(jidResolver);
+            _receipts = new ReceiptReader(jidResolver);
             _chatState.Chats.CollectionChanged += (s, e) => InvalidateChatRowIndex();
             JidAlias = jidAlias ?? throw new ArgumentNullException(nameof(jidAlias));
             JidAlias.BindSelf(() => _authState?.Me?.Id, () => _authState?.Me?.Lid);

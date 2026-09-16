@@ -36,6 +36,7 @@ using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.State;
 using Unison.Socket.UseCases.Contacts;
 using Unison.Uwp.Helpers;
+using Unison.Uwp.Services.WhatsApp.Messages;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Unison.Uwp.Services.WhatsApp
@@ -57,73 +58,32 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private async Task HandleMessageReceiptAsync(BinaryNode node)
         {
-            if (node?.Attrs == null) return;
+            ReceiptFacts receipt = _receipts.Read(node);
+            if (receipt == null) return;
 
-            string receiptType = node.Attrs.GetDictionaryValueOrDefault("type", string.Empty);
-            if (string.Equals(receiptType, "retry", StringComparison.OrdinalIgnoreCase)) return;
-
-            string status;
-            if (string.IsNullOrWhiteSpace(receiptType))
+            // A "sender" receipt is our own echo, so it applies to the message as a whole and
+            // never needs the per-participant tally a group read does.
+            if (!receipt.IsGroup ||
+                string.Equals(receipt.Status, ChatMessage.StatusSent, StringComparison.OrdinalIgnoreCase))
             {
-                status = ChatMessage.StatusDelivered;
-            }
-            else if (string.Equals(receiptType, "sender", StringComparison.OrdinalIgnoreCase))
-            {
-                status = ChatMessage.StatusSent;
-            }
-            else if (string.Equals(receiptType, "read", StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(receiptType, "read-self", StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(receiptType, "played", StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(receiptType, "played-self", StringComparison.OrdinalIgnoreCase))
-            {
-                status = ChatMessage.StatusRead;
-            }
-            else if (string.Equals(receiptType, "delivery", StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(receiptType, "delivered", StringComparison.OrdinalIgnoreCase))
-            {
-                status = ChatMessage.StatusDelivered;
-            }
-            else
-            {
-                // Unknown receipt types must not be promoted to delivered. The official
-                // protocol mapping ignores values it does not recognize.
-                return;
-            }
-
-            var ids = new HashSet<string>(StringComparer.Ordinal);
-            if (node.Attrs.TryGetValue("id", out var rootId) && !string.IsNullOrWhiteSpace(rootId)) ids.Add(rootId);
-            foreach (var item in node.FindAllDescendants("item"))
-            {
-                if (item?.Attrs != null && item.Attrs.TryGetValue("id", out var itemId) && !string.IsNullOrWhiteSpace(itemId))
-                    ids.Add(itemId);
-            }
-
-            string receiptChat = NormalizeJid(node.Attrs.GetDictionaryValueOrDefault("from", string.Empty));
-            bool isGroupReceipt = !string.IsNullOrWhiteSpace(receiptChat) &&
-                receiptChat.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
-
-            if (!isGroupReceipt || string.Equals(status, ChatMessage.StatusSent, StringComparison.OrdinalIgnoreCase))
-            {
-                foreach (var id in ids)
+                foreach (var id in receipt.MessageIds)
                 {
-                    await UpdateOutgoingMessageStatusAsync(id, status);
+                    await UpdateOutgoingMessageStatusAsync(id, receipt.Status);
                 }
                 return;
             }
 
-            string participant = GetCanonicalJid(NormalizeJid(
-                node.Attrs.GetDictionaryValueOrDefault("participant", string.Empty)));
-            if (string.IsNullOrWhiteSpace(participant) || IsSelfLinkedJid(participant)) return;
+            if (string.IsNullOrWhiteSpace(receipt.Participant) || IsSelfLinkedJid(receipt.Participant)) return;
 
-            int expectedRecipients = await GetExpectedGroupRecipientCountAsync(receiptChat);
+            int expectedRecipients = await GetExpectedGroupRecipientCountAsync(receipt.ChatJid);
             if (expectedRecipients <= 0) return;
 
-            foreach (var id in ids)
+            foreach (var id in receipt.MessageIds)
             {
                 string aggregateStatus = RegisterGroupReceipt(
                     id,
-                    participant,
-                    status,
+                    receipt.Participant,
+                    receipt.Status,
                     expectedRecipients);
                 if (!string.IsNullOrWhiteSpace(aggregateStatus))
                 {
@@ -211,20 +171,11 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 var response = await _socket.QueryGroupMetadataAsync(canonical);
                 ApplyGroupSendPermissionsFromMetadata(response, canonical);
-                var groupNode = response?.GetChild("group") ?? response?.GetChild("query")?.GetChild("group");
-                if (groupNode == null) return 0;
 
-                int recipientCount = groupNode.GetChildren("participant")
-                    .Select(participantNode =>
-                        participantNode != null && participantNode.Attrs != null
-                            ? participantNode.Attrs.GetDictionaryValueOrDefault("jid", string.Empty)
-                            : string.Empty)
-                    .Where(jid => !string.IsNullOrWhiteSpace(jid))
-                    .Select(jid => GetCanonicalJid(NormalizeJid(jid)))
-                    .Where(jid => !string.IsNullOrWhiteSpace(jid) && !IsSelfLinkedJid(jid))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .Count();
+                int? counted = _receipts.CountRecipients(response);
+                if (counted == null) return 0;
 
+                int recipientCount = counted.Value;
                 lock (_messageStateLock)
                 {
                     _groupRecipientCountByChat[canonical] = new GroupRecipientCountCacheEntry
