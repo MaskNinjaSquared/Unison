@@ -7,9 +7,10 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 ## Revoke + preview refresh on façades (3.10 apply)
 
 `IMessageService.ApplyIncomingRevocationAsync` owns inbound revoke apply (tombstone via
-`MessageRevocationContent`, persist, active-chat notify). `IChatService.RefreshChatPreviewAsync`
-owns single-tip strip refresh; bulk re-tip / in-memory reconcile forward through the chat façade
-while `MessagesByChat` remains on the host. Pump keeps queue/dispatch and offline summary record.
+`MessageRevocationContent`, persist, active-chat notify). `IMessageService.ApplyIncomingPinInChatAsync`
+owns inbound pin/unpin apply. `IChatService.RefreshChatPreviewAsync` owns single-tip strip refresh;
+bulk re-tip / in-memory reconcile forward through the chat façade while `MessagesByChat` remains on
+the host. Pump keeps queue/dispatch and offline summary record.
 
 ---
 
