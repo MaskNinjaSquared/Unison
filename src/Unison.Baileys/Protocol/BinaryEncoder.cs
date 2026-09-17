@@ -166,7 +166,13 @@ namespace Unison.Baileys.Protocol
 
         private bool IsNibbleString(string str)
         {
-            if (string.IsNullOrEmpty(str) || str.Length > 255)
+            // The packed length byte is seven bits of count and one of flag, which is what
+            // PACKED_MAX stands for - it was defined here and never used. The old limit of 255
+            // let a string through whose packed length was 128: the flag bit got set by the
+            // arithmetic rather than by the odd-length rule, the decoder read a count of zero,
+            // and the 128 bytes that followed were left in the stream, shifting the rest of the
+            // node. Anything longer still encodes correctly as a plain binary string.
+            if (string.IsNullOrEmpty(str) || str.Length > WAConstants.PACKED_MAX)
                 return false;
 
             foreach (char c in str)

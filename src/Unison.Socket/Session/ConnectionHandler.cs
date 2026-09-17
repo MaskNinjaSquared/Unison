@@ -217,12 +217,16 @@ namespace Unison.Socket.Session
                 throw new WaConnectionException("Connection closed", DisconnectReason.ConnectionClosed);
             }
 
-            var frame = _noise.EncodeFrame(data);
-
-            // Noise counters and framing are order-sensitive, so writes are serialised.
+            // Noise counters and framing are order-sensitive, so encoding and writing are
+            // serialised together. Encoding outside this gate was the same bug the comment
+            // warns about: each frame carries the nonce it was encrypted with, so two callers
+            // could encrypt as N and N+1 and then cross the gate in the other order. The
+            // server rejects the out-of-order frame and drops the socket. The keep-alive ping
+            // fires on a timer, so it collides with a user's message sooner or later.
             await _sendGate.WaitAsync().ConfigureAwait(false);
             try
             {
+                byte[] frame = _noise.EncodeFrame(data);
                 await _transport.SendAsync(frame).ConfigureAwait(false);
             }
             finally

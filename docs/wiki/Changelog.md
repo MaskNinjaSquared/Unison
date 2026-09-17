@@ -61,6 +61,50 @@ determines the orientation and answers in one call. Each caller keeps its own lo
 merge still merges the rows and withholds only the alias; the mapped-LID path still only fires the first
 time it sees an address.
 
+### The connection dropped when a message and the keep-alive ping went out together
+
+Each Noise frame carries the nonce it was encrypted with, and the counter advances per frame. The
+send path encrypted *outside* the gate that serialises writes and only took the gate afterwards — the
+comment right beneath it saying "Noise counters and framing are order-sensitive, so writes are
+serialised" described an invariant the code did not keep. Two callers could encrypt as N and N+1 and
+then cross the gate in the other order; the server fails to authenticate the frame it did not expect
+and closes the socket. The keep-alive ping runs on a timer, so it meets a user's message eventually.
+Encoding now happens inside the gate. `EncodeFrame` also takes the state lock that every other member
+of `NoiseHandler` takes — without it, two callers could both prepend the intro header, or neither.
+
+### A malformed length from the server could ask us to allocate two gigabytes
+
+`BINARY_32` read a 32-bit length and cast it to `int` before checking it. Any length with the high bit
+set became negative, and `CanRead` tested `position + length <= data.Length` — a sum that overflows to
+negative for lengths near `int.MaxValue`. Both cases passed the guard and reached `new byte[length]`:
+an overflow exception, or an attempt to allocate whatever the server named. On a 512 MB phone that is
+the process being killed rather than a clean disconnect. The length now stays unsigned until it has
+been checked, and the guard asks how much is left instead of where the read would end.
+
+### A 255-digit attribute would have shifted the rest of the node
+
+The packed-string length byte is seven bits of count and one of flag. The encoder accepted strings up
+to 255 characters, whose packed length is 128 — the arithmetic set the flag bit that is supposed to
+mean "odd length", the decoder read a count of zero, and 128 bytes were left orphaned in the stream.
+The correct bound was already defined in this repo and never used: `PACKED_MAX`. Anything longer
+encodes fine as a plain binary string.
+
+### A self-test that tested nothing, on the critical send path
+
+`VerifyDecryption` ran on every `pkmsg` send, hand-rolled a protobuf parser with no bounds checks, and
+then never compared the plaintext it was handed against anything. It parsed, logged
+"SELF-TEST COMPLETED", and returned. Deleted. The comment above the pkmsg serializer was worse than
+useless: it claimed the generated proto had the field numbers scrambled and listed a numbering that is
+neither what the generated code uses nor what the code below writes. Anyone "fixing" the serializer to
+match that list would break every pkmsg. Replaced with the numbering actually in force.
+
+### Padding drawn from the clock instead of the crypto RNG
+
+`PadRandomMax16` built a fresh `System.Random` per call, seeded from a low-resolution clock, so two
+messages encrypted in the same tick got the same padding length and the same bytes. It goes inside the
+ciphertext and reveals nothing the message size does not, so this is hygiene rather than exposure —
+but a non-cryptographic PRNG inside a crypto routine is a trap for whoever reads it next.
+
 ### Four background tasks reading the chat list that belongs to the UI thread
 
 The chat list is an observable collection bound to the screen. Enumerating it while the UI thread
