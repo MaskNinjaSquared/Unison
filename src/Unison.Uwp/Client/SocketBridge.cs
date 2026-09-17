@@ -1182,14 +1182,27 @@ namespace Unison.Uwp.Client
 
             // Writing is not awaited: callers announce mappings from the receive path, and a
             // database round trip there would slow down message handling for a cache fill.
-            var stored = _lidMappings.StoreMappingsAsync(mappings);
+            // Not awaited is not the same as not watched, though - GC.KeepAlive observes
+            // nothing, so a failed write took the pairing with it in silence and the contact
+            // went back to showing a bare number.
+            _ = ReportIfStoreFailsAsync(_lidMappings.StoreMappingsAsync(mappings), source);
 
             if (writeLog)
             {
                 Diag.W("[Bridge] Stored " + mappings.Count + " LID mapping(s) from " + source);
             }
+        }
 
-            GC.KeepAlive(stored);
+        private static async Task ReportIfStoreFailsAsync(Task write, string source)
+        {
+            try
+            {
+                await write.ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Diag.W("[Bridge] Storing LID mappings from " + source + " failed: " + ex.Message);
+            }
         }
 
         public void Dispose()

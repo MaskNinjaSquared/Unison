@@ -499,21 +499,36 @@ namespace Unison.Socket.Signal
                     return running;
                 }
 
-                var task = RunAndReleaseAsync(inflight, key, work, jids);
-                inflight[key] = task;
-                return task;
+                // The slot is published before the work starts. Starting first and assigning
+                // after looks equivalent and is not: when the work answers from cache it never
+                // really awaits, so it finished - and ran the removal in its finally - before
+                // the assignment below had put anything there. The removal hit nothing and the
+                // completed task was then filed permanently, so every later request for the
+                // same addresses got that one frozen answer back. A pairing corrected on the
+                // wire, or aged past its three-day life, would never be looked up again.
+                var completion = new TaskCompletionSource<IReadOnlyList<LidMapping>>(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
+                inflight[key] = completion.Task;
+                _ = RunAndReleaseAsync(inflight, key, completion, work, jids);
+                return completion.Task;
             }
         }
 
-        private async Task<IReadOnlyList<LidMapping>> RunAndReleaseAsync(
+        private async Task RunAndReleaseAsync(
             Dictionary<string, Task<IReadOnlyList<LidMapping>>> inflight,
             string key,
+            TaskCompletionSource<IReadOnlyList<LidMapping>> completion,
             Func<IReadOnlyList<string>, Task<IReadOnlyList<LidMapping>>> work,
             IReadOnlyList<string> jids)
         {
             try
             {
-                return await work(jids).ConfigureAwait(false);
+                IReadOnlyList<LidMapping> result = await work(jids).ConfigureAwait(false);
+                completion.TrySetResult(result);
+            }
+            catch (Exception ex)
+            {
+                completion.TrySetException(ex);
             }
             finally
             {

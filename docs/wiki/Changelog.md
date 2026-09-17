@@ -61,6 +61,55 @@ determines the orientation and answers in one call. Each caller keeps its own lo
 merge still merges the rows and withholds only the alias; the mapped-LID path still only fires the first
 time it sees an address.
 
+### A cached answer about a contact's two addresses became permanent
+
+`LidMappingStore` coalesces identical in-flight lookups so ten chats resolving at once cost one query.
+The slot was published *after* the work started:
+
+```
+var task = RunAndReleaseAsync(...);   // finishes synchronously when the cache answers
+inflight[key] = task;                 // and is filed here, after its own cleanup ran
+```
+
+A lookup served from cache never really awaits, so it completed — and ran the removal in its `finally`
+— before that assignment put anything in the dictionary. The removal hit nothing, and the finished
+task was then filed forever. Every later request for the same addresses got that one frozen answer:
+not after the three-day life expired, not after a correction arrived on the wire, not after `Close()`.
+The dictionary also gained a permanent entry per distinct set of addresses.
+
+This is a hot path — session setup consults it on every encrypt — and from the second call per contact
+onward the cache answers without awaiting, which is exactly the case that froze.
+
+### The server told us our group list was stale and the refresh was thrown away
+
+`GroupsUpdate` is emitted in three places. Two send `GroupUpdate`; the stale-list refresh sent the raw
+`GroupMetadata` list. The batch reader casts with `as`, so the mismatch came back null, `TryGet`
+reported "no such event", and the refresh vanished without a log or an exception. Sending still worked,
+because the send cache was updated directly — but a group renamed while we were away only caught up on
+the next history sync or a cold start.
+
+### The offline queue kept draining against a dead socket
+
+The queue checks a connection predicate between nodes, documented as: when the socket drops mid-burst,
+abandon the rest rather than process against a dead connection. It was wired to `() => true`. So a drop
+mid-replay meant the whole remaining backlog was handled anyway, each node trying to ack, each ack
+throwing and being swallowed — a burst of wasted work during a reconnect, which is when there is least
+to spare. The session exposes the real thing.
+
+### Disposing a semaphore out from under the send that was holding it
+
+The host gives a close three seconds before abandoning the session, so `Dispose` runs precisely when a
+send is stuck on the send gate — that being why the close timed out. Disposing it under a waiter makes
+that send's `Release` throw `ObjectDisposedException` on the way out, replacing the real error with a
+lifecycle one. It is no longer disposed, and the transport handlers it left subscribed are now dropped.
+
+### `GC.KeepAlive` does not watch a task
+
+A fire-and-forget write of LID pairings ended in `GC.KeepAlive(stored)`, which keeps an object alive
+and observes nothing. A failed write took the pairing with it in silence, and the contact went back to
+showing a bare number. Same shape in the offline buffer's safety release, where a `ContinueWith` was
+never unwrapped.
+
 ### The alias table was stricter in memory than on disk, and the conversion between them could throw
 
 `JidAliasTable` holds the pairing between a contact's two addresses. It is saved to a file and read

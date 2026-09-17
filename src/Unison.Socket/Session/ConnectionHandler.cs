@@ -490,8 +490,16 @@ namespace Unison.Socket.Session
                 _keepAlive = null;
             }
 
+            _transport.MessageReceived -= OnTransportMessageAsync;
+            _transport.Closed -= OnTransportClosed;
             Dispatcher.Clear();
-            _sendGate.Dispose();
+
+            // _sendGate is deliberately not disposed. The host gives a close three seconds and
+            // then abandons the session, which means Dispose runs precisely when a send is
+            // stuck holding this gate - the reason the close timed out. Disposing it under a
+            // waiter makes that send's Release throw ObjectDisposedException on the way out,
+            // replacing the real error with a lifecycle one. A SemaphoreSlim with no wait
+            // handle taken holds nothing that needs releasing.
         }
 
         private Uri BuildConnectionUri()

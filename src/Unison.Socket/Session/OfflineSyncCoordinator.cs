@@ -18,6 +18,7 @@
 // =============================================================================
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Unison.Baileys.Client;
 using Unison.Baileys.Protocol;
@@ -108,7 +109,21 @@ namespace Unison.Socket.Session
             _events.Buffer();
             _log.Debug("[Offline] Buffering events until the backlog is drained");
 
-            var _ = Task.Delay(BufferSafetyTimeout).ContinueWith(t => ReleaseBufferAsync("timed out"));
+            // Unwrapped, so a failure inside the release is observed rather than left on a
+            // task nobody holds. This is the safety net for the buffer; if it throws quietly,
+            // events stay buffered and the list simply stops updating.
+            var _ = Task.Delay(BufferSafetyTimeout)
+                .ContinueWith(
+                    t => ReleaseBufferAsync("timed out"),
+                    CancellationToken.None,
+                    TaskContinuationOptions.None,
+                    TaskScheduler.Default)
+                .Unwrap()
+                .ContinueWith(
+                    t => _log.Warn("[Offline] Buffer safety release failed: " + t.Exception?.GetBaseException().Message),
+                    CancellationToken.None,
+                    TaskContinuationOptions.OnlyOnFaulted,
+                    TaskScheduler.Default);
         }
 
         /// <summary>Releases the buffer if it is still held. Safe to call more than once.</summary>
