@@ -184,7 +184,7 @@ Self-contained first. List/persist last.
 | 3.8 | `.AppState.cs` | **Rewritten — the premise was stale.** See below |
 | 3.9a | List display order (done) | `ChatDisplayOrder` (Core) |
 | 3.9b | `.Persistence.cs` + preview reconcile + the appliers from 3.8 | `ChatFacade` + `ChatStateStore` + `IChatStore` / `IMessageStore`. Close the transitional public dictionaries on `ChatStateStore`. **Persistence rules out; appliers remain — see below** |
-| 3.10 | `.IncomingPump.cs` | Decode/dispatch stays with connection; apply (row, preview, unread, toast) goes to façades. **Started: `IncomingAttention` out — see below** |
+| 3.10 | `.IncomingPump.cs` | Decode/dispatch stays with connection; apply (row, preview, unread, toast) goes to façades. **Started: `IncomingAttention`, `MessageRenderReader`, `MessageIdIndex` and `QuotedContext` are out — see below** |
 
 **3.1a is done.** The avatar half of `MediaCache` is `IAvatarCache` / `AvatarCacheService`: `TryGet`,
 `SaveAsync`, `DeleteIfCached`. It took `BuildSafeAvatarFileName`, `TryGetCachedAvatarUri`,
@@ -623,6 +623,26 @@ not "nothing to show" but "this is not a row", which is how a reaction and a rev
 message they modify instead of becoming bubbles of their own. Sixteen tests, and the only shape
 change was the diagnostics: the reader takes an optional log sink instead of calling the client's
 `Log` and `Debug.WriteLine` directly.
+
+**`QuotedContext`, and the move is what found the bug.** `ApplyContextInfoExtras` handed back seven
+`out` parameters. Six of them — the quote, its id, its kind, its text, the mentions and the forwarded
+flag — are decided by the envelope and nothing else. Only the seventh, the quoted author's *name*,
+needs the account, the alias table and the directory, so that one stayed behind as
+`ResolveQuotedSender` and the other six became a reading with sixteen tests.
+
+Standing the two readings of a quote next to each other is what showed they disagreed, twice.
+
+The live path normalized with `ChatPreviewNormalizer.Normalize`, whose own summary says not to use it
+on text that gets persisted — and this text is persisted, as `HistoryMessage.QuotedBody`. It caps at
+fifty characters and collapses to one line, which changed nothing on screen, because the strip
+normalizes again when it draws. All it did was store a shortened copy of what history sync stored
+whole.
+
+The other direction was worse. History sync read quotes through
+`HistorySyncContentFilter.ExtractContent`, which knows plain text and four media kinds. A quoted
+poll, contact, location or call log fell through as empty text of kind `Text` and the strip drew
+nothing — while live, the same quote showed its label. Both now read through `QuotedContext`, so
+what a quote says no longer depends on whether the app was open when it arrived.
 
 ### Phase 4 — What remains is connection
 
