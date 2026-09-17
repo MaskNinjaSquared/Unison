@@ -184,7 +184,7 @@ Self-contained first. List/persist last.
 | 3.8 | `.AppState.cs` | **Rewritten — the premise was stale.** See below |
 | 3.9a | List display order (done) | `ChatDisplayOrder` (Core) |
 | 3.9b | `.Persistence.cs` + preview reconcile + the appliers from 3.8 | `ChatFacade` + `ChatStateStore` + `IChatStore` / `IMessageStore`. Close the transitional public dictionaries on `ChatStateStore`. **Persistence rules out; appliers remain — see below** |
-| 3.10 | `.IncomingPump.cs` | Decode/dispatch stays with connection; apply (row, preview, unread, toast) goes to façades. **In progress:** rules listed below are out; pump still owns apply orchestration |
+| 3.10 | `.IncomingPump.cs` | Decode/dispatch stays with connection; apply (row, preview, unread, toast) goes to façades. **Rules extraction closed** (see below); **apply orchestration remains** in the pump |
 
 **3.1a is done.** The avatar half of `MediaCache` is `IAvatarCache` / `AvatarCacheService`: `TryGet`,
 `SaveAsync`, `DeleteIfCached`. It took `BuildSafeAvatarFileName`, `TryGetCachedAvatarUri`,
@@ -707,7 +707,21 @@ before the pump queues the matching work — so that order cannot drift when the
 render clears the missing-message ledger when an id is present; live status author is participant
 else self; self-chat + distinct peer LID queues the transient merge. Pump still logs / queues.
 
+**`IncomingLiveDirectChatRouting` closed the rules chapter.** Live DM bucket order (self-chat lane,
+from-me recipient / peer PN / peer LID, from-nonself, sender LID, fallbacks) is Core with host
+callbacks for canonicalization and self-link. `ResolveLiveDirectChatJid` is a thin forward.
+
+**3.10 rules extraction is closed.** Pure decisions that lived in `HandleDecryptedMessageAsync` (and
+the live DM resolver it called) are in Core under tests. What remains in `.IncomingPump.cs` is
+orchestration: queue, locks, UI-thread apply (row, preview, unread, toast, persist), placeholder
+resend state, offline replay timers. That apply move is still 3.10's unfinished half — façades +
+device — not another rule slice.
+
 ### Phase 4 — What remains is connection
+
+`.Connection.cs` is this phase's target file. **No further pure-rule extraction there:**
+`ConnectionHealthPolicy` already left; connect / resume / pairing / broker / suspend are lifecycle
+orchestration. Do not nibble that partial until the rest of phase 3 stops needing the god client.
 
 Rename-able to `IWhatsAppConnection` / keep `IWhatsAppService` until the last caller dies. Target surface:
 

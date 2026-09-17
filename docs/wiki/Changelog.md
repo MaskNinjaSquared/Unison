@@ -4,6 +4,15 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## IncomingPump rules extraction closed (3.10)
+
+`IncomingLiveDirectChatRouting` took the last pure live-DM bucket decision (self-chat, from-me
+recipient/peer hints, from/sender LID, fallbacks). Pure rules from the pump are in Core; apply
+orchestration (row, unread, toast, persist) stays until façades own it. `.Connection.cs` awaits
+phase 4 — no further rule slices there.
+
+---
+
 ## Incoming empty-content, status author, self-chat collapse left WhatsAppService (3.10)
 
 `IncomingEmptyContentSkip` (ledger clear on empty render), `IncomingLiveStatusAuthor`, and
