@@ -4,6 +4,15 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## MeaningfulChatLabel + SelfIdentityHealingDecision (3.6 rules)
+
+`MeaningfulChatLabel` unifies UWP `IsMeaningfulChatLabel` with the weaker history
+stand-in (masked phone / phone echo / group id). `GroupIdPlaceholder` owns the group-id
+test; `GroupMetadataReader.IsIdPlaceholder` forwards. `SelfIdentityHealingDecision`
+collapses the duplicated usync heal/purge branches (modern contact path + legacy IQ).
+
+---
+
 ## Revoke + preview refresh on façades (3.10 apply)
 
 `IMessageService.ApplyIncomingRevocationAsync` owns inbound revoke apply (tombstone via

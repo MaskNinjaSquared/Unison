@@ -511,6 +511,12 @@ What remains in `.Identity.cs` is the larger half and is not this shape: `Resolv
 `RefreshContactNamesAsync` (usync over the socket, ~380 lines) and the alias follow-up scheduling.
 Those are 3.6's move onto `ContactFacade`, not a rule to lift out of a method.
 
+**Two more rules left before the façade move.** `MeaningfulChatLabel` (with `GroupIdPlaceholder`)
+is the single "is this label recognisable?" answer — UWP's `IsMeaningfulChatLabel` and history's
+weaker stand-in had drifted on masked phones and phone echoes. `SelfIdentityHealingDecision` is
+heal vs purge when usync touches `Me.Id` / `Me.Lid`; the modern contact path and the legacy IQ
+parser both call it. Persist / alias removal stay with the caller.
+
 **One more rule came out of the usync half, and it was carrying a bug.** `ContactLookupNumber` (Core,
 20 tests) answers "what number do we ask the server about", derived from a JID, a canonical address or
 digits a person typed. It was written twice — inside `ResolveContactsAsync`'s filter loop and again in
