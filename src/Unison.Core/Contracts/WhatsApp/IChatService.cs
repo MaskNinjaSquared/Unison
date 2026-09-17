@@ -71,5 +71,13 @@ namespace Unison.Core.Contracts.WhatsApp
         Task ReconcileChatPreviewsFromSqliteAsync(
             IReadOnlyList<string> chatJids = null,
             string reason = null);
+
+        /// <summary>
+        /// Live inbound: create/find the list row, write the strip tip, bump unread when
+        /// <see cref="LiveIncomingChatListApplyRequest.CountsAsUnread"/>, reposition for display.
+        /// Must run list mutations on the UI thread. Returns the row and total unread for toast.
+        /// </summary>
+        Task<LiveIncomingChatListApplyResult> ApplyLiveIncomingChatListAsync(
+            LiveIncomingChatListApplyRequest request);
     }
 }

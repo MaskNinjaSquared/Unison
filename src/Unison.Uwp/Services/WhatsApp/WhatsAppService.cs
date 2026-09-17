@@ -264,6 +264,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         private readonly GroupMetadataReader _groupMetadata;
         private IMessageService _messageService;
+        private IChatService _chatService;
         private IContactService _contactService;
         private IPersonStore _personStore;
         private IGroupRosterStore _groupRosterStore;
@@ -277,6 +278,12 @@ namespace Unison.Uwp.Services.WhatsApp
         public void AttachMessageService(IMessageService messageService)
         {
             _messageService = messageService;
+        }
+
+        /// <summary>Wired from App DI so live list apply goes through ChatFacade.</summary>
+        public void AttachChatService(IChatService chatService)
+        {
+            _chatService = chatService;
         }
 
         /// <summary>
@@ -1385,6 +1392,15 @@ namespace Unison.Uwp.Services.WhatsApp
                 ? new List<ChatItem>(rows)
                 : new List<ChatItem>();
         }
+
+        IReadOnlyList<ChatItem> IWhatsAppService.GetChatRowsForCanonicalJid(string jid) =>
+            GetChatRowsForCanonicalJid(jid);
+
+        void IWhatsAppService.RequestChatListDedup(string reason) =>
+            _ = DeduplicateChatsAsync(reason ?? "facade");
+
+        void IWhatsAppService.RequestAliasChatMerge(string lidJid, string pnJid) =>
+            _ = CheckAndMergeDuplicateChatsAsync(lidJid, pnJid);
 
         /// <summary>
         /// Drops the row index. Called whenever the list changes or a JID stops resolving to what

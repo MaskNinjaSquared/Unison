@@ -251,6 +251,18 @@ namespace Unison.Core.Contracts.WhatsApp
         Task ClearUnreadForChatAsync(string jid);
 
         /// <summary>
+        /// Rows that share a canonical conversation id (PN/LID aliases). Copied for safe walk.
+        /// Transitional until the row index lives on <see cref="IChatStateStore"/>.
+        /// </summary>
+        IReadOnlyList<ChatItem> GetChatRowsForCanonicalJid(string jid);
+
+        /// <summary>Schedules a chat-list dedupe pass (new row / alias noise).</summary>
+        void RequestChatListDedup(string reason);
+
+        /// <summary>Schedules a PN/LID duplicate-row merge scan.</summary>
+        void RequestAliasChatMerge(string lidJid, string pnJid);
+
+        /// <summary>
         /// Writes the account's chat-list pin to the in-memory rows and to the local mirror,
         /// without telling the server. Prefer <see cref="IChatService.SetPinnedAsync"/>, which is
         /// what actually pins the chat; this is the local half of it.
