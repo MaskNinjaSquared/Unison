@@ -4,6 +4,28 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Panels and overlays that kept listening after they left the screen
+
+A sweep of the view code-behind for subscriptions with no matching release, since the views are
+transient and most of what they subscribe to is not.
+
+Five info controls (`ChatDetailInfoControl`, `ChatDetailUserInfoControl`,
+`ChatDetailGroupInfoControl`, `ChatDetailGroupMemberInfoControl`,
+`ChatDetailGroupMemberInfoPane`) hooked `ChatDetailInfoViewModel.PropertyChanged` and only
+unhooked when the `DependencyProperty` swapped — never at unload. Closing the pane or leaving the
+conversation left a handler pointing at a visual tree that went on laying itself out.
+
+`ImageViewerView` unsubscribed at unload but kept the view model, and the full-screen bitmap it
+holds, which is the app's memory peak. Its sibling `VideoViewerView` already released everything
+through the setter; the image path now does the same, and picked up the `ReferenceEquals` guard it
+was missing, so re-assigning the same view model no longer reloads the image and drops the zoom.
+
+`ChatDetailView` also never released the `LayoutStates` visual state group it hooks on load, and
+`ChatListView.ViewModel_OpenChatRequested` — raised by the view model rather than by XAML — waits up
+to a quarter second before writing to the list, by which time the view can be gone.
+
+---
+
 ## Every conversation with a voice note left a media player behind
 
 `ChatDetailView` creates a `MediaPlayer` on the first voice note and subscribes to four of its
