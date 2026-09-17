@@ -26,6 +26,7 @@ using System.Threading.Tasks;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
+using Unison.Core.Mappers;
 using Unison.Core.Models;
 using Unison.Socket.AppState;
 using Unison.Socket.UseCases.Messages;
@@ -53,12 +54,14 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
         private readonly IWhatsAppService _appState;
         private readonly IJidResolver _jids;
         private readonly IContactService _contacts;
+        private readonly INotificationService _notifications;
 
         internal ChatFacade(
             IWhatsAppSessionProvider sessions,
             IWhatsAppService appState,
             IJidResolver jids,
-            IContactService contacts = null)
+            IContactService contacts = null,
+            INotificationService notifications = null)
         {
             if (sessions == null)
             {
@@ -74,6 +77,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             _appState = appState;
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _contacts = contacts;
+            _notifications = notifications;
         }
 
         public async Task SetPinnedAsync(ChatItem chat, bool pinned)
@@ -295,111 +299,247 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
                 return new LiveIncomingChatListApplyResult();
             }
 
+            int unreadDelta = request.UnreadDelta;
+            if (unreadDelta == 0 && request.CountsAsUnread)
+            {
+                unreadDelta = 1;
+            }
+
             LiveIncomingChatListApplyResult result = new LiveIncomingChatListApplyResult();
             await _appState.RunOnUiThreadAsync(() =>
             {
-                string jid = request.ChatJid;
-                string canonicalLookup = _jids.GetCanonicalJid(jid) ?? jid;
-                ChatItem chat = _appState.Chats.FirstOrDefault(c =>
-                    c != null &&
-                    string.Equals(
-                        _jids.GetCanonicalJid(c.JID),
-                        canonicalLookup,
-                        StringComparison.OrdinalIgnoreCase));
-
-                if (chat == null)
-                {
-                    string chatName = ResolveName(jid, "chat");
-                    chat = new ChatItem
-                    {
-                        JID = _jids.GetCanonicalJid(jid),
-                        Name = chatName,
-                        Kind = JidHelper.ResolveKind(jid, _jids.IsSelfLinked(jid)),
-                        UnreadCount = 0
-                    };
-                    _appState.Chats.Insert(0, chat);
-                    Debug.WriteLine("[ChatFacade] Created new chat entry for " + jid + " (" + chatName + ")");
-                    _appState.RequestChatListDedup("incoming-new-chat");
-
-                    if (!string.IsNullOrWhiteSpace(request.AliasLid) &&
-                        !string.IsNullOrWhiteSpace(request.AliasPn))
-                    {
-                        _appState.RequestAliasChatMerge(request.AliasLid, request.AliasPn);
-                    }
-
-                    if (PlaceholderChatLabel.IsPlaceholder(
-                            chat.Name,
-                            chat.JID,
-                            SelfChatDisplayHelper.IsSelfMarkerLabel(chat.Name)))
-                    {
-                        IContactService contacts = _contacts;
-                        if (contacts != null)
-                        {
-                            _ = contacts.ResolveMissingNamesAsync();
-                        }
-                    }
-                }
-
-                string yesterday = LocalizedStrings.Get("Common_Yesterday", "Yesterday");
-                LiveChatPreviewApplier.ApplyIfNewer(
-                    chat,
+                ChatItem chat = ApplyStripOnUiThread(
+                    request.ChatJid,
                     request.PreviewText,
                     request.Timestamp,
-                    false,
                     request.PreviewKind,
                     request.AuthorPrefix,
                     request.MentionedJids,
                     request.IsFromMe,
                     request.SendState,
                     request.MessageId,
+                    unreadDelta,
+                    request.IsGroup,
+                    request.AliasLid,
+                    request.AliasPn,
+                    createAtFront: true,
+                    out _);
+
+                result.Chat = chat;
+                result.DisplayName = chat != null ? chat.Name : null;
+                result.TotalUnread = _appState.GetTotalUnreadCount();
+            }).ConfigureAwait(false);
+
+            return result;
+        }
+
+        public async Task ApplyOfflineReplayChatSummariesAsync(
+            IReadOnlyList<OfflineReplayChatSummary> summaries,
+            string reason)
+        {
+            if (summaries == null || summaries.Count == 0)
+            {
+                return;
+            }
+
+            await _appState.RunOnUiThreadAsync(() =>
+            {
+                int created = 0;
+                int updated = 0;
+                int unreadAdded = 0;
+
+                foreach (OfflineReplayChatSummary summary in summaries)
+                {
+                    if (summary == null || string.IsNullOrWhiteSpace(summary.Jid))
+                    {
+                        continue;
+                    }
+
+                    bool createdRow;
+                    ChatItem preferred = ApplyStripOnUiThread(
+                        summary.Jid,
+                        summary.Preview ?? string.Empty,
+                        summary.Timestamp,
+                        summary.Kind,
+                        summary.AuthorPrefix,
+                        mentionedJids: null,
+                        summary.IsFromMe,
+                        HistoryLiveMessageMapper.FromStatus(summary.Status, summary.IsFromMe),
+                        messageId: null,
+                        summary.UnreadDelta,
+                        summary.IsGroup,
+                        aliasLid: null,
+                        aliasPn: null,
+                        createAtFront: false,
+                        out createdRow);
+
+                    if (createdRow)
+                    {
+                        created++;
+                    }
+
+                    if (preferred != null && summary.Timestamp != DateTime.MinValue)
+                    {
+                        updated++;
+                    }
+
+                    if (summary.UnreadDelta > 0)
+                    {
+                        unreadAdded += summary.UnreadDelta;
+                    }
+                }
+
+                ChatDisplayOrder.SortInPlace(_appState.Chats);
+                int totalUnread = _appState.GetTotalUnreadCount();
+                if (_notifications != null)
+                {
+                    _notifications.UpdateBadge(totalUnread);
+                }
+
+                RuntimeDiagnosticsService.Instance.Write(
+                    "messages",
+                    "offline-summary-applied",
+                    "reason=" + (reason ?? string.Empty) +
+                    "; chats=" + summaries.Count +
+                    "; created=" + created +
+                    "; previews=" + updated +
+                    "; unreadAdded=" + unreadAdded);
+            }).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Shared live / offline strip write. Caller must already be on the UI thread.
+        /// </summary>
+        private ChatItem ApplyStripOnUiThread(
+            string jid,
+            string previewText,
+            DateTime timestamp,
+            ChatPreviewKind? previewKind,
+            string authorPrefix,
+            IList<string> mentionedJids,
+            bool isFromMe,
+            MessageSendState sendState,
+            string messageId,
+            int unreadDelta,
+            bool isGroup,
+            string aliasLid,
+            string aliasPn,
+            bool createAtFront,
+            out bool createdRow)
+        {
+            createdRow = false;
+            string canonicalLookup = _jids.GetCanonicalJid(jid) ?? jid;
+            ChatItem chat = _appState.Chats.FirstOrDefault(c =>
+                c != null &&
+                string.Equals(
+                    _jids.GetCanonicalJid(c.JID),
+                    canonicalLookup,
+                    StringComparison.OrdinalIgnoreCase));
+
+            if (chat == null)
+            {
+                string chatName = ResolveName(jid, "chat");
+                chat = new ChatItem
+                {
+                    JID = _jids.GetCanonicalJid(jid) ?? jid,
+                    Name = chatName,
+                    Kind = JidHelper.ResolveKind(jid, _jids.IsSelfLinked(jid)),
+                    UnreadCount = 0
+                };
+                if (createAtFront)
+                {
+                    _appState.Chats.Insert(0, chat);
+                }
+                else
+                {
+                    _appState.Chats.Add(chat);
+                }
+
+                createdRow = true;
+                Debug.WriteLine("[ChatFacade] Created new chat entry for " + jid + " (" + chatName + ")");
+                _appState.RequestChatListDedup(createAtFront ? "incoming-new-chat" : "offline-new-chat");
+
+                if (!string.IsNullOrWhiteSpace(aliasLid) && !string.IsNullOrWhiteSpace(aliasPn))
+                {
+                    _appState.RequestAliasChatMerge(aliasLid, aliasPn);
+                }
+
+                if (PlaceholderChatLabel.IsPlaceholder(
+                        chat.Name,
+                        chat.JID,
+                        SelfChatDisplayHelper.IsSelfMarkerLabel(chat.Name)))
+                {
+                    IContactService contacts = _contacts;
+                    if (contacts != null)
+                    {
+                        _ = contacts.ResolveMissingNamesAsync();
+                    }
+                }
+            }
+
+            chat.ApplyKind(chat.JID, _jids.IsSelfLinked(chat.JID));
+
+            string yesterday = LocalizedStrings.Get("Common_Yesterday", "Yesterday");
+            if (timestamp != DateTime.MinValue)
+            {
+                LiveChatPreviewApplier.ApplyIfNewer(
+                    chat,
+                    previewText,
+                    timestamp,
+                    false,
+                    previewKind,
+                    authorPrefix,
+                    mentionedJids,
+                    isFromMe,
+                    sendState,
+                    messageId,
                     yesterday);
 
                 foreach (ChatItem equivalentRow in _appState.GetChatRowsForCanonicalJid(jid))
                 {
                     if (!ReferenceEquals(equivalentRow, chat))
                     {
+                        equivalentRow.ApplyKind(equivalentRow.JID, _jids.IsSelfLinked(equivalentRow.JID));
                         LiveChatPreviewApplier.ApplyIfNewer(
                             equivalentRow,
-                            request.PreviewText,
-                            request.Timestamp,
+                            previewText,
+                            timestamp,
                             false,
-                            request.PreviewKind,
-                            request.AuthorPrefix,
-                            request.MentionedJids,
-                            request.IsFromMe,
-                            request.SendState,
-                            request.MessageId,
+                            previewKind,
+                            authorPrefix,
+                            mentionedJids,
+                            isFromMe,
+                            sendState,
+                            messageId,
                             yesterday);
                     }
                 }
+            }
 
-                if (!request.IsGroup &&
-                    PlaceholderChatLabel.IsPlaceholder(
-                        chat.Name,
-                        jid,
-                        SelfChatDisplayHelper.IsSelfMarkerLabel(chat.Name)))
+            if (!isGroup &&
+                PlaceholderChatLabel.IsPlaceholder(
+                    chat.Name,
+                    jid,
+                    SelfChatDisplayHelper.IsSelfMarkerLabel(chat.Name)))
+            {
+                string resolvedChatName = ResolveName(jid, "chat");
+                if (!string.IsNullOrEmpty(resolvedChatName) && !resolvedChatName.Contains("@"))
                 {
-                    string resolvedChatName = ResolveName(jid, "chat");
-                    if (!string.IsNullOrEmpty(resolvedChatName) && !resolvedChatName.Contains("@"))
-                    {
-                        chat.Name = resolvedChatName;
-                        Debug.WriteLine("[ChatFacade] Resolved name for UI chat " + jid + " -> " + resolvedChatName);
-                    }
+                    chat.Name = resolvedChatName;
                 }
+            }
 
+            if (createAtFront)
+            {
                 ChatDisplayOrder.Reposition(_appState.Chats, chat);
+            }
 
-                if (request.CountsAsUnread)
-                {
-                    ChatUnreadTally.Bump(chat, _appState.GetChatRowsForCanonicalJid(jid), 1);
-                }
+            if (unreadDelta > 0)
+            {
+                ChatUnreadTally.Bump(chat, _appState.GetChatRowsForCanonicalJid(jid), unreadDelta);
+            }
 
-                result.Chat = chat;
-                result.DisplayName = chat.Name;
-                result.TotalUnread = _appState.GetTotalUnreadCount();
-            }).ConfigureAwait(false);
-
-            return result;
+            return chat;
         }
 
         private string ResolveName(string jid, string context)

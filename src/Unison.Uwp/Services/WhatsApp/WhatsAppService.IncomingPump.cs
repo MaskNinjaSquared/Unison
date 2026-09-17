@@ -1956,28 +1956,14 @@ namespace Unison.Uwp.Services.WhatsApp
                 ChatPreviewKind previewKind = ResolvePreviewKind(chatMessage, renderInfo);
 
                 SetIncomingMessagePumpStage("dedupe", e);
-                // Add to MessagesByChat
-                if (!MessagesByChat.ContainsKey(jid))
+                IncomingTimelineAcceptResult timeline = _messageService.AcceptIncomingTimeline(jid, chatMessage, isGroup);
+
+                if (timeline.Kind == IncomingTimelineAcceptKind.AliasConsolidated)
                 {
-                    MessagesByChat[jid] = new List<ChatMessage>();
-                }
+                    Debug.WriteLine($"[WhatsAppService] Consolidated alias-linked duplicate {chatMessage.Id} from {timeline.AliasSourceChatJid} into {jid}");
 
-                string duplicateChatJid = null;
-                ChatMessage duplicateMessage = null;
-                bool hasAliasLinkedDuplicate = !isGroup &&
-                    !string.IsNullOrEmpty(chatMessage.Id) &&
-                    TryFindAliasLinkedMessage(jid, chatMessage.Id, out duplicateChatJid, out duplicateMessage);
-
-                ChatMessage consolidatedMessage;
-                if (!string.IsNullOrEmpty(chatMessage.Id) &&
-                    hasAliasLinkedDuplicate &&
-                    !string.Equals(NormalizeJid(duplicateChatJid), jid, StringComparison.OrdinalIgnoreCase) &&
-                    TryConsolidateAliasDuplicateMessage(jid, duplicateChatJid, chatMessage.Id, out consolidatedMessage))
-                {
-                    Debug.WriteLine($"[WhatsAppService] Consolidated alias-linked duplicate {chatMessage.Id} from {duplicateChatJid} into {jid}");
-
-                    string duplicateJidForPersist = NormalizeJid(duplicateChatJid);
-                    ChatMessage consolidatedForPersist = consolidatedMessage;
+                    string duplicateJidForPersist = timeline.AliasSourceChatJid;
+                    ChatMessage consolidatedForPersist = timeline.ConsolidatedMessage;
                     QueueMessageControlWork(
                         "alias-duplicate-persist:" + chatMessage.Id,
                         async () =>
@@ -2024,35 +2010,17 @@ namespace Unison.Uwp.Services.WhatsApp
                     return;
                 }
 
-                // Fallback duplicate guard for empty IDs / index drift.
-                if ((!string.IsNullOrEmpty(chatMessage.Id) && HasMessageId(jid, chatMessage.Id)) ||
-                    (!string.IsNullOrEmpty(chatMessage.Id) &&
-                     MessagesByChat[jid].Any(m => string.Equals(m?.Id, chatMessage.Id, StringComparison.Ordinal))) ||
-                    hasAliasLinkedDuplicate)
+                if (timeline.Kind == IncomingTimelineAcceptKind.DuplicateSameChat ||
+                    timeline.Kind == IncomingTimelineAcceptKind.AliasLinkedDuplicate)
                 {
-                    var existingMessage = MessagesByChat[jid].FirstOrDefault(m => string.Equals(m?.Id, chatMessage.Id, StringComparison.Ordinal));
-                    bool existingChanged = false;
-                    if (existingMessage != null)
+                    if (timeline.ExistingChanged && timeline.Message != null)
                     {
-                        DuplicateArrivalPatch patch = DuplicateArrivalEnrichment.Compute(
-                            existingMessage.Status,
-                            chatMessage.Status,
-                            chatMessage.IsFromMe,
-                            existingMessage.ParticipantJid,
-                            chatMessage.ParticipantJid,
-                            existingMessage.SenderName,
-                            chatMessage.SenderName);
-                        existingChanged = DuplicateArrivalEnrichment.Apply(existingMessage, patch);
-                        if (existingChanged)
-                        {
-                            QueueOfflineReplayMessageForPersist(jid, existingMessage);
-                            SchedulePersist();
-                            QueueChatMessagesChanged(jid);
-                        }
+                        _messageService.QueueIncomingPersist(jid, timeline.Message);
+                        QueueChatMessagesChanged(jid);
                     }
-                    if (hasAliasLinkedDuplicate)
+                    if (timeline.Kind == IncomingTimelineAcceptKind.AliasLinkedDuplicate)
                     {
-                        Debug.WriteLine($"[WhatsAppService] Alias-linked duplicate arrival detected for {chatMessage.Id}: existingChat={duplicateChatJid}, finalChat={jid}");
+                        Debug.WriteLine($"[WhatsAppService] Alias-linked duplicate arrival detected for {chatMessage.Id}: existingChat={timeline.AliasSourceChatJid}, finalChat={jid}");
                     }
                     ResolveMissingMessage(jid, chatMessage.Id, "duplicate-arrival");
                     if (!e.IsOffline)
@@ -2089,15 +2057,11 @@ namespace Unison.Uwp.Services.WhatsApp
                     return;
                 }
 
-                ChatMessageOrder.InsertSorted(MessagesByChat[jid], chatMessage);
-                TrimInMemoryMessageWindow(jid);
-                RegisterMessageId(jid, chatMessage.Id);
                 ResolveMissingMessage(jid, chatMessage.Id, "live-arrival");
                 if (!e.IsOffline)
                 {
                     Log($"[WhatsAppService] Added message to chat {jid}. Total messages in memory: {MessagesByChat[jid].Count}");
                 }
-
                 if (e.IsOffline)
                 {
                     RecordOfflineReplayChatSummary(
@@ -2110,7 +2074,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         previewKind,
                         chatMessage.Status,
                         listAuthorPrefix);
-                    QueueOfflineReplayMessageForPersist(jid, chatMessage);
+                    _messageService.QueueIncomingPersist(jid, chatMessage);
 
                     if (IsActiveChatJid(jid))
                     {
@@ -2168,6 +2132,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         IsFromMe = chatMessage.IsFromMe,
                         SendState = HistoryLiveMessageMapper.FromStatus(chatMessage.Status, chatMessage.IsFromMe),
                         MessageId = chatMessage.Id,
+                        UnreadDelta = attention.CountsAsUnread ? 1 : 0,
                         CountsAsUnread = attention.CountsAsUnread,
                         IsGroup = isGroup,
                         AliasLid = aliasLid,
@@ -2200,8 +2165,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 SetIncomingMessagePumpStage("persist-queue", e);
                 // Persistencia em lote: evita reler, serializar e reescrever o JSON
                 // inteiro para cada mensagem recebida.
-                QueueOfflineReplayMessageForPersist(jid, chatMessage);
-                SchedulePersist();
+                _messageService.QueueIncomingPersist(jid, chatMessage);
                 UnloadMessageCacheIfInactive(jid);
             }
             catch (Exception ex)
@@ -2216,6 +2180,90 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
+
+        public IncomingTimelineAcceptResult AcceptIncomingTimeline(
+            string chatJid,
+            ChatMessage message,
+            bool isGroup)
+        {
+            var result = new IncomingTimelineAcceptResult
+            {
+                Kind = IncomingTimelineAcceptKind.Inserted,
+                Message = message
+            };
+
+            if (string.IsNullOrWhiteSpace(chatJid) || message == null)
+            {
+                return result;
+            }
+
+            string jid = NormalizeJid(chatJid) ?? chatJid;
+            if (!MessagesByChat.ContainsKey(jid))
+            {
+                MessagesByChat[jid] = new List<ChatMessage>();
+            }
+
+            string duplicateChatJid = null;
+            ChatMessage duplicateMessage = null;
+            bool hasAliasLinkedDuplicate = !isGroup &&
+                !string.IsNullOrEmpty(message.Id) &&
+                TryFindAliasLinkedMessage(jid, message.Id, out duplicateChatJid, out duplicateMessage);
+
+            ChatMessage consolidatedMessage;
+            if (!string.IsNullOrEmpty(message.Id) &&
+                hasAliasLinkedDuplicate &&
+                !string.Equals(NormalizeJid(duplicateChatJid), jid, StringComparison.OrdinalIgnoreCase) &&
+                TryConsolidateAliasDuplicateMessage(jid, duplicateChatJid, message.Id, out consolidatedMessage))
+            {
+                result.Kind = IncomingTimelineAcceptKind.AliasConsolidated;
+                result.AliasSourceChatJid = NormalizeJid(duplicateChatJid);
+                result.ConsolidatedMessage = consolidatedMessage;
+                result.Message = consolidatedMessage ?? message;
+                return result;
+            }
+
+            if ((!string.IsNullOrEmpty(message.Id) && HasMessageId(jid, message.Id)) ||
+                (!string.IsNullOrEmpty(message.Id) &&
+                 MessagesByChat[jid].Any(m => string.Equals(m?.Id, message.Id, StringComparison.Ordinal))) ||
+                hasAliasLinkedDuplicate)
+            {
+                var existingMessage = MessagesByChat[jid].FirstOrDefault(
+                    m => string.Equals(m?.Id, message.Id, StringComparison.Ordinal));
+                bool existingChanged = false;
+                if (existingMessage != null)
+                {
+                    DuplicateArrivalPatch patch = DuplicateArrivalEnrichment.Compute(
+                        existingMessage.Status,
+                        message.Status,
+                        message.IsFromMe,
+                        existingMessage.ParticipantJid,
+                        message.ParticipantJid,
+                        existingMessage.SenderName,
+                        message.SenderName);
+                    existingChanged = DuplicateArrivalEnrichment.Apply(existingMessage, patch);
+                }
+
+                result.Kind = hasAliasLinkedDuplicate && existingMessage == null
+                    ? IncomingTimelineAcceptKind.AliasLinkedDuplicate
+                    : IncomingTimelineAcceptKind.DuplicateSameChat;
+                result.Message = existingMessage ?? message;
+                result.ExistingChanged = existingChanged;
+                result.AliasSourceChatJid = duplicateChatJid;
+                return result;
+            }
+
+            ChatMessageOrder.InsertSorted(MessagesByChat[jid], message);
+            TrimInMemoryMessageWindow(jid);
+            RegisterMessageId(jid, message.Id);
+            result.Kind = IncomingTimelineAcceptKind.Inserted;
+            result.Message = message;
+            return result;
+        }
+
+        public void QueueIncomingMessagePersist(string chatJid, ChatMessage message)
+        {
+            QueueOfflineReplayMessageForPersist(chatJid, message);
+        }
         /// <summary>
         /// Offline fast-path counterpart of the full duplicate enrichment: fill in a blank
         /// participant or sender name from the envelope without re-running render / UI work.
@@ -2368,81 +2416,19 @@ namespace Unison.Uwp.Services.WhatsApp
                     _offlineReplayUiTimer = null;
                 }
 
-                await RunOnUiThreadAsync(() =>
+                if (_chatService == null)
                 {
-                    int created = 0;
-                    int updated = 0;
-                    int unreadAdded = 0;
+                    Debug.WriteLine("[WhatsAppService] Offline summary apply skipped: ChatFacade not attached.");
+                    return;
+                }
 
-                    foreach (var pair in snapshot)
-                    {
-                        var summary = pair.Value;
-                        if (summary == null || string.IsNullOrWhiteSpace(summary.Jid))
-                        {
-                            continue;
-                        }
+                List<OfflineReplayChatSummary> batch = snapshot.Values.ToList();
+                await _chatService.ApplyOfflineReplayChatSummariesAsync(batch, reason)
+                    .ConfigureAwait(false);
 
-                        var rows = GetChatRowsForCanonicalJid(summary.Jid);
-                        ChatItem preferred = rows.FirstOrDefault();
-                        if (preferred == null)
-                        {
-                            preferred = new ChatItem
-                            {
-                                JID = summary.Jid,
-                                Name = ResolveDisplayName(summary.Jid, "chat"),
-                                Kind = ResolveChatKind(summary.Jid),
-                                UnreadCount = 0
-                            };
-                            Chats.Add(preferred);
-                            rows = GetChatRowsForCanonicalJid(summary.Jid);
-                            created++;
-                        }
-
-                        foreach (var row in rows)
-                        {
-                            ApplyChatKind(row);
-                            if (summary.Timestamp != DateTime.MinValue &&
-                                ApplyChatPreviewIfNewer(
-                                    row,
-                                    summary.Preview ?? string.Empty,
-                                    summary.Timestamp,
-                                    false,
-                                    summary.Kind,
-                                    summary.AuthorPrefix,
-                                    null,
-                                    summary.IsFromMe,
-                                    HistoryLiveMessageMapper.FromStatus(summary.Status, summary.IsFromMe)))
-                            {
-                                updated++;
-                            }
-                        }
-
-                        // UnreadDelta was decided at record time under IncomingAttention. Re-asking
-                        // here would drop counts when the user left the open chat between drain and
-                        // apply — the live path counts once, on arrival.
-                        if (summary.UnreadDelta > 0)
-                        {
-                            ChatUnreadTally.Bump(preferred, rows, summary.UnreadDelta);
-                            unreadAdded += summary.UnreadDelta;
-                        }
-                    }
-
-                    SortChatsForDisplay();
-                    NotificationService.Instance.UpdateBadge(GetTotalUnreadCount());
-
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "messages",
-                        "offline-summary-applied",
-                        "reason=" + reason +
-                        "; chats=" + snapshot.Count +
-                        "; created=" + created +
-                        "; previews=" + updated +
-                        "; unreadAdded=" + unreadAdded);
-                    NoteFullHistoryCatchUpProgress(
-                        "offline-summary:" + reason +
-                        ":chats=" + snapshot.Count +
-                        ":previews=" + updated);
-                });
+                NoteFullHistoryCatchUpProgress(
+                    "offline-summary:" + reason +
+                    ":chats=" + batch.Count);
 
                 SchedulePersist();
             }
@@ -2471,7 +2457,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 _offlineReplayUiApplyLock.Release();
             }
         }
-
         private void MarkOfflineReplayChatDirty(string jid) => _pendingMessages.MarkDirty(jid);
 
         private async Task RefreshChatPreviewFromReplayAsync(

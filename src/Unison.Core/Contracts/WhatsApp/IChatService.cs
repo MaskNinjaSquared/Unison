@@ -79,5 +79,13 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         Task<LiveIncomingChatListApplyResult> ApplyLiveIncomingChatListAsync(
             LiveIncomingChatListApplyRequest request);
+
+        /// <summary>
+        /// Offline replay batch: apply tip + UnreadDelta already decided at record time.
+        /// Does not re-evaluate IncomingAttention.
+        /// </summary>
+        Task ApplyOfflineReplayChatSummariesAsync(
+            IReadOnlyList<OfflineReplayChatSummary> summaries,
+            string reason);
     }
 }

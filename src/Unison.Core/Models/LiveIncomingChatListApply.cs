@@ -22,7 +22,16 @@ namespace Unison.Core.Models
         public bool IsFromMe { get; set; }
         public MessageSendState SendState { get; set; }
         public string MessageId { get; set; }
+
+        /// <summary>
+        /// How many unread increments to apply. Live uses 0 or 1; offline replay uses the
+        /// delta recorded at drain time (never re-ask IncomingAttention on apply).
+        /// </summary>
+        public int UnreadDelta { get; set; }
+
+        /// <summary>Legacy live flag; prefer <see cref="UnreadDelta"/>. Mapped as 1 when delta is 0.</summary>
         public bool CountsAsUnread { get; set; }
+
         public bool IsGroup { get; set; }
 
         /// <summary>Optional LID side of a known PN/LID pair for merge scan after creating a row.</summary>
