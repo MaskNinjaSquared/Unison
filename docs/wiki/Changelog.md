@@ -4,6 +4,33 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Searching for a contact with brackets in the number found nobody
+
+The new-chat box takes whatever the user types and hands it, near enough untouched, to the contact
+lookup: `'+'`, spaces and hyphens were stripped, and nothing else was. A number written the way most
+people write one — `(11) 99999-9999` — therefore reached the server as `+(11)999999999`.
+
+The failure is quiet in the worst way. The query is well formed, the server answers honestly that no
+such account exists, and the user is told the number is not on WhatsApp. Nothing in the app is aware
+that it asked the wrong question. The same digits pasted without brackets work, which makes it look
+like the contact's problem rather than ours.
+
+`PhoneNumberHelper` next door already read numbers properly, so this was a rule written twice where
+only one copy was right. `ContactLookupNumber` (Core, 20 tests) is now the single answer to "what
+number do we ask about", covering both callers — the search box and the background name refresh —
+and returning *why* an address was skipped instead of a bare null, so the log says `SelfAccount` or
+`NotDirectChat` rather than leaving the reason to be guessed.
+
+One ordering detail is pinned by a test because it is easy to write backwards: the device suffix is
+cut before the digits are read. Taken the other way round, `5511988887777:12` folds into
+`551198888777712` — a well-formed query about nobody, i.e. the same silent failure in a new place.
+
+Two behaviour changes fall out of the merge. Searching for your own number no longer goes to the
+server (it still matches locally); and a number typed with a `00` international prefix now has it
+dropped, which is what the rest of the app already did.
+
+---
+
 ## A participant who deleted their photo went on showing it forever
 
 `ChatAvatarOutcome` (phase 3.1c) records how a picture lookup ended, and the whole reason it exists is

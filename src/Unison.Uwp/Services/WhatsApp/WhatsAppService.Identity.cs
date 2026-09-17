@@ -668,58 +668,20 @@ namespace Unison.Uwp.Services.WhatsApp
                         continue;
                     }
 
-                    if (NormalizeJid(jid) == NormalizeJid(_authState?.Me?.Id))
+                    ContactLookupNumber lookup = ContactLookupNumber.For(
+                        jid,
+                        GetCanonicalJid(jid),
+                        _authState?.Me?.Id);
+                    if (!lookup.IsUsable)
                     {
-                        Debug.WriteLine($"[WhatsAppService] ResolveContactsAsync: skipping self JID {jid}");
+                        Debug.WriteLine(
+                            $"[WhatsAppService] ResolveContactsAsync: skipping {jid} ({lookup.Skip})");
                         continue;
-                    }
-
-                    if (jid.EndsWith("@newsletter", StringComparison.OrdinalIgnoreCase) ||
-                        jid.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase) ||
-                        jid.EndsWith("@broadcast", StringComparison.OrdinalIgnoreCase))
-                    {
-                        Debug.WriteLine($"[WhatsAppService] ResolveContactsAsync: skipping non-direct JID {jid}");
-                        continue;
-                    }
-
-                    string phone = null;
-                    if (jid.EndsWith("@s.whatsapp.net", StringComparison.OrdinalIgnoreCase) ||
-                        jid.EndsWith("@lid", StringComparison.OrdinalIgnoreCase))
-                    {
-                        string canonical = GetCanonicalJid(jid);
-                        if (string.IsNullOrWhiteSpace(canonical))
-                        {
-                            canonical = jid;
-                        }
-
-                        int atIndex = canonical.IndexOf('@');
-                        phone = atIndex >= 0 ? canonical.Substring(0, atIndex) : canonical;
-                        int deviceIndex = phone.IndexOf(':');
-                        if (deviceIndex >= 0)
-                        {
-                            phone = phone.Substring(0, deviceIndex);
-                        }
-                    }
-                    else
-                    {
-                        phone = jid;
-                    }
-
-                    phone = phone?.Replace("+", "").Replace(" ", "").Replace("-", "");
-                    if (string.IsNullOrWhiteSpace(phone))
-                    {
-                        Debug.WriteLine($"[WhatsAppService] ResolveContactsAsync: unable to derive phone lookup key for {jid}");
-                        continue;
-                    }
-
-                    if (!phone.StartsWith("+", StringComparison.Ordinal))
-                    {
-                        phone = "+" + phone;
                     }
 
                     var children = new List<BinaryNode>
                     {
-                        new BinaryNode("contact", null, phone)
+                        new BinaryNode("contact", null, lookup.Number)
                     };
                     userNodes.Add(new BinaryNode("user", null, children));
                 }
@@ -1005,9 +967,11 @@ namespace Unison.Uwp.Services.WhatsApp
         public async Task<string> SearchContactAsync(string phoneNumber)
         {
             if (string.IsNullOrEmpty(phoneNumber)) return null;
-            
-            // Normalize phone number (remove +, spaces, etc)
-            string cleaned = phoneNumber.Replace("+", "").Replace(" ", "").Replace("-", "");
+
+            // Whatever the user typed into the phone field, reduced to the digits a JID starts
+            // with — the matching below is a prefix test against stored JIDs, so anything else
+            // in the string can only make it miss.
+            string cleaned = PhoneNumberHelper.NormalizePhoneDigits(phoneNumber);
             if (string.IsNullOrEmpty(cleaned)) return null;
 
             Debug.WriteLine($"[WhatsAppService] SearchContactAsync: Searching for {cleaned}...");

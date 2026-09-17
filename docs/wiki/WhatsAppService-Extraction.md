@@ -511,6 +511,19 @@ What remains in `.Identity.cs` is the larger half and is not this shape: `Resolv
 `RefreshContactNamesAsync` (usync over the socket, ~380 lines) and the alias follow-up scheduling.
 Those are 3.6's move onto `ContactFacade`, not a rule to lift out of a method.
 
+**One more rule came out of the usync half, and it was carrying a bug.** `ContactLookupNumber` (Core,
+20 tests) answers "what number do we ask the server about", derived from a JID, a canonical address or
+digits a person typed. It was written twice — inside `ResolveContactsAsync`'s filter loop and again in
+`SearchContactAsync` — and both copies stripped `'+'`, spaces and hyphens and nothing else, so a number
+typed as `(11) 99999-9999` was queried as `+(11)999999999` and came back as "not on WhatsApp".
+`PhoneNumberHelper` had read numbers correctly all along; the two just never met. The helper also
+returns *why* an address was skipped (`SelfAccount`, `NotDirectChat`, `NoDigits`) so the filter loop's
+three `continue`s stop being three silently identical outcomes.
+
+This is the same shape as `MediaDownloadPlan` in 3.3c and worth naming as the pattern for what is left:
+the façade moves are too big to verify, but each one has a pure rule buried in it that can leave early,
+under test, and the bug tends to be in the rule rather than in the orchestration around it.
+
 **One regression, and it was not in the moved code.** `MediaDerivationService` was registered with
 `AddSingleton<MediaDerivationService>()` in 3.3b while its constructor is `internal`, so the container
 had no public constructor to call and threw on the first resolution. It is registered by hand now.
