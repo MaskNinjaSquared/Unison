@@ -153,6 +153,25 @@ Facades extracted **policy** around it (pairing/logout, pin/mark-read, contact o
 | `HistoryMessageStore` | SQLite `history_message` + `history_message_reaction` | Timeline bodies, quote/pin/revoke, reactions; schema 5; history chunks skip existing bodies (`PreferDeltaSkipExistingBodies`) while still applying side effects |
 | Broker journal | `broker-frame-*.bin` (UBJ2 / UBD3) | Ordered frames + Noise checkpoint while backgrounded |
 
+### Known: the credential blob has an 8 KB ceiling it can reach
+
+A `LocalSettings` value is capped at 8192 bytes, and writing past it throws
+(`0x80073DC8`, "the size of the state manager setting value has exceeded the limit"). `AuthStore`
+serialises the whole `AuthState` into one such value.
+
+The keys themselves are fixed-size and come to roughly 1 KB, but the same blob carries
+`SenderKeyMemory`: per group, every participant **device** JID that already holds our sender key. A
+50-member group runs around 2 KB, so a few active groups reach the ceiling. It also grows on exactly
+the event that saves it — relaying a group message emits `CredsUpdate`, which calls
+`AuthStore.SaveAsync`, which rethrows.
+
+What that costs when it happens is worse than a failed write: the credentials stop being saved from
+that point on, and `LoadAsync` catching everything and returning `null` means the next cold start
+reads the failure as "never paired" and creates a fresh `AuthState` — the device unlinks itself.
+
+Not yet fixed. The memory is a bandwidth cache (losing it re-sends the sender key to everyone,
+which is a cost, not a break), so it does not belong in the same 8 KB value as the credentials.
+
 ## Where to go next
 
 - Protocol internals → [Socket stack](Socket-Stack)
