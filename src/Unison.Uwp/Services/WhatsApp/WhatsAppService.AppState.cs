@@ -213,7 +213,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 MessagesByChat.Remove(canonical);
                 _messageIdIndex.RemoveChat(canonical);
-                _pendingMissingMessagesByChat.Remove(canonical);
+                ForgetMissingMessagesForChat(canonical);
                 _historyOnDemandMarkerByChat.Remove(canonical);
                 _historyOnDemandLastRequestIdByChat.Remove(canonical);
                 _historyOnDemandAttemptsByChat.Remove(canonical);

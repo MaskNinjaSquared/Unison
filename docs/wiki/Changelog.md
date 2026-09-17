@@ -4,6 +4,24 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Deleting a conversation left it asking the server for its messages
+
+A message that fails to decrypt is remembered so the app can ask the account to send it again. That
+register was cleaned up in two places — deleting a chat, and merging a conversation onto its
+canonical address — and both did it by removing the key inline, on the UI thread, while the incoming
+pump reads and writes the same dictionary from a background thread under a lock those two did not
+take. A plain dictionary mutated from two threads at once fails rarely and never in the same place
+twice.
+
+They also dropped the pending entries without cancelling the resends already scheduled for them, so
+a timer stayed alive to ask the server for a message belonging to a conversation the user had just
+deleted.
+
+Both now go through one path that takes the lock, cancels the scheduled work, and forgets the
+in-flight request ids along with it.
+
+---
+
 ## A message that arrived with the app minimised was announced but never counted
 
 The toast fired and the conversation showed nothing new. Dismiss the toast, or miss it, and the

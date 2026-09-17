@@ -283,6 +283,64 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
+        /// <summary>
+        /// Drops every pending missing-message repair for a conversation that is going away.
+        /// </summary>
+        /// <remarks>
+        /// Two callers used to do this by removing the key inline — on the UI thread, outside
+        /// <c>_missingMessageLock</c>, while the pump reads and writes the same dictionary from a
+        /// background thread. That is a plain `Dictionary` being mutated from two threads at once.
+        /// They also dropped the candidates without cancelling their scheduled resends, so a timer
+        /// stayed alive to ask the server for a message belonging to a deleted conversation.
+        /// </remarks>
+        private void ForgetMissingMessagesForChat(string chatJid)
+        {
+            string normJid = NormalizeJid(chatJid);
+            if (string.IsNullOrWhiteSpace(normJid))
+            {
+                return;
+            }
+
+            List<MissingMessageCandidate> dropped = null;
+            lock (_missingMessageLock)
+            {
+                Dictionary<string, MissingMessageCandidate> byMessageId;
+                if (!_pendingMissingMessagesByChat.TryGetValue(normJid, out byMessageId))
+                {
+                    return;
+                }
+
+                dropped = byMessageId.Values.ToList();
+                _pendingMissingMessagesByChat.Remove(normJid);
+
+                foreach (var candidate in dropped)
+                {
+                    if (candidate != null && !string.IsNullOrWhiteSpace(candidate.LastPlaceholderRequestId))
+                    {
+                        _placeholderResendRequestsByStanzaId.Remove(candidate.LastPlaceholderRequestId);
+                    }
+                }
+            }
+
+            foreach (var candidate in dropped)
+            {
+                var cts = candidate?.PlaceholderScheduleCts;
+                if (cts == null)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    cts.Cancel();
+                    cts.Dispose();
+                }
+                catch
+                {
+                }
+            }
+        }
+
         private bool TryGetMissingMessage(string chatJid, string messageId, out MissingMessageCandidate candidate)
         {
             candidate = null;
