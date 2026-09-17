@@ -4,6 +4,29 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Every conversation with a voice note left a media player behind
+
+`ChatDetailView` creates a `MediaPlayer` on the first voice note and subscribes to four of its
+events. Leaving the conversation paused it and cleared the source, and that was all: no
+unsubscribe, no `SetMediaPlayer(null)`, no `Dispose`, and the field kept pointing at it.
+
+Its `CommandManager` and transport controls keep it registered with the system, and those four
+handlers keep the page alive through it, so each player held a whole `ChatDetailView` — with its
+message list — past navigation. On a phone this reads as the app getting heavier the more
+conversations you open, until the OS kills it, with the lock-screen controls still driving the
+oldest player.
+
+Release is now separate from stop, because stopping also happens when a video takes over and the
+next voice note reuses the instance. `VideoViewerView` already did this correctly; the audio path
+now mirrors it.
+
+The `MediaEnded` and `MediaFailed` handlers also ran unguarded, while their two siblings in the same
+file were wrapped. These callbacks arrive on a Media Foundation thread where nothing above catches
+what escapes, so an exception ended the process — on the failure path, precisely when something had
+already gone wrong.
+
+---
+
 ## Sending in groups could unlink the device
 
 A `LocalSettings` value stops at 8192 bytes and throws past it, and `AuthStore` kept the whole

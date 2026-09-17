@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.ObjectModel;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -385,6 +385,7 @@ namespace Unison.Uwp.Shell.Unison.Views
             StopAudioPlayback();
             StopDateSeparatorTimer();
             _voiceRouting?.DetachPlayer();
+            TearDownAudioPlayer();
             if (ViewModel != null)
             {
                 DetachViewModelEvents();
@@ -3263,6 +3264,67 @@ namespace Unison.Uwp.Shell.Unison.Views
             return "Chat";
         }
 
+        /// <summary>
+        /// Releases the player itself, which <see cref="StopAudioPlayback"/> deliberately does not:
+        /// stopping also happens when a video takes over, and the next voice note reuses this
+        /// instance. Only leaving the conversation ends it.
+        /// </summary>
+        /// <remarks>
+        /// Without this the player outlived the view it was created for. Its CommandManager and
+        /// transport controls keep it registered with the system, the four handlers below keep this
+        /// page alive through it, and both survive navigation - so every conversation with a voice
+        /// note left one behind, and the lock-screen controls pointed at the oldest of them.
+        /// Mirrors TearDownPlayer in VideoViewerView.
+        /// </remarks>
+        private void TearDownAudioPlayer()
+        {
+            var player = _audioMediaPlayer;
+            if (player == null)
+            {
+                return;
+            }
+
+            _audioMediaPlayer = null;
+
+            try
+            {
+                player.MediaEnded -= AudioMediaPlayer_MediaEnded;
+                player.MediaFailed -= AudioMediaPlayer_MediaFailed;
+                player.MediaOpened -= AudioMediaPlayer_MediaOpened;
+                player.PlaybackSession.PlaybackStateChanged -= AudioPlaybackSession_PlaybackStateChanged;
+                player.CommandManager.IsEnabled = false;
+                player.Pause();
+                player.Source = null;
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                player.SystemMediaTransportControls.IsEnabled = false;
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                AudioPlayer.SetMediaPlayer(null);
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                player.Dispose();
+            }
+            catch
+            {
+            }
+        }
+
         private void StopAudioPlayback()
         {
             StopAudioPositionTimer();
@@ -3331,16 +3393,25 @@ namespace Unison.Uwp.Shell.Unison.Views
             }
         }
 
+        // Media Foundation raises this on its own thread, so nothing above us catches what escapes
+        // and an exception here ends the process. Its two siblings already guard for that reason.
         private async void AudioMediaPlayer_MediaEnded(MediaPlayer sender, object args)
         {
-            await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
+            try
             {
-                StopAudioPositionTimer();
-                _voiceRouting?.EndSession();
-                _playingAudioVm?.ResetAudioPlaybackToReady();
-                _playingAudioVm = null;
-                _playingAudioMessage = null;
-            });
+                await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
+                {
+                    StopAudioPositionTimer();
+                    _voiceRouting?.EndSession();
+                    _playingAudioVm?.ResetAudioPlaybackToReady();
+                    _playingAudioVm = null;
+                    _playingAudioMessage = null;
+                });
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(string.Format("[ChatDetailView] Audio ended handler failed: {0}", ex.Message));
+            }
         }
 
         private async void AudioMediaPlayer_MediaFailed(MediaPlayer sender, MediaPlayerFailedEventArgs args)
@@ -3352,18 +3423,27 @@ namespace Unison.Uwp.Shell.Unison.Views
                 args?.ErrorMessage);
             LogAudio("media-failed", _playingAudioMessage, detail);
             Debug.WriteLine(string.Format("[ChatDetailView] MediaPlayer failed: {0}", args?.ErrorMessage));
-            await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
+            // Reached only when playback already went wrong; throwing on the way out would turn a
+            // voice note that will not open into a closed app.
+            try
             {
-                StopAudioPositionTimer();
-                _voiceRouting?.EndSession();
-                if (_playingAudioVm != null)
+                await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
                 {
-                    _playingAudioVm.MarkAudioUnavailable();
-                }
+                    StopAudioPositionTimer();
+                    _voiceRouting?.EndSession();
+                    if (_playingAudioVm != null)
+                    {
+                        _playingAudioVm.MarkAudioUnavailable();
+                    }
 
-                _playingAudioVm = null;
-                _playingAudioMessage = null;
-            });
+                    _playingAudioVm = null;
+                    _playingAudioMessage = null;
+                });
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(string.Format("[ChatDetailView] Audio failure handler failed: {0}", ex.Message));
+            }
         }
 
         /// <summary>Session log (+ DebugView) for mobile audio diagnosis — always captured.</summary>
