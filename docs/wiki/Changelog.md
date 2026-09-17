@@ -4,6 +4,24 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Offline duplicate fast-path dropped upgrades the live path kept
+
+Three follow-ups from the same pump scan that found the blank group author.
+
+A second delivery of a message we already have can still carry a participant JID or a sender
+name the first delivery lacked. The full duplicate path applied those; the offline fast-path
+only cleared the missing-message ledger and returned — so a reconnect that re-delivered the
+batch never filled the blanks. Both paths now go through `DuplicateArrivalEnrichment`.
+
+An unrecognised / empty payload that arrived as a placeholder recovery also returned without
+clearing that ledger, so the resend drain kept asking for a message that would never draw.
+
+And `GetTotalUnreadCount` walked the UI-bound `Chats` collection from the pump's `Task.Run`
+thread; on failure it returned 0, so the toast badge could claim nothing was unread right after
+a message had just been counted.
+
+---
+
 ## Offline replay wiped the group author strip
 
 The live path computes `listAuthorPrefix` and passes it into `ApplyChatPreviewIfNewer`. The offline

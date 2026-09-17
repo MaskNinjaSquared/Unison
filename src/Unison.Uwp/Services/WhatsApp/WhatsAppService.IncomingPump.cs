@@ -1621,6 +1621,9 @@ namespace Unison.Uwp.Services.WhatsApp
                 // content extraction, alias resolution, and UI dispatches for messages
                 // we already have on disk. Pushname capture from the raw 'notify' attr
                 // is already handled independently in the OnMessage handler.
+                // Enrichment still runs: a duplicate can carry a participant or a better
+                // sender name the first delivery lacked, and the full path used to keep
+                // those while this path threw them away.
                 if (e.IsOffline && !string.IsNullOrEmpty(e.MessageId))
                 {
                     if (isGroup)
@@ -1628,6 +1631,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         string fastGroupJid = GetCanonicalJid(normalizedFromJid);
                         if (HasMessageId(fastGroupJid, e.MessageId))
                         {
+                            EnrichOfflineDuplicateFast(fastGroupJid, e);
                             ResolveMissingMessage(fastGroupJid, e.MessageId, "offline-duplicate-fast");
                             return;
                         }
@@ -1639,6 +1643,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         if (HasMessageId(fastDmJid, e.MessageId) ||
                             HasMessageIdInAnyAlias(normalizedFromJid, e.MessageId))
                         {
+                            EnrichOfflineDuplicateFast(fastDmJid, e);
                             ResolveMissingMessage(fastDmJid, e.MessageId, "offline-duplicate-fast");
                             return;
                         }
@@ -1756,6 +1761,16 @@ namespace Unison.Uwp.Services.WhatsApp
                     {
                         Log("[WhatsAppService] No text content in message, skipping");
                     }
+
+                    // A placeholder recovery that lands as an unrecognised type still has to
+                    // clear the missing-message ledger, or the resend drain keeps asking for
+                    // a message that will never draw.
+                    if (!string.IsNullOrEmpty(e.MessageId))
+                    {
+                        string skipJid = GetCanonicalJid(normalizedFromJid) ?? NormalizeJid(e.FromJid);
+                        ResolveMissingMessage(skipJid, e.MessageId, "empty-content");
+                    }
+
                     return;
                 }
 
@@ -2051,23 +2066,15 @@ namespace Unison.Uwp.Services.WhatsApp
                     bool existingChanged = false;
                     if (existingMessage != null)
                     {
-                        if (chatMessage.IsFromMe && ShouldApplyMessageStatus(existingMessage.Status, chatMessage.Status))
-                        {
-                            existingMessage.Status = chatMessage.Status;
-                            existingChanged = true;
-                        }
-                        if (string.IsNullOrWhiteSpace(existingMessage.ParticipantJid) &&
-                            !string.IsNullOrWhiteSpace(chatMessage.ParticipantJid))
-                        {
-                            existingMessage.ParticipantJid = chatMessage.ParticipantJid;
-                            existingChanged = true;
-                        }
-                        if (IsWeakHistorySenderName(existingMessage.SenderName) &&
-                            !IsWeakHistorySenderName(chatMessage.SenderName))
-                        {
-                            existingMessage.SenderName = chatMessage.SenderName;
-                            existingChanged = true;
-                        }
+                        DuplicateArrivalPatch patch = DuplicateArrivalEnrichment.Compute(
+                            existingMessage.Status,
+                            chatMessage.Status,
+                            chatMessage.IsFromMe,
+                            existingMessage.ParticipantJid,
+                            chatMessage.ParticipantJid,
+                            existingMessage.SenderName,
+                            chatMessage.SenderName);
+                        existingChanged = DuplicateArrivalEnrichment.Apply(existingMessage, patch);
                         if (existingChanged)
                         {
                             QueueOfflineReplayMessageForPersist(jid, existingMessage);
@@ -2179,6 +2186,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 // Update chat preview on UI thread
                 SetIncomingMessagePumpStage("ui-preview", e);
                 ChatItem notificationChat = null;
+                int totalUnreadForNotify = 0;
                 await RunOnUiThreadAsync(() =>
                     {
                         string canonicalLookup = GetCanonicalJid(jid) ?? jid;
@@ -2277,6 +2285,10 @@ namespace Unison.Uwp.Services.WhatsApp
                         }
 
                         notificationChat = chat;
+                        // Read on the UI thread. GetTotalUnreadCount walks Chats, and the pump
+                        // itself is Task.Run — enumerating the ObservableCollection off-thread
+                        // threw and the catch returned 0, so the toast badge said nothing was unread.
+                        totalUnreadForNotify = GetTotalUnreadCount();
                     });
 
                 SetIncomingMessagePumpStage("notify", e);
@@ -2306,7 +2318,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         isGroup,
                         isMuted,
                         attention.SuppressToast,
-                        GetTotalUnreadCount(),
+                        totalUnreadForNotify,
                         notificationChat?.GetAvatarUrl(preferHigh: false),
                         notificationChat != null ? Math.Max(0, notificationChat.UnreadCount) : 0);
                 }
@@ -2327,6 +2339,55 @@ namespace Unison.Uwp.Services.WhatsApp
                     ex,
                     "id=" + (e?.MessageId ?? "<none>") + "; stage=" + _incomingMessagePumpStage);
                 throw;
+            }
+        }
+
+        /// <summary>
+        /// Offline fast-path counterpart of the full duplicate enrichment: fill in a blank
+        /// participant or sender name from the envelope without re-running render / UI work.
+        /// Status upgrades need a mapped ChatMessage and stay on the full path.
+        /// </summary>
+        private void EnrichOfflineDuplicateFast(string chatJid, Client.DecryptedMessageEventArgs e)
+        {
+            if (string.IsNullOrWhiteSpace(chatJid) || e == null || string.IsNullOrEmpty(e.MessageId))
+            {
+                return;
+            }
+
+            ChatMessage existing = null;
+            string persistJid = chatJid;
+
+            if (MessagesByChat.TryGetValue(chatJid, out var list) && list != null)
+            {
+                existing = list.FirstOrDefault(
+                    m => m != null && string.Equals(m.Id, e.MessageId, StringComparison.Ordinal));
+            }
+
+            if (existing == null &&
+                TryFindAliasLinkedMessage(chatJid, e.MessageId, out string aliasChat, out ChatMessage aliasMsg) &&
+                aliasMsg != null)
+            {
+                existing = aliasMsg;
+                persistJid = aliasChat;
+            }
+
+            if (existing == null)
+            {
+                return;
+            }
+
+            DuplicateArrivalPatch patch = DuplicateArrivalEnrichment.Compute(
+                existing.Status,
+                null,
+                e.IsFromMe,
+                existing.ParticipantJid,
+                NormalizeJid(e.Participant),
+                existing.SenderName,
+                FirstNonEmptyString(e.VerifiedName, e.PushName));
+            if (DuplicateArrivalEnrichment.Apply(existing, patch))
+            {
+                QueueOfflineReplayMessageForPersist(persistJid, existing);
+                SchedulePersist();
             }
         }
 
