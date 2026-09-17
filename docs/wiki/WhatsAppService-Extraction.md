@@ -184,7 +184,7 @@ Self-contained first. List/persist last.
 | 3.8 | `.AppState.cs` | **Rewritten — the premise was stale.** See below |
 | 3.9a | List display order (done) | `ChatDisplayOrder` (Core) |
 | 3.9b | `.Persistence.cs` + preview reconcile + the appliers from 3.8 | `ChatFacade` + `ChatStateStore` + `IChatStore` / `IMessageStore`. Close the transitional public dictionaries on `ChatStateStore`. **Persistence rules out; appliers remain — see below** |
-| 3.10 | `.IncomingPump.cs` | Decode/dispatch stays with connection; apply (row, preview, unread, toast) goes to façades. **Started: `IncomingAttention`, `MessageRenderReader`, `MessageIdIndex` and `QuotedContext` are out — see below** |
+| 3.10 | `.IncomingPump.cs` | Decode/dispatch stays with connection; apply (row, preview, unread, toast) goes to façades. **In progress:** `IncomingAttention`, `MessageRenderReader`, `MessageIdIndex`, `QuotedContext`, `DuplicateArrivalEnrichment`, `IncomingSenderResolver`, `PushNameAcceptDecision` are out — see below |
 
 **3.1a is done.** The avatar half of `MediaCache` is `IAvatarCache` / `AvatarCacheService`: `TryGet`,
 `SaveAsync`, `DeleteIfCached`. It took `BuildSafeAvatarFileName`, `TryGetCachedAvatarUri`,
@@ -652,6 +652,17 @@ The other direction was worse. History sync read quotes through
 poll, contact, location or call log fell through as empty text of kind `Text` and the strip drew
 nothing — while live, the same quote showed its label. Both now read through `QuotedContext`, so
 what a quote says no longer depends on whether the app was open when it arrived.
+
+**The pump scan closed the next four rules.** A pass over `HandleDecryptedMessageAsync` against the
+offline replay path found the author strip wiped on reconnect (fixed), then three more that were the
+same shape: the offline duplicate fast-path threw away participant/sender upgrades the full path
+kept (`DuplicateArrivalEnrichment`); empty/unrecognised content left the missing-message ledger
+hanging; and `GetTotalUnreadCount` walked `Chats` off the UI thread so the toast badge could fall
+back to 0. Two pure decisions followed out of the same method: `IncomingSenderResolver` (who wrote
+it / is it us) and `PushNameAcceptDecision` (whether the envelope's name may enter the map). The
+apply pass for offline unread also stopped re-asking `IncomingAttention` — the count was already
+decided at record time, and re-asking dropped the badge when the open chat changed mid-drain. Image
+hydration during offline replay now matches live (no longer gated on the chat being open).
 
 ### Phase 4 — What remains is connection
 

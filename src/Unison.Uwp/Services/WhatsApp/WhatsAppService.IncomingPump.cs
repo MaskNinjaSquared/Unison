@@ -1796,74 +1796,48 @@ namespace Unison.Uwp.Services.WhatsApp
                         senderJid = NormalizeJid(e.Participant ?? e.FromJid);
                     }
 
-                    // Update if we don't have a name, or if the current name is just the JID/number
-                    if (!ContactNames.TryGetValue(senderJid, out var existingName) ||
-                        PlaceholderChatLabel.IsPlaceholder(existingName, senderJid, IsSelfMarkerLabel(existingName)))
+                    ContactNames.TryGetValue(senderJid, out var existingName);
+                    string sanitized = SanitizeContactLabel(nameFromMsg, senderJid);
+                    PushNameAccept accept = PushNameAcceptDecision.Decide(
+                        sanitized,
+                        existingName,
+                        senderJid,
+                        IsSelfMarkerLabel(existingName));
+                    if (accept == PushNameAccept.IgnoreEmpty)
                     {
-                        string sanitized = SanitizeContactLabel(nameFromMsg, senderJid);
-                        if (string.IsNullOrEmpty(sanitized))
+                        if (IsSelfJid(senderJid))
                         {
-                            if (IsSelfJid(senderJid))
-                            {
-                                Log($"[WhatsAppService] Explicit 'You' label observed for SELF JID {senderJid}. Ignoring and keeping numeric identity.");
-                            }
-                            else
-                            {
-                                Log($"[WhatsAppService] Ignoring PushName 'You' for NON-SELF JID {senderJid} (spoof prevention).");
-                            }
-                            Log($"[WhatsAppService] Ignoring PushName 'You' for {senderJid} to prevent spoofing");
+                            Log($"[WhatsAppService] Explicit 'You' label observed for SELF JID {senderJid}. Ignoring and keeping numeric identity.");
                         }
                         else
                         {
-                            ContactNames[senderJid] = sanitized;
-                            RememberPersonName(senderJid, sanitized);
-                            if (!e.IsOffline)
-                            {
-                                Log($"[WhatsAppService] Updated contact name for {senderJid} from message metadata: {sanitized}");
-                            }
+                            Log($"[WhatsAppService] Ignoring PushName 'You' for NON-SELF JID {senderJid} (spoof prevention).");
+                        }
+                        Log($"[WhatsAppService] Ignoring PushName 'You' for {senderJid} to prevent spoofing");
+                    }
+                    else if (accept == PushNameAccept.Accept)
+                    {
+                        ContactNames[senderJid] = sanitized;
+                        RememberPersonName(senderJid, sanitized);
+                        if (!e.IsOffline)
+                        {
+                            Log($"[WhatsAppService] Updated contact name for {senderJid} from message metadata: {sanitized}");
                         }
                     }
                 }
 
-                // Resolve sender name and true 'IsFromMe' status:
-                
-                string senderName;
-                bool isActuallyFromMe = e.IsFromMe;
-
-                if (isGroup)
-                {
-                    if (e.IsFromMe)
-                    {
-                        senderName = _authState?.Me?.Name ?? SelfListDisplayName();
-                    }
-                    else if (!string.IsNullOrEmpty(e.Participant))
-                    {
-                        string participantJid = NormalizeJid(e.Participant);
-                        senderName = GetResolvedName(participantJid);
-                    }
-                    else
-                    {
-                        senderName = GetResolvedName(jid);
-                    }
-                }
-                else
-                {
-                    // 1-on-1 Chat
-                    if (e.IsFromMe)
-                    {
-                        // If it's from me, it could be a message I sent from this device (Local)
-                        // OR a message I sent from my phone (Synced).
-                        // In Unison, we want to know if 'I' am the author or if the 'Other Person' is.
-                        senderName = _authState?.Me?.Name ?? SelfListDisplayName();
-                        isActuallyFromMe = true;
-                    }
-                    else
-                    {
-                        // Message from the other person
-                        senderName = GetResolvedName(jid);
-                        isActuallyFromMe = false;
-                    }
-                }
+                // Resolve sender name and true 'IsFromMe' status.
+                string participantJid = NormalizeJid(e.Participant);
+                IncomingSenderResolution sender = IncomingSenderResolver.Resolve(
+                    isGroup,
+                    e.IsFromMe,
+                    _authState?.Me?.Name,
+                    SelfListDisplayName(),
+                    string.IsNullOrEmpty(participantJid) ? null : GetResolvedName(participantJid),
+                    GetResolvedName(jid),
+                    !string.IsNullOrEmpty(participantJid));
+                string senderName = sender.SenderName;
+                bool isActuallyFromMe = sender.IsFromMe;
                 
                 // Decided once, here, so the badge and the toast cannot disagree about whether the
                 // user is looking at this conversation.
@@ -1883,7 +1857,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         {
                             SenderName = senderName,
                             IsFromMe = isActuallyFromMe,
-                            ParticipantJid = NormalizeJid(e.Participant)
+                            ParticipantJid = participantJid
                         },
                         true,
                         SelfListDisplayName())
@@ -1902,7 +1876,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             MessageId = e.MessageId,
                             ChatJid = jid,
                             RemoteJid = jid,
-                            ParticipantJid = NormalizeJid(e.Participant),
+                            ParticipantJid = participantJid,
                             SenderName = senderName,
                             IsFromMe = isActuallyFromMe,
                             Timestamp = NormalizeIncomingTimestamp(e.Timestamp),
@@ -2155,12 +2129,15 @@ namespace Unison.Uwp.Services.WhatsApp
                         UnloadMessageCacheIfInactive(jid);
                     }
 
-                    // Stickers still need media hydration during offline replay.
+                    // Same hydration as live: stickers and images both download during replay.
+                    // Gating images on IsActiveChatJid left closed conversations with keys only
+                    // until opened, while a live arrival of the same picture already tried.
                     if (renderInfo?.IsSticker == true && renderInfo.StickerMessage != null)
                     {
                         _ = HydrateStickerForMessageAsync(chatMessage, renderInfo.StickerMessage, e.MessageId, jid);
                     }
-                    else if (renderInfo?.IsImage == true && renderInfo.ImageMessage != null && IsActiveChatJid(jid))
+
+                    if (renderInfo?.IsImage == true && renderInfo.ImageMessage != null)
                     {
                         _ = HydrateImageForMessageAsync(chatMessage, renderInfo.ImageMessage, e.MessageId, jid);
                     }
@@ -2440,7 +2417,8 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 // Same rule as the live path, and for the same reason: an offline replay runs when
                 // the app reconnects, which is exactly when it may be in the background with a
-                // conversation still open behind it.
+                // conversation still open behind it. Decided once here — the apply pass must not
+                // re-ask attention, or opening/closing the chat mid-drain drops the badge.
                 if (countUnread &&
                     IncomingAttention.For(
                         isFromMe,
@@ -2557,11 +2535,10 @@ namespace Unison.Uwp.Services.WhatsApp
                             }
                         }
 
-                        if (summary.UnreadDelta > 0 &&
-                            IncomingAttention.For(
-                                false,
-                                IsActiveChatJid(summary.Jid),
-                                Unison.Uwp.App.IsWindowVisible).CountsAsUnread)
+                        // UnreadDelta was decided at record time under IncomingAttention. Re-asking
+                        // here would drop counts when the user left the open chat between drain and
+                        // apply — the live path counts once, on arrival.
+                        if (summary.UnreadDelta > 0)
                         {
                             ChatUnreadTally.Bump(preferred, rows, summary.UnreadDelta);
                             unreadAdded += summary.UnreadDelta;

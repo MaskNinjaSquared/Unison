@@ -4,6 +4,20 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Offline unread counted twice and disagreed with live
+
+The offline summary recorded an unread delta under `IncomingAttention`, then the apply pass asked
+attention again — with `isFromMe` hard-coded to false. Opening or closing the chat between drain and
+apply dropped counts the live path would have kept. Apply now trusts the delta decided at record.
+
+Image hydration during offline replay also matched live: closed conversations no longer wait until
+opened to start downloading a picture that stickers already fetched.
+
+`IncomingSenderResolver` and `PushNameAcceptDecision` took the two name decisions out of the pump
+so live and offline cannot answer "who wrote this" or "may this push name enter the map" differently.
+
+---
+
 ## Offline duplicate fast-path dropped upgrades the live path kept
 
 Three follow-ups from the same pump scan that found the blank group author.
