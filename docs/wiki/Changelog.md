@@ -4,6 +4,19 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Offline replay wiped the group author strip
+
+The live path computes `listAuthorPrefix` and passes it into `ApplyChatPreviewIfNewer`. The offline
+replay summary path recorded the body and forgot the author, so every reconnect wrote
+`LastMessageAuthor = ""` over whatever the list already showed — groups lost "Nome: …" until the
+next live message. The same hole was in the alias-duplicate refresh.
+
+The summary now carries the prefix. The live path also started passing `ParticipantJid` into
+`FormatListAuthorPrefix`, so a message without a push name still has the short LID/phone fallback
+instead of a blank strip.
+
+---
+
 ## Pin and mute from history sync never reached the list
 
 `Conversation` carries `Pinned` and `MuteEndTime`. The preview builder read the subject, the unread

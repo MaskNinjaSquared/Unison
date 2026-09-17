@@ -810,6 +810,12 @@ namespace Unison.Uwp.Services.WhatsApp
             /// ticks the message actually has after a replay rather than assuming "sent".
             /// </summary>
             public string Status { get; set; }
+
+            /// <summary>
+            /// Group author strip ("Name: "). Without this, ApplyChatPreviewIfNewer writes an
+            /// empty author and the list loses the prefix the live path just computed.
+            /// </summary>
+            public string AuthorPrefix { get; set; }
         }
 
         private readonly object _offlineReplayUiLock = new object();

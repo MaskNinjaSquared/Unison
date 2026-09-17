@@ -812,7 +812,11 @@ namespace Unison.Uwp.Services.WhatsApp
                                 message?.Timestamp ?? DateTime.MinValue,
                                 JidHelper.IsGroupJid(item.Key),
                                 message?.IsFromMe == true,
-                                kind);
+                                kind,
+                                ChatPreviewNormalizer.FormatListAuthorPrefix(
+                                    message,
+                                    JidHelper.IsGroupJid(item.Key),
+                                    SelfListDisplayName()));
                         }
 
                         RuntimeDiagnosticsService.Instance.Write(
@@ -1007,7 +1011,11 @@ namespace Unison.Uwp.Services.WhatsApp
                     target.Timestamp,
                     JidHelper.IsGroupJid(canonical),
                     target.IsFromMe,
-                    ChatPreviewNormalizer.InferKindFromMessage(target));
+                    ChatPreviewNormalizer.InferKindFromMessage(target),
+                    ChatPreviewNormalizer.FormatListAuthorPrefix(
+                        target,
+                        JidHelper.IsGroupJid(canonical),
+                        SelfListDisplayName()));
             }
         }
 
@@ -1850,10 +1858,18 @@ namespace Unison.Uwp.Services.WhatsApp
                     Unison.Uwp.App.IsWindowVisible);
 
                 // List preview body is unprefixed; group author is applied via LastMessageAuthor.
+                // ParticipantJid is required when SenderName is still empty — otherwise the strip
+                // has nothing to fall back to and the live path draws a blank while history draws
+                // the short LID/phone label for the same message.
                 string displayContent = content;
                 string listAuthorPrefix = isGroup
                     ? ChatPreviewNormalizer.FormatListAuthorPrefix(
-                        new ChatMessage { SenderName = senderName, IsFromMe = isActuallyFromMe },
+                        new ChatMessage
+                        {
+                            SenderName = senderName,
+                            IsFromMe = isActuallyFromMe,
+                            ParticipantJid = NormalizeJid(e.Participant)
+                        },
                         true,
                         SelfListDisplayName())
                     : string.Empty;
@@ -2001,7 +2017,8 @@ namespace Unison.Uwp.Services.WhatsApp
                                 chatMessage.Timestamp,
                                 isGroup,
                                 isActuallyFromMe,
-                                previewKind));
+                                previewKind,
+                                listAuthorPrefix));
                     }
                     else
                     {
@@ -2014,7 +2031,8 @@ namespace Unison.Uwp.Services.WhatsApp
                             isActuallyFromMe,
                             countUnread: false,
                             previewKind,
-                            chatMessage.Status);
+                            chatMessage.Status,
+                            listAuthorPrefix);
                     }
                     if (!e.IsOffline)
                     {
@@ -2072,7 +2090,8 @@ namespace Unison.Uwp.Services.WhatsApp
                                 chatMessage.Timestamp,
                                 isGroup,
                                 isActuallyFromMe,
-                                previewKind));
+                                previewKind,
+                                listAuthorPrefix));
                     }
                     else
                     {
@@ -2085,7 +2104,8 @@ namespace Unison.Uwp.Services.WhatsApp
                             isActuallyFromMe,
                             countUnread: false,
                             previewKind,
-                            chatMessage.Status);
+                            chatMessage.Status,
+                            listAuthorPrefix);
                     }
                     if (!e.IsOffline)
                     {
@@ -2113,7 +2133,8 @@ namespace Unison.Uwp.Services.WhatsApp
                         isActuallyFromMe,
                         countUnread: true,
                         previewKind,
-                        chatMessage.Status);
+                        chatMessage.Status,
+                        listAuthorPrefix);
                     QueueOfflineReplayMessageForPersist(jid, chatMessage);
 
                     if (IsActiveChatJid(jid))
@@ -2317,7 +2338,8 @@ namespace Unison.Uwp.Services.WhatsApp
             bool isFromMe,
             bool countUnread,
             ChatPreviewKind kind = ChatPreviewKind.Text,
-            string status = null)
+            string status = null,
+            string authorPrefix = null)
         {
             string canonical = GetCanonicalJid(NormalizeJid(jid));
             if (string.IsNullOrWhiteSpace(canonical))
@@ -2352,6 +2374,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     summary.IsFromMe = isFromMe;
                     summary.Kind = kind;
                     summary.Status = status;
+                    summary.AuthorPrefix = authorPrefix ?? string.Empty;
                 }
 
                 // Same rule as the live path, and for the same reason: an offline replay runs when
@@ -2414,7 +2437,8 @@ namespace Unison.Uwp.Services.WhatsApp
                             IsFromMe = pair.Value.IsFromMe,
                             UnreadDelta = pair.Value.UnreadDelta,
                             Kind = pair.Value.Kind,
-                            Status = pair.Value.Status
+                            Status = pair.Value.Status,
+                            AuthorPrefix = pair.Value.AuthorPrefix
                         },
                         StringComparer.OrdinalIgnoreCase);
 
@@ -2463,7 +2487,7 @@ namespace Unison.Uwp.Services.WhatsApp
                                     summary.Timestamp,
                                     false,
                                     summary.Kind,
-                                    null,
+                                    summary.AuthorPrefix,
                                     null,
                                     summary.IsFromMe,
                                     HistoryLiveMessageMapper.FromStatus(summary.Status, summary.IsFromMe)))
@@ -2549,7 +2573,8 @@ namespace Unison.Uwp.Services.WhatsApp
             DateTime timestamp,
             bool isGroup,
             bool isFromMe,
-            ChatPreviewKind? kindHint = null)
+            ChatPreviewKind? kindHint = null,
+            string authorPrefix = null)
         {
             if (string.IsNullOrWhiteSpace(jid))
             {
@@ -2573,7 +2598,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             timestamp,
                             false,
                             kindHint,
-                            null,
+                            authorPrefix,
                             null,
                             isFromMe,
                             isFromMe ? MessageSendState.Sent : MessageSendState.NotApplicable))
