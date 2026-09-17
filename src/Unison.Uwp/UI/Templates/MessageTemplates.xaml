@@ -38,7 +38,13 @@
                     IsGroupChat="{x:Bind IsGroupChat, Mode=OneWay}"/>
 
                 <Border Background="Transparent" Margin="0,1,0,0" Padding="12,8,16,8">
-                    <StackPanel>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <StackPanel Grid.Row="0">
                         <StackPanel x:Name="SentForwardedLabel"
                                     Orientation="Horizontal"
                                     Margin="0,0,0,4"
@@ -115,12 +121,18 @@
                                    FontWeight="SemiBold"
                                    Margin="0,0,0,6"
                                    x:Load="{x:Bind ShowStickerError, Mode=OneWay}"/>
-                        <Grid x:Name="SentImageDownload"
+                        </StackPanel>
+                        <Grid x:Name="SentMediaPlaceholderHost"
+                              Grid.Row="1"
+                              HorizontalAlignment="Left"
                               MaxWidth="250"
                               MaxHeight="250"
+                              Loaded="MediaPlaceholder_Loaded"
+                              SizeChanged="MediaPlaceholder_SizeChanged">
+                        <Grid x:Name="SentImageDownload"
                               HorizontalAlignment="Stretch"
+                              VerticalAlignment="Stretch"
                               Margin="0,0,0,6"
-                              SizeChanged="MediaPlaceholder_SizeChanged"
                               x:Load="{x:Bind NeedsImageDownload, Mode=OneWay}">
                             <Border Background="{ThemeResource ChatDetailSentMediaDownloadOverlayBrush}" CornerRadius="4"/>
                             <Image Source="{x:Bind ThumbnailUri, Mode=OneWay, Converter={StaticResource StringToImageSourceConverter}, ConverterParameter=320}"
@@ -151,11 +163,9 @@
                                     Visibility="{x:Bind ShowImageDownloadIcon, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                         </Grid>
                         <Grid x:Name="SentVideoDownload"
-                              MaxWidth="250"
-                              MaxHeight="250"
                               HorizontalAlignment="Stretch"
+                              VerticalAlignment="Stretch"
                               Margin="0,0,0,6"
-                              SizeChanged="MediaPlaceholder_SizeChanged"
                               x:Load="{x:Bind NeedsVideoDownload, Mode=OneWay}">
                             <Border Background="{ThemeResource ChatDetailSentMediaDownloadOverlayBrush}" CornerRadius="4"/>
                             <Image Source="{x:Bind VideoPosterUri, Mode=OneWay, Converter={StaticResource StringToImageSourceConverter}, ConverterParameter=320}"
@@ -180,11 +190,9 @@
                                     Visibility="{x:Bind ShowVideoDownloadIcon, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                         </Grid>
                         <Grid x:Name="SentVideoPlay"
-                              MaxWidth="250"
-                              MaxHeight="250"
                               HorizontalAlignment="Stretch"
+                              VerticalAlignment="Stretch"
                               Margin="0,0,0,6"
-                              SizeChanged="MediaPlaceholder_SizeChanged"
                               x:Load="{x:Bind ShowVideoPlayOverlay, Mode=OneWay}">
                             <Border Background="#FF111111" CornerRadius="4"/>
                             <Image Source="{x:Bind VideoPosterUri, Mode=OneWay, Converter={StaticResource StringToImageSourceConverter}, ConverterParameter=320}"
@@ -209,6 +217,8 @@
                                 </Grid>
                             </Button>
                         </Grid>
+                        </Grid>
+                        <StackPanel Grid.Row="2">
                         <RichTextBlock x:Name="SentCaption"
                                        helpers:CommentRichService.Text="{x:Bind Caption, Mode=OneWay}"
                                        helpers:CommentRichService.MentionedJids="{x:Bind MentionedJids, Mode=OneWay}"
@@ -452,7 +462,8 @@
                                            Visibility="{x:Bind IsSendFailed, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                             </StackPanel>
                         </Grid>
-                    </StackPanel>
+                        </StackPanel>
+                    </Grid>
                 </Border>
 
                 <!-- Brief flash when scrolled-to from a reply/quote tap. -->
@@ -526,7 +537,13 @@
                     IsGroupChat="{x:Bind IsGroupChat, Mode=OneWay}"/>
 
                 <Border Background="Transparent" Margin="0,1,0,0" Padding="16,8,12,8">
-                    <StackPanel>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <StackPanel Grid.Row="0">
                         <TextBlock Text="{x:Bind SenderName, Mode=OneWay}"
                                    Visibility="{x:Bind ShowGroupSenderName, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
                                    Foreground="{ThemeResource ChatDetailGroupSenderBrush}"
@@ -614,12 +631,18 @@
                                    FontWeight="SemiBold"
                                    Margin="0,0,0,6"
                                    x:Load="{x:Bind ShowStickerError, Mode=OneWay}"/>
-                        <Grid x:Name="ReceivedImageDownload"
+                        </StackPanel>
+                        <Grid x:Name="ReceivedMediaPlaceholderHost"
+                              Grid.Row="1"
+                              HorizontalAlignment="Left"
                               MaxWidth="250"
                               MaxHeight="250"
+                              Loaded="MediaPlaceholder_Loaded"
+                              SizeChanged="MediaPlaceholder_SizeChanged">
+                        <Grid x:Name="ReceivedImageDownload"
                               HorizontalAlignment="Stretch"
+                              VerticalAlignment="Stretch"
                               Margin="0,0,0,6"
-                              SizeChanged="MediaPlaceholder_SizeChanged"
                               x:Load="{x:Bind NeedsImageDownload, Mode=OneWay}">
                             <Border Background="{ThemeResource ChatDetailReceivedMediaDownloadOverlayBrush}" CornerRadius="4"/>
                             <Image Source="{x:Bind ThumbnailUri, Mode=OneWay, Converter={StaticResource StringToImageSourceConverter}, ConverterParameter=320}"
@@ -648,11 +671,9 @@
                                     Visibility="{x:Bind ShowImageDownloadIcon, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                         </Grid>
                         <Grid x:Name="ReceivedVideoDownload"
-                              MaxWidth="250"
-                              MaxHeight="250"
                               HorizontalAlignment="Stretch"
+                              VerticalAlignment="Stretch"
                               Margin="0,0,0,6"
-                              SizeChanged="MediaPlaceholder_SizeChanged"
                               x:Load="{x:Bind NeedsVideoDownload, Mode=OneWay}">
                             <Border Background="{ThemeResource ChatDetailReceivedMediaDownloadOverlayBrush}" CornerRadius="4"/>
                             <Image Source="{x:Bind VideoPosterUri, Mode=OneWay, Converter={StaticResource StringToImageSourceConverter}, ConverterParameter=320}"
@@ -675,11 +696,9 @@
                                     Visibility="{x:Bind ShowVideoDownloadIcon, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                         </Grid>
                         <Grid x:Name="ReceivedVideoPlay"
-                              MaxWidth="250"
-                              MaxHeight="250"
                               HorizontalAlignment="Stretch"
+                              VerticalAlignment="Stretch"
                               Margin="0,0,0,6"
-                              SizeChanged="MediaPlaceholder_SizeChanged"
                               x:Load="{x:Bind ShowVideoPlayOverlay, Mode=OneWay}">
                             <Border Background="#FF111111" CornerRadius="4"/>
                             <Image Source="{x:Bind VideoPosterUri, Mode=OneWay, Converter={StaticResource StringToImageSourceConverter}, ConverterParameter=320}"
@@ -704,6 +723,8 @@
                                 </Grid>
                             </Button>
                         </Grid>
+                        </Grid>
+                        <StackPanel Grid.Row="2">
                         <RichTextBlock x:Name="ReceivedCaption"
                                        helpers:CommentRichService.Text="{x:Bind Caption, Mode=OneWay}"
                                        helpers:CommentRichService.MentionedJids="{x:Bind MentionedJids, Mode=OneWay}"
@@ -930,7 +951,8 @@
                                            MaxWidth="72"/>
                             </StackPanel>
                         </Grid>
-                    </StackPanel>
+                        </StackPanel>
+                    </Grid>
                 </Border>
 
                 <!-- Brief flash when scrolled-to from a reply/quote tap. -->

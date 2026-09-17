@@ -53,30 +53,104 @@ namespace Unison.Uwp.UI.Templates
         }
 
         /// <summary>
-        /// Keep download/play media tiles square: stretch up to 250×250, shrink on narrow phones.
+        /// Media host Grid (not StackPanel): set Width+Height up to 250 from the
+        /// messages ListView so the tile fills available width on small phones too.
+        /// Children stretch inside the host.
         /// </summary>
         private const double MediaPlaceholderMaxSide = 250;
 
+        /// <summary>Outer bubble margins (48+12) plus content padding (12+16).</summary>
+        private const double MediaPlaceholderChromeInset = 88;
+
+        private void MediaPlaceholder_Loaded(object sender, RoutedEventArgs e)
+        {
+            ApplyMediaPlaceholderSize(sender as FrameworkElement);
+        }
+
         private void MediaPlaceholder_SizeChanged(object sender, SizeChangedEventArgs e)
         {
+            // Ignore self-inflicted height/width updates once we already match the target.
             var grid = sender as FrameworkElement;
             if (grid == null)
             {
                 return;
             }
 
-            double width = e.NewSize.Width;
-            if (width <= 0 || double.IsNaN(width))
+            double paneWidth = ResolveMessagesPaneWidth(grid);
+            if (paneWidth <= 0)
             {
                 return;
             }
 
-            double side = width > MediaPlaceholderMaxSide ? MediaPlaceholderMaxSide : width;
+            double available = paneWidth > MediaPlaceholderChromeInset
+                ? paneWidth - MediaPlaceholderChromeInset
+                : paneWidth;
+            double side = available > MediaPlaceholderMaxSide
+                ? MediaPlaceholderMaxSide
+                : available;
+
+            if (System.Math.Abs(e.NewSize.Width - side) <= 0.5 &&
+                System.Math.Abs(e.NewSize.Height - side) <= 0.5)
+            {
+                return;
+            }
+
+            ApplyMediaPlaceholderSize(grid);
+        }
+
+        private static void ApplyMediaPlaceholderSize(FrameworkElement grid)
+        {
+            if (grid == null)
+            {
+                return;
+            }
+
+            double paneWidth = ResolveMessagesPaneWidth(grid);
+            double available = paneWidth > MediaPlaceholderChromeInset
+                ? paneWidth - MediaPlaceholderChromeInset
+                : paneWidth;
+
+            if (available <= 0 || double.IsNaN(available))
+            {
+                return;
+            }
+
+            double side = available > MediaPlaceholderMaxSide
+                ? MediaPlaceholderMaxSide
+                : available;
+
+            if (System.Math.Abs(grid.Width - side) > 0.5)
+            {
+                grid.Width = side;
+            }
 
             if (System.Math.Abs(grid.Height - side) > 0.5)
             {
                 grid.Height = side;
             }
+        }
+
+        private static double ResolveMessagesPaneWidth(FrameworkElement from)
+        {
+            DependencyObject current = from;
+            while (current != null)
+            {
+                var list = current as Windows.UI.Xaml.Controls.ListView;
+                if (list != null && list.ActualWidth > 0)
+                {
+                    return list.ActualWidth;
+                }
+
+                var items = current as Windows.UI.Xaml.Controls.ItemsControl;
+                if (items != null && items.ActualWidth > 120)
+                {
+                    return items.ActualWidth;
+                }
+
+                current = VisualTreeHelper.GetParent(current);
+            }
+
+            return 0;
         }
 
         private void DocumentReady_RightTapped(object sender, RightTappedRoutedEventArgs e)
