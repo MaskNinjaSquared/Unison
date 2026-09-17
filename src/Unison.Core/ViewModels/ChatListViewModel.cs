@@ -1545,6 +1545,14 @@ namespace Unison.Core.ViewModels
                     try
                     {
                         _chatStore?.ApplyTo(created);
+                        // History Conversation pin/mute after ApplyTo: the store must not wipe
+                        // flags the phone just sent, and those flags have to reach ChatStore too.
+                        HistoryChatPreviewApplier.ApplyLocalFlags(preview, created);
+                        if (preview.IsChatPinned.HasValue || preview.AppliesMute)
+                        {
+                            PersistHistoryLocalFlags(created, preview);
+                        }
+
                         TryApplyCanonicalPinFallback(created);
                     }
                     catch (Exception ex)
@@ -1558,13 +1566,39 @@ namespace Unison.Core.ViewModels
                     toAdd.Add(created);
                     IndexChat(index, created);
                 }
-                else if (HistoryChatPreviewApplier.ApplyIfNewer(preview, existing, yesterday, selfLabel))
+                else
                 {
-                    updated++;
+                    bool bodyChanged = HistoryChatPreviewApplier.ApplyIfNewer(
+                        preview,
+                        existing,
+                        yesterday,
+                        selfLabel);
+                    bool flagsChanged = false;
                     try
                     {
-                        _chatStore?.ApplyTo(existing);
-                        TryApplyCanonicalPinFallback(existing);
+                        if (bodyChanged)
+                        {
+                            updated++;
+                            _chatStore?.ApplyTo(existing);
+                        }
+
+                        // Flags apply even when the tip did not move — that was the whole miss:
+                        // a pinned chat whose last message was already on the list never got the pin.
+                        HistoryChatPreviewApplier.ApplyLocalFlags(preview, existing);
+                        flagsChanged = preview.IsChatPinned.HasValue || preview.AppliesMute;
+                        if (flagsChanged)
+                        {
+                            PersistHistoryLocalFlags(existing, preview);
+                            if (!bodyChanged)
+                            {
+                                updated++;
+                            }
+                        }
+
+                        if (bodyChanged || flagsChanged)
+                        {
+                            TryApplyCanonicalPinFallback(existing);
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -2477,6 +2511,54 @@ namespace Unison.Core.ViewModels
             if (alt.MutedUntil != null)
             {
                 chat.MutedUntil = alt.MutedUntil;
+            }
+        }
+
+        /// <summary>
+        /// Writes the pin / mute the history Conversation carried into the durable store.
+        /// Without this the icons appear for one session and vanish on the next launch.
+        /// </summary>
+        private void PersistHistoryLocalFlags(ChatItem chat, HistoryChatPreview preview)
+        {
+            if (chat == null || preview == null || _chatStore == null || string.IsNullOrWhiteSpace(chat.JID))
+            {
+                return;
+            }
+
+            if (preview.IsChatPinned.HasValue)
+            {
+                _ = PersistHistoryPinnedAsync(chat.JID, preview.IsChatPinned.Value);
+            }
+
+            if (preview.AppliesMute)
+            {
+                _ = PersistHistoryMuteAsync(chat.JID, preview.MutedUntil);
+            }
+        }
+
+        private async Task PersistHistoryPinnedAsync(string jid, bool pinned)
+        {
+            try
+            {
+                await _chatStore.SetChatPinnedAsync(jid, pinned).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[ChatListViewModel] Persist history pin failed: " + ex.Message);
+            }
+        }
+
+        private async Task PersistHistoryMuteAsync(string jid, long? mutedUntil)
+        {
+            try
+            {
+                await _chatStore.SetMutedUntilAsync(jid, mutedUntil).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[ChatListViewModel] Persist history mute failed: " + ex.Message);
             }
         }
 

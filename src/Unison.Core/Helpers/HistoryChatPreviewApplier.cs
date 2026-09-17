@@ -172,7 +172,44 @@ namespace Unison.Core.Helpers
                 Timestamp = WhatsAppMapper.FormatTimestamp(preview.LastMessageTimestampUtc, yesterdayLabel)
             };
             chat.IsGroup = preview.IsGroup;
+            ApplyLocalFlags(preview, chat);
             return chat;
+        }
+
+        /// <summary>
+        /// Pin / mute from the history Conversation onto the row. Idempotent when the
+        /// preview did not carry either flag.
+        /// </summary>
+        public static bool ApplyLocalFlags(HistoryChatPreview preview, ChatItem target)
+        {
+            if (preview == null || target == null)
+            {
+                return false;
+            }
+
+            if (!preview.IsChatPinned.HasValue && !preview.AppliesMute)
+            {
+                return false;
+            }
+
+            bool beforePinned = target.IsChatPinned;
+            long? beforePinnedTs = target.PinnedTimestamp;
+            long? beforeMute = target.MutedUntil;
+
+            AppStateChatMutation.ApplyFlags(
+                target,
+                new ChatFlagChange
+                {
+                    Pinned = preview.IsChatPinned,
+                    PinnedTimestamp = preview.PinnedTimestamp,
+                    AppliesMute = preview.AppliesMute,
+                    MuteEndTimestamp = preview.MutedUntil
+                },
+                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+
+            return beforePinned != target.IsChatPinned ||
+                   beforePinnedTs != target.PinnedTimestamp ||
+                   beforeMute != target.MutedUntil;
         }
 
         /// <summary>
@@ -247,26 +284,21 @@ namespace Unison.Core.Helpers
                 (string.IsNullOrWhiteSpace(target.Name) ||
                  (incomingTs >= existingTs && incomingTs != DateTime.MinValue && !string.IsNullOrWhiteSpace(preview.Name))))
             {
-                // Prefer a non-empty name; overwrite on newer/equal only when existing looks empty/weak.
-                // Group subjects matching the sync blacklist only fill a blank label.
-                bool existingHasName = !string.IsNullOrWhiteSpace(target.Name);
-                bool allowName =
-                    !preview.IsGroup ||
-                    GroupNameSyncBlacklist.ShouldApplySyncedSubject(
+                // A phone number (or bare JID user part) from the sync must not wipe a name the
+                // contact directory already resolved. That is what left the list showing an ID
+                // next to a conversation the app already knew by name.
+                bool incomingMeaningful = IsMeaningfulPreviewName(preview.Name, preview.Jid, preview.IsGroup);
+                bool existingMeaningful = IsMeaningfulPreviewName(target.Name, target.JID, target.IsGroup);
+                if (ChatNameReplacement.ShouldReplace(
+                        target.Name,
                         preview.Name,
-                        incomingMeaningful: !GroupNameSyncBlacklist.IsBlacklisted(preview.Name) &&
-                                            !string.IsNullOrWhiteSpace(preview.Name),
-                        existingMeaningful: existingHasName);
-
-                if (allowName &&
-                    (string.IsNullOrWhiteSpace(target.Name) ||
-                     (incomingTs >= existingTs && incomingTs != DateTime.MinValue)))
+                        incomingMeaningful,
+                        existingMeaningful,
+                        preview.IsGroup) &&
+                    !string.Equals(target.Name, preview.Name, StringComparison.Ordinal))
                 {
-                    if (!string.Equals(target.Name, preview.Name, StringComparison.Ordinal))
-                    {
-                        target.Name = preview.Name;
-                        changed = true;
-                    }
+                    target.Name = preview.Name;
+                    changed = true;
                 }
             }
 
@@ -278,11 +310,27 @@ namespace Unison.Core.Helpers
                     changed = true;
                 }
 
-                target.LastMessageParticipantJid = preview.LastMessageParticipantJid;
-                target.LastMessageSenderName = preview.LastMessageSenderName;
+                // A bare LID/phone in the author strip is a stand-in. Do not let a sync chunk that
+                // never named the sender overwrite a strip ChatAuthorProjection already fixed.
+                bool incomingSenderUsable = GroupParticipantResolver.IsUsableDisplayLabel(
+                    preview.LastMessageSenderName,
+                    preview.LastMessageParticipantJid);
+                bool existingSenderUsable = GroupParticipantResolver.IsUsableDisplayLabel(
+                    target.LastMessageSenderName,
+                    target.LastMessageParticipantJid);
+                bool keepExistingSender = !incomingSenderUsable && existingSenderUsable;
+
+                if (!keepExistingSender)
+                {
+                    target.LastMessageParticipantJid = preview.LastMessageParticipantJid;
+                    target.LastMessageSenderName = preview.LastMessageSenderName;
+                }
+
                 target.LastMessageIsFromMe = preview.LastMessageIsFromMe;
 
-                string incomingAuthor = ComposeAuthor(preview, selfDisplayName);
+                string incomingAuthor = keepExistingSender
+                    ? target.LastMessageAuthor
+                    : ComposeAuthor(preview, selfDisplayName);
                 // Never blank out an author the live path already resolved: an empty incoming
                 // strip (chunk that never named the sender) must not overwrite a populated one.
                 bool wipesExisting = string.IsNullOrEmpty(incomingAuthor) &&
@@ -343,7 +391,36 @@ namespace Unison.Core.Helpers
                 changed = true;
             }
 
+            if (ApplyLocalFlags(preview, target))
+            {
+                changed = true;
+            }
+
             return changed;
+        }
+
+        /// <summary>
+        /// Whether a preview name is something the user can recognise, not a phone echo or
+        /// invite-link placeholder. Core-side stand-in for the UWP <c>IsMeaningfulChatLabel</c>.
+        /// </summary>
+        private static bool IsMeaningfulPreviewName(string label, string jid, bool isGroup)
+        {
+            if (string.IsNullOrWhiteSpace(label))
+            {
+                return false;
+            }
+
+            if (PlaceholderChatLabel.IsPlaceholder(label, jid))
+            {
+                return false;
+            }
+
+            if (isGroup && GroupNameSyncBlacklist.IsBlacklisted(label))
+            {
+                return false;
+            }
+
+            return true;
         }
 
         private static List<string> CopyMentioned(IReadOnlyList<string> jids)

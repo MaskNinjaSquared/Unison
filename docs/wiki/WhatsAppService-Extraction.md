@@ -536,6 +536,15 @@ which is most of what this extraction adds.
 
 **Canonical JID:** introduce `IJidResolver` in phase 1 as a thin wrapper so 3.2 / 3.6 / 3.7 do not all rewrite aliasing at once.
 
+### Pinned / muted from history sync — found on device, fixed
+
+The earlier fix stopped local pin/mute from being *deleted* by whole-row writes. Separately, pin and
+mute that arrive on the history-sync `Conversation` itself were never applied: `HistoryChatPreviewBuilder`
+ignored `Pinned` and `MuteEndTime`, the preview store skipped chunks whose tip had not moved (so a
+pinned chat already on the list never got a notify), and `ApplyTo` from `ChatStore` ran after any
+in-memory flag would have been set. Both flags now ride on the preview, re-apply after `ApplyTo`,
+and persist per-field.
+
 ### Pinned / muted did not survive the sync — found on device, fixed
 
 The pin and mute icons were missing from the list after a sync. The two obvious suspects are both

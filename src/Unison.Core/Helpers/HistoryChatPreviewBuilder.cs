@@ -89,6 +89,8 @@ namespace Unison.Core.Helpers
                         true)
                     : string.Empty;
 
+                HistoryConversationFlags flags = HistoryConversationFlagsReader.Read(conv);
+
                 results.Add(new HistoryChatPreview
                 {
                     Jid = jid,
@@ -98,6 +100,10 @@ namespace Unison.Core.Helpers
                     IsGroup = isGroup,
                     Status = conv.Archived ? ChatStatus.Archived : ChatStatus.Active,
                     UnreadCount = unread,
+                    IsChatPinned = flags.Pinned,
+                    PinnedTimestamp = flags.PinnedTimestamp,
+                    AppliesMute = flags.AppliesMute,
+                    MutedUntil = flags.MutedUntil,
                     LastMessage = normalizedText,
                     LastMessageAuthor = author,
                     LastMessageIsFromMe = fromMe,

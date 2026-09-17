@@ -145,7 +145,18 @@ namespace Unison.Uwp.Data
 
                         if (!tipNewer && !statusChanged && !stripChanged)
                         {
-                            skipped++;
+                            // Preview table has no pin/mute columns. A chunk that only carries
+                            // those still has to reach the list — otherwise a pinned conversation
+                            // whose tip did not move never shows the icon.
+                            if (HasLocalFlagPayload(model))
+                            {
+                                notified.Add(CloneForNotify(model, status));
+                            }
+                            else
+                            {
+                                skipped++;
+                            }
+
                             continue;
                         }
 
@@ -196,7 +207,7 @@ namespace Unison.Uwp.Data
                 _writeLock.Release();
             }
 
-            if (upserted > 0)
+            if (notified.Count > 0)
             {
                 Debug.WriteLine(
                     "[HistoryChatPreviewStore] Delta upserted=" + upserted +
@@ -204,16 +215,17 @@ namespace Unison.Uwp.Data
                     " tip=" + tipUpdates +
                     " flags=" + flagUpdates +
                     " skipped=" + skipped +
+                    " notified=" + notified.Count +
                     " syncId=" + (syncId ?? "") +
                     " type=" + (syncType ?? "") +
                     " notify=" + notifyChunk);
-                if (notifyChunk && notified.Count > 0)
+                if (notifyChunk)
                 {
                     ChunkPersisted?.Invoke(this, new HistoryChatPreviewChunkEventArgs
                     {
                         SyncId = syncId ?? string.Empty,
                         SyncType = syncType ?? string.Empty,
-                        UpsertedCount = upserted,
+                        UpsertedCount = Math.Max(upserted, notified.Count),
                         Rows = notified
                     });
                 }
@@ -386,6 +398,10 @@ namespace Unison.Uwp.Data
                 IsGroup = model.IsGroup,
                 Status = status,
                 UnreadCount = model.UnreadCount,
+                IsChatPinned = model.IsChatPinned,
+                PinnedTimestamp = model.PinnedTimestamp,
+                AppliesMute = model.AppliesMute,
+                MutedUntil = model.MutedUntil,
                 LastMessage = model.LastMessage,
                 LastMessageAuthor = model.LastMessageAuthor,
                 LastMessageIsFromMe = model.LastMessageIsFromMe,
@@ -400,6 +416,15 @@ namespace Unison.Uwp.Data
                 SyncType = model.SyncType,
                 UpdatedAtUtc = model.UpdatedAtUtc
             };
+        }
+
+        /// <summary>
+        /// Pin / mute travel on the in-memory preview only (no columns on this table) and still
+        /// need to reach the list when the tip itself did not move.
+        /// </summary>
+        private static bool HasLocalFlagPayload(HistoryChatPreview model)
+        {
+            return model != null && (model.IsChatPinned.HasValue || model.AppliesMute);
         }
 
         private sealed class LifecycleSnapshot

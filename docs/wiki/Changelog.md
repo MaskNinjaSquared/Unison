@@ -4,6 +4,25 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Pin and mute from history sync never reached the list
+
+`Conversation` carries `Pinned` and `MuteEndTime`. The preview builder read the subject, the unread
+count and the archived bit, and left those two on the floor. App-state can bring the same facts
+later, but on a fresh link the history chunk is what we have — and a pinned chat whose tip had
+already landed on the list was skipped entirely by the delta gate, so the icon never appeared even
+in memory.
+
+Both flags now travel on `HistoryChatPreview`, apply through the same `AppStateChatMutation` the
+live path uses, and write into `ChatStore` so they survive the next launch. Mute deadlines that
+arrive in milliseconds are converted to unix seconds before storage; without that conversion a
+timed mute looked permanent.
+
+The same hydrate path was also overwriting a resolved contact name with the bare phone number the
+sync uses as a fallback, and replacing a group author strip `ChatAuthorProjection` had already
+named with a bare LID. Both now refuse to downgrade.
+
+---
+
 ## A toast for a poll that was nowhere in the app
 
 Found by comparing `MessageRenderReader` against `BackgroundMessagePreviewEngine`, which cannot
