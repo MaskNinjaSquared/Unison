@@ -342,38 +342,8 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
         /// True when a group label is just the chat id: <c>120363…</c> or the legacy
         /// <c>phone-timestamp</c> user part. Those are placeholders, not subjects.
         /// </summary>
-        public static bool IsIdPlaceholder(string label, string groupJid)
-        {
-            if (string.IsNullOrWhiteSpace(label))
-            {
-                return true;
-            }
-
-            string trimmed = label.Trim();
-            if (trimmed.Contains("@"))
-            {
-                return true;
-            }
-
-            string bare = (groupJid ?? string.Empty).Split('@')[0];
-            if (!string.IsNullOrEmpty(bare) &&
-                string.Equals(trimmed, bare, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-
-            if (trimmed.All(char.IsDigit))
-            {
-                return true;
-            }
-
-            string labelDigits = DigitsOnly(trimmed);
-            string jidDigits = DigitsOnly(bare);
-            bool hasLetters = trimmed.Any(char.IsLetter);
-            return !hasLetters &&
-                   jidDigits.Length >= 7 &&
-                   string.Equals(labelDigits, jidDigits, StringComparison.Ordinal);
-        }
+        public static bool IsIdPlaceholder(string label, string groupJid) =>
+            GroupIdPlaceholder.IsIdPlaceholder(label, groupJid);
 
         /// <summary>
         /// True when both sides hold the same set of member JIDs, which lets the caller merge
@@ -520,16 +490,6 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
             }
 
             return null;
-        }
-
-        private static string DigitsOnly(string value)
-        {
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                return string.Empty;
-            }
-
-            return new string(value.Where(char.IsDigit).ToArray());
         }
     }
 }

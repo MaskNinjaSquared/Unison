@@ -3283,48 +3283,11 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private bool IsMeaningfulChatLabel(string label, string contextJid, bool isGroup)
         {
-            if (string.IsNullOrWhiteSpace(label))
-            {
-                return false;
-            }
-
-            if (IsSelfMarkerLabel(label))
-            {
-                return false;
-            }
-
-            string trimmed = label.Trim();
-            if (IsMaskedPhoneLabel(trimmed))
-            {
-                return false;
-            }
-
-            if (trimmed.Contains("@"))
-            {
-                return false;
-            }
-
-            if (isGroup)
-            {
-                if (GroupNameSyncBlacklist.IsBlacklisted(trimmed))
-                {
-                    return false;
-                }
-
-                return !IsGroupIdPlaceholder(trimmed, contextJid);
-            }
-
-            string digits = ExtractDigitsOnly(trimmed);
-            string contextDigits = ExtractDigitsOnly(NormalizeJid(contextJid));
-            bool hasLetters = trimmed.Any(char.IsLetter);
-            if (!hasLetters &&
-                digits.Length >= 7 &&
-                string.Equals(digits, contextDigits, StringComparison.Ordinal))
-            {
-                return false;
-            }
-
-            return true;
+            return MeaningfulChatLabel.IsMeaningful(
+                label,
+                contextJid,
+                isGroup,
+                IsSelfMarkerLabel(label));
         }
 
         /// <summary>
@@ -7258,16 +7221,6 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        private static string ExtractDigitsOnly(string value)
-        {
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                return string.Empty;
-            }
-
-            return new string(value.Where(char.IsDigit).ToArray());
-        }
-
         private async Task DeduplicateChatsAsync(string reason)
         {
             await RunOnUiThreadAsync(() =>
@@ -7729,22 +7682,27 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         private void HealOwnIdentity(string normalizedUser, string normalizedLid)
         {
-            var meLid = _authState?.Me?.Lid;
-            if (string.IsNullOrEmpty(meLid))
+            string meLid = _authState?.Me?.Lid;
+            if (string.IsNullOrEmpty(meLid) || _authState?.Me == null)
             {
                 return;
             }
 
-            var normalizedMeLid = NormalizeJid(meLid);
+            string normalizedMeLid = NormalizeJid(meLid);
+            SelfIdentityHealingAction action = SelfIdentityHealingDecision.Decide(
+                normalizedUser,
+                normalizedLid,
+                _authState.Me.Id,
+                normalizedMeLid);
 
-            if (normalizedUser == normalizedMeLid && normalizedLid != _authState.Me.Id)
+            if (action == SelfIdentityHealingAction.HealMeId)
             {
                 Log("[WhatsAppService] IDENTITY HEALING (USync): Me.Lid (" + meLid + ") belongs to PN " +
                     normalizedLid + ", but current Me.Id is " + _authState.Me.Id + ". Fixing...");
                 _authState.Me.Id = normalizedLid;
                 _ = PersistAuthStateAsync(null, "usync-identity-heal");
             }
-            else if (normalizedUser == _authState.Me.Id && normalizedLid != normalizedMeLid)
+            else if (action == SelfIdentityHealingAction.PurgeForeignMapping)
             {
                 Log("[WhatsAppService] IDENTITY CORRUPTION DETECTED (USync): Me.Id (" + normalizedUser +
                     ") is mapped to foreign LID " + normalizedLid + ". PURGING...");

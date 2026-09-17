@@ -287,8 +287,14 @@ namespace Unison.Core.Helpers
                 // A phone number (or bare JID user part) from the sync must not wipe a name the
                 // contact directory already resolved. That is what left the list showing an ID
                 // next to a conversation the app already knew by name.
-                bool incomingMeaningful = IsMeaningfulPreviewName(preview.Name, preview.Jid, preview.IsGroup);
-                bool existingMeaningful = IsMeaningfulPreviewName(target.Name, target.JID, target.IsGroup);
+                bool incomingMeaningful = MeaningfulChatLabel.IsMeaningful(
+                    preview.Name,
+                    preview.Jid,
+                    preview.IsGroup);
+                bool existingMeaningful = MeaningfulChatLabel.IsMeaningful(
+                    target.Name,
+                    target.JID,
+                    target.IsGroup);
                 if (ChatNameReplacement.ShouldReplace(
                         target.Name,
                         preview.Name,
@@ -397,30 +403,6 @@ namespace Unison.Core.Helpers
             }
 
             return changed;
-        }
-
-        /// <summary>
-        /// Whether a preview name is something the user can recognise, not a phone echo or
-        /// invite-link placeholder. Core-side stand-in for the UWP <c>IsMeaningfulChatLabel</c>.
-        /// </summary>
-        private static bool IsMeaningfulPreviewName(string label, string jid, bool isGroup)
-        {
-            if (string.IsNullOrWhiteSpace(label))
-            {
-                return false;
-            }
-
-            if (PlaceholderChatLabel.IsPlaceholder(label, jid))
-            {
-                return false;
-            }
-
-            if (isGroup && GroupNameSyncBlacklist.IsBlacklisted(label))
-            {
-                return false;
-            }
-
-            return true;
         }
 
         private static List<string> CopyMentioned(IReadOnlyList<string> jids)

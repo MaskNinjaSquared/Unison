@@ -56,7 +56,7 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         private static bool IsGroupIdPlaceholder(string label, string groupJid) =>
-            GroupMetadataReader.IsIdPlaceholder(label, groupJid);
+            GroupIdPlaceholder.IsIdPlaceholder(label, groupJid);
 
         /// <summary>
         /// Whether we already hold a usable name for this group, counting the label on the
