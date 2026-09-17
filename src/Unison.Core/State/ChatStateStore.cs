@@ -24,13 +24,13 @@ namespace Unison.Core.State
         private readonly object _gate = new object();
 
         private readonly Dictionary<string, List<ChatMessage>> _messagesByChat =
-            new Dictionary<string, List<ChatMessage>>(StringComparer.Ordinal);
+            new Dictionary<string, List<ChatMessage>>(StringComparer.OrdinalIgnoreCase);
 
         private readonly Dictionary<string, string> _pushNames =
-            new Dictionary<string, string>(StringComparer.Ordinal);
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         private readonly Dictionary<string, string> _addressBookNames =
-            new Dictionary<string, string>(StringComparer.Ordinal);
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         public ChatStateStore(IDispatcher dispatcher)
         {
@@ -67,6 +67,11 @@ namespace Unison.Core.State
         // affinity rather than by _gate: WhatsAppService mutates on the UI thread,
         // and so do the view models that read. Reading these collections from a
         // background thread is only safe once the writes come through this class.
+        //
+        // Keys are OrdinalIgnoreCase. MessageIdIndex already was, and JidHelper leaves
+        // mixed-case @g.us alone — with Ordinal those two disagreed, so a group whose
+        // casing drifted on the wire could be "already seen" in the index and missing
+        // from the message list.
         // ---------------------------------------------------------------------
 
         /// <summary>Transitional. Prefer <see cref="GetMessages"/> and <see cref="UpsertMessagesAsync"/>.</summary>
@@ -112,7 +117,7 @@ namespace Unison.Core.State
 
             foreach (var chat in Chats)
             {
-                if (string.Equals(chat.JID, jid, StringComparison.Ordinal))
+                if (string.Equals(chat.JID, jid, StringComparison.OrdinalIgnoreCase))
                 {
                     return chat;
                 }

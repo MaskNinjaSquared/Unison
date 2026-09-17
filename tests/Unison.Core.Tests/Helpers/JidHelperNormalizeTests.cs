@@ -126,17 +126,14 @@ namespace Unison.Core.Tests.Helpers
         [Fact]
         public void A_group_address_is_returned_before_any_other_rule_runs()
         {
-            // RECORDED, NOT ENDORSED. Groups take an early return, so unlike a direct
-            // address the server part is never lowercased. Two spellings of the same group
-            // therefore normalize to two different strings.
+            // RECORDED. Groups take an early return, so unlike a direct address the
+            // server part is never lowercased. Two spellings of the same group therefore
+            // normalize to two different strings.
             //
-            // That is only harmless while every consumer compares group addresses
-            // case-insensitively. WhatsAppService does; ChatStateStore does not -- it keys
-            // chats and messages with StringComparer.Ordinal. If a mixed-case @g.us ever
-            // reaches the store, one group becomes two rows.
-            //
-            // Left as-is: changing chat identity is not a change to make without a device
-            // pass. This test exists so the asymmetry is declared rather than discovered.
+            // ChatStateStore keys messages and push names with OrdinalIgnoreCase, and
+            // MessageIdIndex does the same, so the two spellings still land in one
+            // bucket. Lowercasing @g.us inside Normalize remains a separate identity
+            // change and is not made here.
             Assert.Equal("120363000000000000@G.US", JidHelper.Normalize("120363000000000000@G.US"));
         }
 

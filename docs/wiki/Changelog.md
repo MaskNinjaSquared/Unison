@@ -4,6 +4,20 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Group message keys disagreed on casing; hydrate failures were silent
+
+`MessageIdIndex` already keyed chat JIDs with `OrdinalIgnoreCase`. `ChatStateStore.MessagesByChat`
+(and the push-name / address-book maps) used `Ordinal`, and `FindChat` compared with `Ordinal`
+too — so a mixed-case `@g.us` that `JidHelper.Normalize` leaves alone could be "already seen" in
+the index while missing from the message list. Those maps and `FindChat` now match the index.
+`JidHelper` itself is unchanged; lowercasing group servers is still a separate identity change.
+
+Image and sticker hydrate tasks that run beside the incoming pump were started with `_ =` and
+any throw left the bubble without media and no log. They now go through `ObserveIncomingWork`,
+which records the failure under the messages diagnostics channel.
+
+---
+
 ## Offline unread counted twice and disagreed with live
 
 The offline summary recorded an unread delta under `IncomingAttention`, then the apply pass asked

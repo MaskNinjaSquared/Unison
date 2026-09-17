@@ -1262,6 +1262,39 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
+        /// <summary>
+        /// Fire-and-forget that still surfaces a failure. Hydrate / reaction work that runs
+        /// beside the pump used to be discarded with <c>_ =</c>, so a download that threw left
+        /// the bubble without media and no log.
+        /// </summary>
+        private static void ObserveIncomingWork(Task work, string label, string messageId)
+        {
+            if (work == null)
+            {
+                return;
+            }
+
+            _ = ObserveIncomingWorkAsync(work, label, messageId);
+        }
+
+        private static async Task ObserveIncomingWorkAsync(Task work, string label, string messageId)
+        {
+            try
+            {
+                await work.ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "[WhatsAppService] " + label + " failed for " + (messageId ?? "?") + ": " + ex.Message);
+                RuntimeDiagnosticsService.Instance.RecordException(
+                    "messages",
+                    label + "-failed",
+                    ex,
+                    "messageId=" + (messageId ?? string.Empty));
+            }
+        }
+
         private void ResetIncomingMessagePump(string reason, bool requeueCurrent)
         {
             int generation;
@@ -2134,12 +2167,18 @@ namespace Unison.Uwp.Services.WhatsApp
                     // until opened, while a live arrival of the same picture already tried.
                     if (renderInfo?.IsSticker == true && renderInfo.StickerMessage != null)
                     {
-                        _ = HydrateStickerForMessageAsync(chatMessage, renderInfo.StickerMessage, e.MessageId, jid);
+                        ObserveIncomingWork(
+                            HydrateStickerForMessageAsync(chatMessage, renderInfo.StickerMessage, e.MessageId, jid),
+                            "hydrate-sticker",
+                            e.MessageId);
                     }
 
                     if (renderInfo?.IsImage == true && renderInfo.ImageMessage != null)
                     {
-                        _ = HydrateImageForMessageAsync(chatMessage, renderInfo.ImageMessage, e.MessageId, jid);
+                        ObserveIncomingWork(
+                            HydrateImageForMessageAsync(chatMessage, renderInfo.ImageMessage, e.MessageId, jid),
+                            "hydrate-image",
+                            e.MessageId);
                     }
 
                     return;
@@ -2152,12 +2191,18 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 if (renderInfo?.IsImage == true && renderInfo.ImageMessage != null)
                 {
-                    _ = HydrateImageForMessageAsync(chatMessage, renderInfo.ImageMessage, e.MessageId, jid);
+                    ObserveIncomingWork(
+                        HydrateImageForMessageAsync(chatMessage, renderInfo.ImageMessage, e.MessageId, jid),
+                        "hydrate-image",
+                        e.MessageId);
                 }
 
                 if (renderInfo?.IsSticker == true && renderInfo.StickerMessage != null)
                 {
-                    _ = HydrateStickerForMessageAsync(chatMessage, renderInfo.StickerMessage, e.MessageId, jid);
+                    ObserveIncomingWork(
+                        HydrateStickerForMessageAsync(chatMessage, renderInfo.StickerMessage, e.MessageId, jid),
+                        "hydrate-sticker",
+                        e.MessageId);
                 }
 
                 // Update chat preview on UI thread
