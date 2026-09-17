@@ -4,6 +4,28 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## A toast for a poll that was nowhere in the app
+
+Found by comparing `MessageRenderReader` against `BackgroundMessagePreviewEngine`, which cannot
+reference Core and so carries its own reading of an envelope — and turned out to be the more
+complete of the two.
+
+Polls come in three proto fields, `PollCreationMessage` and `V2` and `V3`, and a poll sent by a
+current WhatsApp arrives as V3. Core read only V1. So a poll received today fell off the end of the
+cascade as an unknown type and was never drawn anywhere: not live, not after a sync. The background
+task reads all three, so it still raised the notification — the user got a toast and then found
+nothing in the conversation it pointed at.
+
+Same shape, smaller blast radius, for `LiveLocationMessage` and `ContactsArrayMessage`: known to the
+background reader, unknown to Core, so sharing live location or a batch of contact cards produced
+the same silence.
+
+One divergence is left on purpose. For an envelope neither side recognises, the background reader
+falls back to `[Message]` and Core draws nothing; which of the two is right is a product call and
+is not made here.
+
+---
+
 ## Polls, shared contacts and locations disappeared from the conversation after a sync
 
 Not blank — gone. The same short classification behind the quote bug turned out to sit in a much

@@ -41,6 +41,76 @@ public class MessageRenderReaderTests
     }
 
     [Fact]
+    public void A_poll_from_a_current_WhatsApp_is_read()
+    {
+        // V3 is what a poll sent today actually arrives as. Reading only V1 meant these fell off
+        // the end of the cascade as unknown and were never drawn, while the background task - which
+        // reads all three versions - still raised a toast for them.
+        var msg = new Proto.Message
+        {
+            PollCreationMessageV3 = new Proto.Message.Types.PollCreationMessage { Name = "lunch?" }
+        };
+
+        Assert.Equal("[Poll] lunch?", MessageRenderReader.Read(msg).Content);
+    }
+
+    [Fact]
+    public void The_middle_poll_version_is_read_too()
+    {
+        var msg = new Proto.Message
+        {
+            PollCreationMessageV2 = new Proto.Message.Types.PollCreationMessage { Name = "dinner?" }
+        };
+
+        Assert.Equal("[Poll] dinner?", MessageRenderReader.Read(msg).Content);
+    }
+
+    [Fact]
+    public void The_oldest_poll_version_is_still_read()
+    {
+        var msg = new Proto.Message
+        {
+            PollCreationMessage = new Proto.Message.Types.PollCreationMessage { Name = "coffee?" }
+        };
+
+        Assert.Equal("[Poll] coffee?", MessageRenderReader.Read(msg).Content);
+    }
+
+    [Fact]
+    public void A_poll_carrying_more_than_one_version_is_read_as_the_newest()
+    {
+        var msg = new Proto.Message
+        {
+            PollCreationMessage = new Proto.Message.Types.PollCreationMessage { Name = "old" },
+            PollCreationMessageV3 = new Proto.Message.Types.PollCreationMessage { Name = "new" }
+        };
+
+        Assert.Equal("[Poll] new", MessageRenderReader.Read(msg).Content);
+    }
+
+    [Fact]
+    public void A_live_location_is_read_like_a_location()
+    {
+        var msg = new Proto.Message
+        {
+            LiveLocationMessage = new Proto.Message.Types.LiveLocationMessage()
+        };
+
+        Assert.Equal("[Location]", MessageRenderReader.Read(msg).Content);
+    }
+
+    [Fact]
+    public void A_handful_of_contact_cards_is_read_as_contacts()
+    {
+        var msg = new Proto.Message
+        {
+            ContactsArrayMessage = new Proto.Message.Types.ContactsArrayMessage()
+        };
+
+        Assert.Equal("[Contacts]", MessageRenderReader.Read(msg).Content);
+    }
+
+    [Fact]
     public void A_sticker_that_also_carries_an_image_is_read_as_a_sticker()
     {
         // The reason the sticker arm sits above the image arm. A live envelope merged field by

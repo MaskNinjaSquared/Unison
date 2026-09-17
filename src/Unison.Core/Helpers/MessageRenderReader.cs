@@ -144,6 +144,27 @@ namespace Unison.Core.Helpers
                 return null;
             }
 
+            // Three of them, and the newest is the one in use: a poll sent by a current WhatsApp
+            // arrives as V3. Only V1 was read here, so the ones people actually receive fell off
+            // the end of this cascade as unknown and were never drawn — while the background task,
+            // which reads all three, still raised the toast for them. A notification about a
+            // message that was nowhere in the app.
+            if (unwrapped.PollCreationMessageV3 != null)
+            {
+                return new MessageRenderInfo
+                {
+                    Content = "[Poll] " + unwrapped.PollCreationMessageV3.Name
+                };
+            }
+
+            if (unwrapped.PollCreationMessageV2 != null)
+            {
+                return new MessageRenderInfo
+                {
+                    Content = "[Poll] " + unwrapped.PollCreationMessageV2.Name
+                };
+            }
+
             if (unwrapped.PollCreationMessage != null)
             {
                 return new MessageRenderInfo
@@ -169,7 +190,14 @@ namespace Unison.Core.Helpers
                 };
             }
 
-            if (unwrapped.LocationMessage != null)
+            // Several cards at once: one envelope, no single name to put on it.
+            if (unwrapped.ContactsArrayMessage != null)
+            {
+                return new MessageRenderInfo { Content = "[Contacts]" };
+            }
+
+            // Live location is its own field, not a LocationMessage that happens to move.
+            if (unwrapped.LocationMessage != null || unwrapped.LiveLocationMessage != null)
             {
                 return new MessageRenderInfo { Content = "[Location]" };
             }
