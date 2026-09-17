@@ -799,7 +799,7 @@ namespace Unison.Uwp.Services.WhatsApp
                                 preview = MediaPreviewTag.ForKind(kind) ?? "[Message]";
                             }
 
-                            await RefreshChatPreviewFromReplayAsync(
+                            await RefreshChatPreviewViaFacadeAsync(
                                 item.Key,
                                 preview,
                                 message?.Timestamp ?? DateTime.MinValue,
@@ -915,9 +915,9 @@ namespace Unison.Uwp.Services.WhatsApp
             catch { return null; }
         }
 
-        private async Task HandleMessageRevocationAsync(string chatJid, Proto.Message.Types.ProtocolMessage protocol, string envelopeMessageId = null)
+        public async Task ApplyIncomingRevocationAsync(string chatJid, string targetMessageId, string envelopeMessageId = null)
         {
-            string targetId = protocol?.Key?.Id;
+            string targetId = targetMessageId;
             if (string.IsNullOrWhiteSpace(chatJid) || string.IsNullOrWhiteSpace(targetId)) return;
 
             string canonical = GetCanonicalJid(chatJid);
@@ -966,30 +966,8 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             if (target == null) return;
-            target.Content = "[Message Deleted]";
-            target.Caption = string.Empty;
-            target.Kind = ChatMessageKind.Text;
-            target.IsImage = false;
-            target.ImageUri = null;
-            target.ImageUrl = null;
-            target.ImageDirectPath = null;
-            target.ImageMediaKeyBase64 = null;
-            target.ImageFileEncSha256Base64 = null;
-            target.ImageMimeType = null;
-            target.VideoUri = null;
-            target.VideoPosterUri = null;
-            target.VideoUrl = null;
-            target.VideoDirectPath = null;
-            target.VideoMediaKeyBase64 = null;
-            target.VideoFileEncSha256Base64 = null;
-            target.VideoMimeType = null;
-            target.VideoDurationSeconds = 0;
-            target.IsAudio = false;
-            target.AudioUri = null;
-            target.AudioUrl = null;
-            target.AudioDirectPath = null;
-            target.AudioMediaKeyBase64 = null;
-            target.AudioFileEncSha256Base64 = null;
+            MessageRevocationContent.ApplyTombstone(target);
+
             await SaveMessageAsync(canonical, target);
 
             if (IsActiveChatJid(canonical)) QueueChatMessagesChanged(canonical);
@@ -998,7 +976,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 : null;
             if (latest != null && string.Equals(latest.Id, target.Id, StringComparison.Ordinal))
             {
-                await RefreshChatPreviewFromReplayAsync(
+                await RefreshChatPreviewViaFacadeAsync(
                     canonical,
                     target.Content,
                     target.Timestamp,
@@ -1728,7 +1706,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 {
                     QueueMessageControlWork(
                         "message-revoke:" + e.MessageId,
-                        () => HandleMessageRevocationAsync(jid, e.Message.ProtocolMessage, e.MessageId));
+                        () => _messageService.ApplyIncomingRevocationAsync(jid, e.Message.ProtocolMessage.Key?.Id, e.MessageId));
                     return;
                 }
 
@@ -1980,7 +1958,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     {
                         QueueMessageControlWork(
                             "alias-duplicate-preview:" + chatMessage.Id,
-                            () => RefreshChatPreviewFromReplayAsync(
+                            () => RefreshChatPreviewViaFacadeAsync(
                                 jid,
                                 displayContent,
                                 chatMessage.Timestamp,
@@ -2027,7 +2005,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     {
                         QueueMessageControlWork(
                             "duplicate-preview:" + chatMessage.Id,
-                            () => RefreshChatPreviewFromReplayAsync(
+                            () => RefreshChatPreviewViaFacadeAsync(
                                 jid,
                                 displayContent,
                                 chatMessage.Timestamp,
@@ -2459,6 +2437,35 @@ namespace Unison.Uwp.Services.WhatsApp
         }
         private void MarkOfflineReplayChatDirty(string jid) => _pendingMessages.MarkDirty(jid);
 
+        private Task RefreshChatPreviewViaFacadeAsync(
+            string jid,
+            string displayContent,
+            DateTime timestamp,
+            bool isGroup,
+            bool isFromMe,
+            ChatPreviewKind? kindHint = null,
+            string authorPrefix = null)
+        {
+            if (_chatService != null)
+            {
+                return _chatService.RefreshChatPreviewAsync(
+                    jid,
+                    displayContent,
+                    timestamp,
+                    isFromMe,
+                    kindHint,
+                    authorPrefix);
+            }
+
+            return RefreshChatPreviewFromReplayAsync(
+                jid,
+                displayContent,
+                timestamp,
+                isGroup,
+                isFromMe,
+                kindHint,
+                authorPrefix);
+        }
         private async Task RefreshChatPreviewFromReplayAsync(
             string jid,
             string displayContent,
@@ -2517,7 +2524,10 @@ namespace Unison.Uwp.Services.WhatsApp
         /// Called once after the offline batch drain completes, instead of per-message
         /// UI dispatches during the drain.
         /// </summary>
-        private async Task RefreshAllChatPreviewsFromStoredAsync(string reason)
+        public Task RefreshAllChatPreviewsFromStoredAsync(string reason) =>
+            RefreshAllChatPreviewsFromStoredCoreAsync(reason);
+
+        private async Task RefreshAllChatPreviewsFromStoredCoreAsync(string reason)
         {
             await RunOnUiThreadAsync(() =>
             {
@@ -2560,6 +2570,9 @@ namespace Unison.Uwp.Services.WhatsApp
                 Debug.WriteLine($"[WhatsAppService] Bulk preview refresh ({reason}): updated {updated} chat previews");
             });
         }
+
+        public Task ReconcileChatListFromStoredAsync(string reason) =>
+            ReconcileChatListFromStoredMessagesAsync(reason);
 
         private async Task ReconcileChatListFromStoredMessagesAsync(string reason)
         {

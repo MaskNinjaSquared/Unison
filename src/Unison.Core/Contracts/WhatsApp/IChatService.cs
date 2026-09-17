@@ -10,6 +10,7 @@
 // because the list has to sort and draw before any of that round trips - and
 // has to keep working with no connection at all.
 // =============================================================================
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Unison.Core.Models;
@@ -87,5 +88,20 @@ namespace Unison.Core.Contracts.WhatsApp
         Task ApplyOfflineReplayChatSummariesAsync(
             IReadOnlyList<OfflineReplayChatSummary> summaries,
             string reason);
+
+        /// <summary>Updates list rows for one chat tip (duplicate/revoke/replay refresh).</summary>
+        Task RefreshChatPreviewAsync(
+            string chatJid,
+            string previewText,
+            DateTime timestamp,
+            bool isFromMe,
+            ChatPreviewKind? kindHint = null,
+            string authorPrefix = null);
+
+        /// <summary>Re-tips every open row from the in-memory message cache.</summary>
+        Task RefreshAllChatPreviewsFromStoredAsync(string reason);
+
+        /// <summary>Creates missing rows and re-tips/reorders from the in-memory message cache.</summary>
+        Task ReconcileChatListFromStoredAsync(string reason);
     }
 }

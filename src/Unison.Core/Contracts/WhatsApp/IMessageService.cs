@@ -168,5 +168,14 @@ namespace Unison.Core.Contracts.WhatsApp
 
         /// <summary>Queues a message for debounced JSON/SQLite persist and schedules a flush.</summary>
         void QueueIncomingPersist(string chatJid, ChatMessage message);
+
+        /// <summary>
+        /// Applies an inbound revoke protocol to the timeline (tombstone + persist).
+        /// Prefer this over calling the WhatsApp client from the pump.
+        /// </summary>
+        Task ApplyIncomingRevocationAsync(
+            string chatJid,
+            string targetMessageId,
+            string envelopeMessageId = null);
     }
 }

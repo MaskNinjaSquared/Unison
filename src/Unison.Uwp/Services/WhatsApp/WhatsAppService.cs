@@ -2211,11 +2211,22 @@ namespace Unison.Uwp.Services.WhatsApp
                     // Extra in-memory repair only for large desktop drains (already warmed timelines).
                     if (offlineCount >= 50 && !UseFrugalSyncBudget)
                     {
-                        await ReconcileChatListFromStoredMessagesAsync(
-                            "delayed-offline-repair:" + offlineCount);
-                        await Task.Delay(400, token);
-                        await RefreshAllChatPreviewsFromStoredAsync(
-                            "delayed-post-offline-drain");
+                        if (_chatService != null)
+                        {
+                            await _chatService.ReconcileChatListFromStoredAsync(
+                                "delayed-offline-repair:" + offlineCount);
+                            await Task.Delay(400, token);
+                            await _chatService.RefreshAllChatPreviewsFromStoredAsync(
+                                "delayed-post-offline-drain");
+                        }
+                        else
+                        {
+                            await ReconcileChatListFromStoredMessagesAsync(
+                                "delayed-offline-repair:" + offlineCount);
+                            await Task.Delay(400, token);
+                            await RefreshAllChatPreviewsFromStoredAsync(
+                                "delayed-post-offline-drain");
+                        }
                     }
 
                     RuntimeDiagnosticsService.Instance.Write(

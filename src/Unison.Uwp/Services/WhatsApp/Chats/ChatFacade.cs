@@ -291,6 +291,78 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             return _appState.ReconcileChatPreviewsFromSqliteAsync(chatJids, reason);
         }
 
+        public async Task RefreshChatPreviewAsync(
+            string chatJid,
+            string previewText,
+            DateTime timestamp,
+            bool isFromMe,
+            ChatPreviewKind? kindHint = null,
+            string authorPrefix = null)
+        {
+            if (string.IsNullOrWhiteSpace(chatJid))
+            {
+                return;
+            }
+
+            await _appState.RunOnUiThreadAsync(() =>
+            {
+                IReadOnlyList<ChatItem> rows = _appState.GetChatRowsForCanonicalJid(chatJid);
+                if (rows == null || rows.Count == 0)
+                {
+                    return;
+                }
+
+                string yesterday = LocalizedStrings.Get("Common_Yesterday", "Yesterday");
+                MessageSendState sendState = isFromMe
+                    ? MessageSendState.Sent
+                    : MessageSendState.NotApplicable;
+                ChatItem preferred = null;
+
+                foreach (ChatItem row in rows)
+                {
+                    if (row == null)
+                    {
+                        continue;
+                    }
+
+                    if (LiveChatPreviewApplier.ApplyIfNewer(
+                        row,
+                        previewText,
+                        timestamp,
+                        false,
+                        kindHint,
+                        authorPrefix,
+                        mentionedJids: null,
+                        isFromMe,
+                        sendState,
+                        messageId: null,
+                        yesterday))
+                    {
+                        preferred = preferred ?? row;
+                    }
+                }
+
+                if (preferred != null)
+                {
+                    int index = _appState.Chats.IndexOf(preferred);
+                    if (index > 0)
+                    {
+                        _appState.Chats.Move(index, 0);
+                    }
+                }
+            }).ConfigureAwait(false);
+        }
+
+        public Task RefreshAllChatPreviewsFromStoredAsync(string reason)
+        {
+            return _appState.RefreshAllChatPreviewsFromStoredAsync(reason);
+        }
+
+        public Task ReconcileChatListFromStoredAsync(string reason)
+        {
+            return _appState.ReconcileChatListFromStoredAsync(reason);
+        }
+
         public async Task<LiveIncomingChatListApplyResult> ApplyLiveIncomingChatListAsync(
             LiveIncomingChatListApplyRequest request)
         {

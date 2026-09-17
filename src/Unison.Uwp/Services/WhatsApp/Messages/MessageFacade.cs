@@ -1099,5 +1099,16 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             _whatsAppService.QueueIncomingMessagePersist(chatJid, message);
             _whatsAppService.SchedulePersistPublic();
         }
+
+        public Task ApplyIncomingRevocationAsync(
+            string chatJid,
+            string targetMessageId,
+            string envelopeMessageId = null)
+        {
+            return _whatsAppService.ApplyIncomingRevocationAsync(
+                chatJid,
+                targetMessageId,
+                envelopeMessageId);
+        }
     }
 }

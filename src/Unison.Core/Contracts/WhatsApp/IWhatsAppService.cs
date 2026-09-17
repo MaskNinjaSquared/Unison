@@ -275,6 +275,26 @@ namespace Unison.Core.Contracts.WhatsApp
         void QueueIncomingMessagePersist(string chatJid, ChatMessage message);
 
         /// <summary>
+        /// Transitional host for <see cref="IMessageService.ApplyIncomingRevocationAsync"/>.
+        /// </summary>
+        Task ApplyIncomingRevocationAsync(
+            string chatJid,
+            string targetMessageId,
+            string envelopeMessageId = null);
+
+        /// <summary>
+        /// Transitional host for <see cref="IChatService.RefreshAllChatPreviewsFromStoredAsync"/> —
+        /// walks <c>MessagesByChat</c>. Prefer the chat façade.
+        /// </summary>
+        Task RefreshAllChatPreviewsFromStoredAsync(string reason);
+
+        /// <summary>
+        /// Transitional host for <see cref="IChatService.ReconcileChatListFromStoredAsync"/> —
+        /// creates missing rows and re-tips from <c>MessagesByChat</c>. Prefer the chat façade.
+        /// </summary>
+        Task ReconcileChatListFromStoredAsync(string reason);
+
+        /// <summary>
         /// Writes the account's chat-list pin to the in-memory rows and to the local mirror,
         /// without telling the server. Prefer <see cref="IChatService.SetPinnedAsync"/>, which is
         /// what actually pins the chat; this is the local half of it.
