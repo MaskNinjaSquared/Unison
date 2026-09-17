@@ -368,7 +368,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// Persists current chats and messages to disk.
         /// </summary>
 
-        public async Task PersistDataAsync()
+        public async Task<bool> PersistDataAsync()
         {
             await _persistRunLock.WaitAsync();
             try
@@ -404,10 +404,12 @@ namespace Unison.Uwp.Services.WhatsApp
                 await _messageStore.SaveJidAliasesAsync(aliasSnapshot ?? new Dictionary<string, string>(), chatJids ?? new List<string>());
 
                 Debug.WriteLine($"[WhatsAppService] Persisted {(chatSnapshot?.Count ?? 0)} chat rows and contact metadata");
+                return true;
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[WhatsAppService] Failed to persist data: {ex.Message}");
+                return false;
             }
             finally
             {
@@ -464,7 +466,13 @@ namespace Unison.Uwp.Services.WhatsApp
                         return;
                     }
 
-                    await PersistDataAsync();
+                    // Put the save back if it did not land, or a transient disk error would
+                    // swallow the debt and the change would sit unsaved until something else
+                    // happened to dirty the catalogue again.
+                    if (!await PersistDataAsync())
+                    {
+                        _persistScheduler.Restore();
+                    }
                 }, null, 3000, Timeout.Infinite);
             }
         }

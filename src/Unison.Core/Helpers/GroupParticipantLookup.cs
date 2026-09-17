@@ -599,8 +599,7 @@ namespace Unison.Core.Helpers
 
                 if (!string.IsNullOrWhiteSpace(chat.Name) &&
                     chat.Name.IndexOf('@') < 0 &&
-                    !string.Equals(chat.Name, "Me", StringComparison.OrdinalIgnoreCase) &&
-                    !string.Equals(chat.Name, "You", StringComparison.OrdinalIgnoreCase))
+                    !SelfChatNaming.IsKnownFallback(chat.Name))
                 {
                     IndexDirectMap(names, raw, chat.Name.Trim());
                     IndexDirectMap(names, canonical, chat.Name.Trim());

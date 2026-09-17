@@ -90,6 +90,7 @@ namespace Unison.Uwp.Shell.Unison.Views
         private void SettingsView_Loaded(object sender, RoutedEventArgs e)
         {
             Activate();
+            ViewModel?.Attach();
             SetStickyVisible(false, animate: false);
         }
 
@@ -100,6 +101,8 @@ namespace Unison.Uwp.Shell.Unison.Views
                 _stickyFadeStoryboard.Stop();
                 _stickyFadeStoryboard = null;
             }
+
+            _viewModel?.Detach();
         }
 
         private void Activate()

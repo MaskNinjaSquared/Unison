@@ -307,23 +307,7 @@ namespace Unison.Core.Helpers
             return name + ": ";
         }
 
-        private static bool IsKnownSelfFallback(string name)
-        {
-            if (string.IsNullOrEmpty(name))
-            {
-                return false;
-            }
-
-            foreach (string fallback in SelfChatNaming.KnownFallbacks)
-            {
-                if (string.Equals(name, fallback, StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
+        private static bool IsKnownSelfFallback(string name) => SelfChatNaming.IsKnownFallback(name);
 
         private static string ShortParticipantLabel(string participantJid)
         {

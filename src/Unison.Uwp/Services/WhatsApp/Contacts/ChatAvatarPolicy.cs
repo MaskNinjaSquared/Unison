@@ -373,14 +373,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                    string.Equals(reason, "no-picture", StringComparison.OrdinalIgnoreCase);
         }
 
-        private static DateTime ToComparableUtc(DateTime timestamp)
-        {
-            if (timestamp == DateTime.MinValue || timestamp == DateTime.MaxValue)
-            {
-                return timestamp;
-            }
-
-            return Unison.Core.Mappers.WhatsAppMapper.ToUtc(timestamp);
-        }
+        private static DateTime ToComparableUtc(DateTime timestamp) =>
+            ChatMessageOrder.ToComparableUtc(timestamp);
     }
 }

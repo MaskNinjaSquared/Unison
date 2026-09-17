@@ -320,7 +320,6 @@ namespace Unison.Uwp
             services.AddSingleton<IChatService>(sp => new ChatFacade(
                 sp.GetRequiredService<IWhatsAppSessionProvider>(),
                 sp.GetRequiredService<IWhatsAppService>(),
-                sp.GetRequiredService<IChatStore>(),
                 sp.GetRequiredService<IJidResolver>()));
             // Forwards for now: the w:g2 work is still inside the client (phase 3.2). What this
             // registration buys is that the info pane and the composer stop naming it.

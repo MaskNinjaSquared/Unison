@@ -94,6 +94,23 @@ namespace Unison.Core.State
         }
 
         /// <summary>
+        /// Puts the save back on the books after an attempt failed.
+        /// </summary>
+        /// <remarks>
+        /// <see cref="TryBeginPersist"/> clears the flag before the write runs, so a write that
+        /// throws used to consume the debt and leave the change on disk stale until some
+        /// unrelated edit happened to schedule another save. The message queue already restores
+        /// its drain on failure; this is the same contract for the catalogue.
+        /// </remarks>
+        public void Restore()
+        {
+            lock (_sync)
+            {
+                _pending = true;
+            }
+        }
+
+        /// <summary>
         /// Lifts startup suppression and reports whether a save deferred during startup is
         /// now owed.
         /// </summary>

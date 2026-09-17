@@ -120,7 +120,12 @@ namespace Unison.Uwp.Data
                                 DeletedAtUtc = carried,
                                 LastMessageTimestampUtc = model.LastMessageTimestampUtc,
                                 LastMessageId = model.LastMessageId,
-                                UnreadCount = Math.Max(0, model.UnreadCount)
+                                UnreadCount = Math.Max(0, model.UnreadCount),
+                                Name = model.Name,
+                                LastMessageSendState = (int)model.LastMessageSendState,
+                                IsGroup = model.IsGroup,
+                                LidJid = model.LidJid,
+                                PnJid = model.PnJid
                             };
                             continue;
                         }
@@ -128,9 +133,9 @@ namespace Unison.Uwp.Data
                         bool tipNewer = IsIncomingTipNewer(prior, model);
                         bool statusChanged = prior.Status != (int)status ||
                                              !NullableDateEquals(prior.DeletedAtUtc, carried);
-                        bool unreadChanged = tipNewer && prior.UnreadCount != Math.Max(0, model.UnreadCount);
+                        bool stripChanged = HasStripChange(prior, model);
 
-                        if (!tipNewer && !statusChanged && !unreadChanged)
+                        if (!tipNewer && !statusChanged && !stripChanged)
                         {
                             skipped++;
                             continue;
@@ -139,21 +144,29 @@ namespace Unison.Uwp.Data
                         if (tipNewer)
                         {
                             // Tip moved: rewrite the list strip (and lifecycle) in one pass.
-                            conn.InsertOrReplace(ToRow(model, carried, status));
+                            conn.InsertOrReplace(ToRow(model, carried, status, prior));
                             tipUpdates++;
                             upserted++;
                             notified.Add(CloneForNotify(model, status));
                             prior.LastMessageTimestampUtc = model.LastMessageTimestampUtc;
                             prior.LastMessageId = model.LastMessageId;
-                            prior.UnreadCount = Math.Max(0, model.UnreadCount);
                         }
                         else
                         {
-                            // Same tip: only archived / deleted / revived flags.
+                            // Same tip, but the strip around it moved: unread cleared, a tick
+                            // advanced over the same message, a name resolved. None of those
+                            // touch the tip, and before this they never reached disk at all -
+                            // the badge came back on the next start.
                             conn.Execute(
-                                "UPDATE history_chat_preview SET Status = ?, DeletedAtUtc = ?, UpdatedAtUtc = ? WHERE Jid = ?",
+                                "UPDATE history_chat_preview SET Status = ?, DeletedAtUtc = ?, " +
+                                "UnreadCount = ?, Name = ?, LastMessageSendState = ?, IsGroup = ?, " +
+                                "UpdatedAtUtc = ? WHERE Jid = ?",
                                 (int)status,
                                 carried,
+                                Math.Max(0, model.UnreadCount),
+                                model.Name,
+                                (int)model.LastMessageSendState,
+                                model.IsGroup,
                                 DateTime.UtcNow,
                                 jid);
                             flagUpdates++;
@@ -163,6 +176,10 @@ namespace Unison.Uwp.Data
 
                         prior.Status = (int)status;
                         prior.DeletedAtUtc = carried;
+                        prior.UnreadCount = Math.Max(0, model.UnreadCount);
+                        prior.Name = model.Name;
+                        prior.LastMessageSendState = (int)model.LastMessageSendState;
+                        prior.IsGroup = model.IsGroup;
                     }
                 }).ConfigureAwait(false);
             }
@@ -208,7 +225,8 @@ namespace Unison.Uwp.Data
             {
                 var rows = await _connection
                     .QueryAsync<LifecycleSnapshot>(
-                        "SELECT Jid, Status, DeletedAtUtc, LastMessageTimestampUtc, LastMessageId, UnreadCount " +
+                        "SELECT Jid, Status, DeletedAtUtc, LastMessageTimestampUtc, LastMessageId, " +
+                        "UnreadCount, Name, LastMessageSendState, IsGroup, LidJid, PnJid " +
                         "FROM history_chat_preview")
                     .ConfigureAwait(false);
                 if (rows != null)
@@ -255,6 +273,36 @@ namespace Unison.Uwp.Data
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// Whether anything the list strip shows changed without the tip moving.
+        /// </summary>
+        /// <remarks>
+        /// This gate used to ask only about the tip. Everything else the row carries - the
+        /// unread badge, the delivery tick, the resolved name, the group flag - changes over
+        /// a conversation whose newest message stays put, which is the ordinary case: reading
+        /// a chat does not add a message to it.
+        /// </remarks>
+        private static bool HasStripChange(LifecycleSnapshot prior, HistoryChatPreview model)
+        {
+            if (prior == null || model == null)
+            {
+                return true;
+            }
+
+            return prior.UnreadCount != Math.Max(0, model.UnreadCount) ||
+                   prior.LastMessageSendState != (int)model.LastMessageSendState ||
+                   prior.IsGroup != model.IsGroup ||
+                   !string.Equals(prior.Name ?? string.Empty, model.Name ?? string.Empty, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// Keeps a value the incoming row has no way of knowing rather than blanking it.
+        /// </summary>
+        private static string Carry(string incoming, string stored)
+        {
+            return string.IsNullOrWhiteSpace(incoming) ? stored : incoming;
         }
 
         private static bool NullableDateEquals(DateTime? left, DateTime? right)
@@ -312,6 +360,18 @@ namespace Unison.Uwp.Data
             public string LastMessageId { get; set; }
 
             public int UnreadCount { get; set; }
+
+            public string Name { get; set; }
+
+            public int LastMessageSendState { get; set; }
+
+            public bool IsGroup { get; set; }
+
+            // Carried so a live catalog write does not blank them: the live row builder has
+            // no idea what the other half of a PN/LID pair is, only the history sync does.
+            public string LidJid { get; set; }
+
+            public string PnJid { get; set; }
         }
 
         public async Task<IReadOnlyList<HistoryChatPreview>> GetAllAsync(string syncId = null)
@@ -577,14 +637,20 @@ namespace Unison.Uwp.Data
         private static HistoryChatPreviewRow ToRow(
             HistoryChatPreview model,
             DateTime? deletedAtUtc,
-            ChatStatus status)
+            ChatStatus status,
+            LifecycleSnapshot prior = null)
         {
             return new HistoryChatPreviewRow
             {
                 DeletedAtUtc = deletedAtUtc,
                 Jid = model.Jid,
-                LidJid = model.LidJid,
-                PnJid = model.PnJid,
+
+                // InsertOrReplace rewrites the whole row, and the live catalog builder cannot
+                // fill these two - only the history sync learns which PN goes with which LID.
+                // Written straight from the model, the first live write after a sync blanked
+                // them and the contact came back as two rows.
+                LidJid = Carry(model.LidJid, prior?.LidJid),
+                PnJid = Carry(model.PnJid, prior?.PnJid),
                 Name = model.Name,
                 IsGroup = model.IsGroup,
                 Status = (int)status,

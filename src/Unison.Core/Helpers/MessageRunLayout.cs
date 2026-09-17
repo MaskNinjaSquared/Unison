@@ -36,6 +36,31 @@ namespace Unison.Core.Helpers
             Func<string, bool> quoteFromMe = quotedIdIsFromMe ?? (_ => false);
             DateTime? previousLocalDate = null;
 
+            // Names first, for every message, before any run is measured. Whether two messages
+            // belong to the same run is decided by sender name when the participant ids differ,
+            // which is the ordinary PN/LID case. Resolving names inside the layout loop left the
+            // next message still unnamed when the current one asked whether the run continued,
+            // so a message could close a run that its neighbour then went on to continue.
+            if (lookup != null)
+            {
+                for (int i = 0; i < messages.Count; i++)
+                {
+                    ChatMessage message = messages[i];
+                    if (message == null)
+                    {
+                        continue;
+                    }
+
+                    if (isGroup)
+                    {
+                        lookup.EnsureGroupSenderName(message, groupChat);
+                    }
+
+                    // Quotes exist in 1:1 too; self-quotes often omit Participant and must still show You.
+                    lookup.EnsureQuotedSenderName(message, groupChat, quoteFromMe);
+                }
+            }
+
             for (int i = 0; i < messages.Count; i++)
             {
                 ChatMessage current = messages[i];
@@ -54,17 +79,6 @@ namespace Unison.Core.Helpers
                 if (localDate != DateTime.MinValue)
                 {
                     previousLocalDate = localDate;
-                }
-
-                if (lookup != null)
-                {
-                    if (isGroup)
-                    {
-                        lookup.EnsureGroupSenderName(current, groupChat);
-                    }
-
-                    // Quotes exist in 1:1 too; self-quotes often omit Participant and must still show You.
-                    lookup.EnsureQuotedSenderName(current, groupChat, quoteFromMe);
                 }
 
                 bool isRunStart = i == 0;
@@ -87,8 +101,7 @@ namespace Unison.Core.Helpers
                     isRunStart &&
                     !current.IsFromMe &&
                     !string.IsNullOrWhiteSpace(current.SenderName) &&
-                    !string.Equals(current.SenderName, "Me", StringComparison.OrdinalIgnoreCase) &&
-                    !string.Equals(current.SenderName, "You", StringComparison.OrdinalIgnoreCase);
+                    !SelfChatNaming.IsKnownFallback(current.SenderName);
 
                 bool contactSlot = isGroup && !current.IsFromMe;
                 current.ShowContactSlot = contactSlot;

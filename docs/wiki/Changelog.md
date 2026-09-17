@@ -61,6 +61,82 @@ determines the orientation and answers in one call. Each caller keeps its own lo
 merge still merges the rows and withholds only the alias; the mapped-LID path still only fires the first
 time it sees an address.
 
+### The unread badge came back every time the app started
+
+The list row is written to disk through a gate that asks whether anything changed. The gate asked
+only about the tip — the newest message — and there was a second clause meant to cover the unread
+count that read `tipNewer && prior.UnreadCount != model.UnreadCount`, which can never be true unless
+the tip already moved. So it decided nothing.
+
+Reading a conversation does not add a message to it. The tip stays exactly where it was, the row was
+judged unchanged, and the badge on disk kept the old number — which is what the list hydrates from on
+the next start. The same gate was swallowing the delivery tick advancing over an unchanged message
+(Pending → Sent → Delivered → Read, all on the same tip, by definition) and a name resolving on a
+quiet conversation.
+
+The gate now asks about the strip around the tip as well, and the same-tip branch writes those
+columns instead of only the lifecycle flags.
+
+### A contact came back as two rows after a restart
+
+`InsertOrReplace` rewrites the whole row, and the live catalog writer had no value for `LidJid` and
+`PnJid` — only the history sync learns which phone number goes with which LID. It wrote them anyway,
+as null. So the first ordinary write after a sync erased the pairing, and the hydrate that uses those
+two columns to fold a contact's two addresses into one row had nothing left to match on.
+
+They are now carried from the stored row when the incoming one cannot know them.
+
+### Marking a conversation read could quietly send nothing
+
+The tail of a conversation is filtered to messages that have an id, because a receipt names a range of
+ids and one without an id cannot go in it. The count used to size the tail was taken from the list
+*before* that filter and then skipped over the list *after* it, so every dropped message overshot the
+end by one. With enough of them the tail came back empty — and both callers read an empty tail as
+"nothing to do" and returned without sending anything. The user read the conversation and the other
+side never got the blue ticks.
+
+Now in `MessageTail`, with tests, including the case that used to come back empty.
+
+### Two ViewModels held on to singletons they never let go of
+
+`SettingsViewModel` and `DebugViewModel` are transient; the shell and the diagnostics console they
+subscribe to are singletons. Neither dropped its subscription, so every visit left another instance
+alive, raising property changes for pages that no longer exist. The debug one is the visible case: one
+of the two events it never released opens a fullscreen QR dialog, so running a socket slice after a few
+visits opened one dialog per abandoned instance.
+
+### A group message could break its own run in half
+
+Whether two messages belong to the same run is decided by sender name when the participant ids differ,
+which is the ordinary case for a contact appearing under both a phone number and a LID. Names were
+resolved inside the layout loop, so when a message asked "does the run continue past me?", the next
+message had not been named yet and the answer was no — while that next message, once named, decided
+the run did continue. The two flags contradicted each other across the same pair: a tail on a bubble
+mid-run, and the one below it stuck on with no avatar and no name.
+
+Names are now resolved for the whole batch before any run is measured.
+
+### "Is this name just a stand-in for me?" knew only English in three of four places
+
+The canonical list in `SelfChatNaming.KnownFallbacks` carries the localized ones — "Você", "Anda",
+"Tu". Three of the four decisions that ask this question compared against the literals "Me" and "You",
+and one of those three is the guard that decides what gets cached as a participant's name. On a device
+running in any other language the localized stand-in walked past it as though it were a real name.
+
+Now one predicate, `SelfChatNaming.IsKnownFallback`, used by all four.
+
+### A failed save was forgotten instead of retried
+
+`TryBeginPersist` clears the pending flag before the write runs, so a write that failed consumed the
+debt: the change stayed unsaved until something unrelated dirtied the catalogue again. The message
+queue already restores its drain on failure; the catalogue now does the same.
+
+### The Status cap kept whichever items arrived first
+
+Fifty per author, applied in the order the sync chunk delivered them. The equivalent cap one level up,
+in `HistoryMessageBuilder`, sorts newest-first before cutting. For an author who posts a lot, the quota
+could fill with old posts and drop the recent ones.
+
 ### Reading on the phone left the pinned tile showing the old count
 
 The same event — a conversation became read — is handled twice, once for a local read and once for the

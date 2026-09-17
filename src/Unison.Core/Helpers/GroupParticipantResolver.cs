@@ -388,8 +388,7 @@ namespace Unison.Core.Helpers
                 return false;
             }
 
-            if (string.Equals(trimmed, "Me", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(trimmed, "You", StringComparison.OrdinalIgnoreCase))
+            if (SelfChatNaming.IsKnownFallback(trimmed))
             {
                 return false;
             }

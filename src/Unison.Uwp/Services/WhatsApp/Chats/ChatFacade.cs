@@ -25,6 +25,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
+using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Socket.AppState;
 using Unison.Socket.UseCases.Messages;
@@ -49,13 +50,11 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
 
         private readonly IWhatsAppSessionProvider _sessions;
         private readonly IWhatsAppService _appState;
-        private readonly IChatStore _chatStore;
         private readonly IJidResolver _jids;
 
         internal ChatFacade(
             IWhatsAppSessionProvider sessions,
             IWhatsAppService appState,
-            IChatStore chatStore,
             IJidResolver jids)
         {
             if (sessions == null)
@@ -70,7 +69,6 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
 
             _sessions = sessions;
             _appState = appState;
-            _chatStore = chatStore;
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
         }
 
@@ -307,10 +305,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
                 return new List<ChatMessage>();
             }
 
-            return live
-                .Where(m => m != null && !string.IsNullOrEmpty(m.Id))
-                .Skip(Math.Max(0, live.Count - take))
-                .ToList();
+            return MessageTail.Addressable(live, take);
         }
 
         private static ReceiptTarget ToReceiptTarget(ChatMessage message)

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Proto;
 using Unison.Core.Mappers;
 using Unison.Core.Models;
@@ -33,7 +34,15 @@ namespace Unison.Core.Helpers
                     continue;
                 }
 
-                foreach (var hist in conv.Messages)
+                // Newest first, because the per-author cap below keeps the first N it sees. In
+                // chunk order the cap kept whichever ones happened to arrive first, so a very
+                // active author could fill the quota with old posts and lose the recent ones.
+                var ordered = conv.Messages
+                    .Where(m => m?.Message != null)
+                    .OrderByDescending(m => m.Message.MessageTimestamp)
+                    .ToList();
+
+                foreach (var hist in ordered)
                 {
                     var info = hist?.Message;
                     if (info?.Key == null || string.IsNullOrWhiteSpace(info.Key.Id))

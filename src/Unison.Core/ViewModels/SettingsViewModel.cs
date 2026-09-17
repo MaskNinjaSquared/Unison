@@ -370,6 +370,34 @@ namespace Unison.Core.ViewModels
             RaiseProfileHeaderChanged();
         }
 
+        /// <summary>
+        /// Re-subscribes to the shell after the surface comes back. Safe to call more than once.
+        /// </summary>
+        /// <remarks>
+        /// The shell is a singleton and this ViewModel is transient, so the subscription has to
+        /// come off when the surface goes away - otherwise every visit to Settings leaves another
+        /// instance alive on the shell's event, raising property changes for a page that is gone.
+        /// </remarks>
+        public void Attach()
+        {
+            if (_shell == null)
+            {
+                return;
+            }
+
+            _shell.PropertyChanged -= OnShellPropertyChanged;
+            _shell.PropertyChanged += OnShellPropertyChanged;
+        }
+
+        /// <summary>Drops the shell subscription when the surface closes.</summary>
+        public void Detach()
+        {
+            if (_shell != null)
+            {
+                _shell.PropertyChanged -= OnShellPropertyChanged;
+            }
+        }
+
         private void OnShellPropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
             if (e.PropertyName == nameof(ShellViewModel.CurrentUserName) ||

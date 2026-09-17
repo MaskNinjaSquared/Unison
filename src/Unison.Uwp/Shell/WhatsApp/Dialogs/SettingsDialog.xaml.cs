@@ -77,6 +77,7 @@ namespace Unison.Uwp.Shell.WhatsApp.Dialogs
             UnhookUnderlayDismiss();
             UnhookWindowSizeChanged();
             UnhookLeaveRequested();
+            _viewModel?.Detach();
             _dialogChrome = null;
             try
             {
