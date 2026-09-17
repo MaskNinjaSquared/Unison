@@ -174,7 +174,7 @@ Self-contained first. List/persist last.
 | 3.2b | Group apply + roster persist | `GroupFacade`, after 3.6 / 3.7 / 3.9 |
 | 3.3a | Media cache + file naming (done) | `IMediaCache` / `MediaCacheService`, `MediaFileExtensions` |
 | 3.3b | Derived renditions — transcode / poster / WebP (done) | `MediaDerivationService` |
-| 3.3c | Download orchestration | `MessageFacade`. Contract already has `Ensure*AvailableAsync` |
+| 3.3c | Download reading (done) | `MediaDownloadPlan` (Core). Orchestration stays — see below |
 | 3.4 | Send (main file) | `MessageFacade` over use cases; client only “send this node” |
 | 3.5a | Receipt reading (done) | `ReceiptReader` |
 | 3.5b | Receipt aggregation state (done) | `GroupReceiptTally` (Core) |
@@ -264,9 +264,24 @@ Both sides are UWP, so there was never anything to abstract — the only reason 
 problem in 3.3a was that the holder was the client, which talks to Core contracts. The container now
 registers the concrete type and maps `IMediaCache` onto it.
 
-What is left in the client is 3.3c: `Ensure*AvailableAsync`, `EnsureWebPDisplayUriAsync` and
-`EnsurePlayableAudioUriAsync`. Those read and write `ChatMessage` and persist it, so they follow
-message state rather than media.
+**3.3c took the reading, not the orchestration.** The four `Ensure*AvailableAsync` each opened with
+the same block spelled out by hand: decode the key, decode the expected hash, pick a cache file base,
+pick a default mime. Four copies of one rule, and they had drifted — audio named its cached file after
+the message id while the other three used the content hash, so the same voice note forwarded to five
+chats was five downloads and five copies on disk. `MediaDownloadPlan` (Core, pure, 13 tests) is that
+reading in one place.
+
+The orchestration deliberately stayed: what a missing key means (a sticker marks itself failed and
+returns quietly, a video raises), what to do with the bytes, and when to persist the row. Those are
+genuinely different per kind, and flattening them would be inventing a rule rather than moving one.
+
+Extracting it also surfaced a defect the four copies were hiding: `EnsureVideoAvailableAsync` checks
+the cache before taking the download lock and again after waiting on it, and only the first built the
+video poster. Two taps on the same uncached video, and the one that waited returned a row with no
+thumbnail. Both paths now go through `EnsureVideoPosterAsync`.
+
+What is still in the client is `EnsureWebPDisplayUriAsync` and `EnsurePlayableAudioUriAsync`. Those
+read and write `ChatMessage` and persist it, so they follow message state rather than media.
 
 **3.7a is done, and it did not fold into `LidMappingStore`.** The plan above said to merge the
 session alias map into `LidMappingStore`, whose own header says it exists to replace exactly that.
