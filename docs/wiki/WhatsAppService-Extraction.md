@@ -184,7 +184,7 @@ Self-contained first. List/persist last.
 | 3.8 | `.AppState.cs` | **Rewritten — the premise was stale.** See below |
 | 3.9a | List display order (done) | `ChatDisplayOrder` (Core) |
 | 3.9b | `.Persistence.cs` + preview reconcile + the appliers from 3.8 | `ChatFacade` + `ChatStateStore` + `IChatStore` / `IMessageStore`. Close the transitional public dictionaries on `ChatStateStore`. **Persistence rules out; appliers remain — see below** |
-| 3.10 | `.IncomingPump.cs` | Decode/dispatch stays with connection; apply (row, preview, unread, toast) goes to façades. **In progress:** `IncomingAttention`, `MessageRenderReader`, `MessageIdIndex`, `QuotedContext`, `DuplicateArrivalEnrichment`, `IncomingSenderResolver`, `PushNameAcceptDecision`, `LiveChatPreviewApplier`, `IncomingMediaMetadata`, `OfflineReplaySummaryMerge` are out — see below |
+| 3.10 | `.IncomingPump.cs` | Decode/dispatch stays with connection; apply (row, preview, unread, toast) goes to façades. **In progress:** rules listed below are out; pump still owns apply orchestration |
 
 **3.1a is done.** The avatar half of `MediaCache` is `IAvatarCache` / `AvatarCacheService`: `TryGet`,
 `SaveAsync`, `DeleteIfCached`. It took `BuildSafeAvatarFileName`, `TryGetCachedAvatarUri`,
@@ -682,6 +682,12 @@ notify stage stopped naming `NotificationService.Instance` and takes `INotificat
 each had a hand-written copy of "when does this tip win, and which fields travel with it". The model
 moved to Core with the merge (6 tests). Rollback now also restores `AuthorPrefix` with the tip —
 the old catch left it behind. The client still owns the lock, timer, attention decision and UI apply.
+
+**`IncomingChatMessageSnapshot` closed the GetChatMessage escape hatch.** The pump used to build
+`ChatMessage` by hand when MessageFacade was unset — without media flags. Facade is always
+attached from `App`; a missing attach now drops the message with a diagnostics write. Snapshot
+construction is `IncomingChatMessageSnapshot.FromRender` (4 tests). Separately,
+`MissingMessagePriority` owns which placeholder resends are preferred (peer/self vs group).
 
 ### Phase 4 — What remains is connection
 

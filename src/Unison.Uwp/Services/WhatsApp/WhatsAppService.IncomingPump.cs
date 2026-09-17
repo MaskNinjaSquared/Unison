@@ -568,14 +568,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return false;
             }
 
-            if (candidate.IsFromMe)
-            {
-                return true;
-            }
-
-            string chatJid = candidate.ChatJid ?? string.Empty;
-            return chatJid.EndsWith("@s.whatsapp.net", StringComparison.OrdinalIgnoreCase) ||
-                   chatJid.EndsWith("@lid", StringComparison.OrdinalIgnoreCase);
+            return MissingMessagePriority.IsPeerOrSelf(candidate.IsFromMe, candidate.ChatJid);
         }
 
         private static string DescribeMissingMessageCandidate(MissingMessageCandidate candidate)
@@ -1898,72 +1891,40 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 SetIncomingMessagePumpStage("model", e);
                 // Domain ChatMessage via the MessageFacade (Kind resolved in mapper).
-                ChatMessage chatMessage;
                 ApplyContextInfoExtras(e.Message, out string quotedText, out string quotedSender, out string quotedParticipantJid, out string quotedMessageId, out var quotedKind, out var mentionedJids, out bool isForwarded);
 
-                if (_messageService != null)
+                if (_messageService == null)
                 {
-                    chatMessage = _messageService.GetChatMessage(
-                        new ChatMessageMapContext
-                        {
-                            MessageId = e.MessageId,
-                            ChatJid = jid,
-                            RemoteJid = jid,
-                            ParticipantJid = participantJid,
-                            SenderName = senderName,
-                            IsFromMe = isActuallyFromMe,
-                            Timestamp = NormalizeIncomingTimestamp(e.Timestamp),
-                            Status = isActuallyFromMe ? ApplyChatStatusPolicy(jid, ChatMessage.StatusSent) : null
-                        },
-                        new ChatMessageContentSnapshot
-                        {
-                            Text = content,
-                            IsImage = renderInfo?.IsImage == true,
-                            IsVideo = renderInfo?.IsVideo == true,
-                            IsSticker = renderInfo?.IsSticker == true,
-                            IsAudio = renderInfo?.IsAudio == true,
-                            IsVoice = renderInfo?.IsVoice == true,
-                            IsDocument = renderInfo?.IsDocument == true,
-                            Caption = renderInfo?.Caption ?? "",
-                            IsForwarded = isForwarded,
-                            QuotedText = quotedText,
-                            QuotedKind = quotedKind,
-                            QuotedSenderName = quotedSender,
-                            QuotedParticipantJid = quotedParticipantJid,
-                            QuotedMessageId = quotedMessageId,
-                            MentionedJids = mentionedJids
-                        });
+                    Debug.WriteLine("[WhatsAppService] Dropping inbound message: MessageFacade is not attached.");
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "messages",
+                        "message-facade-missing",
+                        "messageId=" + (e.MessageId ?? string.Empty));
+                    return;
                 }
-                else
-                {
-                    // Temporary escape hatch until MessageFacade is always attached.
-                    chatMessage = new ChatMessage
+
+                ChatMessage chatMessage = _messageService.GetChatMessage(
+                    new ChatMessageMapContext
                     {
-                        Id = e.MessageId,
-                        Content = content,
-                        Kind = ChatPreviewNormalizer.ResolveKind(
-                            renderInfo?.IsImage == true,
-                            renderInfo?.IsVideo == true,
-                            renderInfo?.IsSticker == true,
-                            renderInfo?.IsAudio == true,
-                            renderInfo?.IsVoice == true,
-                            renderInfo?.IsDocument == true),
-                        Caption = renderInfo?.Caption ?? "",
-                        IsForwarded = isForwarded,
-                        Timestamp = NormalizeIncomingTimestamp(e.Timestamp),
-                        IsFromMe = isActuallyFromMe,
-                        SenderName = senderName,
+                        MessageId = e.MessageId,
+                        ChatJid = jid,
                         RemoteJid = jid,
-                        ParticipantJid = NormalizeJid(e.Participant),
-                        Status = isActuallyFromMe ? ApplyChatStatusPolicy(jid, ChatMessage.StatusSent) : null,
-                        QuotedText = quotedText,
-                        QuotedKind = quotedKind,
-                        QuotedSenderName = quotedSender,
-                        QuotedParticipantJid = quotedParticipantJid,
-                        QuotedMessageId = quotedMessageId,
-                        MentionedJids = mentionedJids
-                    };
-                }
+                        ParticipantJid = participantJid,
+                        SenderName = senderName,
+                        IsFromMe = isActuallyFromMe,
+                        Timestamp = NormalizeIncomingTimestamp(e.Timestamp),
+                        Status = isActuallyFromMe ? ApplyChatStatusPolicy(jid, ChatMessage.StatusSent) : null
+                    },
+                    IncomingChatMessageSnapshot.FromRender(
+                        renderInfo,
+                        content,
+                        isForwarded,
+                        quotedText,
+                        quotedKind,
+                        quotedSender,
+                        quotedParticipantJid,
+                        quotedMessageId,
+                        mentionedJids));
 
                 IncomingMediaMetadata.Apply(chatMessage, renderInfo);
 

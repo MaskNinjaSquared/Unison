@@ -4,6 +4,14 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Incoming pump always builds ChatMessage through MessageFacade (3.10)
+
+The temporary hand-built `ChatMessage` path (missing media flags) is gone. Snapshots come from
+`IncomingChatMessageSnapshot.FromRender`; a missing façade attachment fails closed. Placeholder
+resend priority is `MissingMessagePriority` in Core.
+
+---
+
 ## Offline replay tip merge left WhatsAppService (3.10)
 
 `OfflineReplayChatSummary` and the record/rollback tip rules are `OfflineReplaySummaryMerge` in

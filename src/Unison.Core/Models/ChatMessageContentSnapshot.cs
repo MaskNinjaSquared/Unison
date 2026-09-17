@@ -1,11 +1,12 @@
 using System.Collections.Generic;
+using Unison.Core.Helpers;
 
 namespace Unison.Core.Models
 {
     /// <summary>
     /// Transport facts for message facade construction
     /// (<c>IMessageService.GetChatMessage</c> / <c>IChatMessageMapper.MapIndividual</c>).
-    /// Prefer protocol flags; <see cref="Kind"/> is optional — the mapper resolves it when Text.
+    /// Prefer protocol flags; <see cref="Kind"/> is optional — the mapper resolves it when false.
     /// </summary>
     public sealed class ChatMessageContentSnapshot
     {
