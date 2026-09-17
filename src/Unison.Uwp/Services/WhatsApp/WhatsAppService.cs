@@ -1436,91 +1436,18 @@ namespace Unison.Uwp.Services.WhatsApp
             MessageSendState? sendState = null,
             string messageId = null)
         {
-            if (chat == null)
-            {
-                return false;
-            }
-
-            DateTime candidateUtc = ToComparableUtc(timestamp);
-            DateTime currentUtc = chat.LastMessageTimestampUtc.HasValue
-                ? ToComparableUtc(chat.LastMessageTimestampUtc.Value)
-                : DateTime.MinValue;
-
-            if (!ChatPreviewStaleness.ShouldAccept(chat.LastMessageTimestampUtc, timestamp, force))
-            {
-                if (candidateUtc != DateTime.MinValue)
-                {
-                    Debug.WriteLine($"[WhatsAppService] Ignored stale preview for {chat.JID}: candidate={candidateUtc:O}, current={currentUtc:O}");
-                }
-                return false;
-            }
-
-            bool sameId = !string.IsNullOrWhiteSpace(messageId) &&
-                          string.Equals(chat.LastMessageId, messageId, StringComparison.Ordinal);
-            if (!force &&
-                sameId &&
-                candidateUtc == currentUtc &&
-                isFromMe.HasValue &&
-                chat.LastMessageIsFromMe == isFromMe.Value &&
-                sendState.HasValue &&
-                chat.LastMessageSendState == sendState.Value)
-            {
-                // Same tip already on the strip — still allow body refresh below only when text differs.
-                string peekRaw = preview ?? string.Empty;
-                ChatPreviewNormalizer.Normalize(peekRaw, kindHint, out _, out var peekClean);
-                if (string.Equals(chat.LastMessage, peekClean, StringComparison.Ordinal))
-                {
-                    return false;
-                }
-            }
-
-            string raw = preview ?? string.Empty;
-            string author = authorPrefix ?? string.Empty;
-            if (string.IsNullOrEmpty(author))
-            {
-                ChatPreviewNormalizer.TryPeelAuthorPrefix(ref raw, out author);
-            }
-
-            if (kindHint == null &&
-                raw.IndexOf("[Document]", StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                kindHint = ChatPreviewKind.Document;
-            }
-
-            ChatPreviewNormalizer.Normalize(raw, kindHint, out var kind, out var cleanPreview);
-
-            chat.LastMessageAuthor = author ?? string.Empty;
-            chat.LastMessage = cleanPreview;
-            chat.LastMessageKind = kind;
-            chat.LastMessageMentionedJids = mentionedJids != null && mentionedJids.Count > 0
-                ? new System.Collections.Generic.List<string>(mentionedJids)
-                : null;
-            if (isFromMe.HasValue)
-            {
-                chat.LastMessageIsFromMe = isFromMe.Value;
-            }
-
-            if (sendState.HasValue)
-            {
-                chat.LastMessageSendState = sendState.Value;
-            }
-            else if (isFromMe == false)
-            {
-                chat.LastMessageSendState = MessageSendState.NotApplicable;
-            }
-            else if (isFromMe == true && chat.LastMessageSendState == MessageSendState.NotApplicable)
-            {
-                chat.LastMessageSendState = MessageSendState.Pending;
-            }
-
-            if (!string.IsNullOrWhiteSpace(messageId))
-            {
-                chat.LastMessageId = messageId;
-            }
-
-            chat.Timestamp = timestamp == DateTime.MinValue ? string.Empty : FormatTimestamp(timestamp);
-            chat.LastMessageTimestampUtc = candidateUtc == DateTime.MinValue ? (DateTime?)null : candidateUtc;
-            return true;
+            return LiveChatPreviewApplier.ApplyIfNewer(
+                chat,
+                preview,
+                timestamp,
+                force,
+                kindHint,
+                authorPrefix,
+                mentionedJids,
+                isFromMe,
+                sendState,
+                messageId,
+                LocalizedStrings.Get("Common_Yesterday", "Yesterday"));
         }
 
         private static int CompareChatsForDisplay(ChatItem left, ChatItem right) =>
@@ -2459,16 +2386,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private static ChatPreviewKind ResolvePreviewKind(ChatMessage message, MessageRenderInfo renderInfo)
         {
-            if (renderInfo != null)
-            {
-                ChatPreviewKind fromRender = renderInfo.PreviewKind;
-                if (fromRender != ChatPreviewKind.Text)
-                {
-                    return fromRender;
-                }
-            }
-
-            return ChatPreviewNormalizer.InferKindFromMessage(message);
+            return LiveChatPreviewApplier.ResolveKind(message, renderInfo);
         }
 
         /// <summary>

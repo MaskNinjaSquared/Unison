@@ -4,6 +4,14 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Live chat-list strip apply left WhatsAppService (3.10)
+
+`ApplyChatPreviewIfNewer` and `ResolvePreviewKind` are now `LiveChatPreviewApplier` in Core — the
+same shape as the history preview applier. The client still decides *when* to update the strip; only
+the write (staleness, body, author, kind, ticks) moved, under nine tests.
+
+---
+
 ## Group list strip kept LID digits after history sync
 
 History push names land under the phone JID while group envelopes often name the sender by LID.

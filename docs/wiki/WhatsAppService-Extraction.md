@@ -184,7 +184,7 @@ Self-contained first. List/persist last.
 | 3.8 | `.AppState.cs` | **Rewritten — the premise was stale.** See below |
 | 3.9a | List display order (done) | `ChatDisplayOrder` (Core) |
 | 3.9b | `.Persistence.cs` + preview reconcile + the appliers from 3.8 | `ChatFacade` + `ChatStateStore` + `IChatStore` / `IMessageStore`. Close the transitional public dictionaries on `ChatStateStore`. **Persistence rules out; appliers remain — see below** |
-| 3.10 | `.IncomingPump.cs` | Decode/dispatch stays with connection; apply (row, preview, unread, toast) goes to façades. **In progress:** `IncomingAttention`, `MessageRenderReader`, `MessageIdIndex`, `QuotedContext`, `DuplicateArrivalEnrichment`, `IncomingSenderResolver`, `PushNameAcceptDecision` are out — see below |
+| 3.10 | `.IncomingPump.cs` | Decode/dispatch stays with connection; apply (row, preview, unread, toast) goes to façades. **In progress:** `IncomingAttention`, `MessageRenderReader`, `MessageIdIndex`, `QuotedContext`, `DuplicateArrivalEnrichment`, `IncomingSenderResolver`, `PushNameAcceptDecision`, `LiveChatPreviewApplier` are out — see below |
 
 **3.1a is done.** The avatar half of `MediaCache` is `IAvatarCache` / `AvatarCacheService`: `TryGet`,
 `SaveAsync`, `DeleteIfCached`. It took `BuildSafeAvatarFileName`, `TryGetCachedAvatarUri`,
@@ -663,6 +663,13 @@ it / is it us) and `PushNameAcceptDecision` (whether the envelope's name may ent
 apply pass for offline unread also stopped re-asking `IncomingAttention` — the count was already
 decided at record time, and re-asking dropped the badge when the open chat changed mid-drain. Image
 hydration during offline replay now matches live (no longer gated on the chat being open).
+
+**`LiveChatPreviewApplier` took the strip write.** Every live, offline-replay, revoke and reconcile
+path funnelled through `WhatsAppService.ApplyChatPreviewIfNewer` — staleness via
+`ChatPreviewStaleness`, then body / author / kind / send-state / message id / formatted clock.
+That method is now a one-line forward; the rule lives in Core next to `HistoryChatPreviewApplier`
+(9 tests), including `ResolveKind` (render hint vs domain message). The pump still owns when to
+call it; only the write left.
 
 ### Phase 4 — What remains is connection
 
