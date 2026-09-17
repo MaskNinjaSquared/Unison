@@ -527,16 +527,14 @@ namespace Unison.Core.ViewModels
             if (!_attached) return;
             _attached = false;
 
-            try
+            CancellationTokenSource running;
+            lock (_messagePreviewReconcileGate)
             {
-                _messagePreviewReconcileCts?.Cancel();
-                _messagePreviewReconcileCts?.Dispose();
-            }
-            catch
-            {
+                running = _messagePreviewReconcileCts;
+                _messagePreviewReconcileCts = null;
             }
 
-            _messagePreviewReconcileCts = null;
+            CancelAndDispose(running);
 
             _connection.StatusChanged -= Connection_StatusChanged;
             _history.SyncStatusChanged -= History_SyncStatusChanged;
@@ -1255,19 +1253,7 @@ namespace Unison.Core.ViewModels
                 }
             }
 
-            CancellationTokenSource previous = _messagePreviewReconcileCts;
-            _messagePreviewReconcileCts = new CancellationTokenSource();
-            CancellationToken token = _messagePreviewReconcileCts.Token;
-            try
-            {
-                previous?.Cancel();
-                previous?.Dispose();
-            }
-            catch
-            {
-            }
-
-            _ = RunMessagePreviewReconcileAsync(token, full: false);
+            _ = RunMessagePreviewReconcileAsync(BeginMessagePreviewReconcile(), full: false);
         }
 
         /// <summary>
@@ -1281,19 +1267,55 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
-            CancellationTokenSource previous = _messagePreviewReconcileCts;
-            _messagePreviewReconcileCts = new CancellationTokenSource();
-            CancellationToken token = _messagePreviewReconcileCts.Token;
-            try
+            _ = RunMessagePreviewReconcileAsync(BeginMessagePreviewReconcile(), full: true);
+        }
+
+        /// <summary>
+        /// Retires the running reconcile and returns the token of the one taking its place.
+        /// </summary>
+        /// <remarks>
+        /// The swap happens under the same gate the queue uses, and the token comes from the
+        /// local source rather than a second read of the field. Read twice without the gate,
+        /// two reconciles starting together could each walk away holding the other's token, so
+        /// cancelling one stopped the wrong worker and the one meant to stop kept writing
+        /// previews over the fresher pass.
+        /// </remarks>
+        private CancellationToken BeginMessagePreviewReconcile()
+        {
+            var fresh = new CancellationTokenSource();
+            CancellationTokenSource previous;
+
+            lock (_messagePreviewReconcileGate)
             {
-                previous?.Cancel();
-                previous?.Dispose();
-            }
-            catch
-            {
+                previous = _messagePreviewReconcileCts;
+                _messagePreviewReconcileCts = fresh;
             }
 
-            _ = RunMessagePreviewReconcileAsync(token, full: true);
+            CancelAndDispose(previous);
+            return fresh.Token;
+        }
+
+        private static void CancelAndDispose(CancellationTokenSource source)
+        {
+            if (source == null)
+            {
+                return;
+            }
+
+            try
+            {
+                source.Cancel();
+                source.Dispose();
+            }
+            catch (ObjectDisposedException)
+            {
+                // Already retired by the shutdown path.
+            }
+            catch (AggregateException)
+            {
+                // Thrown for us by a cancellation callback; the worker it belongs to is going
+                // away regardless.
+            }
         }
 
         private async Task RunMessagePreviewReconcileAsync(CancellationToken token, bool full)
@@ -1304,6 +1326,12 @@ namespace Unison.Core.ViewModels
             }
             catch (TaskCanceledException)
             {
+                return;
+            }
+            catch (ObjectDisposedException)
+            {
+                // The source behind this token was retired while we were on our way to the
+                // delay. Same meaning as cancellation: a newer reconcile owns the work now.
                 return;
             }
 

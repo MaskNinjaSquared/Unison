@@ -61,6 +61,36 @@ determines the orientation and answers in one call. Each caller keeps its own lo
 merge still merges the rows and withholds only the alias; the mapped-LID path still only fires the first
 time it sees an address.
 
+### Four background tasks reading the chat list that belongs to the UI thread
+
+The chat list is an observable collection bound to the screen. Enumerating it while the UI thread
+adds a row throws `InvalidOperationException`, and on a background task there is no caller to catch it.
+
+`ChatAvatarPolicy` already knew this — it has a `SnapshotChatsAsync` whose comment says the list "must
+not be enumerated from a background task" — and then reached for the live list anyway, from inside the
+predicate that filters that very snapshot. The sibling-group lookup now takes its source as a
+parameter, so each caller has to say where it reads from: the batch paths pass their snapshot, and the
+one path that legitimately runs on the UI thread says so.
+
+`ContactNameResolver` had the same rule written both ways in one file: `ResolveMissing` marshals to the
+UI thread to copy the list, while `RefreshAsync` forty lines above walked it directly. Now both marshal.
+
+### Two reconciles could each walk away holding the other's cancellation token
+
+`ChatListViewModel` swapped its reconcile token source with a read and a write that were not a unit,
+outside the gate the neighbouring queue uses. Two reconciles starting together could each end up with
+the other's token: cancelling one stopped the wrong worker, and the one meant to stop carried on
+writing previews over the fresher pass. The swap now happens under that gate and returns the token from
+the local source rather than re-reading the field. The retire path also handles the source being
+disposed underneath it, which is how a losing racer finds out it lost.
+
+### A failed panel rebuild closed the app
+
+`ChatDetailInfoViewModel.ScheduleRebuild` was `async void` without being an event handler. Nothing
+awaited it, so a throw from the rebuild went to the synchronisation context, where there is no caller
+to catch it — the app closed instead of logging a refresh that failed. Split into a scheduler and an
+awaited half that reports.
+
 ### A cached answer about a contact's two addresses became permanent
 
 `LidMappingStore` coalesces identical in-flight lookups so ten chats resolving at once cost one query.

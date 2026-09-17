@@ -100,11 +100,28 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                     await _directory.HarvestGroupMappingsAsync().ConfigureAwait(false);
                 }
 
-                var directJids = _whatsAppService.Chats
-                    .Where(c => c != null && !c.IsGroup && !string.IsNullOrEmpty(c.JID))
-                    .Select(c => JidHelper.Normalize(c.JID))
-                    .Distinct()
-                    .ToList();
+                // Snapshot on the UI thread, the way ResolveMissing does it below. Walking the
+                // live collection from here reads it while the UI thread may be adding a chat,
+                // and an observable collection answers that with InvalidOperationException -
+                // on a background task, with nobody to catch it.
+                var directJids = new List<string>();
+                await _whatsAppService.RunOnUiThreadAsync(() =>
+                {
+                    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (ChatItem chat in _whatsAppService.Chats)
+                    {
+                        if (chat == null || chat.IsGroup || string.IsNullOrEmpty(chat.JID))
+                        {
+                            continue;
+                        }
+
+                        string jid = JidHelper.Normalize(chat.JID);
+                        if (seen.Add(jid))
+                        {
+                            directJids.Add(jid);
+                        }
+                    }
+                });
 
                 if (!force && directJids.Count > 12)
                 {

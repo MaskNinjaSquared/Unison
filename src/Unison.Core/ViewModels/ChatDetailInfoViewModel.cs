@@ -63,6 +63,9 @@ namespace Unison.Core.ViewModels
         /// <summary>Upper bound on the in-memory media index (models, not ViewModels).</summary>
         private const int MediaIndexLimit = 400;
 
+        /// <summary>How long a burst of message events is allowed to settle before rebuilding.</summary>
+        private static readonly TimeSpan RebuildDebounce = TimeSpan.FromMilliseconds(400);
+
         /// <summary>Media rows newest-first; only the first <see cref="_mediaWindow"/> become ViewModels.</summary>
         private readonly List<ChatMessage> _mediaIndex = new List<ChatMessage>();
 
@@ -687,7 +690,7 @@ namespace Unison.Core.ViewModels
         /// Coalesces the bursts of message events a history chunk produces: rebuilding the panes
         /// once per burst instead of once per chat keeps the grids off the UI thread hot path.
         /// </summary>
-        private async void ScheduleRebuild()
+        private void ScheduleRebuild()
         {
             if (_rebuildScheduled || _detached)
             {
@@ -695,21 +698,40 @@ namespace Unison.Core.ViewModels
             }
 
             _rebuildScheduled = true;
+            _ = RunScheduledRebuildAsync();
+        }
+
+        /// <summary>
+        /// The awaited half of <see cref="ScheduleRebuild"/>, kept apart from it so the failure
+        /// has somewhere to land. As an <c>async void</c> this ran on nobody's behalf: a throw
+        /// from the rebuild went to the synchronisation context, where there is no caller to
+        /// catch it, and closed the app instead of logging a failed refresh.
+        /// </summary>
+        private async Task RunScheduledRebuildAsync()
+        {
             try
             {
-                await Task.Delay(400).ConfigureAwait(false);
-            }
-            finally
-            {
-                _rebuildScheduled = false;
-            }
+                try
+                {
+                    await Task.Delay(RebuildDebounce).ConfigureAwait(false);
+                }
+                finally
+                {
+                    _rebuildScheduled = false;
+                }
 
-            if (_detached)
-            {
-                return;
-            }
+                if (_detached)
+                {
+                    return;
+                }
 
-            await RebuildFilteredAsync().ConfigureAwait(false);
+                await RebuildFilteredAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[ChatDetailInfoViewModel] Scheduled rebuild failed: " + ex.Message);
+            }
         }
 
         private async Task RebuildFilteredAsync()

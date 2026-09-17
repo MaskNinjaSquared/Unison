@@ -80,13 +80,13 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
             var snapshot = await SnapshotChatsAsync();
             var batch = snapshot
-                .Where(c => NeedsRefresh(c, nowUtc) && !IsBackoffActive(c, nowUtc))
+                .Where(c => NeedsRefresh(c, nowUtc, snapshot) && !IsBackoffActive(c, nowUtc))
                 .OrderByDescending(c => IsViewportPriority(c, viewportSnapshot))
                 .ThenBy(c => c.AvatarFetchFailedAtUtc ?? DateTime.MinValue)
                 .Take(batchSize)
                 .ToList();
 
-            int available = snapshot.Count(c => NeedsRefresh(c, nowUtc) && !IsBackoffActive(c, nowUtc));
+            int available = snapshot.Count(c => NeedsRefresh(c, nowUtc, snapshot) && !IsBackoffActive(c, nowUtc));
             Debug.WriteLine(
                 $"[ChatAvatarPolicy] Batch={batch.Count}, available={available}, batchSize={batchSize}, frugal={frugal}, viewportPriority={viewportSnapshot.Count}");
 
@@ -186,8 +186,11 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 // remember rather than a picture that does not exist.
                 bool firstVisibleRetryThisSession = missingAvatar && !_attemptedThisSession.Contains(requestKey);
 
+                // The live list is the right source here: every caller of RequestRefresh reaches
+                // it from the UI thread - a visible row, a failed image, an alias discovery
+                // already marshalled - so reading it is safe on this path only.
                 if (!force && !firstVisibleRetryThisSession &&
-                    (!NeedsRefresh(chat, nowUtc) || IsBackoffActive(chat, nowUtc)))
+                    (!NeedsRefresh(chat, nowUtc, _whatsAppService.Chats) || IsBackoffActive(chat, nowUtc)))
                 {
                     return;
                 }
@@ -243,8 +246,8 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             DateTime nowUtc = DateTime.UtcNow;
             var snapshot = await SnapshotChatsAsync();
 
-            int remaining = snapshot.Count(c => NeedsRefresh(c, nowUtc) && !IsBackoffActive(c, nowUtc));
-            int backedOff = snapshot.Count(c => NeedsRefresh(c, nowUtc) && IsBackoffActive(c, nowUtc));
+            int remaining = snapshot.Count(c => NeedsRefresh(c, nowUtc, snapshot) && !IsBackoffActive(c, nowUtc));
+            int backedOff = snapshot.Count(c => NeedsRefresh(c, nowUtc, snapshot) && IsBackoffActive(c, nowUtc));
 
             if (remaining > 0 && !token.IsCancellationRequested)
             {
@@ -321,7 +324,13 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             return nowUtc - ToComparableUtc(chat.AvatarFetchFailedAtUtc.Value) < AvatarFetchFailureBackoff;
         }
 
-        private bool NeedsRefresh(ChatItem chat, DateTime nowUtc)
+        /// <param name="knownChats">
+        /// Where the sibling-group lookup below may read from. It is a parameter so each caller
+        /// has to say: the batch paths pass their snapshot, because this predicate runs on a
+        /// background task and the live chat list belongs to the UI thread. Reaching for that
+        /// live list from in here quietly undid the snapshot taken a few lines earlier.
+        /// </param>
+        private bool NeedsRefresh(ChatItem chat, DateTime nowUtc, IEnumerable<ChatItem> knownChats)
         {
             if (chat == null)
             {
@@ -343,7 +352,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                     chat.AvatarFetchedAtUtc.HasValue &&
                     !string.IsNullOrWhiteSpace(chat.AvatarFetchFailureReason) &&
                     chat.AvatarFetchFailureReason.IndexOf(GroupAvatarFallbackMissReason, StringComparison.OrdinalIgnoreCase) >= 0 &&
-                    FindSiblingGroupAvatarSource(chat) != null)
+                    FindSiblingGroupAvatarSource(chat, knownChats) != null)
                 {
                     return true;
                 }
@@ -361,9 +370,9 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         /// A group the user is in twice - the same conversation reached through two JIDs - where
         /// one copy already has the picture. Worth a retry, since the fetch can follow the sibling.
         /// </summary>
-        private ChatItem FindSiblingGroupAvatarSource(ChatItem chat)
+        private static ChatItem FindSiblingGroupAvatarSource(ChatItem chat, IEnumerable<ChatItem> knownChats)
         {
-            return SiblingGroupAvatar.Find(chat, _whatsAppService.Chats);
+            return SiblingGroupAvatar.Find(chat, knownChats);
         }
 
         private static bool IsLegacyGroupMissReason(string reason)
