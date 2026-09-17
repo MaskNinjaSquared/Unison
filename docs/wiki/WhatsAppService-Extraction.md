@@ -712,10 +712,12 @@ from-me recipient / peer PN / peer LID, from-nonself, sender LID, fallbacks) is 
 callbacks for canonicalization and self-link. `ResolveLiveDirectChatJid` is a thin forward.
 
 **3.10 rules extraction is closed.** Pure decisions that lived in `HandleDecryptedMessageAsync` (and
-the live DM resolver it called) are in Core under tests. What remains in `.IncomingPump.cs` is
-orchestration: queue, locks, UI-thread apply (row, preview, unread, toast, persist), placeholder
-resend state, offline replay timers. That apply move is still 3.10's unfinished half — façades +
-device — not another rule slice.
+the live DM resolver it called) are in Core under tests.
+
+**Apply progress:** live toast/badge/tile is `MessageFacade.NotifyLiveIncoming`; live list strip
+(create row, preview, unread, reposition) is `ChatFacade.ApplyLiveIncomingChatListAsync`. What remains
+in `.IncomingPump.cs` for apply is timeline insert (`MessagesByChat` + id index + dedupe), persist
+queue, offline-replay summary apply, placeholder resend state and the pump queue itself.
 
 ### Phase 4 — What remains is connection
 
