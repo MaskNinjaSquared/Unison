@@ -860,87 +860,39 @@ namespace Unison.Uwp.Services.WhatsApp
             out List<string> mentionedJids,
             out bool isForwarded)
         {
-            quotedText = null;
-            quotedSender = null;
-            quotedParticipantJid = null;
-            quotedMessageId = null;
-            quotedKind = ChatPreviewKind.Text;
-            mentionedJids = null;
-            isForwarded = false;
+            QuotedContext context = QuotedContext.Read(msg);
 
-            Proto.Message unwrapped = UnwrapMessage(msg);
-            isForwarded = HistorySyncContentFilter.ReadIsForwarded(unwrapped);
-            Proto.ContextInfo ctx = GetContextInfo(unwrapped);
-            if (ctx == null)
+            quotedText = context.QuotedText;
+            quotedParticipantJid = context.QuotedParticipantJid;
+            quotedMessageId = context.QuotedMessageId;
+            quotedKind = context.QuotedKind;
+            mentionedJids = context.MentionedJids;
+            isForwarded = context.IsForwarded;
+
+            // Naming the author is the one part that is not in the envelope: it needs the account,
+            // the alias table and the directory, which is why the reading above stops here.
+            quotedSender = ResolveQuotedSender(context.QuotedParticipantJid);
+        }
+
+        private string ResolveQuotedSender(string participant)
+        {
+            if (string.IsNullOrEmpty(participant))
             {
-                return;
+                return null;
             }
 
-            if (ctx.MentionedJid != null && ctx.MentionedJid.Count > 0)
+            if (IsSelfJid(participant) || IsSelfLinkedJid(participant))
             {
-                mentionedJids = new List<string>();
-                for (int i = 0; i < ctx.MentionedJid.Count; i++)
-                {
-                    string norm = NormalizeJid(ctx.MentionedJid[i]);
-                    if (!string.IsNullOrEmpty(norm) && !mentionedJids.Contains(norm))
-                    {
-                        mentionedJids.Add(norm);
-                    }
-                }
-
-                if (mentionedJids.Count == 0)
-                {
-                    mentionedJids = null;
-                }
+                return SelfListDisplayName();
             }
 
-            if (ctx.QuotedMessage == null)
+            string name = ResolveDisplayName(participant, "quote");
+            if (string.IsNullOrWhiteSpace(name) || name.IndexOf('@') >= 0)
             {
-                return;
+                name = GetResolvedName(participant);
             }
 
-            if (ctx.HasStanzaId && !string.IsNullOrWhiteSpace(ctx.StanzaId))
-            {
-                quotedMessageId = ctx.StanzaId;
-            }
-
-            MessageRenderInfo quotedInfo = ExtractMessageRenderInfo(ctx.QuotedMessage);
-            if (quotedInfo != null)
-            {
-                quotedKind = quotedInfo.PreviewKind;
-                string raw = quotedInfo.Content ?? string.Empty;
-                ChatPreviewKind? hint = quotedKind == ChatPreviewKind.Text
-                    ? null
-                    : (ChatPreviewKind?)quotedKind;
-                ChatPreviewNormalizer.Normalize(raw, hint, out _, out quotedText);
-                if (string.IsNullOrWhiteSpace(quotedText) &&
-                    !string.IsNullOrWhiteSpace(quotedInfo.Caption))
-                {
-                    quotedText = quotedInfo.Caption;
-                }
-
-                // Media quotes with no caption: keep QuotedText empty — the bubble strip
-                // shows icon + localized label from QuotedKind (not legacy [Image] tags).
-            }
-
-            string participant = NormalizeJid(ctx.Participant);
-            if (!string.IsNullOrEmpty(participant))
-            {
-                quotedParticipantJid = participant;
-                if (IsSelfJid(participant) || IsSelfLinkedJid(participant))
-                {
-                    quotedSender = SelfListDisplayName();
-                }
-                else
-                {
-                    quotedSender = ResolveDisplayName(participant, "quote");
-                    if (string.IsNullOrWhiteSpace(quotedSender) ||
-                        quotedSender.IndexOf('@') >= 0)
-                    {
-                        quotedSender = GetResolvedName(participant);
-                    }
-                }
-            }
+            return name;
         }
 
         private static bool IsValidMessageTimestamp(DateTime timestamp)
