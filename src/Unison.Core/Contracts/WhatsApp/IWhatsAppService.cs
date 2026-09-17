@@ -263,6 +263,18 @@ namespace Unison.Core.Contracts.WhatsApp
         void RequestAliasChatMerge(string lidJid, string pnJid);
 
         /// <summary>
+        /// Transitional host for <see cref="IMessageService.AcceptIncomingTimeline"/> —
+        /// mutates MessagesByChat + MessageIdIndex. Prefer the message façade.
+        /// </summary>
+        IncomingTimelineAcceptResult AcceptIncomingTimeline(
+            string chatJid,
+            ChatMessage message,
+            bool isGroup);
+
+        /// <summary>Queues one message into the debounced persist batch.</summary>
+        void QueueIncomingMessagePersist(string chatJid, ChatMessage message);
+
+        /// <summary>
         /// Writes the account's chat-list pin to the in-memory rows and to the local mirror,
         /// without telling the server. Prefer <see cref="IChatService.SetPinnedAsync"/>, which is
         /// what actually pins the chat; this is the local half of it.
