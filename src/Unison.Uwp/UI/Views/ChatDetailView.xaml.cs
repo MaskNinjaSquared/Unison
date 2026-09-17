@@ -251,6 +251,17 @@ namespace Unison.Uwp.UI.Views
             }
         }
 
+        /// <summary>Releases the state group, which outlives this page's handler otherwise.</summary>
+        private void UnhookLayoutStateChanges()
+        {
+            if (_layoutStates == null)
+            {
+                return;
+            }
+
+            _layoutStates.CurrentStateChanged -= LayoutStates_CurrentStateChanged;
+            _layoutStates = null;
+        }
         private void LayoutStates_CurrentStateChanged(object sender, VisualStateChangedEventArgs e)
         {
             if (e.NewState != null && e.NewState.Name != "Minimal")
@@ -384,6 +395,7 @@ namespace Unison.Uwp.UI.Views
             StopDateSeparatorTimer();
             _voiceRouting?.DetachPlayer();
             TearDownAudioPlayer();
+            UnhookLayoutStateChanges();
             if (ViewModel != null)
             {
                 DetachViewModelEvents();

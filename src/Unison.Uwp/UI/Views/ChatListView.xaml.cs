@@ -356,32 +356,42 @@ namespace Unison.Uwp.UI.Views
         // Shell coordination
         // ---------------------------------------------------------------------
 
+        // Raised by the view model rather than by XAML, so async void here has nothing above it to
+        // catch an escape. It also waits up to a quarter second before touching the list, and the
+        // view can be unloaded by then — unsubscribing does not recall a call already in flight.
         private async void ViewModel_OpenChatRequested(object sender, string jid)
         {
-            if (string.IsNullOrEmpty(jid) || ViewModel == null)
+            try
             {
-                return;
-            }
-
-            // A new chat may still be materializing in the store; give it a short chance.
-            ChatItem chat = null;
-            for (int i = 0; i < 5 && chat == null; i++)
-            {
-                chat = ViewModel.FindChatByJid(jid);
-                if (chat == null)
+                if (string.IsNullOrEmpty(jid) || ViewModel == null)
                 {
-                    await Task.Delay(50);
+                    return;
                 }
-            }
 
-            if (chat == null)
+                // A new chat may still be materializing in the store; give it a short chance.
+                ChatItem chat = null;
+                for (int i = 0; i < 5 && chat == null; i++)
+                {
+                    chat = ViewModel.FindChatByJid(jid);
+                    if (chat == null)
+                    {
+                        await Task.Delay(50);
+                    }
+                }
+
+                if (chat == null || ChatList == null || ViewModel == null)
+                {
+                    return;
+                }
+
+                // Deliberately not quiet: opening a new chat should behave like picking it.
+                ViewModel.EnsureVisible(chat);
+                ChatList.SelectedItem = chat;
+            }
+            catch (Exception ex)
             {
-                return;
+                Debug.WriteLine(string.Format("[ChatListView] Opening a chat on request failed: {0}", ex.Message));
             }
-
-            // Deliberately not quiet: opening a new chat should behave like picking it.
-            ViewModel.EnsureVisible(chat);
-            ChatList.SelectedItem = chat;
         }
 
         private void ViewModel_BeforeLocalConversationsCleared(object sender, EventArgs e)

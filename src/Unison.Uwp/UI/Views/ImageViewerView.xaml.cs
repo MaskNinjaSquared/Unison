@@ -43,6 +43,13 @@ namespace Unison.Uwp.UI.Views
             get => _viewModel;
             set
             {
+                // Re-assigning the same view model used to reload the bitmap and throw away the
+                // zoom the user had set. Matches VideoViewerView.
+                if (ReferenceEquals(_viewModel, value))
+                {
+                    return;
+                }
+
                 if (_viewModel != null)
                 {
                     _viewModel.PropertyChanged -= ViewModel_PropertyChanged;
@@ -77,11 +84,10 @@ namespace Unison.Uwp.UI.Views
 
         private void ImageViewerView_Unloaded(object sender, RoutedEventArgs e)
         {
-            if (_viewModel != null)
-            {
-                _viewModel.PropertyChanged -= ViewModel_PropertyChanged;
-                _viewModel.CloseRequested -= ViewModel_CloseRequested;
-            }
+            // Unsubscribing alone left the view model, and the full-screen bitmap it holds, alive
+            // behind a closed overlay — the app's memory peak, on the device with the least of it.
+            // The setter already unsubscribes and clears the image source, so hand it null.
+            ViewModel = null;
         }
 
         private void ImageViewerView_SizeChanged(object sender, SizeChangedEventArgs e)
