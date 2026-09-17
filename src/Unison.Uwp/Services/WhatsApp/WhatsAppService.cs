@@ -804,29 +804,6 @@ namespace Unison.Uwp.Services.WhatsApp
         // Offline messages are intentionally kept off the UI thread while a large replay
         // is draining. Keep a compact per-chat summary so the chat list can still be
         // updated after the in-memory message cache is released for inactive chats.
-        private sealed class OfflineReplayChatSummary
-        {
-            public string Jid { get; set; }
-            public string Preview { get; set; }
-            public DateTime Timestamp { get; set; }
-            public bool IsGroup { get; set; }
-            public bool IsFromMe { get; set; }
-            public int UnreadDelta { get; set; }
-            public ChatPreviewKind Kind { get; set; }
-
-            /// <summary>
-            /// Delivery status of the message this summary describes, so the list shows the
-            /// ticks the message actually has after a replay rather than assuming "sent".
-            /// </summary>
-            public string Status { get; set; }
-
-            /// <summary>
-            /// Group author strip ("Name: "). Without this, ApplyChatPreviewIfNewer writes an
-            /// empty author and the list loses the prefix the live path just computed.
-            /// </summary>
-            public string AuthorPrefix { get; set; }
-        }
-
         private readonly object _offlineReplayUiLock = new object();
         private readonly SemaphoreSlim _offlineReplayUiApplyLock = new SemaphoreSlim(1, 1);
         private readonly Dictionary<string, OfflineReplayChatSummary> _offlineReplayUiSummaries =

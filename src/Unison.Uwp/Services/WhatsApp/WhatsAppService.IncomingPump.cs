@@ -2408,48 +2408,33 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            DateTime comparableTimestamp = IsValidMessageTimestamp(timestamp)
-                ? ToComparableUtc(timestamp)
-                : DateTime.MinValue;
+            // Same rule as the live path: decide unread once here. The apply pass must not
+            // re-ask attention, or opening/closing the chat mid-drain drops the badge.
+            bool incrementUnread = countUnread &&
+                IncomingAttention.For(
+                    isFromMe,
+                    IsActiveChatJid(canonical),
+                    Unison.Uwp.App.IsWindowVisible).CountsAsUnread;
 
             lock (_offlineReplayUiLock)
             {
                 if (!_offlineReplayUiSummaries.TryGetValue(canonical, out var summary))
                 {
-                    summary = new OfflineReplayChatSummary
-                    {
-                        Jid = canonical,
-                        Timestamp = DateTime.MinValue,
-                        IsGroup = isGroup,
-                        Kind = ChatPreviewKind.Text
-                    };
+                    summary = OfflineReplaySummaryMerge.Create(canonical, isGroup);
                     _offlineReplayUiSummaries[canonical] = summary;
                 }
 
-                if (comparableTimestamp != DateTime.MinValue &&
-                    (summary.Timestamp == DateTime.MinValue || comparableTimestamp >= summary.Timestamp))
-                {
-                    summary.Timestamp = comparableTimestamp;
-                    summary.Preview = preview ?? string.Empty;
-                    summary.IsGroup = isGroup;
-                    summary.IsFromMe = isFromMe;
-                    summary.Kind = kind;
-                    summary.Status = status;
-                    summary.AuthorPrefix = authorPrefix ?? string.Empty;
-                }
-
-                // Same rule as the live path, and for the same reason: an offline replay runs when
-                // the app reconnects, which is exactly when it may be in the background with a
-                // conversation still open behind it. Decided once here — the apply pass must not
-                // re-ask attention, or opening/closing the chat mid-drain drops the badge.
-                if (countUnread &&
-                    IncomingAttention.For(
-                        isFromMe,
-                        IsActiveChatJid(canonical),
-                        Unison.Uwp.App.IsWindowVisible).CountsAsUnread)
-                {
-                    summary.UnreadDelta++;
-                }
+                OfflineReplaySummaryMerge.Record(
+                    summary,
+                    preview,
+                    timestamp,
+                    isGroup,
+                    isFromMe,
+                    kind,
+                    status,
+                    authorPrefix,
+                    incrementUnread,
+                    DateTime.UtcNow);
 
                 // Throttle instead of debounce: show the first recovered conversation
                 // within ~180 ms even while a long replay continues. Further messages
@@ -2601,20 +2586,7 @@ namespace Unison.Uwp.Services.WhatsApp
                                 continue;
                             }
 
-                            if (ChatMessageOrder.ToComparableUtc(pair.Value.Timestamp) >
-                                ChatMessageOrder.ToComparableUtc(current.Timestamp))
-                            {
-                                // Every field describing the preview has to move with it.
-                                // Leaving authorship or kind behind pairs one message's text
-                                // with another message's ticks.
-                                current.Timestamp = pair.Value.Timestamp;
-                                current.Preview = pair.Value.Preview;
-                                current.IsGroup = pair.Value.IsGroup;
-                                current.IsFromMe = pair.Value.IsFromMe;
-                                current.Kind = pair.Value.Kind;
-                                current.Status = pair.Value.Status;
-                            }
-                            current.UnreadDelta += pair.Value.UnreadDelta;
+                            OfflineReplaySummaryMerge.Reapply(current, pair.Value);
                         }
                     }
                 }

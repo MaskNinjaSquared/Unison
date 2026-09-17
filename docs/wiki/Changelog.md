@@ -4,6 +4,14 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Offline replay tip merge left WhatsAppService (3.10)
+
+`OfflineReplayChatSummary` and the record/rollback tip rules are `OfflineReplaySummaryMerge` in
+Core. Unread still accumulates when the tip is older; a failed UI apply restores every tip field
+including the group author prefix (the catch used to leave it behind).
+
+---
+
 ## Incoming media metadata left WhatsAppService (3.10)
 
 Proto → `ChatMessage` media fields (keys, mime, URL, caption, PTT) live in `IncomingMediaMetadata`.
