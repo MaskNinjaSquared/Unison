@@ -212,7 +212,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
                 MessagesByChat.Remove(canonical);
-                _messageIdIndexByChat.Remove(canonical);
+                _messageIdIndex.RemoveChat(canonical);
                 _pendingMissingMessagesByChat.Remove(canonical);
                 _historyOnDemandMarkerByChat.Remove(canonical);
                 _historyOnDemandLastRequestIdByChat.Remove(canonical);
@@ -315,10 +315,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
                 messages.Remove(message);
-                if (_messageIdIndexByChat.TryGetValue(canonical, out var idSet))
-                {
-                    idSet.Remove(messageId);
-                }
+                _messageIdIndex.Remove(canonical, messageId);
 
                 // Every row sharing this identity, not just the first: a conversation is
                 // listed under both PN and LID, and correcting one left the other showing a

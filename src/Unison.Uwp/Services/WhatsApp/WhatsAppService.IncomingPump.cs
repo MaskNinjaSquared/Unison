@@ -46,22 +46,11 @@ namespace Unison.Uwp.Services.WhatsApp
         private HashSet<string> GetOrBuildMessageIdIndex(string chatJid)
         {
             string normJid = NormalizeJid(chatJid);
-            if (!_messageIdIndexByChat.TryGetValue(normJid, out var idSet))
+            return _messageIdIndex.GetOrBuild(normJid, () =>
             {
-                if (MessagesByChat.TryGetValue(normJid, out var list))
-                {
-                    idSet = new HashSet<string>(
-                        list.Where(m => m != null && !string.IsNullOrEmpty(m.Id)).Select(m => m.Id));
-                }
-                else
-                {
-                    idSet = new HashSet<string>();
-                }
-
-                _messageIdIndexByChat[normJid] = idSet;
-            }
-
-            return idSet;
+                List<ChatMessage> list;
+                return MessagesByChat.TryGetValue(normJid, out list) ? list : null;
+            });
         }
 
         private bool HasMessageId(string chatJid, string messageId)
@@ -193,10 +182,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             sourceMessages.Remove(existingMessage);
-            if (_messageIdIndexByChat.TryGetValue(normalizedSource, out var sourceIndex))
-            {
-                sourceIndex.Remove(messageId);
-            }
+            _messageIdIndex.Remove(normalizedSource, messageId);
 
             return true;
         }

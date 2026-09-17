@@ -593,6 +593,22 @@ the weight is the invariant rather than the four cases: unless the message is al
 is both counted and announced. `IsActiveChatJid` on its own is left alone everywhere it asks about
 the *view* (hydrate this image, refresh that timeline) rather than about the user's attention.
 
+**`MessageIdIndex` took the duplicate guard with it.** Which ids a conversation already holds is what
+stops the same message being shown twice when it arrives from more than one direction — live
+delivery, offline replay, history sync, and the merge of two addresses belonging to one contact. It
+was a raw `Dictionary<string, HashSet<string>>` the client reached into from eleven places across
+five partials, plus four hand-written copies of the same "collect the ids of these messages" loop.
+Three of those four read `m.Id` without checking `m` first.
+
+It is a type now (Core, 19 tests) and the dictionary is gone from the client. Two things the tests
+pin are worth stating because they pull in opposite directions: the conversation key is
+case-insensitive and normalised on the way in, since a caller that forgot to normalise got a second,
+empty index for a conversation that already had one — which reads as "this message is new" for every
+message in it — while the ids themselves are compared exactly, because they are server-assigned and
+folding their case would merge two real messages. `GetOrBuild` hands out the live set rather than a
+copy, which the transient-chat merge depends on; that is now stated in the type instead of being a
+property of where the field happened to live.
+
 **`MessageRenderReader` next, and it moved whole.** Reading an envelope into "what goes on screen" —
 preview line, media kind, the sub-message the download path needs — was 134 lines of cascade in the
 client. It needed nothing from the client: `MediaPreviewTag`, `ChatPreviewKind` and

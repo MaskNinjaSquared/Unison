@@ -663,7 +663,7 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 Chats.Clear();
                 MessagesByChat.Clear();
-                _messageIdIndexByChat.Clear();
+                _messageIdIndex.Clear();
                 lock (_historyOnDemandLock)
                 {
                     _historyOnDemandMarkerByChat.Clear();

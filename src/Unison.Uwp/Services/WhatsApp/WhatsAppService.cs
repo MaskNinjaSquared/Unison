@@ -471,7 +471,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         }
 
                         MessagesByChat.Remove(key);
-                        _messageIdIndexByChat.Remove(NormalizeJid(key));
+                        _messageIdIndex.RemoveChat(key);
                     }
                 });
 
@@ -605,7 +605,7 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 MessagesByChat.Remove(jid);
             }
-            _messageIdIndexByChat.Remove(normalized);
+            _messageIdIndex.RemoveChat(normalized);
         }
 
         private void TrimInMemoryMessageWindow(string jid)
@@ -645,9 +645,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     .OrderBy(m => m.Timestamp));
             }
 
-            _messageIdIndexByChat[normalized] = new HashSet<string>(messages
-                .Where(m => m != null && !string.IsNullOrWhiteSpace(m.Id))
-                .Select(m => m.Id), StringComparer.Ordinal);
+            _messageIdIndex.Rebuild(normalized, messages);
         }
         private AuthState _authState;
 
@@ -1261,7 +1259,7 @@ namespace Unison.Uwp.Services.WhatsApp
             public bool AckAccepted { get; set; }
             public DateTime AckAcceptedUtc { get; set; }
         }
-        private readonly Dictionary<string, HashSet<string>> _messageIdIndexByChat = new Dictionary<string, HashSet<string>>();
+        private readonly MessageIdIndex _messageIdIndex = new MessageIdIndex();
         private readonly Dictionary<string, string> _historyOnDemandMarkerByChat = new Dictionary<string, string>();
         private readonly HashSet<string> _historyOnDemandInFlight = new HashSet<string>();
         private readonly Dictionary<string, HistoryOnDemandRequestState> _historyOnDemandRequestById = new Dictionary<string, HistoryOnDemandRequestState>();
@@ -2104,7 +2102,7 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 Chats.Clear();
                 MessagesByChat.Clear();
-                _messageIdIndexByChat.Clear();
+                _messageIdIndex.Clear();
                 lock (_historyOnDemandLock)
                 {
                     _historyOnDemandMarkerByChat.Clear();
@@ -2694,9 +2692,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
                 ChatMessageOrder.SortInPlace(list);
-                _messageIdIndexByChat[normJid] = new HashSet<string>(
-                    list.Where(m => !string.IsNullOrEmpty(m.Id)).Select(m => m.Id),
-                    StringComparer.Ordinal);
+                _messageIdIndex.Rebuild(normJid, list);
             });
         }
 
@@ -3476,9 +3472,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
                 MessagesByChat[normJid] = cache;
-                _messageIdIndexByChat[normJid] = new HashSet<string>(
-                    cache.Where(m => !string.IsNullOrEmpty(m.Id)).Select(m => m.Id),
-                    StringComparer.Ordinal);
+                _messageIdIndex.Rebuild(normJid, cache);
 
                 if (stateAdjustedMessages.Count > 0)
                 {
@@ -7039,7 +7033,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             }
                         }
                         MessagesByChat.Remove(normLidJid);
-                        _messageIdIndexByChat.Remove(normLidJid);
+                        _messageIdIndex.RemoveChat(normLidJid);
                     }
 
                     // 2. Remove LID chat from UI
@@ -7497,7 +7491,7 @@ namespace Unison.Uwp.Services.WhatsApp
                                 }
 
                                 MessagesByChat.Remove(secondaryNorm);
-                                _messageIdIndexByChat.Remove(secondaryNorm);
+                                _messageIdIndex.RemoveChat(secondaryNorm);
                             }
 
                             if (ContactNames.TryGetValue(secondaryNorm, out var secondaryName) && !ContactNames.ContainsKey(primaryNorm))
@@ -7624,7 +7618,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
                         ChatMessageOrder.SortInPlace(primaryMsgs);
                         MessagesByChat.Remove(key);
-                        _messageIdIndexByChat.Remove(key);
+                        _messageIdIndex.RemoveChat(key);
                         normalizedMessageKeyCount++;
                     }
 

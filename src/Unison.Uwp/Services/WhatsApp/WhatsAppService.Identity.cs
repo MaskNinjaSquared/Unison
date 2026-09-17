@@ -324,7 +324,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         GetOrBuildMessageIdIndex(normalizedCanonical));
 
                     MessagesByChat.Remove(normalizedTransient);
-                    _messageIdIndexByChat.Remove(normalizedTransient);
+                    _messageIdIndex.RemoveChat(normalizedTransient);
                     _pendingMissingMessagesByChat.Remove(normalizedTransient);
                     merged = true;
                     canonicalSnapshot = canonicalMessages.ToList();
