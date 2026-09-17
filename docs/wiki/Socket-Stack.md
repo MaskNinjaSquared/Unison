@@ -171,7 +171,15 @@ Outgoing **audio is converted to OGG** before upload (UWP media processor).
 
 ## Events
 
-`IWaEventBus` is the only Socket → host channel. During initial history sync, `WaEventBuffer` **buffers and merges** bursts (`MessagingHistorySet`, chats/contacts/messages upserts, receipts, group updates), then flushes. Timeout 30s auto-flush; nested flush debounce 100 ms.
+`IWaEventBus` is the only Socket → host channel. `WaEventBuffer` is the rc14 `event-buffer.ts` port: during initial history sync it opens a buffer, and `OfflineSyncCoordinator` releases it when the backlog drains. Timeout 30s auto-flush; nested flush debounce 100 ms.
+
+**The merge half is not built.** A kind is only held back when a merger is registered for it, and no
+`IWaEventMerger` implementation exists — `RegisterMerger` has no callers. So every event is dispatched
+individually today, and the buffer's open/release cycle is a no-op around that. The fail-safe is
+deliberate (an unmerged kind passes straight through rather than being lost); what is missing is the
+mergers themselves, for `MessagingHistorySet`, chats/contacts/messages upserts, receipts, and group
+updates. Until they exist, a first sync costs the host one dispatch per event rather than one batch,
+which is why `SocketBridge` still coalesces on its own side.
 
 QR travels on `ConnectionUpdate.Qr` (no separate QR event), matching rc14.
 
