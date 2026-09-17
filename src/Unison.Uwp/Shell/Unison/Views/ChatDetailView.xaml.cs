@@ -1321,18 +1321,27 @@ namespace Unison.Uwp.Shell.Unison.Views
                 return;
             }
 
-            if (vm.NeedsImageDownload)
+            // Called by the info panes, not by XAML, so async void here has no handler above it: a
+            // download that fails on a bad connection closed the app instead of doing nothing.
+            try
             {
-                await vm.DownloadImageAsync();
-            }
-            else
-            {
-                await vm.EnsureImageReadyAsync(showErrorDialog: false);
-            }
+                if (vm.NeedsImageDownload)
+                {
+                    await vm.DownloadImageAsync();
+                }
+                else
+                {
+                    await vm.EnsureImageReadyAsync(showErrorDialog: false);
+                }
 
-            if (vm.HasImage)
+                if (vm.HasImage)
+                {
+                    OpenImageViewer(vm);
+                }
+            }
+            catch (Exception ex)
             {
-                OpenImageViewer(vm);
+                Debug.WriteLine(string.Format("[ChatDetailView] Opening an image from the info pane failed: {0}", ex.Message));
             }
         }
 
@@ -1343,14 +1352,21 @@ namespace Unison.Uwp.Shell.Unison.Views
                 return;
             }
 
-            if (vm.NeedsVideoDownload)
+            try
             {
-                await vm.DownloadVideoAsync();
-            }
+                if (vm.NeedsVideoDownload)
+                {
+                    await vm.DownloadVideoAsync();
+                }
 
-            if (vm.HasLocalVideo)
+                if (vm.HasLocalVideo)
+                {
+                    OpenVideoViewer(vm);
+                }
+            }
+            catch (Exception ex)
             {
-                OpenVideoViewer(vm);
+                Debug.WriteLine(string.Format("[ChatDetailView] Opening a video from the info pane failed: {0}", ex.Message));
             }
         }
 
@@ -2874,13 +2890,20 @@ namespace Unison.Uwp.Shell.Unison.Views
                 return;
             }
 
-            if (!vm.HasLocalAudio || vm.ShowAudioDownloadIcon || vm.NeedsAudioDownload)
+            try
             {
-                await vm.DownloadAudioAsync();
-                return;
-            }
+                if (!vm.HasLocalAudio || vm.ShowAudioDownloadIcon || vm.NeedsAudioDownload)
+                {
+                    await vm.DownloadAudioAsync();
+                    return;
+                }
 
-            await PlayOrPauseAudioAsync(vm);
+                await PlayOrPauseAudioAsync(vm);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(string.Format("[ChatDetailView] Playing audio from the info pane failed: {0}", ex.Message));
+            }
         }
 
         private async System.Threading.Tasks.Task PlayOrPauseAudioAsync(ChatMessageViewModel vm)
