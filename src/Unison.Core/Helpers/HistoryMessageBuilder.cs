@@ -430,32 +430,23 @@ namespace Unison.Core.Helpers
             string chatJid,
             IDictionary<string, string> pushNames)
         {
-            Message unwrapped = HistorySyncContentFilter.Unwrap(info?.Message);
-            ContextInfo ctx = HistorySyncContentFilter.GetContextInfo(unwrapped);
-            if (ctx == null || ctx.QuotedMessage == null)
+            // Same reading as the live path. It used to be a second, shorter one here, built on
+            // ExtractContent, which knows text and the four media kinds and nothing else — so a
+            // quoted poll, contact, location or call came back as empty text of kind Text, and the
+            // strip drew nothing. Live, the same quote showed its label. Which of the two you got
+            // depended on whether the message arrived while the app was open.
+            QuotedContext quote = QuotedContext.Read(info?.Message);
+            if (!quote.HasQuote)
             {
                 return;
             }
 
-            if (ctx.HasStanzaId && !string.IsNullOrWhiteSpace(ctx.StanzaId))
-            {
-                row.QuotedMessageId = ctx.StanzaId.Trim();
-            }
-
-            string quotedChat = JidHelper.Normalize(ctx.RemoteJid);
-            row.QuotedChatJid = string.IsNullOrWhiteSpace(quotedChat) ? chatJid : quotedChat;
-
-            string quotedParticipant = JidHelper.Normalize(ctx.Participant);
-            row.QuotedParticipantJid = quotedParticipant;
-            row.QuotedSenderName = ResolveName(pushNames, quotedParticipant);
-
-            Message quoted = HistorySyncContentFilter.Unwrap(ctx.QuotedMessage) ?? ctx.QuotedMessage;
-            string quotedText;
-            ChatPreviewKind quotedKind;
-            HistorySyncContentFilter.ExtractContent(quoted, out quotedText, out quotedKind);
-            ChatPreviewNormalizer.NormalizeBody(quotedText, quotedKind, out quotedKind, out string quotedNormalized);
-            row.QuotedKind = quotedKind;
-            row.QuotedBody = quotedNormalized;
+            row.QuotedMessageId = quote.QuotedMessageId;
+            row.QuotedChatJid = quote.QuotedChatJid ?? chatJid;
+            row.QuotedParticipantJid = quote.QuotedParticipantJid;
+            row.QuotedSenderName = ResolveName(pushNames, quote.QuotedParticipantJid);
+            row.QuotedKind = quote.QuotedKind;
+            row.QuotedBody = quote.QuotedText;
         }
 
         private static void FillMediaEnvelope(HistoryMessage row, WebMessageInfo info)

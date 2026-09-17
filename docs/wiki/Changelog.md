@@ -4,6 +4,18 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Quoting a poll, a contact or a location came back blank after a sync
+
+History sync read quotes through `HistorySyncContentFilter.ExtractContent`, which knows plain text
+and the four media kinds and nothing else. A quoted poll, contact, location or call log fell through
+it as empty text of kind `Text`, so the strip on the bubble drew nothing at all. The live path, on
+the same quote, showed its label — which of the two you saw depended on whether the message arrived
+while the app happened to be open.
+
+Both paths now read through `QuotedContext`, so a quote means the same thing however it got here.
+
+---
+
 ## Quotes arriving live were stored truncated at 50 characters
 
 Reading the context info moved to `QuotedContext` in Core, and putting the live path beside the

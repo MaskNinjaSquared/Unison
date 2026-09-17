@@ -214,6 +214,79 @@ public class QuotedContextTests
     }
 
     [Fact]
+    public void Quoting_a_poll_names_the_poll()
+    {
+        // The reading history sync used before knew text and the four media kinds and nothing
+        // else, so a quoted poll came back empty and the strip drew nothing — while the same quote
+        // arriving live showed its label.
+        var read = QuotedContext.Read(Quoting(new Proto.ContextInfo
+        {
+            Participant = "5511999999999@s.whatsapp.net",
+            QuotedMessage = new Proto.Message
+            {
+                PollCreationMessage = new Proto.Message.Types.PollCreationMessage { Name = "lunch?" }
+            }
+        }));
+
+        Assert.True(read.HasQuote);
+        Assert.False(string.IsNullOrWhiteSpace(read.QuotedText));
+    }
+
+    [Fact]
+    public void Quoting_a_location_is_a_quote_with_something_in_it()
+    {
+        var read = QuotedContext.Read(Quoting(new Proto.ContextInfo
+        {
+            Participant = "5511999999999@s.whatsapp.net",
+            QuotedMessage = new Proto.Message
+            {
+                LocationMessage = new Proto.Message.Types.LocationMessage()
+            }
+        }));
+
+        Assert.True(read.HasQuote);
+        Assert.False(string.IsNullOrWhiteSpace(read.QuotedText));
+    }
+
+    [Fact]
+    public void The_conversation_a_quote_points_into_is_read_when_given()
+    {
+        var read = QuotedContext.Read(Quoting(new Proto.ContextInfo
+        {
+            RemoteJid = "120363000000000000@g.us",
+            Participant = "5511999999999@s.whatsapp.net",
+            QuotedMessage = new Proto.Message { Conversation = "x" }
+        }));
+
+        Assert.Equal("120363000000000000@g.us", read.QuotedChatJid);
+    }
+
+    [Fact]
+    public void No_conversation_on_the_quote_means_the_caller_decides()
+    {
+        var read = QuotedContext.Read(Quoting(new Proto.ContextInfo
+        {
+            Participant = "5511999999999@s.whatsapp.net",
+            QuotedMessage = new Proto.Message { Conversation = "x" }
+        }));
+
+        Assert.Null(read.QuotedChatJid);
+    }
+
+    [Fact]
+    public void Surrounding_space_on_a_quoted_id_is_not_part_of_it()
+    {
+        var read = QuotedContext.Read(Quoting(new Proto.ContextInfo
+        {
+            StanzaId = "  ABC123  ",
+            Participant = "5511999999999@s.whatsapp.net",
+            QuotedMessage = new Proto.Message { Conversation = "x" }
+        }));
+
+        Assert.Equal("ABC123", read.QuotedMessageId);
+    }
+
+    [Fact]
     public void A_long_quote_is_kept_whole_because_this_text_gets_stored()
     {
         // The one-line cap belongs to the strip that draws it, which normalizes again on the way

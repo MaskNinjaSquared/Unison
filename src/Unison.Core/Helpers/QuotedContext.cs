@@ -34,6 +34,12 @@ namespace Unison.Core.Helpers
         /// <summary>Who wrote the quoted message, normalized. Null when the quote carries no author.</summary>
         public string QuotedParticipantJid { get; private set; }
 
+        /// <summary>
+        /// The conversation the quoted message lives in, when the sender said so. Null means the
+        /// quote points into the same conversation, which is the caller's default.
+        /// </summary>
+        public string QuotedChatJid { get; private set; }
+
         /// <summary>Text of the quote. Empty for media with no caption, where the strip shows the kind instead.</summary>
         public string QuotedText { get; private set; }
 
@@ -79,11 +85,12 @@ namespace Unison.Core.Helpers
 
             if (context.HasStanzaId && !string.IsNullOrWhiteSpace(context.StanzaId))
             {
-                read.QuotedMessageId = context.StanzaId;
+                read.QuotedMessageId = context.StanzaId.Trim();
             }
 
             read.ReadQuotedBody(context.QuotedMessage);
             read.QuotedParticipantJid = NormalizeOrNull(context.Participant);
+            read.QuotedChatJid = NormalizeOrNull(context.RemoteJid);
             return read;
         }
 
