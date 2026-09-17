@@ -184,7 +184,7 @@ Self-contained first. List/persist last.
 | 3.8 | `.AppState.cs` | **Rewritten — the premise was stale.** See below |
 | 3.9a | List display order (done) | `ChatDisplayOrder` (Core) |
 | 3.9b | `.Persistence.cs` + preview reconcile + the appliers from 3.8 | `ChatFacade` + `ChatStateStore` + `IChatStore` / `IMessageStore`. Close the transitional public dictionaries on `ChatStateStore`. **Persistence rules out; appliers remain — see below** |
-| 3.10 | `.IncomingPump.cs` | Decode/dispatch stays with connection. **Rules closed.** **Notify + timeline accept + persist enqueue on MessageFacade.** **Live + offline list apply on ChatFacade.** Pump keeps queue/locks, alias-consolidate orchestration, offline summary *record* |
+| 3.10 | `.IncomingPump.cs` | Decode/dispatch stays with connection. **Rules closed.** **Notify + timeline accept + persist enqueue + revoke on MessageFacade.** **Live + offline list apply + tip refresh/reconcile on ChatFacade.** Pump keeps queue/locks, alias-consolidate orchestration, offline summary *record* |
 
 **3.1a is done.** The avatar half of `MediaCache` is `IAvatarCache` / `AvatarCacheService`: `TryGet`,
 `SaveAsync`, `DeleteIfCached`. It took `BuildSafeAvatarFileName`, `TryGetCachedAvatarUri`,
@@ -718,8 +718,12 @@ the live DM resolver it called) are in Core under tests.
 list strip (create row, preview, unread, reposition/sort) is `ChatFacade` (`ApplyLiveIncomingChatListAsync`
 / `ApplyOfflineReplayChatSummariesAsync`, shared `UnreadDelta`). Timeline insert/dedupe is
 `IMessageService.AcceptIncomingTimeline` (host still holds `MessagesByChat` + id index);
-persist enqueue is `QueueIncomingPersist`. Pump still owns alias-consolidate side-effects,
-offline summary *recording*, placeholder/missing ledger and the queue itself.
+persist enqueue is `QueueIncomingPersist`. Revoke is `IMessageService.ApplyIncomingRevocationAsync`
+(`MessageRevocationContent` tombstone; host still finds the row in `MessagesByChat` / SQLite).
+Tip refresh / bulk re-tip / in-memory list reconcile is `IChatService.RefreshChatPreviewAsync` /
+`RefreshAllChatPreviewsFromStoredAsync` / `ReconcileChatListFromStoredAsync` (bulk paths still walk
+host `MessagesByChat`). Pump still owns alias-consolidate side-effects, offline summary
+*recording*, placeholder/missing ledger and the queue itself.
 
 ### Phase 4 — What remains is connection
 
