@@ -593,6 +593,21 @@ the weight is the invariant rather than the four cases: unless the message is al
 is both counted and announced. `IsActiveChatJid` on its own is left alone everywhere it asks about
 the *view* (hydrate this image, refresh that timeline) rather than about the user's attention.
 
+**`MessageRenderReader` next, and it moved whole.** Reading an envelope into "what goes on screen" —
+preview line, media kind, the sub-message the download path needs — was 134 lines of cascade in the
+client. It needed nothing from the client: `MediaPreviewTag`, `ChatPreviewKind` and
+`HistorySyncContentFilter` were already in Core, and Core already references `Unison.Baileys`, so
+`Proto` was in reach. `MessageRenderInfo` went with it.
+
+The cascade's value is in the order of its arms, which is why it was worth pinning with tests rather
+than moving quietly. A sticker is checked before an image because an envelope assembled field by
+field can carry both, and in that case the image is the sticker's thumbnail — check image first and
+a stray picture renders instead of the sticker. Returning null likewise means something specific:
+not "nothing to show" but "this is not a row", which is how a reaction and a revocation reach the
+message they modify instead of becoming bubbles of their own. Sixteen tests, and the only shape
+change was the diagnostics: the reader takes an optional log sink instead of calling the client's
+`Log` and `Debug.WriteLine` directly.
+
 ### Phase 4 — What remains is connection
 
 Rename-able to `IWhatsAppConnection` / keep `IWhatsAppService` until the last caller dies. Target surface:
