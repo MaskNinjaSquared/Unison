@@ -75,7 +75,7 @@ namespace Unison.Core.Helpers
             var read = new QuotedContext
             {
                 IsForwarded = forwarded,
-                MentionedJids = ReadMentions(context)
+                MentionedJids = HistorySyncContentFilter.ReadMentionedJids(unwrapped)
             };
 
             if (context.QuotedMessage == null)
@@ -92,36 +92,6 @@ namespace Unison.Core.Helpers
             read.QuotedParticipantJid = NormalizeOrNull(context.Participant);
             read.QuotedChatJid = NormalizeOrNull(context.RemoteJid);
             return read;
-        }
-
-        private static List<string> ReadMentions(Proto.ContextInfo context)
-        {
-            if (context.MentionedJid == null || context.MentionedJid.Count == 0)
-            {
-                return null;
-            }
-
-            List<string> mentioned = null;
-            for (int i = 0; i < context.MentionedJid.Count; i++)
-            {
-                var normalized = NormalizeOrNull(context.MentionedJid[i]);
-                if (normalized == null)
-                {
-                    continue;
-                }
-
-                if (mentioned == null)
-                {
-                    mentioned = new List<string>();
-                }
-
-                if (!mentioned.Contains(normalized))
-                {
-                    mentioned.Add(normalized);
-                }
-            }
-
-            return mentioned;
         }
 
         private void ReadQuotedBody(Proto.Message quoted)
