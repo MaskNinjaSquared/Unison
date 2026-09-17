@@ -536,6 +536,39 @@ which is most of what this extraction adds.
 
 **Canonical JID:** introduce `IJidResolver` in phase 1 as a thin wrapper so 3.2 / 3.6 / 3.7 do not all rewrite aliasing at once.
 
+### Known: pinned / muted do not survive the sync (device-reported, not yet fixed)
+
+Reported from the device: the pin and mute icons in the list are not there after a sync. Not fixed —
+recorded here with what the read-through established, so the next person does not start from zero.
+
+Ruled out first, because they were the obvious suspects and both are innocent: `history_chat_preview`
+has no pin or mute columns at all, and `HistoryChatPreviewApplier` never writes those fields, so the
+preview cannot be overwriting them. The durable home is a separate table — `ChatRow` / `ChatStore` —
+and the app-state path (`AppStateSyncService` → `ApplyAppStateChatFlagsAsync`) does write to it.
+
+Two real defects found on the way, either of which produces this symptom:
+
+**`ApplyLocalFields` overwrites unconditionally when a row exists.** `chat.IsChatPinned` and
+`chat.MutedUntil` are assigned straight from the stored row, so a stale row silently reverts a flag
+that app-state had just applied in memory. Only the `state == null` case is treated as "say nothing".
+
+**Three write paths upsert without reading first.** `ChatListViewModel` calls `ApplyTo(chat)` before
+`UpsertAsync` (`SetLocalMuteAsync`, `ToggleWidgetPinAsync`); `ChatDetailViewModel.SetLocalMuteAsync`,
+`ChatDetailInfoViewModel.SetNotificationsEnabledAsync` and its widget-pin toggle do not. All five pass
+`chat.IsChatPinned` and `chat.MutedUntil` as part of the row. So when the in-memory `ChatItem` has not
+had the stored state applied to it, muting a chat from the info panel writes `IsChatPinned = false`
+over a stored `true` — the pin is not merely hidden, it is gone from disk.
+
+`WarmAsync` is worth a look too: it does `_cache.Clear()` and repopulates from disk, and it is called
+from two places (`WhatsAppService.WarmChatStoreAsync` and `ChatListViewModel.EnsureLocalChatPinsAppliedAsync`).
+`ApplyTo` reads the cache only, so anything applied inside that window sees no state. The existing
+`EnsureLocalChatPinsAppliedAsync` re-apply and `TryApplyCanonicalPinFallback` are both patches over
+this area, which is the usual sign that the ownership is wrong rather than the individual calls.
+
+The shape of the fix is the phase 3.9b question, not a local patch: pin and mute have one durable
+owner, reads merge rather than assign, and writes carry only the field they moved — the same rule
+`AppStateChatMutation` already applies in memory and `ChatStore` does not apply on disk.
+
 ### Phase 4 — What remains is connection
 
 Rename-able to `IWhatsAppConnection` / keep `IWhatsAppService` until the last caller dies. Target surface:
