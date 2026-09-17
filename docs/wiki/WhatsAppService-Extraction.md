@@ -184,7 +184,7 @@ Self-contained first. List/persist last.
 | 3.8 | `.AppState.cs` | **Rewritten — the premise was stale.** See below |
 | 3.9a | List display order (done) | `ChatDisplayOrder` (Core) |
 | 3.9b | `.Persistence.cs` + preview reconcile + the appliers from 3.8 | `ChatFacade` + `ChatStateStore` + `IChatStore` / `IMessageStore`. Close the transitional public dictionaries on `ChatStateStore`. **Persistence rules out; appliers remain — see below** |
-| 3.10 | `.IncomingPump.cs` | Decode/dispatch stays with connection; apply (row, preview, unread, toast) goes to façades. **Rules extraction closed** (see below); **apply orchestration remains** in the pump |
+| 3.10 | `.IncomingPump.cs` | Decode/dispatch stays with connection; apply (row, preview, unread, toast) goes to façades. **Rules closed.** **Notify (toast/badge/tile) on MessageFacade.** Preview/unread/insert still in the pump |
 
 **3.1a is done.** The avatar half of `MediaCache` is `IAvatarCache` / `AvatarCacheService`: `TryGet`,
 `SaveAsync`, `DeleteIfCached`. It took `BuildSafeAvatarFileName`, `TryGetCachedAvatarUri`,
@@ -674,9 +674,9 @@ call it; only the write left.
 **`IncomingMediaMetadata` took the media key write.** Five private statics on `.Media.cs` copied
 proto image/sticker/video/audio/document fields onto `ChatMessage` for the download path. The pump
 called them one by one from `MessageRenderInfo` flags; hydrate called the same five. They are one
-Core type now (6 tests). The pump calls `Apply(chatMessage, renderInfo)` once. Separately, the
-notify stage stopped naming `NotificationService.Instance` and takes `INotificationService` via
-`AttachNotificationService` (fallback to the singleton until every host wires it).
+Core type now (6 tests). The pump calls `Apply(chatMessage, renderInfo)` once. Live toasts left the
+client: `IMessageService.NotifyLiveIncoming` on `MessageFacade` (with `INotificationService` + mute
+via `IChatStore`). `AttachNotificationService` on the client is gone.
 
 **`OfflineReplaySummaryMerge` took the offline tip fold.** Record and the failed-apply rollback
 each had a hand-written copy of "when does this tip win, and which fields travel with it". The model

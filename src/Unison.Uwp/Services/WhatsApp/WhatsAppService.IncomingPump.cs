@@ -2245,37 +2245,22 @@ namespace Unison.Uwp.Services.WhatsApp
                     });
 
                 SetIncomingMessagePumpStage("notify", e);
-                if (!isActuallyFromMe)
+                string notificationName = notificationChat?.Name;
+                if (string.IsNullOrWhiteSpace(notificationName))
                 {
-                    string notificationName = notificationChat?.Name;
-                    if (string.IsNullOrWhiteSpace(notificationName))
-                    {
-                        notificationName = ResolveDisplayName(jid, "notification");
-                    }
-
-                    // Unified mute (WhatsApp sync + local SQLite) via MutedUntil.
-                    if (notificationChat != null)
-                    {
-                        _chatStore?.ApplyTo(notificationChat);
-                    }
-
-                    bool isMuted = notificationChat != null
-                        ? notificationChat.IsMutedLocally
-                        : (_chatStore?.TryGetCached(jid)?.IsMutedLocally ?? false);
-
-                    INotificationService notifications = _notifications ?? NotificationService.Instance;
-                    notifications.NotifyIncomingMessage(
-                        jid,
-                        notificationName,
-                        senderName,
-                        content,
-                        isGroup,
-                        isMuted,
-                        attention.SuppressToast,
-                        totalUnreadForNotify,
-                        notificationChat?.GetAvatarUrl(preferHigh: false),
-                        notificationChat != null ? Math.Max(0, notificationChat.UnreadCount) : 0);
+                    notificationName = ResolveDisplayName(jid, "notification");
                 }
+
+                _messageService.NotifyLiveIncoming(
+                    jid,
+                    notificationName,
+                    senderName,
+                    content,
+                    isGroup,
+                    isActuallyFromMe,
+                    attention.SuppressToast,
+                    totalUnreadForNotify,
+                    notificationChat);
 
                 SetIncomingMessagePumpStage("persist-queue", e);
                 // Persistencia em lote: evita reler, serializar e reescrever o JSON

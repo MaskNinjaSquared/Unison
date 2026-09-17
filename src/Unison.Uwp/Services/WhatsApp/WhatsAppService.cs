@@ -268,7 +268,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private IPersonStore _personStore;
         private IGroupRosterStore _groupRosterStore;
         private IChatStore _chatStore;
-        private INotificationService _notifications;
         private ISystemInfoProvider _systemInfo;
         private IDebugSendService _debugSendService;
         private bool _isWindowsMobile;
@@ -278,14 +277,6 @@ namespace Unison.Uwp.Services.WhatsApp
         public void AttachMessageService(IMessageService messageService)
         {
             _messageService = messageService;
-        }
-
-        /// <summary>
-        /// Wired from App DI so the incoming pump can toast without naming <c>NotificationService.Instance</c>.
-        /// </summary>
-        public void AttachNotificationService(INotificationService notifications)
-        {
-            _notifications = notifications;
         }
 
         /// <summary>

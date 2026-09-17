@@ -4,6 +4,15 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Live incoming notify moved to MessageFacade (3.10 apply)
+
+Toast / badge / tile for live inbound messages go through `IMessageService.NotifyLiveIncoming`.
+`IncomingLiveNotifyGate` skips from-me; mute comes from `IChatStore`. `AttachNotificationService` is
+gone from `WhatsAppService` — the façade owns `INotificationService` directly. List preview / unread
+insert still run in the pump.
+
+---
+
 ## IncomingPump rules extraction closed (3.10)
 
 `IncomingLiveDirectChatRouting` took the last pure live-DM bucket decision (self-chat, from-me

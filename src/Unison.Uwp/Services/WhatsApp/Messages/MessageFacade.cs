@@ -27,6 +27,8 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
         private readonly IHistoryMessageStore _historyMessageStore;
         private readonly IJidResolver _jids;
         private readonly IChatStateStore _chatState;
+        private readonly INotificationService _notifications;
+        private readonly IChatStore _chatStore;
         private readonly int _sqlOpenPageSize;
         private readonly int _sqlLoadMorePageSize;
         private readonly int _thinTimelineThreshold;
@@ -39,6 +41,8 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             HistoryFacade history,
             IHistoryMessageStore historyMessageStore,
             IJidResolver jids,
+            INotificationService notifications,
+            IChatStore chatStore = null,
             IChatStateStore chatState = null,
             ISystemInfoProvider systemInfo = null)
         {
@@ -50,6 +54,8 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             _history = history ?? throw new ArgumentNullException(nameof(history));
             _historyMessageStore = historyMessageStore
                 ?? throw new ArgumentNullException(nameof(historyMessageStore));
+            _notifications = notifications ?? throw new ArgumentNullException(nameof(notifications));
+            _chatStore = chatStore;
             _chatState = chatState;
             // systemInfo kept in the ctor for DI compatibility; page sizes match desktop on all devices.
             _ = systemInfo;
@@ -1029,6 +1035,50 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
         public void StartNewChat(string jid)
         {
             _whatsAppService.StartNewChat(jid);
+        }
+
+        public void NotifyLiveIncoming(
+            string chatJid,
+            string chatName,
+            string senderName,
+            string preview,
+            bool isGroup,
+            bool isFromMe,
+            bool suppressToast,
+            int totalUnread,
+            ChatItem chat)
+        {
+            if (!IncomingLiveNotifyGate.ShouldAnnounce(isFromMe))
+            {
+                return;
+            }
+
+            if (chat != null)
+            {
+                _chatStore?.ApplyTo(chat);
+            }
+
+            bool isMuted = chat != null
+                ? chat.IsMutedLocally
+                : (_chatStore?.TryGetCached(chatJid)?.IsMutedLocally ?? false);
+
+            string name = chatName;
+            if (string.IsNullOrWhiteSpace(name) && chat != null)
+            {
+                name = chat.Name;
+            }
+
+            _notifications.NotifyIncomingMessage(
+                chatJid,
+                name,
+                senderName,
+                preview,
+                isGroup,
+                isMuted,
+                suppressToast,
+                totalUnread,
+                chat != null ? chat.GetAvatarUrl(preferHigh: false) : null,
+                chat != null ? Math.Max(0, chat.UnreadCount) : 0);
         }
     }
 }

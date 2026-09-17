@@ -141,5 +141,20 @@ namespace Unison.Core.Contracts.WhatsApp
         /// User action: ensure a chat row exists for <paramref name="jid"/> (new-chat flow).
         /// </summary>
         void StartNewChat(string jid);
+
+        /// <summary>
+        /// Live inbound announce: toast / badge / tile. From-me is a no-op. Mute is read from
+        /// <paramref name="chat"/> (after local store overlay) or the chat-store cache.
+        /// </summary>
+        void NotifyLiveIncoming(
+            string chatJid,
+            string chatName,
+            string senderName,
+            string preview,
+            bool isGroup,
+            bool isFromMe,
+            bool suppressToast,
+            int totalUnread,
+            ChatItem chat);
     }
 }
