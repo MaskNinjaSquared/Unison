@@ -1712,10 +1712,20 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 if (chatControl == IncomingEnvelopeKind.PinInChat)
                 {
+                    var pinMessage = e.Message.PinInChatMessage;
+                    string pinTargetId = pinMessage?.Key?.Id;
+                    bool pin = pinMessage != null &&
+                        pinMessage.Type == Proto.Message.Types.PinInChatMessage.Types.Type.PinForAll;
                     uint duration = e.Message.MessageContextInfo?.MessageAddOnDurationInSecs ?? 0;
+                    long senderTs = pinMessage?.SenderTimestampMs ?? 0;
                     QueueMessageControlWork(
                         "message-pin:" + e.MessageId,
-                        () => HandlePinInChatMessageAsync(jid, e.Message.PinInChatMessage, duration));
+                        () => _messageService.ApplyIncomingPinInChatAsync(
+                            jid,
+                            pinTargetId,
+                            pin,
+                            senderTs,
+                            duration));
                     return;
                 }
 

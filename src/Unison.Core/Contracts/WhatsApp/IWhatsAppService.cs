@@ -283,6 +283,16 @@ namespace Unison.Core.Contracts.WhatsApp
             string envelopeMessageId = null);
 
         /// <summary>
+        /// Transitional host for <see cref="IMessageService.ApplyIncomingPinInChatAsync"/>.
+        /// </summary>
+        Task ApplyIncomingPinInChatAsync(
+            string chatJid,
+            string targetMessageId,
+            bool pin,
+            long senderTimestampMs,
+            uint durationSeconds = 0);
+
+        /// <summary>
         /// Transitional host for <see cref="IChatService.RefreshAllChatPreviewsFromStoredAsync"/> —
         /// walks <c>MessagesByChat</c>. Prefer the chat façade.
         /// </summary>

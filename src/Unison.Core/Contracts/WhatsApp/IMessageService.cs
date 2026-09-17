@@ -177,5 +177,16 @@ namespace Unison.Core.Contracts.WhatsApp
             string chatJid,
             string targetMessageId,
             string envelopeMessageId = null);
+
+        /// <summary>
+        /// Applies an inbound pin-in-chat protocol to the timeline.
+        /// Prefer this over calling the WhatsApp client from the pump.
+        /// </summary>
+        Task ApplyIncomingPinInChatAsync(
+            string chatJid,
+            string targetMessageId,
+            bool pin,
+            long senderTimestampMs,
+            uint durationSeconds = 0);
     }
 }

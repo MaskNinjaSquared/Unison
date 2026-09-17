@@ -5754,15 +5754,25 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        private async Task HandlePinInChatMessageAsync(string chatJid, Proto.Message.Types.PinInChatMessage pinMessage, uint durationSeconds = 0)
+        public async Task ApplyIncomingPinInChatAsync(
+            string chatJid,
+            string targetMessageId,
+            bool pin,
+            long senderTimestampMs,
+            uint durationSeconds = 0)
         {
-            if (pinMessage?.Key == null || string.IsNullOrWhiteSpace(pinMessage.Key.Id)) return;
-            bool pin = pinMessage.Type == Proto.Message.Types.PinInChatMessage.Types.Type.PinForAll;
-            DateTime pinnedAt = pinMessage.SenderTimestampMs > 0
-                ? UnixMillisecondsToUtc(pinMessage.SenderTimestampMs)
+            if (string.IsNullOrWhiteSpace(chatJid) || string.IsNullOrWhiteSpace(targetMessageId))
+            {
+                return;
+            }
+
+            DateTime pinnedAt = senderTimestampMs > 0
+                ? UnixMillisecondsToUtc(senderTimestampMs)
                 : DateTime.UtcNow;
-            DateTime? expires = pin && durationSeconds > 0 ? pinnedAt.AddSeconds(durationSeconds) : (DateTime?)null;
-            await ApplyPinnedMessageStateAsync(chatJid, pinMessage.Key.Id, pin, pinnedAt, expires);
+            DateTime? expires = pin && durationSeconds > 0
+                ? pinnedAt.AddSeconds(durationSeconds)
+                : (DateTime?)null;
+            await ApplyPinnedMessageStateAsync(chatJid, targetMessageId, pin, pinnedAt, expires);
         }
 
         public async Task SetMessagePinnedAsync(string chatJid, ChatMessage message, bool pin, uint durationSeconds = 604800)

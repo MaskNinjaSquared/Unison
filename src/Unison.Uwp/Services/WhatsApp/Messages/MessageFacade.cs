@@ -1110,5 +1110,20 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                 targetMessageId,
                 envelopeMessageId);
         }
+
+        public Task ApplyIncomingPinInChatAsync(
+            string chatJid,
+            string targetMessageId,
+            bool pin,
+            long senderTimestampMs,
+            uint durationSeconds = 0)
+        {
+            return _whatsAppService.ApplyIncomingPinInChatAsync(
+                chatJid,
+                targetMessageId,
+                pin,
+                senderTimestampMs,
+                durationSeconds);
+        }
     }
 }
