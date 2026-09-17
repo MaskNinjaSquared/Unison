@@ -61,6 +61,29 @@ determines the orientation and answers in one call. Each caller keeps its own lo
 merge still merges the rows and withholds only the alias; the mapped-LID path still only fires the first
 time it sees an address.
 
+### The same audio forwarded to five chats was five downloads
+
+Image, video and document all named their cached file after the content hash, so the same media
+arriving twice was recognised as one file and fetched once. Audio named its file after the message id.
+A voice note forwarded to five chats is five different message ids and therefore, until now, five
+downloads over mobile data and five copies on eMMC.
+
+The four `Ensure*AvailableAsync` routines each read the message's media fields by hand at the top,
+which is how the copies drifted apart in the first place. That reading is now `MediaDownloadPlan` in
+Core — url, direct path, key, expected hash, cache file base, mime — with 13 tests, including one that
+pins the audio naming against exactly this regression.
+
+What deliberately stayed behind is the part that genuinely differs per kind: whether a missing key is
+fatal (a sticker marks itself failed and stays quiet; a video raises), what to do with the bytes, and
+when to write the row.
+
+### A second tap on the same video left the row without a thumbnail
+
+`EnsureVideoAvailableAsync` checks the cache twice — once before taking the download lock and once
+after waiting on it — and the two checks did not agree. The first built the poster if the row lacked
+one; the second returned the URI bare. So of two taps on the same uncached video, whichever lost the
+race came back with no thumbnail. Both now take the same path.
+
 ### Five error messages reached the user as garbled text
 
 "A chave do áudio não está disponível" was stored in the source as "A chave do Ã¡udio nÃ£o estÃ¡

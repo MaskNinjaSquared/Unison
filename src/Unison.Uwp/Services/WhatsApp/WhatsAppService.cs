@@ -2453,12 +2453,6 @@ namespace Unison.Uwp.Services.WhatsApp
             SchedulePostMessageEnrichment("heavy-history:" + reason);
         }
 
-        private static string ToBase64Url(byte[] data)
-        {
-            string encoded = MediaCacheNaming.ToUrlSafeBase64(data);
-            return string.IsNullOrEmpty(encoded) ? Guid.NewGuid().ToString("N") : encoded;
-        }
-
         private static ChatPreviewKind ResolvePreviewKind(ChatMessage message, MessageRenderInfo renderInfo)
         {
             if (renderInfo != null)

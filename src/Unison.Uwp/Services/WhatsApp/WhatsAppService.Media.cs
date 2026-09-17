@@ -398,19 +398,18 @@ namespace Unison.Uwp.Services.WhatsApp
 
             await EnsureConnectedAsync();
 
-            byte[] mediaKey = DecodeBase64Safe(message.AudioMediaKeyBase64);
-            if (mediaKey == null || mediaKey.Length == 0) throw new InvalidOperationException("A chave do áudio não está disponível.");
-            byte[] expected = DecodeBase64Safe(message.AudioFileEncSha256Base64);
+            MediaDownloadPlan plan = MediaDownloadPlan.For(message, MediaDownloadKind.Audio);
+            if (!plan.HasKey) throw new InvalidOperationException("A chave do áudio não está disponível.");
 
             try
             {
                 SessionLogger.Instance.WriteAlways(string.Format(
                     "[Audio/ensure] download-start id={0} mime={1} hasUrl={2} hasPath={3} keyLen={4}",
                     message.Id ?? "?",
-                    message.AudioMimeType ?? "?",
-                    !string.IsNullOrWhiteSpace(message.AudioUrl),
-                    !string.IsNullOrWhiteSpace(message.AudioDirectPath),
-                    mediaKey.Length));
+                    plan.MimeType ?? "?",
+                    !string.IsNullOrWhiteSpace(plan.Url),
+                    !string.IsNullOrWhiteSpace(plan.DirectPath),
+                    plan.MediaKey.Length));
             }
             catch
             {
@@ -425,15 +424,16 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
                 var bytes = await _socket.DownloadAndDecryptMediaAsync(
-                    message.AudioUrl,
-                    message.AudioDirectPath,
-                    mediaKey,
-                    "audio",
-                    expected);
-                string uri = await SaveAudioBytesToCacheAsync(
-                    bytes,
-                    message.Id ?? Guid.NewGuid().ToString("N"),
-                    message.AudioMimeType);
+                    plan.Url,
+                    plan.DirectPath,
+                    plan.MediaKey,
+                    plan.MediaType,
+                    plan.ExpectedSha256);
+
+                // Named after the content hash, like image, video and document already were.
+                // Using the message id here meant the same audio forwarded to five chats was
+                // five downloads and five copies on disk.
+                string uri = await SaveAudioBytesToCacheAsync(bytes, plan.FileBase, plan.MimeType);
                 message.AudioUri = uri;
                 try
                 {
@@ -489,8 +489,10 @@ namespace Unison.Uwp.Services.WhatsApp
             }
             await EnsureConnectedAsync();
 
-            byte[] mediaKey = DecodeBase64Safe(message.ImageMediaKeyBase64);
-            if (mediaKey == null || mediaKey.Length == 0)
+            MediaDownloadPlan plan = MediaDownloadPlan.For(
+                message,
+                isSticker ? MediaDownloadKind.Sticker : MediaDownloadKind.Image);
+            if (!plan.HasKey)
             {
                 if (isSticker)
                 {
@@ -501,13 +503,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 throw new InvalidOperationException("A chave da imagem não está disponível.");
             }
 
-            byte[] expected = DecodeBase64Safe(message.ImageFileEncSha256Base64);
-            string mediaKeyId = (expected != null && expected.Length > 0)
-                ? ToBase64Url(expected)
-                : (message.Id ?? Guid.NewGuid().ToString("N"));
-            string mediaType = "image";
-            string defaultMime = isSticker ? "image/webp" : "image/jpeg";
-
             await MediaDownloadLock.WaitAsync();
             try
             {
@@ -517,15 +512,12 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
                 var bytes = await _socket.DownloadAndDecryptMediaAsync(
-                    message.ImageUrl,
-                    message.ImageDirectPath,
-                    mediaKey,
-                    mediaType,
-                    expected);
-                string uri = await SaveImageBytesForDisplayAsync(
-                    bytes,
-                    mediaKeyId,
-                    message.ImageMimeType ?? defaultMime);
+                    plan.Url,
+                    plan.DirectPath,
+                    plan.MediaKey,
+                    plan.MediaType,
+                    plan.ExpectedSha256);
+                string uri = await SaveImageBytesForDisplayAsync(bytes, plan.FileBase, plan.MimeType);
                 if (string.IsNullOrWhiteSpace(uri))
                 {
                     if (isSticker)
@@ -568,61 +560,75 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
+        /// <summary>
+        /// Returns the cached video's URI, building the poster first if the row has none.
+        /// </summary>
+        /// <remarks>
+        /// Both ways of finding the file already cached land here — the check before the lock
+        /// and the one after waiting on it. They used to differ: only the first built a poster,
+        /// so of two taps on the same uncached video, the one that waited came back with a row
+        /// that had no thumbnail.
+        /// </remarks>
+        private async Task<string> EnsureVideoPosterAsync(ChatMessage message)
+        {
+            if (!string.IsNullOrWhiteSpace(message.VideoPosterUri))
+            {
+                return message.VideoUri;
+            }
+
+            try
+            {
+                message.VideoPosterUri = await TryCreateVideoPosterAsync(message.VideoUri, message.Id);
+                string chatJid = GetCanonicalJid(message.RemoteJid);
+                if (!string.IsNullOrWhiteSpace(chatJid) &&
+                    !string.IsNullOrWhiteSpace(message.VideoPosterUri))
+                {
+                    await SaveMessageAsync(chatJid, message);
+                    QueueChatMessagesChanged(chatJid);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[WhatsAppService] Video poster failed: " + ex.Message);
+            }
+
+            return message.VideoUri;
+        }
+
         public async Task<string> EnsureVideoAvailableAsync(ChatMessage message)
         {
             if (message == null || !message.IsVideo) return null;
             if (!string.IsNullOrWhiteSpace(message.VideoUri))
             {
-                if (string.IsNullOrWhiteSpace(message.VideoPosterUri))
-                {
-                    try
-                    {
-                        message.VideoPosterUri = await TryCreateVideoPosterAsync(message.VideoUri, message.Id);
-                        string chatJidPoster = GetCanonicalJid(message.RemoteJid);
-                        if (!string.IsNullOrWhiteSpace(chatJidPoster) &&
-                            !string.IsNullOrWhiteSpace(message.VideoPosterUri))
-                        {
-                            await SaveMessageAsync(chatJidPoster, message);
-                            QueueChatMessagesChanged(chatJidPoster);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine("[WhatsAppService] Video poster failed: " + ex.Message);
-                    }
-                }
-
-                return message.VideoUri;
+                return await EnsureVideoPosterAsync(message);
             }
 
             await EnsureConnectedAsync();
 
-            byte[] mediaKey = DecodeBase64Safe(message.VideoMediaKeyBase64);
-            if (mediaKey == null || mediaKey.Length == 0)
+            MediaDownloadPlan plan = MediaDownloadPlan.For(message, MediaDownloadKind.Video);
+            if (!plan.HasKey)
             {
                 throw new InvalidOperationException("A chave do vídeo não está disponível.");
             }
 
-            byte[] expected = DecodeBase64Safe(message.VideoFileEncSha256Base64);
-            string mediaKeyId = (expected != null && expected.Length > 0)
-                ? ToBase64Url(expected)
-                : (message.Id ?? Guid.NewGuid().ToString("N"));
-
             await MediaDownloadLock.WaitAsync();
             try
             {
-                if (!string.IsNullOrWhiteSpace(message.VideoUri)) return message.VideoUri;
+                // Whoever waited on the lock finds the file already there, and takes the same
+                // path the cache hit above takes - including the poster. Returning the URI bare
+                // here meant the second of two taps on the same video got a thumbnail-less row.
+                if (!string.IsNullOrWhiteSpace(message.VideoUri))
+                {
+                    return await EnsureVideoPosterAsync(message);
+                }
 
                 var bytes = await _socket.DownloadAndDecryptMediaAsync(
-                    message.VideoUrl,
-                    message.VideoDirectPath,
-                    mediaKey,
-                    "video",
-                    expected);
-                string uri = await SaveVideoBytesToCacheAsync(
-                    bytes,
-                    mediaKeyId,
-                    message.VideoMimeType ?? "video/mp4");
+                    plan.Url,
+                    plan.DirectPath,
+                    plan.MediaKey,
+                    plan.MediaType,
+                    plan.ExpectedSha256);
+                string uri = await SaveVideoBytesToCacheAsync(bytes, plan.FileBase, plan.MimeType);
                 if (string.IsNullOrWhiteSpace(uri))
                 {
                     throw new InvalidOperationException("Falha ao guardar o vídeo.");
@@ -631,7 +637,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 message.VideoUri = uri;
                 try
                 {
-                    message.VideoPosterUri = await TryCreateVideoPosterAsync(uri, message.Id ?? mediaKeyId);
+                    message.VideoPosterUri = await TryCreateVideoPosterAsync(uri, message.Id ?? plan.FileBase);
                 }
                 catch (Exception ex)
                 {
@@ -668,16 +674,11 @@ namespace Unison.Uwp.Services.WhatsApp
 
             await EnsureConnectedAsync();
 
-            byte[] mediaKey = DecodeBase64Safe(message.DocumentMediaKeyBase64);
-            if (mediaKey == null || mediaKey.Length == 0)
+            MediaDownloadPlan plan = MediaDownloadPlan.For(message, MediaDownloadKind.Document);
+            if (!plan.HasKey)
             {
                 throw new InvalidOperationException("A chave do documento não está disponível.");
             }
-
-            byte[] expected = DecodeBase64Safe(message.DocumentFileEncSha256Base64);
-            string mediaKeyId = (expected != null && expected.Length > 0)
-                ? ToBase64Url(expected)
-                : (message.Id ?? Guid.NewGuid().ToString("N"));
 
             await MediaDownloadLock.WaitAsync();
             try
@@ -688,16 +689,16 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
                 var bytes = await _socket.DownloadAndDecryptMediaAsync(
-                    message.DocumentUrl,
-                    message.DocumentDirectPath,
-                    mediaKey,
-                    "document",
-                    expected);
+                    plan.Url,
+                    plan.DirectPath,
+                    plan.MediaKey,
+                    plan.MediaType,
+                    plan.ExpectedSha256);
                 string uri = await SaveDocumentBytesToCacheAsync(
                     bytes,
-                    mediaKeyId,
-                    message.DocumentFileName,
-                    message.DocumentMimeType);
+                    plan.FileBase,
+                    plan.FileName,
+                    plan.MimeType);
                 if (string.IsNullOrWhiteSpace(uri))
                 {
                     throw new InvalidOperationException("Falha ao guardar o documento.");
@@ -802,9 +803,9 @@ namespace Unison.Uwp.Services.WhatsApp
             if (chatMessage == null || imageMessage == null || _socket == null) return;
             ApplyImageMetadata(chatMessage, imageMessage);
 
-            string mediaKeyId = (imageMessage.FileEncSha256 != null && imageMessage.FileEncSha256.Length > 0)
-                ? ToBase64Url(imageMessage.FileEncSha256.ToByteArray())
-                : (messageId ?? Guid.NewGuid().ToString("N"));
+            string mediaKeyId = MediaCacheNaming.ResolveFileBase(
+                imageMessage.FileEncSha256 != null ? imageMessage.FileEncSha256.ToByteArray() : null,
+                messageId);
 
             if (imageMessage.JpegThumbnail != null &&
                 imageMessage.JpegThumbnail.Length > 0 &&
@@ -918,9 +919,9 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            string mediaKeyId = (stickerMessage.FileEncSha256 != null && stickerMessage.FileEncSha256.Length > 0)
-                ? ToBase64Url(stickerMessage.FileEncSha256.ToByteArray())
-                : (messageId ?? Guid.NewGuid().ToString("N"));
+            string mediaKeyId = MediaCacheNaming.ResolveFileBase(
+                stickerMessage.FileEncSha256 != null ? stickerMessage.FileEncSha256.ToByteArray() : null,
+                messageId);
 
             // Prefer embedded PNG thumbnail first so the bubble isn't empty while CDN download runs.
             if (stickerMessage.PngThumbnail != null && stickerMessage.PngThumbnail.Length > 0)
