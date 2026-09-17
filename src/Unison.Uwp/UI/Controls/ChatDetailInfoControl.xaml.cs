@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Windows.Input;
 using Unison.Core.ViewModels;
 using Windows.UI.Xaml;
@@ -27,13 +27,16 @@ namespace Unison.Uwp.UI.Controls
                 new PropertyMetadata(null));
 
         private ChatDetailInfoViewModel _boundInfo;
+        private bool _infoHooked;
+        private bool _isLoaded;
         private ChatDetailUserInfoControl _userInfoHost;
         private ChatDetailGroupInfoControl _groupInfoHost;
 
         public ChatDetailInfoControl()
         {
             InitializeComponent();
-            Loaded += (s, e) => ApplyInfoViewModel();
+            Loaded += OnControlLoaded;
+            Unloaded += OnControlUnloaded;
         }
 
         public ChatDetailInfoViewModel InfoViewModel
@@ -56,20 +59,52 @@ namespace Unison.Uwp.UI.Controls
 
         private void OnInfoViewModelChanged(ChatDetailInfoViewModel oldVm, ChatDetailInfoViewModel newVm)
         {
-            if (_boundInfo != null)
-            {
-                _boundInfo.PropertyChanged -= Info_PropertyChanged;
-            }
-
+            UnhookInfo();
             _boundInfo = newVm;
-            if (_boundInfo != null)
-            {
-                _boundInfo.PropertyChanged += Info_PropertyChanged;
-            }
+            HookInfo();
 
             ApplyInfoViewModel();
         }
 
+        private void OnControlLoaded(object sender, RoutedEventArgs e)
+        {
+            _isLoaded = true;
+            HookInfo();
+            ApplyInfoViewModel();
+        }
+
+        private void OnControlUnloaded(object sender, RoutedEventArgs e)
+        {
+            _isLoaded = false;
+            UnhookInfo();
+        }
+
+        /// <summary>
+        /// Listens only while on screen. The view model outlives this control, so a subscription
+        /// left behind at unload keeps the whole visual tree alive and goes on laying out a pane
+        /// nobody is looking at.
+        /// </summary>
+        private void HookInfo()
+        {
+            if (_boundInfo == null || _infoHooked || !_isLoaded)
+            {
+                return;
+            }
+
+            _boundInfo.PropertyChanged += Info_PropertyChanged;
+            _infoHooked = true;
+        }
+
+        private void UnhookInfo()
+        {
+            if (_boundInfo == null || !_infoHooked)
+            {
+                return;
+            }
+
+            _boundInfo.PropertyChanged -= Info_PropertyChanged;
+            _infoHooked = false;
+        }
         private void Info_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
             ApplyInfoViewModel();
