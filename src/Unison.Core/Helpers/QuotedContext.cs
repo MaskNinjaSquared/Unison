@@ -131,8 +131,13 @@ namespace Unison.Core.Helpers
                 ? (ChatPreviewKind?)null
                 : QuotedKind;
 
+            // NormalizeBody, not Normalize: this text is persisted as HistoryMessage.QuotedBody, and
+            // Normalize caps at 50 characters for a one-line strip. The strip normalizes again when
+            // it draws (ChatMessageViewModel.QuotedStripText), so capping here changed nothing on
+            // screen and stored a truncated quote for good — while the same quote arriving through
+            // history sync was stored whole. The helper says as much on Normalize itself.
             string text;
-            ChatPreviewNormalizer.Normalize(info.Content ?? string.Empty, hint, out _, out text);
+            ChatPreviewNormalizer.NormalizeBody(info.Content ?? string.Empty, hint, out _, out text);
 
             if (string.IsNullOrWhiteSpace(text) && !string.IsNullOrWhiteSpace(info.Caption))
             {

@@ -214,6 +214,52 @@ public class QuotedContextTests
     }
 
     [Fact]
+    public void A_long_quote_is_kept_whole_because_this_text_gets_stored()
+    {
+        // The one-line cap belongs to the strip that draws it, which normalizes again on the way
+        // out. Capping here wrote a truncated quote into history_message permanently, while the
+        // same quote arriving through history sync was stored whole.
+        var original = new string('a', 400);
+
+        var read = QuotedContext.Read(Quoting(new Proto.ContextInfo
+        {
+            Participant = "5511999999999@s.whatsapp.net",
+            QuotedMessage = new Proto.Message { Conversation = original }
+        }));
+
+        Assert.Equal(original, read.QuotedText);
+    }
+
+    [Fact]
+    public void Line_breaks_in_a_quote_survive_the_reading()
+    {
+        var read = QuotedContext.Read(Quoting(new Proto.ContextInfo
+        {
+            Participant = "5511999999999@s.whatsapp.net",
+            QuotedMessage = new Proto.Message { Conversation = "first\nsecond" }
+        }));
+
+        Assert.Equal("first\nsecond", read.QuotedText);
+    }
+
+    [Fact]
+    public void A_caption_that_looks_like_one_of_our_tags_is_left_alone()
+    {
+        // The tag we generate for a captionless image is stripped (see the test above); a caption
+        // the user typed is their text, brackets and all.
+        var read = QuotedContext.Read(Quoting(new Proto.ContextInfo
+        {
+            Participant = "5511999999999@s.whatsapp.net",
+            QuotedMessage = new Proto.Message
+            {
+                ImageMessage = new Proto.Message.Types.ImageMessage { Caption = "[Image] at the beach" }
+            }
+        }));
+
+        Assert.Equal("[Image] at the beach", read.QuotedText);
+    }
+
+    [Fact]
     public void The_shared_empty_reading_is_never_handed_out_mutated()
     {
         var first = QuotedContext.Read(new Proto.Message { Conversation = "a" });

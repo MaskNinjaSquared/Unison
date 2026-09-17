@@ -4,6 +4,23 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Quotes arriving live were stored truncated at 50 characters
+
+Reading the context info moved to `QuotedContext` in Core, and putting the live path beside the
+history-sync one showed they did not agree.
+
+The live path normalized the quote with `ChatPreviewNormalizer.Normalize`, which collapses to a
+single line and caps at 50 characters — the helper says on that method not to use it on text that
+gets persisted. But this text is persisted, as `HistoryMessage.QuotedBody`, and the strip that draws
+it normalizes again anyway (`ChatMessageViewModel.QuotedStripText`). So the cap changed nothing on
+screen and stored a shortened quote for good, while the same quote arriving through history sync
+was stored whole.
+
+It now uses `NormalizeBody`, like the sync path. The one-line cap stays where it belongs, in the
+strip that draws it.
+
+---
+
 ## Panels and overlays that kept listening after they left the screen
 
 A sweep of the view code-behind for subscriptions with no matching release, since the views are
