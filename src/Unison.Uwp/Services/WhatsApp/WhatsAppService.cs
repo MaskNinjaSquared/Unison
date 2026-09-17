@@ -6386,82 +6386,26 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private string ResolveLiveDirectChatJid(Client.DecryptedMessageEventArgs e, out string routingReason)
         {
-            routingReason = "fallback-from";
             if (e == null)
             {
+                routingReason = "fallback-from";
                 return null;
             }
 
-            string normalizedFrom = NormalizeJid(e.FromJid);
-            string normalizedRecipient = NormalizeJid(e.RecipientJid);
-
-            // Self-chat is a distinct lane. When both the sender and recipient are already us,
-            // ignore companion/device peer-recipient hints and force the canonical self PN bucket.
-            if (e.IsFromMe && IsSelfLinkedJid(normalizedFrom) && IsSelfLinkedJid(normalizedRecipient))
-            {
-                routingReason = "self-chat";
-                return GetCanonicalSelfPnJid();
-            }
-
-            if (e.IsFromMe)
-            {
-                if (TryGetCanonicalNonSelfDirectJid(e.RecipientJid, out var recipientCanonical))
-                {
-                    routingReason = "recipient-jid";
-                    return recipientCanonical;
-                }
-
-                if (TryGetCanonicalNonSelfDirectJid(e.PeerRecipientPn, out var peerRecipientPnCanonical))
-                {
-                    routingReason = "peer-recipient-pn";
-                    return peerRecipientPnCanonical;
-                }
-
-                if (TryGetCanonicalNonSelfDirectJid(e.PeerRecipientLid, out var peerRecipientLidCanonical))
-                {
-                    routingReason = "peer-recipient-lid";
-                    return peerRecipientLidCanonical;
-                }
-            }
-
-            if (TryGetCanonicalNonSelfDirectJid(e.FromJid, out var fromCanonical))
-            {
-                routingReason = "from-nonself";
-                return fromCanonical;
-            }
-
-            if (TryGetCanonicalNonSelfDirectJid(e.SenderLid, out var senderLidCanonical))
-            {
-                routingReason = "sender-lid";
-                return senderLidCanonical;
-            }
-
-            var identityCandidates = new[]
-            {
-                NormalizeJid(e.FromJid),
-                NormalizeJid(e.RecipientJid),
-                NormalizeJid(e.PeerRecipientPn),
-                NormalizeJid(e.PeerRecipientLid),
-                NormalizeJid(e.SenderLid)
-            }
-            .Where(v => !string.IsNullOrWhiteSpace(v))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-            if (identityCandidates.Count > 0 && identityCandidates.All(IsSelfLinkedJid))
-            {
-                routingReason = "self-chat";
-                return GetCanonicalSelfPnJid();
-            }
-
-            string fallback = GetCanonicalJid(e.FromJid);
-            if (!string.IsNullOrWhiteSpace(fallback))
-            {
-                return fallback;
-            }
-
-            routingReason = "self-chat-fallback";
-            return GetCanonicalSelfPnJid();
+            IncomingLiveDirectChatRoute route = IncomingLiveDirectChatRouting.Resolve(
+                e.IsFromMe,
+                e.FromJid,
+                e.RecipientJid,
+                e.PeerRecipientPn,
+                e.PeerRecipientLid,
+                e.SenderLid,
+                NormalizeJid,
+                IsSelfLinkedJid,
+                TryGetCanonicalNonSelfDirectJid,
+                GetCanonicalSelfPnJid,
+                GetCanonicalJid);
+            routingReason = route.Reason;
+            return route.ChatJid;
         }
 
         internal string NormalizeChatJid(string jid) => NormalizeJid(jid);
