@@ -563,6 +563,13 @@ namespace Unison.Socket.UseCases.Messages
         /// companion always has a LID once paired; here it can, while credentials are still
         /// being restored, so the fallback follows what we can actually sign under.
         /// </summary>
+        /// <summary>Two addresses naming the same party, compared as identity is compared elsewhere.</summary>
+        private static bool SameAddress(string left, string right)
+        {
+            return !string.IsNullOrEmpty(left) &&
+                   string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
+        }
+
         private static string ResolveAddressingMode(GroupMetadata metadata, string meLid, out string source)
         {
             if (metadata != null && metadata.AddressingMode == GroupAddressingMode.Lid)
@@ -649,12 +656,17 @@ namespace Unison.Socket.UseCases.Messages
                 }
 
                 // We already have the message we are sending.
-                if (deviceJid == meId || (!string.IsNullOrEmpty(meLid) && deviceJid == meLid))
+                // Addresses are compared case-insensitively here as everywhere else that decides
+                // identity: getting this wrong sends the message to the device that is sending it,
+                // or files our own devices as the recipient's.
+                if (SameAddress(deviceJid, meId) ||
+                    (!string.IsNullOrEmpty(meLid) && SameAddress(deviceJid, meLid)))
                 {
                     continue;
                 }
 
-                if (device.User == mePnUser || (meLidUser != null && device.User == meLidUser))
+                if (SameAddress(device.User, mePnUser) ||
+                    (meLidUser != null && SameAddress(device.User, meLidUser)))
                 {
                     mine.Add(deviceJid);
                 }
