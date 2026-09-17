@@ -4,6 +4,30 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Sending in groups could unlink the device
+
+A `LocalSettings` value stops at 8192 bytes and throws past it, and `AuthStore` kept the whole
+`AuthState` in one. The keys are about a kilobyte, but the same value carried `SenderKeyMemory` —
+per group, every participant device that already holds our sender key. A 50-member group is around
+2 KB, so a few active groups reached the ceiling.
+
+The write that overflowed it was the group send: relaying emits `CredsUpdate`, which saves the
+credentials. From the first throw they stopped being saved at all, and because a load that fails
+returns null, the next cold start read that as "never paired" and built a fresh state over the top.
+The account unlinked itself, and the only trace was a `Debug.WriteLine` that release builds do not
+have.
+
+The memory moved to its own file, written after the credentials and allowed to fail quietly — it is
+a cache, and losing it costs one re-send of the sender key. Installs written before the split are
+migrated on the next load.
+
+The load path now separates "no account saved" from "an account is saved and I could not read it".
+In the second case it refuses to write an unregistered state over the stored one, so a read that
+fails costs a session rather than the device link. A pairing the user actually completes is
+registered, and still replaces what is there.
+
+---
+
 ## A failed connection attempt left its socket open behind it
 
 `ConnectAsync` subscribes to the transport and then opens it, sends the client hello and waits for
