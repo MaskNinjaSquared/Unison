@@ -2815,7 +2815,18 @@ namespace Unison.Uwp.Services.WhatsApp
 
             if (changed)
             {
-                try { await PersistChatCatalogAsync(Chats.ToList()).ConfigureAwait(false); } catch { }
+                try
+                {
+                    // Same reason as the other catalogue writes: Chats belongs to the UI thread
+                    // and this loop has been yielding, so the snapshot has to be taken there.
+                    List<ChatItem> snapshot = null;
+                    await RunOnUiThreadAsync(() => snapshot = Chats.Where(c => c != null).ToList());
+                    await PersistChatCatalogAsync(snapshot ?? new List<ChatItem>()).ConfigureAwait(false);
+                }
+                catch
+                {
+                }
+
                 _messageStore.ClearMemoryCache();
                 OnHistorySyncReceived?.Invoke(this, null);
             }

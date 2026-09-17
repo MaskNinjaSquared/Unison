@@ -1367,11 +1367,13 @@ namespace Unison.Uwp.Data
             await _writeLock.WaitAsync();
             try
             {
-                // Filter to only save names for JIDs that have chats
-                var chatJidSet = new HashSet<string>(chatJids);
+                // Filter to only save names for JIDs that have chats. Case-insensitive, like
+                // the map these names come from and like the alias save below: an ordinal set
+                // silently dropped any name whose key differed in case from the chat's address.
+                var chatJidSet = new HashSet<string>(chatJids, StringComparer.OrdinalIgnoreCase);
                 var filteredNames = allContactNames
                     .Where(kvp => chatJidSet.Contains(kvp.Key))
-                    .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+                    .ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase);
 
                 var file = await _storeRoot.CreateFileAsync(CONTACT_NAMES_FILE, CreationCollisionOption.ReplaceExisting);
                 var json = await SerializeJsonAsync(filteredNames);
@@ -1427,10 +1429,10 @@ namespace Unison.Uwp.Data
             await _writeLock.WaitAsync();
             try
             {
-                var chatJidSet = new HashSet<string>(chatJids);
+                var chatJidSet = new HashSet<string>(chatJids, StringComparer.OrdinalIgnoreCase);
                 var filteredNames = allPhoneNames
                     .Where(kvp => chatJidSet.Contains(kvp.Key))
-                    .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+                    .ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase);
 
                 var file = await _storeRoot.CreateFileAsync(PHONE_CONTACT_NAMES_FILE, CreationCollisionOption.ReplaceExisting);
                 var json = await SerializeJsonAsync(filteredNames);

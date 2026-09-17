@@ -61,6 +61,41 @@ determines the orientation and answers in one call. Each caller keeps its own lo
 merge still merges the rows and withholds only the alias; the mapped-LID path still only fires the first
 time it sees an address.
 
+### The alias table was stricter in memory than on disk, and the conversion between them could throw
+
+`JidAliasTable` holds the pairing between a contact's two addresses. It is saved to a file and read
+back, and both ends of that file use case-insensitive dictionaries — but the table in memory was
+ordinal. So two addresses differing only in case were two aliases in memory and one on disk, and one
+of them disappeared on the next start without a word.
+
+The sharper edge: `Snapshot()` copies into a case-insensitive dictionary, and that constructor throws
+outright when both keys are present. `Snapshot()` runs inside the suspend write, where the throw would
+take the chat catalogue down with it — losing a save at the one moment the system gives no second
+chance.
+
+The table is now case-insensitive too, which is what the file always was. The same mismatch was
+dropping contact names on the way out: the filter deciding which names belong to a loaded conversation
+built an ordinal set, while the alias save right below it built a case-insensitive one.
+
+### A one-row save was reading the whole catalogue twice
+
+`PersistChatCatalogSliceAsync` exists so clearing a badge does not rewrite everything — and then the
+store it writes to ran two unfiltered `SELECT`s over the whole table before every write, however small.
+On a few hundred conversations, each mark-as-read paid two full scans. Those reads are now scoped to
+the addresses in the batch when the batch is small, and left as scans for a sync chunk, where the
+address list would exceed what SQLite takes as bound parameters and scanning is cheaper anyway.
+
+They also moved inside the write lock. They decide insert vs. update vs. skip, so reading them outside
+let two concurrent writers judge against the same stale picture and one of them conclude "nothing
+changed" about a row the other had already moved.
+
+### Two catalogue saves enumerated the chat list from a background thread
+
+Both were several awaits deep on a pool thread calling `Chats.ToList()`. That collection belongs to the
+UI thread; enumerating it while the UI inserts a row throws, and in both cases the `catch` around it
+would have turned that into a save that silently did not happen. They snapshot on the UI thread now,
+like every other catalogue write in the file.
+
 ### The unread badge came back every time the app started
 
 The list row is written to disk through a gate that asks whether anything changed. The gate asked

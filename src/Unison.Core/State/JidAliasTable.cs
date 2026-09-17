@@ -24,7 +24,15 @@ namespace Unison.Core.State
     public sealed class JidAliasTable : IDictionary<string, string>, IReadOnlyDictionary<string, string>
     {
         private readonly object _sync = new object();
-        private readonly Dictionary<string, string> _inner = new Dictionary<string, string>();
+
+        // Case-insensitive, like the file this table is loaded from and saved to. It used to be
+        // ordinal, which made the two disagree in both directions: two addresses differing only
+        // in case were two aliases in memory and one on disk, so one of them vanished on the
+        // next start - and Snapshot(), which copies into a case-insensitive dictionary for the
+        // persist, throws outright if both are present. That throw runs inside the suspend
+        // write, where it would take the chat catalogue down with it.
+        private readonly Dictionary<string, string> _inner =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         private Func<string> _selfId;
         private Func<string> _selfLid;

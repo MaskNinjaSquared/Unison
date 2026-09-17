@@ -76,10 +76,6 @@ namespace Unison.Uwp.Data
 
             await EnsureInitializedAsync().ConfigureAwait(false);
 
-            // Light snapshot: enough to decide insert vs lifecycle/tip delta without loading bodies.
-            var existing = await LoadLifecycleSnapshotAsync().ConfigureAwait(false);
-            var tombstones = await LoadTombstonesAsync().ConfigureAwait(false);
-
             await _writeLock.WaitAsync().ConfigureAwait(false);
             string syncId = null;
             string syncType = null;
@@ -91,6 +87,18 @@ namespace Unison.Uwp.Data
             var notified = new List<HistoryChatPreview>();
             try
             {
+                // Read inside the write lock. The snapshot is what decides insert / update /
+                // skip, so reading it outside let two concurrent writers judge against the same
+                // stale picture and one of them conclude "nothing changed" about a row the other
+                // had already moved.
+                //
+                // Light snapshot: enough to decide insert vs lifecycle/tip delta without loading
+                // bodies, and scoped to the batch when the batch is small - a one-row slice used
+                // to scan the whole catalogue twice, which is the cost this store exists to avoid.
+                string[] scope = ScopeFor(rows);
+                var existing = await LoadLifecycleSnapshotAsync(scope).ConfigureAwait(false);
+                var tombstones = await LoadTombstonesAsync(scope).ConfigureAwait(false);
+
                 await _connection.RunInTransactionAsync(conn =>
                 {
                     foreach (var model in rows)
@@ -218,7 +226,53 @@ namespace Unison.Uwp.Data
             }
         }
 
-        private async Task<Dictionary<string, LifecycleSnapshot>> LoadLifecycleSnapshotAsync()
+        /// <summary>
+        /// The addresses to restrict the pre-write reads to, or null to read the whole table.
+        /// </summary>
+        /// <remarks>
+        /// A sync chunk carries more addresses than SQLite will take as bound parameters, and at
+        /// that size scanning is cheaper than a huge IN list anyway. A slice carries one or two,
+        /// and that is the case worth narrowing: on eMMC two full scans to save one row is the
+        /// cost the slice path was introduced to get away from.
+        /// </remarks>
+        private static string[] ScopeFor(IReadOnlyList<HistoryChatPreview> rows)
+        {
+            const int MaxScopedAddresses = 64;
+            if (rows == null || rows.Count > MaxScopedAddresses)
+            {
+                return null;
+            }
+
+            var scope = new List<string>(rows.Count);
+            for (int i = 0; i < rows.Count; i++)
+            {
+                string jid = rows[i]?.Jid;
+                if (!string.IsNullOrWhiteSpace(jid))
+                {
+                    scope.Add(jid);
+                }
+            }
+
+            return scope.Count == 0 ? null : scope.ToArray();
+        }
+
+        private static string WhereJidIn(string[] scope)
+        {
+            if (scope == null || scope.Length == 0)
+            {
+                return string.Empty;
+            }
+
+            var placeholders = new string[scope.Length];
+            for (int i = 0; i < scope.Length; i++)
+            {
+                placeholders[i] = "?";
+            }
+
+            return " WHERE Jid IN (" + string.Join(", ", placeholders) + ")";
+        }
+
+        private async Task<Dictionary<string, LifecycleSnapshot>> LoadLifecycleSnapshotAsync(string[] scope)
         {
             var map = new Dictionary<string, LifecycleSnapshot>(StringComparer.OrdinalIgnoreCase);
             try
@@ -227,7 +281,8 @@ namespace Unison.Uwp.Data
                     .QueryAsync<LifecycleSnapshot>(
                         "SELECT Jid, Status, DeletedAtUtc, LastMessageTimestampUtc, LastMessageId, " +
                         "UnreadCount, Name, LastMessageSendState, IsGroup, LidJid, PnJid " +
-                        "FROM history_chat_preview")
+                        "FROM history_chat_preview" + WhereJidIn(scope),
+                        scope ?? new string[0])
                     .ConfigureAwait(false);
                 if (rows != null)
                 {
@@ -507,14 +562,19 @@ namespace Unison.Uwp.Data
         /// The tombstone per JID, so an upsert can decide whether the incoming row is a leftover
         /// from a sync chunk or a genuinely newer message that should bring the chat back.
         /// </summary>
-        private async Task<Dictionary<string, DateTime>> LoadTombstonesAsync()
+        private async Task<Dictionary<string, DateTime>> LoadTombstonesAsync(string[] scope)
         {
             var map = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
             try
             {
+                string scopeClause = scope == null || scope.Length == 0
+                    ? string.Empty
+                    : WhereJidIn(scope).Replace(" WHERE ", " AND ");
                 var rows = await _connection
                     .QueryAsync<TombstoneRow>(
-                        "SELECT Jid, DeletedAtUtc FROM history_chat_preview WHERE DeletedAtUtc IS NOT NULL")
+                        "SELECT Jid, DeletedAtUtc FROM history_chat_preview WHERE DeletedAtUtc IS NOT NULL" +
+                        scopeClause,
+                        scope ?? new string[0])
                     .ConfigureAwait(false);
                 if (rows != null)
                 {

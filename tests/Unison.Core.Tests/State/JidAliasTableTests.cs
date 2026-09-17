@@ -305,5 +305,115 @@ namespace Unison.Core.Tests.State
 
             Assert.Equal(ContactPn, snapshot[ContactLid]);
         }
+
+        // --- case-insensitivity ----------------------------------------------
+        // The table is saved to and loaded from a file that uses OrdinalIgnoreCase
+        // (see MessageStore.LoadJidAliasesAsync / SaveJidAliasesAsync). The memory
+        // copy must agree: if it were case-sensitive, two addresses differing only
+        // in case would be two entries in memory and one on disk, and Snapshot(),
+        // which copies into a case-insensitive dictionary, would throw when both
+        // were present. That throw runs inside the suspend write and would take
+        // the chat catalogue down with it.
+
+        private const string NeutralLid = "777666555@lid";
+        private const string NeutralPn = "5511777666555@s.whatsapp.net";
+
+        [Fact]
+        public void The_suspend_write_does_not_crash_when_the_same_address_was_written_in_different_cases()
+        {
+            // This was the crashing scenario: two entries differing only in case
+            // were both in _inner, and Snapshot() tried to copy them into an
+            // OrdinalIgnoreCase dictionary, which throws ArgumentException on
+            // duplicate keys. The fix is making _inner case-insensitive itself.
+            var table = Bound();
+
+            table["ABC123@lid"] = NeutralPn;
+            table["abc123@lid"] = NeutralPn;
+
+            var exception = Record.Exception(() => table.Snapshot());
+
+            Assert.Null(exception);
+            Assert.Single(table.Snapshot());
+        }
+
+        [Fact]
+        public void A_lookup_finds_the_entry_regardless_of_the_case_used_when_writing()
+        {
+            var table = Bound();
+            table[NeutralLid] = NeutralPn;
+
+            Assert.True(table.TryGetValue(NeutralLid.ToUpperInvariant(), out var found));
+            Assert.Equal(NeutralPn, found);
+
+            Assert.Equal(NeutralPn, table[NeutralLid.ToUpperInvariant()]);
+            Assert.Equal(NeutralPn, table["777666555@LID"]);
+        }
+
+        [Fact]
+        public void Writing_the_same_address_in_different_case_replaces_rather_than_duplicates()
+        {
+            var table = Bound();
+
+            table["999888777@lid"] = "first@s.whatsapp.net";
+            table["999888777@LID"] = "second@s.whatsapp.net";
+
+            Assert.Single(table);
+            Assert.Equal("second@s.whatsapp.net", table["999888777@lid"]);
+        }
+
+        [Fact]
+        public void Snapshot_is_itself_case_insensitive_so_the_round_trip_through_disk_preserves_lookups()
+        {
+            // The file format is OrdinalIgnoreCase. The snapshot that goes to disk
+            // must allow lookups in any case, otherwise reloading and querying in a
+            // different case than the one stored would fail.
+            var table = Bound();
+            table[NeutralLid] = NeutralPn;
+            table[NeutralPn] = NeutralLid;
+
+            var snapshot = table.Snapshot();
+
+            Assert.True(snapshot.ContainsKey(NeutralLid.ToUpperInvariant()));
+            Assert.True(snapshot.ContainsKey(NeutralPn.ToUpperInvariant()));
+            Assert.Equal(NeutralPn, snapshot["777666555@LID"]);
+        }
+
+        [Fact]
+        public void ContainsKey_ignores_case()
+        {
+            var table = Bound();
+            table[NeutralLid] = NeutralPn;
+
+            Assert.True(table.ContainsKey(NeutralLid));
+            Assert.True(table.ContainsKey(NeutralLid.ToUpperInvariant()));
+            Assert.True(table.ContainsKey("777666555@LiD"));
+        }
+
+        [Fact]
+        public void Remove_ignores_case()
+        {
+            var table = Bound();
+            table[NeutralLid] = NeutralPn;
+
+            Assert.True(table.Remove(NeutralLid.ToUpperInvariant()));
+            Assert.Empty(table);
+        }
+
+        [Fact]
+        public void Genuinely_different_addresses_remain_distinct()
+        {
+            // The case-insensitivity must not collapse addresses that actually differ.
+            var table = Bound();
+
+            table["111222333@lid"] = "5511111222333@s.whatsapp.net";
+            table["444555666@lid"] = "5511444555666@s.whatsapp.net";
+
+            Assert.Equal(2, table.Count);
+            Assert.Equal("5511111222333@s.whatsapp.net", table["111222333@lid"]);
+            Assert.Equal("5511444555666@s.whatsapp.net", table["444555666@lid"]);
+
+            var snapshot = table.Snapshot();
+            Assert.Equal(2, snapshot.Count);
+        }
     }
 }

@@ -279,7 +279,12 @@ namespace Unison.Uwp.Services.WhatsApp
 
             try
             {
-                await PersistChatCatalogAsync(Chats.ToList()).ConfigureAwait(false);
+                // Snapshot on the UI thread. By here we are several awaits deep on a pool
+                // thread, and Chats is bound to the list: enumerating it while the UI adds a
+                // row throws, and the catch below would turn that into a silently skipped save.
+                List<ChatItem> snapshot = null;
+                await RunOnUiThreadAsync(() => snapshot = Chats.Where(c => c != null).ToList());
+                await PersistChatCatalogAsync(snapshot ?? new List<ChatItem>()).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
