@@ -53,8 +53,10 @@ namespace Unison.Uwp.UI.Templates
         }
 
         /// <summary>
-        /// Keep download/play media tiles square while MaxWidth=300 shrinks on narrow phones.
+        /// Keep download/play media tiles square: stretch up to 250×250, shrink on narrow phones.
         /// </summary>
+        private const double MediaPlaceholderMaxSide = 250;
+
         private void MediaPlaceholder_SizeChanged(object sender, SizeChangedEventArgs e)
         {
             var grid = sender as FrameworkElement;
@@ -69,7 +71,8 @@ namespace Unison.Uwp.UI.Templates
                 return;
             }
 
-            double side = width > 300 ? 300 : width;
+            double side = width > MediaPlaceholderMaxSide ? MediaPlaceholderMaxSide : width;
+
             if (System.Math.Abs(grid.Height - side) > 0.5)
             {
                 grid.Height = side;

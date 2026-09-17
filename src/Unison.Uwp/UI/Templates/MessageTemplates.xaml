@@ -116,7 +116,8 @@
                                    Margin="0,0,0,6"
                                    x:Load="{x:Bind ShowStickerError, Mode=OneWay}"/>
                         <Grid x:Name="SentImageDownload"
-                              MaxWidth="300"
+                              MaxWidth="250"
+                              MaxHeight="250"
                               HorizontalAlignment="Stretch"
                               Margin="0,0,0,6"
                               SizeChanged="MediaPlaceholder_SizeChanged"
@@ -150,7 +151,8 @@
                                     Visibility="{x:Bind ShowImageDownloadIcon, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                         </Grid>
                         <Grid x:Name="SentVideoDownload"
-                              MaxWidth="300"
+                              MaxWidth="250"
+                              MaxHeight="250"
                               HorizontalAlignment="Stretch"
                               Margin="0,0,0,6"
                               SizeChanged="MediaPlaceholder_SizeChanged"
@@ -178,7 +180,8 @@
                                     Visibility="{x:Bind ShowVideoDownloadIcon, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                         </Grid>
                         <Grid x:Name="SentVideoPlay"
-                              MaxWidth="300"
+                              MaxWidth="250"
+                              MaxHeight="250"
                               HorizontalAlignment="Stretch"
                               Margin="0,0,0,6"
                               SizeChanged="MediaPlaceholder_SizeChanged"
@@ -612,7 +615,8 @@
                                    Margin="0,0,0,6"
                                    x:Load="{x:Bind ShowStickerError, Mode=OneWay}"/>
                         <Grid x:Name="ReceivedImageDownload"
-                              MaxWidth="300"
+                              MaxWidth="250"
+                              MaxHeight="250"
                               HorizontalAlignment="Stretch"
                               Margin="0,0,0,6"
                               SizeChanged="MediaPlaceholder_SizeChanged"
@@ -644,7 +648,8 @@
                                     Visibility="{x:Bind ShowImageDownloadIcon, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                         </Grid>
                         <Grid x:Name="ReceivedVideoDownload"
-                              MaxWidth="300"
+                              MaxWidth="250"
+                              MaxHeight="250"
                               HorizontalAlignment="Stretch"
                               Margin="0,0,0,6"
                               SizeChanged="MediaPlaceholder_SizeChanged"
@@ -670,7 +675,8 @@
                                     Visibility="{x:Bind ShowVideoDownloadIcon, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                         </Grid>
                         <Grid x:Name="ReceivedVideoPlay"
-                              MaxWidth="300"
+                              MaxWidth="250"
+                              MaxHeight="250"
                               HorizontalAlignment="Stretch"
                               Margin="0,0,0,6"
                               SizeChanged="MediaPlaceholder_SizeChanged"
