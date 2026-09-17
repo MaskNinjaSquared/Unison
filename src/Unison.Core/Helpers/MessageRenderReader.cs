@@ -113,9 +113,14 @@ namespace Unison.Core.Helpers
 
             if (unwrapped.DocumentMessage != null)
             {
+                // The caption first: it is what the sender wrote, and the file name is only the
+                // fallback for the common case of a document sent with nothing said about it.
+                string label = !string.IsNullOrWhiteSpace(unwrapped.DocumentMessage.Caption)
+                    ? unwrapped.DocumentMessage.Caption
+                    : unwrapped.DocumentMessage.FileName;
                 return new MessageRenderInfo
                 {
-                    Content = MediaPreviewTag.ForDocument(unwrapped.DocumentMessage.FileName),
+                    Content = MediaPreviewTag.ForDocument(label),
                     IsDocument = true,
                     DocumentMessage = unwrapped.DocumentMessage
                 };

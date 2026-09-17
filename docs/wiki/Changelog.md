@@ -4,6 +4,31 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Polls, shared contacts and locations disappeared from the conversation after a sync
+
+Not blank — gone. The same short classification behind the quote bug turned out to sit in a much
+worse place as well: `TryGetListableContent`, the gate that decides whether a message from a history
+sync becomes a row in the conversation at all, and whether it can be the line the chat list shows.
+
+It asked `ExtractContent`, which knows plain text and the four media kinds. A poll, a shared
+contact, a location or a call log came back as empty text of kind `Text`, `HasRenderableContent`
+said there was nothing to draw, and the message was dropped: no timeline row
+(`HistoryMessageBuilder` returned null) and not even a candidate for the preview
+(`FindNewestListable` skipped past it). So sending a location left the chat list still showing
+whatever was said before it, and after a reinstall or a resync the location itself was not in the
+conversation either. Live, all four showed normally — they were there until the next sync.
+
+Both paths now classify through `MessageRenderReader`. The label these carry is still the raw
+`[Poll] …` / `[Contact] …` / `[Location]` the live path has always shown, in English regardless of
+app language; giving them proper `ChatPreviewKind` values with localized labels is worth doing and
+is not done here.
+
+The same comparison settled a document sent with a caption, where the two paths disagreed about
+what to show: the sync used the caption, live used the file name. The caption is what the sender
+wrote, so that is what both use now, falling back to the file name when nothing was written.
+
+---
+
 ## Quoting a poll, a contact or a location came back blank after a sync
 
 History sync read quotes through `HistorySyncContentFilter.ExtractContent`, which knows plain text

@@ -382,56 +382,22 @@ namespace Unison.Core.Helpers
                 ?? current.GroupStatusMessageV2?.Message;
         }
 
+        /// <summary>
+        /// What this envelope says, for the one caller that decides whether it can be listed.
+        /// The tag on media is stripped again by <see cref="ChatPreviewNormalizer.NormalizeBody"/>.
+        /// </summary>
+        /// <remarks>
+        /// This used to be a second, shorter classification, which knew text and the four media
+        /// kinds and nothing else. A poll, a contact, a location or a call came back as empty text
+        /// of kind Text, HasRenderableContent said no, and the message was dropped from the sync
+        /// altogether: no row in the conversation, and not even a candidate for the list preview.
+        /// Live the same message showed. So they were there until a resync, and then they were not.
+        /// </remarks>
         public static void ExtractContent(Message msg, out string text, out ChatPreviewKind kind)
         {
-            text = string.Empty;
-            kind = ChatPreviewKind.Text;
-            if (msg == null)
-            {
-                return;
-            }
-
-            if (!string.IsNullOrEmpty(msg.Conversation))
-            {
-                text = msg.Conversation;
-                kind = ChatPreviewKind.Text;
-            }
-            else if (msg.ExtendedTextMessage != null)
-            {
-                text = msg.ExtendedTextMessage.Text ?? string.Empty;
-                kind = ChatPreviewKind.Text;
-            }
-            else if (msg.StickerMessage != null)
-            {
-                kind = ChatPreviewKind.Sticker;
-            }
-            else if (msg.ImageMessage != null)
-            {
-                text = msg.ImageMessage.Caption ?? string.Empty;
-                kind = ChatPreviewKind.Image;
-            }
-            else if (msg.VideoMessage != null)
-            {
-                text = msg.VideoMessage.Caption ?? string.Empty;
-                kind = ChatPreviewKind.Video;
-            }
-            else if (msg.AudioMessage != null)
-            {
-                kind = ChatPreviewKind.Voice;
-            }
-            else if (msg.DocumentMessage != null)
-            {
-                text = msg.DocumentMessage.Caption
-                       ?? msg.DocumentMessage.FileName
-                       ?? string.Empty;
-                kind = ChatPreviewKind.Document;
-            }
-            else if (msg.DocumentWithCaptionMessage?.Message?.DocumentMessage != null)
-            {
-                var doc = msg.DocumentWithCaptionMessage.Message.DocumentMessage;
-                text = doc.Caption ?? doc.FileName ?? string.Empty;
-                kind = ChatPreviewKind.Document;
-            }
+            MessageRenderInfo info = MessageRenderReader.Read(msg);
+            text = info?.Content ?? string.Empty;
+            kind = info == null ? ChatPreviewKind.Text : info.PreviewKind;
         }
 
         public static DateTime? ToUtc(ulong unixSeconds)
