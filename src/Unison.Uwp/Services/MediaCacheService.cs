@@ -78,9 +78,16 @@ namespace Unison.Uwp.Services
             {
                 string fileName = BuildFileName(fileBase, extension);
                 StorageFolder folder = await OpenFolderAsync(kind).ConfigureAwait(false);
-                if (await folder.TryGetItemAsync(fileName) is StorageFile)
+                if (await folder.TryGetItemAsync(fileName) is StorageFile existing)
                 {
-                    return BuildUri(kind, fileName);
+                    // Existing is not the same as usable. A write interrupted by the app being
+                    // suspended - which on Mobile is routine - leaves an empty file behind, and
+                    // answering with it would serve that emptiness forever.
+                    var properties = await existing.GetBasicPropertiesAsync();
+                    if (properties.Size > 0)
+                    {
+                        return BuildUri(kind, fileName);
+                    }
                 }
             }
             catch (Exception ex)

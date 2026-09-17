@@ -61,12 +61,27 @@ determines the orientation and answers in one call. Each caller keeps its own lo
 merge still merges the rows and withholds only the alias; the mapped-LID path still only fires the first
 time it sees an address.
 
-### The same audio forwarded to five chats was five downloads
+### The same media forwarded five times was downloaded five times
 
-Image, video and document all named their cached file after the content hash, so the same media
-arriving twice was recognised as one file and fetched once. Audio named its file after the message id.
-A voice note forwarded to five chats is five different message ids and therefore, until now, five
-downloads over mobile data and five copies on eMMC.
+Two halves, and only naming them both makes the fix true.
+
+The cached file is named after the content hash — image, video and document already were; audio used
+the message id, so five forwards of one voice note wrote five identical files to eMMC. That is now
+uniform.
+
+Naming alone changes nothing about the network, though, because the file name is chosen *after* the
+download. The only cache check was `message.ImageUri` and its siblings — a per-row field, which a
+forwarded copy has empty, being a different message describing byte-identical media. So every copy
+was fetched again. There is now a lookup on disk before the download: named by content hash, the
+answer is yes for every forward after the first.
+
+Media the server does not address by content hash falls back to the message id, and the lookup
+correctly finds nothing. For images the extension has to be guessed from the declared mime, since the
+real one is read from bytes we have not fetched; a wrong guess misses the cache and downloads, which
+is the safe direction for it to fail.
+
+One guard came with it: `TryGetUriAsync` now rejects a zero-byte file. Existing is not the same as
+usable, and a write interrupted by suspension — routine on Mobile — would otherwise be served forever.
 
 The four `Ensure*AvailableAsync` routines each read the message's media fields by hand at the top,
 which is how the copies drifted apart in the first place. That reading is now `MediaDownloadPlan` in

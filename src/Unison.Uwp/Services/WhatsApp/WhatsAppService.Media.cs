@@ -318,6 +318,41 @@ namespace Unison.Uwp.Services.WhatsApp
                 reuseExisting: false);
 
         /// <summary>
+        /// The URI of a file this media already has on disk, or null when it must be fetched.
+        /// </summary>
+        /// <remarks>
+        /// The per-message check the callers do first asks "has *this row* been downloaded",
+        /// which a forwarded copy answers no to — it is a different message, with an empty URI
+        /// field, describing byte-identical media. This asks the other question: is the file
+        /// itself already here. Named by content hash, the answer is yes for every forward
+        /// after the first, which is the difference between one download and one per copy on a
+        /// metered connection.
+        ///
+        /// Only media the server addresses by content hash can be matched this way. Without one
+        /// the name falls back to the message id and the lookup correctly finds nothing.
+        /// </remarks>
+        private async Task<string> TryReuseDownloadedFileAsync(
+            MediaCacheKind kind,
+            MediaDownloadPlan plan,
+            string extension)
+        {
+            if (plan.ExpectedSha256 == null || plan.ExpectedSha256.Length == 0)
+            {
+                return null;
+            }
+
+            try
+            {
+                return await _mediaCache.TryGetUriAsync(kind, plan.FileBase, extension);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[WhatsAppService] Cache lookup failed (" + kind + "): " + ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>
         /// WhatsApp voice notes are often Ogg/Opus — fine on desktop MediaPlayer, often fails on W10 Mobile.
         /// Renaming the extension alone does not change the codec; re-encode to AAC/.m4a when possible.
         /// </summary>
@@ -423,6 +458,25 @@ namespace Unison.Uwp.Services.WhatsApp
                     return await EnsurePlayableAudioUriAsync(message, message.AudioUri);
                 }
 
+                string cached = await TryReuseDownloadedFileAsync(
+                    MediaCacheKind.Audio,
+                    plan,
+                    MediaFileExtensions.ForAudio(plan.MimeType));
+                if (!string.IsNullOrWhiteSpace(cached))
+                {
+                    message.AudioUri = cached;
+                    SessionLogger.Instance.WriteAlways(
+                        "[Audio/ensure] disk-hit id=" + (message.Id ?? "?") + " uri=" + cached);
+                    string reusedJid = GetCanonicalJid(message.RemoteJid);
+                    if (!string.IsNullOrWhiteSpace(reusedJid))
+                    {
+                        await SaveMessageAsync(reusedJid, message);
+                        QueueChatMessagesChanged(reusedJid);
+                    }
+
+                    return await EnsurePlayableAudioUriAsync(message, cached);
+                }
+
                 var bytes = await _socket.DownloadAndDecryptMediaAsync(
                     plan.Url,
                     plan.DirectPath,
@@ -508,6 +562,32 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 if (!string.IsNullOrWhiteSpace(message.ImageUri))
                 {
+                    return await EnsureWebPDisplayUriAsync(message);
+                }
+
+                // The extension has to be guessed from the declared mime, because the real one
+                // is read from the payload we have not fetched yet. A server that declares jpeg
+                // and sends WebP simply misses the cache and downloads, which is the safe way
+                // for this guess to be wrong.
+                string cachedImage = await TryReuseDownloadedFileAsync(
+                    MediaCacheKind.Image,
+                    plan,
+                    MediaFileExtensions.ForImage(plan.MimeType));
+                if (!string.IsNullOrWhiteSpace(cachedImage))
+                {
+                    message.ImageUri = cachedImage;
+                    if (isSticker)
+                    {
+                        message.IsStickerFailed = false;
+                    }
+
+                    string reusedJid = GetCanonicalJid(message.RemoteJid);
+                    if (!string.IsNullOrWhiteSpace(reusedJid))
+                    {
+                        await SaveMessageAsync(reusedJid, message);
+                        QueueChatMessagesChanged(reusedJid);
+                    }
+
                     return await EnsureWebPDisplayUriAsync(message);
                 }
 
@@ -622,6 +702,16 @@ namespace Unison.Uwp.Services.WhatsApp
                     return await EnsureVideoPosterAsync(message);
                 }
 
+                string cachedVideo = await TryReuseDownloadedFileAsync(
+                    MediaCacheKind.Video,
+                    plan,
+                    MediaFileExtensions.ForVideo(plan.MimeType));
+                if (!string.IsNullOrWhiteSpace(cachedVideo))
+                {
+                    message.VideoUri = cachedVideo;
+                    return await EnsureVideoPosterAsync(message);
+                }
+
                 var bytes = await _socket.DownloadAndDecryptMediaAsync(
                     plan.Url,
                     plan.DirectPath,
@@ -686,6 +776,24 @@ namespace Unison.Uwp.Services.WhatsApp
                 if (!string.IsNullOrWhiteSpace(message.DocumentUri))
                 {
                     return message.DocumentUri;
+                }
+
+                string cachedDocument = await TryReuseDownloadedFileAsync(
+                    MediaCacheKind.Document,
+                    plan,
+                    MediaFileExtensions.ForDocument(plan.FileName, plan.MimeType));
+                if (!string.IsNullOrWhiteSpace(cachedDocument))
+                {
+                    message.DocumentUri = cachedDocument;
+                    await TryFillDocumentFileLengthFromLocalAsync(message);
+                    string reusedJid = GetCanonicalJid(message.RemoteJid);
+                    if (!string.IsNullOrWhiteSpace(reusedJid))
+                    {
+                        await SaveMessageAsync(reusedJid, message);
+                        QueueChatMessagesChanged(reusedJid);
+                    }
+
+                    return cachedDocument;
                 }
 
                 var bytes = await _socket.DownloadAndDecryptMediaAsync(
