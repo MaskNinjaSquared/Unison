@@ -4,6 +4,33 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Muting a chat from the info panel deleted its pin
+
+Pinned and muted conversations came back from a sync with their icons gone. The preview table was
+the obvious suspect and is innocent — it has no pin or mute columns at all. Those live in a separate
+table, and the damage was in how it was written.
+
+Every caller wrote the whole row: status, tile pin, chat pin and mute together. That means each one
+needed a current copy of the three fields it was not changing, and the list view read them first
+while the chat detail and info panel did not. So muting a conversation from the info panel stored
+"not pinned" over a real pin. Nothing looked wrong at the time; the pin was gone from disk, and the
+next read restored the absence exactly as it found it.
+
+Writes now name one field each, through the read-modify-write that was already there. App-state
+writes only what the mutation actually mentioned, which is what it already did in memory.
+
+A second cause sat next to it: warming the store cleared the cache before refilling it from disk, and
+the read path consults the cache only. Anything hydrated inside that window was told nothing was
+stored — and since two different callers warm the store, the window opened more than once per launch,
+including during a sync, which is the moment the list is being rebuilt. The cache is filled first now
+and stale entries dropped afterwards.
+
+The read rule moved to `ChatLocalStateApply` (10 tests) and pins the distinction the old code made by
+accident: nothing stored says nothing about pin or mute, because either can arrive before a row
+exists — but it does say "no tile", because a tile is on the Start screen or it is not.
+
+---
+
 ## Searching for a contact with brackets in the number found nobody
 
 The new-chat box takes whatever the user types and hands it, near enough untouched, to the contact

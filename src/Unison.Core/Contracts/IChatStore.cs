@@ -36,19 +36,20 @@ namespace Unison.Core.Contracts
 
 
 
-        /// <summary>Insert or replace. Returns the persisted snapshot.</summary>
+        // Each write names one field. Writing the whole row instead means every caller has to be
+        // holding a current copy of the other three, and the ones that were not silently reverted
+        // them: muting a chat from the info panel used to store IsChatPinned=false over a pin.
 
-        Task<ChatLocalState> UpsertAsync(
+        /// <summary>The chat-list pin, mirrored from pin_v1 / app-state.</summary>
+        Task SetChatPinnedAsync(string jid, bool pinned);
 
-            string jid,
+        /// <summary>The Start-screen tile.</summary>
+        Task SetWidgetPinnedAsync(string jid, bool pinned);
 
-            ChatStatus status,
+        /// <summary>Unix seconds mute deadline; null unmutes.</summary>
+        Task SetMutedUntilAsync(string jid, long? mutedUntil);
 
-            bool isWidgetPinned,
-
-            bool isChatPinned,
-
-            long? mutedUntil);
+        Task SetStatusAsync(string jid, ChatStatus status);
 
 
 

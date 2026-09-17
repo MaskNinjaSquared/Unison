@@ -128,32 +128,32 @@ namespace Unison.Uwp.Data
 
                 await _connection.Table<ChatRow>().ToListAsync().ConfigureAwait(false);
 
-            _cache.Clear();
-
             if (rows == null)
-
             {
-
                 return;
-
             }
 
-
-
+            // Filled first, then the stale keys are dropped. Clearing up front leaves a window in
+            // which the cache answers "nothing stored" for every chat, and ApplyTo reads the cache
+            // only - so a list hydrated during a warm came out with no pins and no mutes.
+            var loaded = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (ChatRow row in rows)
-
             {
-
                 ChatLocalState state = ToModel(row);
-
                 if (state != null && !string.IsNullOrEmpty(state.Jid))
-
                 {
-
                     _cache[state.Jid] = Clone(state);
-
+                    loaded.Add(state.Jid);
                 }
+            }
 
+            foreach (string key in new System.Collections.Generic.List<string>(_cache.Keys))
+            {
+                if (!loaded.Contains(key))
+                {
+                    ChatLocalState dropped;
+                    _cache.TryRemove(key, out dropped);
+                }
             }
 
 
@@ -250,37 +250,25 @@ namespace Unison.Uwp.Data
 
 
 
-        public Task<ChatLocalState> UpsertAsync(
-
-            string jid,
-
-            ChatStatus status,
-
-            bool isWidgetPinned,
-
-            bool isChatPinned,
-
-            long? mutedUntil)
-
+        public Task SetChatPinnedAsync(string jid, bool pinned)
         {
-
-            return WriteAsync(jid, existing =>
-
-            {
-
-                existing.Status = status;
-
-                existing.IsWidgetPinned = isWidgetPinned;
-
-                existing.IsChatPinned = isChatPinned;
-
-                existing.MutedUntil = mutedUntil;
-
-            });
-
+            return WriteAsync(jid, existing => existing.IsChatPinned = pinned);
         }
 
+        public Task SetWidgetPinnedAsync(string jid, bool pinned)
+        {
+            return WriteAsync(jid, existing => existing.IsWidgetPinned = pinned);
+        }
 
+        public Task SetMutedUntilAsync(string jid, long? mutedUntil)
+        {
+            return WriteAsync(jid, existing => existing.MutedUntil = mutedUntil);
+        }
+
+        public Task SetStatusAsync(string jid, ChatStatus status)
+        {
+            return WriteAsync(jid, existing => existing.Status = status);
+        }
 
         public void ApplyTo(ChatItem chat)
 
@@ -333,64 +321,8 @@ namespace Unison.Uwp.Data
         /// </summary>
 
         private static void ApplyLocalFields(ChatItem chat, ChatLocalState state)
-
         {
-
-            if (state == null)
-
-            {
-
-                chat.IsWidgetPinned = false;
-
-                // Keep existing MutedUntil / IsChatPinned from history/JSON when no SQLite row yet.
-
-                return;
-
-            }
-
-
-
-            // history_chat_preview is authoritative. The Chat table is a fallback when
-            // app-state arrives before a catalogue row has been persisted.
-            if (chat.Status == ChatStatus.Active && state.Status != ChatStatus.Active)
-            {
-                chat.Status = state.Status;
-            }
-
-            chat.IsWidgetPinned = state.IsWidgetPinned;
-
-            chat.MutedUntil = state.MutedUntil;
-
-            // ChatStore is the durable local mirror of pin_v1 (ApplyChatPin / app-state).
-
-            // history_chat_preview has no pin columns; without this, a restart showed every
-
-            // chat unpinned until the next app-state sync arrived.
-
-            chat.IsChatPinned = state.IsChatPinned;
-
-            if (!state.IsChatPinned)
-
-            {
-
-                // Match ApplyAppStateChatFlagsAsync: 0 is an explicit unpin tombstone so
-
-                // PN/LID dedupe cannot resurrect a pin from an alias that was not updated.
-
-                chat.PinnedTimestamp = 0;
-
-            }
-
-            else if (chat.PinnedTimestamp == null || chat.PinnedTimestamp == 0)
-
-            {
-
-                // Sort key until app-state fills the real pin timestamp; keep pinned rows on top.
-
-                chat.PinnedTimestamp = 1;
-
-            }
-
+            ChatLocalStateApply.Apply(chat, state);
         }
 
 

@@ -1283,12 +1283,8 @@ namespace Unison.Core.ViewModels
                     if (tileExists != chat.IsWidgetPinned)
                     {
                         chat.IsWidgetPinned = tileExists;
-                        await _chatStore.UpsertAsync(
-                            chat.JID,
-                            chat.Status,
-                            chat.IsWidgetPinned,
-                            chat.IsChatPinned,
-                            chat.MutedUntil).ConfigureAwait(false);
+                        await _chatStore.SetWidgetPinnedAsync(chat.JID, chat.IsWidgetPinned)
+                            .ConfigureAwait(false);
                     }
                 }
 
@@ -1360,12 +1356,7 @@ namespace Unison.Core.ViewModels
                 }
 
                 chat.IsWidgetPinned = nextPinned;
-                await _chatStore.UpsertAsync(
-                    chat.JID,
-                    chat.Status,
-                    chat.IsWidgetPinned,
-                    chat.IsChatPinned,
-                    chat.MutedUntil);
+                await _chatStore.SetWidgetPinnedAsync(chat.JID, chat.IsWidgetPinned);
                 OnPropertyChanged(nameof(IsWidgetPinned));
             }
             catch (Exception ex)
@@ -1385,12 +1376,7 @@ namespace Unison.Core.ViewModels
             try
             {
                 chat.MutedUntil = mutedUntilUnixSeconds;
-                await _chatStore.UpsertAsync(
-                    chat.JID,
-                    chat.Status,
-                    chat.IsWidgetPinned,
-                    chat.IsChatPinned,
-                    chat.MutedUntil);
+                await _chatStore.SetMutedUntilAsync(chat.JID, chat.MutedUntil);
                 RaiseMuteCommandsCanExecuteChanged();
                 OnPropertyChanged(nameof(ShowMuteDurationOptions));
                 OnPropertyChanged(nameof(ShowUnmuteOption));

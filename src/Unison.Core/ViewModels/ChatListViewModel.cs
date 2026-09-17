@@ -706,12 +706,7 @@ namespace Unison.Core.ViewModels
                 }
 
                 chat.IsWidgetPinned = nextPinned;
-                await _chatStore.UpsertAsync(
-                    chat.JID,
-                    chat.Status,
-                    chat.IsWidgetPinned,
-                    chat.IsChatPinned,
-                    chat.MutedUntil);
+                await _chatStore.SetWidgetPinnedAsync(chat.JID, chat.IsWidgetPinned);
             }
             catch (Exception ex)
             {
@@ -772,12 +767,7 @@ namespace Unison.Core.ViewModels
             {
                 _chatStore.ApplyTo(chat);
                 chat.MutedUntil = request.MutedUntil;
-                await _chatStore.UpsertAsync(
-                    chat.JID,
-                    chat.Status,
-                    chat.IsWidgetPinned,
-                    chat.IsChatPinned,
-                    chat.MutedUntil);
+                await _chatStore.SetMutedUntilAsync(chat.JID, chat.MutedUntil);
             }
             catch (Exception ex)
             {

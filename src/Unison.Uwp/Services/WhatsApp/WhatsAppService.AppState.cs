@@ -443,12 +443,26 @@ namespace Unison.Uwp.Services.WhatsApp
                 {
                     try
                     {
-                        await _chatStore.UpsertAsync(
-                            chat.JID,
-                            chat.Status,
-                            chat.IsWidgetPinned,
-                            chat.IsChatPinned,
-                            chat.MutedUntil).ConfigureAwait(false);
+                        // Only what the mutation spoke about. A mute arriving for a pinned chat
+                        // used to carry the rest of the row with it, and whichever field the row
+                        // happened to be stale on was overwritten.
+                        if (change.Pinned.HasValue)
+                        {
+                            await _chatStore.SetChatPinnedAsync(chat.JID, change.Pinned.Value)
+                                .ConfigureAwait(false);
+                        }
+
+                        if (change.AppliesMute)
+                        {
+                            await _chatStore.SetMutedUntilAsync(chat.JID, change.MuteEndTimestamp)
+                                .ConfigureAwait(false);
+                        }
+
+                        if (change.Archived.HasValue)
+                        {
+                            await _chatStore.SetStatusAsync(chat.JID, chat.Status)
+                                .ConfigureAwait(false);
+                        }
                     }
                     catch (Exception ex)
                     {
