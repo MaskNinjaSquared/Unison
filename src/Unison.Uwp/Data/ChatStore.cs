@@ -1,138 +1,72 @@
-using System;
-
+﻿using System;
 using System.Collections.Concurrent;
-
 using System.Diagnostics;
-
 using System.IO;
-
 using System.Threading;
-
 using System.Threading.Tasks;
-
 using SQLite;
-
 using Unison.Core.Contracts;
-
 using Unison.Core.Helpers;
-
 using Unison.Core.Models;
-
 using Unison.Uwp.Data.Entities;
-
 using Windows.Storage;
 
-
-
 namespace Unison.Uwp.Data
-
 {
-
     /// <summary>
-
     /// SQLite chat metadata store (same unison.db as Person).
-
     /// </summary>
-
     public sealed class ChatStore : IChatStore
-
     {
-
         private static readonly string DatabaseFileName = "unison.db";
 
-
-
         private readonly ConcurrentDictionary<string, ChatLocalState> _cache =
-
             new ConcurrentDictionary<string, ChatLocalState>(StringComparer.OrdinalIgnoreCase);
 
-
-
         private readonly SemaphoreSlim _initLock = new SemaphoreSlim(1, 1);
-
         private readonly SemaphoreSlim _writeLock = new SemaphoreSlim(1, 1);
 
-
-
         private SQLiteAsyncConnection _connection;
-
         private bool _initialized;
 
-
-
         public async Task InitializeAsync()
-
         {
-
             if (_initialized)
-
             {
-
                 return;
-
             }
 
-
-
             await _initLock.WaitAsync().ConfigureAwait(false);
-
             try
-
             {
-
                 if (_initialized)
-
                 {
-
                     return;
-
                 }
-
-
 
                 SQLitePCL.Batteries.Init();
 
-
-
                 string dbPath = Path.Combine(ApplicationData.Current.LocalFolder.Path, DatabaseFileName);
-
                 _connection = new SQLiteAsyncConnection(dbPath);
-
                 await _connection.CreateTableAsync<ChatRow>().ConfigureAwait(false);
-
                 _initialized = true;
-
                 Debug.WriteLine("[ChatStore] Initialized at " + dbPath);
-
             }
-
             finally
-
             {
-
                 _initLock.Release();
-
             }
-
         }
 
-
-
         public async Task WarmAsync()
-
         {
-
             await EnsureInitializedAsync().ConfigureAwait(false);
-
             System.Collections.Generic.List<ChatRow> rows =
-
                 await _connection.Table<ChatRow>().ToListAsync().ConfigureAwait(false);
-
             if (rows == null)
             {
                 return;
             }
-
             // Filled first, then the stale keys are dropped. Clearing up front leaves a window in
             // which the cache answers "nothing stored" for every chat, and ApplyTo reads the cache
             // only - so a list hydrated during a warm came out with no pins and no mutes.
@@ -146,7 +80,6 @@ namespace Unison.Uwp.Data
                     loaded.Add(state.Jid);
                 }
             }
-
             foreach (string key in new System.Collections.Generic.List<string>(_cache.Keys))
             {
                 if (!loaded.Contains(key))
@@ -156,99 +89,51 @@ namespace Unison.Uwp.Data
                 }
             }
 
-
-
             Debug.WriteLine("[ChatStore] Warm loaded " + _cache.Count + " rows");
-
         }
-
-
 
         public ChatLocalState TryGetCached(string jid)
-
         {
-
             string key = NormalizeJid(jid);
-
             if (string.IsNullOrEmpty(key))
-
             {
-
                 return null;
-
             }
-
-
 
             ChatLocalState cached;
-
             if (_cache.TryGetValue(key, out cached))
-
             {
-
                 return Clone(cached);
-
             }
-
-
 
             return null;
-
         }
-
-
 
         public async Task<ChatLocalState> GetAsync(string jid)
-
         {
-
             string key = NormalizeJid(jid);
-
             if (string.IsNullOrEmpty(key))
-
             {
-
                 return null;
-
             }
-
-
 
             ChatLocalState cached;
-
             if (_cache.TryGetValue(key, out cached))
-
             {
-
                 return Clone(cached);
-
             }
-
-
 
             await EnsureInitializedAsync().ConfigureAwait(false);
-
             ChatRow row = await _connection.FindAsync<ChatRow>(key).ConfigureAwait(false);
-
             if (row == null)
-
             {
-
                 return null;
-
             }
 
-
-
             ChatLocalState state = ToModel(row);
-
             _cache[key] = Clone(state);
-
             return state;
-
         }
-
-
 
         public Task SetChatPinnedAsync(string jid, bool pinned)
         {
@@ -271,267 +156,136 @@ namespace Unison.Uwp.Data
         }
 
         public void ApplyTo(ChatItem chat)
-
         {
-
             if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
-
             {
-
                 return;
-
             }
-
-
 
             ChatLocalState state = TryGetCached(chat.JID);
-
             ApplyLocalFields(chat, state);
-
         }
-
-
 
         public async Task ApplyToAsync(ChatItem chat)
-
         {
-
             if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
-
             {
-
                 return;
-
             }
 
-
-
             ChatLocalState state = await GetAsync(chat.JID).ConfigureAwait(false);
-
             ApplyLocalFields(chat, state);
-
         }
 
-
-
         /// <summary>
-
         /// Applies widget pin, chat-list pin, and mutedUntil from store onto the model.
-
         /// </summary>
-
         private static void ApplyLocalFields(ChatItem chat, ChatLocalState state)
         {
             ChatLocalStateApply.Apply(chat, state);
         }
 
-
-
         private async Task<ChatLocalState> WriteAsync(string jid, Action<ChatLocalState> mutate)
-
         {
-
             string key = NormalizeJid(jid);
-
             if (string.IsNullOrEmpty(key) || mutate == null)
-
             {
-
                 return null;
-
             }
-
-
 
             await EnsureInitializedAsync().ConfigureAwait(false);
-
             await _writeLock.WaitAsync().ConfigureAwait(false);
-
             try
-
             {
-
                 ChatLocalState next;
-
                 ChatLocalState cached;
-
                 if (_cache.TryGetValue(key, out cached))
-
                 {
-
                     next = Clone(cached);
-
                 }
-
                 else
-
                 {
-
                     ChatRow row = await _connection.FindAsync<ChatRow>(key).ConfigureAwait(false);
-
                     next = row != null ? ToModel(row) : new ChatLocalState { Jid = key };
-
                 }
-
-
 
                 next.Jid = key;
-
                 mutate(next);
 
-
-
                 await _connection.InsertOrReplaceAsync(ToRow(next)).ConfigureAwait(false);
-
                 _cache[key] = Clone(next);
-
                 return Clone(next);
-
             }
-
             finally
-
             {
-
                 _writeLock.Release();
-
             }
-
         }
-
-
 
         private async Task EnsureInitializedAsync()
-
         {
-
             if (!_initialized)
-
             {
-
                 await InitializeAsync().ConfigureAwait(false);
-
             }
-
         }
-
-
 
         private static string NormalizeJid(string jid)
-
         {
-
             return JidHelper.Normalize(jid);
-
         }
-
-
 
         private static ChatLocalState ToModel(ChatRow row)
-
         {
-
             if (row == null)
-
             {
-
                 return null;
-
             }
-
-
 
             ChatStatus status = ChatStatus.Active;
-
             if (Enum.IsDefined(typeof(ChatStatus), row.Status))
-
             {
-
                 status = (ChatStatus)row.Status;
-
             }
 
-
-
             return new ChatLocalState
-
             {
-
                 Jid = row.Jid,
-
                 Status = status,
-
                 IsChatPinned = row.IsChatPinned,
-
                 IsWidgetPinned = row.IsWidgetPinned,
-
                 MutedUntil = row.MutedUntil
-
             };
-
         }
-
-
 
         private static ChatRow ToRow(ChatLocalState state)
-
         {
-
             return new ChatRow
-
             {
-
                 Jid = state.Jid,
-
                 Status = (int)state.Status,
-
                 IsChatPinned = state.IsChatPinned,
-
                 IsWidgetPinned = state.IsWidgetPinned,
-
                 MutedUntil = state.MutedUntil,
-
                 UpdatedAtUtc = DateTime.UtcNow
-
             };
-
         }
-
-
 
         private static ChatLocalState Clone(ChatLocalState source)
-
         {
-
             if (source == null)
-
             {
-
                 return null;
-
             }
 
-
-
             return new ChatLocalState
-
             {
-
                 Jid = source.Jid,
-
                 Status = source.Status,
-
                 IsChatPinned = source.IsChatPinned,
-
                 IsWidgetPinned = source.IsWidgetPinned,
-
                 MutedUntil = source.MutedUntil
-
             };
-
         }
-
     }
-
 }
-

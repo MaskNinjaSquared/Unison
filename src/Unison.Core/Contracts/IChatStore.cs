@@ -1,40 +1,21 @@
-using System.Threading.Tasks;
-
+﻿using System.Threading.Tasks;
 using Unison.Core.Models;
 
-
-
 namespace Unison.Core.Contracts
-
 {
-
     /// <summary>
-
     /// SQLite store for local chat metadata (same DB as Person).
-
     /// </summary>
-
     public interface IChatStore
-
     {
-
         Task InitializeAsync();
 
-
-
         /// <summary>Load every row into the in-memory cache.</summary>
-
         Task WarmAsync();
-
-
 
         ChatLocalState TryGetCached(string jid);
 
-
-
         Task<ChatLocalState> GetAsync(string jid);
-
-
 
         // Each write names one field. Writing the whole row instead means every caller has to be
         // holding a current copy of the other three, and the ones that were not silently reverted
@@ -51,21 +32,11 @@ namespace Unison.Core.Contracts
 
         Task SetStatusAsync(string jid, ChatStatus status);
 
-
-
         /// <summary>
-
         /// Applies SQLite local fields onto a chat model (widget pin, chat-list pin, mute).
-
         /// </summary>
-
         void ApplyTo(ChatItem chat);
 
-
-
         Task ApplyToAsync(ChatItem chat);
-
     }
-
 }
-
