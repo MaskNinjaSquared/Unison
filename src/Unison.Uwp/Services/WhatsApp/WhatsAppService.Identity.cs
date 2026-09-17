@@ -778,19 +778,20 @@ namespace Unison.Uwp.Services.WhatsApp
 
                             // Identity Healing: Check if this LID belongs to US
                             string meLid = _authState?.Me?.Lid;
-                            if (!string.IsNullOrEmpty(meLid) && normalizedUser == NormalizeJid(meLid))
+                            string normalizedMeLid = string.IsNullOrEmpty(meLid) ? null : NormalizeJid(meLid);
+                            SelfIdentityHealingAction heal = SelfIdentityHealingDecision.Decide(
+                                normalizedUser,
+                                normalizedTarget,
+                                _authState?.Me?.Id,
+                                normalizedMeLid);
+                            if (heal == SelfIdentityHealingAction.HealMeId)
                             {
-                                string meId = _authState.Me.Id;
-                                if (normalizedTarget != meId)
-                                {
-                                    Log($"[WhatsAppService] IDENTITY HEALING (USync): Me.Lid ({meLid}) belongs to PN {normalizedTarget}, but current Me.Id is {meId}. Fixing...");
-                                    _authState.Me.Id = normalizedTarget;
-                                    _ = PersistAuthStateAsync(null, "usync-identity-heal");
-                                }
+                                Log($"[WhatsAppService] IDENTITY HEALING (USync): Me.Lid ({meLid}) belongs to PN {normalizedTarget}, but current Me.Id is {_authState.Me.Id}. Fixing...");
+                                _authState.Me.Id = normalizedTarget;
+                                _ = PersistAuthStateAsync(null, "usync-identity-heal");
                             }
-                            else if (normalizedUser == _authState?.Me?.Id && !string.IsNullOrEmpty(meLid) && normalizedTarget != NormalizeJid(meLid))
+                            else if (heal == SelfIdentityHealingAction.PurgeForeignMapping)
                             {
-                                // If the PN in Me.Id points to a LID that isn't ours, it's corrupt
                                 Log($"[WhatsAppService] IDENTITY CORRUPTION DETECTED (USync): Me.Id ({normalizedUser}) is mapped to foreign LID {normalizedTarget}. PURGING...");
                                 _authState.Me.Id = meLid;
                                 JidAlias.Remove(normalizedUser);
