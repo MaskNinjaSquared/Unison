@@ -4,6 +4,15 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Offline list apply + timeline accept on façades (3.10 apply)
+
+`ChatFacade.ApplyOfflineReplayChatSummariesAsync` reuses the live strip path with recorded
+`UnreadDelta` (never re-asks IncomingAttention). `IMessageService.AcceptIncomingTimeline` owns
+insert/same-chat enrich/alias detect; `QueueIncomingPersist` forwards the debounced persist batch.
+Alias consolidate store/dedupe side-effects stay pump-orchestrated.
+
+---
+
 ## Live list apply moved to ChatFacade (3.10 apply)
 
 `IChatService.ApplyLiveIncomingChatListAsync` owns create-row, strip tip (`LiveChatPreviewApplier`),

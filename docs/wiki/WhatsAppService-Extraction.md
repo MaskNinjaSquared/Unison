@@ -184,7 +184,7 @@ Self-contained first. List/persist last.
 | 3.8 | `.AppState.cs` | **Rewritten — the premise was stale.** See below |
 | 3.9a | List display order (done) | `ChatDisplayOrder` (Core) |
 | 3.9b | `.Persistence.cs` + preview reconcile + the appliers from 3.8 | `ChatFacade` + `ChatStateStore` + `IChatStore` / `IMessageStore`. Close the transitional public dictionaries on `ChatStateStore`. **Persistence rules out; appliers remain — see below** |
-| 3.10 | `.IncomingPump.cs` | Decode/dispatch stays with connection. **Rules closed.** **Notify on MessageFacade.** **Live list apply (preview/unread/new row) on ChatFacade.** Timeline insert + persist still in the pump |
+| 3.10 | `.IncomingPump.cs` | Decode/dispatch stays with connection. **Rules closed.** **Notify + timeline accept + persist enqueue on MessageFacade.** **Live + offline list apply on ChatFacade.** Pump keeps queue/locks, alias-consolidate orchestration, offline summary *record* |
 
 **3.1a is done.** The avatar half of `MediaCache` is `IAvatarCache` / `AvatarCacheService`: `TryGet`,
 `SaveAsync`, `DeleteIfCached`. It took `BuildSafeAvatarFileName`, `TryGetCachedAvatarUri`,
@@ -714,10 +714,12 @@ callbacks for canonicalization and self-link. `ResolveLiveDirectChatJid` is a th
 **3.10 rules extraction is closed.** Pure decisions that lived in `HandleDecryptedMessageAsync` (and
 the live DM resolver it called) are in Core under tests.
 
-**Apply progress:** live toast/badge/tile is `MessageFacade.NotifyLiveIncoming`; live list strip
-(create row, preview, unread, reposition) is `ChatFacade.ApplyLiveIncomingChatListAsync`. What remains
-in `.IncomingPump.cs` for apply is timeline insert (`MessagesByChat` + id index + dedupe), persist
-queue, offline-replay summary apply, placeholder resend state and the pump queue itself.
+**Apply progress:** live toast/badge/tile is `MessageFacade.NotifyLiveIncoming`; live and offline
+list strip (create row, preview, unread, reposition/sort) is `ChatFacade` (`ApplyLiveIncomingChatListAsync`
+/ `ApplyOfflineReplayChatSummariesAsync`, shared `UnreadDelta`). Timeline insert/dedupe is
+`IMessageService.AcceptIncomingTimeline` (host still holds `MessagesByChat` + id index);
+persist enqueue is `QueueIncomingPersist`. Pump still owns alias-consolidate side-effects,
+offline summary *recording*, placeholder/missing ledger and the queue itself.
 
 ### Phase 4 — What remains is connection
 
