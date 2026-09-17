@@ -4,6 +4,24 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## A failed connection attempt left its socket open behind it
+
+`ConnectAsync` subscribes to the transport and then opens it, sends the client hello and waits for
+the handshake. Any failure after that point — a handshake timeout, a rejected payload, a parse error
+— propagated straight out, which is the one thing it could not do: the socket was already open and
+those two handlers were still attached.
+
+The host reads that exception as "connect failed" and builds a new session, so the abandoned one
+stays behind holding a live connection that nobody will ever close, still receiving frames. On a
+phone reconnecting across a patchy network this accumulates, and the symptom is not an error message
+but the app getting slower and heavier the longer it stays on.
+
+Every exit from the connect path now goes through the existing close, which unsubscribes, fails the
+pending waiters and closes the transport. It was already idempotent, so the transport dropping
+underneath us on the way out is not a second close.
+
+---
+
 ## Deleting a conversation left it asking the server for its messages
 
 A message that fails to decrypt is remembered so the app can ask the account to send it again. That

@@ -179,35 +179,57 @@ namespace Unison.Socket.Session
             _transport.MessageReceived += OnTransportMessageAsync;
             _transport.Closed += OnTransportClosed;
 
-            await _events.EmitAsync(
-                WaEventKind.ConnectionUpdate,
-                new ConnectionUpdate { Connection = ConnectionStatus.Connecting }).ConfigureAwait(false);
-
-            var uri = BuildConnectionUri();
-            var headers = BuildHeaders();
-
-            await _transport.ConnectAsync(uri, headers).ConfigureAwait(false);
-            await SendClientHelloAsync().ConfigureAwait(false);
-
-            using (var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+            // From here on the transport may be open and we are subscribed to it, so every exit
+            // has to go through EndAsync. Letting a failed handshake propagate on its own left a
+            // live socket behind with these two handlers still attached: the host takes the
+            // exception as "connect failed" and builds a new session, while the abandoned one goes
+            // on receiving frames on a connection nobody will ever close. EndAsync is idempotent,
+            // so the transport closing underneath us on the way out is not a second close.
+            try
             {
-                timeoutCts.CancelAfter(_config.ConnectTimeout);
+                await _events.EmitAsync(
+                    WaEventKind.ConnectionUpdate,
+                    new ConnectionUpdate { Connection = ConnectionStatus.Connecting }).ConfigureAwait(false);
 
-                var completed = await Task.WhenAny(
-                    _handshakeCompletion.Task,
-                    Task.Delay(Timeout.Infinite, timeoutCts.Token)).ConfigureAwait(false);
+                var uri = BuildConnectionUri();
+                var headers = BuildHeaders();
 
-                if (completed != _handshakeCompletion.Task)
+                await _transport.ConnectAsync(uri, headers).ConfigureAwait(false);
+                await SendClientHelloAsync().ConfigureAwait(false);
+
+                using (var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
                 {
-                    throw new WaConnectionException(
-                        $"Handshake timed out after {_config.ConnectTimeout.TotalSeconds:F0}s",
-                        DisconnectReason.ConnectionLost);
+                    timeoutCts.CancelAfter(_config.ConnectTimeout);
+
+                    var completed = await Task.WhenAny(
+                        _handshakeCompletion.Task,
+                        Task.Delay(Timeout.Infinite, timeoutCts.Token)).ConfigureAwait(false);
+
+                    if (completed != _handshakeCompletion.Task)
+                    {
+                        throw new WaConnectionException(
+                            $"Handshake timed out after {_config.ConnectTimeout.TotalSeconds:F0}s",
+                            DisconnectReason.ConnectionLost);
+                    }
+
+                    await _handshakeCompletion.Task.ConfigureAwait(false);
                 }
 
-                await _handshakeCompletion.Task.ConfigureAwait(false);
+                StartKeepAlive();
             }
+            catch (Exception ex)
+            {
+                try
+                {
+                    await EndAsync(ex).ConfigureAwait(false);
+                }
+                catch (Exception endError)
+                {
+                    _log.Error("Error closing connection after a failed connect", endError);
+                }
 
-            StartKeepAlive();
+                throw;
+            }
         }
 
         public async Task SendRawAsync(byte[] data)
