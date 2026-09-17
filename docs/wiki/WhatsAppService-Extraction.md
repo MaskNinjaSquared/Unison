@@ -703,6 +703,10 @@ participant alt before usync. The pump still registers; Core only decides which 
 state-only, placeholder), status broadcast address, and chat controls (revoke, pin) are classified
 before the pump queues the matching work — so that order cannot drift when the method is split again.
 
+**`IncomingEmptyContentSkip` / `IncomingLiveStatusAuthor` / `IncomingSelfChatCollapseGate`.** Empty
+render clears the missing-message ledger when an id is present; live status author is participant
+else self; self-chat + distinct peer LID queues the transient merge. Pump still logs / queues.
+
 ### Phase 4 — What remains is connection
 
 Rename-able to `IWhatsAppConnection` / keep `IWhatsAppService` until the last caller dies. Target surface:

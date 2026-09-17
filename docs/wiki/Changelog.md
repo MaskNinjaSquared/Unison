@@ -4,6 +4,14 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Incoming empty-content, status author, self-chat collapse left WhatsAppService (3.10)
+
+`IncomingEmptyContentSkip` (ledger clear on empty render), `IncomingLiveStatusAuthor`, and
+`IncomingSelfChatCollapseGate` are Core decisions. The pump still logs, reports status, and queues
+the transient-chat merge.
+
+---
+
 ## Incoming pump early exits and media hydrate plans left WhatsAppService (3.10)
 
 Four more Core rules: `IncomingMediaHydrationPlan` (offline/live sticker+image arms),

@@ -1564,11 +1564,10 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            string author = NormalizeJid(e.Participant);
-            if (string.IsNullOrWhiteSpace(author) && e.IsFromMe)
-            {
-                author = NormalizeJid(_authState?.Me?.Id);
-            }
+            string author = IncomingLiveStatusAuthor.Resolve(
+                NormalizeJid(e.Participant),
+                e.IsFromMe,
+                NormalizeJid(_authState?.Me?.Id));
 
             if (string.IsNullOrWhiteSpace(author))
             {
@@ -1710,9 +1709,10 @@ namespace Unison.Uwp.Services.WhatsApp
                     Debug.WriteLine(
                         $"[WhatsAppService] Direct live routing: id={e.MessageId}, from={normalizedFromJid} (self={IsSelfJid(normalizedFromJid)}), recipient={normalizedRecipient} (self={IsSelfJid(normalizedRecipient)}), peerRecipientPn={normalizedPeerRecipientPn} (self={IsSelfJid(normalizedPeerRecipientPn)}), peerRecipientLid={normalizedPeerRecipientLid} (self={IsSelfJid(normalizedPeerRecipientLid)}), senderLid={normalizedSenderLid} (self={IsSelfJid(normalizedSenderLid)}), isFromMe={e.IsFromMe}, finalChat={jid}, reason={routingReason}");
 
-                    if (string.Equals(routingReason, "self-chat", StringComparison.OrdinalIgnoreCase) &&
-                        !string.IsNullOrWhiteSpace(normalizedPeerRecipientLid) &&
-                        !string.Equals(normalizedPeerRecipientLid, jid, StringComparison.OrdinalIgnoreCase))
+                    if (IncomingSelfChatCollapseGate.ShouldCollapse(
+                            routingReason,
+                            normalizedPeerRecipientLid,
+                            jid))
                     {
                         QueueMessageControlWork(
                             "live-self-chat-collapse:" + e.MessageId,
@@ -1790,12 +1790,15 @@ namespace Unison.Uwp.Services.WhatsApp
                 SetIncomingMessagePumpStage("render", e);
                 // Extract message render payload
                 var renderInfo = ExtractMessageRenderInfo(e.Message);
-                string content = renderInfo?.Content;
-                if (string.IsNullOrEmpty(content))
+                IncomingEmptyContentSkip emptySkip = IncomingEmptyContentSkip.For(
+                    renderInfo?.Content,
+                    e.Message?.SenderKeyDistributionMessage != null,
+                    !string.IsNullOrEmpty(e.MessageId));
+                if (emptySkip.ShouldSkip)
                 {
                     // SenderKeyDistributionMessage-only payloads have no user-facing content
-                    // They were already processed in SocketClient ? just skip silently
-                    if (e.Message?.SenderKeyDistributionMessage != null)
+                    // They were already processed in SocketClient — just skip silently
+                    if (emptySkip.Reason == IncomingEmptyContentReason.SenderKeyDistributionOnly)
                     {
                         Log("[WhatsAppService] SenderKeyDistribution-only message, no content to display");
                     }
@@ -1807,7 +1810,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     // A placeholder recovery that lands as an unrecognised type still has to
                     // clear the missing-message ledger, or the resend drain keeps asking for
                     // a message that will never draw.
-                    if (!string.IsNullOrEmpty(e.MessageId))
+                    if (emptySkip.ClearMissingLedger)
                     {
                         string skipJid = GetCanonicalJid(normalizedFromJid) ?? NormalizeJid(e.FromJid);
                         ResolveMissingMessage(skipJid, e.MessageId, "empty-content");
@@ -1815,6 +1818,8 @@ namespace Unison.Uwp.Services.WhatsApp
 
                     return;
                 }
+
+                string content = renderInfo.Content;
 
 
                 // Update contact name cache if a pushName or verifiedName is provided
