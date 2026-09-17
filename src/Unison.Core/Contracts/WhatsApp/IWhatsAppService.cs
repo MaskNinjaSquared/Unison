@@ -192,7 +192,7 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>True when a JID already has a resolved display name in the local name cache.</summary>
         bool HasResolvedContactName(string jid);
 
-        /// <summary>In-memory JID â†’ device-contact display name overlay.</summary>
+        /// <summary>In-memory JID → device-contact display name overlay.</summary>
         Dictionary<string, string> PhoneContactNamesByJid { get; }
 
         /// <summary>Re-applies <see cref="ResolveDisplayName"/> to each chat's Name where it changed.</summary>

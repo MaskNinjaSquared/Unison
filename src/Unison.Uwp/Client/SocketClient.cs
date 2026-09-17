@@ -416,7 +416,7 @@ namespace Unison.Uwp.Client
         /// </summary>
         private static async Task<string> FetchCurrentVersionAsync()
         {
-            // Fast path â€“ already fetched
+            // Fast path – already fetched
             if (_cachedVersion != null)
                 return _cachedVersion;
 
@@ -4773,7 +4773,7 @@ namespace Unison.Uwp.Client
                 }
 
                 // Decrypt using Signal protocol
-                // Pass 'from' as groupJid â€” for group messages, 'from' is the group JID
+                // Pass 'from' as groupJid — for group messages, 'from' is the group JID
                 byte[] decryptedPayload = null;
                 try
                 {
@@ -4861,7 +4861,7 @@ namespace Unison.Uwp.Client
                         await HandleMissingMessageAsync(node, from, participant, id, $"parse-failed:{e2eType}", author);
                     }
                     
-                    // Successfully processed one enc node (or logged failure) â€” done with this message node
+                    // Successfully processed one enc node (or logged failure) — done with this message node
                     break;
                 }
                 else

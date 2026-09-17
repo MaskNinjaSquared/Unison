@@ -71,7 +71,7 @@ namespace Unison.Uwp.Shell.Unison.Views
             }
         }
 
-        /// <summary>Logout / session wipe â€” clear detail + selection before shell is torn down.</summary>
+        /// <summary>Logout / session wipe — clear detail + selection before shell is torn down.</summary>
         public async Task ResetForLoggedOutAsync()
         {
             try
@@ -91,7 +91,7 @@ namespace Unison.Uwp.Shell.Unison.Views
             _shell?.ClearChat();
         }
 
-        /// <summary>Called when local chats are wiped (resync) â€” leave NarrowDetail empty state.</summary>
+        /// <summary>Called when local chats are wiped (resync) — leave NarrowDetail empty state.</summary>
         public void NotifyLocalConversationsCleared()
         {
             _ = NotifyLocalConversationsClearedAsync();
@@ -145,7 +145,7 @@ namespace Unison.Uwp.Shell.Unison.Views
 
         /// <summary>
         /// Minimal: if chat space is visible with no open intent / no chat, close it and show the list.
-        /// Do not tear down while <see cref="ShellViewModel.PendingChat"/> is set â€” that means we
+        /// Do not tear down while <see cref="ShellViewModel.PendingChat"/> is set — that means we
         /// deliberately opened NarrowDetail (UI HasActiveChat can lag one frame behind SelectChat).
         /// </summary>
         private void ReconcileMinimalEmptyDetail()
@@ -160,7 +160,7 @@ namespace Unison.Uwp.Shell.Unison.Views
                 return;
             }
 
-            // Opening or open: shell still owns a chat â€” leave NarrowDetail alone.
+            // Opening or open: shell still owns a chat — leave NarrowDetail alone.
             if (_shell.PendingChat != null && _shell.HasActiveChat)
             {
                 return;
@@ -559,12 +559,12 @@ namespace Unison.Uwp.Shell.Unison.Views
                 }
                 else if (ChatDetailPart.HasActiveChat)
                 {
-                    // Open race/cancel while another (or same) chat remains visible â€” keep it.
+                    // Open race/cancel while another (or same) chat remains visible — keep it.
                     TryRecoverListSelectionFromActiveChat();
                 }
                 else
                 {
-                    // Genuine failed open â€” leave empty, but try restoring list highlight by jid.
+                    // Genuine failed open — leave empty, but try restoring list highlight by jid.
                     Debug.WriteLine("[ChatsView] Open chat did not activate UI for " + selected.JID);
                     ChatListPart.HighlightChatQuiet(selected);
                 }
@@ -645,14 +645,14 @@ namespace Unison.Uwp.Shell.Unison.Views
         private void ChatListPart_MenuClicked(object sender, EventArgs e)
         {
             int handlers = MenuClicked?.GetInvocationList()?.Length ?? 0;
-            Debug.WriteLine("[ChatsView] ChatListPart_MenuClicked â†’ shell handlers=" + handlers);
+            Debug.WriteLine("[ChatsView] ChatListPart_MenuClicked → shell handlers=" + handlers);
             if (MenuClicked != null)
             {
                 MenuClicked.Invoke(this, EventArgs.Empty);
                 return;
             }
 
-            // Fallback if MainView missed WireChatsViewMenu after Settingsâ†’Chats.
+            // Fallback if MainView missed WireChatsViewMenu after Settings→Chats.
             TryToggleShellPaneFallback();
         }
 

@@ -906,7 +906,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     quotedText = quotedInfo.Caption;
                 }
 
-                // Media quotes with no caption: keep QuotedText empty â€” the bubble strip
+                // Media quotes with no caption: keep QuotedText empty — the bubble strip
                 // shows icon + localized label from QuotedKind (not legacy [Image] tags).
             }
 

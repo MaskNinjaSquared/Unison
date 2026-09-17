@@ -122,7 +122,7 @@ namespace Unison.Uwp.Data
 
         /// <summary>
         /// Initialize the store and create necessary folders for the current sync epoch.
-        /// Legacy LocalFolder/Messages is not migrated â€” abandoned + force history repair.
+        /// Legacy LocalFolder/Messages is not migrated — abandoned + force history repair.
         /// </summary>
         public async Task InitializeAsync()
         {

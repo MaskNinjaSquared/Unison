@@ -8,12 +8,12 @@ using Unison.Core.Helpers;
 namespace Unison.Core.ViewModels
 {
     /// <summary>
-    /// Form state for the new-chat ContentDialog (phone â†’ JID resolve).
+    /// Form state for the new-chat ContentDialog (phone → JID resolve).
     /// DialogService.ShowNewChatDialogAsync receives this VM as target.
     /// </summary>
     public class NewChatDialogViewModel : Observable
     {
-        // â”€â”€ DI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── DI ───────────────────────────────────────────────────────────────
 
         /// <summary>Resolves phone numbers to WhatsApp JIDs via the contact facade.</summary>
         private readonly IContactService _contactService;
@@ -21,7 +21,7 @@ namespace Unison.Core.ViewModels
         /// <summary>Localized error / status strings for the dialog.</summary>
         private readonly IStringResources _strings;
 
-        // â”€â”€ State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── State ────────────────────────────────────────────────────────────
 
         private string _phoneNumber;
         private string _errorMessage;
@@ -39,12 +39,12 @@ namespace Unison.Core.ViewModels
                 () => !_isSearching && !string.IsNullOrWhiteSpace(PhoneNumber));
         }
 
-        // â”€â”€ Events â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Events ───────────────────────────────────────────────────────────
 
         /// <summary>Raised when SearchContactAsync resolves a JID successfully.</summary>
         public event EventHandler<string> ContactResolved;
 
-        // â”€â”€ Bindable state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Bindable state ───────────────────────────────────────────────────
 
         /// <summary>Phone digits entered in the dialog TextBox.</summary>
         public string PhoneNumber
@@ -85,7 +85,7 @@ namespace Unison.Core.ViewModels
         /// <summary>Last resolved JID (dialog Primary closes with this).</summary>
         public string ResolvedJid { get; private set; }
 
-        // â”€â”€ Commands â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Commands ─────────────────────────────────────────────────────────
 
         /// <summary>Looks up the entered phone number on WhatsApp and sets <see cref="ResolvedJid"/>.</summary>
         public ICommand SearchCommand { get; }
@@ -93,7 +93,7 @@ namespace Unison.Core.ViewModels
         private void RaiseSearchCanExecuteChanged() =>
             (SearchCommand as RelayCommand)?.RaiseCanExecuteChanged();
 
-        // â”€â”€ Actions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Actions ──────────────────────────────────────────────────────────
 
         /// <summary>Lookup contact; sets ResolvedJid or an error message.</summary>
         public async Task SearchContactAsync()

@@ -229,7 +229,7 @@ namespace Unison.Core.ViewModels
             set => Set(ref _activeSection, value);
         }
 
-        /// <summary>Startup | Login | Connected â€” maps to AppSurfaceStates.</summary>
+        /// <summary>Startup | Login | Connected — maps to AppSurfaceStates.</summary>
         public string AppSurface
         {
             get => _appSurface;
@@ -248,7 +248,7 @@ namespace Unison.Core.ViewModels
         /// </summary>
         public event EventHandler LoginExitTransitionRequested;
 
-        /// <summary>WideBoth | NarrowList | NarrowDetail â€” maps to ChatPaneStates.</summary>
+        /// <summary>WideBoth | NarrowList | NarrowDetail — maps to ChatPaneStates.</summary>
         public string ChatPane
         {
             get => _chatPane;

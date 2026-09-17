@@ -181,7 +181,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return ResolveSelfDisplayName(canonical, normalized, context);
             }
 
-            // Person in-memory cache (SQLite-backed store) Ã¢â‚¬â€ same idea as Redis in front of Dynamo.
+            // Person in-memory cache (SQLite-backed store) — same idea as Redis in front of Dynamo.
             string personName = TryGetPersonDisplayName(canonical) ?? TryGetPersonDisplayName(normalized);
             if (!string.IsNullOrWhiteSpace(personName))
             {

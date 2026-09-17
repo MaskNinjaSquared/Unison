@@ -318,7 +318,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 reuseExisting: false);
 
         /// <summary>
-        /// WhatsApp voice notes are often Ogg/Opus â€” fine on desktop MediaPlayer, often fails on W10 Mobile.
+        /// WhatsApp voice notes are often Ogg/Opus — fine on desktop MediaPlayer, often fails on W10 Mobile.
         /// Renaming the extension alone does not change the codec; re-encode to AAC/.m4a when possible.
         /// </summary>
         private Task<string> TryTranscodeOggOpusToM4aAsync(string sourceUri, string fileBase) =>
@@ -341,7 +341,7 @@ namespace Unison.Uwp.Services.WhatsApp
             string playable = await TryTranscodeOggOpusToM4aAsync(sourceUri, message.Id);
             string playMime = "audio/mp4";
 
-            // 2) Mobile has no Opus MF decoder â€” Concentus â†’ PCM WAV (MediaPlayer always accepts WAV).
+            // 2) Mobile has no Opus MF decoder — Concentus → PCM WAV (MediaPlayer always accepts WAV).
             if (string.IsNullOrWhiteSpace(playable))
             {
                 SessionLogger.Instance.WriteAlways(
@@ -392,14 +392,14 @@ namespace Unison.Uwp.Services.WhatsApp
                 {
                 }
 
-                // Cached .ogg from older builds â€” try m4a once so Mobile can play.
+                // Cached .ogg from older builds — try m4a once so Mobile can play.
                 return await EnsurePlayableAudioUriAsync(message, message.AudioUri);
             }
 
             await EnsureConnectedAsync();
 
             byte[] mediaKey = DecodeBase64Safe(message.AudioMediaKeyBase64);
-            if (mediaKey == null || mediaKey.Length == 0) throw new InvalidOperationException("A chave do Ã¡udio nÃ£o estÃ¡ disponÃ­vel.");
+            if (mediaKey == null || mediaKey.Length == 0) throw new InvalidOperationException("A chave do áudio não está disponível.");
             byte[] expected = DecodeBase64Safe(message.AudioFileEncSha256Base64);
 
             try
@@ -498,7 +498,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     return null;
                 }
 
-                throw new InvalidOperationException("A chave da imagem nÃ£o estÃ¡ disponÃ­vel.");
+                throw new InvalidOperationException("A chave da imagem não está disponível.");
             }
 
             byte[] expected = DecodeBase64Safe(message.ImageFileEncSha256Base64);
@@ -600,7 +600,7 @@ namespace Unison.Uwp.Services.WhatsApp
             byte[] mediaKey = DecodeBase64Safe(message.VideoMediaKeyBase64);
             if (mediaKey == null || mediaKey.Length == 0)
             {
-                throw new InvalidOperationException("A chave do vÃ­deo nÃ£o estÃ¡ disponÃ­vel.");
+                throw new InvalidOperationException("A chave do vídeo não está disponível.");
             }
 
             byte[] expected = DecodeBase64Safe(message.VideoFileEncSha256Base64);
@@ -625,7 +625,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     message.VideoMimeType ?? "video/mp4");
                 if (string.IsNullOrWhiteSpace(uri))
                 {
-                    throw new InvalidOperationException("Falha ao guardar o vÃ­deo.");
+                    throw new InvalidOperationException("Falha ao guardar o vídeo.");
                 }
 
                 message.VideoUri = uri;
@@ -671,7 +671,7 @@ namespace Unison.Uwp.Services.WhatsApp
             byte[] mediaKey = DecodeBase64Safe(message.DocumentMediaKeyBase64);
             if (mediaKey == null || mediaKey.Length == 0)
             {
-                throw new InvalidOperationException("A chave do documento nÃ£o estÃ¡ disponÃ­vel.");
+                throw new InvalidOperationException("A chave do documento não está disponível.");
             }
 
             byte[] expected = DecodeBase64Safe(message.DocumentFileEncSha256Base64);

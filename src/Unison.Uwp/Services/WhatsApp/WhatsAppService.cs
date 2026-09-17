@@ -680,7 +680,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private const int PreSessionCloseFatalThreshold = 5;
         /// <summary>
         /// True between stream:error 515 (pair stage 1 done) and session-initialized (stage 2).
-        /// During this window Registered is already true but closes are expected â€” never treat as logout.
+        /// During this window Registered is already true but closes are expected — never treat as logout.
         /// </summary>
         private volatile bool _pairingRestartPending = false;
         /// <summary>
@@ -2068,7 +2068,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            RaiseSyncStatus("Preparing conversationsâ€¦");
+            RaiseSyncStatus("Preparing conversations…");
 
             try
             {
@@ -2120,7 +2120,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         /// <summary>
         /// Sends FULL_HISTORY_SYNC_ON_DEMAND after a manual wipe. Retries once on a
-        /// forced fresh transport â€” a live socket that already completed pull will not
+        /// forced fresh transport — a live socket that already completed pull will not
         /// spontaneously re-bootstrap like pairing.
         /// </summary>
         private async Task<bool> EnsureFullHistoryRequestedForUserResyncAsync(string reason)
@@ -5129,7 +5129,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             Debug.WriteLine(
-                $"[WhatsAppService] MessageStoreForceHistoryRepair pending Ã¢â‚¬â€ requesting full history ({reason})");
+                $"[WhatsAppService] MessageStoreForceHistoryRepair pending — requesting full history ({reason})");
 
             bool ok = await RequestFullHistoryOnDemandTrackedAsync(
                 "message-store-epoch:" + reason,
@@ -7063,7 +7063,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// History/WebMessageInfo often leave MessageKey.participant unset while setting
         /// WebMessageInfo.participant (field 5). Newer WA builds also stash alt JIDs in
         /// unknown MessageKey string fields (participantAlt / remoteJidAlt overlays).
-        /// Protobuf getters return "" when unset Ã¢â‚¬â€ never coalesce with ??.
+        /// Protobuf getters return "" when unset — never coalesce with ??.
         /// </summary>
         private string ResolveHistoryParticipantJid(Proto.WebMessageInfo info)
         {
@@ -7182,7 +7182,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
 
                     int len = (int)length;
-                    // Skip known field 4 (participant) Ã¢â‚¬â€ already read via the typed API.
+                    // Skip known field 4 (participant) — already read via the typed API.
                     if (fieldNumber != 4 && len > 0 && len < 256)
                     {
                         string candidate = System.Text.Encoding.UTF8.GetString(bytes, index, len);

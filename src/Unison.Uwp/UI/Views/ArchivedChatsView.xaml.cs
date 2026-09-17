@@ -67,7 +67,7 @@ namespace Unison.Uwp.UI.Views
             }
         }
 
-        /// <summary>Logout / session wipe â€” clear detail + selection before shell is torn down.</summary>
+        /// <summary>Logout / session wipe — clear detail + selection before shell is torn down.</summary>
         public async Task ResetForLoggedOutAsync()
         {
             try
@@ -87,7 +87,7 @@ namespace Unison.Uwp.UI.Views
             _shell?.ClearChat();
         }
 
-        /// <summary>Called when local chats are wiped (resync) â€” leave NarrowDetail empty state.</summary>
+        /// <summary>Called when local chats are wiped (resync) — leave NarrowDetail empty state.</summary>
         public void NotifyLocalConversationsCleared()
         {
             _ = NotifyLocalConversationsClearedAsync();
@@ -546,7 +546,7 @@ namespace Unison.Uwp.UI.Views
         private void ChatListPart_MenuClicked(object sender, EventArgs e)
         {
             int handlers = MenuClicked?.GetInvocationList()?.Length ?? 0;
-            Debug.WriteLine("[ArchivedChatsView] ChatListPart_MenuClicked â†’ shell handlers=" + handlers);
+            Debug.WriteLine("[ArchivedChatsView] ChatListPart_MenuClicked → shell handlers=" + handlers);
             if (MenuClicked != null)
             {
                 MenuClicked.Invoke(this, EventArgs.Empty);

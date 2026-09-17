@@ -296,7 +296,7 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         /// <summary>
-        /// Marks the 515 pairing-restart window. Must run as early as possible â€” on Mobile the
+        /// Marks the 515 pairing-restart window. Must run as early as possible — on Mobile the
         /// transport often closes with 1006 BEFORE the "restart" status is published, and that
         /// premature close must not schedule the generic AutoReconnect loop.
         /// </summary>
@@ -339,7 +339,7 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 PairingTrace(
                     "stage2-reconnect already in-flight reason=" + (reason ?? string.Empty) +
-                    " â€” leaving ownership to current reconnect (pairingRestartPending=true blocks generic loop)");
+                    " — leaving ownership to current reconnect (pairingRestartPending=true blocks generic loop)");
                 return;
             }
 
@@ -405,7 +405,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
                     else if (_pairingRestartPending && !IsConnected)
                     {
-                        // Generic loop exited / was racing â€” ensure stage-2 still runs.
+                        // Generic loop exited / was racing — ensure stage-2 still runs.
                         TryStartPairingStage2Reconnect("post-generic-loop-pairing-pending");
                     }
                 }
@@ -446,7 +446,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     Debug.WriteLine($"[WhatsAppService] Loaded EXISTING AuthState (ObjID: {_authState.GetHashCode()}), registered: {_authState.Registered}");
                 }
 
-                // No linked account â‡’ never toast â€œUnison desconectadoâ€ from orphaned broker closes.
+                // No linked account ⇒ never toast “Unison desconectado” from orphaned broker closes.
                 bool hasActiveAccount =
                     _authState.Registered &&
                     _authState.Me != null &&
@@ -560,7 +560,7 @@ namespace Unison.Uwp.Services.WhatsApp
             var keyStore = _socket?.KeyStore;
             _debugSendService?.Stop("clear-session");
 
-            // Block â€œUnison desconectadoâ€ before tearing the socket down â€” otherwise the
+            // Block “Unison desconectado” before tearing the socket down — otherwise the
             // background broker sees close while AuthStore still says Registered+MeId.
             SetSuppressReconnectToast(true);
             string clearToastError;
@@ -595,7 +595,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _sessionEstablishedTcs.TrySetCanceled();
             _sessionEstablishedTcs = CreateSessionEstablishedTcs();
 
-            // Show Login surface immediately Ã¢â‚¬â€ do NOT start Connect/QR until keys are gone.
+            // Show Login surface immediately — do NOT start Connect/QR until keys are gone.
             Log("[WhatsAppService] Switching UI to Login before auth wipe.");
             await RaiseSessionClearedAsync(startPairing: false).ConfigureAwait(false);
             await Task.Yield();
@@ -635,7 +635,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 Log($"[WhatsAppService] Warning: failed to clear NoiseSessionStore: {ex.Message}");
             }
 
-            // Auth gone â€” restart pairing / QR now.
+            // Auth gone — restart pairing / QR now.
             // Clear the fatal latch so ConnectAsync for QR is allowed.
             _fatalSessionEnded = false;
             _suppressReconnect = false;
@@ -643,7 +643,7 @@ namespace Unison.Uwp.Services.WhatsApp
             await RaiseSessionClearedAsync(startPairing: true).ConfigureAwait(false);
             await Task.Yield();
 
-            // 6. Wipe messages, chats, and contact names from disk (epoch rotate Ã¢â‚¬â€ non-blocking for QR).
+            // 6. Wipe messages, chats, and contact names from disk (epoch rotate — non-blocking for QR).
             await _messageStore.WipeAllDataAsync();
             // history_migration / history_chat_preview: HistoryFacade listens to OnSessionCleared.
             if (_groupRosterStore != null)
@@ -1161,7 +1161,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     _suppressReconnect = false;
                 }
 
-                // Pre-session-close â†’ logout only for returning registered companions.
+                // Pre-session-close → logout only for returning registered companions.
                 // Fresh QR (unregistered) and 515 pairing stage-2 must not escalate closes.
                 _countPreSessionCloseAsFatal = auth.Registered && !_pairingRestartPending;
                 if (!_countPreSessionCloseAsFatal)
@@ -1276,7 +1276,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         "pairing-restart",
                         "code=515");
 
-                    PairingTrace("connection status=restart â†’ stage2");
+                    PairingTrace("connection status=restart → stage2");
                     TryStartPairingStage2Reconnect("connection-update-restart");
                 }
                 else if (status == "close" && _authState != null && _authState.Registered)
@@ -1286,7 +1286,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     if (_pairingRestartPending)
                     {
                         // Stage-2 already owns the window (ReconnectForPairingAsync / stream 515).
-                        // Do NOT ScheduleAutoReconnect and do NOT restart Connect here â€”
+                        // Do NOT ScheduleAutoReconnect and do NOT restart Connect here —
                         // _isReconnecting is cleared as soon as ConnectAsync() returns, while
                         // OnSessionInitialized may still be outstanding.
                         RuntimeDiagnosticsService.Instance.Write(
@@ -1294,7 +1294,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             "pairing-restart-close",
                             "ignored-pre-session-streak=true");
                         PairingTrace(
-                            "close while pairingRestartPending â†’ SKIP ScheduleAutoReconnect " +
+                            "close while pairingRestartPending → SKIP ScheduleAutoReconnect " +
                             "(stage2 owner)");
                         PublishConnectionUpdate(status);
                         return;
@@ -1302,7 +1302,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
                     // Mobile often delivers close(1006) milliseconds BEFORE status=restart /
                     // before OnStreamError finishes. Registered is already true from
-                    // pair-success, session not established, pre-session-fatal off (QR) â€”
+                    // pair-success, session not established, pre-session-fatal off (QR) —
                     // claim stage-2 now so generic AutoReconnect cannot win the race.
                     if (!_sessionEstablishedThisConnection && !_countPreSessionCloseAsFatal)
                     {
@@ -1311,7 +1311,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             "pairing-close-before-restart",
                             "claiming-stage2=true");
                         PairingTrace(
-                            "close BEFORE restart flag â†’ claim stage2 (close-before-restart race)");
+                            "close BEFORE restart flag → claim stage2 (close-before-restart race)");
                         TryStartPairingStage2Reconnect("close-before-restart");
                         PublishConnectionUpdate(status);
                         return;
@@ -1326,7 +1326,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             "streak=" + streak + "; threshold=" + PreSessionCloseFatalThreshold);
                         if (streak >= PreSessionCloseFatalThreshold)
                         {
-                            // Report only â€” ConnectionFacade decides auto-unlink policy.
+                            // Report only — ConnectionFacade decides auto-unlink policy.
                             RaiseReport(
                                 () => OnInvalidSessionSuspected?.Invoke(this, "pre-session-close-streak"),
                                 nameof(OnInvalidSessionSuspected));
@@ -1382,7 +1382,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     return;
                 }
 
-                PairingTrace("OnSessionInitialized â†’ raising UI event");
+                PairingTrace("OnSessionInitialized → raising UI event");
                 Debug.WriteLine("[WhatsAppService] Session initialized - triggering missing name resolution");
                 _sessionEstablishedThisConnection = true;
                 _pairingRestartPending = false;
@@ -1493,7 +1493,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 {
                     if (_pairingRestartPending)
                     {
-                        PairingTrace("transport failure during pairing stage2 â†’ defer to ReconnectForPairingAsync");
+                        PairingTrace("transport failure during pairing stage2 → defer to ReconnectForPairingAsync");
                     }
                     else
                     {
@@ -1780,7 +1780,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 if (_pairingRestartPending)
                 {
                     PairingTrace(
-                        "AutoReconnectLoop EXIT â€” pairingRestartPending (trigger=" +
+                        "AutoReconnectLoop EXIT — pairingRestartPending (trigger=" +
                         (trigger ?? string.Empty) + ")");
                     return;
                 }
@@ -1807,7 +1807,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 if (_pairingRestartPending)
                 {
-                    PairingTrace("AutoReconnectLoop EXIT before delay â€” pairing claimed stage2");
+                    PairingTrace("AutoReconnectLoop EXIT before delay — pairing claimed stage2");
                     return;
                 }
 
@@ -1822,7 +1822,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     {
                         if (_pairingRestartPending)
                         {
-                            PairingTrace("AutoReconnectLoop EXIT after delay â€” pairing claimed stage2");
+                            PairingTrace("AutoReconnectLoop EXIT after delay — pairing claimed stage2");
                         }
                         return;
                     }
@@ -1871,7 +1871,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             try
             {
-                PairingTrace("ReconnectForPairingAsync waiting 1s then ConnectAsyncâ€¦");
+                PairingTrace("ReconnectForPairingAsync waiting 1s then ConnectAsync…");
                 Log($"[WhatsAppService] Resetting session and deleting local data...");
                 await Task.Delay(1000); // Wait for the stage 1 socket to fully close
                 await ConnectAsync();
@@ -1887,7 +1887,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 Debug.WriteLine($"[WhatsAppService] Pairing stage 2 reconnect failed: {ex.Message}");
                 OnError?.Invoke(this, ex);
                 needsPersistentRetry = _authState != null && _authState.Registered;
-                // Stage 2 failed â€” allow normal reconnect / revoked detection again.
+                // Stage 2 failed — allow normal reconnect / revoked detection again.
                 _pairingRestartPending = false;
             }
             finally
@@ -1903,7 +1903,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         /// <summary>
         /// Applied by <see cref="IConnectionService"/> when auto-unlink policy fires.
-        /// Socket-only latch â€” does not wipe auth or navigate.
+        /// Socket-only latch — does not wipe auth or navigate.
         /// </summary>
         public void SuppressReconnectFromPolicy(string reason)
         {

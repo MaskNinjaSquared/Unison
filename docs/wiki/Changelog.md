@@ -61,6 +61,21 @@ determines the orientation and answers in one call. Each caller keeps its own lo
 merge still merges the rows and withholds only the alias; the mapped-LID path still only fires the first
 time it sees an address.
 
+### Five error messages reached the user as garbled text
+
+"A chave do áudio não está disponível" was stored in the source as "A chave do Ã¡udio nÃ£o estÃ¡
+disponÃ­vel", and that is what the user read when a media download failed without a key. The same for
+image, video, document, and "Falha ao guardar o vídeo".
+
+The cause was a round trip: the files were written as UTF-8, read back as CP1252, and written as UTF-8
+again. That is not the same as Latin-1, and the difference is exactly where punctuation lives — an em
+dash is `E2 80 94`, and CP1252 reads `80` as a euro sign. So a repair through Latin-1 fixes the accents
+and leaves every dash and arrow unrecoverable. Undone through CP1252 instead, repeated until it
+converged, applied only to runs that decode as valid UTF-8 and never to a whole file.
+
+Eighteen files were affected; most of the damage was in comments, where `—`, `→`, `↔` and the `──` rules
+in `NewChatDialogViewModel` had turned into noise. The script is kept at `tools/fix-mojibake.ps1`.
+
 ### The connection dropped when a message and the keep-alive ping went out together
 
 Each Noise frame carries the nonce it was encrypted with, and the counter advances per frame. The

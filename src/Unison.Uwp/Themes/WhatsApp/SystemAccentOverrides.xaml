@@ -36,7 +36,7 @@
             <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="{ThemeResource SystemAccentColor}"/>
             <SolidColorBrush x:Key="ToggleSwitchStrokeOn" Color="{ThemeResource SystemAccentColor}"/>
 
-            <!-- WinUI 2 accent fills (ToggleSwitch, CheckBox, Radio, ProgressBar, â€¦) -->
+            <!-- WinUI 2 accent fills (ToggleSwitch, CheckBox, Radio, ProgressBar, …) -->
             <SolidColorBrush x:Key="AccentFillColorDefaultBrush" Color="{ThemeResource SystemAccentColor}"/>
             <SolidColorBrush x:Key="AccentFillColorSecondaryBrush" Color="{ThemeResource SystemAccentColor}" Opacity="0.9"/>
             <SolidColorBrush x:Key="AccentFillColorTertiaryBrush" Color="{ThemeResource SystemAccentColor}" Opacity="0.8"/>

@@ -48,7 +48,7 @@ namespace Unison.Uwp.Shell.Unison.Views
         /// <summary>
         /// DI ViewModel owns composer, pin, audio prepare, presence watch, and timeline VMs.
         /// List chrome / MediaElement / Storyboards stay in code-behind.
-        /// Loaded Ã¢â€ â€™ InitializeAsync; Unloaded Ã¢â€ â€™ UninitializeAsync.
+        /// Loaded → InitializeAsync; Unloaded → UninitializeAsync.
         /// </summary>
         public ChatDetailViewModel ViewModel { get; private set; }
 
@@ -1160,7 +1160,7 @@ namespace Unison.Uwp.Shell.Unison.Views
 
         private void BackButton_Click(object sender, RoutedEventArgs e)
         {
-            // Fullscreen chrome / info pane â€” close overlay before leaving the chat.
+            // Fullscreen chrome / info pane — close overlay before leaving the chat.
             if (TryConsumeBack())
             {
                 return;
@@ -1193,7 +1193,7 @@ namespace Unison.Uwp.Shell.Unison.Views
         }
 
         /// <summary>
-        /// MenuFlyout Visibility bindings are unreliable on UWP â€” swap mute/unmute on open.
+        /// MenuFlyout Visibility bindings are unreliable on UWP — swap mute/unmute on open.
         /// </summary>
         private void ChatMoreFlyout_Opening(object sender, object e)
         {
@@ -1205,7 +1205,7 @@ namespace Unison.Uwp.Shell.Unison.Views
 
             // Mute / pin can have changed since this chat was opened; re-read and swap
             // Visibility. MenuFlyout Visibility bindings are unreliable on UWP, so this is
-            // done on Opening â€” texts stay on x:Uid, no Loc round-trip.
+            // done on Opening — texts stay on x:Uid, no Loc round-trip.
             ViewModel.RefreshLocalChatState();
             bool muted = ViewModel.ShowUnmuteOption;
             bool widgetPinned = ViewModel.IsWidgetPinned;
@@ -1434,7 +1434,7 @@ namespace Unison.Uwp.Shell.Unison.Views
             }
 
             string openLabel = LocalizedStrings.Get("ChatDetail_DocumentOpen.Label", "Open document");
-            string saveLabel = LocalizedStrings.Get("ChatDetail_DocumentSaveAs.Label", "Save asâ€¦");
+            string saveLabel = LocalizedStrings.Get("ChatDetail_DocumentSaveAs.Label", "Save as…");
 
             var flyout = new MenuFlyout();
             var openItem = new MenuFlyoutItem
@@ -1554,7 +1554,7 @@ namespace Unison.Uwp.Shell.Unison.Views
                     }
                 }
 
-                // Same conversation already open / loading â€” do not cancel in-flight load.
+                // Same conversation already open / loading — do not cancel in-flight load.
                 // List rebuilds often replace ChatItem instances; only rebind the reference.
                 if (_activeChat != null &&
                     string.Equals(
@@ -1793,7 +1793,7 @@ namespace Unison.Uwp.Shell.Unison.Views
 
                     // Only advance by TimestampUtc, or refresh when MessageId / body / fromMe differ
                     // at the same second. When MessageId differs, trust the visible tip even if the
-                    // strip timestamp was poisoned (Unspecifiedâ†’ToUniversalTime / +3h).
+                    // strip timestamp was poisoned (Unspecified→ToUniversalTime / +3h).
                     bool tipIdDiffers = !string.IsNullOrWhiteSpace(lastMsg.Id) &&
                                         !string.Equals(chat.LastMessageId, lastMsg.Id, StringComparison.Ordinal);
                     bool shouldApply =
@@ -2151,7 +2151,7 @@ namespace Unison.Uwp.Shell.Unison.Views
 
             // One deferred correction after layout so the new bubble's realized height is included.
             // Fire-and-forget on the dispatcher: any exception here (e.g. ScrollIntoView's
-            // well-known E_FAIL when the container isn't generated yet â€” more frequent on
+            // well-known E_FAIL when the container isn't generated yet — more frequent on
             // slower/older ListView virtualization such as Windows 10 Mobile) has no awaiter,
             // so it must be swallowed here or it becomes a fatal unhandled exception.
             _ = Dispatcher.RunAsync(CoreDispatcherPriority.Low, async () =>
@@ -2178,7 +2178,7 @@ namespace Unison.Uwp.Shell.Unison.Views
         /// <summary>
         /// <see cref="ListViewBase.ScrollIntoView(object, ScrollIntoViewAlignment)"/> can throw
         /// COMException (E_FAIL) when called right after items are inserted and the container
-        /// hasn't been generated yet â€” observed reliably on Windows 10 Mobile. Never let it
+        /// hasn't been generated yet — observed reliably on Windows 10 Mobile. Never let it
         /// escape as an unhandled exception (it would tear down the whole app via
         /// App.UnhandledException).
         /// </summary>
@@ -2562,7 +2562,7 @@ namespace Unison.Uwp.Shell.Unison.Views
             string preview = _displayedPinnedMessage.Caption;
             if (string.IsNullOrWhiteSpace(preview)) preview = _displayedPinnedMessage.Content;
             PinnedMessagePreviewText.Text = string.IsNullOrWhiteSpace(preview)
-                ? "[MÃƒÆ’Ã‚Â­dia]"
+                ? "[Mídia]"
                 : preview.Replace("\r", " ").Replace("\n", " ");
             PinnedMessageTitleText.Text = _activePinnedMessages.Count > 1
                 ? LocalizedStrings.Format("ChatDetail_PinnedIndex", _displayedPinnedIndex + 1, _activePinnedMessages.Count)
@@ -2750,7 +2750,7 @@ namespace Unison.Uwp.Shell.Unison.Views
             }
             catch
             {
-                // Ignore Ã¢â‚¬â€ delay is only for UI timing.
+                // Ignore — delay is only for UI timing.
             }
 
             if (generation != _highlightGeneration || _highlightedMessage != target)
@@ -2927,7 +2927,7 @@ namespace Unison.Uwp.Shell.Unison.Views
                     return;
                 }
 
-                // Always resolve a playable URI (network if needed; oggÃ¢â€ â€™wav via Concentus on Mobile).
+                // Always resolve a playable URI (network if needed; ogg→wav via Concentus on Mobile).
                 if (string.IsNullOrWhiteSpace(message.AudioUri) && vm != null)
                 {
                     vm.AudioPlaybackStatus = AudioPlaybackStatus.Downloading;
@@ -2970,7 +2970,7 @@ namespace Unison.Uwp.Shell.Unison.Views
                 }
 
                 player.Play();
-                // Route after Play â€” AudioRoutingManager needs an active Communications stream.
+                // Route after Play — AudioRoutingManager needs an active Communications stream.
                 _voiceRouting?.BeginSession();
                 StartAudioPositionTimer();
             }
@@ -2997,7 +2997,7 @@ namespace Unison.Uwp.Shell.Unison.Views
 
             _audioMediaPlayer = new MediaPlayer
             {
-                // Mobile: Communications enables AudioRoutingManager (speaker â†” earpiece).
+                // Mobile: Communications enables AudioRoutingManager (speaker ↔ earpiece).
                 // Desktop: Media uses the system default device.
                 AudioCategory = useCommunications || _isWindowsMobile
                     ? MediaPlayerAudioCategory.Communications
@@ -3129,9 +3129,9 @@ namespace Unison.Uwp.Shell.Unison.Views
 
         /// <summary>
         /// SMTC display:
-        /// Group â†’ Title = group name, Artist = message author.
-        /// 1:1 â†’ Title = "Unison", Artist = message author.
-        /// Must be re-applied after Source is set (MediaOpened) â€” assigning Source clears DisplayUpdater.
+        /// Group → Title = group name, Artist = message author.
+        /// 1:1 → Title = "Unison", Artist = message author.
+        /// Must be re-applied after Source is set (MediaOpened) — assigning Source clears DisplayUpdater.
         /// </summary>
         private void ApplySmtcMetadata(ChatMessage message)
         {
@@ -3312,13 +3312,13 @@ namespace Unison.Uwp.Shell.Unison.Views
                 await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
                 {
                     LogAudio("media-opened", _playingAudioMessage, detail);
-                    // Source assignment clears DisplayUpdater â€” re-apply on open.
+                    // Source assignment clears DisplayUpdater — re-apply on open.
                     if (_playingAudioMessage != null)
                     {
                         ApplySmtcMetadata(_playingAudioMessage);
                     }
 
-                    // Stream is live â€” reassert speaker if session already began.
+                    // Stream is live — reassert speaker if session already began.
                     if (_playingAudioVm != null &&
                         _playingAudioVm.AudioPlaybackStatus == AudioPlaybackStatus.Playing)
                     {
@@ -3366,7 +3366,7 @@ namespace Unison.Uwp.Shell.Unison.Views
             });
         }
 
-        /// <summary>Session log (+ DebugView) for mobile audio diagnosis Ã¢â‚¬â€ always captured.</summary>
+        /// <summary>Session log (+ DebugView) for mobile audio diagnosis — always captured.</summary>
         private void LogAudio(string stage, ChatMessage message, string details)
         {
             string id = message?.Id ?? "?";
@@ -3386,7 +3386,7 @@ namespace Unison.Uwp.Shell.Unison.Views
             }
         }
 
-        /// <summary>Trash: fade timer Ã¢â€ â€™ slide red mic onto trash Ã¢â€ â€™ flash trash Ã¢â€ â€™ cancel recording.</summary>
+        /// <summary>Trash: fade timer → slide red mic onto trash → flash trash → cancel recording.</summary>
         private async void CancelRecordingButton_Click(object sender, RoutedEventArgs e)
         {
             if (ViewModel == null || !ViewModel.IsRecording || _cancelRecordingAnimating)
@@ -3620,7 +3620,7 @@ namespace Unison.Uwp.Shell.Unison.Views
         }
 
         /// <summary>
-        /// Group: hint â†’ alphabetical member names â†’ fade out (then the outer loop waits ~90s).
+        /// Group: hint → alphabetical member names → fade out (then the outer loop waits ~90s).
         /// </summary>
         private async Task AnimateGroupStatusSequenceAsync(string statusText, CancellationToken ct)
         {
@@ -3682,7 +3682,7 @@ namespace Unison.Uwp.Shell.Unison.Views
         }
 
         /// <summary>
-        /// Full sequence: show presence status 5s â†’ crossfade to "select for contact info" 5s â†’ fade out â†’ slide back
+        /// Full sequence: show presence status 5s → crossfade to "select for contact info" 5s → fade out → slide back
         /// </summary>
         private async Task AnimateStatusSequenceAsync(string statusText, CancellationToken ct)
         {
@@ -3716,7 +3716,7 @@ namespace Unison.Uwp.Shell.Unison.Views
         }
 
         /// <summary>
-        /// Fallback-only sequence: show "select for contact info" 5s Ã¢â€ â€™ fade out Ã¢â€ â€™ slide back
+        /// Fallback-only sequence: show "select for contact info" 5s → fade out → slide back
         /// </summary>
         private async Task AnimateFallbackOnlyAsync(CancellationToken ct)
         {
