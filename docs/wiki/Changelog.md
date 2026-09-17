@@ -4,6 +4,30 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## A message that arrived with the app minimised was announced but never counted
+
+The toast fired and the conversation showed nothing new. Dismiss the toast, or miss it, and the
+message was gone as far as the list was concerned — no badge on the row, no count on the tile.
+
+Two lines a few dozen apart decided this, and they were answering the same question differently.
+The badge asked whether the conversation was the one open in the detail view. The toast asked
+whether it was open *and* the window was visible. Nothing closes the open conversation when the app
+goes to the background, so with a chat open and the app minimised the first said "the user is
+looking at this, do not count it" while the second said "they cannot see it, tell them". Each line
+is defensible on its own, which is why this survived: you have to read both together to see that a
+message can fall through the gap between them.
+
+It is one decision now — `IncomingAttention` (11 tests) — returning both answers from one reading of
+"is the user actually looking at this". The test that matters is the invariant rather than the
+cases: unless the message is already on screen, it is both counted and announced. Doing neither is
+how one goes missing.
+
+The same rule had two more copies in the offline replay path, with the same omission, and they are
+worth more than they look: a replay runs when the app reconnects, which is precisely when it tends
+to be in the background with a conversation still open behind it.
+
+---
+
 ## Muting a chat from the info panel deleted its pin
 
 Pinned and muted conversations came back from a sync with their icons gone. The preview table was

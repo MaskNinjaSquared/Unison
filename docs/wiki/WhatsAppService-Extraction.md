@@ -184,7 +184,7 @@ Self-contained first. List/persist last.
 | 3.8 | `.AppState.cs` | **Rewritten — the premise was stale.** See below |
 | 3.9a | List display order (done) | `ChatDisplayOrder` (Core) |
 | 3.9b | `.Persistence.cs` + preview reconcile + the appliers from 3.8 | `ChatFacade` + `ChatStateStore` + `IChatStore` / `IMessageStore`. Close the transitional public dictionaries on `ChatStateStore`. **Persistence rules out; appliers remain — see below** |
-| 3.10 | `.IncomingPump.cs` | Decode/dispatch stays with connection; apply (row, preview, unread, toast) goes to façades |
+| 3.10 | `.IncomingPump.cs` | Decode/dispatch stays with connection; apply (row, preview, unread, toast) goes to façades. **Started: `IncomingAttention` out — see below** |
 
 **3.1a is done.** The avatar half of `MediaCache` is `IAvatarCache` / `AvatarCacheService`: `TryGet`,
 `SaveAsync`, `DeleteIfCached`. It took `BuildSafeAvatarFileName`, `TryGetCachedAvatarUri`,
@@ -570,6 +570,28 @@ decisions hold each other up, which is why they are described together here.
 Left alone deliberately: `EnsureLocalChatPinsAppliedAsync` and `TryApplyCanonicalPinFallback` are
 both patches over this area and are candidates to disappear in 3.9b, once the ownership question is
 settled rather than worked around.
+
+### 3.10 — first rule out, and it was a live bug
+
+`HandleDecryptedMessageAsync` is ~760 lines and the pump as a whole is 2,868, so the same approach as
+3.3c and 3.6 applies: take the rules out one at a time before attempting the move.
+
+The first one out is `IncomingAttention` (Core, 11 tests): whether an arriving message counts as
+unread, and whether its toast would be telling the user something already in front of them. Those
+were two expressions a few dozen lines apart, and they disagreed. The unread side tested
+`IsActiveChatJid(jid)`; the toast side tested `App.IsWindowVisible && IsActiveChatJid(jid)`. Nothing
+calls `SetActiveChatJid(null)` when the window hides — only the detail view unloading does — so a
+message arriving while the app was minimised over an open chat was announced by a toast and never
+counted. The badge stayed put and the tile count sent with the notification was the stale one.
+
+Two further copies were in the offline replay path (`RecordOfflineReplayChatSummary` and
+`ApplyOfflineReplayChatSummariesAsync`), with the same omission and a worse exposure: a replay runs
+on reconnect, which is when the app is most likely to be backgrounded with a chat still open.
+
+The type returns both answers together so they cannot drift apart again, and the test that carries
+the weight is the invariant rather than the four cases: unless the message is already on screen, it
+is both counted and announced. `IsActiveChatJid` on its own is left alone everywhere it asks about
+the *view* (hydrate this image, refresh that timeline) rather than about the user's attention.
 
 ### Phase 4 — What remains is connection
 

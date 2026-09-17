@@ -2003,6 +2003,13 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
                 }
                 
+                // Decided once, here, so the badge and the toast cannot disagree about whether the
+                // user is looking at this conversation.
+                IncomingAttention attention = IncomingAttention.For(
+                    isActuallyFromMe,
+                    IsActiveChatJid(jid),
+                    Unison.Uwp.App.IsWindowVisible);
+
                 // List preview body is unprefixed; group author is applied via LastMessageAuthor.
                 string displayContent = content;
                 string listAuthorPrefix = isGroup
@@ -2400,10 +2407,11 @@ namespace Unison.Uwp.Services.WhatsApp
                         // the updated conversation to its correct real-time position.
                         RepositionChatForDisplay(chat);
                         
-                        // Increment unread only when the conversation is not being
-                        // viewed. Messages received in the open chat are already visible
-                        // and should not create a badge or toast for themselves.
-                        if (!isActuallyFromMe && !IsActiveChatJid(jid))
+                        // Messages arriving in the conversation the user is actually looking at are
+                        // already visible and should produce neither a badge nor a toast. Both
+                        // halves of that come from one place, because they used to disagree about
+                        // what "looking at" means once the app was in the background.
+                        if (attention.CountsAsUnread)
                         {
                             ChatUnreadTally.Bump(chat, GetChatRowsForCanonicalJid(jid), 1);
                         }
@@ -2429,7 +2437,6 @@ namespace Unison.Uwp.Services.WhatsApp
                     bool isMuted = notificationChat != null
                         ? notificationChat.IsMutedLocally
                         : (_chatStore?.TryGetCached(jid)?.IsMutedLocally ?? false);
-                    bool suppressToast = Unison.Uwp.App.IsWindowVisible && IsActiveChatJid(jid);
 
                     NotificationService.Instance.NotifyIncomingMessage(
                         jid,
@@ -2438,7 +2445,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         content,
                         isGroup,
                         isMuted,
-                        suppressToast,
+                        attention.SuppressToast,
                         GetTotalUnreadCount(),
                         notificationChat?.GetAvatarUrl(preferHigh: false),
                         notificationChat != null ? Math.Max(0, notificationChat.UnreadCount) : 0);
@@ -2508,7 +2515,14 @@ namespace Unison.Uwp.Services.WhatsApp
                     summary.Status = status;
                 }
 
-                if (countUnread && !isFromMe && !IsActiveChatJid(canonical))
+                // Same rule as the live path, and for the same reason: an offline replay runs when
+                // the app reconnects, which is exactly when it may be in the background with a
+                // conversation still open behind it.
+                if (countUnread &&
+                    IncomingAttention.For(
+                        isFromMe,
+                        IsActiveChatJid(canonical),
+                        Unison.Uwp.App.IsWindowVisible).CountsAsUnread)
                 {
                     summary.UnreadDelta++;
                 }
@@ -2619,7 +2633,11 @@ namespace Unison.Uwp.Services.WhatsApp
                             }
                         }
 
-                        if (summary.UnreadDelta > 0 && !IsActiveChatJid(summary.Jid))
+                        if (summary.UnreadDelta > 0 &&
+                            IncomingAttention.For(
+                                false,
+                                IsActiveChatJid(summary.Jid),
+                                Unison.Uwp.App.IsWindowVisible).CountsAsUnread)
                         {
                             ChatUnreadTally.Bump(preferred, rows, summary.UnreadDelta);
                             unreadAdded += summary.UnreadDelta;
