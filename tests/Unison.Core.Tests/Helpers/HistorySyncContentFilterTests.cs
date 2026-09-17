@@ -221,4 +221,31 @@ public class HistorySyncContentFilterTests
         // showing whatever was said before it.
         Assert.Equal("newer", HistorySyncContentFilter.FindNewestListable(conv).Key.Id);
     }
+
+    [Fact]
+    public void A_group_sender_named_under_the_phone_jid_is_found_when_the_message_carries_only_the_lid()
+    {
+        // History puts push names under the phone JID and group envelopes under the LID. Without
+        // the same-chunk LID↔PN map the list strip fell back to bare digits until the group was
+        // opened and the roster filled the gap.
+        var sync = new HistorySync();
+        sync.Pushnames.Add(new Pushname
+        {
+            Id = "5511999999999@s.whatsapp.net",
+            Pushname_ = "Ana"
+        });
+        sync.PhoneNumberToLidMappings.Add(new PhoneNumberToLIDMapping
+        {
+            PnJid = "5511999999999@s.whatsapp.net",
+            LidJid = "123456789012345@lid"
+        });
+
+        var map = HistorySyncContentFilter.BuildPushNameMap(sync);
+        string name = HistorySyncContentFilter.ResolveSenderName(
+            new WebMessageInfo(),
+            map,
+            "123456789012345@lid");
+
+        Assert.Equal("Ana", name);
+    }
 }

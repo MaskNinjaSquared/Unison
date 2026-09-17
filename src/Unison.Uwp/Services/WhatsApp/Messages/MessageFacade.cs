@@ -8,6 +8,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
+using Unison.Core.State;
 using Unison.Uwp.Services.WhatsApp.History;
 
 namespace Unison.Uwp.Services.WhatsApp.Messages
@@ -25,6 +26,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
         private readonly HistoryFacade _history;
         private readonly IHistoryMessageStore _historyMessageStore;
         private readonly IJidResolver _jids;
+        private readonly IChatStateStore _chatState;
         private readonly int _sqlOpenPageSize;
         private readonly int _sqlLoadMorePageSize;
         private readonly int _thinTimelineThreshold;
@@ -37,6 +39,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             HistoryFacade history,
             IHistoryMessageStore historyMessageStore,
             IJidResolver jids,
+            IChatStateStore chatState = null,
             ISystemInfoProvider systemInfo = null)
         {
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
@@ -47,6 +50,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             _history = history ?? throw new ArgumentNullException(nameof(history));
             _historyMessageStore = historyMessageStore
                 ?? throw new ArgumentNullException(nameof(historyMessageStore));
+            _chatState = chatState;
             // systemInfo kept in the ctor for DI compatibility; page sizes match desktop on all devices.
             _ = systemInfo;
 
@@ -872,13 +876,15 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
         }
 
         /// <summary>
-        /// Inserts/updates Person rows. UpsertIfChanged skips writes when nothing changed.
+        /// Inserts/updates Person rows and merges the same push names into the in-memory map the
+        /// list strip reads. UpsertIfChanged skips writes when nothing changed.
         /// </summary>
         private async Task UpsertPeopleFromHistoryAsync(HistorySync sync)
         {
             await _personStore.InitializeAsync().ConfigureAwait(false);
 
             int writes = 0;
+            var pushPairs = new List<KeyValuePair<string, string>>();
 
             if (sync.Pushnames != null)
             {
@@ -890,12 +896,57 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                     }
 
                     string jid = JidHelper.Normalize(pn.Id);
+                    string name = pn.Pushname_.Trim();
                     string phone = JidHelper.TryPhoneFromJid(jid);
+                    if (!string.IsNullOrWhiteSpace(jid))
+                    {
+                        pushPairs.Add(new KeyValuePair<string, string>(jid, name));
+                    }
+
                     if (await _personStore.UpsertIfChangedAsync(
                         jid,
-                        pn.Pushname_,
+                        name,
                         null,
                         phone,
+                        PersonSource.Observed).ConfigureAwait(false))
+                    {
+                        writes++;
+                    }
+                }
+            }
+
+            // Same LID↔PN pairs the preview builder uses: store the name under both so
+            // ChatAuthorProjection can resolve a group strip that still holds the LID.
+            if (sync.PhoneNumberToLidMappings != null)
+            {
+                foreach (var mapping in sync.PhoneNumberToLidMappings)
+                {
+                    if (mapping == null ||
+                        string.IsNullOrWhiteSpace(mapping.LidJid) ||
+                        string.IsNullOrWhiteSpace(mapping.PnJid))
+                    {
+                        continue;
+                    }
+
+                    string lid = JidHelper.Normalize(mapping.LidJid);
+                    string pn = JidHelper.Normalize(mapping.PnJid);
+                    string name = FindPushName(pushPairs, pn) ?? FindPushName(pushPairs, lid);
+                    if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(lid))
+                    {
+                        continue;
+                    }
+
+                    if (!pushPairs.Exists(p =>
+                            string.Equals(p.Key, lid, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        pushPairs.Add(new KeyValuePair<string, string>(lid, name));
+                    }
+
+                    if (await _personStore.UpsertIfChangedAsync(
+                        lid,
+                        name,
+                        null,
+                        JidHelper.TryPhoneFromJid(pn),
                         PersonSource.Observed).ConfigureAwait(false))
                     {
                         writes++;
@@ -939,7 +990,33 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                 }
             }
 
+            if (_chatState != null && pushPairs.Count > 0)
+            {
+                await _chatState.MergePushNamesAsync(pushPairs).ConfigureAwait(false);
+            }
+
             Debug.WriteLine("[MessageFacade] Person upserts from history: " + writes);
+        }
+
+        private static string FindPushName(
+            List<KeyValuePair<string, string>> pairs,
+            string jid)
+        {
+            if (pairs == null || string.IsNullOrWhiteSpace(jid))
+            {
+                return null;
+            }
+
+            for (int i = 0; i < pairs.Count; i++)
+            {
+                if (string.Equals(pairs[i].Key, jid, StringComparison.OrdinalIgnoreCase) &&
+                    !string.IsNullOrWhiteSpace(pairs[i].Value))
+                {
+                    return pairs[i].Value;
+                }
+            }
+
+            return null;
         }
 
         public Task ResyncConversationsAsync(System.IProgress<ConversationResyncPhase> progress = null)

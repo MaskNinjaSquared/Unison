@@ -125,6 +125,11 @@ namespace Unison.Core.Helpers
         /// history chunk's <c>WebMessageInfo.PushName</c> is usually empty. Indexed by normalized
         /// JID. Bare phone keys are added only for PN (@s.whatsapp.net) so LID bare digits cannot
         /// steal another person's push name.
+        /// <para>
+        /// The same chunk often lists LID↔PN pairs under <see cref="HistorySync.PhoneNumberToLidMappings"/>.
+        /// Group envelopes carry the LID while push names stay under the phone JID — without mirroring
+        /// those pairs the list strip falls back to bare digits until the group is opened.
+        /// </para>
         /// </summary>
         public static Dictionary<string, string> BuildPushNameMap(HistorySync sync)
         {
@@ -160,7 +165,76 @@ namespace Unison.Core.Helpers
                 }
             }
 
+            MirrorPushNamesAcrossLidPn(map, sync);
             return map;
+        }
+
+        /// <summary>
+        /// Copies a known push name onto the other half of each LID↔PN pair in this chunk.
+        /// </summary>
+        private static void MirrorPushNamesAcrossLidPn(
+            Dictionary<string, string> map,
+            HistorySync sync)
+        {
+            if (map == null || map.Count == 0 || sync == null)
+            {
+                return;
+            }
+
+            if (sync.PhoneNumberToLidMappings != null)
+            {
+                foreach (var mapping in sync.PhoneNumberToLidMappings)
+                {
+                    if (mapping == null)
+                    {
+                        continue;
+                    }
+
+                    MirrorPair(map, mapping.LidJid, mapping.PnJid);
+                }
+            }
+
+            if (sync.Conversations == null)
+            {
+                return;
+            }
+
+            foreach (var conv in sync.Conversations)
+            {
+                if (conv == null ||
+                    string.IsNullOrWhiteSpace(conv.LidJid) ||
+                    string.IsNullOrWhiteSpace(conv.PnJid))
+                {
+                    continue;
+                }
+
+                MirrorPair(map, conv.LidJid, conv.PnJid);
+            }
+        }
+
+        private static void MirrorPair(Dictionary<string, string> map, string lidJid, string pnJid)
+        {
+            string lid = JidHelper.Normalize(lidJid);
+            string pn = JidHelper.Normalize(pnJid);
+            if (string.IsNullOrWhiteSpace(lid) || string.IsNullOrWhiteSpace(pn))
+            {
+                return;
+            }
+
+            string name;
+            if (map.TryGetValue(pn, out name) &&
+                !string.IsNullOrWhiteSpace(name) &&
+                !map.ContainsKey(lid))
+            {
+                map[lid] = name;
+            }
+
+            if (map.TryGetValue(lid, out name) &&
+                !string.IsNullOrWhiteSpace(name) &&
+                !map.ContainsKey(pn))
+            {
+                map[pn] = name;
+            }
         }
 
         /// <summary>

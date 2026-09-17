@@ -332,6 +332,11 @@ namespace Unison.Core.State
             return MergeNamesAsync(_addressBookNames, namesByJid);
         }
 
+        public void NotifyDisplayNamesChanged()
+        {
+            RaiseDisplayNamesChanged();
+        }
+
         public Task ClearAsync()
         {
             lock (_gate)

@@ -4,6 +4,16 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Group list strip kept LID digits after history sync
+
+History push names land under the phone JID while group envelopes often name the sender by LID.
+`BuildPushNameMap` now mirrors names across the chunk's LID↔PN pairs, so the preview strip can
+resolve "Ana" instead of bare digits. People upsert and the in-memory push-name map do the same
+mirror, and when a LID/PN alias arrives later the author projection is nudged via
+`NotifyDisplayNamesChanged` instead of waiting until the group is opened.
+
+---
+
 ## Group message keys disagreed on casing; hydrate failures were silent
 
 `MessageIdIndex` already keyed chat JIDs with `OrdinalIgnoreCase`. `ChatStateStore.MessagesByChat`

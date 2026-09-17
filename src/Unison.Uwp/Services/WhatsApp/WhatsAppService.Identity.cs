@@ -600,6 +600,11 @@ namespace Unison.Uwp.Services.WhatsApp
                 // which is what the pairs just changed. Running it once at the end covers every
                 // pair in the burst, including the per-pair merge this used to do separately.
                 await DeduplicateChatsAsync("alias:" + source);
+
+                // Group list strips often stuck on LID digits until a name was reachable under the
+                // phone JID. ChatAuthorProjection listens for DisplayNamesChanged — alias alone
+                // did not raise it, so opening the group (roster) was the only upgrade path.
+                _chatState?.NotifyDisplayNamesChanged();
             }
             catch (Exception ex)
             {
