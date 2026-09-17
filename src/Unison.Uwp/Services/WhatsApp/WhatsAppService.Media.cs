@@ -45,104 +45,27 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private static void ApplyAudioMetadata(ChatMessage target, Proto.Message.Types.AudioMessage audio)
         {
-            if (target == null || audio == null) return;
-            target.IsAudio = true;
-            target.IsVoiceMessage = audio.Ptt;
-            target.AudioDurationSeconds = audio.Seconds;
-            target.AudioMimeType = audio.Mimetype;
-            target.AudioUrl = audio.Url;
-            target.AudioDirectPath = audio.DirectPath;
-            target.AudioMediaKeyBase64 = audio.MediaKey != null && audio.MediaKey.Length > 0
-                ? Convert.ToBase64String(audio.MediaKey.ToByteArray())
-                : null;
-            target.AudioFileEncSha256Base64 = audio.FileEncSha256 != null && audio.FileEncSha256.Length > 0
-                ? Convert.ToBase64String(audio.FileEncSha256.ToByteArray())
-                : null;
-            target.NotifyAudioDownloadStateChanged();
+            IncomingMediaMetadata.ApplyAudio(target, audio);
         }
 
         private static void ApplyDocumentMetadata(ChatMessage target, Proto.Message.Types.DocumentMessage document)
         {
-            if (target == null || document == null) return;
-            target.Kind = ChatMessageKind.Document;
-            target.DocumentFileName = document.FileName;
-            target.DocumentMimeType = document.Mimetype;
-            target.DocumentUrl = document.Url;
-            target.DocumentDirectPath = document.DirectPath;
-            target.DocumentMediaKeyBase64 = document.MediaKey != null && document.MediaKey.Length > 0
-                ? Convert.ToBase64String(document.MediaKey.ToByteArray())
-                : null;
-            target.DocumentFileEncSha256Base64 = document.FileEncSha256 != null && document.FileEncSha256.Length > 0
-                ? Convert.ToBase64String(document.FileEncSha256.ToByteArray())
-                : null;
-            if (document.HasFileLength && document.FileLength > 0)
-            {
-                target.DocumentFileLengthBytes = document.FileLength > long.MaxValue
-                    ? long.MaxValue
-                    : (long)document.FileLength;
-            }
-            target.NotifyDocumentDownloadStateChanged();
+            IncomingMediaMetadata.ApplyDocument(target, document);
         }
 
         private static void ApplyImageMetadata(ChatMessage target, Proto.Message.Types.ImageMessage image)
         {
-            if (target == null || image == null) return;
-            target.Kind = ChatMessageKind.Image;
-            target.ImageMimeType = image.Mimetype;
-            target.ImageUrl = image.Url;
-            target.ImageDirectPath = image.DirectPath;
-            target.ImageMediaKeyBase64 = image.MediaKey != null && image.MediaKey.Length > 0
-                ? Convert.ToBase64String(image.MediaKey.ToByteArray())
-                : null;
-            target.ImageFileEncSha256Base64 = image.FileEncSha256 != null && image.FileEncSha256.Length > 0
-                ? Convert.ToBase64String(image.FileEncSha256.ToByteArray())
-                : null;
-            if (!string.IsNullOrWhiteSpace(image.Caption))
-            {
-                target.Caption = image.Caption;
-            }
-
-            // Plain auto-props above; nudge bindings for download affordance.
-            target.NotifyImageDownloadStateChanged();
+            IncomingMediaMetadata.ApplyImage(target, image);
         }
 
         private static void ApplyStickerMetadata(ChatMessage target, Proto.Message.Types.StickerMessage sticker)
         {
-            if (target == null || sticker == null) return;
-            target.Kind = ChatMessageKind.Sticker;
-            target.IsStickerFailed = false;
-            target.ImageMimeType = sticker.Mimetype;
-            target.ImageUrl = sticker.Url;
-            target.ImageDirectPath = sticker.DirectPath;
-            target.ImageMediaKeyBase64 = sticker.MediaKey != null && sticker.MediaKey.Length > 0
-                ? Convert.ToBase64String(sticker.MediaKey.ToByteArray())
-                : null;
-            target.ImageFileEncSha256Base64 = sticker.FileEncSha256 != null && sticker.FileEncSha256.Length > 0
-                ? Convert.ToBase64String(sticker.FileEncSha256.ToByteArray())
-                : null;
-            target.NotifyImageDownloadStateChanged();
+            IncomingMediaMetadata.ApplySticker(target, sticker);
         }
 
         private static void ApplyVideoMetadata(ChatMessage target, Proto.Message.Types.VideoMessage video)
         {
-            if (target == null || video == null) return;
-            target.Kind = ChatMessageKind.Video;
-            target.VideoDurationSeconds = video.Seconds;
-            target.VideoMimeType = video.Mimetype;
-            target.VideoUrl = video.Url;
-            target.VideoDirectPath = video.DirectPath;
-            target.VideoMediaKeyBase64 = video.MediaKey != null && video.MediaKey.Length > 0
-                ? Convert.ToBase64String(video.MediaKey.ToByteArray())
-                : null;
-            target.VideoFileEncSha256Base64 = video.FileEncSha256 != null && video.FileEncSha256.Length > 0
-                ? Convert.ToBase64String(video.FileEncSha256.ToByteArray())
-                : null;
-            if (!string.IsNullOrWhiteSpace(video.Caption))
-            {
-                target.Caption = video.Caption;
-            }
-
-            target.NotifyVideoDownloadStateChanged();
+            IncomingMediaMetadata.ApplyVideo(target, video);
         }
 
         private Task<string> SaveImageBytesToCacheAsync(byte[] imageBytes, string fileBase, string mimeType) =>

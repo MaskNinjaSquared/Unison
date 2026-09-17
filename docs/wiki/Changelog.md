@@ -4,6 +4,14 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Incoming media metadata left WhatsAppService (3.10)
+
+Proto → `ChatMessage` media fields (keys, mime, URL, caption, PTT) live in `IncomingMediaMetadata`.
+The pump applies them in one call from `MessageRenderInfo`; hydrate still uses the typed helpers.
+Incoming toasts go through attached `INotificationService` instead of only `NotificationService.Instance`.
+
+---
+
 ## Live chat-list strip apply left WhatsAppService (3.10)
 
 `ApplyChatPreviewIfNewer` and `ResolvePreviewKind` are now `LiveChatPreviewApplier` in Core — the

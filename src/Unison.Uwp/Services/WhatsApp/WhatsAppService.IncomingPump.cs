@@ -1965,30 +1965,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     };
                 }
 
-                if (renderInfo?.IsAudio == true && renderInfo.AudioMessage != null)
-                {
-                    ApplyAudioMetadata(chatMessage, renderInfo.AudioMessage);
-                }
-
-                if (renderInfo?.IsImage == true && renderInfo.ImageMessage != null)
-                {
-                    ApplyImageMetadata(chatMessage, renderInfo.ImageMessage);
-                }
-
-                if (renderInfo?.IsSticker == true && renderInfo.StickerMessage != null)
-                {
-                    ApplyStickerMetadata(chatMessage, renderInfo.StickerMessage);
-                }
-
-                if (renderInfo?.IsVideo == true && renderInfo.VideoMessage != null)
-                {
-                    ApplyVideoMetadata(chatMessage, renderInfo.VideoMessage);
-                }
-
-                if (renderInfo?.IsDocument == true && renderInfo.DocumentMessage != null)
-                {
-                    ApplyDocumentMetadata(chatMessage, renderInfo.DocumentMessage);
-                }
+                IncomingMediaMetadata.Apply(chatMessage, renderInfo);
 
                 ApplyPendingStateToMessage(jid, chatMessage);
 
@@ -2332,7 +2309,8 @@ namespace Unison.Uwp.Services.WhatsApp
                         ? notificationChat.IsMutedLocally
                         : (_chatStore?.TryGetCached(jid)?.IsMutedLocally ?? false);
 
-                    NotificationService.Instance.NotifyIncomingMessage(
+                    INotificationService notifications = _notifications ?? NotificationService.Instance;
+                    notifications.NotifyIncomingMessage(
                         jid,
                         notificationName,
                         senderName,

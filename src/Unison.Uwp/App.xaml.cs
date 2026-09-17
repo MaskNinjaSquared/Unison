@@ -389,6 +389,7 @@ namespace Unison.Uwp
             whatsAppImpl.AttachSystemInfoProvider(Services.GetRequiredService<ISystemInfoProvider>());
             whatsAppImpl.AttachMessageService(Services.GetRequiredService<IMessageService>());
             whatsAppImpl.AttachContactService(Services.GetRequiredService<IContactService>());
+            whatsAppImpl.AttachNotificationService(Services.GetRequiredService<INotificationService>());
             Services.GetRequiredService<IConnectionService>().AttachWhatsAppService(whatsApp);
             // The remaining facades subscribe to client events in their constructors, and they can
             // only hear what they were around for. Build them now rather than when a screen first asks.

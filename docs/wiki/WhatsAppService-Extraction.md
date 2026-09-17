@@ -184,7 +184,7 @@ Self-contained first. List/persist last.
 | 3.8 | `.AppState.cs` | **Rewritten — the premise was stale.** See below |
 | 3.9a | List display order (done) | `ChatDisplayOrder` (Core) |
 | 3.9b | `.Persistence.cs` + preview reconcile + the appliers from 3.8 | `ChatFacade` + `ChatStateStore` + `IChatStore` / `IMessageStore`. Close the transitional public dictionaries on `ChatStateStore`. **Persistence rules out; appliers remain — see below** |
-| 3.10 | `.IncomingPump.cs` | Decode/dispatch stays with connection; apply (row, preview, unread, toast) goes to façades. **In progress:** `IncomingAttention`, `MessageRenderReader`, `MessageIdIndex`, `QuotedContext`, `DuplicateArrivalEnrichment`, `IncomingSenderResolver`, `PushNameAcceptDecision`, `LiveChatPreviewApplier` are out — see below |
+| 3.10 | `.IncomingPump.cs` | Decode/dispatch stays with connection; apply (row, preview, unread, toast) goes to façades. **In progress:** `IncomingAttention`, `MessageRenderReader`, `MessageIdIndex`, `QuotedContext`, `DuplicateArrivalEnrichment`, `IncomingSenderResolver`, `PushNameAcceptDecision`, `LiveChatPreviewApplier`, `IncomingMediaMetadata` are out — see below |
 
 **3.1a is done.** The avatar half of `MediaCache` is `IAvatarCache` / `AvatarCacheService`: `TryGet`,
 `SaveAsync`, `DeleteIfCached`. It took `BuildSafeAvatarFileName`, `TryGetCachedAvatarUri`,
@@ -670,6 +670,13 @@ path funnelled through `WhatsAppService.ApplyChatPreviewIfNewer` — staleness v
 That method is now a one-line forward; the rule lives in Core next to `HistoryChatPreviewApplier`
 (9 tests), including `ResolveKind` (render hint vs domain message). The pump still owns when to
 call it; only the write left.
+
+**`IncomingMediaMetadata` took the media key write.** Five private statics on `.Media.cs` copied
+proto image/sticker/video/audio/document fields onto `ChatMessage` for the download path. The pump
+called them one by one from `MessageRenderInfo` flags; hydrate called the same five. They are one
+Core type now (6 tests). The pump calls `Apply(chatMessage, renderInfo)` once. Separately, the
+notify stage stopped naming `NotificationService.Instance` and takes `INotificationService` via
+`AttachNotificationService` (fallback to the singleton until every host wires it).
 
 ### Phase 4 — What remains is connection
 
