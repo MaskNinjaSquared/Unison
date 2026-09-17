@@ -320,7 +320,8 @@ namespace Unison.Uwp
             services.AddSingleton<IChatService>(sp => new ChatFacade(
                 sp.GetRequiredService<IWhatsAppSessionProvider>(),
                 sp.GetRequiredService<IWhatsAppService>(),
-                sp.GetRequiredService<IJidResolver>()));
+                sp.GetRequiredService<IJidResolver>(),
+                sp.GetRequiredService<IContactService>()));
             // Forwards for now: the w:g2 work is still inside the client (phase 3.2). What this
             // registration buys is that the info pane and the composer stop naming it.
             services.AddSingleton<IGroupService>(sp => new GroupFacade(
@@ -388,6 +389,7 @@ namespace Unison.Uwp
             whatsAppImpl.AttachUiDispatcher(rootFrame?.Dispatcher);
             whatsAppImpl.AttachSystemInfoProvider(Services.GetRequiredService<ISystemInfoProvider>());
             whatsAppImpl.AttachMessageService(Services.GetRequiredService<IMessageService>());
+            whatsAppImpl.AttachChatService(Services.GetRequiredService<IChatService>());
             whatsAppImpl.AttachContactService(Services.GetRequiredService<IContactService>());
             Services.GetRequiredService<IConnectionService>().AttachWhatsAppService(whatsApp);
             // The remaining facades subscribe to client events in their constructors, and they can

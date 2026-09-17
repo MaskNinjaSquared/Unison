@@ -2136,119 +2136,54 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 ObserveMediaHydration(chatMessage, renderInfo, e.MessageId, jid);
 
-                // Update chat preview on UI thread
+                // Update chat preview on UI thread via ChatFacade
                 SetIncomingMessagePumpStage("ui-preview", e);
-                ChatItem notificationChat = null;
-                int totalUnreadForNotify = 0;
-                await RunOnUiThreadAsync(() =>
+                string aliasLid = null;
+                string aliasPn = null;
+                if (JidAlias.TryGetValue(jid, out var aliasPair))
+                {
+                    aliasLid = JidHelper.IsLidJid(jid) ? jid : aliasPair;
+                    aliasPn = JidHelper.IsPhoneJid(jid) ? jid : aliasPair;
+                }
+
+                if (_chatService == null)
+                {
+                    Debug.WriteLine("[WhatsAppService] Dropping live list apply: ChatFacade is not attached.");
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "messages",
+                        "chat-facade-missing",
+                        "messageId=" + (e.MessageId ?? string.Empty));
+                    return;
+                }
+
+                LiveIncomingChatListApplyResult listApply = await _chatService.ApplyLiveIncomingChatListAsync(
+                    new LiveIncomingChatListApplyRequest
                     {
-                        string canonicalLookup = GetCanonicalJid(jid) ?? jid;
-                        var chat = Chats.FirstOrDefault(c =>
-                            string.Equals(
-                                GetCanonicalJid(c.JID),
-                                canonicalLookup,
-                                StringComparison.OrdinalIgnoreCase));
-                        
-                        // Create new chat entry if this JID isn't known yet
-                        if (chat == null)
-                        {
-                            string chatName = ResolveDisplayName(jid, "chat");
-                            chat = new ChatItem
-                            {
-                                JID = GetCanonicalJid(jid),
-                                Name = chatName,
-                                Kind = ResolveChatKind(jid),
-                                UnreadCount = 0
-                            };
-                            Chats.Insert(0, chat);
-                            Log($"[WhatsAppService] Created new chat entry for {jid} ({chatName})");
-                            _ = DeduplicateChatsAsync("incoming-new-chat");
+                        ChatJid = jid,
+                        PreviewText = displayContent,
+                        Timestamp = chatMessage.Timestamp,
+                        PreviewKind = previewKind,
+                        AuthorPrefix = listAuthorPrefix,
+                        MentionedJids = chatMessage.MentionedJids,
+                        IsFromMe = chatMessage.IsFromMe,
+                        SendState = HistoryLiveMessageMapper.FromStatus(chatMessage.Status, chatMessage.IsFromMe),
+                        MessageId = chatMessage.Id,
+                        CountsAsUnread = attention.CountsAsUnread,
+                        IsGroup = isGroup,
+                        AliasLid = aliasLid,
+                        AliasPn = aliasPn
+                    }).ConfigureAwait(false);
 
-                            // If this JID is a PN that has a mapped LID, or vice-versa, trigger a merge scan
-                            if (JidAlias.TryGetValue(jid, out var alias))
-                            {
-                                // Sorting the pair by casing-sensitive suffix put the same
-                                // address on both sides when the server varied the case,
-                                // and the merge scan then compared a chat with itself.
-                                string lid = JidHelper.IsLidJid(jid) ? jid : alias;
-                                string pn = JidHelper.IsPhoneJid(jid) ? jid : alias;
-                                _ = CheckAndMergeDuplicateChatsAsync(lid, pn);
-                            }
-
-                            // If name is still naked, trigger resolution
-                            if (PlaceholderChatLabel.IsPlaceholder(chat.Name, chat.JID, IsSelfMarkerLabel(chat.Name)))
-                            {
-                                _ = ResolveMissingNamesAsync();
-                            }
-                        }
-                        
-                        // Atualiza todas as linhas PN/LID equivalentes. Uma linha duplicada
-                        // podia continuar visivel com mensagem antiga mesmo apos o envio.
-                        ApplyChatPreviewIfNewer(
-                            chat,
-                            displayContent,
-                            chatMessage.Timestamp,
-                            false,
-                            previewKind,
-                            listAuthorPrefix,
-                            chatMessage.MentionedJids,
-                            chatMessage.IsFromMe,
-                            HistoryLiveMessageMapper.FromStatus(chatMessage.Status, chatMessage.IsFromMe),
-                            chatMessage.Id);
-                        foreach (var equivalentRow in GetChatRowsForCanonicalJid(jid))
-                        {
-                            if (!ReferenceEquals(equivalentRow, chat))
-                            {
-                                ApplyChatPreviewIfNewer(
-                                    equivalentRow,
-                                    displayContent,
-                                    chatMessage.Timestamp,
-                                    false,
-                                    previewKind,
-                                    listAuthorPrefix,
-                                    chatMessage.MentionedJids,
-                                    chatMessage.IsFromMe,
-                                    HistoryLiveMessageMapper.FromStatus(chatMessage.Status, chatMessage.IsFromMe),
-                                    chatMessage.Id);
-                            }
-                        }
-
-                        // If it's a 1-on-1 and name is still a number/JID, try to resolve it with the newly updated name
-                        if (!isGroup && PlaceholderChatLabel.IsPlaceholder(chat.Name, jid, IsSelfMarkerLabel(chat.Name)))
-                        {
-                            var resolvedChatName = ResolveDisplayName(jid, "chat");
-                            if (!string.IsNullOrEmpty(resolvedChatName) && !resolvedChatName.Contains("@"))
-                            {
-                                chat.Name = resolvedChatName;
-                                Log($"[WhatsAppService] Resolved name for UI chat {jid} -> {resolvedChatName}");
-                            }
-                        }
-                        
-                        // Keep pinned chats above regular chats while still moving
-                        // the updated conversation to its correct real-time position.
-                        RepositionChatForDisplay(chat);
-                        
-                        // Messages arriving in the conversation the user is actually looking at are
-                        // already visible and should produce neither a badge nor a toast. Both
-                        // halves of that come from one place, because they used to disagree about
-                        // what "looking at" means once the app was in the background.
-                        if (attention.CountsAsUnread)
-                        {
-                            ChatUnreadTally.Bump(chat, GetChatRowsForCanonicalJid(jid), 1);
-                        }
-
-                        notificationChat = chat;
-                        // Read on the UI thread. GetTotalUnreadCount walks Chats, and the pump
-                        // itself is Task.Run — enumerating the ObservableCollection off-thread
-                        // threw and the catch returned 0, so the toast badge said nothing was unread.
-                        totalUnreadForNotify = GetTotalUnreadCount();
-                    });
+                ChatItem notificationChat = listApply?.Chat;
+                int totalUnreadForNotify = listApply != null ? listApply.TotalUnread : 0;
 
                 SetIncomingMessagePumpStage("notify", e);
                 string notificationName = notificationChat?.Name;
                 if (string.IsNullOrWhiteSpace(notificationName))
                 {
-                    notificationName = ResolveDisplayName(jid, "notification");
+                    notificationName = !string.IsNullOrWhiteSpace(listApply?.DisplayName)
+                        ? listApply.DisplayName
+                        : ResolveDisplayName(jid, "notification");
                 }
 
                 _messageService.NotifyLiveIncoming(

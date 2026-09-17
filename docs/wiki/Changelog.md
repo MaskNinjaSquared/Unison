@@ -4,6 +4,15 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Live list apply moved to ChatFacade (3.10 apply)
+
+`IChatService.ApplyLiveIncomingChatListAsync` owns create-row, strip tip (`LiveChatPreviewApplier`),
+reposition, unread bump and total-unread for toast. Pump still inserts into `MessagesByChat` and
+queues persist. Transitional client helpers: `GetChatRowsForCanonicalJid`, `RequestChatListDedup`,
+`RequestAliasChatMerge`.
+
+---
+
 ## Live incoming notify moved to MessageFacade (3.10 apply)
 
 Toast / badge / tile for live inbound messages go through `IMessageService.NotifyLiveIncoming`.

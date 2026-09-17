@@ -29,6 +29,7 @@ using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Socket.AppState;
 using Unison.Socket.UseCases.Messages;
+using Unison.Uwp.Helpers;
 using Unison.Uwp.Services.Socket;
 
 namespace Unison.Uwp.Services.WhatsApp.Chats
@@ -51,11 +52,13 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
         private readonly IWhatsAppSessionProvider _sessions;
         private readonly IWhatsAppService _appState;
         private readonly IJidResolver _jids;
+        private readonly IContactService _contacts;
 
         internal ChatFacade(
             IWhatsAppSessionProvider sessions,
             IWhatsAppService appState,
-            IJidResolver jids)
+            IJidResolver jids,
+            IContactService contacts = null)
         {
             if (sessions == null)
             {
@@ -70,6 +73,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             _sessions = sessions;
             _appState = appState;
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
+            _contacts = contacts;
         }
 
         public async Task SetPinnedAsync(ChatItem chat, bool pinned)
@@ -281,6 +285,131 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             string reason = null)
         {
             return _appState.ReconcileChatPreviewsFromSqliteAsync(chatJids, reason);
+        }
+
+        public async Task<LiveIncomingChatListApplyResult> ApplyLiveIncomingChatListAsync(
+            LiveIncomingChatListApplyRequest request)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.ChatJid))
+            {
+                return new LiveIncomingChatListApplyResult();
+            }
+
+            LiveIncomingChatListApplyResult result = new LiveIncomingChatListApplyResult();
+            await _appState.RunOnUiThreadAsync(() =>
+            {
+                string jid = request.ChatJid;
+                string canonicalLookup = _jids.GetCanonicalJid(jid) ?? jid;
+                ChatItem chat = _appState.Chats.FirstOrDefault(c =>
+                    c != null &&
+                    string.Equals(
+                        _jids.GetCanonicalJid(c.JID),
+                        canonicalLookup,
+                        StringComparison.OrdinalIgnoreCase));
+
+                if (chat == null)
+                {
+                    string chatName = ResolveName(jid, "chat");
+                    chat = new ChatItem
+                    {
+                        JID = _jids.GetCanonicalJid(jid),
+                        Name = chatName,
+                        Kind = JidHelper.ResolveKind(jid, _jids.IsSelfLinked(jid)),
+                        UnreadCount = 0
+                    };
+                    _appState.Chats.Insert(0, chat);
+                    Debug.WriteLine("[ChatFacade] Created new chat entry for " + jid + " (" + chatName + ")");
+                    _appState.RequestChatListDedup("incoming-new-chat");
+
+                    if (!string.IsNullOrWhiteSpace(request.AliasLid) &&
+                        !string.IsNullOrWhiteSpace(request.AliasPn))
+                    {
+                        _appState.RequestAliasChatMerge(request.AliasLid, request.AliasPn);
+                    }
+
+                    if (PlaceholderChatLabel.IsPlaceholder(
+                            chat.Name,
+                            chat.JID,
+                            SelfChatDisplayHelper.IsSelfMarkerLabel(chat.Name)))
+                    {
+                        IContactService contacts = _contacts;
+                        if (contacts != null)
+                        {
+                            _ = contacts.ResolveMissingNamesAsync();
+                        }
+                    }
+                }
+
+                string yesterday = LocalizedStrings.Get("Common_Yesterday", "Yesterday");
+                LiveChatPreviewApplier.ApplyIfNewer(
+                    chat,
+                    request.PreviewText,
+                    request.Timestamp,
+                    false,
+                    request.PreviewKind,
+                    request.AuthorPrefix,
+                    request.MentionedJids,
+                    request.IsFromMe,
+                    request.SendState,
+                    request.MessageId,
+                    yesterday);
+
+                foreach (ChatItem equivalentRow in _appState.GetChatRowsForCanonicalJid(jid))
+                {
+                    if (!ReferenceEquals(equivalentRow, chat))
+                    {
+                        LiveChatPreviewApplier.ApplyIfNewer(
+                            equivalentRow,
+                            request.PreviewText,
+                            request.Timestamp,
+                            false,
+                            request.PreviewKind,
+                            request.AuthorPrefix,
+                            request.MentionedJids,
+                            request.IsFromMe,
+                            request.SendState,
+                            request.MessageId,
+                            yesterday);
+                    }
+                }
+
+                if (!request.IsGroup &&
+                    PlaceholderChatLabel.IsPlaceholder(
+                        chat.Name,
+                        jid,
+                        SelfChatDisplayHelper.IsSelfMarkerLabel(chat.Name)))
+                {
+                    string resolvedChatName = ResolveName(jid, "chat");
+                    if (!string.IsNullOrEmpty(resolvedChatName) && !resolvedChatName.Contains("@"))
+                    {
+                        chat.Name = resolvedChatName;
+                        Debug.WriteLine("[ChatFacade] Resolved name for UI chat " + jid + " -> " + resolvedChatName);
+                    }
+                }
+
+                ChatDisplayOrder.Reposition(_appState.Chats, chat);
+
+                if (request.CountsAsUnread)
+                {
+                    ChatUnreadTally.Bump(chat, _appState.GetChatRowsForCanonicalJid(jid), 1);
+                }
+
+                result.Chat = chat;
+                result.DisplayName = chat.Name;
+                result.TotalUnread = _appState.GetTotalUnreadCount();
+            }).ConfigureAwait(false);
+
+            return result;
+        }
+
+        private string ResolveName(string jid, string context)
+        {
+            if (_contacts != null)
+            {
+                return _contacts.ResolveDisplayName(jid, context);
+            }
+
+            return _appState.ResolveDisplayName(jid, context);
         }
 
         /// <summary>
