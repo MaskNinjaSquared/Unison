@@ -689,6 +689,20 @@ attached from `App`; a missing attach now drops the message with a diagnostics w
 construction is `IncomingChatMessageSnapshot.FromRender` (4 tests). Separately,
 `MissingMessagePriority` owns which placeholder resends are preferred (peer/self vs group).
 
+**`IncomingMediaHydrationPlan` aligned offline and live downloads.** Both paths used to spell the
+same sticker/image ifs twice (different order). One plan from `MessageRenderInfo` feeds
+`ObserveMediaHydration` so a closed chat during replay still tries the same arms as a live arrival.
+
+**`IncomingPushNameTarget` named who owns the push name.** From-me binds to the account; otherwise
+participant, then from — beside `PushNameAcceptDecision`.
+
+**`IncomingEnvelopeAliasHints` collects PN/LID pairs** from sender lid, peer recipient, and group
+participant alt before usync. The pump still registers; Core only decides which pairs are formed.
+
+**`IncomingEnvelopeDisposition` named the early exits.** Session control (peer-data response, app-
+state-only, placeholder), status broadcast address, and chat controls (revoke, pin) are classified
+before the pump queues the matching work — so that order cannot drift when the method is split again.
+
 ### Phase 4 — What remains is connection
 
 Rename-able to `IWhatsAppConnection` / keep `IWhatsAppService` until the last caller dies. Target surface:

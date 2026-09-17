@@ -1270,6 +1270,30 @@ namespace Unison.Uwp.Services.WhatsApp
             _ = ObserveIncomingWorkAsync(work, label, messageId);
         }
 
+        private void ObserveMediaHydration(
+            ChatMessage chatMessage,
+            MessageRenderInfo renderInfo,
+            string messageId,
+            string jid)
+        {
+            IncomingMediaHydrationPlan plan = IncomingMediaHydrationPlan.From(renderInfo);
+            if (plan.HasSticker)
+            {
+                ObserveIncomingWork(
+                    HydrateStickerForMessageAsync(chatMessage, plan.Sticker, messageId, jid),
+                    "hydrate-sticker",
+                    messageId);
+            }
+
+            if (plan.HasImage)
+            {
+                ObserveIncomingWork(
+                    HydrateImageForMessageAsync(chatMessage, plan.Image, messageId, jid),
+                    "hydrate-image",
+                    messageId);
+            }
+        }
+
         private static async Task ObserveIncomingWorkAsync(Task work, string label, string messageId)
         {
             try
@@ -1585,7 +1609,8 @@ namespace Unison.Uwp.Services.WhatsApp
                     Log($"[WhatsAppService] HandleDecryptedMessageAsync from {e.FromJid}, participant={e.Participant}, id={e.MessageId}");
                 }
 
-                if (e.Message?.ProtocolMessage?.PeerDataOperationRequestResponseMessage != null)
+                IncomingEnvelopeKind sessionKind = IncomingEnvelopeDisposition.ClassifySessionControl(e.Message);
+                if (sessionKind == IncomingEnvelopeKind.PeerDataOperationResponse)
                 {
                     var response = e.Message.ProtocolMessage.PeerDataOperationRequestResponseMessage;
                     QueueMessageControlWork($"peer-response:{e.MessageId}", () => ProcessPeerDataOperationResponseAsync(response));
@@ -1594,13 +1619,12 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 // Both of these are the session's business now: the app state module inside
                 // Unison.Socket takes the key share and recovers from a fatal sync itself.
-                if (e.Message?.ProtocolMessage?.AppStateFatalExceptionNotification != null ||
-                    e.Message?.ProtocolMessage?.AppStateSyncKeyShare != null)
+                if (sessionKind == IncomingEnvelopeKind.AppStateSessionOnly)
                 {
                     return;
                 }
 
-                if (e.Message?.PlaceholderMessage != null)
+                if (sessionKind == IncomingEnvelopeKind.Placeholder)
                 {
                     RegisterMissingMessage(e.FromJid, e.Participant, e.MessageId, e.IsFromMe, e.Timestamp, $"placeholder:{e.Message.PlaceholderMessage.Type}");
                     QueueMessageControlWork(
@@ -1610,31 +1634,22 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
                 // Build PN/LID alias from message metadata immediately (works even when usync times out).
-                if (!string.IsNullOrEmpty(e.SenderLid) && JidHelper.IsPhoneJid(e.FromJid))
+                foreach (IncomingAliasHint hint in IncomingEnvelopeAliasHints.Collect(
+                    e.SenderLid,
+                    e.FromJid,
+                    e.PeerRecipientPn,
+                    e.PeerRecipientLid,
+                    e.RecipientJid,
+                    e.Participant,
+                    e.ParticipantAlt,
+                    NormalizeJid))
                 {
-                    RegisterAliasMapping(e.SenderLid, e.FromJid, "sender_lid");
-                }
-                if (!string.IsNullOrEmpty(e.PeerRecipientPn) && JidHelper.IsLidJid(e.FromJid))
-                {
-                    RegisterAliasMapping(e.FromJid, e.PeerRecipientPn, "peer_recipient_pn");
-                }
-                if (!string.IsNullOrEmpty(e.PeerRecipientLid) && JidHelper.IsPhoneJid(e.RecipientJid))
-                {
-                    RegisterAliasMapping(e.PeerRecipientLid, e.RecipientJid, "peer_recipient_lid");
-                }
-                if (!string.IsNullOrEmpty(e.Participant) && !string.IsNullOrEmpty(e.ParticipantAlt))
-                {
-                    string participant = NormalizeJid(e.Participant);
-                    string alternate = NormalizeJid(e.ParticipantAlt);
-                    if (participant.EndsWith("@lid", StringComparison.OrdinalIgnoreCase))
-                        RegisterAliasMapping(participant, alternate, "group-participant-alt");
-                    else if (alternate.EndsWith("@lid", StringComparison.OrdinalIgnoreCase))
-                        RegisterAliasMapping(alternate, participant, "group-participant-alt");
+                    RegisterAliasMapping(hint.LidJid, hint.PnJid, hint.Source);
                 }
 
                 string normalizedFromJid = NormalizeJid(e.FromJid);
-                if (JidHelper.IsStatusBroadcast(normalizedFromJid) ||
-                    JidHelper.IsStatusBroadcast(e.FromJid))
+                if (IncomingEnvelopeDisposition.ClassifyAddress(normalizedFromJid) == IncomingEnvelopeKind.StatusBroadcast ||
+                    IncomingEnvelopeDisposition.ClassifyAddress(e.FromJid) == IncomingEnvelopeKind.StatusBroadcast)
                 {
                     IngestLiveStatus(e);
                     return;
@@ -1708,7 +1723,8 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
                 }
 
-                if (e.Message?.ProtocolMessage != null && (int)e.Message.ProtocolMessage.Type == 0)
+                IncomingEnvelopeKind chatControl = IncomingEnvelopeDisposition.ClassifyChatControl(e.Message);
+                if (chatControl == IncomingEnvelopeKind.Revoke)
                 {
                     QueueMessageControlWork(
                         "message-revoke:" + e.MessageId,
@@ -1716,7 +1732,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     return;
                 }
 
-                if (e.Message?.PinInChatMessage != null)
+                if (chatControl == IncomingEnvelopeKind.PinInChat)
                 {
                     uint duration = e.Message.MessageContextInfo?.MessageAddOnDurationInSecs ?? 0;
                     QueueMessageControlWork(
@@ -1809,9 +1825,11 @@ namespace Unison.Uwp.Services.WhatsApp
                     // Attributing it to the conversation instead - which is what happens when the
                     // sender is read as "participant or chat" - writes the user's name over their
                     // contact's, and leaves the user themselves nameless.
-                    string senderJid = e.IsFromMe
-                        ? NormalizeJid(_authState?.Me?.Id)
-                        : NormalizeJid(e.Participant ?? e.FromJid);
+                    string senderJid = IncomingPushNameTarget.Resolve(
+                        e.IsFromMe,
+                        NormalizeJid(_authState?.Me?.Id),
+                        NormalizeJid(e.Participant),
+                        NormalizeJid(e.FromJid));
                     if (e.IsFromMe)
                     {
                         CaptureSelfPushName(nameFromMsg, "message-echo");
@@ -2101,23 +2119,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
 
                     // Same hydration as live: stickers and images both download during replay.
-                    // Gating images on IsActiveChatJid left closed conversations with keys only
-                    // until opened, while a live arrival of the same picture already tried.
-                    if (renderInfo?.IsSticker == true && renderInfo.StickerMessage != null)
-                    {
-                        ObserveIncomingWork(
-                            HydrateStickerForMessageAsync(chatMessage, renderInfo.StickerMessage, e.MessageId, jid),
-                            "hydrate-sticker",
-                            e.MessageId);
-                    }
-
-                    if (renderInfo?.IsImage == true && renderInfo.ImageMessage != null)
-                    {
-                        ObserveIncomingWork(
-                            HydrateImageForMessageAsync(chatMessage, renderInfo.ImageMessage, e.MessageId, jid),
-                            "hydrate-image",
-                            e.MessageId);
-                    }
+                    ObserveMediaHydration(chatMessage, renderInfo, e.MessageId, jid);
 
                     return;
                 }
@@ -2127,21 +2129,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     QueueChatMessagesChanged(jid);
                 }
 
-                if (renderInfo?.IsImage == true && renderInfo.ImageMessage != null)
-                {
-                    ObserveIncomingWork(
-                        HydrateImageForMessageAsync(chatMessage, renderInfo.ImageMessage, e.MessageId, jid),
-                        "hydrate-image",
-                        e.MessageId);
-                }
-
-                if (renderInfo?.IsSticker == true && renderInfo.StickerMessage != null)
-                {
-                    ObserveIncomingWork(
-                        HydrateStickerForMessageAsync(chatMessage, renderInfo.StickerMessage, e.MessageId, jid),
-                        "hydrate-sticker",
-                        e.MessageId);
-                }
+                ObserveMediaHydration(chatMessage, renderInfo, e.MessageId, jid);
 
                 // Update chat preview on UI thread
                 SetIncomingMessagePumpStage("ui-preview", e);

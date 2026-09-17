@@ -4,6 +4,15 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Incoming pump early exits and media hydrate plans left WhatsAppService (3.10)
+
+Four more Core rules: `IncomingMediaHydrationPlan` (offline/live sticker+image arms),
+`IncomingPushNameTarget` (who receives the push name), `IncomingEnvelopeAliasHints` (PN/LID pairs
+before usync), and `IncomingEnvelopeDisposition` (session/status/revoke/pin exits). The pump still
+queues and registers; only the decisions moved.
+
+---
+
 ## Incoming pump always builds ChatMessage through MessageFacade (3.10)
 
 The temporary hand-built `ChatMessage` path (missing media flags) is gone. Snapshots come from
