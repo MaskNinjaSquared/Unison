@@ -127,6 +127,12 @@ namespace Unison.Core.ViewModels
         private int _batchTotal;
         private int _batchVisibleTarget;
 
+        /// <summary>
+        /// A pin arrived while the debounced refresh was suppressed (batch / safe mode). The batch
+        /// loop owns the list then, so the reorder waits for its next tick instead of being lost.
+        /// </summary>
+        private bool _visibleOrderDirty;
+
         private bool _previewHydrateLoopRunning;
         private readonly object _previewHydrateGate = new object();
         private List<HistoryChatPreview> _previewHydrateQueue;
@@ -1576,10 +1582,13 @@ namespace Unison.Core.ViewModels
                     bool flagsChanged = false;
                     try
                     {
+                        // Do not ApplyTo here on tip updates. ChatStore may still lack the pin/mute
+                        // history just wrote onto the row (async persist), and re-applying the
+                        // stale cache was clearing IsChatPinned / MutedUntil while tips arrived.
+                        // Batch release and RefreshVisibleChats already call ApplyTo when ordering.
                         if (bodyChanged)
                         {
                             updated++;
-                            _chatStore?.ApplyTo(existing);
                         }
 
                         // Flags apply even when the tip did not move — that was the whole miss:
@@ -1804,10 +1813,13 @@ namespace Unison.Core.ViewModels
             // preview and timestamp change is what created the dispatcher backlog during history
             // sync, so only the two things that can change the *order* or the *membership* of the
             // list get to trigger a refresh.
-            if (e.PropertyName == nameof(ChatItem.IsChatPinned) ||
-                e.PropertyName == nameof(ChatItem.PinnedTimestamp) ||
-                e.PropertyName == nameof(ChatItem.Status))
+            if (ChatListReorderTrigger.RequiresVisibleReorder(e.PropertyName))
             {
+                // App-state delivers pins while history sync is still filling the list, and the
+                // debounced refresh is suppressed for the whole of it. Mark the order stale so the
+                // batch loop re-sorts in place; otherwise the pin only reaches the top of the list
+                // after the sync ends.
+                _visibleOrderDirty = true;
                 _ = _dispatcher.RunAsync(ScheduleRefreshVisibleChats);
                 return;
             }
@@ -1862,6 +1874,7 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
+            _visibleOrderDirty = false;
             ApplyLocalChatFieldsToScopedChats();
 
             string query = SearchQuery?.Trim() ?? string.Empty;
@@ -2192,14 +2205,26 @@ namespace Unison.Core.ViewModels
                 return true;
             }
 
-            int sourceIndex = _chatState.Chats.Where(MatchesScope).ToList().IndexOf(chat);
+            // Pin-aware index — mirroring raw Chats order after Move(0) put unpinned tips on top.
+            var ordered = ChatListDisplayOrder.SortForDisplay(
+                _chatState.Chats.Where(c => c != null && MatchesScope(c)));
+            int targetIndex = -1;
+            for (int i = 0; i < ordered.Count; i++)
+            {
+                if (ReferenceEquals(ordered[i], chat))
+                {
+                    targetIndex = i;
+                    break;
+                }
+            }
+
             int visibleIndex = VisibleChats.IndexOf(chat);
-            if (sourceIndex < 0 || visibleIndex < 0)
+            if (targetIndex < 0 || visibleIndex < 0)
             {
                 return false;
             }
 
-            int targetIndex = Math.Min(sourceIndex, VisibleChats.Count - 1);
+            targetIndex = Math.Min(targetIndex, VisibleChats.Count - 1);
             if (targetIndex < 0)
             {
                 return false;
@@ -2404,6 +2429,14 @@ namespace Unison.Core.ViewModels
                 IsLoadingOverlayVisible = false;
             }
 
+            // A pin that landed on a row already on screen cannot move it by itself: the release
+            // loop only appends. Without this the conversation sat wherever its tip put it until
+            // the sync finished.
+            if (_visibleOrderDirty)
+            {
+                ReorderVisibleChatsInPlace();
+            }
+
             if (!_batchCompleted)
             {
                 if (added > 0)
@@ -2426,6 +2459,13 @@ namespace Unison.Core.ViewModels
             _batchRendering = false;
             _batchCompleted = false;
             RefreshVisibleChats();
+
+            // Safe mode can outlive the batch loop, and the full refresh above is gated on it. The
+            // in-place reorder is not, so a pin that arrived late still reaches the top.
+            if (_visibleOrderDirty)
+            {
+                ReorderVisibleChatsInPlace();
+            }
             _ = PresentSyncStatusAsync(null, visible: false, source: "IHistoryService:batch-complete");
             IsLoadingOverlayVisible = false;
         }
@@ -2452,6 +2492,19 @@ namespace Unison.Core.ViewModels
                 {
                     _chatStore.ApplyTo(chat);
                     TryApplyCanonicalPinFallback(chat);
+
+                    // History / app-state can pin the row in memory before ChatStore has a known
+                    // pin under this exact JID. Mirror it into the cache so the next ApplyTo
+                    // (another batch tick) cannot treat a mute-only stub as "not pinned".
+                    if (chat.IsChatPinned)
+                    {
+                        _chatStore.RememberChatPinned(chat.JID, true);
+                    }
+
+                    if (chat.MutedUntil != null)
+                    {
+                        _chatStore.RememberMutedUntil(chat.JID, chat.MutedUntil);
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -2463,17 +2516,12 @@ namespace Unison.Core.ViewModels
 
         /// <summary>
         /// Pin may be stored under the canonical PN while the list row is still a LID (or the
-        /// reverse). When this JID has no ChatStore row yet, borrow pin/mute from the alias key.
+        /// reverse). Borrow pin/mute from the alias when this address has not answered, or only
+        /// answered a different field (a mute-only stub must not block the borrow).
         /// </summary>
         private void TryApplyCanonicalPinFallback(ChatItem chat)
         {
-            if (chat == null || _chatStore == null || chat.IsChatPinned)
-            {
-                return;
-            }
-
-            // A cached row for this exact JID already decided pin/unpin — do not resurrect via alias.
-            if (_chatStore.TryGetCached(chat.JID) != null)
+            if (chat == null || _chatStore == null)
             {
                 return;
             }
@@ -2488,29 +2536,42 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
+            ChatLocalState exact = _chatStore.TryGetCached(chat.JID);
             ChatLocalState alt = _chatStore.TryGetCached(canonical);
             if (alt == null)
             {
                 return;
             }
 
-            if (alt.IsChatPinned)
+            // An explicit unpin under this exact JID wins over the alias.
+            if (!chat.IsChatPinned &&
+                !(exact != null && exact.Knows(ChatLocalStateFields.Pin) && !exact.IsChatPinned) &&
+                alt.Knows(ChatLocalStateFields.Pin) &&
+                alt.IsChatPinned)
             {
                 chat.IsChatPinned = true;
                 if (chat.PinnedTimestamp == null || chat.PinnedTimestamp == 0)
                 {
                     chat.PinnedTimestamp = 1;
                 }
+
+                _chatStore.RememberChatPinned(chat.JID, true);
             }
 
-            if (alt.IsWidgetPinned)
+            if (!chat.IsWidgetPinned &&
+                alt.Knows(ChatLocalStateFields.WidgetPin) &&
+                alt.IsWidgetPinned)
             {
                 chat.IsWidgetPinned = true;
             }
 
-            if (alt.MutedUntil != null)
+            if (chat.MutedUntil == null &&
+                !(exact != null && exact.Knows(ChatLocalStateFields.Mute)) &&
+                alt.Knows(ChatLocalStateFields.Mute) &&
+                alt.MutedUntil != null)
             {
                 chat.MutedUntil = alt.MutedUntil;
+                _chatStore.RememberMutedUntil(chat.JID, alt.MutedUntil);
             }
         }
 
@@ -2527,11 +2588,14 @@ namespace Unison.Core.ViewModels
 
             if (preview.IsChatPinned.HasValue)
             {
+                // Cache first so the next ApplyTo (batch / refresh) cannot wipe the pin before SQLite.
+                _chatStore.RememberChatPinned(chat.JID, preview.IsChatPinned.Value);
                 _ = PersistHistoryPinnedAsync(chat.JID, preview.IsChatPinned.Value);
             }
 
             if (preview.AppliesMute)
             {
+                _chatStore.RememberMutedUntil(chat.JID, preview.MutedUntil);
                 _ = PersistHistoryMuteAsync(chat.JID, preview.MutedUntil);
             }
         }
@@ -2568,6 +2632,8 @@ namespace Unison.Core.ViewModels
         /// </summary>
         private void ReorderVisibleChatsInPlace()
         {
+            _visibleOrderDirty = false;
+
             if (VisibleChats.Count < 2)
             {
                 return;
