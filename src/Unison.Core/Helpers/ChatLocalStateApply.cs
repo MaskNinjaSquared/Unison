@@ -7,12 +7,11 @@ namespace Unison.Core.Helpers
     /// mute deadline, the Start-screen tile, and archived as a fallback.
     /// </summary>
     /// <remarks>
-    /// This is the only durable home for pin and mute — `history_chat_preview` has no columns for
-    /// either — so it is what stands between a restart and a list with every icon missing.
+    /// This is the only durable home for pin and mute — <c>history_chat_preview</c> has no columns
+    /// for either — so it is what stands between a restart and a list with every icon missing.
     ///
-    /// Assigning from the store is only safe because writes are per-field
-    /// (<c>SetChatPinnedAsync</c> and friends): a row that carries the whole state would let one
-    /// flag's write stamp a stale copy of the others, and reading it back would then undo them.
+    /// Only fields the store <em>knows</em> are applied. A mute-only cache stub used to carry
+    /// <c>IsChatPinned = false</c> by default; applying that default mid-sync wiped favourites.
     /// </remarks>
     public static class ChatLocalStateApply
     {
@@ -40,13 +39,28 @@ namespace Unison.Core.Helpers
 
             // history_chat_preview owns status; this table only answers when app-state arrived
             // before the catalogue had a row to put it on.
-            if (chat.Status == ChatStatus.Active && state.Status != ChatStatus.Active)
+            if (state.Knows(ChatLocalStateFields.Status) &&
+                chat.Status == ChatStatus.Active &&
+                state.Status != ChatStatus.Active)
             {
                 chat.Status = state.Status;
             }
 
-            chat.IsWidgetPinned = state.IsWidgetPinned;
-            chat.MutedUntil = state.MutedUntil;
+            if (state.Knows(ChatLocalStateFields.WidgetPin))
+            {
+                chat.IsWidgetPinned = state.IsWidgetPinned;
+            }
+
+            if (state.Knows(ChatLocalStateFields.Mute))
+            {
+                chat.MutedUntil = state.MutedUntil;
+            }
+
+            if (!state.Knows(ChatLocalStateFields.Pin))
+            {
+                return;
+            }
+
             chat.IsChatPinned = state.IsChatPinned;
 
             if (!state.IsChatPinned)

@@ -118,6 +118,46 @@ public class ChatLocalStateApplyTests
     }
 
     [Fact]
+    public void A_mute_only_stub_does_not_wipe_a_pin_already_on_the_row()
+    {
+        // RememberMutedUntil used to create a cache row whose pin defaulted to false. ApplyTo
+        // then treated that default as authoritative and cleared favourites mid-sync.
+        var chat = new ChatItem
+        {
+            JID = "a@s.whatsapp.net",
+            IsChatPinned = true,
+            PinnedTimestamp = 1700,
+            MutedUntil = null
+        };
+
+        ChatLocalStateApply.Apply(
+            chat,
+            new ChatLocalState { Jid = "a@s.whatsapp.net", MutedUntil = 99 });
+
+        Assert.True(chat.IsChatPinned);
+        Assert.Equal(1700, chat.PinnedTimestamp);
+        Assert.Equal(99, chat.MutedUntil);
+    }
+
+    [Fact]
+    public void A_pin_only_stub_does_not_clear_a_mute_already_on_the_row()
+    {
+        var chat = new ChatItem
+        {
+            JID = "a@s.whatsapp.net",
+            IsChatPinned = false,
+            MutedUntil = 99
+        };
+
+        ChatLocalStateApply.Apply(
+            chat,
+            new ChatLocalState { Jid = "a@s.whatsapp.net", IsChatPinned = true });
+
+        Assert.True(chat.IsChatPinned);
+        Assert.Equal(99, chat.MutedUntil);
+    }
+
+    [Fact]
     public void A_null_chat_is_ignored_rather_than_thrown_at()
     {
         ChatLocalStateApply.Apply(null, new ChatLocalState { Jid = "a@s.whatsapp.net" });

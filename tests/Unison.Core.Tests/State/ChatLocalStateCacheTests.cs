@@ -160,6 +160,33 @@ namespace Unison.Core.Tests.State
         }
 
         [Fact]
+        public void Warm_does_not_overwrite_a_pin_the_cache_already_learned()
+        {
+            var cache = new ChatLocalStateCache();
+            cache.Mutate(Jid, state => state.IsChatPinned = true);
+
+            cache.LoadWarm(new[]
+            {
+                new ChatLocalState { Jid = Jid, IsChatPinned = false, MutedUntil = MuteDeadline }
+            });
+
+            ChatLocalState stored = cache.TryGet(Jid);
+            Assert.True(stored.IsChatPinned);
+            Assert.Equal(MuteDeadline, stored.MutedUntil);
+        }
+
+        [Fact]
+        public void Mutate_mute_alone_does_not_claim_to_know_the_pin()
+        {
+            var cache = new ChatLocalStateCache();
+            cache.Mutate(Jid, state => state.MutedUntil = MuteDeadline);
+
+            ChatLocalState stored = cache.TryGet(Jid);
+            Assert.True(stored.Knows(ChatLocalStateFields.Mute));
+            Assert.False(stored.Knows(ChatLocalStateFields.Pin));
+        }
+
+        [Fact]
         public void Blank_addresses_are_ignored_by_every_operation()
         {
             var cache = new ChatLocalStateCache();

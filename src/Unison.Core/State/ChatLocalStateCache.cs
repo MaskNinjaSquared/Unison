@@ -106,9 +106,9 @@ namespace Unison.Core.State
         }
 
         /// <summary>
-        /// Replaces the cache with what the table holds. Filled first, then the keys the table no
-        /// longer has are dropped: clearing up front leaves a window in which every chat reads as
-        /// "nothing stored", and a list hydrated inside it came out with no pins and no mutes.
+        /// Replaces missing rows from disk and fills unknown fields, without undoing a flag the
+        /// cache already learned. Warm runs while app-state / history are still remembering pins;
+        /// overwriting those with a disk row that has not caught up yet was clearing the list.
         /// </summary>
         public void LoadWarm(IEnumerable<ChatLocalState> rows)
         {
@@ -131,9 +131,15 @@ namespace Unison.Core.State
                     continue;
                 }
 
-                ChatLocalState stored = Clone(row);
-                stored.Jid = key;
-                _rows[key] = stored;
+                ChatLocalState fromDisk = Clone(row);
+                fromDisk.Jid = key;
+                fromDisk.KnownFields = ChatLocalStateFields.All;
+
+                _rows.AddOrUpdate(
+                    key,
+                    _ => fromDisk,
+                    (_, current) => MergeWarm(current, fromDisk));
+
                 loaded.Add(key);
             }
 
@@ -145,6 +151,38 @@ namespace Unison.Core.State
                     _rows.TryRemove(key, out dropped);
                 }
             }
+        }
+
+        /// <summary>
+        /// Disk fills fields the cache has not spoken about. Fields the cache already knows win —
+        /// they may be newer than SQLite while a write is still in flight.
+        /// </summary>
+        private static ChatLocalState MergeWarm(ChatLocalState cached, ChatLocalState fromDisk)
+        {
+            ChatLocalState merged = Clone(cached);
+            merged.Jid = fromDisk.Jid;
+
+            if (!merged.Knows(ChatLocalStateFields.Pin))
+            {
+                merged.IsChatPinned = fromDisk.IsChatPinned;
+            }
+
+            if (!merged.Knows(ChatLocalStateFields.Mute))
+            {
+                merged.MutedUntil = fromDisk.MutedUntil;
+            }
+
+            if (!merged.Knows(ChatLocalStateFields.WidgetPin))
+            {
+                merged.IsWidgetPinned = fromDisk.IsWidgetPinned;
+            }
+
+            if (!merged.Knows(ChatLocalStateFields.Status))
+            {
+                merged.Status = fromDisk.Status;
+            }
+
+            return merged;
         }
 
         private static string Key(string jid)
@@ -160,14 +198,28 @@ namespace Unison.Core.State
                 return null;
             }
 
-            return new ChatLocalState
+            var copy = new ChatLocalState { Jid = source.Jid };
+            if (source.Knows(ChatLocalStateFields.Status))
             {
-                Jid = source.Jid,
-                Status = source.Status,
-                IsChatPinned = source.IsChatPinned,
-                IsWidgetPinned = source.IsWidgetPinned,
-                MutedUntil = source.MutedUntil
-            };
+                copy.Status = source.Status;
+            }
+
+            if (source.Knows(ChatLocalStateFields.Pin))
+            {
+                copy.IsChatPinned = source.IsChatPinned;
+            }
+
+            if (source.Knows(ChatLocalStateFields.WidgetPin))
+            {
+                copy.IsWidgetPinned = source.IsWidgetPinned;
+            }
+
+            if (source.Knows(ChatLocalStateFields.Mute))
+            {
+                copy.MutedUntil = source.MutedUntil;
+            }
+
+            return copy;
         }
     }
 }
