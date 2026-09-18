@@ -5402,20 +5402,8 @@ namespace Unison.Uwp.Services.WhatsApp
             return MessageStatusProgression.ShouldApply(current, incoming);
         }
 
-        private static string MapWebMessageStatus(Proto.WebMessageInfo message)
-        {
-            if (message == null || !message.HasStatus) return null;
-            switch (message.Status)
-            {
-                case Proto.WebMessageInfo.Types.Status.Error: return ChatMessage.StatusFailed;
-                case Proto.WebMessageInfo.Types.Status.Pending: return ChatMessage.StatusPending;
-                case Proto.WebMessageInfo.Types.Status.ServerAck: return ChatMessage.StatusSent;
-                case Proto.WebMessageInfo.Types.Status.DeliveryAck: return ChatMessage.StatusDelivered;
-                case Proto.WebMessageInfo.Types.Status.Read:
-                case Proto.WebMessageInfo.Types.Status.Played: return ChatMessage.StatusRead;
-                default: return null;
-            }
-        }
+        private static string MapWebMessageStatus(Proto.WebMessageInfo message) =>
+            WebMessageStatusMap.FromWebMessageInfo(message);
 
         private static DateTime UnixMillisecondsToUtc(long milliseconds)
         {
