@@ -4379,12 +4379,19 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             DateTime newestUtc = GetNewestStoredMessageUtc();
             DateTime watermarkUtc = _catchUpWatermarkUtc;
-            bool tipAdvanced = newestUtc != DateTime.MinValue && newestUtc > watermarkUtc;
-            // Chunks that fill older history do not move GetNewestStoredMessageUtc — count them.
-            bool madeProgress = tipAdvanced || progressSignals > 0;
             string staleReason;
             bool stillStale = TryGetHistoryFreshnessStaleReason(DateTime.UtcNow, out staleReason);
             int stagnantStop = CatchUpStagnantCyclesBeforeStop;
+
+            HistoryCatchUpContinueResult decision = HistoryCatchUpContinueDecision.Decide(
+                newestUtc,
+                watermarkUtc,
+                progressSignals,
+                stillStale,
+                _catchUpStagnantCycles,
+                stagnantStop,
+                _catchUpContinueRound,
+                CatchUpContinueMaxRounds);
 
             RuntimeDiagnosticsService.Instance.Write(
                 "history",
@@ -4394,71 +4401,49 @@ namespace Unison.Uwp.Services.WhatsApp
                 "; signals=" + progressSignals +
                 "; ackAccepted=" + ackAccepted +
                 "; stillStale=" + stillStale +
-                "; tipAdvanced=" + tipAdvanced +
-                "; madeProgress=" + madeProgress +
+                "; tipAdvanced=" + decision.TipAdvanced +
+                "; madeProgress=" + decision.MadeProgress +
                 "; newest=" + FormatFreshnessTimestamp(newestUtc) +
                 "; watermark=" + FormatFreshnessTimestamp(watermarkUtc) +
                 "; round=" + _catchUpContinueRound +
                 "; stagnant=" + _catchUpStagnantCycles +
                 "; stagnantStop=" + stagnantStop +
                 "; frugal=" + UseFrugalSyncBudget +
+                "; action=" + decision.Action +
                 "; trigger=" + (triggerReason ?? string.Empty));
 
             Debug.WriteLine(
                 "[WhatsAppService] Catch-up idle decide: requestId=" + (requestId ?? "<none>") +
                 ", stillStale=" + stillStale +
-                ", tipAdvanced=" + tipAdvanced +
-                ", madeProgress=" + madeProgress +
+                ", tipAdvanced=" + decision.TipAdvanced +
+                ", madeProgress=" + decision.MadeProgress +
                 ", signals=" + progressSignals +
                 ", newest=" + FormatFreshnessTimestamp(newestUtc) +
                 ", watermark=" + FormatFreshnessTimestamp(watermarkUtc) +
                 ", round=" + _catchUpContinueRound +
                 ", stagnant=" + _catchUpStagnantCycles +
-                "/" + stagnantStop);
+                "/" + stagnantStop +
+                ", action=" + decision.Action);
 
-            if (madeProgress)
-            {
-                if (tipAdvanced)
-                {
-                    _catchUpWatermarkUtc = newestUtc;
-                }
+            _catchUpStagnantCycles = decision.NextStagnantCycles;
+            _catchUpWatermarkUtc = decision.NextWatermarkUtc;
 
-                _catchUpStagnantCycles = 0;
-            }
-            else
+            switch (decision.Action)
             {
-                _catchUpStagnantCycles++;
-            }
+                case HistoryCatchUpContinueAction.FinishFreshAndStagnant:
+                    FinishHistoryCatchUpContinue("fresh-and-stagnant", releaseEnrichment: true);
+                    return;
 
-            // Tip age "fresh" is only a soft signal: require a stalled lot before ending.
-            if (!stillStale && _catchUpStagnantCycles >= stagnantStop)
-            {
-                FinishHistoryCatchUpContinue("fresh-and-stagnant", releaseEnrichment: true);
-                return;
+                case HistoryCatchUpContinueAction.FinishStagnantProgress:
+                    FinishHistoryCatchUpContinue("stagnant-progress", releaseEnrichment: true);
+                    return;
+
+                case HistoryCatchUpContinueAction.FinishMaxContinues:
+                    FinishHistoryCatchUpContinue("max-continues", releaseEnrichment: true);
+                    return;
             }
 
-            if (_catchUpStagnantCycles >= stagnantStop)
-            {
-                FinishHistoryCatchUpContinue("stagnant-progress", releaseEnrichment: true);
-                return;
-            }
-
-            if (_catchUpContinueRound >= CatchUpContinueMaxRounds)
-            {
-                FinishHistoryCatchUpContinue("max-continues", releaseEnrichment: true);
-                return;
-            }
-
-            if (newestUtc != DateTime.MinValue && newestUtc > _catchUpWatermarkUtc)
-            {
-                _catchUpWatermarkUtc = newestUtc;
-            }
-            else if (_catchUpWatermarkUtc == DateTime.MinValue && newestUtc != DateTime.MinValue)
-            {
-                _catchUpWatermarkUtc = newestUtc;
-            }
-
-            _catchUpContinueRound++;
+            _catchUpContinueRound = decision.NextContinueRound;
             // Insist on the next FULL_HISTORY page on the live socket. Soft-reconnect alone does
             // not solicit history — and a reconnect with an empty offline buffer never re-enters
             // LogHistoryFreshnessAfterOfflineDrain in a way that asks again.
