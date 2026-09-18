@@ -304,15 +304,8 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             }
         }
 
-        private static bool ShouldRaiseAvatarProgress(int fetchedSoFar, int batchCount)
-        {
-            if (fetchedSoFar == 0 || fetchedSoFar + 1 >= batchCount)
-            {
-                return true;
-            }
-
-            return (fetchedSoFar % AvatarStatusProgressStride) == 0;
-        }
+        private static bool ShouldRaiseAvatarProgress(int fetchedSoFar, int batchCount) =>
+            AvatarBatchProgressRaise.ShouldRaise(fetchedSoFar, batchCount, AvatarStatusProgressStride);
 
         private static bool IsBackoffActive(ChatItem chat, DateTime nowUtc)
         {
