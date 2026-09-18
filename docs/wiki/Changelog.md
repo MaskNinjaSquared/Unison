@@ -4,6 +4,20 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Pin / mute still wiped mid-sync — mute-only cache stub
+
+The earlier write-merge fix was necessary but not sufficient. `RememberMutedUntil` (and any
+single-field remember) created a cache row whose *other* fields defaulted to off. `ApplyTo` then
+treated `IsChatPinned = false` as an answer and cleared favourites that history or app-state had
+already put on the row. Warming the store from SQLite could also overwrite a pin still only in the
+cache.
+
+`ChatLocalState` now tracks which fields are known; `ChatLocalStateApply` only assigns those.
+Warm merges unknown fields from disk and leaves known cache flags alone. PN/LID dedupe carries mute
+as well as pin, and the alias fallback no longer stops at a mute-only stub for the exact JID.
+
+---
+
 ## Pin / mute dropped from the list during a sync — found and fixed
 
 Two independent causes, one symptom.
