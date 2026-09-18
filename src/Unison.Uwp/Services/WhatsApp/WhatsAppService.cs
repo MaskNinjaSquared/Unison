@@ -7048,25 +7048,8 @@ namespace Unison.Uwp.Services.WhatsApp
             return null;
         }
 
-        private static bool LooksLikeUserJid(string value)
-        {
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                return false;
-            }
-
-            string trimmed = value.Trim();
-            if (trimmed.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase) ||
-                trimmed.EndsWith("@broadcast", StringComparison.OrdinalIgnoreCase) ||
-                trimmed.EndsWith("@newsletter", StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-
-            return trimmed.EndsWith("@s.whatsapp.net", StringComparison.OrdinalIgnoreCase) ||
-                   trimmed.EndsWith("@lid", StringComparison.OrdinalIgnoreCase) ||
-                   trimmed.EndsWith("@hosted", StringComparison.OrdinalIgnoreCase);
-        }
+        private static bool LooksLikeUserJid(string value) =>
+            UserJidShape.Matches(value);
 
         private static bool TryReadProtoVarint(byte[] buffer, ref int index, out ulong value)
         {
