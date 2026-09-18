@@ -2550,8 +2550,84 @@ namespace Unison.Uwp.Services.WhatsApp
                 int total = Math.Max(processed, 1);
                 PublishInitialSyncProgress(false, true, processed, total, "sqlite-finalized");
                 _sqliteHistoryConversationsAccumulated = 0;
-                ClearFullHistoryOnDemandRequestState("sqlite-finalized");
-                EndHistoryCatchUpBanner("sqlite-finalized");
+
+                // Paginated FULL_HISTORY catch-up: a quiet SQLite lot must not clear the
+                // in-flight request and kill the banner — that made the watchdog exit with
+                // request-cleared before DecideCatchUpAfterIdleBatch could solicit the next
+                // page, so only one bounce ever ran. Hand the lot to the continue decision
+                // instead (same path as idle/hard-timeout).
+                string lotRequestId = null;
+                bool lotAckAccepted = false;
+                int lotProgressSignals = 0;
+                string lotTrigger = "sqlite-lot-quiet";
+                bool handOffCatchUp = false;
+                lock (_historyOnDemandLock)
+                {
+                    string pendingId = !string.IsNullOrWhiteSpace(_fullHistoryOnDemandRequestId)
+                        ? _fullHistoryOnDemandRequestId
+                        : _fullHistoryRepairRequestId;
+                    HistoryOnDemandRequestState pendingState = null;
+                    if (!string.IsNullOrWhiteSpace(pendingId))
+                    {
+                        _historyOnDemandRequestById.TryGetValue(pendingId, out pendingState);
+                    }
+
+                    bool catchUpBanner = Volatile.Read(ref _historyCatchUpBannerActive) == 1 ||
+                                         _catchUpContinueRound > 0;
+                    bool pendingFull = pendingState != null &&
+                        string.Equals(
+                            pendingState.RequestType,
+                            "FullHistorySyncOnDemand",
+                            StringComparison.Ordinal);
+
+                    if (catchUpBanner || pendingFull)
+                    {
+                        handOffCatchUp = true;
+                        lotRequestId = pendingId;
+                        if (pendingState != null)
+                        {
+                            lotAckAccepted = pendingState.AckAccepted;
+                            lotProgressSignals = pendingState.ProgressSignalCount;
+                            lotTrigger = pendingState.TriggerReason ?? lotTrigger;
+                            ClearHistoryRequestStateLocked(pendingState);
+                        }
+                        else
+                        {
+                            _fullHistoryOnDemandRequestedThisSession = false;
+                            _fullHistoryOnDemandRequestId = null;
+                            _fullHistoryRepairRequestId = null;
+                        }
+
+                        Debug.WriteLine(
+                            "[WhatsAppService] SQLite quiet lot handed to catch-up continue: requestId=" +
+                            (lotRequestId ?? "<none>") +
+                            ", signals=" + lotProgressSignals +
+                            ", banner=" + (Volatile.Read(ref _historyCatchUpBannerActive) == 1));
+                    }
+                }
+
+                if (handOffCatchUp)
+                {
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "history",
+                        "catch-up-sqlite-lot-quiet",
+                        "requestId=" + (lotRequestId ?? string.Empty) +
+                        "; signals=" + lotProgressSignals +
+                        "; delayMs=" + delayMs +
+                        "; processed=" + processed);
+
+                    DecideCatchUpAfterIdleBatch(
+                        lotRequestId,
+                        lotAckAccepted,
+                        lotProgressSignals,
+                        "sqlite-lot-quiet:" + (lotTrigger ?? string.Empty),
+                        delayMs);
+                }
+                else
+                {
+                    ClearFullHistoryOnDemandRequestState("sqlite-finalized");
+                    EndHistoryCatchUpBanner("sqlite-finalized");
+                }
 
                 // After history quiet: re-read newest history_message per visible chat so the
                 // list strip matches SQLite even when preview rows lagged or skipped fromMe.
