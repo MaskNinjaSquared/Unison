@@ -1487,16 +1487,14 @@ namespace Unison.Uwp.Services
 
             if (value.PinAction != null && !string.IsNullOrWhiteSpace(chatJid))
             {
-                long? pinTimestamp = value.PinAction.Pinned
-                    ? AppStatePinMapping.NormalizeSortKey(
-                        value.Timestamp > 0
-                            ? value.Timestamp
-                            : DateTimeOffset.UtcNow.ToUnixTimeMilliseconds())
-                    : 0;
+                AppStatePinMapping.Result pin = AppStatePinMapping.FromAction(
+                    value.PinAction.Pinned,
+                    value.Timestamp,
+                    DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
                 await _owner.ApplyAppStateChatFlagsAsync(
                     chatJid,
-                    pinned: value.PinAction.Pinned,
-                    pinnedTimestamp: pinTimestamp);
+                    pinned: pin.IsPinned,
+                    pinnedTimestamp: pin.PinnedTimestampUnixSeconds);
                 return true;
             }
 

@@ -5272,7 +5272,11 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            if (update.Archived.HasValue || update.Pinned.HasValue || update.AppliesMute || update.MuteEndTime.HasValue)
+            if (update.Archived.HasValue ||
+                update.AppliesPin ||
+                update.Pinned.HasValue ||
+                update.AppliesMute ||
+                update.MuteEndTime.HasValue)
             {
                 long? muteSeconds = null;
                 bool applyMute = update.AppliesMute;
@@ -5294,12 +5298,28 @@ namespace Unison.Uwp.Services.WhatsApp
                     applyMute = true;
                 }
 
-                long? pinTs = AppStatePinMapping.NormalizeSortKey(update.Pinned);
+                bool? pinned = null;
+                long? pinTs = null;
+                if (update.AppliesPin)
+                {
+                    AppStatePinMapping.Result pin = AppStatePinMapping.FromAction(
+                        pinned: update.Pinned.HasValue,
+                        actionTimestamp: update.Pinned ?? 0,
+                        fallbackTimestampMs: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+                    pinned = pin.IsPinned;
+                    pinTs = pin.PinnedTimestampUnixSeconds;
+                }
+                else if (update.Pinned.HasValue)
+                {
+                    // Legacy: positive timestamp = pinned, 0 = unpin.
+                    pinned = update.Pinned.Value > 0;
+                    pinTs = AppStatePinMapping.NormalizeSortKey(update.Pinned);
+                }
 
                 await ApplyAppStateChatFlagsAsync(
                     update.Id,
                     archived: update.Archived,
-                    pinned: update.Pinned.HasValue ? (bool?)(update.Pinned.Value > 0) : null,
+                    pinned: pinned,
                     muteEndTimestamp: muteSeconds,
                     pinnedTimestamp: pinTs,
                     applyMute: applyMute);
