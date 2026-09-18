@@ -5272,15 +5272,37 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            if (update.Archived.HasValue || update.Pinned.HasValue || update.MuteEndTime.HasValue)
+            if (update.Archived.HasValue || update.Pinned.HasValue || update.AppliesMute || update.MuteEndTime.HasValue)
             {
+                long? muteSeconds = null;
+                bool applyMute = update.AppliesMute;
+                if (applyMute)
+                {
+                    // Wire timestamps are usually ms; ChatItem.MutedUntil is unix seconds.
+                    AppStateMuteMapping.Result mute = AppStateMuteMapping.FromAction(
+                        muted: update.MuteEndTime.HasValue,
+                        muteEndTimestamp: update.MuteEndTime ?? 0);
+                    muteSeconds = mute.MutedUntilUnixSeconds;
+                }
+                else if (update.MuteEndTime.HasValue)
+                {
+                    // Legacy updates without AppliesMute still carried a deadline.
+                    AppStateMuteMapping.Result mute = AppStateMuteMapping.FromAction(
+                        muted: true,
+                        muteEndTimestamp: update.MuteEndTime.Value);
+                    muteSeconds = mute.MutedUntilUnixSeconds;
+                    applyMute = true;
+                }
+
+                long? pinTs = AppStatePinMapping.NormalizeSortKey(update.Pinned);
+
                 await ApplyAppStateChatFlagsAsync(
                     update.Id,
                     archived: update.Archived,
                     pinned: update.Pinned.HasValue ? (bool?)(update.Pinned.Value > 0) : null,
-                    muteEndTimestamp: update.MuteEndTime,
-                    pinnedTimestamp: update.Pinned,
-                    applyMute: update.MuteEndTime.HasValue);
+                    muteEndTimestamp: muteSeconds,
+                    pinnedTimestamp: pinTs,
+                    applyMute: applyMute);
             }
 
             if (update.UnreadCount.HasValue)

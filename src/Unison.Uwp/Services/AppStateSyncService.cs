@@ -12,6 +12,7 @@ using Unison.Baileys.Crypto;
 using Unison.Baileys.Protocol;
 
 using Unison.Baileys.Client;
+using Unison.Core.Helpers;
 using Unison.Uwp.Services.WhatsApp;
 
 namespace Unison.Uwp.Services
@@ -1487,8 +1488,11 @@ namespace Unison.Uwp.Services
             if (value.PinAction != null && !string.IsNullOrWhiteSpace(chatJid))
             {
                 long? pinTimestamp = value.PinAction.Pinned
-                    ? (long?)(value.Timestamp > 0 ? value.Timestamp : DateTimeOffset.UtcNow.ToUnixTimeMilliseconds())
-                    : null;
+                    ? AppStatePinMapping.NormalizeSortKey(
+                        value.Timestamp > 0
+                            ? value.Timestamp
+                            : DateTimeOffset.UtcNow.ToUnixTimeMilliseconds())
+                    : 0;
                 await _owner.ApplyAppStateChatFlagsAsync(
                     chatJid,
                     pinned: value.PinAction.Pinned,
@@ -1498,8 +1502,13 @@ namespace Unison.Uwp.Services
 
             if (value.MuteAction != null && !string.IsNullOrWhiteSpace(chatJid))
             {
-                long? muteEnd = value.MuteAction.Muted ? (long?)value.MuteAction.MuteEndTimestamp : null;
-                await _owner.ApplyAppStateChatFlagsAsync(chatJid, muteEndTimestamp: muteEnd, applyMute: true);
+                AppStateMuteMapping.Result mute = AppStateMuteMapping.FromAction(
+                    value.MuteAction.Muted,
+                    value.MuteAction.MuteEndTimestamp);
+                await _owner.ApplyAppStateChatFlagsAsync(
+                    chatJid,
+                    muteEndTimestamp: mute.MutedUntilUnixSeconds,
+                    applyMute: true);
                 return true;
             }
 

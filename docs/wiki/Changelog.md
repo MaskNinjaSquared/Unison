@@ -4,6 +4,22 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Pin / mute vs Baileys 7.0.0-rc14 (protocol)
+
+Compared with rc14 `processSyncAction` (`chat-utils.ts`):
+
+- **Unmute** must be `muteEndTime: null`. We emitted `0`, and `ChatMuteHelper` treats `0` as
+  forever — so an unmute from app-state looked permanently muted.
+- **Mute deadlines** on the wire are usually milliseconds; `ChatItem.MutedUntil` is unix seconds.
+  History already converted; app-state did not — mid-sync mutes looked eternal.
+- **Pin sort keys** mix `Conversation.pinned` (seconds) with `SyncActionValue.timestamp` (ms);
+  normalize to seconds so order does not prefer the wrong unit.
+
+`SyncActionProcessor` now sets `AppliesMute` and null for unmute; the host maps through
+`AppStateMuteMapping` / `AppStatePinMapping`.
+
+---
+
 ## Pin / mute still wiped mid-sync — mute-only cache stub
 
 The earlier write-merge fix was necessary but not sufficient. `RememberMutedUntil` (and any
