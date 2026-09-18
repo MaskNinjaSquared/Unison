@@ -137,11 +137,14 @@ namespace Unison.Socket.AppState
 
             if (value.MuteAction != null)
             {
+                // Baileys processSyncAction: muted → muteEndTimestamp, else null.
+                // Zero is forever on ChatItem — never emit it for unmute.
                 chats.Add(new ChatUpdate(id)
                 {
+                    AppliesMute = true,
                     MuteEndTime = value.MuteAction.Muted
                         ? unchecked((long)value.MuteAction.MuteEndTimestamp)
-                        : 0
+                        : (long?)null
                 });
                 return;
             }

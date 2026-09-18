@@ -33,8 +33,17 @@ namespace Unison.Socket.Models
         /// <summary>Unix seconds of the newest message, used for ordering the list.</summary>
         public long? ConversationTimestamp { get; set; }
 
-        /// <summary>Unix seconds when the mute expires, or 0 to unmute.</summary>
+        /// <summary>
+        /// Unix seconds when the mute expires. Null with <see cref="AppliesMute"/> means unmuted
+        /// (Baileys rc14). Zero means forever — never use zero to unmute.
+        /// </summary>
         public long? MuteEndTime { get; set; }
+
+        /// <summary>
+        /// True when this update speaks about mute. Distinguishes "untouched" from
+        /// <see cref="MuteEndTime"/> = null (explicit unmute).
+        /// </summary>
+        public bool AppliesMute { get; set; }
 
         public bool? Archived { get; set; }
 
