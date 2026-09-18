@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -194,11 +194,8 @@ namespace Unison.Uwp.Services.WhatsApp
         private Task<string> ConvertWebPBytesToDisplayPngAsync(byte[] imageBytes, string fileBase) =>
             _mediaDerivation.EnsurePngDisplayCopyAsync(imageBytes, fileBase);
 
-        private static bool IsWebPCacheUri(string uri)
-        {
-            return !string.IsNullOrWhiteSpace(uri)
-                && uri.EndsWith(".webp", StringComparison.OrdinalIgnoreCase);
-        }
+        private static bool IsWebPCacheUri(string uri) =>
+            WebPCacheUri.Matches(uri);
 
         private Task<byte[]> TryReadCachedImageBytesAsync(string msAppDataUri) =>
             _mediaCache.TryReadAsync(msAppDataUri);
