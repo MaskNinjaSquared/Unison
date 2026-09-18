@@ -11,8 +11,6 @@ namespace Unison.Core.Tests.Helpers
         [Fact]
         public void Unmute_is_null_not_zero()
         {
-            // Baileys processSyncAction: muted=false → muteEndTime: null.
-            // Our ChatMuteHelper treats 0 as forever — emitting 0 for unmute made the icon stick.
             AppStateMuteMapping.Result result = AppStateMuteMapping.FromAction(
                 muted: false,
                 muteEndTimestamp: 0);
@@ -35,7 +33,6 @@ namespace Unison.Core.Tests.Helpers
         [Fact]
         public void Millisecond_deadlines_become_unix_seconds()
         {
-            // Wire / SyncActionValue timestamps are usually ms; ChatItem.MutedUntil is seconds.
             long ms = 1_700_000_000_000L;
             AppStateMuteMapping.Result result = AppStateMuteMapping.FromAction(
                 muted: true,
@@ -55,13 +52,43 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
-        public void Pin_timestamp_in_ms_normalizes_to_seconds_for_sort()
+        public void Pin_with_missing_timestamp_is_still_pinned()
         {
-            // History Conversation.pinned is uint32 seconds; SyncActionValue.timestamp is ms.
-            // Mixing them left app-state pins always sorting above history pins.
-            Assert.Equal(
-                1_700_000_000L,
-                AppStatePinMapping.NormalizeSortKey(1_700_000_000_000L));
+            // SyncActionValue.timestamp defaults to 0 when absent. Collapsing that into
+            // Pinned=0 made the host treat a real pin as an unpin (Pinned.Value > 0).
+            AppStatePinMapping.Result result = AppStatePinMapping.FromAction(
+                pinned: true,
+                actionTimestamp: 0,
+                fallbackTimestampMs: 1_700_000_000_123L);
+
+            Assert.True(result.AppliesPin);
+            Assert.True(result.IsPinned);
+            Assert.Equal(1_700_000_000L, result.PinnedTimestampUnixSeconds);
+        }
+
+        [Fact]
+        public void Pin_with_ms_timestamp_normalizes_to_seconds()
+        {
+            AppStatePinMapping.Result result = AppStatePinMapping.FromAction(
+                pinned: true,
+                actionTimestamp: 1_700_000_000_000L,
+                fallbackTimestampMs: 99);
+
+            Assert.True(result.IsPinned);
+            Assert.Equal(1_700_000_000L, result.PinnedTimestampUnixSeconds);
+        }
+
+        [Fact]
+        public void Unpin_clears_the_sort_key()
+        {
+            AppStatePinMapping.Result result = AppStatePinMapping.FromAction(
+                pinned: false,
+                actionTimestamp: 1_700_000_000L,
+                fallbackTimestampMs: 99);
+
+            Assert.True(result.AppliesPin);
+            Assert.False(result.IsPinned);
+            Assert.Equal(0, result.PinnedTimestampUnixSeconds);
         }
 
         [Fact]
@@ -70,13 +97,6 @@ namespace Unison.Core.Tests.Helpers
             Assert.Equal(
                 1_700_000_000L,
                 AppStatePinMapping.NormalizeSortKey(1_700_000_000L));
-        }
-
-        [Fact]
-        public void Unpin_sort_key_is_zero()
-        {
-            Assert.Equal(0, AppStatePinMapping.NormalizeSortKey(0));
-            Assert.Null(AppStatePinMapping.NormalizeSortKey(null));
         }
     }
 }

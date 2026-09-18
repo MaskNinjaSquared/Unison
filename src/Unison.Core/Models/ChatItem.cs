@@ -177,10 +177,10 @@ namespace Unison.Core.Models
         public bool HasUnread => _unreadCount > 0;
 
         /// <summary>
-        /// Favourite chats. Always false until favourites are persisted; the list filter still
-        /// consults this so the UI can ship before the feature does.
+        /// Favourite / pinned chat for list filters. Same flag as the pin icon
+        /// (<see cref="IsChatPinned"/>) — the protocol has no separate favourites store.
         /// </summary>
-        public bool IsFavorite => false;
+        public bool IsFavorite => IsChatPinned;
 
         /// <summary>
         /// Local unsent draft. Always false until drafts are stored on the chat row.
@@ -445,6 +445,7 @@ namespace Unison.Core.Models
                 if (_isChatPinned == value) return;
                 _isChatPinned = value;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(IsFavorite));
             }
         }
 

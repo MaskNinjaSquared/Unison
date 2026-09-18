@@ -4,6 +4,16 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Protocol pins still missing after mute fix — timestamp 0 = unpin
+
+Baileys emits `pinned: timestamp` when `pinAction.pinned` is true, else `null`. Our processor wrote
+`Pinned = timestamp` and the host decided pin with `Pinned > 0`. Protobuf leaves
+`SyncActionValue.timestamp` at **0** when absent, so a real pin collapsed to unpin and never set
+`IsChatPinned`. `AppliesPin` + fallback timestamp (like the legacy path) fix that. Also
+`IsFavorite` was hardcoded `false`, so the Favorites filter could never show pins.
+
+---
+
 ## Pin / mute vs Baileys 7.0.0-rc14 (protocol)
 
 Compared with rc14 `processSyncAction` (`chat-utils.ts`):
