@@ -47,8 +47,14 @@ namespace Unison.Socket.Models
 
         public bool? Archived { get; set; }
 
-        /// <summary>Sort key for a pinned chat; 0 unpins.</summary>
+        /// <summary>Sort key for a pinned chat when <see cref="AppliesPin"/>; null unpins.</summary>
         public long? Pinned { get; set; }
+
+        /// <summary>
+        /// True when this update speaks about pin. Distinguishes "untouched" from
+        /// <see cref="Pinned"/> = null (explicit unpin), matching Baileys rc14.
+        /// </summary>
+        public bool AppliesPin { get; set; }
 
         public bool? MarkedAsUnread { get; set; }
 
