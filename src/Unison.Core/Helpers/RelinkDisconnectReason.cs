@@ -4,10 +4,10 @@
 // Disconnect reasons that mean the companion must re-link (session invalid /
 // replaced / forbidden / bad), not a soft network drop.
 // =============================================================================
+using Unison.Core.Models;
+
 namespace Unison.Core.Helpers
 {
-    using Unison.Core.Models;
-
     public static class RelinkDisconnectReason
     {
         public static bool Matches(DisconnectReason reason)
