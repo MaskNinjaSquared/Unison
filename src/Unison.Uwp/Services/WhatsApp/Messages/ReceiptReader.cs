@@ -99,34 +99,8 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             };
         }
 
-        private static string MapStatus(string receiptType)
-        {
-            if (string.IsNullOrWhiteSpace(receiptType))
-            {
-                return ChatMessage.StatusDelivered;
-            }
-
-            if (string.Equals(receiptType, "sender", StringComparison.OrdinalIgnoreCase))
-            {
-                return ChatMessage.StatusSent;
-            }
-
-            if (string.Equals(receiptType, "read", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(receiptType, "read-self", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(receiptType, "played", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(receiptType, "played-self", StringComparison.OrdinalIgnoreCase))
-            {
-                return ChatMessage.StatusRead;
-            }
-
-            if (string.Equals(receiptType, "delivery", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(receiptType, "delivered", StringComparison.OrdinalIgnoreCase))
-            {
-                return ChatMessage.StatusDelivered;
-            }
-
-            return null;
-        }
+        private static string MapStatus(string receiptType) =>
+            ReceiptTypeStatusMap.FromReceiptType(receiptType);
 
         /// <summary>
         /// How many distinct other people a group message has to reach before its tick can fill in.
