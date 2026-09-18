@@ -10,7 +10,8 @@ Safe extract loop continued: unit tests that pin today’s behaviour, then a Cor
 one-line forward from the client / façade. New helpers include `HistoryCatchUpContinueDecision`,
 `HistoryFreshnessStaleDecision`, `AutomaticPlaceholderRecoveryTrigger`, `ExplicitLogoutStreamCode`,
 `ListEnrichmentPhase`, `UserJidShape`, `HistoryOnDemandSyncType`, `GroupAvatarFallbackDecision`,
-`RelinkDisconnectReason`, `WebPCacheUri`, and `WebMessageStatusMap`. No product behaviour change
+`RelinkDisconnectReason`, `WebPCacheUri`, `WebMessageStatusMap`, `LegacyGroupAvatarMissReason`,
+`ReceiptTypeStatusMap`, and `AvatarBatchProgressRaise`. No product behaviour change
 intended — orchestration stays where it was.
 
 ---
