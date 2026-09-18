@@ -732,6 +732,15 @@ SQLite). Tip refresh / bulk re-tip / in-memory list reconcile is `IChatService.R
 host `MessagesByChat`). Pump still owns alias-consolidate side-effects, offline summary
 *recording*, placeholder/missing ledger and the queue itself.
 
+### Pure-rule nibble (ongoing, before façade moves)
+
+When a method is still too large to move whole, lift the pure decision first: write tests that
+match today’s client code, add a Core helper, forward with a one-liner, commit extract then wire.
+Recent lifts from `WhatsAppService` / façades include catch-up continue + freshness stale,
+placeholder recovery trigger, explicit logout stream codes, list enrichment phases, user-JID
+shape, on-demand sync type, group avatar fallback, relink disconnect reasons, WebP cache URI,
+and web-message status map. Orchestration stays behind the forward.
+
 ### Phase 4 — What remains is connection
 
 `.Connection.cs` is this phase's target file. **No further pure-rule extraction there:**

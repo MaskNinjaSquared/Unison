@@ -4,6 +4,47 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Pure rules lifted out of WhatsAppService (phase-3 nibble)
+
+Safe extract loop continued: unit tests that pin today’s behaviour, then a Core helper, then a
+one-line forward from the client / façade. New helpers include `HistoryCatchUpContinueDecision`,
+`HistoryFreshnessStaleDecision`, `AutomaticPlaceholderRecoveryTrigger`, `ExplicitLogoutStreamCode`,
+`ListEnrichmentPhase`, `UserJidShape`, `HistoryOnDemandSyncType`, `GroupAvatarFallbackDecision`,
+`RelinkDisconnectReason`, `WebPCacheUri`, and `WebMessageStatusMap`. No product behaviour change
+intended — orchestration stays where it was.
+
+---
+
+## FULL_HISTORY catch-up pagination stopped after one bounce
+
+SQLite quiet finalize (`sqlite-finalized`, ~900 ms after a Full lot) was clearing the
+in-flight `FULL_HISTORY` request and ending the catch-up banner. The idle watchdog then
+exited with `request-cleared` and never called `DecideCatchUpAfterIdleBatch`, so adjacent
+pages never ran. Quiet lots during an active catch-up now hand off to that continue path
+(banner stays up) instead of treating the first lot as finished.
+
+---
+
+## Group author strip survives restart + no group-title fallback
+
+`HistoryChatPreviewStore` now treats author/sender/participant changes as strip
+updates and writes those columns on same-tip upserts (projection persist used to
+be a no-op on disk). Live tip apply no longer blanks a resolved `LastMessageAuthor`
+with an empty prefix. Group subject is rejected as a sender label (legacy sync
+fallback) in projection, live apply, and `ComposeAuthor`.
+
+---
+
+## Pin/mute survive history tip refresh + live list order
+
+History tip updates no longer call `IChatStore.ApplyTo` before pin/mute land in the cache
+(that was clearing `IsChatPinned` / `MutedUntil` while chunks kept arriving).
+`RememberChatPinned` / `RememberMutedUntil` stage the cache immediately; live tip refresh and
+reconcile use `ChatDisplayOrder.Reposition` / `SortInPlace` instead of `Move(0)` / tip-time-only
+sort so pinned rows stay on top. Visible move-to-match uses pin-aware order.
+
+---
+
 ## MeaningfulChatLabel + SelfIdentityHealingDecision (3.6 rules)
 
 `MeaningfulChatLabel` unifies UWP `IsMeaningfulChatLabel` with the weaker history
