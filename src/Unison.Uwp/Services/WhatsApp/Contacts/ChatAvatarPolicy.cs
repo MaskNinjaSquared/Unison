@@ -375,12 +375,8 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             return SiblingGroupAvatar.Find(chat, knownChats);
         }
 
-        private static bool IsLegacyGroupMissReason(string reason)
-        {
-            return string.Equals(reason, "server-error:404", StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(reason, "server-error:406", StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(reason, "no-picture", StringComparison.OrdinalIgnoreCase);
-        }
+        private static bool IsLegacyGroupMissReason(string reason) =>
+            LegacyGroupAvatarMissReason.Matches(reason);
 
         private static DateTime ToComparableUtc(DateTime timestamp) =>
             ChatMessageOrder.ToComparableUtc(timestamp);
