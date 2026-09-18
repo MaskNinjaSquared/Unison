@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Unison.Core.Constants;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
+using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Uwp.Services;
 using Unison.Uwp.Services.Socket;
@@ -505,13 +506,8 @@ namespace Unison.Uwp.Services.WhatsApp.Connection
             }
         }
 
-        private static bool IsRelinkReason(DisconnectReason reason)
-        {
-            return reason == DisconnectReason.LoggedOut ||
-                   reason == DisconnectReason.ConnectionReplaced ||
-                   reason == DisconnectReason.BadSession ||
-                   reason == DisconnectReason.Forbidden;
-        }
+        private static bool IsRelinkReason(DisconnectReason reason) =>
+            RelinkDisconnectReason.Matches(reason);
 
         private static string Describe(DisconnectReason reason, string code)
         {
