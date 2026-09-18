@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -1306,17 +1306,8 @@ namespace Unison.Uwp.Services.WhatsApp
             return TryGetHistoryFreshnessStaleReason(DateTime.UtcNow, out reason);
         }
 
-        private static bool IsAutomaticPlaceholderRecoveryTrigger(string trigger)
-        {
-            if (string.IsNullOrWhiteSpace(trigger))
-            {
-                return false;
-            }
-
-            return trigger.IndexOf("offline-complete", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                   trigger.IndexOf("deferred-drain", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                   trigger.IndexOf("socket:decrypt-failed", StringComparison.OrdinalIgnoreCase) >= 0;
-        }
+        private static bool IsAutomaticPlaceholderRecoveryTrigger(string trigger) =>
+            AutomaticPlaceholderRecoveryTrigger.Matches(trigger);
 
         private static DateTime ToComparableUtc(DateTime timestamp)
         {
