@@ -4,6 +4,27 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Pin / mute dropped from the list during a sync — found and fixed
+
+Two independent causes, one symptom.
+
+**The store was undoing its own per-field promise.** `ChatStore.WriteAsync` read the row, awaited
+SQLite, then put that copy back into the cache — and `InsertOrReplace` rewrites every column from
+it. Pin and mute arrive from two senders that overlap for the whole of a sync (app-state patches and
+the history `Conversation`), so whatever the other one remembered inside that await was erased, in
+the cache `ApplyTo` reads *and* in the durable row. The merge now happens next to the INSERT, on
+whatever the cache currently holds: `ChatLocalStateCache` (Core, 11 tests) owns that half of the
+store, and a disk read can no longer seed over a newer remembered flag.
+
+**A pin arriving mid-sync could not move its row.** The batch release loop only appends, and the
+debounced `RefreshVisibleChats` is suppressed while batching or in safe mode, so a conversation
+pinned from app-state stayed wherever its tip had put it until the sync ended. Order-bearing
+property changes (`ChatListReorderTrigger`: pin, pinned timestamp, status) now mark the visible
+order stale, and the release tick re-sorts in place — as does batch completion, which safe mode can
+outlive.
+
+---
+
 ## Pure rules lifted out of WhatsAppService (phase-3 nibble)
 
 Safe extract loop continued: unit tests that pin today’s behaviour, then a Core helper, then a
