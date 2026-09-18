@@ -675,11 +675,8 @@ namespace Unison.Uwp.Services.WhatsApp.History
             }
         }
 
-        private static bool IsOnDemandSyncType(string syncType)
-        {
-            return !string.IsNullOrEmpty(syncType) &&
-                   syncType.IndexOf("OnDemand", StringComparison.OrdinalIgnoreCase) >= 0;
-        }
+        private static bool IsOnDemandSyncType(string syncType) =>
+            HistoryOnDemandSyncType.Matches(syncType);
 
         /// <summary>
         /// Wipes the local conversations and asks the phone to send them again. The account stays
