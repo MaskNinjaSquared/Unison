@@ -984,22 +984,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 "; reason=" + (reason ?? string.Empty));
         }
 
-        private static bool IsListEnrichmentPhase(string status)
-        {
-            string phase;
-            int current;
-            int total;
-            if (!SyncPhaseStatus.TryParse(status, out phase, out current, out total))
-            {
-                return false;
-            }
-
-            return string.Equals(phase, SyncPhaseStatus.Settling, StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(phase, SyncPhaseStatus.Names, StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(phase, SyncPhaseStatus.Avatars, StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(phase, SyncPhaseStatus.Groups, StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(phase, SyncPhaseStatus.LowMemory, StringComparison.OrdinalIgnoreCase);
-        }
+        private static bool IsListEnrichmentPhase(string status) =>
+            ListEnrichmentPhase.Matches(status);
 
         bool IWhatsAppService.ShouldDeferAvatarFetch(out string reason) => ShouldDeferProfilePictureFetch(out reason);
 
