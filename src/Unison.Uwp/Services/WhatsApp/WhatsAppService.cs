@@ -5334,19 +5334,8 @@ namespace Unison.Uwp.Services.WhatsApp
         /// <summary>
         /// Phone revoked this companion (401 / 403 / the live <c>device_removed</c> stanza).
         /// </summary>
-        private static bool IsExplicitLogoutStreamCode(string code)
-        {
-            if (string.IsNullOrWhiteSpace(code))
-            {
-                return false;
-            }
-
-            string trimmed = code.Trim();
-            return string.Equals(trimmed, "401", StringComparison.Ordinal) ||
-                   string.Equals(trimmed, "403", StringComparison.Ordinal) ||
-                   string.Equals(trimmed, "device_removed", StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(trimmed, "device-removed", StringComparison.OrdinalIgnoreCase);
-        }
+        private static bool IsExplicitLogoutStreamCode(string code) =>
+            ExplicitLogoutStreamCode.Matches(code);
 
         /// <summary>
         /// Recovers the stream code behind a socket error, so disconnect policy can be applied to
