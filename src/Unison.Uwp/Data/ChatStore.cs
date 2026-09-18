@@ -1,5 +1,5 @@
 ﻿using System;
-using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
@@ -8,6 +8,7 @@ using SQLite;
 using Unison.Core.Contracts;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
+using Unison.Core.State;
 using Unison.Uwp.Data.Entities;
 using Windows.Storage;
 
@@ -20,8 +21,7 @@ namespace Unison.Uwp.Data
     {
         private static readonly string DatabaseFileName = "unison.db";
 
-        private readonly ConcurrentDictionary<string, ChatLocalState> _cache =
-            new ConcurrentDictionary<string, ChatLocalState>(StringComparer.OrdinalIgnoreCase);
+        private readonly ChatLocalStateCache _cache = new ChatLocalStateCache();
 
         private readonly SemaphoreSlim _initLock = new SemaphoreSlim(1, 1);
         private readonly SemaphoreSlim _writeLock = new SemaphoreSlim(1, 1);
@@ -61,66 +61,43 @@ namespace Unison.Uwp.Data
         public async Task WarmAsync()
         {
             await EnsureInitializedAsync().ConfigureAwait(false);
-            System.Collections.Generic.List<ChatRow> rows =
-                await _connection.Table<ChatRow>().ToListAsync().ConfigureAwait(false);
+            List<ChatRow> rows = await _connection.Table<ChatRow>().ToListAsync().ConfigureAwait(false);
             if (rows == null)
             {
                 return;
             }
-            // Filled first, then the stale keys are dropped. Clearing up front leaves a window in
-            // which the cache answers "nothing stored" for every chat, and ApplyTo reads the cache
-            // only - so a list hydrated during a warm came out with no pins and no mutes.
-            var loaded = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var states = new List<ChatLocalState>(rows.Count);
             foreach (ChatRow row in rows)
             {
                 ChatLocalState state = ToModel(row);
-                if (state != null && !string.IsNullOrEmpty(state.Jid))
+                if (state != null)
                 {
-                    _cache[state.Jid] = Clone(state);
-                    loaded.Add(state.Jid);
+                    states.Add(state);
                 }
             }
-            foreach (string key in new System.Collections.Generic.List<string>(_cache.Keys))
-            {
-                if (!loaded.Contains(key))
-                {
-                    ChatLocalState dropped;
-                    _cache.TryRemove(key, out dropped);
-                }
-            }
+
+            _cache.LoadWarm(states);
 
             Debug.WriteLine("[ChatStore] Warm loaded " + _cache.Count + " rows");
         }
 
         public ChatLocalState TryGetCached(string jid)
         {
-            string key = NormalizeJid(jid);
-            if (string.IsNullOrEmpty(key))
-            {
-                return null;
-            }
-
-            ChatLocalState cached;
-            if (_cache.TryGetValue(key, out cached))
-            {
-                return Clone(cached);
-            }
-
-            return null;
+            return _cache.TryGet(jid);
         }
 
         public async Task<ChatLocalState> GetAsync(string jid)
         {
-            string key = NormalizeJid(jid);
-            if (string.IsNullOrEmpty(key))
+            ChatLocalState cached = _cache.TryGet(jid);
+            if (cached != null)
             {
-                return null;
+                return cached;
             }
 
-            ChatLocalState cached;
-            if (_cache.TryGetValue(key, out cached))
+            string key = NormalizeJid(jid);
+            if (string.IsNullOrWhiteSpace(key))
             {
-                return Clone(cached);
+                return null;
             }
 
             await EnsureInitializedAsync().ConfigureAwait(false);
@@ -130,13 +107,13 @@ namespace Unison.Uwp.Data
                 return null;
             }
 
-            ChatLocalState state = ToModel(row);
-            _cache[key] = Clone(state);
-            return state;
+            _cache.Seed(ToModel(row));
+            return _cache.TryGet(key);
         }
 
         public Task SetChatPinnedAsync(string jid, bool pinned)
         {
+            RememberChatPinned(jid, pinned);
             return WriteAsync(jid, existing => existing.IsChatPinned = pinned);
         }
 
@@ -147,12 +124,23 @@ namespace Unison.Uwp.Data
 
         public Task SetMutedUntilAsync(string jid, long? mutedUntil)
         {
+            RememberMutedUntil(jid, mutedUntil);
             return WriteAsync(jid, existing => existing.MutedUntil = mutedUntil);
         }
 
         public Task SetStatusAsync(string jid, ChatStatus status)
         {
             return WriteAsync(jid, existing => existing.Status = status);
+        }
+
+        public void RememberChatPinned(string jid, bool pinned)
+        {
+            _cache.Mutate(jid, state => state.IsChatPinned = pinned);
+        }
+
+        public void RememberMutedUntil(string jid, long? mutedUntil)
+        {
+            _cache.Mutate(jid, state => state.MutedUntil = mutedUntil);
         }
 
         public void ApplyTo(ChatItem chat)
@@ -185,10 +173,21 @@ namespace Unison.Uwp.Data
             ChatLocalStateApply.Apply(chat, state);
         }
 
+        /// <summary>
+        /// Writes one field, and persists the row the cache holds after that write is merged in.
+        /// </summary>
+        /// <remarks>
+        /// The merge has to happen here, next to the INSERT, rather than on a copy taken before it.
+        /// Pin and mute arrive from two senders that overlap during a sync (app-state patches and
+        /// the history Conversation), so a writer that read the state, awaited SQLite and then put
+        /// its own copy back was undoing whatever the other one remembered inside that await —
+        /// in the cache, which <see cref="ApplyTo"/> reads, and in the row, which
+        /// <c>InsertOrReplace</c> rewrites whole.
+        /// </remarks>
         private async Task<ChatLocalState> WriteAsync(string jid, Action<ChatLocalState> mutate)
         {
             string key = NormalizeJid(jid);
-            if (string.IsNullOrEmpty(key) || mutate == null)
+            if (string.IsNullOrWhiteSpace(key) || mutate == null)
             {
                 return null;
             }
@@ -197,24 +196,20 @@ namespace Unison.Uwp.Data
             await _writeLock.WaitAsync().ConfigureAwait(false);
             try
             {
-                ChatLocalState next;
-                ChatLocalState cached;
-                if (_cache.TryGetValue(key, out cached))
-                {
-                    next = Clone(cached);
-                }
-                else
+                if (!_cache.Contains(key))
                 {
                     ChatRow row = await _connection.FindAsync<ChatRow>(key).ConfigureAwait(false);
-                    next = row != null ? ToModel(row) : new ChatLocalState { Jid = key };
+                    _cache.Seed(ToModel(row));
                 }
 
-                next.Jid = key;
-                mutate(next);
+                ChatLocalState next = _cache.Mutate(key, mutate);
+                if (next == null)
+                {
+                    return null;
+                }
 
                 await _connection.InsertOrReplaceAsync(ToRow(next)).ConfigureAwait(false);
-                _cache[key] = Clone(next);
-                return Clone(next);
+                return next;
             }
             finally
             {
@@ -254,7 +249,8 @@ namespace Unison.Uwp.Data
                 Status = status,
                 IsChatPinned = row.IsChatPinned,
                 IsWidgetPinned = row.IsWidgetPinned,
-                MutedUntil = row.MutedUntil
+                MutedUntil = row.MutedUntil,
+                KnownFields = ChatLocalStateFields.All
             };
         }
 
@@ -271,21 +267,5 @@ namespace Unison.Uwp.Data
             };
         }
 
-        private static ChatLocalState Clone(ChatLocalState source)
-        {
-            if (source == null)
-            {
-                return null;
-            }
-
-            return new ChatLocalState
-            {
-                Jid = source.Jid,
-                Status = source.Status,
-                IsChatPinned = source.IsChatPinned,
-                IsWidgetPinned = source.IsWidgetPinned,
-                MutedUntil = source.MutedUntil
-            };
-        }
     }
 }
