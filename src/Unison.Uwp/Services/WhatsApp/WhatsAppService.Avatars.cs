@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -332,15 +332,12 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private static bool ShouldTryGroupAvatarFallback(ProfilePictureResult result)
         {
-            if (result == null || !string.IsNullOrWhiteSpace(result.Url))
+            if (result == null)
             {
                 return false;
             }
 
-            return result.IsNotFound ||
-                   string.Equals(result.FailureReason, "server-error:401", StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(result.FailureReason, "server-error:404", StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(result.FailureReason, "server-error:406", StringComparison.OrdinalIgnoreCase);
+            return GroupAvatarFallbackDecision.ShouldTry(result.Url, result.IsNotFound, result.FailureReason);
         }
 
         private List<string> ExtractGroupAvatarFallbackJids(BinaryNode response, string groupJid)
