@@ -1528,52 +1528,22 @@ namespace Unison.Uwp.Services.WhatsApp
         private bool TryGetHistoryFreshnessStaleReason(DateTime nowUtc, out string reason)
         {
             DateTime newestAnyUtc = GetNewestStoredMessageUtc();
-            if (newestAnyUtc == DateTime.MinValue)
-            {
-                reason = "no-stored-messages";
-                return true;
-            }
+            DateTime newestNonSelfUtc = newestAnyUtc == DateTime.MinValue
+                ? DateTime.MinValue
+                : GetNewestStoredMessageUtc(jid => !IsSelfLinkedJid(jid));
+            bool hasGroups = HasGroupChats();
+            DateTime newestGroupUtc = hasGroups
+                ? GetNewestStoredMessageUtc(IsGroupJid)
+                : DateTime.MinValue;
 
-            DateTime newestNonSelfUtc = GetNewestStoredMessageUtc(jid => !IsSelfLinkedJid(jid));
-            if (newestNonSelfUtc == DateTime.MinValue)
-            {
-                reason = $"no-non-self-messages:newestAny={FormatFreshnessTimestamp(newestAnyUtc)}";
-                return true;
-            }
-
-            TimeSpan newestNonSelfAge = nowUtc - newestNonSelfUtc;
-            if (newestNonSelfAge > HistoryFreshnessStaleThreshold)
-            {
-                reason = $"non-self-stale:{newestNonSelfUtc:O}:ageMinutes={newestNonSelfAge.TotalMinutes:F1}:newestAny={FormatFreshnessTimestamp(newestAnyUtc)}";
-                return true;
-            }
-
-            if (HasGroupChats())
-            {
-                DateTime newestGroupUtc = GetNewestStoredMessageUtc(IsGroupJid);
-                if (newestGroupUtc == DateTime.MinValue)
-                {
-                    reason = $"no-group-messages:newestAny={FormatFreshnessTimestamp(newestAnyUtc)}:newestNonSelf={FormatFreshnessTimestamp(newestNonSelfUtc)}";
-                    return true;
-                }
-
-                TimeSpan newestGroupAge = nowUtc - newestGroupUtc;
-                if (newestGroupAge > HistoryFreshnessStaleThreshold)
-                {
-                    reason = $"group-stale:{newestGroupUtc:O}:ageMinutes={newestGroupAge.TotalMinutes:F1}:newestAny={FormatFreshnessTimestamp(newestAnyUtc)}:newestNonSelf={FormatFreshnessTimestamp(newestNonSelfUtc)}";
-                    return true;
-                }
-            }
-
-            TimeSpan newestAnyAge = nowUtc - newestAnyUtc;
-            if (newestAnyAge > HistoryFreshnessStaleThreshold)
-            {
-                reason = $"newest-stale:{newestAnyUtc:O}:ageMinutes={newestAnyAge.TotalMinutes:F1}";
-                return true;
-            }
-
-            reason = null;
-            return false;
+            return HistoryFreshnessStaleDecision.IsStale(
+                nowUtc,
+                newestAnyUtc,
+                newestNonSelfUtc,
+                hasGroups,
+                newestGroupUtc,
+                HistoryFreshnessStaleThreshold,
+                out reason);
         }
 
         private int GetStoredMessageCount()
