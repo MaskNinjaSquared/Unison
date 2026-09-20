@@ -60,6 +60,7 @@ namespace Unison.Core.Helpers
                 Jid = jid,
                 Name = chat.Name,
                 IsGroup = chat.IsGroup || JidHelper.IsGroupJid(jid),
+                Status = chat.Status,
                 UnreadCount = Math.Max(0, chat.UnreadCount),
                 LastMessage = chat.LastMessage,
                 LastMessageAuthor = chat.LastMessageAuthor,
@@ -113,7 +114,8 @@ namespace Unison.Core.Helpers
                 LastMessageMentionedJids = CopyMentioned(preview.LastMessageMentionedJids),
                 LastMessageTimestampUtc = preview.LastMessageTimestampUtc,
                 LastMessageId = preview.LastMessageId,
-                UnreadCount = Math.Max(0, preview.UnreadCount)
+                UnreadCount = Math.Max(0, preview.UnreadCount),
+                Status = preview.Status
             };
             chat.IsGroup = preview.IsGroup;
             return chat;
@@ -166,10 +168,48 @@ namespace Unison.Core.Helpers
                 LastMessageTimestampUtc = preview.LastMessageTimestampUtc,
                 LastMessageId = preview.LastMessageId,
                 UnreadCount = Math.Max(0, preview.UnreadCount),
+                Status = preview.Status,
                 Timestamp = WhatsAppMapper.FormatTimestamp(preview.LastMessageTimestampUtc, yesterdayLabel)
             };
             chat.IsGroup = preview.IsGroup;
+            ApplyLocalFlags(preview, chat);
             return chat;
+        }
+
+        /// <summary>
+        /// Pin / mute from the history Conversation onto the row. Idempotent when the
+        /// preview did not carry either flag.
+        /// </summary>
+        public static bool ApplyLocalFlags(HistoryChatPreview preview, ChatItem target)
+        {
+            if (preview == null || target == null)
+            {
+                return false;
+            }
+
+            if (!preview.IsChatPinned.HasValue && !preview.AppliesMute)
+            {
+                return false;
+            }
+
+            bool beforePinned = target.IsChatPinned;
+            long? beforePinnedTs = target.PinnedTimestamp;
+            long? beforeMute = target.MutedUntil;
+
+            AppStateChatMutation.ApplyFlags(
+                target,
+                new ChatFlagChange
+                {
+                    Pinned = preview.IsChatPinned,
+                    PinnedTimestamp = preview.PinnedTimestamp,
+                    AppliesMute = preview.AppliesMute,
+                    MuteEndTimestamp = preview.MutedUntil
+                },
+                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+
+            return beforePinned != target.IsChatPinned ||
+                   beforePinnedTs != target.PinnedTimestamp ||
+                   beforeMute != target.MutedUntil;
         }
 
         /// <summary>
@@ -214,6 +254,12 @@ namespace Unison.Core.Helpers
             }
 
             bool changed = false;
+            if (preview.Status != ChatStatus.Deleted && target.Status != preview.Status)
+            {
+                target.Status = preview.Status;
+                changed = true;
+            }
+
             DateTime incomingTs = preview.LastMessageTimestampUtc.HasValue
                 ? WhatsAppMapper.ToUtc(preview.LastMessageTimestampUtc.Value)
                 : DateTime.MinValue;
@@ -238,15 +284,27 @@ namespace Unison.Core.Helpers
                 (string.IsNullOrWhiteSpace(target.Name) ||
                  (incomingTs >= existingTs && incomingTs != DateTime.MinValue && !string.IsNullOrWhiteSpace(preview.Name))))
             {
-                // Prefer a non-empty name; overwrite on newer/equal only when existing looks empty/weak.
-                if (string.IsNullOrWhiteSpace(target.Name) ||
-                    (incomingTs >= existingTs && incomingTs != DateTime.MinValue))
+                // A phone number (or bare JID user part) from the sync must not wipe a name the
+                // contact directory already resolved. That is what left the list showing an ID
+                // next to a conversation the app already knew by name.
+                bool incomingMeaningful = MeaningfulChatLabel.IsMeaningful(
+                    preview.Name,
+                    preview.Jid,
+                    preview.IsGroup);
+                bool existingMeaningful = MeaningfulChatLabel.IsMeaningful(
+                    target.Name,
+                    target.JID,
+                    target.IsGroup);
+                if (ChatNameReplacement.ShouldReplace(
+                        target.Name,
+                        preview.Name,
+                        incomingMeaningful,
+                        existingMeaningful,
+                        preview.IsGroup) &&
+                    !string.Equals(target.Name, preview.Name, StringComparison.Ordinal))
                 {
-                    if (!string.Equals(target.Name, preview.Name, StringComparison.Ordinal))
-                    {
-                        target.Name = preview.Name;
-                        changed = true;
-                    }
+                    target.Name = preview.Name;
+                    changed = true;
                 }
             }
 
@@ -258,11 +316,27 @@ namespace Unison.Core.Helpers
                     changed = true;
                 }
 
-                target.LastMessageParticipantJid = preview.LastMessageParticipantJid;
-                target.LastMessageSenderName = preview.LastMessageSenderName;
+                // A bare LID/phone in the author strip is a stand-in. Do not let a sync chunk that
+                // never named the sender overwrite a strip ChatAuthorProjection already fixed.
+                bool incomingSenderUsable = GroupParticipantResolver.IsUsableDisplayLabel(
+                    preview.LastMessageSenderName,
+                    preview.LastMessageParticipantJid);
+                bool existingSenderUsable = GroupParticipantResolver.IsUsableDisplayLabel(
+                    target.LastMessageSenderName,
+                    target.LastMessageParticipantJid);
+                bool keepExistingSender = !incomingSenderUsable && existingSenderUsable;
+
+                if (!keepExistingSender)
+                {
+                    target.LastMessageParticipantJid = preview.LastMessageParticipantJid;
+                    target.LastMessageSenderName = preview.LastMessageSenderName;
+                }
+
                 target.LastMessageIsFromMe = preview.LastMessageIsFromMe;
 
-                string incomingAuthor = ComposeAuthor(preview, selfDisplayName);
+                string incomingAuthor = keepExistingSender
+                    ? target.LastMessageAuthor
+                    : ComposeAuthor(preview, selfDisplayName);
                 // Never blank out an author the live path already resolved: an empty incoming
                 // strip (chunk that never named the sender) must not overwrite a populated one.
                 bool wipesExisting = string.IsNullOrEmpty(incomingAuthor) &&
@@ -320,6 +394,11 @@ namespace Unison.Core.Helpers
             if (preview.IsGroup && !target.IsGroup)
             {
                 target.IsGroup = true;
+                changed = true;
+            }
+
+            if (ApplyLocalFlags(preview, target))
+            {
                 changed = true;
             }
 

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.DependencyInjection;
+using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Windows.UI;
@@ -141,17 +143,9 @@ namespace Unison.Uwp.UI.Helpers
                 return string.Empty;
             }
 
-            IWhatsAppService whatsApp = null;
-            try
-            {
-                whatsApp = App.GetWhatsAppService();
-            }
-            catch
-            {
-            }
-
-            IReadOnlyDictionary<string, string> lookup = BindLookup(mentionLookup, mentionedJids, whatsApp);
-            if ((lookup == null || lookup.Count == 0) && whatsApp == null)
+            MentionResolvers mentions = ResolveMentionServices();
+            IReadOnlyDictionary<string, string> lookup = BindLookup(mentionLookup, mentionedJids, mentions);
+            if ((lookup == null || lookup.Count == 0) && mentions.IsEmpty)
             {
                 return text;
             }
@@ -174,7 +168,7 @@ namespace Unison.Uwp.UI.Helpers
 
                 string token = m.Groups[1].Value;
                 string digits = MentionLookupBuilder.ExtractUserDigits(token);
-                string displayName = ResolveMentionDisplayName(digits, lookup, whatsApp);
+                string displayName = ResolveMentionDisplayName(digits, lookup, mentions);
                 if (MentionLookupBuilder.IsUsableName(displayName, digits))
                 {
                     sb.Append('@');
@@ -219,16 +213,8 @@ namespace Unison.Uwp.UI.Helpers
             Brush linkBrush = ResolveLinkBrush(block);
             Brush mentionBrush = ResolveMentionBrush(block);
 
-            IWhatsAppService whatsApp = null;
-            try
-            {
-                whatsApp = App.GetWhatsAppService();
-            }
-            catch
-            {
-            }
-
-            IReadOnlyDictionary<string, string> lookup = BindLookup(mentionLookup, mentionedJids, whatsApp);
+            MentionResolvers mentions = ResolveMentionServices();
+            IReadOnlyDictionary<string, string> lookup = BindLookup(mentionLookup, mentionedJids, mentions);
             var segments = MessageLinkParser.Parse(text);
             for (int i = 0; i < segments.Count; i++)
             {
@@ -238,7 +224,7 @@ namespace Unison.Uwp.UI.Helpers
                     Uri uri;
                     if (!Uri.TryCreate(segment.NavigateUrl, UriKind.Absolute, out uri))
                     {
-                        AppendPlainWithMentions(paragraph, segment.Text, lookup, whatsApp, mentionBrush);
+                        AppendPlainWithMentions(paragraph, segment.Text, lookup, mentions, mentionBrush);
                         continue;
                     }
 
@@ -253,7 +239,7 @@ namespace Unison.Uwp.UI.Helpers
                 }
                 else
                 {
-                    AppendPlainWithMentions(paragraph, segment.Text, lookup, whatsApp, mentionBrush);
+                    AppendPlainWithMentions(paragraph, segment.Text, lookup, mentions, mentionBrush);
                 }
             }
 
@@ -313,10 +299,42 @@ namespace Unison.Uwp.UI.Helpers
             return ResolveThemeBrush(mentionKey, DefaultMentionBrush);
         }
 
+        /// <summary>
+        /// What the app can offer for turning a mention token into a name. Both are absent before
+        /// the container is built, which is why every field is optional rather than required.
+        /// </summary>
+        private sealed class MentionResolvers
+        {
+            public IJidResolver Jids { get; set; }
+
+            public IContactService Contacts { get; set; }
+
+            public bool IsEmpty => Jids == null && Contacts == null;
+        }
+
+        private static MentionResolvers ResolveMentionServices()
+        {
+            var resolvers = new MentionResolvers();
+            try
+            {
+                IServiceProvider services = App.Services;
+                if (services != null)
+                {
+                    resolvers.Jids = services.GetService<IJidResolver>();
+                    resolvers.Contacts = services.GetService<IContactService>();
+                }
+            }
+            catch
+            {
+            }
+
+            return resolvers;
+        }
+
         private static IReadOnlyDictionary<string, string> BindLookup(
             IReadOnlyDictionary<string, string> rosterLookup,
             IEnumerable<string> mentionedJids,
-            IWhatsAppService whatsApp)
+            MentionResolvers mentions)
         {
             IReadOnlyDictionary<string, string> roster = rosterLookup ?? MentionLookupBuilder.Empty;
             if (mentionedJids == null)
@@ -337,13 +355,14 @@ namespace Unison.Uwp.UI.Helpers
             }
 
             Func<string, string> canonical = null;
-            if (whatsApp != null)
+            IJidResolver jids = mentions?.Jids;
+            if (jids != null)
             {
                 canonical = jid =>
                 {
                     try
                     {
-                        return whatsApp.GetCanonicalJid(jid);
+                        return jids.GetCanonicalJid(jid);
                     }
                     catch
                     {
@@ -358,7 +377,7 @@ namespace Unison.Uwp.UI.Helpers
         private static string ResolveMentionDisplayName(
             string digits,
             IReadOnlyDictionary<string, string> mentionLookup,
-            IWhatsAppService whatsApp)
+            MentionResolvers mentions)
         {
             string fromLookup = MentionLookupBuilder.FindName(mentionLookup, digits);
             if (MentionLookupBuilder.IsUsableName(fromLookup, digits))
@@ -366,18 +385,19 @@ namespace Unison.Uwp.UI.Helpers
                 return MentionLookupBuilder.CleanLabel(fromLookup);
             }
 
-            if (whatsApp == null || string.IsNullOrEmpty(digits))
+            IContactService contacts = mentions?.Contacts;
+            if (contacts == null || string.IsNullOrEmpty(digits))
             {
                 return null;
             }
 
-            string fromPn = SafeResolveName(whatsApp, digits + "@s.whatsapp.net");
+            string fromPn = SafeResolveName(contacts, digits + "@s.whatsapp.net");
             if (MentionLookupBuilder.IsUsableName(fromPn, digits))
             {
                 return MentionLookupBuilder.CleanLabel(fromPn);
             }
 
-            string fromLid = SafeResolveName(whatsApp, digits + "@lid");
+            string fromLid = SafeResolveName(contacts, digits + "@lid");
             if (MentionLookupBuilder.IsUsableName(fromLid, digits))
             {
                 return MentionLookupBuilder.CleanLabel(fromLid);
@@ -390,7 +410,7 @@ namespace Unison.Uwp.UI.Helpers
             Paragraph paragraph,
             string text,
             IReadOnlyDictionary<string, string> mentionLookup,
-            IWhatsAppService whatsApp,
+            MentionResolvers mentions,
             Brush mentionBrush)
         {
             if (string.IsNullOrEmpty(text))
@@ -412,7 +432,7 @@ namespace Unison.Uwp.UI.Helpers
 
                 string token = m.Groups[1].Value;
                 string digits = MentionLookupBuilder.ExtractUserDigits(token);
-                string displayName = ResolveMentionDisplayName(digits, mentionLookup, whatsApp);
+                string displayName = ResolveMentionDisplayName(digits, mentionLookup, mentions);
                 if (MentionLookupBuilder.IsUsableName(displayName, digits))
                 {
                     paragraph.Inlines.Add(new Run
@@ -436,11 +456,11 @@ namespace Unison.Uwp.UI.Helpers
             }
         }
 
-        private static string SafeResolveName(IWhatsAppService whatsApp, string jid)
+        private static string SafeResolveName(IContactService contacts, string jid)
         {
             try
             {
-                return whatsApp.ResolveDisplayName(jid, "mention");
+                return contacts.ResolveDisplayName(jid, "mention");
             }
             catch
             {

@@ -59,6 +59,11 @@ namespace Unison.Core.Diagnostics
             set => _sessionLogger.Enabled = value;
         }
 
+        public bool IsVerboseLoggingEnabled => _runtimeDiagnostics.IsVerboseLoggingEnabled;
+
+        public void SetVerboseLogging(bool enabled, string source) =>
+            _runtimeDiagnostics.SetVerboseLogging(enabled, source);
+
         public bool IsSocketSliceAvailable => _socketSliceProbe != null;
 
         public bool IsSocketSliceRunning => _socketSliceProbe != null && _socketSliceProbe.IsRunning;
@@ -74,6 +79,9 @@ namespace Unison.Core.Diagnostics
         public string GetRecentRuntimeText() => _runtimeDiagnostics.GetRecentText();
 
         public Task<string> ExportRuntimeReportAsync() => _runtimeDiagnostics.ExportReportAsync();
+
+        public Task<string> SaveRuntimeReportToLocalFolderAsync() =>
+            _runtimeDiagnostics.SaveReportToLocalFolderAsync();
 
         public Task ClearRuntimeLogAsync() => _runtimeDiagnostics.ClearAsync();
 

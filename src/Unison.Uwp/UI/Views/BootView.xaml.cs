@@ -213,7 +213,6 @@ namespace Unison.Uwp.UI.Views
             ShellViewModel shell = null;
             try
             {
-                (App.GetWhatsAppService() as WhatsAppService)?.AttachUiDispatcher(Dispatcher);
                 shell = App.Services?.GetRequiredService<ShellViewModel>();
                 if (shell == null)
                 {

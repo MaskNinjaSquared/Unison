@@ -2,11 +2,13 @@ using System;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
+using Unison.Core.Contracts;
 using Unison.Core.Models;
 using Unison.Core.ViewModels;
 using Windows.Foundation;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Media;
 
 namespace Unison.Uwp.UI.Views
@@ -45,6 +47,13 @@ namespace Unison.Uwp.UI.Views
         private bool _hooked;
 
         /// <summary>
+        /// Parent page must call <see cref="ConfigureScope"/> before we subscribe/attach.
+        /// On phone, Loaded can run synchronously inside InitializeComponent — Attach before
+        /// scope is set used to throw and tear down navigation (Archived on Creators Update).
+        /// </summary>
+        private bool _scopeReady;
+
+        /// <summary>
         /// Set while we are the ones writing the selection. Without it, every programmatic
         /// selection would come back through <see cref="ChatList_SelectionChanged"/> and be
         /// reported to the shell as if the user had clicked.
@@ -64,9 +73,34 @@ namespace Unison.Uwp.UI.Views
             this.Unloaded += ChatListView_Unloaded;
         }
 
+        public void ConfigureScope(ChatListScope scope)
+        {
+            ViewModel?.ConfigureScope(scope);
+            ApplyScopeChrome(scope);
+            _scopeReady = true;
+            TryAttach();
+        }
+
+        private void ApplyScopeChrome(ChatListScope scope)
+        {
+            if (scope != ChatListScope.Archived || HeaderTitle == null || FilterButton == null)
+            {
+                return;
+            }
+
+            var strings = App.Services?.GetService<IStringResources>();
+            HeaderTitle.Text = strings?.Get("Shell_Archived.Text", "Archived chats") ?? "Archived chats";
+            FilterButton.Visibility = Visibility.Collapsed;
+        }
+
         private void ChatListView_Loaded(object sender, RoutedEventArgs e)
         {
-            if (ViewModel == null || _hooked)
+            TryAttach();
+        }
+
+        private void TryAttach()
+        {
+            if (!_scopeReady || _hooked || ViewModel == null)
             {
                 return;
             }
@@ -87,6 +121,7 @@ namespace Unison.Uwp.UI.Views
             }
 
             _hooked = false;
+            _scopeReady = false;
             ViewModel.MenuRequested -= ViewModel_MenuRequested;
             ViewModel.OpenChatRequested -= ViewModel_OpenChatRequested;
             ViewModel.BeforeLocalConversationsCleared -= ViewModel_BeforeLocalConversationsCleared;
@@ -216,6 +251,46 @@ namespace Unison.Uwp.UI.Views
             }
         }
 
+        /// <summary>Context flyout on a row: delete the conversation (asks first).</summary>
+        internal void DeleteChat(ChatItem chat)
+        {
+            if (chat == null || ViewModel?.DeleteChatCommand == null)
+            {
+                return;
+            }
+
+            if (ViewModel.DeleteChatCommand.CanExecute(chat))
+            {
+                ViewModel.DeleteChatCommand.Execute(chat);
+            }
+        }
+
+        internal void ArchiveChat(ChatItem chat)
+        {
+            if (chat == null || ViewModel?.ArchiveChatCommand == null)
+            {
+                return;
+            }
+
+            if (ViewModel.ArchiveChatCommand.CanExecute(chat))
+            {
+                ViewModel.ArchiveChatCommand.Execute(chat);
+            }
+        }
+
+        internal void UnarchiveChat(ChatItem chat)
+        {
+            if (chat == null || ViewModel?.UnarchiveChatCommand == null)
+            {
+                return;
+            }
+
+            if (ViewModel.UnarchiveChatCommand.CanExecute(chat))
+            {
+                ViewModel.UnarchiveChatCommand.Execute(chat);
+            }
+        }
+
         /// <summary>Context flyout on a row: mute until a moment, or unmute with null.</summary>
         internal void SetLocalMute(ChatItem chat, long? mutedUntilUnixSeconds)
         {
@@ -281,32 +356,42 @@ namespace Unison.Uwp.UI.Views
         // Shell coordination
         // ---------------------------------------------------------------------
 
+        // Raised by the view model rather than by XAML, so async void here has nothing above it to
+        // catch an escape. It also waits up to a quarter second before touching the list, and the
+        // view can be unloaded by then — unsubscribing does not recall a call already in flight.
         private async void ViewModel_OpenChatRequested(object sender, string jid)
         {
-            if (string.IsNullOrEmpty(jid) || ViewModel == null)
+            try
             {
-                return;
-            }
-
-            // A new chat may still be materializing in the store; give it a short chance.
-            ChatItem chat = null;
-            for (int i = 0; i < 5 && chat == null; i++)
-            {
-                chat = ViewModel.FindChatByJid(jid);
-                if (chat == null)
+                if (string.IsNullOrEmpty(jid) || ViewModel == null)
                 {
-                    await Task.Delay(50);
+                    return;
                 }
-            }
 
-            if (chat == null)
+                // A new chat may still be materializing in the store; give it a short chance.
+                ChatItem chat = null;
+                for (int i = 0; i < 5 && chat == null; i++)
+                {
+                    chat = ViewModel.FindChatByJid(jid);
+                    if (chat == null)
+                    {
+                        await Task.Delay(50);
+                    }
+                }
+
+                if (chat == null || ChatList == null || ViewModel == null)
+                {
+                    return;
+                }
+
+                // Deliberately not quiet: opening a new chat should behave like picking it.
+                ViewModel.EnsureVisible(chat);
+                ChatList.SelectedItem = chat;
+            }
+            catch (Exception ex)
             {
-                return;
+                Debug.WriteLine(string.Format("[ChatListView] Opening a chat on request failed: {0}", ex.Message));
             }
-
-            // Deliberately not quiet: opening a new chat should behave like picking it.
-            ViewModel.EnsureVisible(chat);
-            ChatList.SelectedItem = chat;
         }
 
         private void ViewModel_BeforeLocalConversationsCleared(object sender, EventArgs e)
@@ -316,7 +401,7 @@ namespace Unison.Uwp.UI.Views
             // Leave NarrowDetail empty-state; restore list pane during wipe/resync.
             try
             {
-                FindAncestorChatsView()?.NotifyLocalConversationsCleared();
+                FindAncestorConversationShellPage()?.NotifyLocalConversationsCleared();
             }
             catch (Exception ex)
             {
@@ -324,12 +409,12 @@ namespace Unison.Uwp.UI.Views
             }
         }
 
-        private ChatsView FindAncestorChatsView()
+        private IConversationShellPage FindAncestorConversationShellPage()
         {
             DependencyObject current = this;
             while (current != null)
             {
-                var match = current as ChatsView;
+                var match = current as IConversationShellPage;
                 if (match != null)
                 {
                     return match;
@@ -339,7 +424,7 @@ namespace Unison.Uwp.UI.Views
             }
 
             return Window.Current?.Content != null
-                ? FindInSubtree<ChatsView>(Window.Current.Content as DependencyObject)
+                ? FindInSubtree<IConversationShellPage>(Window.Current.Content as DependencyObject)
                 : null;
         }
 
@@ -367,6 +452,41 @@ namespace Unison.Uwp.UI.Views
             }
 
             return null;
+        }
+
+        private void HeaderTitle_Holding(object sender, HoldingRoutedEventArgs e)
+        {
+            if (e.HoldingState != Windows.UI.Input.HoldingState.Started)
+            {
+                return;
+            }
+
+            e.Handled = true;
+            _ = OpenRuntimeDiagnosticsAsync();
+        }
+
+        private void HeaderTitle_RightTapped(object sender, RightTappedRoutedEventArgs e)
+        {
+            e.Handled = true;
+            _ = OpenRuntimeDiagnosticsAsync();
+        }
+
+        private async Task OpenRuntimeDiagnosticsAsync()
+        {
+            try
+            {
+                IDialogService dialogs = App.Services?.GetService<IDialogService>();
+                if (dialogs == null)
+                {
+                    return;
+                }
+
+                await dialogs.ShowRuntimeDiagnosticsAsync();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatListView] Runtime diagnostics dialog failed: " + ex.Message);
+            }
         }
     }
 }

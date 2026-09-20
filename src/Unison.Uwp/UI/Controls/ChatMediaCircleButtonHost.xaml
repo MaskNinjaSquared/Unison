@@ -1,0 +1,10 @@
+<UserControl
+    x:Class="Unison.Uwp.UI.Controls.ChatMediaCircleButtonHost"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    HorizontalAlignment="Center"
+    VerticalAlignment="Center">
+
+    <!-- Active shell button is created in code (Unison-only style/brushes stay Unison-only). -->
+    <Grid x:Name="Root"/>
+</UserControl>

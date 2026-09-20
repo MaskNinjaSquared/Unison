@@ -28,7 +28,10 @@
                                Width="264"
                                Height="264"
                                Stretch="Uniform"
-                               Tapped="QRCodeImage_Tapped"/>
+                               IsRightTapEnabled="True"
+                               Tapped="QRCodeImage_Tapped"
+                               Holding="QRCodeImage_Holding"
+                               RightTapped="QRCodeImage_RightTapped"/>
                         <controls:ModernProgressRing x:Name="QRProgress"
                                                      Width="48"
                                                      Height="48"

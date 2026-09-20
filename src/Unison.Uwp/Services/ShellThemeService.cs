@@ -1,22 +1,25 @@
 using System;
 using System.Diagnostics;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using Unison.Core.Constants;
 using Unison.Core.Contracts;
 using Unison.Core.Models;
+using Unison.Core.ViewModels;
 using Unison.Uwp.Services.Themes;
 using Windows.ApplicationModel.Core;
 using Windows.Data.Xml.Dom;
 using Windows.UI.Notifications;
 using Windows.UI.Xaml;
+using Windows.UI.Xaml.Controls;
 
 namespace Unison.Uwp.Services
 {
     /// <summary>
-    /// Swaps Themes/{Shell}/Theme.xaml and dispatches chrome/sync policy via
+    /// Swaps Themes/{Shell}/Theme.xaml and dispatches chrome/sync/navigation policy via
     /// <see cref="ShellThemeStrategy"/> (Unison vs WhatsApp).
     /// </summary>
-    public sealed class ShellThemeService : IShellThemeService
+    public sealed class ShellThemeService : IShellThemeService, IShellNavigationStrategy
     {
         private readonly ILocalSettings _localSettings;
         private readonly IDialogService _dialogs;
@@ -40,6 +43,21 @@ namespace Unison.Uwp.Services
         public bool DisplaySyncInChatList => Current.DisplaySyncInChatList;
 
         public bool UsesMobileStatusBarProgress => Current.UsesMobileStatusBarProgress;
+
+        public Type ResolveRootPage(NavigationDestination destination) =>
+            Current.ResolveRootPage(destination);
+
+        public Type ResolveShellPage(NavigationDestination destination) =>
+            Current.ResolveShellPage(destination);
+
+        public void OpenSettings(Frame shellFrame) =>
+            Current.OpenSettings(shellFrame);
+
+        public bool IsSettingsPage(object content) =>
+            Current.IsSettingsPage(content);
+
+        public bool TryResolveShellDestination(object content, out NavigationDestination destination) =>
+            Current.TryResolveShellDestination(content, out destination);
 
         private ShellThemeStrategy Current =>
             _strategy ?? (_strategy = CreateStrategy(ReadSelectedShell()));
@@ -195,7 +213,17 @@ namespace Unison.Uwp.Services
         {
             if (shell == AppShell.WhatsApp)
             {
-                return new WhatsAppThemeStrategy();
+                return new WhatsAppThemeStrategy(
+                    _dialogs,
+                    () =>
+                    {
+                        if (App.Services == null)
+                        {
+                            throw new InvalidOperationException("DI is not ready for SettingsViewModel.");
+                        }
+
+                        return App.Services.GetRequiredService<SettingsViewModel>();
+                    });
             }
 
             return new UnisonThemeStrategy(_systemInfo);

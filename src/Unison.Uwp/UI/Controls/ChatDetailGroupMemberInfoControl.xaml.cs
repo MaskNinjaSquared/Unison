@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using Unison.Core.ViewModels;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
@@ -18,11 +18,14 @@ namespace Unison.Uwp.UI.Controls
                 new PropertyMetadata(null, OnInfoViewModelChanged));
 
         private ChatDetailInfoViewModel _boundInfo;
+        private bool _infoHooked;
+        private bool _isLoaded;
 
         public ChatDetailGroupMemberInfoControl()
         {
             InitializeComponent();
-            Loaded += (s, e) => ApplyInfoViewModel();
+            Loaded += OnControlLoaded;
+            Unloaded += OnControlUnloaded;
         }
 
         public ChatDetailInfoViewModel InfoViewModel
@@ -39,16 +42,9 @@ namespace Unison.Uwp.UI.Controls
 
         private void OnInfoViewModelChanged(ChatDetailInfoViewModel oldVm, ChatDetailInfoViewModel newVm)
         {
-            if (_boundInfo != null)
-            {
-                _boundInfo.PropertyChanged -= Info_PropertyChanged;
-            }
-
+            UnhookInfo();
             _boundInfo = newVm;
-            if (_boundInfo != null)
-            {
-                _boundInfo.PropertyChanged += Info_PropertyChanged;
-            }
+            HookInfo();
 
             if (newVm != null)
             {
@@ -58,6 +54,45 @@ namespace Unison.Uwp.UI.Controls
             ApplyInfoViewModel();
         }
 
+        private void OnControlLoaded(object sender, RoutedEventArgs e)
+        {
+            _isLoaded = true;
+            HookInfo();
+            ApplyInfoViewModel();
+        }
+
+        private void OnControlUnloaded(object sender, RoutedEventArgs e)
+        {
+            _isLoaded = false;
+            UnhookInfo();
+        }
+
+        /// <summary>
+        /// Listens only while on screen. The view model outlives this control, so a subscription
+        /// left behind at unload keeps the whole visual tree alive and goes on laying out a pane
+        /// nobody is looking at.
+        /// </summary>
+        private void HookInfo()
+        {
+            if (_boundInfo == null || _infoHooked || !_isLoaded)
+            {
+                return;
+            }
+
+            _boundInfo.PropertyChanged += Info_PropertyChanged;
+            _infoHooked = true;
+        }
+
+        private void UnhookInfo()
+        {
+            if (_boundInfo == null || !_infoHooked)
+            {
+                return;
+            }
+
+            _boundInfo.PropertyChanged -= Info_PropertyChanged;
+            _infoHooked = false;
+        }
         private void Info_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
             if (ChatDetailInfoPivotHelper.IsMediaPaneProperty(e.PropertyName))
@@ -86,17 +121,6 @@ namespace Unison.Uwp.UI.Controls
                 return;
             }
 
-            ProfilePivotItem.Header = ChatDetailInfoPivotHelper.Upper(vm.ProfilePivotHeader);
-            if (MediaPivotItem != null)
-            {
-                MediaPivotItem.Header = ChatDetailInfoPivotHelper.Upper(vm.MediaPivotHeader);
-            }
-
-            if (FilesPivotItem != null)
-            {
-                FilesPivotItem.Header = ChatDetailInfoPivotHelper.Upper(vm.FilesPivotHeader);
-            }
-
             MediaPane?.AttachPaging(vm, isFilesPane: false);
             FilesPane?.AttachPaging(vm);
             BindMediaPanes();
@@ -107,11 +131,6 @@ namespace Unison.Uwp.UI.Controls
                 InfoAvatar.IsGroup = false;
             }
 
-            if (NameLabel != null)
-            {
-                NameLabel.Text = ChatDetailInfoPivotHelper.Upper(vm.NameSectionLabel);
-            }
-
             if (NameValue != null)
             {
                 NameValue.Text = vm.DisplayName ?? string.Empty;
@@ -119,7 +138,6 @@ namespace Unison.Uwp.UI.Controls
 
             if (AdminValue != null)
             {
-                AdminValue.Text = vm.AdminRoleText ?? string.Empty;
                 AdminValue.Visibility = vm.IsMemberAdmin ? Visibility.Visible : Visibility.Collapsed;
             }
 
@@ -130,28 +148,34 @@ namespace Unison.Uwp.UI.Controls
                     : Visibility.Collapsed;
             }
 
-            if (PhoneLabel != null)
+            string phoneText = vm.PhoneValue ?? string.Empty;
+            bool canCall = vm.CanCallPhone;
+
+            if (PhoneCallButton != null)
             {
-                PhoneLabel.Text = ChatDetailInfoPivotHelper.Upper(vm.PhoneSectionLabel);
+                PhoneCallButton.Command = vm.CallPhoneCommand;
+                PhoneCallButton.Visibility = canCall ? Visibility.Visible : Visibility.Collapsed;
             }
 
             if (PhoneValue != null)
             {
-                PhoneValue.Text = vm.PhoneValue ?? string.Empty;
+                PhoneValue.Text = phoneText;
             }
 
-            if (AddContactButton != null)
+            if (PhoneValueFallback != null)
             {
-                AddContactButton.Content = vm.AddContactLabel;
-                AddContactButton.Command = vm.AddContactCommand;
-                AddContactButton.Visibility = vm.CanAddToAddressBook
+                PhoneValueFallback.Text = string.IsNullOrWhiteSpace(phoneText) ? "—" : phoneText;
+                PhoneValueFallback.Visibility = (!canCall && vm.HasPhone) || (!vm.HasPhone && vm.CanAddToAddressBook)
                     ? Visibility.Visible
                     : Visibility.Collapsed;
             }
 
-            if (SharedGroupsLabel != null)
+            if (AddContactButton != null)
             {
-                SharedGroupsLabel.Text = ChatDetailInfoPivotHelper.Upper(vm.SharedGroupsSectionLabel);
+                AddContactButton.Command = vm.AddContactCommand;
+                AddContactButton.Visibility = vm.CanAddToAddressBook
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
             }
 
             if (SharedGroupsList != null)
@@ -162,7 +186,6 @@ namespace Unison.Uwp.UI.Controls
 
             if (SharedGroupsEmpty != null)
             {
-                SharedGroupsEmpty.Text = vm.SharedGroupsEmptyText ?? string.Empty;
                 SharedGroupsEmpty.Visibility = vm.HasSharedGroups ? Visibility.Collapsed : Visibility.Visible;
             }
         }
@@ -176,8 +199,8 @@ namespace Unison.Uwp.UI.Controls
             }
 
             bool loading = vm.IsMediaIndexLoading;
-            MediaPane?.Bind(vm.MediaItems, vm.HasMedia, vm.MediaEmptyText, loading);
-            FilesPane?.Bind(vm.FileItems, vm.HasFiles, vm.FilesEmptyText, loading);
+            MediaPane?.Bind(vm.MediaItems, vm.HasMedia, loading);
+            FilesPane?.Bind(vm.FileItems, vm.HasFiles, loading);
         }
     }
 }

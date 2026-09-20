@@ -1,0 +1,413 @@
+<ContentDialog
+    x:Class="Unison.Uwp.Shell.WhatsApp.Dialogs.SettingsDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Unison.Uwp.UI.Controls"
+    xmlns:triggers="using:Unison.Uwp.UI.Triggers"
+    xmlns:Interactivity="using:Microsoft.Xaml.Interactivity"
+    xmlns:Core="using:Microsoft.Xaml.Interactions.Core"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Background="{ThemeResource SettingsPageBackgroundBrush}"
+    FullSizeDesired="False"
+    VerticalAlignment="Center"
+    MinHeight="400">
+
+    <!--
+        Breakpoints (host width / device):
+          Phone handset (IsMobile &amp;&amp; !Continuum): FullSizeDesired, do not size BackgroundElement
+          Narrow desktop &lt; 600: Overlay
+          600–800 compact: box 600px + Overlay
+          ≥ 800 full: Inline, min ~800
+    -->
+    <ContentDialog.Resources>
+        <Thickness x:Key="ContentDialogPadding">0</Thickness>
+        <x:Double x:Key="ContentDialogMaxWidth">960</x:Double>
+        <x:Double x:Key="ContentDialogMaxHeight">720</x:Double>
+        <x:Double x:Key="ContentDialogMinWidth">320</x:Double>
+    </ContentDialog.Resources>
+
+    <Grid x:Name="RootLayout"
+          MinHeight="400"
+          HorizontalAlignment="Stretch"
+          VerticalAlignment="Stretch">
+        <VisualStateManager.VisualStateGroups>
+            <!--
+                WindowWidthRangeTrigger (not AdaptiveTrigger): ContentDialog lives in a
+                Popup where AdaptiveTrigger often never refreshes on resize.
+                Do NOT set IsPaneOpen=False here — it would block the hamburger.
+            -->
+            <VisualStateGroup x:Name="LayoutStates"
+                              CurrentStateChanged="LayoutStates_CurrentStateChanged">
+                <VisualState x:Name="Phone">
+                    <VisualState.StateTriggers>
+                        <triggers:WindowWidthRangeTrigger MinWindowWidth="0" MaxWindowWidth="600"/>
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="RootSplitView.DisplayMode" Value="Overlay"/>
+                        <Setter Target="RootSplitView.OpenPaneLength" Value="240"/>
+                        <Setter Target="RootSplitView.PaneBackground" Value="{ThemeResource AcrylicInAppFillColorDefaultBrush}"/>
+                        <Setter Target="PaneToggleButton.Visibility" Value="Visible"/>
+                    </VisualState.Setters>
+                </VisualState>
+
+                <VisualState x:Name="Compact">
+                    <VisualState.StateTriggers>
+                        <triggers:WindowWidthRangeTrigger MinWindowWidth="600" MaxWindowWidth="800"/>
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="RootSplitView.DisplayMode" Value="Overlay"/>
+                        <Setter Target="RootSplitView.OpenPaneLength" Value="240"/>
+                        <Setter Target="RootSplitView.PaneBackground" Value="{ThemeResource AcrylicInAppFillColorDefaultBrush}"/>
+                        <Setter Target="PaneToggleButton.Visibility" Value="Visible"/>
+                    </VisualState.Setters>
+                </VisualState>
+
+                <VisualState x:Name="Full">
+                    <VisualState.StateTriggers>
+                        <triggers:WindowWidthRangeTrigger MinWindowWidth="800" MaxWindowWidth="99999"/>
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="RootSplitView.DisplayMode" Value="Inline"/>
+                        <Setter Target="RootSplitView.IsPaneOpen" Value="True"/>
+                        <Setter Target="RootSplitView.OpenPaneLength" Value="260"/>
+                        <Setter Target="RootSplitView.PaneBackground" Value="{ThemeResource SettingsDialogPaneBackgroundBrush}"/>
+                        <Setter Target="PaneToggleButton.Visibility" Value="Collapsed"/>
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
+        <SplitView x:Name="RootSplitView"
+                   DisplayMode="Overlay"
+                   IsPaneOpen="False"
+                   OpenPaneLength="240"
+                   PaneBackground="{ThemeResource AcrylicInAppFillColorDefaultBrush}">
+            <SplitView.Pane>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <ListView x:Name="SectionList"
+                              Grid.Row="0"
+                              SelectionMode="Single"
+                              SelectionChanged="SectionList_SelectionChanged"
+                              Margin="0,8,0,0"
+                              ScrollViewer.VerticalScrollBarVisibility="Auto">
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem" BasedOn="{StaticResource WhatsAppSidebarItemStyle}">
+                                <Setter Property="Padding" Value="0"/>
+                            </Style>
+                        </ListView.ItemContainerStyle>
+
+                        <ListViewItem x:Name="GeneralNavItem" Tag="general" IsSelected="True">
+                            <StackPanel Orientation="Horizontal" Padding="12,0">
+                                <TextBlock Text="&#xE713;" FontFamily="{StaticResource IconFont}" FontSize="20" Width="24" VerticalAlignment="Center"/>
+                                <TextBlock x:Uid="Settings_General" Text="General" Margin="16,0,0,0" FontSize="14" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </ListViewItem>
+
+                        <ListViewItem Tag="notifications">
+                            <StackPanel Orientation="Horizontal" Padding="12,0">
+                                <TextBlock Text="&#xE91C;" FontFamily="{StaticResource IconFont}" FontSize="20" Width="24" VerticalAlignment="Center"/>
+                                <TextBlock x:Uid="Settings_NotificationsSection" Text="Notifications" Margin="16,0,0,0" FontSize="14" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </ListViewItem>
+
+                        <ListViewItem Tag="customization">
+                            <StackPanel Orientation="Horizontal" Padding="12,0">
+                                <TextBlock Text="&#xE790;" FontFamily="{StaticResource IconFont}" FontSize="20" Width="24" VerticalAlignment="Center"/>
+                                <TextBlock x:Uid="Settings_Customization" Text="Customization" Margin="16,0,0,0" FontSize="14" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </ListViewItem>
+
+                        <ListViewItem Tag="advanced">
+                            <StackPanel Orientation="Horizontal" Padding="12,0">
+                                <TextBlock Text="&#xE7BA;" FontFamily="{StaticResource IconFont}" FontSize="20" Width="24" VerticalAlignment="Center"/>
+                                <TextBlock x:Uid="Settings_Advanced" Text="Advanced Settings" Margin="16,0,0,0" FontSize="14" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </ListViewItem>
+
+                        <ListViewItem Tag="about">
+                            <StackPanel Orientation="Horizontal" Padding="12,0">
+                                <TextBlock Text="&#xE946;" FontFamily="{StaticResource IconFont}" FontSize="20" Width="24" VerticalAlignment="Center"/>
+                                <TextBlock x:Uid="Settings_About" Text="About" Margin="16,0,0,0" FontSize="14" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </ListViewItem>
+                    </ListView>
+
+                    <!-- Footer: same idea as MainView ProfileNavRow -->
+                    <Grid Grid.Row="1"
+                          Padding="8,8,12,12"
+                          Margin="4,2"
+                          MinHeight="44">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Grid Width="28" Height="28" VerticalAlignment="Center">
+                            <Ellipse Fill="#2A2A2A"
+                                     Stroke="{ThemeResource WhatsAppGreenFocusBrush}"
+                                     StrokeThickness="1.5"/>
+                            <FontIcon Glyph="&#xE77B;"
+                                      FontFamily="{StaticResource IconFont}"
+                                      FontSize="14"
+                                      Foreground="#808080"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"/>
+                            <Ellipse>
+                                <Ellipse.Fill>
+                                    <ImageBrush Stretch="UniformToFill"
+                                                ImageSource="{Binding CurrentUserAvatar, Converter={StaticResource StringToImageSourceConverter}, ConverterParameter=64}"/>
+                                </Ellipse.Fill>
+                            </Ellipse>
+                        </Grid>
+
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding ProfileDisplayName}"
+                                   Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                                   Margin="12,0,0,0"
+                                   FontSize="14"
+                                   VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis"
+                                   MaxLines="1"/>
+                    </Grid>
+                </Grid>
+            </SplitView.Pane>
+
+            <SplitView.Content>
+                <Grid Background="{ThemeResource SettingsPageBackgroundBrush}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <Grid Grid.Row="0" Margin="8,8,12,0" MinHeight="40">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <!-- Hamburger in Phone/Compact (Overlay); Visible by default until Full collapses it. -->
+                        <Button x:Name="PaneToggleButton"
+                                Style="{StaticResource WhatsAppIconButtonStyle}"
+                                Width="40" Height="40"
+                                HorizontalAlignment="Left"
+                                Visibility="Visible"
+                                Click="PaneToggleButton_Click">
+                            <FontIcon Glyph="&#xE700;" FontFamily="{StaticResource IconFont}" FontSize="16"
+                                      Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
+                        </Button>
+                        <TextBlock x:Name="SectionTitleText"
+                                   Grid.Column="1"
+                                   Text="General"
+                                   Margin="8,0,0,0"
+                                   FontSize="18"
+                                   VerticalAlignment="Center"
+                                   Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                                   FontFamily="{StaticResource MainFontSemibold}"/>
+                    </Grid>
+
+                    <ScrollViewer Grid.Row="1"
+                                  VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  HorizontalScrollMode="Disabled"
+                                  Padding="12,8,12,24">
+                        <Grid HorizontalAlignment="Stretch">
+                            <!-- General -->
+                            <StackPanel x:Name="GeneralPanel">
+                                <controls:SettingBox LocalizationUid="Settings_LiveTiles"
+                                                     Margin="0,0,0,8"
+                                                     Header="Live Tiles"
+                                                     Text="Atualizar o tile principal com a última mensagem.">
+                                    <controls:SettingBox.Control>
+                                        <ToggleSwitch OnContent="" OffContent="" MinWidth="0" Margin="0"
+                                                      IsOn="{Binding LiveTilesEnabled, Mode=TwoWay}"/>
+                                    </controls:SettingBox.Control>
+                                </controls:SettingBox>
+
+                                <controls:SettingBox LocalizationUid="Settings_AutoUnlink"
+                                                     Margin="0,0,0,8"
+                                                     Header="Desvincular automaticamente"
+                                                     Text="Se a sessão for invalidada no telemóvel, limpar dados locais e pedir QR. Desligue para manter o app como backup e só tentar reconectar.">
+                                    <controls:SettingBox.Control>
+                                        <ToggleSwitch OnContent="" OffContent="" MinWidth="0" Margin="0"
+                                                      IsOn="{Binding AutoUnlinkOnLogoutEnabled, Mode=TwoWay}"/>
+                                    </controls:SettingBox.Control>
+                                </controls:SettingBox>
+
+                                <controls:SettingBox LocalizationUid="Settings_PublishWindowsContacts"
+                                                     Margin="0,0,0,8"
+                                                     Header="Show Unison contacts in Windows"
+                                                     Text="Adds your 1:1 chats to a separate Unison list in the People app. Off by default.">
+                                    <controls:SettingBox.Control>
+                                        <ToggleSwitch OnContent="" OffContent="" MinWidth="0" Margin="0"
+                                                      IsOn="{Binding PublishContactsToWindowsEnabled, Mode=TwoWay}"/>
+                                    </controls:SettingBox.Control>
+                                </controls:SettingBox>
+                            </StackPanel>
+
+                            <!-- Notifications -->
+                            <StackPanel x:Name="NotificationsPanel" Visibility="Collapsed">
+                                <controls:SettingBox LocalizationUid="Settings_Notifications"
+                                                     Margin="0,0,0,8"
+                                                     Header="Notificações"
+                                                     Text="Exibir toasts e badge ao receber mensagens.">
+                                    <controls:SettingBox.Control>
+                                        <ToggleSwitch OnContent="" OffContent="" MinWidth="0" Margin="0"
+                                                      IsOn="{Binding NotificationsEnabled, Mode=TwoWay}"/>
+                                    </controls:SettingBox.Control>
+                                </controls:SettingBox>
+
+                                <controls:SettingBox LocalizationUid="Settings_MessageNotificationSound"
+                                                     Margin="0,0,0,8"
+                                                     Header="Message notifications"
+                                                     Text="Sound for 1:1 message toasts.">
+                                    <controls:SettingBox.Control>
+                                        <ComboBox x:Name="MessageSoundComboBox"
+                                                  MinWidth="160"
+                                                  Margin="0,0,4,0"
+                                                  SelectedIndex="{Binding SelectedMessageNotificationSoundIndex, Mode=OneWay}">
+                                            <Interactivity:Interaction.Behaviors>
+                                                <Core:EventTriggerBehavior EventName="SelectionChanged">
+                                                    <Core:InvokeCommandAction
+                                                        Command="{Binding ChangeMessageNotificationSoundCommand}"
+                                                        CommandParameter="{Binding SelectedIndex, ElementName=MessageSoundComboBox}"/>
+                                                </Core:EventTriggerBehavior>
+                                            </Interactivity:Interaction.Behaviors>
+                                            <ComboBoxItem x:Uid="Settings_NotificationSound_SystemDefault" Content="System default"/>
+                                        </ComboBox>
+                                    </controls:SettingBox.Control>
+                                </controls:SettingBox>
+
+                                <controls:SettingBox LocalizationUid="Settings_GroupNotificationSound"
+                                                     Margin="0,0,0,8"
+                                                     Header="Group notifications"
+                                                     Text="Sound for group message toasts.">
+                                    <controls:SettingBox.Control>
+                                        <ComboBox x:Name="GroupSoundComboBox"
+                                                  MinWidth="160"
+                                                  Margin="0,0,4,0"
+                                                  SelectedIndex="{Binding SelectedGroupNotificationSoundIndex, Mode=OneWay}">
+                                            <Interactivity:Interaction.Behaviors>
+                                                <Core:EventTriggerBehavior EventName="SelectionChanged">
+                                                    <Core:InvokeCommandAction
+                                                        Command="{Binding ChangeGroupNotificationSoundCommand}"
+                                                        CommandParameter="{Binding SelectedIndex, ElementName=GroupSoundComboBox}"/>
+                                                </Core:EventTriggerBehavior>
+                                            </Interactivity:Interaction.Behaviors>
+                                            <ComboBoxItem x:Uid="Settings_NotificationSound_SystemDefaultGroup" Content="System default"/>
+                                        </ComboBox>
+                                    </controls:SettingBox.Control>
+                                </controls:SettingBox>
+                            </StackPanel>
+
+                            <!-- Customization -->
+                            <StackPanel x:Name="CustomizationPanel" Visibility="Collapsed">
+                                <controls:SettingBox LocalizationUid="Settings_Language"
+                                                     Margin="0,0,0,8"
+                                                     Header="Language"
+                                                     Text="Choose the app language. The app restarts to apply it.">
+                                    <controls:SettingBox.Control>
+                                        <ComboBox x:Name="LanguageComboBox"
+                                                  MinWidth="160"
+                                                  Margin="0,0,4,0"
+                                                  ItemsSource="{Binding LanguageOptions}"
+                                                  SelectedItem="{Binding SelectedLanguageOption, Mode=OneWay}"
+                                                  SelectionChanged="LanguageComboBox_SelectionChanged"/>
+                                    </controls:SettingBox.Control>
+                                </controls:SettingBox>
+
+                                <controls:SettingBox LocalizationUid="Settings_TimeFormat"
+                                                     Margin="0,0,0,8"
+                                                     Header="Time format"
+                                                     Text="Choose 24-hour or 12-hour clock.">
+                                    <controls:SettingBox.Control>
+                                        <ComboBox x:Name="TimeFormatComboBox"
+                                                  MinWidth="140"
+                                                  Margin="0,0,4,0"
+                                                  SelectedIndex="{Binding SelectedTimeFormatIndex, Mode=OneWay}">
+                                            <Interactivity:Interaction.Behaviors>
+                                                <Core:EventTriggerBehavior EventName="SelectionChanged">
+                                                    <Core:InvokeCommandAction
+                                                        Command="{Binding ChangeTimeFormatCommand}"
+                                                        CommandParameter="{Binding SelectedIndex, ElementName=TimeFormatComboBox}"/>
+                                                </Core:EventTriggerBehavior>
+                                            </Interactivity:Interaction.Behaviors>
+                                            <ComboBoxItem x:Uid="Settings_TimeFormat24Hours" Content="24 Hours"/>
+                                            <ComboBoxItem x:Uid="Settings_TimeFormat12Hours" Content="12 Hours"/>
+                                        </ComboBox>
+                                    </controls:SettingBox.Control>
+                                </controls:SettingBox>
+
+                                <controls:SettingBox LocalizationUid="Settings_Shell"
+                                                     Margin="0,0,0,8"
+                                                     Header="Shell"
+                                                     Text="Escolha o visual do aplicativo.">
+                                    <controls:SettingBox.Control>
+                                        <ComboBox x:Name="ShellComboBox"
+                                                  MinWidth="140"
+                                                  Margin="0,0,4,0"
+                                                  SelectedIndex="{Binding SelectedShellIndex, Mode=OneWay}">
+                                            <Interactivity:Interaction.Behaviors>
+                                                <Core:EventTriggerBehavior EventName="SelectionChanged">
+                                                    <Core:InvokeCommandAction
+                                                        Command="{Binding ChangeShellCommand}"
+                                                        CommandParameter="{Binding SelectedIndex, ElementName=ShellComboBox}"/>
+                                                </Core:EventTriggerBehavior>
+                                            </Interactivity:Interaction.Behaviors>
+                                            <ComboBoxItem Content="Unison"/>
+                                            <ComboBoxItem Content="WhatsApp"/>
+                                        </ComboBox>
+                                    </controls:SettingBox.Control>
+                                </controls:SettingBox>
+                            </StackPanel>
+
+                            <!-- Advanced -->
+                            <StackPanel x:Name="AdvancedPanel" Visibility="Collapsed">
+                                <controls:SettingBox LocalizationUid="Settings_KeepAlive"
+                                                     Margin="0,0,0,8"
+                                                     Header="Modo em segundo plano"
+                                                     Text="Usa geolocalização só para o sistema não congelar o app (Unogram). A posição não é lida nem enviada. Consome mais bateria.">
+                                    <controls:SettingBox.Control>
+                                        <ToggleSwitch OnContent="" OffContent="" MinWidth="0" Margin="0"
+                                                      IsOn="{Binding LocationKeepAliveEnabled, Mode=TwoWay}"/>
+                                    </controls:SettingBox.Control>
+                                </controls:SettingBox>
+
+                                <Button Click="DisconnectButton_Click"
+                                        HorizontalAlignment="Left"
+                                        Margin="0,16,0,8"
+                                        MinHeight="44"
+                                        Padding="16,10">
+                                    <StackPanel Orientation="Horizontal">
+                                        <FontIcon FontFamily="{StaticResource IconFont}"
+                                                  FontSize="16"
+                                                  Glyph="&#xF3B1;"
+                                                  Foreground="#E81123"
+                                                  Margin="0,0,8,0"
+                                                  VerticalAlignment="Center"/>
+                                        <TextBlock x:Uid="Settings_Disconnect"
+                                                   Text="Disconnect"
+                                                   FontSize="15"
+                                                   Foreground="#E81123"
+                                                   VerticalAlignment="Center"
+                                                   FontFamily="{StaticResource MainFontSemibold}"/>
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+
+                            <!-- About -->
+                            <StackPanel x:Name="AboutPanel" Visibility="Collapsed">
+                                <controls:AboutControl HorizontalAlignment="Left" Margin="0,8,0,0"/>
+                            </StackPanel>
+                        </Grid>
+                    </ScrollViewer>
+                </Grid>
+            </SplitView.Content>
+        </SplitView>
+    </Grid>
+</ContentDialog>

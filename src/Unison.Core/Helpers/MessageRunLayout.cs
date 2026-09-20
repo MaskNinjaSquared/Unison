@@ -36,6 +36,31 @@ namespace Unison.Core.Helpers
             Func<string, bool> quoteFromMe = quotedIdIsFromMe ?? (_ => false);
             DateTime? previousLocalDate = null;
 
+            // Names first, for every message, before any run is measured. Whether two messages
+            // belong to the same run is decided by sender name when the participant ids differ,
+            // which is the ordinary PN/LID case. Resolving names inside the layout loop left the
+            // next message still unnamed when the current one asked whether the run continued,
+            // so a message could close a run that its neighbour then went on to continue.
+            if (lookup != null)
+            {
+                for (int i = 0; i < messages.Count; i++)
+                {
+                    ChatMessage message = messages[i];
+                    if (message == null)
+                    {
+                        continue;
+                    }
+
+                    if (isGroup)
+                    {
+                        lookup.EnsureGroupSenderName(message, groupChat);
+                    }
+
+                    // Quotes exist in 1:1 too; self-quotes often omit Participant and must still show You.
+                    lookup.EnsureQuotedSenderName(message, groupChat, quoteFromMe);
+                }
+            }
+
             for (int i = 0; i < messages.Count; i++)
             {
                 ChatMessage current = messages[i];
@@ -56,28 +81,17 @@ namespace Unison.Core.Helpers
                     previousLocalDate = localDate;
                 }
 
-                if (lookup != null)
-                {
-                    if (isGroup)
-                    {
-                        lookup.EnsureGroupSenderName(current, groupChat);
-                    }
-
-                    // Quotes exist in 1:1 too; self-quotes often omit Participant and must still show You.
-                    lookup.EnsureQuotedSenderName(current, groupChat, quoteFromMe);
-                }
-
                 bool isRunStart = i == 0;
                 bool isRunEnd = i == messages.Count - 1;
 
                 if (!isRunStart)
                 {
-                    isRunStart = !IsSameMessageRun(messages[i - 1], current);
+                    isRunStart = !IsSameMessageRun(messages[i - 1], current, isGroup);
                 }
 
                 if (!isRunEnd)
                 {
-                    isRunEnd = !IsSameMessageRun(current, messages[i + 1]);
+                    isRunEnd = !IsSameMessageRun(current, messages[i + 1], isGroup);
                 }
 
                 current.IsRunStart = isRunStart;
@@ -87,8 +101,7 @@ namespace Unison.Core.Helpers
                     isRunStart &&
                     !current.IsFromMe &&
                     !string.IsNullOrWhiteSpace(current.SenderName) &&
-                    !string.Equals(current.SenderName, "Me", StringComparison.OrdinalIgnoreCase) &&
-                    !string.Equals(current.SenderName, "You", StringComparison.OrdinalIgnoreCase);
+                    !SelfChatNaming.IsKnownFallback(current.SenderName);
 
                 bool contactSlot = isGroup && !current.IsFromMe;
                 current.ShowContactSlot = contactSlot;
@@ -145,7 +158,7 @@ namespace Unison.Core.Helpers
             }
         }
 
-        public static bool IsSameMessageRun(ChatMessage left, ChatMessage right)
+        public static bool IsSameMessageRun(ChatMessage left, ChatMessage right, bool isGroup)
         {
             if (left == null || right == null)
             {
@@ -157,22 +170,46 @@ namespace Unison.Core.Helpers
                 return false;
             }
 
+            // Own bubbles are always one run (no participant identity to mismatch).
             if (left.IsFromMe)
             {
                 return true;
             }
 
-            string leftParticipant = left.ParticipantJid ?? string.Empty;
-            string rightParticipant = right.ParticipantJid ?? string.Empty;
-            if (!string.IsNullOrEmpty(leftParticipant) && !string.IsNullOrEmpty(rightParticipant))
+            // 1:1 peer is a single counterparty — LID/PN/empty ParticipantJid must not split the run
+            // or middle bubbles incorrectly get IsRunEnd (Unison tip) / IsRunStart (avatar).
+            if (!isGroup)
             {
-                return string.Equals(leftParticipant, rightParticipant, StringComparison.OrdinalIgnoreCase);
+                return true;
             }
 
+            string leftParticipant = JidHelper.Normalize(left.ParticipantJid) ?? string.Empty;
+            string rightParticipant = JidHelper.Normalize(right.ParticipantJid) ?? string.Empty;
+            if (!string.IsNullOrEmpty(leftParticipant) && !string.IsNullOrEmpty(rightParticipant))
+            {
+                if (string.Equals(leftParticipant, rightParticipant, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+
+                // LID vs PN (or device alias) for the same person: merge only when both names match.
+                string leftName = left.SenderName ?? string.Empty;
+                string rightName = right.SenderName ?? string.Empty;
+                return !string.IsNullOrWhiteSpace(leftName) &&
+                       string.Equals(leftName, rightName, StringComparison.OrdinalIgnoreCase);
+            }
+
+            // One side missing participant (common on history rows): keep the run when names match.
             return string.Equals(
                 left.SenderName ?? string.Empty,
                 right.SenderName ?? string.Empty,
                 StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>Backward-compatible overload (treats as group identity rules).</summary>
+        public static bool IsSameMessageRun(ChatMessage left, ChatMessage right)
+        {
+            return IsSameMessageRun(left, right, isGroup: true);
         }
     }
 }

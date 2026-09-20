@@ -258,9 +258,14 @@ namespace Unison.Baileys.Protocol
                 case 254: // BINARY_32
                     {
                         if (_position + 4 > _data.Length) throw new EndOfStreamException();
-                        int length = (int)ReadUInt32();
-                         if (!CanRead(length)) throw new EndOfStreamException($"Expected {length} bytes but only {_data.Length - _position} remain");
-                        return ReadBinaryString(length);
+
+                        // Kept unsigned until it has been checked. Casting first turned any
+                        // length with the high bit set into a negative int, which then sailed
+                        // past the guard below and reached `new byte[length]`.
+                        uint length = ReadUInt32();
+                        if (length > int.MaxValue || !CanRead((int)length))
+                            throw new EndOfStreamException($"Expected {length} bytes but only {_data.Length - _position} remain");
+                        return ReadBinaryString((int)length);
                     }
                 
                 case 255: // NIBBLE_8
@@ -412,7 +417,7 @@ namespace Unison.Baileys.Protocol
 
         private byte[] ReadBytes(int length)
         {
-            if (_position + length > _data.Length)
+            if (!CanRead(length))
                 throw new EndOfStreamException("Unexpected end of data");
             
             var bytes = new byte[length];
@@ -420,9 +425,19 @@ namespace Unison.Baileys.Protocol
             _position += length;
             return bytes;
         }
+
+        /// <summary>
+        /// Whether <paramref name="length"/> more bytes are available.
+        /// </summary>
+        /// <remarks>
+        /// Asked as "how much is left" rather than "where would this end": adding a length near
+        /// int.MaxValue to the position overflowed into a negative number, so the guard said yes
+        /// to a read the buffer could never satisfy. Lengths come off the wire, so the server —
+        /// or anyone speaking before the handshake finishes — chooses them.
+        /// </remarks>
         private bool CanRead(int length)
         {
-            return _position + length <= _data.Length;
+            return length >= 0 && length <= _data.Length - _position;
         }
     }
 }

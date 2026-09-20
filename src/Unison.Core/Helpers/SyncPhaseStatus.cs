@@ -35,6 +35,11 @@ namespace Unison.Core.Helpers
         /// <summary>Enrichment gave up this round because the device is under memory pressure.</summary>
         public const string LowMemory = "lowmemory";
 
+        /// <summary>
+        /// FULL_HISTORY_SYNC_ON_DEMAND was sent; waiting for peer history chunks to finish applying.
+        /// </summary>
+        public const string HistoryCatchUp = "historycatchup";
+
         /// <summary>A phase with no meaningful count (<c>phase:settling</c>).</summary>
         public static string Format(string phase)
         {

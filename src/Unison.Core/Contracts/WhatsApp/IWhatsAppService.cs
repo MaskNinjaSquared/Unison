@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Threading;
@@ -13,8 +13,6 @@ namespace Unison.Core.Contracts.WhatsApp
     public interface IWhatsAppService
     {
         ObservableCollection<ChatItem> Chats { get; }
-        /// <summary>Session-local JID aliasing (PN/LID pairs), read-only for consumers.</summary>
-        IReadOnlyDictionary<string, string> JidAlias { get; }
         string CurrentConnectionStatus { get; }
         string CurrentUserName { get; set; }
         /// <summary>Account phone digits from the PN JID — placeholder when the push name is unknown.</summary>
@@ -26,6 +24,11 @@ namespace Unison.Core.Contracts.WhatsApp
         bool IsConnected { get; }
         bool IsLoadingPersistedChats { get; }
         bool IsInitialSyncSafeMode { get; }
+        /// <summary>
+        /// True when startup/sync work should use smaller batches, longer quiet floors and
+        /// gentler list updates. Driven by memory pressure and hot sync, not form-factor alone.
+        /// </summary>
+        bool PreferFrugalSyncBudget { get; }
         int InitialSyncProcessedConversations { get; }
         int InitialSyncTotalConversations { get; }
 
@@ -63,6 +66,25 @@ namespace Unison.Core.Contracts.WhatsApp
         event EventHandler<InitialSyncProgressEventArgs> OnInitialSyncProgress;
         /// <summary>Presence / chatstate for the subscribed contact (forwards SocketClient).</summary>
         event EventHandler<PresenceUpdateEventArgs> OnPresenceUpdate;
+        /// <summary>
+        /// A stream error arrived with this code. Reporting only: the client does not classify it
+        /// and does not decide whether the session should be dropped — see
+        /// <see cref="IConnectionService.ClassifyStreamError"/>.
+        /// </summary>
+        event EventHandler<string> OnStreamError;
+        /// <summary>
+        /// The shape of the failures looks like a bad session (repeated closes before login). A
+        /// guess, not a verdict, and deliberately not acted on here.
+        /// </summary>
+        event EventHandler<string> OnInvalidSessionSuspected;
+        /// <summary>A live status@broadcast item was decoded. It is not a chat and never routes to one.</summary>
+        event EventHandler<HistoryStatus> OnLiveStatusReceived;
+        /// <summary>A background FULL_HISTORY solicitation went out; the toast gate counts these.</summary>
+        event EventHandler OnBackgroundHistorySyncBounced;
+        /// <summary>An avatar file was written to the local cache for a JID.</summary>
+        event EventHandler<AvatarCachedEventArgs> OnAvatarCached;
+        /// <summary>A phone JID and a LID were newly paired.</summary>
+        event EventHandler<JidAliasResolvedEventArgs> OnJidAliasResolved;
 
         /// <summary>Active pairing helper after ConnectAsync; may be null before connect.</summary>
         IPairingService Pairing { get; }
@@ -122,7 +144,6 @@ namespace Unison.Core.Contracts.WhatsApp
 
         /// <summary>Prefer <see cref="IContactService.RefreshContactNamesAsync"/> from ViewModels.</summary>
         Task RefreshContactNamesAsync(bool includeGroups, bool force);
-        string GetCanonicalJid(string jid);
         string ResolveDisplayName(string jid, string context);
 
         /// <summary>Raw usync query for a batch of JIDs (name resolution primitive used by <see cref="IContactService"/>).</summary>
@@ -146,6 +167,12 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         Task RefreshGroupSendPermissionsAsync(string groupJid);
 
+        /// <summary>
+        /// Hydrates <see cref="ChatItem.GroupMembers"/> from the local roster store when empty.
+        /// Does not hit the network; Members pivot / chat open use this before a background IQ.
+        /// </summary>
+        Task EnsureGroupRosterLoadedFromStoreAsync(string groupJid);
+
         /// <summary>True while a reconnect/history replay drain is in progress; background refreshes should back off.</summary>
         bool IsReplayDrainActive { get; }
 
@@ -165,7 +192,7 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>True when a JID already has a resolved display name in the local name cache.</summary>
         bool HasResolvedContactName(string jid);
 
-        /// <summary>In-memory JID â†’ device-contact display name overlay.</summary>
+        /// <summary>In-memory JID → device-contact display name overlay.</summary>
         Dictionary<string, string> PhoneContactNamesByJid { get; }
 
         /// <summary>Re-applies <see cref="ResolveDisplayName"/> to each chat's Name where it changed.</summary>
@@ -224,11 +251,73 @@ namespace Unison.Core.Contracts.WhatsApp
         Task ClearUnreadForChatAsync(string jid);
 
         /// <summary>
+        /// Rows that share a canonical conversation id (PN/LID aliases). Copied for safe walk.
+        /// Transitional until the row index lives on <see cref="IChatStateStore"/>.
+        /// </summary>
+        IReadOnlyList<ChatItem> GetChatRowsForCanonicalJid(string jid);
+
+        /// <summary>Schedules a chat-list dedupe pass (new row / alias noise).</summary>
+        void RequestChatListDedup(string reason);
+
+        /// <summary>Schedules a PN/LID duplicate-row merge scan.</summary>
+        void RequestAliasChatMerge(string lidJid, string pnJid);
+
+        /// <summary>
+        /// Transitional host for <see cref="IMessageService.AcceptIncomingTimeline"/> —
+        /// mutates MessagesByChat + MessageIdIndex. Prefer the message façade.
+        /// </summary>
+        IncomingTimelineAcceptResult AcceptIncomingTimeline(
+            string chatJid,
+            ChatMessage message,
+            bool isGroup);
+
+        /// <summary>Queues one message into the debounced persist batch.</summary>
+        void QueueIncomingMessagePersist(string chatJid, ChatMessage message);
+
+        /// <summary>
+        /// Transitional host for <see cref="IMessageService.ApplyIncomingRevocationAsync"/>.
+        /// </summary>
+        Task ApplyIncomingRevocationAsync(
+            string chatJid,
+            string targetMessageId,
+            string envelopeMessageId = null);
+
+        /// <summary>
+        /// Transitional host for <see cref="IMessageService.ApplyIncomingPinInChatAsync"/>.
+        /// </summary>
+        Task ApplyIncomingPinInChatAsync(
+            string chatJid,
+            string targetMessageId,
+            bool pin,
+            long senderTimestampMs,
+            uint durationSeconds = 0);
+
+        /// <summary>
+        /// Transitional host for <see cref="IChatService.RefreshAllChatPreviewsFromStoredAsync"/> —
+        /// walks <c>MessagesByChat</c>. Prefer the chat façade.
+        /// </summary>
+        Task RefreshAllChatPreviewsFromStoredAsync(string reason);
+
+        /// <summary>
+        /// Transitional host for <see cref="IChatService.ReconcileChatListFromStoredAsync"/> —
+        /// creates missing rows and re-tips from <c>MessagesByChat</c>. Prefer the chat façade.
+        /// </summary>
+        Task ReconcileChatListFromStoredAsync(string reason);
+
+        /// <summary>
         /// Writes the account's chat-list pin to the in-memory rows and to the local mirror,
         /// without telling the server. Prefer <see cref="IChatService.SetPinnedAsync"/>, which is
         /// what actually pins the chat; this is the local half of it.
         /// </summary>
         Task ApplyChatPinAsync(string jid, bool pinned);
+
+        /// <summary>
+        /// Removes a conversation from the list, the in-memory timeline and local storage, without
+        /// telling the server. Prefer <see cref="IChatService.DeleteChatAsync"/>, which is what
+        /// actually deletes the chat for the account; this is the local half of it, and also the
+        /// path taken when the phone is the one that deleted it.
+        /// </summary>
+        Task ApplyChatDeletionAsync(string jid);
 
         /// <summary>Subscribes to presence for a 1:1 JID when the socket is connected; no-op otherwise.</summary>
         Task PresenceSubscribeAsync(string jid);
@@ -298,9 +387,6 @@ namespace Unison.Core.Contracts.WhatsApp
 
         /// <summary>Delegates to <see cref="IContactService"/> (owns batch/backoff policy); kept for legacy callers.</summary>
         Task RetrieveContactPicturesCoreAsync(CancellationToken cancellationToken = default(CancellationToken));
-
-        /// <summary>Downloads a remote avatar URL into local MediaCache.</summary>
-        Task<string> CacheRemoteAvatarAsync(string jid, string remoteUrl, CancellationToken cancellationToken = default(CancellationToken));
 
         /// <summary>True when the noise handshake completed and IQ calls are safe.</summary>
         bool IsTransportReady { get; }

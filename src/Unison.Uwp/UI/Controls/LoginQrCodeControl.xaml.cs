@@ -1,6 +1,9 @@
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
+using Unison.Core.Contracts;
 using Unison.Core.ViewModels;
 using Unison.Uwp.Client;
 using Windows.UI.Core;
@@ -190,6 +193,41 @@ namespace Unison.Uwp.UI.Controls
             if (ViewModel?.ShowQrFullscreenCommand?.CanExecute(null) == true)
             {
                 ViewModel.ShowQrFullscreenCommand.Execute(null);
+            }
+        }
+
+        private void QRCodeImage_Holding(object sender, HoldingRoutedEventArgs e)
+        {
+            if (e.HoldingState != Windows.UI.Input.HoldingState.Started)
+            {
+                return;
+            }
+
+            e.Handled = true;
+            _ = OpenRuntimeDiagnosticsAsync();
+        }
+
+        private void QRCodeImage_RightTapped(object sender, RightTappedRoutedEventArgs e)
+        {
+            e.Handled = true;
+            _ = OpenRuntimeDiagnosticsAsync();
+        }
+
+        private async Task OpenRuntimeDiagnosticsAsync()
+        {
+            try
+            {
+                IDialogService dialogs = App.Services?.GetService<IDialogService>();
+                if (dialogs == null)
+                {
+                    return;
+                }
+
+                await dialogs.ShowRuntimeDiagnosticsAsync();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[LoginQr] Runtime diagnostics dialog failed: " + ex.Message);
             }
         }
 

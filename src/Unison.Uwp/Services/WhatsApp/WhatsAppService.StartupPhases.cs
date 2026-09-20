@@ -16,13 +16,14 @@ namespace Unison.Uwp.Services.WhatsApp
     /// silently if the device was not on its lowest memory level. From the outside that read as a
     /// minute of nothing followed by names appearing for no reason - so the wait now ends as soon
     /// as the sync actually settles, the pressure check retries instead of abandoning the pass, and
-    /// both report what they are doing.
+    /// both report what they are doing. Quiet floors and enrichment budgets follow
+    /// <c>PreferFrugalSyncBudget</c> (memory + hot sync), not a Mobile/desktop flag.
     /// </remarks>
     public partial class WhatsAppService
     {
         /// <summary>Breathing room the UI gets before enrichment starts, even on a fast device.</summary>
         private TimeSpan StartupQuietFloor =>
-            IsWindowsMobile ? TimeSpan.FromSeconds(3) : TimeSpan.FromSeconds(1);
+            UseFrugalSyncBudget ? TimeSpan.FromSeconds(3) : TimeSpan.FromSeconds(1);
 
         private static readonly TimeSpan StartupQuietPollInterval = TimeSpan.FromMilliseconds(500);
 
@@ -86,6 +87,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 "reason=" + (reason ?? string.Empty) +
                 "; waitedMs=" + (long)elapsed.Elapsed.TotalMilliseconds +
                 "; budgetMs=" + (long)budget.TotalMilliseconds +
+                "; frugal=" + UseFrugalSyncBudget +
                 "; memory=" + MemoryManager.AppMemoryUsageLevel);
 
             if (token.IsCancellationRequested)

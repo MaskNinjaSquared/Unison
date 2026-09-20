@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
-using Unison.Core.Contracts;
-using Unison.Core.Contracts.WhatsApp;
+using System.Collections.ObjectModel;
 using Unison.Core.Models;
 
 namespace Unison.Core.Helpers
@@ -19,8 +18,7 @@ namespace Unison.Core.Helpers
             GroupMember member,
             string participantJid,
             ChatItem groupChat,
-            IWhatsAppService whatsApp,
-            IPersonStore personStore,
+            ParticipantResolutionContext context,
             string nameHint = null)
         {
             if (member == null)
@@ -41,33 +39,34 @@ namespace Unison.Core.Helpers
 
             if (string.IsNullOrWhiteSpace(member.AvatarUrl))
             {
-                member.AvatarUrl = ResolveAvatar(jid, groupChat, whatsApp, personStore, member);
+                member.AvatarUrl = ResolveAvatar(jid, groupChat, context, member);
             }
 
             if (string.IsNullOrWhiteSpace(member.DisplayName))
             {
-                member.DisplayName = ResolveDisplayName(jid, groupChat, whatsApp, personStore, nameHint, member);
+                member.DisplayName = ResolveDisplayName(jid, groupChat, context, nameHint, member);
             }
         }
 
         /// <summary>
         /// Local avatar URI: roster → 1:1 chat → Person cache.
         /// When <paramref name="directChatAvatars"/> is provided, the Chats walk is skipped.
+        /// When <paramref name="rosterByCanonical"/> is provided, the roster is not scanned linearly.
         /// </summary>
         public static string ResolveAvatar(
             string participantJid,
             ChatItem groupChat,
-            IWhatsAppService whatsApp,
-            IPersonStore personStore,
+            ParticipantResolutionContext context,
             GroupMember rosterMember = null,
-            IReadOnlyDictionary<string, string> directChatAvatars = null)
+            IReadOnlyDictionary<string, string> directChatAvatars = null,
+            IReadOnlyDictionary<string, GroupMember> rosterByCanonical = null)
         {
             if (string.IsNullOrWhiteSpace(participantJid))
             {
                 return null;
             }
 
-            string canonical = CanonicalJid(whatsApp, participantJid);
+            string canonical = CanonicalJid(context, participantJid);
             if (string.IsNullOrWhiteSpace(canonical))
             {
                 return null;
@@ -78,40 +77,41 @@ namespace Unison.Core.Helpers
                 return rosterMember.AvatarUrl;
             }
 
-            string fromRoster = FindAvatarOnRoster(groupChat, canonical, whatsApp);
+            string fromRoster = FindAvatarOnRoster(groupChat, canonical, context, rosterByCanonical);
             if (!string.IsNullOrWhiteSpace(fromRoster))
             {
                 return fromRoster;
             }
 
-            string fromDirect = FindAvatarOnDirectChat(canonical, whatsApp, directChatAvatars);
+            string fromDirect = FindAvatarOnDirectChat(canonical, context, directChatAvatars);
             if (!string.IsNullOrWhiteSpace(fromDirect))
             {
                 return fromDirect;
             }
 
-            return FindAvatarOnPerson(canonical, participantJid, personStore);
+            return FindAvatarOnPerson(canonical, participantJid, context?.People);
         }
 
         /// <summary>
         /// Display label: hint (bubble / quote) → roster → protocol names → Person → 1:1 chat → JID user.
         /// When <paramref name="directChatNames"/> is provided, the Chats walk is skipped.
+        /// When <paramref name="rosterByCanonical"/> is provided, the roster is not scanned linearly.
         /// </summary>
         public static string ResolveDisplayName(
             string participantJid,
             ChatItem groupChat,
-            IWhatsAppService whatsApp,
-            IPersonStore personStore,
+            ParticipantResolutionContext context,
             string nameHint = null,
             GroupMember rosterMember = null,
-            IReadOnlyDictionary<string, string> directChatNames = null)
+            IReadOnlyDictionary<string, string> directChatNames = null,
+            IReadOnlyDictionary<string, GroupMember> rosterByCanonical = null)
         {
             if (string.IsNullOrWhiteSpace(participantJid))
             {
                 return UsableLabel(nameHint, null) ? nameHint.Trim() : string.Empty;
             }
 
-            string canonical = CanonicalJid(whatsApp, participantJid) ?? JidHelper.Normalize(participantJid);
+            string canonical = CanonicalJid(context, participantJid) ?? JidHelper.Normalize(participantJid);
 
             if (UsableLabel(nameHint, canonical))
             {
@@ -123,13 +123,14 @@ namespace Unison.Core.Helpers
                 return rosterMember.DisplayName.Trim();
             }
 
-            GroupMember fromRoster = rosterMember ?? FindRosterMember(groupChat, canonical, whatsApp);
+            GroupMember fromRoster = rosterMember
+                ?? FindRosterMember(groupChat, canonical, context, rosterByCanonical);
             if (fromRoster != null && UsableLabel(fromRoster.DisplayName, canonical))
             {
                 return fromRoster.DisplayName.Trim();
             }
 
-            string fromService = ResolveServiceName(whatsApp, participantJid);
+            string fromService = ResolveServiceName(context, participantJid);
             if (UsableLabel(fromService, canonical))
             {
                 return fromService.Trim();
@@ -137,20 +138,20 @@ namespace Unison.Core.Helpers
 
             if (!string.Equals(canonical, participantJid, StringComparison.OrdinalIgnoreCase))
             {
-                fromService = ResolveServiceName(whatsApp, canonical);
+                fromService = ResolveServiceName(context, canonical);
                 if (UsableLabel(fromService, canonical))
                 {
                     return fromService.Trim();
                 }
             }
 
-            Person person = TryGetPerson(personStore, canonical, participantJid);
+            Person person = TryGetPerson(context?.People, canonical, participantJid);
             if (person != null && UsableLabel(person.Name, canonical))
             {
                 return person.Name.Trim();
             }
 
-            string fromChat = FindNameOnDirectChat(canonical, whatsApp, directChatNames);
+            string fromChat = FindNameOnDirectChat(canonical, context, directChatNames);
             if (UsableLabel(fromChat, canonical))
             {
                 return fromChat.Trim();
@@ -159,9 +160,30 @@ namespace Unison.Core.Helpers
             return ShortJidUser(canonical);
         }
 
-        private static GroupMember FindRosterMember(ChatItem groupChat, string canonical, IWhatsAppService whatsApp)
+        private static GroupMember FindRosterMember(
+            ChatItem groupChat,
+            string canonical,
+            ParticipantResolutionContext context,
+            IReadOnlyDictionary<string, GroupMember> rosterByCanonical = null)
         {
-            if (groupChat?.GroupMembers == null || string.IsNullOrWhiteSpace(canonical))
+            if (string.IsNullOrWhiteSpace(canonical))
+            {
+                return null;
+            }
+
+            // Indexed open-chat lookup: O(1). Do not fall through to a linear scan.
+            if (rosterByCanonical != null)
+            {
+                GroupMember indexed;
+                if (rosterByCanonical.TryGetValue(canonical, out indexed))
+                {
+                    return indexed;
+                }
+
+                return null;
+            }
+
+            if (groupChat?.GroupMembers == null)
             {
                 return null;
             }
@@ -174,9 +196,9 @@ namespace Unison.Core.Helpers
                     continue;
                 }
 
-                if (JidsMatch(whatsApp, member.Jid, canonical) ||
-                    JidsMatch(whatsApp, member.PhoneNumber, canonical) ||
-                    JidsMatch(whatsApp, member.Lid, canonical))
+                if (JidsMatch(context, member.Jid, canonical) ||
+                    JidsMatch(context, member.PhoneNumber, canonical) ||
+                    JidsMatch(context, member.Lid, canonical))
                 {
                     return member;
                 }
@@ -185,15 +207,19 @@ namespace Unison.Core.Helpers
             return null;
         }
 
-        private static string FindAvatarOnRoster(ChatItem groupChat, string canonical, IWhatsAppService whatsApp)
+        private static string FindAvatarOnRoster(
+            ChatItem groupChat,
+            string canonical,
+            ParticipantResolutionContext context,
+            IReadOnlyDictionary<string, GroupMember> rosterByCanonical = null)
         {
-            GroupMember member = FindRosterMember(groupChat, canonical, whatsApp);
+            GroupMember member = FindRosterMember(groupChat, canonical, context, rosterByCanonical);
             return string.IsNullOrWhiteSpace(member?.AvatarUrl) ? null : member.AvatarUrl;
         }
 
         private static string FindAvatarOnDirectChat(
             string canonical,
-            IWhatsAppService whatsApp,
+            ParticipantResolutionContext context,
             IReadOnlyDictionary<string, string> directChatAvatars)
         {
             if (string.IsNullOrWhiteSpace(canonical))
@@ -213,20 +239,21 @@ namespace Unison.Core.Helpers
                 return null;
             }
 
-            if (whatsApp?.Chats == null)
+            ObservableCollection<ChatItem> chats = context?.ChatState?.Chats;
+            if (chats == null)
             {
                 return null;
             }
 
-            for (int i = 0; i < whatsApp.Chats.Count; i++)
+            for (int i = 0; i < chats.Count; i++)
             {
-                ChatItem chat = whatsApp.Chats[i];
+                ChatItem chat = chats[i];
                 if (chat == null || chat.IsGroup || string.IsNullOrWhiteSpace(chat.JID))
                 {
                     continue;
                 }
 
-                if (!JidsMatch(whatsApp, chat.JID, canonical))
+                if (!JidsMatch(context, chat.JID, canonical))
                 {
                     continue;
                 }
@@ -241,7 +268,7 @@ namespace Unison.Core.Helpers
             return null;
         }
 
-        private static string FindAvatarOnPerson(string canonical, string participantJid, IPersonStore personStore)
+        private static string FindAvatarOnPerson(string canonical, string participantJid, Contracts.IPersonStore personStore)
         {
             Person person = TryGetPerson(personStore, canonical, participantJid);
             return string.IsNullOrWhiteSpace(person?.AvatarUrl) ? null : person.AvatarUrl;
@@ -249,7 +276,7 @@ namespace Unison.Core.Helpers
 
         private static string FindNameOnDirectChat(
             string canonical,
-            IWhatsAppService whatsApp,
+            ParticipantResolutionContext context,
             IReadOnlyDictionary<string, string> directChatNames)
         {
             if (string.IsNullOrWhiteSpace(canonical))
@@ -269,20 +296,21 @@ namespace Unison.Core.Helpers
                 return null;
             }
 
-            if (whatsApp?.Chats == null)
+            ObservableCollection<ChatItem> chats = context?.ChatState?.Chats;
+            if (chats == null)
             {
                 return null;
             }
 
-            for (int i = 0; i < whatsApp.Chats.Count; i++)
+            for (int i = 0; i < chats.Count; i++)
             {
-                ChatItem chat = whatsApp.Chats[i];
+                ChatItem chat = chats[i];
                 if (chat == null || chat.IsGroup || string.IsNullOrWhiteSpace(chat.JID))
                 {
                     continue;
                 }
 
-                if (!JidsMatch(whatsApp, chat.JID, canonical))
+                if (!JidsMatch(context, chat.JID, canonical))
                 {
                     continue;
                 }
@@ -296,7 +324,7 @@ namespace Unison.Core.Helpers
             return null;
         }
 
-        private static Person TryGetPerson(IPersonStore personStore, string canonical, string participantJid)
+        private static Person TryGetPerson(Contracts.IPersonStore personStore, string canonical, string participantJid)
         {
             if (personStore == null)
             {
@@ -314,19 +342,19 @@ namespace Unison.Core.Helpers
             return person;
         }
 
-        private static string ResolveServiceName(IWhatsAppService whatsApp, string jid)
+        private static string ResolveServiceName(ParticipantResolutionContext context, string jid)
         {
-            return whatsApp?.ResolveDisplayName(jid, "sender");
+            return context?.Contacts?.ResolveDisplayName(jid, "sender");
         }
 
-        private static string CanonicalJid(IWhatsAppService whatsApp, string jid)
+        private static string CanonicalJid(ParticipantResolutionContext context, string jid)
         {
             if (string.IsNullOrWhiteSpace(jid))
             {
                 return null;
             }
 
-            string canonical = whatsApp != null ? whatsApp.GetCanonicalJid(jid) : null;
+            string canonical = context?.Jids?.GetCanonicalJid(jid);
             if (string.IsNullOrWhiteSpace(canonical))
             {
                 canonical = JidHelper.Normalize(jid);
@@ -335,15 +363,15 @@ namespace Unison.Core.Helpers
             return canonical;
         }
 
-        private static bool JidsMatch(IWhatsAppService whatsApp, string left, string right)
+        private static bool JidsMatch(ParticipantResolutionContext context, string left, string right)
         {
             if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right))
             {
                 return false;
             }
 
-            string leftCanon = CanonicalJid(whatsApp, left);
-            string rightCanon = CanonicalJid(whatsApp, right);
+            string leftCanon = CanonicalJid(context, left);
+            string rightCanon = CanonicalJid(context, right);
             return string.Equals(leftCanon, rightCanon, StringComparison.OrdinalIgnoreCase);
         }
 
@@ -360,8 +388,14 @@ namespace Unison.Core.Helpers
                 return false;
             }
 
-            if (string.Equals(trimmed, "Me", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(trimmed, "You", StringComparison.OrdinalIgnoreCase))
+            if (SelfChatNaming.IsKnownFallback(trimmed))
+            {
+                return false;
+            }
+
+            // Phone / LID user parts are placeholders, not display names. Digit-only labels
+            // must not win for a LID participant whose PN bare is a different digit string.
+            if (IsPhoneLikePlaceholder(trimmed))
             {
                 return false;
             }
@@ -371,6 +405,49 @@ namespace Unison.Core.Helpers
                 string.Equals(trimmed, bare, StringComparison.OrdinalIgnoreCase))
             {
                 return false;
+            }
+
+            string phone = JidHelper.TryPhoneFromJid(jid);
+            if (!string.IsNullOrEmpty(phone) &&
+                string.Equals(trimmed, phone, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// True when <paramref name="candidate"/> is a real display label for
+        /// <paramref name="participantJid"/> (not empty, not a raw JID/user/phone part).
+        /// </summary>
+        public static bool IsUsableDisplayLabel(string candidate, string participantJid)
+        {
+            return UsableLabel(candidate, participantJid);
+        }
+
+        /// <summary>
+        /// Long digit-only strings are almost always a phone (or LID user) echoed as a "name".
+        /// </summary>
+        private static bool IsPhoneLikePlaceholder(string trimmed)
+        {
+            if (string.IsNullOrEmpty(trimmed) || trimmed.Length < 7)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < trimmed.Length; i++)
+            {
+                char c = trimmed[i];
+                if (c == '+' || c == ' ' || c == '-' || c == '(' || c == ')')
+                {
+                    continue;
+                }
+
+                if (!char.IsDigit(c))
+                {
+                    return false;
+                }
             }
 
             return true;

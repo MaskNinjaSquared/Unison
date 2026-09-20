@@ -25,6 +25,20 @@ namespace Unison.Core.Models
         public string IncomingPumpMessageId { get; set; }
         public DateTime IncomingPumpStageUtc { get; set; }
         public bool HistorySyncProcessing { get; set; }
+        public bool HistoryCatchUpBannerActive { get; set; }
+        public bool FullHistoryOnDemandPending { get; set; }
+        public string FullHistoryOnDemandRequestId { get; set; }
+        public string FullHistoryTriggerReason { get; set; }
+        public bool FullHistoryAckAccepted { get; set; }
+        public int FullHistoryProgressSignalCount { get; set; }
+        public string FullHistoryLastProgressReason { get; set; }
+        public DateTime FullHistoryLastProgressUtc { get; set; }
+        public bool EnrichmentAwaitingHeavyHistory { get; set; }
+        public DateTime LastHistorySyncReceivedUtc { get; set; }
+        public string LastHistorySyncType { get; set; }
+        public int SqliteHistoryConversationsAccumulated { get; set; }
+        public int InitialSyncProcessedConversations { get; set; }
+        public int InitialSyncTotalConversations { get; set; }
         public bool PersistPending { get; set; }
         public bool OfflineReplayFlushRequested { get; set; }
         public int LiveIncomingQueueDepth { get; set; }
@@ -52,6 +66,27 @@ namespace Unison.Core.Models
         public ulong MemoryUsageBytes { get; set; }
         public ulong MemoryLimitBytes { get; set; }
         public string MemoryUsageLevel { get; set; }
+
+        /// <summary>
+        /// Result of <c>WebPHelpers.HasWebPCodec</c> (ApiContract 7 + WebpDecoderId in enumerator).
+        /// Can be a false positive on Mobile if a codec pack registers the id but XAML still fails.
+        /// </summary>
+        public bool WebPSupportEnabled { get; set; }
+
+        public bool WebPApiContract7 { get; set; }
+
+        public bool WebPDecoderIdListed { get; set; }
+
+        /// <summary>
+        /// Last libwebp decode attempt: ok / DllNotFound / fail / pngEncodeFail / empty / notProbed.
+        /// </summary>
+        public string WebPDecodeStatus { get; set; }
+
+        /// <summary>Whether <c>libwebp.dll</c> is at the package root (DllImport path).</summary>
+        public string WebPLibInPackage { get; set; }
+
+        /// <summary>Whether <c>libsharpyuv.dll</c> is at the package root.</summary>
+        public string WebPSharpYuvInPackage { get; set; }
 
         public bool IsPotentiallyStalled
         {
@@ -153,6 +188,19 @@ namespace Unison.Core.Models
             sb.AppendLine("  Pending IQ queries: " + PendingQueryCount);
             sb.AppendLine("  Pending persistence messages: " + OfflinePersistPendingMessageCount);
             sb.AppendLine("  History sync: " + YesNo(HistorySyncProcessing));
+            sb.AppendLine("  History catch-up banner: " + YesNo(HistoryCatchUpBannerActive));
+            sb.AppendLine("  FULL_HISTORY pending: " + YesNo(FullHistoryOnDemandPending));
+            sb.AppendLine("  FULL_HISTORY request id: " + (FullHistoryOnDemandRequestId ?? "<none>"));
+            sb.AppendLine("  FULL_HISTORY trigger: " + (FullHistoryTriggerReason ?? "<none>"));
+            sb.AppendLine("  FULL_HISTORY ack accepted: " + YesNo(FullHistoryAckAccepted));
+            sb.AppendLine("  FULL_HISTORY progress signals: " + FullHistoryProgressSignalCount);
+            sb.AppendLine("  FULL_HISTORY last progress: " + (FullHistoryLastProgressReason ?? "<none>"));
+            sb.AppendLine("  FULL_HISTORY last progress at: " + FormatUtc(FullHistoryLastProgressUtc));
+            sb.AppendLine("  Enrichment waiting on history: " + YesNo(EnrichmentAwaitingHeavyHistory));
+            sb.AppendLine("  Last history sync type: " + (LastHistorySyncType ?? "<none>"));
+            sb.AppendLine("  Last history sync received: " + FormatUtc(LastHistorySyncReceivedUtc));
+            sb.AppendLine("  SQLite history conversations (chunk accum): " + SqliteHistoryConversationsAccumulated);
+            sb.AppendLine("  Initial sync processed/total: " + InitialSyncProcessedConversations + " / " + InitialSyncTotalConversations);
             sb.AppendLine();
             sb.AppendLine("Counters");
             sb.AppendLine("  Inbound frames / decoded nodes: " + InboundFrameCount + " / " + DecodedNodeCount);
@@ -173,6 +221,14 @@ namespace Unison.Core.Models
             sb.AppendLine("Memory");
             sb.AppendLine("  Usage / limit: " + (MemoryUsageBytes / (1024UL * 1024UL)) + " / " + (MemoryLimitBytes / (1024UL * 1024UL)) + " MB");
             sb.AppendLine("  Level: " + (MemoryUsageLevel ?? "unknown"));
+            sb.AppendLine();
+            sb.AppendLine("Media");
+            sb.AppendLine("  webpSupportEnabled: " + (WebPSupportEnabled ? "true" : "false"));
+            sb.AppendLine("  webpApiContract7: " + (WebPApiContract7 ? "true" : "false"));
+            sb.AppendLine("  webpDecoderIdListed: " + (WebPDecoderIdListed ? "true" : "false"));
+            sb.AppendLine("  webpDecode: " + (WebPDecodeStatus ?? "notProbed"));
+            sb.AppendLine("  libwebpInPackage: " + (WebPLibInPackage ?? "unknown"));
+            sb.AppendLine("  libsharpyuvInPackage: " + (WebPSharpYuvInPackage ?? "unknown"));
             sb.AppendLine();
             sb.AppendLine("Potential stall detected: " + YesNo(IsPotentiallyStalled));
             return sb.ToString();

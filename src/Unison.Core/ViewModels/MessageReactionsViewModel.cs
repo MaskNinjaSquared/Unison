@@ -19,7 +19,7 @@ namespace Unison.Core.ViewModels
         private readonly IPersonStore _people;
         private readonly IHistoryMessageStore _historyMessages;
         private readonly IStringResources _strings;
-        private readonly IWhatsAppService _whatsApp;
+        private readonly IJidResolver _jids;
 
         private string _title;
         private bool _isLoading;
@@ -28,12 +28,12 @@ namespace Unison.Core.ViewModels
             IPersonStore people,
             IHistoryMessageStore historyMessages = null,
             IStringResources strings = null,
-            IWhatsAppService whatsApp = null)
+            IJidResolver jids = null)
         {
             _people = people ?? throw new ArgumentNullException(nameof(people));
             _historyMessages = historyMessages;
             _strings = strings;
-            _whatsApp = whatsApp;
+            _jids = jids;
         }
 
         /// <summary>"1 reaction" / "{0} reactions".</summary>
@@ -198,7 +198,7 @@ namespace Unison.Core.ViewModels
                 return null;
             }
 
-            string canonical = _whatsApp?.GetCanonicalJid(jid);
+            string canonical = _jids?.GetCanonicalJid(jid);
             return string.IsNullOrWhiteSpace(canonical) ? JidHelper.Normalize(jid) : canonical;
         }
 

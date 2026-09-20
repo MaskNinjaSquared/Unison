@@ -28,7 +28,10 @@
                        Foreground="{ThemeResource WhatsAppTextHighBrush}"
                        FontFamily="{StaticResource MainFontSemibold}"
                        FontWeight="SemiBold"
-                       VerticalAlignment="Center"/>
+                       VerticalAlignment="Center"
+                       TextWrapping="NoWrap"
+                       TextTrimming="CharacterEllipsis"
+                       MaxLines="1"/>
 
             <Button x:Name="MenuButton"
                     Grid.Column="1"

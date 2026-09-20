@@ -8,6 +8,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
+using Unison.Core.State;
 using Unison.Uwp.Services.WhatsApp.History;
 
 namespace Unison.Uwp.Services.WhatsApp.Messages
@@ -24,6 +25,10 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
         private readonly IReactionMapper _reactionMapper;
         private readonly HistoryFacade _history;
         private readonly IHistoryMessageStore _historyMessageStore;
+        private readonly IJidResolver _jids;
+        private readonly IChatStateStore _chatState;
+        private readonly INotificationService _notifications;
+        private readonly IChatStore _chatStore;
         private readonly int _sqlOpenPageSize;
         private readonly int _sqlLoadMorePageSize;
         private readonly int _thinTimelineThreshold;
@@ -35,8 +40,13 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             IReactionMapper reactionMapper,
             HistoryFacade history,
             IHistoryMessageStore historyMessageStore,
+            IJidResolver jids,
+            INotificationService notifications,
+            IChatStore chatStore = null,
+            IChatStateStore chatState = null,
             ISystemInfoProvider systemInfo = null)
         {
+            _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
             _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
             _chatMessageMapper = chatMessageMapper ?? throw new ArgumentNullException(nameof(chatMessageMapper));
@@ -44,10 +54,15 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             _history = history ?? throw new ArgumentNullException(nameof(history));
             _historyMessageStore = historyMessageStore
                 ?? throw new ArgumentNullException(nameof(historyMessageStore));
+            _notifications = notifications ?? throw new ArgumentNullException(nameof(notifications));
+            _chatStore = chatStore;
+            _chatState = chatState;
+            // systemInfo kept in the ctor for DI compatibility; page sizes match desktop on all devices.
+            _ = systemInfo;
 
-            bool mobile = systemInfo != null && systemInfo.IsMobile();
-            _sqlOpenPageSize = mobile ? 30 : 50;
-            _sqlLoadMorePageSize = mobile ? 20 : 30;
+            // Same SQLite page sizes as desktop (Mobile used to use 30/20).
+            _sqlOpenPageSize = 50;
+            _sqlLoadMorePageSize = 30;
             _thinTimelineThreshold = Math.Max(5, _sqlOpenPageSize - ThinTimelineOnDemandMargin);
 
             // Both live as long as the app does, so there is nothing to unhook from.
@@ -315,7 +330,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             AddKey(jid);
             try
             {
-                AddKey(_whatsAppService.GetCanonicalJid(jid));
+                AddKey(_jids.GetCanonicalJid(jid));
             }
             catch
             {
@@ -325,8 +340,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             {
                 string norm = JidHelper.Normalize(jid);
                 if (!string.IsNullOrWhiteSpace(norm) &&
-                    _whatsAppService.JidAlias != null &&
-                    _whatsAppService.JidAlias.TryGetValue(norm, out string alias))
+                    _jids.TryGetAlias(norm, out string alias))
                 {
                     AddKey(alias);
                 }
@@ -868,13 +882,15 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
         }
 
         /// <summary>
-        /// Inserts/updates Person rows. UpsertIfChanged skips writes when nothing changed.
+        /// Inserts/updates Person rows and merges the same push names into the in-memory map the
+        /// list strip reads. UpsertIfChanged skips writes when nothing changed.
         /// </summary>
         private async Task UpsertPeopleFromHistoryAsync(HistorySync sync)
         {
             await _personStore.InitializeAsync().ConfigureAwait(false);
 
             int writes = 0;
+            var pushPairs = new List<KeyValuePair<string, string>>();
 
             if (sync.Pushnames != null)
             {
@@ -886,12 +902,57 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                     }
 
                     string jid = JidHelper.Normalize(pn.Id);
+                    string name = pn.Pushname_.Trim();
                     string phone = JidHelper.TryPhoneFromJid(jid);
+                    if (!string.IsNullOrWhiteSpace(jid))
+                    {
+                        pushPairs.Add(new KeyValuePair<string, string>(jid, name));
+                    }
+
                     if (await _personStore.UpsertIfChangedAsync(
                         jid,
-                        pn.Pushname_,
+                        name,
                         null,
                         phone,
+                        PersonSource.Observed).ConfigureAwait(false))
+                    {
+                        writes++;
+                    }
+                }
+            }
+
+            // Same LID↔PN pairs the preview builder uses: store the name under both so
+            // ChatAuthorProjection can resolve a group strip that still holds the LID.
+            if (sync.PhoneNumberToLidMappings != null)
+            {
+                foreach (var mapping in sync.PhoneNumberToLidMappings)
+                {
+                    if (mapping == null ||
+                        string.IsNullOrWhiteSpace(mapping.LidJid) ||
+                        string.IsNullOrWhiteSpace(mapping.PnJid))
+                    {
+                        continue;
+                    }
+
+                    string lid = JidHelper.Normalize(mapping.LidJid);
+                    string pn = JidHelper.Normalize(mapping.PnJid);
+                    string name = FindPushName(pushPairs, pn) ?? FindPushName(pushPairs, lid);
+                    if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(lid))
+                    {
+                        continue;
+                    }
+
+                    if (!pushPairs.Exists(p =>
+                            string.Equals(p.Key, lid, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        pushPairs.Add(new KeyValuePair<string, string>(lid, name));
+                    }
+
+                    if (await _personStore.UpsertIfChangedAsync(
+                        lid,
+                        name,
+                        null,
+                        JidHelper.TryPhoneFromJid(pn),
                         PersonSource.Observed).ConfigureAwait(false))
                     {
                         writes++;
@@ -935,7 +996,33 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                 }
             }
 
+            if (_chatState != null && pushPairs.Count > 0)
+            {
+                await _chatState.MergePushNamesAsync(pushPairs).ConfigureAwait(false);
+            }
+
             Debug.WriteLine("[MessageFacade] Person upserts from history: " + writes);
+        }
+
+        private static string FindPushName(
+            List<KeyValuePair<string, string>> pairs,
+            string jid)
+        {
+            if (pairs == null || string.IsNullOrWhiteSpace(jid))
+            {
+                return null;
+            }
+
+            for (int i = 0; i < pairs.Count; i++)
+            {
+                if (string.Equals(pairs[i].Key, jid, StringComparison.OrdinalIgnoreCase) &&
+                    !string.IsNullOrWhiteSpace(pairs[i].Value))
+                {
+                    return pairs[i].Value;
+                }
+            }
+
+            return null;
         }
 
         public Task ResyncConversationsAsync(System.IProgress<ConversationResyncPhase> progress = null)
@@ -948,6 +1035,95 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
         public void StartNewChat(string jid)
         {
             _whatsAppService.StartNewChat(jid);
+        }
+
+        public void NotifyLiveIncoming(
+            string chatJid,
+            string chatName,
+            string senderName,
+            string preview,
+            bool isGroup,
+            bool isFromMe,
+            bool suppressToast,
+            int totalUnread,
+            ChatItem chat)
+        {
+            if (!IncomingLiveNotifyGate.ShouldAnnounce(isFromMe))
+            {
+                return;
+            }
+
+            if (chat != null)
+            {
+                _chatStore?.ApplyTo(chat);
+            }
+
+            bool isMuted = chat != null
+                ? chat.IsMutedLocally
+                : (_chatStore?.TryGetCached(chatJid)?.IsMutedLocally ?? false);
+
+            string name = chatName;
+            if (string.IsNullOrWhiteSpace(name) && chat != null)
+            {
+                name = chat.Name;
+            }
+
+            _notifications.NotifyIncomingMessage(
+                chatJid,
+                name,
+                senderName,
+                preview,
+                isGroup,
+                isMuted,
+                suppressToast,
+                totalUnread,
+                chat != null ? chat.GetAvatarUrl(preferHigh: false) : null,
+                chat != null ? Math.Max(0, chat.UnreadCount) : 0);
+        }
+
+        public IncomingTimelineAcceptResult AcceptIncomingTimeline(
+            string chatJid,
+            ChatMessage message,
+            bool isGroup)
+        {
+            return _whatsAppService.AcceptIncomingTimeline(chatJid, message, isGroup);
+        }
+
+        public void QueueIncomingPersist(string chatJid, ChatMessage message)
+        {
+            if (string.IsNullOrWhiteSpace(chatJid) || message == null)
+            {
+                return;
+            }
+
+            _whatsAppService.QueueIncomingMessagePersist(chatJid, message);
+            _whatsAppService.SchedulePersistPublic();
+        }
+
+        public Task ApplyIncomingRevocationAsync(
+            string chatJid,
+            string targetMessageId,
+            string envelopeMessageId = null)
+        {
+            return _whatsAppService.ApplyIncomingRevocationAsync(
+                chatJid,
+                targetMessageId,
+                envelopeMessageId);
+        }
+
+        public Task ApplyIncomingPinInChatAsync(
+            string chatJid,
+            string targetMessageId,
+            bool pin,
+            long senderTimestampMs,
+            uint durationSeconds = 0)
+        {
+            return _whatsAppService.ApplyIncomingPinInChatAsync(
+                chatJid,
+                targetMessageId,
+                pin,
+                senderTimestampMs,
+                durationSeconds);
         }
     }
 }

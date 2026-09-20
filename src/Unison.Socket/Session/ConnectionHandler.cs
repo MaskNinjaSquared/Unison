@@ -179,35 +179,57 @@ namespace Unison.Socket.Session
             _transport.MessageReceived += OnTransportMessageAsync;
             _transport.Closed += OnTransportClosed;
 
-            await _events.EmitAsync(
-                WaEventKind.ConnectionUpdate,
-                new ConnectionUpdate { Connection = ConnectionStatus.Connecting }).ConfigureAwait(false);
-
-            var uri = BuildConnectionUri();
-            var headers = BuildHeaders();
-
-            await _transport.ConnectAsync(uri, headers).ConfigureAwait(false);
-            await SendClientHelloAsync().ConfigureAwait(false);
-
-            using (var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+            // From here on the transport may be open and we are subscribed to it, so every exit
+            // has to go through EndAsync. Letting a failed handshake propagate on its own left a
+            // live socket behind with these two handlers still attached: the host takes the
+            // exception as "connect failed" and builds a new session, while the abandoned one goes
+            // on receiving frames on a connection nobody will ever close. EndAsync is idempotent,
+            // so the transport closing underneath us on the way out is not a second close.
+            try
             {
-                timeoutCts.CancelAfter(_config.ConnectTimeout);
+                await _events.EmitAsync(
+                    WaEventKind.ConnectionUpdate,
+                    new ConnectionUpdate { Connection = ConnectionStatus.Connecting }).ConfigureAwait(false);
 
-                var completed = await Task.WhenAny(
-                    _handshakeCompletion.Task,
-                    Task.Delay(Timeout.Infinite, timeoutCts.Token)).ConfigureAwait(false);
+                var uri = BuildConnectionUri();
+                var headers = BuildHeaders();
 
-                if (completed != _handshakeCompletion.Task)
+                await _transport.ConnectAsync(uri, headers).ConfigureAwait(false);
+                await SendClientHelloAsync().ConfigureAwait(false);
+
+                using (var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
                 {
-                    throw new WaConnectionException(
-                        $"Handshake timed out after {_config.ConnectTimeout.TotalSeconds:F0}s",
-                        DisconnectReason.ConnectionLost);
+                    timeoutCts.CancelAfter(_config.ConnectTimeout);
+
+                    var completed = await Task.WhenAny(
+                        _handshakeCompletion.Task,
+                        Task.Delay(Timeout.Infinite, timeoutCts.Token)).ConfigureAwait(false);
+
+                    if (completed != _handshakeCompletion.Task)
+                    {
+                        throw new WaConnectionException(
+                            $"Handshake timed out after {_config.ConnectTimeout.TotalSeconds:F0}s",
+                            DisconnectReason.ConnectionLost);
+                    }
+
+                    await _handshakeCompletion.Task.ConfigureAwait(false);
                 }
 
-                await _handshakeCompletion.Task.ConfigureAwait(false);
+                StartKeepAlive();
             }
+            catch (Exception ex)
+            {
+                try
+                {
+                    await EndAsync(ex).ConfigureAwait(false);
+                }
+                catch (Exception endError)
+                {
+                    _log.Error("Error closing connection after a failed connect", endError);
+                }
 
-            StartKeepAlive();
+                throw;
+            }
         }
 
         public async Task SendRawAsync(byte[] data)
@@ -217,12 +239,16 @@ namespace Unison.Socket.Session
                 throw new WaConnectionException("Connection closed", DisconnectReason.ConnectionClosed);
             }
 
-            var frame = _noise.EncodeFrame(data);
-
-            // Noise counters and framing are order-sensitive, so writes are serialised.
+            // Noise counters and framing are order-sensitive, so encoding and writing are
+            // serialised together. Encoding outside this gate was the same bug the comment
+            // warns about: each frame carries the nonce it was encrypted with, so two callers
+            // could encrypt as N and N+1 and then cross the gate in the other order. The
+            // server rejects the out-of-order frame and drops the socket. The keep-alive ping
+            // fires on a timer, so it collides with a user's message sooner or later.
             await _sendGate.WaitAsync().ConfigureAwait(false);
             try
             {
+                byte[] frame = _noise.EncodeFrame(data);
                 await _transport.SendAsync(frame).ConfigureAwait(false);
             }
             finally
@@ -490,8 +516,16 @@ namespace Unison.Socket.Session
                 _keepAlive = null;
             }
 
+            _transport.MessageReceived -= OnTransportMessageAsync;
+            _transport.Closed -= OnTransportClosed;
             Dispatcher.Clear();
-            _sendGate.Dispose();
+
+            // _sendGate is deliberately not disposed. The host gives a close three seconds and
+            // then abandons the session, which means Dispose runs precisely when a send is
+            // stuck holding this gate - the reason the close timed out. Disposing it under a
+            // waiter makes that send's Release throw ObjectDisposedException on the way out,
+            // replacing the real error with a lifecycle one. A SemaphoreSlim with no wait
+            // handle taken holds nothing that needs releasing.
         }
 
         private Uri BuildConnectionUri()

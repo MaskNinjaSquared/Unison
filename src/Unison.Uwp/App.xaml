@@ -9,31 +9,25 @@
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <!-- WinUI 2 controls/styles (Imgur: XamlControlsResources). -->
-                <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+                <!-- WinUI 2 controls/styles (Imgur: XamlControlsResources).
+                     ContentDialogMaxWidth must live inside XamlControlsResources or the
+                     stock template keeps the ~548 default (SettingsDialog needs 600–960).
+                     Use muxc: prefix — do not redefine default xmlns or ResourceDictionary breaks. -->
+                <muxc:XamlControlsResources xmlns:muxc="using:Microsoft.UI.Xaml.Controls">
+                    <muxc:XamlControlsResources.MergedDictionaries>
+                        <ResourceDictionary>
+                            <!-- Raise width ceiling only — keep default-ish height so dialogs stay centered. -->
+                            <x:Double x:Key="ContentDialogMaxWidth">2000</x:Double>
+                        </ResourceDictionary>
+                    </muxc:XamlControlsResources.MergedDictionaries>
+                </muxc:XamlControlsResources>
                 <!-- Default shell theme; App.ApplySelectedShellTheme may swap Unison ↔ WhatsApp. -->
                 <ResourceDictionary Source="Themes/Unison/Theme.xaml" />
             </ResourceDictionary.MergedDictionaries>
 
-            <!-- Avatar Fallback Colors (theme-aware) - must be first -->
-            <ResourceDictionary.ThemeDictionaries>
-                <ResourceDictionary x:Key="Default">
-                    <SolidColorBrush x:Key="AvatarFallbackBackgroundBrush" Color="#454545"/>
-                    <SolidColorBrush x:Key="AvatarFallbackIconBrush" Color="#808080"/>
-                    <SolidColorBrush x:Key="AvatarBorderBrush" Color="Transparent"/>
-                </ResourceDictionary>
-                <ResourceDictionary x:Key="Dark">
-                    <SolidColorBrush x:Key="AvatarFallbackBackgroundBrush" Color="#454545"/>
-                    <SolidColorBrush x:Key="AvatarFallbackIconBrush" Color="#808080"/>
-                    <SolidColorBrush x:Key="AvatarBorderBrush" Color="Transparent"/>
-                </ResourceDictionary>
-                <ResourceDictionary x:Key="Light">
-                    <SolidColorBrush x:Key="AvatarFallbackBackgroundBrush" Color="#DDDDDD"/>
-                    <SolidColorBrush x:Key="AvatarFallbackIconBrush" Color="#BABABA"/>
-                    <SolidColorBrush x:Key="AvatarBorderBrush" Color="#FFE0E0E0"/>
-                </ResourceDictionary>
-            </ResourceDictionary.ThemeDictionaries>
-            
+            <!-- AvatarFallback* / AvatarBorderBrush live in Themes/*/Styles.xaml ThemeDictionaries.
+                 Do not redefine them here — Application ThemeDictionaries win over MergedDictionaries. -->
+
             <!-- Converters -->
             <converters:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
             <converters:StringToImageSourceConverter x:Key="StringToImageSourceConverter"/>
@@ -53,7 +47,7 @@
             <FontFamily x:Key="MainFontBold">ms-appx:///Assets/Fonts/SegUIVar-Bold_Text.ttf#Segoe UI Variable Bold</FontFamily>
             <FontFamily x:Key="MainFontSemibold">ms-appx:///Assets/Fonts/SegUIVar-Semibold_Text.ttf#Segoe UI Variable Semibold</FontFamily>
             <FontFamily x:Key="IconFont">ms-appx:///Assets/Fonts/SegoeIcons.ttf#Segoe Fluent Icons</FontFamily>
-            <!-- Custom PathIcon geometries (new-chat EA02, filter EA01). Regen: scripts/icons/generate-unison-icons.ps1 -->
+            <!-- Custom PathIcon geometries (filter EA01, new-chat EA02, check EA03, double-check EA04). Regen: scripts/icons/generate-unison-icons.ps1 -->
             <FontFamily x:Key="UnisonIconFont">ms-appx:///Assets/Fonts/UnisonIcons.ttf#UnisonIcons</FontFamily>
 
             <!-- Branding Colors -->

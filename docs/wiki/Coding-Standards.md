@@ -95,18 +95,23 @@ Host a **control** (`*Control` : `UserControl`) only when it is reused or is a r
 ## 3. UI folders
 
 ```
-src/Unison.Uwp/UI/
-  Views/              pages (`*View`) and nested surfaces that are real child views (chat list/detail)
-  Controls/           reusable pieces (avatar, setting box, bubbles chrome, chat-info panes:
+src/Unison.Uwp/
+  Shell/
+    Unison/Views/     shell-specific pages (SettingsView today)
+    WhatsApp/Views/   shell-specific pages (SettingsView; may become dialog later)
+  UI/
+    Views/            shared pages (`*View`) and nested surfaces (chat list/detail)
+    Controls/         reusable pieces (avatar, setting box, bubbles chrome, chat-info panes:
                       ChatDetailInfoControl, ChatDetailUserInfoControl, ChatDetailGroupInfoControl,
                       ChatDetailGroupMemberInfoPane, ChatDetailGroupMemberInfoControl, ChatInfoMedia*)
-  Dialogs/            ContentDialog XAML only
-  Converters/         IValueConverter
-  Templates/          DataTemplates (messages, chat items, preview kinds)
-  TemplateSelectors/  DataTemplateSelector
-  Helpers/            view-only helpers (rich text, presentation)
+    Dialogs/            ContentDialog XAML only
+    Converters/         IValueConverter
+    Templates/          DataTemplates (messages, chat items, preview kinds)
+    TemplateSelectors/  DataTemplateSelector
+    Helpers/            view-only helpers (rich text, presentation)
 ```
 
+- **Shell-specific** page → `Shell/{Unison|WhatsApp}/`. Opened via the active `ShellThemeStrategy` map / `OpenSettings`.
 - **Reusable** visual → `Controls/`. Do not paste a second copy into a page.
 - **Dialog** → `Dialogs/` + a method on `IDialogService`. Views do not `new ContentDialog` for product flows.
 - **Converter** → `Converters/`. Do not put convert logic in the code-behind.
@@ -181,10 +186,12 @@ Text normalization: `ChatPreviewNormalizer.Normalize` is the **chat-list preview
 
 ## 7. Navigation, settings, i18n
 
-- Route **keys** in `Unison.Core/Constants/NavigationRoutes.cs`.
-- Page **types** only in `NavigatorService`. Core never names a view type.
+- Destination **enum** in Core: `NavigationDestination`. Pane string keys: `NavigationRoutes` (Tags / `ActiveSection`).
+- Page **types** only in `ShellThemeStrategy` / `NavigatorService`. Core never names a view type.
+- **Settings:** `INavigator.OpenSettings()` (explicit). Unison: `Shell/Unison/Views/SettingsView`. WhatsApp: `Shell/WhatsApp/Dialogs/SettingsDialog` (section UI in code-behind).
+- Other shell sections: `NavigateInShell(NavigationDestination.Chats|Archived|Status|Debug)`.
 - Auth boundaries: `NavigateAndClear` (Boot / Start / Login / AppShell). No back stack into login.
-- Master-detail stays on `ChatsView` / `StatusView` (not a Frame push list → detail).
+- Master-detail stays on `ChatsView` / `StatusView` (not a Frame push list → detail). Route pages such as `ArchivedChatsView` are separate shell pages with matching XAML (`x:Class`), not derived `Page` types loading a base `.xaml`.
 - Settings keys and defaults: `LocalSettingsConstants`. Do not invent a parallel key string; Background toasts that share a key must keep the **same literal**.
 - UI strings: `Strings/{tag}/Resources.resw` + `x:Uid` and/or `IStringResources`. English fallback for missing keys.
 - Shipped languages: `en-US`, `pt-BR`, `es-ES`, `it-IT`, `nl-NL`, `id-ID`, `pl-PL`, `uk-UA`, `ru-RU`. Add the key to **all** packs, or English-only with fallback — never a hardcoded sentence in a ViewModel.

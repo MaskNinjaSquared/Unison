@@ -25,12 +25,14 @@ Unison.Core/
 
 | Interface | Facade (UWP) | Responsibility |
 |---|---|---|
-| `IConnectionService` | `ConnectionFacade` | Pairing (QR / code), disconnect policy, server logout, session wipe |
+| `IJidResolver` | `JidResolver` | Canonical JID + PN/LID alias lookup (wraps the client table until it moves) |
+| `IConnectionService` | `ConnectionFacade` | Pairing (QR / code), disconnect policy, server logout, session wipe, startup order (`InitializeConnectionStateAsync`, `IsRegisteredAsync`, `EnsureConnectedAsync`, `LoadPersistedUiStateAsync`, `StartDeferredStartupMaintenance`, `IsConnected`) |
 | `IMessageService` | `MessageFacade` | Send, on-demand media, message pin, reactions, `GetChatMessage`, new chat |
-| `IChatService` | `ChatFacade` | Account pin/unpin (app-state) + mark-read |
+| `IChatService` | `ChatFacade` | Account pin/unpin (app-state) + mark-read, active chat, unread total, list-row persist + SQLite preview reconcile |
+| `IGroupService` | `GroupFacade` | Send permissions, roster hydrate, high-quality group avatar (forwards to the client until phase 3.2) |
 | `IContactService` | `ContactFacade` | Address-book overlay, name refresh, avatar policy, phone search, People add-contact card, optional Unison `UserDataAccount` in People |
 | `IProfileService` | `ProfileFacade` | “Me” hydrate + profile picture IQ |
-| `IHistoryService` | `HistoryFacade` | Sync status, chunks, on-demand full resync |
+| `IHistoryService` | `HistoryFacade` | Sync status, chunks, on-demand full resync, initial-sync counters + frugal budget |
 | `IStatusService` | `StatusFacade` | Active Status authors/items, live status@broadcast ingest, on-demand media |
 | `IDebugSendService` | `DebugSendService` | File-watch test send (`#if DEBUG`) |
 | `IWhatsAppService` | `WhatsAppService` | Compatibility client (socket, in-memory chats, persist) |
@@ -107,7 +109,7 @@ Order that matters:
 7. ViewModel factories and platform adapters
 8. ViewModels: `ShellViewModel` **singleton**; others transient
 
-After `BuildServiceProvider`, `WhatsAppService.Attach*` wires satellites. `IConnectionService.AttachWhatsAppService` breaks the cycle. Profile, History, and Status are resolved immediately so they do not miss events.
+After `BuildServiceProvider`, `WhatsAppService.Attach*` wires the satellites that still call into the client (`AttachMessageService`, `AttachContactService`, the three stores). `IConnectionService.AttachWhatsAppService` breaks the cycle. Profile, History, and Status are resolved immediately because they subscribe to client events in their constructors and would otherwise miss the early ones.
 
 `App.GetWhatsAppService()` is the only remaining central resolve for the concrete client.
 
@@ -117,23 +119,23 @@ After `BuildServiceProvider`, `WhatsAppService.Attach*` wires satellites. `IConn
 |---|---|
 | `LoginViewModel` | **Only** `IConnectionService` |
 | `StartViewModel` | Language + `ShellViewModel` (no WhatsApp) |
-| `ShellViewModel` | `IWhatsAppService` (session/unread), `IConnectionService`, `IProfileService` |
+| `ShellViewModel` | `IConnectionService` (startup order), `IChatService` (unread badge), `IProfileService`, `IChatStateStore` |
 | `ChatListViewModel` | Message, Contact, Connection, History, Chat facades; `IChatStateStore` for the list |
 | `StatusListViewModel` / `StatusDetailViewModel` | **Only** `IStatusService` (+ `IDispatcher`) |
-| `ChatDetailViewModel` | `IMessageService`, required (load / SQLite load-more / on-demand / send / presence); `IChatService`, `IPersonStore`; `IContactService` for the 1:1 **Add contact** overflow; `IWhatsAppService` for canonical JIDs / group lock. Timeline UI window: `InitialUiMessageWindow` / `MaxUiMessageWindow`; `CanLoadMore` + `LoadMoreMessagesAsync` for top-scroll prepend; bubbles via `IChatMessageVmFactory` |
-| `ChatDetailInfoViewModel` | `IMessageService` (media/files index on Media/Files pivot + `ChatMessagesChanged`); `IChatService` (pin); `IPersonStore` (groups in common); `IContactService` (Add contact when not in the agenda); `IWhatsAppService` for group permissions / HQ avatar |
+| `ChatDetailViewModel` | `IMessageService`, required (load / SQLite load-more / on-demand / send / presence); `IChatService`, `IPersonStore`; `IContactService` for the 1:1 **Add contact** overflow; `IGroupService` for the composer lock; `IConnectionService` for the presence gate; `IJidResolver` for canonical JIDs. Timeline UI window: `InitialUiMessageWindow` / `MaxUiMessageWindow`; `CanLoadMore` + `LoadMoreMessagesAsync` for top-scroll prepend; bubbles via `IChatMessageVmFactory` |
+| `ChatDetailInfoViewModel` | `IMessageService` (media/files index on Media/Files pivot + `ChatMessagesChanged`); `IChatService` (pin); `IPersonStore` (groups in common); `IContactService` (Add contact when not in the agenda); `IGroupService` for group permissions / roster / HQ avatar; `IChatStateStore` for shared-group names |
 | `ChatMessageViewModel` | `IMessageService` (media ensure, message pin); `IDialogService` for the reactions viewer |
-| `MessageReactionsViewModel` | `IPersonStore` (who reacted); `IWhatsAppService` for canonical JIDs |
+| `MessageReactionsViewModel` | `IPersonStore` (who reacted); `IJidResolver` for canonical JIDs |
 | `NewChatDialogViewModel` | `IContactService.SearchContactAsync` |
 | `SettingsViewModel` | `IConnectionService.LogoutAsync`; `IContactService.SetPublishContactsToWindowsAsync` |
-| `DebugViewModel` | `IWhatsAppService` (verbose, wipe, snapshot) |
+| `DebugViewModel` | `IDiagnosticsConsole` (log, snapshot, verbose toggle); `IConnectionService.ClearLocalSessionAsync` for the wipe |
 | `ImageViewerViewModel` / `VideoViewerViewModel` | Share + picker (constructed from the view) |
 
 Chat bubbles are **entities with a ViewModel** (`ChatMessageViewModel` + `.Actions.cs`): images, videos, reactions, quotes, and interaction commands. Many former code-behind handlers moved to ViewModels via **Microsoft.Xaml.Behaviors**.
 
 Opening a chat is driven by `ChatDetailView` in two steps: `PrepareActiveChatAsync` shows the header (the host then switches VisualState), `CompleteActiveChatLoadAsync` loads the UI window. The view owns cancellation, scroll and run layout; every write to `Messages` is a ViewModel method: `ReplaceTimelineWindow` for the opening window, `MergeTimelineFromService` for a reload (strip preview bubbles → refresh rows already on screen → ordered insert → trim to `MaxUiMessageWindow`), `ApplyPreviewFallback` for an empty timeline that has a list preview, `StampGroupRemoteJid` for older rows missing the group JID. The view has no second copy of that logic.
 
-Group author photos are **not** resolved by the bubble. `ChatDetailViewModel.ApplyMessageRunLayout` walks the visible timeline once, resolves avatar URI (group roster → canonical 1:1 chat → `IPersonStore` cache), and sets `ChatMessage.ContactUri` / `ShowContact`. The template only binds those fields. LID vs PN matching goes through `GetCanonicalJid`. Member picture GETs are `GroupRosterPolicy` on `IContactService` (batches of 16; `AvatarFetchedAtUtc` remembers misses). Roster apply also persists `PersonGroup` memberships (Jid + Lid/phone aliases) for the “groups in common” member pane. UI shells: user/group in `ChatDetailInfoControl`; member in `ChatDetailGroupMemberInfoPane` — keep them separate.
+Group author photos are **not** resolved by the bubble. `ChatDetailViewModel.ApplyMessageRunLayout` walks the visible timeline once, resolves avatar URI (group roster → canonical 1:1 chat → `IPersonStore` cache), and sets `ChatMessage.ContactUri` / `ShowContact`. The template only binds those fields. LID vs PN matching goes through `IJidResolver.GetCanonicalJid`. Member picture GETs are `GroupRosterPolicy` on `IContactService` (batches of 16; `AvatarFetchedAtUtc` remembers misses). Roster apply also persists `PersonGroup` memberships (Jid + Lid/phone aliases) for the “groups in common” member pane. UI shells: user/group in `ChatDetailInfoControl`; member in `ChatDetailGroupMemberInfoPane` — keep them separate.
 
 ## ChatDetail composer
 

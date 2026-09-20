@@ -6,7 +6,6 @@ using Windows.Foundation;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Media;
-using Windows.UI.Xaml.Media.Imaging;
 
 namespace Unison.Uwp.UI.Controls
 {
@@ -200,24 +199,23 @@ namespace Unison.Uwp.UI.Controls
 
         private void ApplyStatusChrome(ChatListPreview preview)
         {
-            if (StatusHost == null || StatusImage == null || FailedMark == null)
+            if (StatusHost == null || StatusIconSent == null || StatusIconRead == null || FailedMark == null)
             {
                 return;
             }
 
             bool showTick = preview != null && preview.ShowStatusCheckmark;
             bool showFail = preview != null && preview.ShowSendFailed;
+            bool showRead = showTick && preview.IsReadStatus;
+            bool showSent = showTick && !preview.IsReadStatus;
             StatusHost.Visibility = (showTick || showFail) ? Visibility.Visible : Visibility.Collapsed;
             FailedMark.Visibility = showFail ? Visibility.Visible : Visibility.Collapsed;
-            StatusImage.Visibility = showTick ? Visibility.Visible : Visibility.Collapsed;
-            if (showTick && !string.IsNullOrEmpty(preview.StatusCheckmarkUri))
-            {
-                StatusImage.Source = new BitmapImage(new System.Uri(preview.StatusCheckmarkUri));
-            }
-            else
-            {
-                StatusImage.Source = null;
-            }
+            StatusIconSent.Visibility = showSent ? Visibility.Visible : Visibility.Collapsed;
+            StatusIconRead.Visibility = showRead ? Visibility.Visible : Visibility.Collapsed;
+
+            var glyph = showTick ? (preview.StatusGlyph ?? string.Empty) : string.Empty;
+            StatusIconSent.Glyph = glyph;
+            StatusIconRead.Glyph = glyph;
         }
 
         private void KindHost_LayoutUpdated(object sender, object e)

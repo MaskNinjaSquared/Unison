@@ -22,6 +22,7 @@ namespace Unison.Core.Helpers
         public static readonly string[] KnownFallbacks =
         {
             "You",
+            "Me",
             "Você",
             "Anda",
             "Tu",
@@ -29,6 +30,34 @@ namespace Unison.Core.Helpers
             "Ty",
             "U"
         };
+
+        /// <summary>
+        /// Whether a name is one of the stand-ins we use for the logged-in account rather than
+        /// something a contact is actually called.
+        /// </summary>
+        /// <remarks>
+        /// This question was asked in four places and three of them knew only "Me" and "You",
+        /// so on a device running in any other language the localized stand-in sailed through
+        /// as a real name and could be cached as a participant's label.
+        /// </remarks>
+        public static bool IsKnownFallback(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                return false;
+            }
+
+            string trimmed = name.Trim();
+            for (int i = 0; i < KnownFallbacks.Length; i++)
+            {
+                if (string.Equals(trimmed, KnownFallbacks[i], StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
 
         /// <summary>
         /// List/header label. Non-personal returns <paramref name="baseName"/> as-is.

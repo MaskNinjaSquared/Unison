@@ -9,6 +9,7 @@ using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Navigation;
 using Microsoft.Extensions.DependencyInjection;
 using Unison.Core.Constants;
+using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Models;
 using Unison.Core.ViewModels;
@@ -16,7 +17,7 @@ using Unison.Core.ViewModels;
 namespace Unison.Uwp.UI.Views
 {
     /// <summary>Shell content: chat list + detail (master-detail VisualStates).</summary>
-    public sealed partial class ChatsView : Page
+    public partial class ChatsView : Page, IConversationShellPage
     {
         private ShellViewModel _shell;
         private bool _hooked;
@@ -32,6 +33,7 @@ namespace Unison.Uwp.UI.Views
         public ChatsView()
         {
             InitializeComponent();
+            ChatListPart.ConfigureScope(ChatListScope.Active);
             NavigationCacheMode = NavigationCacheMode.Disabled;
             PaneSplitter.Width = ChatPaneLayoutConstants.SplitterWidth;
             Column0.MinWidth = ChatPaneLayoutConstants.MinListWidth;
@@ -89,7 +91,12 @@ namespace Unison.Uwp.UI.Views
         }
 
         /// <summary>Called when local chats are wiped (resync) — leave NarrowDetail empty state.</summary>
-        internal async void NotifyLocalConversationsCleared()
+        public void NotifyLocalConversationsCleared()
+        {
+            _ = NotifyLocalConversationsClearedAsync();
+        }
+
+        private async Task NotifyLocalConversationsClearedAsync()
         {
             try
             {
@@ -599,12 +606,12 @@ namespace Unison.Uwp.UI.Views
 
             try
             {
-                var service = App.Services?.GetService<IWhatsAppService>();
-                if (service != null)
+                var jids = App.Services?.GetService<IJidResolver>();
+                if (jids != null)
                 {
                     return string.Equals(
-                        service.GetCanonicalJid(active.JID),
-                        service.GetCanonicalJid(chat.JID),
+                        jids.GetCanonicalJid(active.JID),
+                        jids.GetCanonicalJid(chat.JID),
                         StringComparison.OrdinalIgnoreCase);
                 }
             }

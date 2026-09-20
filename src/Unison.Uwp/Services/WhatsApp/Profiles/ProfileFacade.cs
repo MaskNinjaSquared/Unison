@@ -25,12 +25,16 @@ namespace Unison.Uwp.Services.WhatsApp.Profiles
     {
         private readonly IWhatsAppSessionProvider _sessions;
         private readonly IWhatsAppService _appState;
+        private readonly IAvatarCache _avatarCache;
 
         /// <param name="appState">
-        /// Still the owner of the cached avatar and the persisted profile. That half moves to
-        /// the state store in a later phase; this facade only replaces the wire path.
+        /// Still the owner of the persisted profile. That half moves to the state store in a later
+        /// phase; this facade only replaces the wire path.
         /// </param>
-        internal ProfileFacade(IWhatsAppSessionProvider sessions, IWhatsAppService appState)
+        internal ProfileFacade(
+            IWhatsAppSessionProvider sessions,
+            IWhatsAppService appState,
+            IAvatarCache avatarCache)
         {
             if (sessions == null)
             {
@@ -44,6 +48,7 @@ namespace Unison.Uwp.Services.WhatsApp.Profiles
 
             _sessions = sessions;
             _appState = appState;
+            _avatarCache = avatarCache ?? throw new ArgumentNullException(nameof(avatarCache));
 
             // Both live as long as the app does, so there is nothing to unhook from.
             _appState.OnUserProfileChanged += (s, e) =>
@@ -168,7 +173,8 @@ namespace Unison.Uwp.Services.WhatsApp.Profiles
             string localUri = null;
             try
             {
-                localUri = await _appState.CacheRemoteAvatarAsync(meId, remoteUrl, cancellationToken)
+                localUri = await _avatarCache
+                    .SaveAsync(meId, remoteUrl, AvatarVariant.Preview, cancellationToken)
                     .ConfigureAwait(false);
             }
             catch (Exception ex)

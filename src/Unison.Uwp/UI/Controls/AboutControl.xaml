@@ -65,10 +65,11 @@
                         Text="{x:Bind ViewModel.AppTitle, Mode=OneWay}"
                         TextWrapping="Wrap" />
                     <TextBlock
+                        x:Uid="Settings_AppDescription"
                         Margin="0,2,0,0"
                         FontSize="12"
                         Foreground="{ThemeResource WhatsAppTextMediumBrush}"
-                        Text="{x:Bind ViewModel.AppDescription, Mode=OneWay}"
+                        Text="WhatsApp Client based on Baileys for Windows Universal Platform."
                         TextWrapping="Wrap" />
                 </StackPanel>
 
@@ -105,11 +106,12 @@
                         Foreground="{ThemeResource WhatsAppTextHighBrush}"
                         Text="Branch" />
                     <TextBlock
+                        x:Uid="Settings_AppBranch"
                         Margin="5,0,0,0"
                         FontSize="14"
                         FontWeight="SemiLight"
                         Foreground="{StaticResource UnisonGreenBrightBrush}"
-                        Text="{x:Bind ViewModel.AppBranch, Mode=OneWay}" />
+                        Text="Release" />
                 </StackPanel>
 
                 <StackPanel

@@ -204,7 +204,12 @@ namespace Unison.Socket.Messages
                     { OfflineNodeKind.Notification, Notifications.HandleAsync },
                     { OfflineNodeKind.Call, Calls.HandleAsync }
                 },
-                () => true,
+                // The queue checks this between nodes so a socket that drops mid-burst abandons
+                // the rest instead of working against a dead connection. Passing a constant
+                // disabled that: every remaining node was handled, each one tried to ack, and
+                // each ack threw and was swallowed - a burst of wasted work and log noise at
+                // exactly the worst moment, during a reconnect.
+                () => session.Connection.IsConnected,
                 (node, error) => Ack.ExecuteAsync(node, error),
                 log)
             {

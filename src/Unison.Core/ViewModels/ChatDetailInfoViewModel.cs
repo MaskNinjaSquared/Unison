@@ -11,6 +11,7 @@ using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Factories;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
+using Unison.Core.State;
 
 namespace Unison.Core.ViewModels
 {
@@ -26,11 +27,21 @@ namespace Unison.Core.ViewModels
         private readonly IMessageStore _messageStore;
         private readonly IMessageService _messages;
         private readonly IChatMessageVmFactory _messageVmFactory;
-        private readonly IWhatsAppService _whatsApp;
+
+        /// <summary>Send permissions, roster and the group picture.</summary>
+        private readonly IGroupService _groups;
+
+        /// <summary>The chat list, for naming the groups this person shares with us.</summary>
+        private readonly IChatStateStore _chatState;
+
+        private readonly ParticipantResolutionContext _participants;
+        private readonly IJidResolver _jids;
         private readonly IPersonStore _personStore;
         private readonly IContactService _contacts;
         private readonly IDispatcher _dispatcher;
         private readonly IStringResources _strings;
+        private readonly IDialogService _dialogs;
+        private readonly IUriLauncher _uriLauncher;
         private readonly ChatItem _source;
         private readonly GroupMember _member;
         private readonly bool _isGroup;
@@ -43,12 +54,17 @@ namespace Unison.Core.ViewModels
         private bool _isMediaIndexLoading;
         private bool _membersAvatarsRequested;
         private bool _isMembersAvatarsLoading;
+        private bool _isMembersRosterLoading;
+        private Task _membersRosterEnsureTask;
 
         /// <summary>Tiles materialized per page. Groups hold hundreds of media rows.</summary>
         private const int MediaPageSize = 30;
 
         /// <summary>Upper bound on the in-memory media index (models, not ViewModels).</summary>
         private const int MediaIndexLimit = 400;
+
+        /// <summary>How long a burst of message events is allowed to settle before rebuilding.</summary>
+        private static readonly TimeSpan RebuildDebounce = TimeSpan.FromMilliseconds(400);
 
         /// <summary>Media rows newest-first; only the first <see cref="_mediaWindow"/> become ViewModels.</summary>
         private readonly List<ChatMessage> _mediaIndex = new List<ChatMessage>();
@@ -57,10 +73,6 @@ namespace Unison.Core.ViewModels
 
         private int _mediaWindow;
         private int _fileWindow;
-
-        private string _notificationsValue;
-        private string _pinMenuLabel;
-        private string _chatPinLabel;
 
         public ChatDetailInfoViewModel(
             ChatItem source,
@@ -72,13 +84,19 @@ namespace Unison.Core.ViewModels
             IChatService chatService = null,
             IMessageStore messageStore = null,
             IChatMessageVmFactory messageVmFactory = null,
-            IWhatsAppService whatsApp = null,
+            IGroupService groups = null,
             GroupMember member = null,
             IPersonStore personStore = null,
             IMessageService messages = null,
-            IContactService contacts = null)
+            IContactService contacts = null,
+            IDialogService dialogs = null,
+            ParticipantResolutionContext participants = null,
+            IUriLauncher uriLauncher = null,
+            IChatStateStore chatState = null)
         {
             _source = source ?? throw new ArgumentNullException(nameof(source));
+            _participants = participants;
+            _jids = participants?.Jids;
             _member = member;
             _isGroupMember = member != null;
             _isGroup = isGroup && !_isGroupMember;
@@ -88,11 +106,14 @@ namespace Unison.Core.ViewModels
             _messageStore = messageStore;
             _messages = messages;
             _messageVmFactory = messageVmFactory;
-            _whatsApp = whatsApp;
+            _groups = groups;
+            _chatState = chatState;
             _personStore = personStore;
             _contacts = contacts;
             _dispatcher = dispatcher;
             _strings = strings;
+            _dialogs = dialogs;
+            _uriLauncher = uriLauncher;
 
             _source.PropertyChanged += Source_PropertyChanged;
             if (_member != null)
@@ -130,6 +151,14 @@ namespace Unison.Core.ViewModels
                       _chatService != null &&
                       !string.IsNullOrWhiteSpace(_source?.JID));
 
+            // Same surface as ChatDetail overflow: 1:1 and group. Hidden on a member's profile so
+            // it cannot delete the group the member happens to be in.
+            DeleteChatCommand = new RelayCommand(
+                () => _ = DeleteChatAsync(),
+                () => !_isGroupMember &&
+                      _chatService != null &&
+                      !string.IsNullOrWhiteSpace(_source?.JID));
+
             SetNotificationsCommand = new RelayCommand<bool>(
                 enabled => _ = SetNotificationsEnabledAsync(enabled),
                 _ => !_isGroupMember &&
@@ -140,19 +169,23 @@ namespace Unison.Core.ViewModels
                 () => _ = AddContactAsync(),
                 () => CanAddToAddressBook);
 
+            CallPhoneCommand = new RelayCommand(
+                () => _ = CallPhoneAsync(),
+                () => CanCallPhone);
+
             RefreshDerived();
             if (_isGroupMember)
             {
                 _ = LoadSharedGroupsAsync();
             }
-            else if (_whatsApp != null)
+            else if (_groups != null)
             {
                 if (_isGroup)
                 {
-                    _ = _whatsApp.RefreshGroupSendPermissionsAsync(_source.JID);
+                    _ = _groups.RefreshGroupSendPermissionsAsync(_source.JID);
                 }
 
-                _ = _whatsApp.EnsureHighQualityGroupAvatarAsync(_source);
+                _ = _groups.EnsureHighQualityGroupAvatarAsync(_source);
             }
         }
 
@@ -182,6 +215,9 @@ namespace Unison.Core.ViewModels
         /// <summary>True while the Members pivot is hydrating roster pictures.</summary>
         public bool IsMembersAvatarsLoading => _isMembersAvatarsLoading;
 
+        /// <summary>True while the Members pivot is fetching the roster metadata base.</summary>
+        public bool IsMembersRosterLoading => _isMembersRosterLoading;
+
         public bool HasSharedGroups => SharedGroups.Count > 0;
 
         public ChatItem Source => _source;
@@ -199,8 +235,7 @@ namespace Unison.Core.ViewModels
                 ? (GroupParticipantResolver.ResolveAvatar(
                     _member?.Jid ?? _member?.Lid ?? _member?.PhoneNumber,
                     _source,
-                    _whatsApp,
-                    _personStore,
+                    _participants,
                     _member) ?? string.Empty)
                 : _source.GetAvatarUrl(preferHigh: true);
 
@@ -214,8 +249,7 @@ namespace Unison.Core.ViewModels
                     return GroupParticipantResolver.ResolveDisplayName(
                         jid,
                         _source,
-                        _whatsApp,
-                        _personStore,
+                        _participants,
                         _member?.DisplayName,
                         _member) ?? string.Empty;
                 }
@@ -261,76 +295,32 @@ namespace Unison.Core.ViewModels
 
         public bool HasPhone => !string.IsNullOrWhiteSpace(PhoneValue);
 
+        /// <summary>Non-group profiles with a phone — drives the dialer hyperlink.</summary>
+        public bool CanCallPhone =>
+            !_isGroup &&
+            _uriLauncher != null &&
+            HasPhone;
+
         public bool CanAddToAddressBook =>
             !_isGroup &&
             _contacts != null &&
             _contacts.CanAddToAddressBook(LookupJid, PhoneValue);
-
-        public string AddContactLabel => Loc("ChatDetail_AddContact.Text", "Add contact");
-
-        public string AddContactAppBarLabel =>
-            Loc("ChatDetailInfo_AddContactAppBarLabel", "Add\ncontact");
 
         /// <summary>Contact about / group description — local-only placeholder until synced.</summary>
         public string StatusOrDescription => string.Empty;
 
         public bool HasStatusOrDescription => !string.IsNullOrWhiteSpace(StatusOrDescription);
 
-        public string NotificationsValue
-        {
-            get => _notificationsValue;
-            private set => Set(ref _notificationsValue, value);
-        }
-
         /// <summary>True when the chat is not muted — notifications are delivered.</summary>
         public bool NotificationsEnabled => !_source.IsMutedLocally;
 
-        public string PinMenuLabel
-        {
-            get => _pinMenuLabel;
-            private set => Set(ref _pinMenuLabel, value);
-        }
+        /// <summary>Start-tile pin state (drives pin/unpin app-bar Visibility).</summary>
+        public bool IsWidgetPinned => _source != null && _source.IsWidgetPinned;
 
-        public string ProfilePivotHeader =>
-            _isGroupMember
-                ? Loc("ChatDetailInfo_Profile", "Profile")
-                : _isGroup
-                    ? Loc("ChatDetailInfo_GroupInfo", "Group info")
-                    : Loc("ChatDetailInfo_Profile", "Profile");
-
-        public string NameSectionLabel =>
-            _isGroup
-                ? Loc("ChatDetailInfo_GroupName", "Group name")
-                : Loc("ChatDetailInfo_Name", "Name");
-
-        public string PhoneSectionLabel => Loc("ChatDetailInfo_Phone", "Phone");
-
-        public string StatusSectionLabel =>
-            _isGroup
-                ? Loc("ChatDetailInfo_Description", "Description")
-                : Loc("ChatDetailInfo_Status", "Status");
-
-        public string NotificationsSectionLabel =>
-            Loc("ChatDetailInfo_Notifications", "Notifications");
-
-        public string SharedGroupsSectionLabel =>
-            Loc("ChatDetailInfo_GroupsInCommon", "Groups in common");
-
-        public string SharedGroupsEmptyText =>
-            Loc("ChatDetailInfo_GroupsInCommonEmpty", "No groups in common.");
-
-        public string AdminRoleText =>
-            _member != null && _member.IsAdmin
-                ? Loc("ChatDetailInfo_Admin", "Admin")
-                : string.Empty;
+        /// <summary>Account chat-list pin state (drives pin/unpin app-bar Visibility).</summary>
+        public bool IsChatPinned => _source != null && _source.IsChatPinned;
 
         public bool IsMemberAdmin => _member != null && _member.IsAdmin;
-
-        public string NotificationsOnText => Loc("ChatDetailInfo_NotificationsOn", "On");
-
-        public string NotificationsOffText => Loc("ChatDetailInfo_NotificationsOff", "Off");
-
-        public string MembersSectionLabel => Loc("ChatDetailInfo_Members", "Members");
 
         public bool HasMembersCount => _source.GroupMemberCount > 0;
 
@@ -355,8 +345,6 @@ namespace Unison.Core.ViewModels
             }
         }
 
-        public string MembersPivotHeader => Loc("ChatDetailInfo_Members", "Members");
-
         public IList<GroupMember> Members => _source.GroupMembers;
 
         public bool HasMembers => _source.HasGroupMembers;
@@ -364,42 +352,26 @@ namespace Unison.Core.ViewModels
         /// <summary>Digit → name map from <see cref="Members"/> for bubble/strip parsers.</summary>
         public IReadOnlyDictionary<string, string> MentionLookup => _source.MentionLookup;
 
-        public string MediaPivotHeader => Loc("ChatDetailInfo_Media", "Media");
-
-        public string FilesPivotHeader => Loc("ChatDetailInfo_Files", "Files");
-
-        public string CallsPivotHeader => Loc("ChatDetailInfo_Calls", "Calls");
-
-        public string CallsEmptyText =>
-            Loc("ChatDetailInfo_CallsEmpty", "Calls you make and receive will appear here.");
-
-        public string MembersEmptyText =>
-            Loc("ChatDetailInfo_MembersEmpty", "Group members will appear here.");
-
-        public string MediaEmptyText =>
-            Loc("ChatDetailInfo_MediaEmpty", "Photos, videos and audio will appear here.");
-
-        public string FilesEmptyText =>
-            Loc("ChatDetailInfo_FilesEmpty", "Documents will appear here.");
-
-        /// <summary>
-        /// Label for the WhatsApp chat-list pin, which is a different thing from the Start tile
-        /// beside it: this one follows the account to every device.
-        /// </summary>
-        public string ChatPinLabel
-        {
-            get => _chatPinLabel;
-            private set => Set(ref _chatPinLabel, value);
-        }
-
         public ICommand PinToStartCommand { get; }
 
         public ICommand PinChatCommand { get; }
+
+        /// <summary>Deletes the 1:1 conversation for the account after asking.</summary>
+        public ICommand DeleteChatCommand { get; }
+
+        /// <summary>
+        /// Raised once the conversation is gone, so the host can leave the chat surface instead of
+        /// keeping an info pane open on something that no longer exists.
+        /// </summary>
+        public event EventHandler ChatDeleted;
 
         /// <summary>True = unmute; false = mute forever (same local mute as the chat overflow).</summary>
         public ICommand SetNotificationsCommand { get; }
 
         public ICommand AddContactCommand { get; }
+
+        /// <summary>Confirm + open dialer for this profile phone (1:1 or group member).</summary>
+        public ICommand CallPhoneCommand { get; }
 
         public void Detach()
         {
@@ -445,6 +417,8 @@ namespace Unison.Core.ViewModels
             _isMediaIndexLoading = false;
             _membersAvatarsRequested = false;
             _isMembersAvatarsLoading = false;
+            _isMembersRosterLoading = false;
+            _membersRosterEnsureTask = null;
         }
 
         /// <summary>
@@ -466,6 +440,114 @@ namespace Unison.Core.ViewModels
             }
 
             _ = RebuildFilteredAsync();
+        }
+
+        /// <summary>
+        /// Members pivot: restore roster from SQLite when empty, sync metadata in the background,
+        /// then hydrate pictures (lazy). Ring only while waiting for a cold network fetch.
+        /// </summary>
+        public Task EnsureMembersPivotReadyAsync()
+        {
+            if (_detached || !_isGroup || string.IsNullOrWhiteSpace(_source?.JID))
+            {
+                return Task.CompletedTask;
+            }
+
+            if (_membersRosterEnsureTask != null)
+            {
+                return _membersRosterEnsureTask;
+            }
+
+            _membersRosterEnsureTask = RunMembersPivotReadyAsync();
+            return _membersRosterEnsureTask;
+        }
+
+        private async Task RunMembersPivotReadyAsync()
+        {
+            try
+            {
+                if (!HasMembers && _groups != null)
+                {
+                    SetMembersRosterLoading(true);
+                    try
+                    {
+                        await _groups.EnsureGroupRosterLoadedFromStoreAsync(_source.JID)
+                            .ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine(
+                            "[ChatDetailInfoViewModel] Members roster store load failed: " + ex.Message);
+                    }
+                    finally
+                    {
+                        SetMembersRosterLoading(false);
+                    }
+                }
+
+                if (_detached)
+                {
+                    return;
+                }
+
+                if (HasMembers)
+                {
+                    _ = RefreshMembersRosterInBackgroundAsync();
+                    await EnsureMembersAvatarsHydratedAsync().ConfigureAwait(false);
+                    return;
+                }
+
+                SetMembersRosterLoading(true);
+                try
+                {
+                    if (_groups != null)
+                    {
+                        await _groups.RefreshGroupSendPermissionsAsync(_source.JID)
+                            .ConfigureAwait(false);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        "[ChatDetailInfoViewModel] Members roster network ensure failed: " + ex.Message);
+                }
+                finally
+                {
+                    SetMembersRosterLoading(false);
+                }
+
+                if (_detached)
+                {
+                    return;
+                }
+
+                if (HasMembers)
+                {
+                    await EnsureMembersAvatarsHydratedAsync().ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                _membersRosterEnsureTask = null;
+            }
+        }
+
+        private async Task RefreshMembersRosterInBackgroundAsync()
+        {
+            if (_groups == null || string.IsNullOrWhiteSpace(_source?.JID))
+            {
+                return;
+            }
+
+            try
+            {
+                await _groups.RefreshGroupSendPermissionsAsync(_source.JID).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[ChatDetailInfoViewModel] Members roster background sync failed: " + ex.Message);
+            }
         }
 
         /// <summary>
@@ -503,6 +585,29 @@ namespace Unison.Core.ViewModels
             finally
             {
                 SetMembersAvatarsLoading(false);
+            }
+        }
+
+        private void SetMembersRosterLoading(bool value)
+        {
+            Action apply = () =>
+            {
+                if (_isMembersRosterLoading == value)
+                {
+                    return;
+                }
+
+                _isMembersRosterLoading = value;
+                OnPropertyChanged(nameof(IsMembersRosterLoading));
+            };
+
+            if (_dispatcher != null)
+            {
+                _ = _dispatcher.RunAsync(apply);
+            }
+            else
+            {
+                apply();
             }
         }
 
@@ -559,7 +664,7 @@ namespace Unison.Core.ViewModels
             OnPropertyChanged(nameof(PhoneValue));
             OnPropertyChanged(nameof(HasPhone));
             OnPropertyChanged(nameof(IsMemberAdmin));
-            OnPropertyChanged(nameof(AdminRoleText));
+            OnPropertyChanged(nameof(IsMemberAdmin));
             RaiseCanAddToAddressBook();
         }
 
@@ -585,7 +690,7 @@ namespace Unison.Core.ViewModels
         /// Coalesces the bursts of message events a history chunk produces: rebuilding the panes
         /// once per burst instead of once per chat keeps the grids off the UI thread hot path.
         /// </summary>
-        private async void ScheduleRebuild()
+        private void ScheduleRebuild()
         {
             if (_rebuildScheduled || _detached)
             {
@@ -593,21 +698,40 @@ namespace Unison.Core.ViewModels
             }
 
             _rebuildScheduled = true;
+            _ = RunScheduledRebuildAsync();
+        }
+
+        /// <summary>
+        /// The awaited half of <see cref="ScheduleRebuild"/>, kept apart from it so the failure
+        /// has somewhere to land. As an <c>async void</c> this ran on nobody's behalf: a throw
+        /// from the rebuild went to the synchronisation context, where there is no caller to
+        /// catch it, and closed the app instead of logging a failed refresh.
+        /// </summary>
+        private async Task RunScheduledRebuildAsync()
+        {
             try
             {
-                await Task.Delay(400).ConfigureAwait(false);
-            }
-            finally
-            {
-                _rebuildScheduled = false;
-            }
+                try
+                {
+                    await Task.Delay(RebuildDebounce).ConfigureAwait(false);
+                }
+                finally
+                {
+                    _rebuildScheduled = false;
+                }
 
-            if (_detached)
-            {
-                return;
-            }
+                if (_detached)
+                {
+                    return;
+                }
 
-            await RebuildFilteredAsync().ConfigureAwait(false);
+                await RebuildFilteredAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[ChatDetailInfoViewModel] Scheduled rebuild failed: " + ex.Message);
+            }
         }
 
         private async Task RebuildFilteredAsync()
@@ -844,8 +968,8 @@ namespace Unison.Core.ViewModels
                 return false;
             }
 
-            string canonical = _whatsApp != null
-                ? _whatsApp.GetCanonicalJid(participant)
+            string canonical = _jids != null
+                ? _jids.GetCanonicalJid(participant)
                 : JidHelper.Normalize(participant);
             if (string.IsNullOrWhiteSpace(canonical))
             {
@@ -864,8 +988,8 @@ namespace Unison.Core.ViewModels
                 return false;
             }
 
-            string other = _whatsApp != null
-                ? _whatsApp.GetCanonicalJid(jid)
+            string other = _jids != null
+                ? _jids.GetCanonicalJid(jid)
                 : JidHelper.Normalize(jid);
             if (string.IsNullOrWhiteSpace(other))
             {
@@ -918,9 +1042,9 @@ namespace Unison.Core.ViewModels
                     string groupJid = pair.Key;
                     string name = groupJid;
                     string avatar = null;
-                    if (_whatsApp?.Chats != null)
+                    if (_chatState?.Chats != null)
                     {
-                        var chat = _whatsApp.Chats.FirstOrDefault(c =>
+                        var chat = _chatState.Chats.FirstOrDefault(c =>
                             c != null &&
                             string.Equals(
                                 JidHelper.Normalize(c.JID),
@@ -931,9 +1055,9 @@ namespace Unison.Core.ViewModels
                             name = chat.GetNameResolved(_strings) ?? chat.Name ?? groupJid;
                             avatar = chat.GetAvatarUrl(preferHigh: false);
                         }
-                        else if (_whatsApp != null)
+                        else if (_contacts != null)
                         {
-                            name = _whatsApp.ResolveDisplayName(groupJid, "chat") ?? groupJid;
+                            name = _contacts.ResolveDisplayName(groupJid, "chat") ?? groupJid;
                         }
                     }
 
@@ -1004,15 +1128,15 @@ namespace Unison.Core.ViewModels
             }
 
             Add(member.Jid);
-            if (_whatsApp != null && !string.IsNullOrWhiteSpace(member.Jid))
+            if (_jids != null && !string.IsNullOrWhiteSpace(member.Jid))
             {
-                Add(_whatsApp.GetCanonicalJid(member.Jid));
+                Add(_jids.GetCanonicalJid(member.Jid));
             }
 
             Add(member.Lid);
-            if (_whatsApp != null && !string.IsNullOrWhiteSpace(member.Lid))
+            if (_jids != null && !string.IsNullOrWhiteSpace(member.Lid))
             {
-                Add(_whatsApp.GetCanonicalJid(member.Lid));
+                Add(_jids.GetCanonicalJid(member.Lid));
             }
 
             string phone = member.PhoneNumber;
@@ -1078,20 +1202,19 @@ namespace Unison.Core.ViewModels
             }
             else if (e.PropertyName == nameof(ChatItem.IsWidgetPinned))
             {
-                RefreshPinLabel();
+                OnPropertyChanged(nameof(IsWidgetPinned));
                 (PinToStartCommand as RelayCommand)?.RaiseCanExecuteChanged();
             }
             else if (e.PropertyName == nameof(ChatItem.IsChatPinned))
             {
-                RefreshChatPinLabel();
+                OnPropertyChanged(nameof(IsChatPinned));
+                (PinChatCommand as RelayCommand)?.RaiseCanExecuteChanged();
             }
         }
 
         private void RefreshDerived()
         {
             RefreshNotifications();
-            RefreshPinLabel();
-            RefreshChatPinLabel();
             RaiseCanAddToAddressBook();
         }
 
@@ -1123,8 +1246,32 @@ namespace Unison.Core.ViewModels
         {
             OnPropertyChanged(nameof(PhoneValue));
             OnPropertyChanged(nameof(HasPhone));
+            OnPropertyChanged(nameof(CanCallPhone));
             OnPropertyChanged(nameof(CanAddToAddressBook));
             (AddContactCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (CallPhoneCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        }
+
+        private async Task CallPhoneAsync()
+        {
+            if (!CanCallPhone)
+            {
+                return;
+            }
+
+            string phone = PhoneValue;
+            string label = DisplayName;
+            if (string.IsNullOrWhiteSpace(label))
+            {
+                label = phone;
+            }
+
+            await PhoneCallPrompt.ConfirmAndCallAsync(
+                phone,
+                label,
+                _dialogs,
+                _uriLauncher,
+                _strings).ConfigureAwait(false);
         }
 
         private async Task AddContactAsync()
@@ -1152,9 +1299,6 @@ namespace Unison.Core.ViewModels
 
         private void RefreshNotifications()
         {
-            NotificationsValue = _source.IsMutedLocally
-                ? Loc("ChatDetailInfo_NotificationsOff", "Off")
-                : Loc("ChatDetailInfo_NotificationsOn", "On");
             OnPropertyChanged(nameof(NotificationsEnabled));
             (SetNotificationsCommand as RelayCommand<bool>)?.RaiseCanExecuteChanged();
         }
@@ -1176,32 +1320,13 @@ namespace Unison.Core.ViewModels
             try
             {
                 chat.MutedUntil = mutedUntil;
-                await _chatStore.UpsertAsync(
-                    chat.JID,
-                    chat.LocalStatus,
-                    chat.IsWidgetPinned,
-                    chat.IsChatPinned,
-                    chat.MutedUntil);
+                await _chatStore.SetMutedUntilAsync(chat.JID, chat.MutedUntil);
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine(
                     "[ChatDetailInfoViewModel] Set notifications failed: " + ex.Message);
             }
-        }
-
-        private void RefreshPinLabel()
-        {
-            PinMenuLabel = _source.IsWidgetPinned
-                ? Loc("ChatDetailInfo_UnpinAppBarLabel", "Unpin from\nStart")
-                : Loc("ChatDetailInfo_PinAppBarLabel", "Pin to\nStart");
-        }
-
-        private void RefreshChatPinLabel()
-        {
-            ChatPinLabel = _source.IsChatPinned
-                ? Loc("ChatDetailInfo_UnpinChatAppBarLabel", "Unpin\nchat")
-                : Loc("ChatDetailInfo_PinChatAppBarLabel", "Pin\nchat");
         }
 
         /// <summary>
@@ -1223,6 +1348,20 @@ namespace Unison.Core.ViewModels
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine("[ChatDetailInfoViewModel] Chat pin failed: " + ex.Message);
+            }
+        }
+
+        private async Task DeleteChatAsync()
+        {
+            bool deleted = await ChatDeletionPrompt.ConfirmAndDeleteAsync(
+                _source,
+                _chatService,
+                _dialogs,
+                _strings);
+
+            if (deleted)
+            {
+                ChatDeleted?.Invoke(this, EventArgs.Empty);
             }
         }
 
@@ -1263,24 +1402,19 @@ namespace Unison.Core.ViewModels
                 }
 
                 chat.IsWidgetPinned = nextPinned;
-                await _chatStore.UpsertAsync(
-                    chat.JID,
-                    chat.LocalStatus,
-                    chat.IsWidgetPinned,
-                    chat.IsChatPinned,
-                    chat.MutedUntil);
+                await _chatStore.SetWidgetPinnedAsync(chat.JID, chat.IsWidgetPinned);
 
                 if (_dispatcher != null)
                 {
                     await _dispatcher.RunAsync(() =>
                     {
-                        RefreshPinLabel();
+                        OnPropertyChanged(nameof(IsWidgetPinned));
                         (PinToStartCommand as RelayCommand)?.RaiseCanExecuteChanged();
                     });
                 }
                 else
                 {
-                    RefreshPinLabel();
+                    OnPropertyChanged(nameof(IsWidgetPinned));
                     (PinToStartCommand as RelayCommand)?.RaiseCanExecuteChanged();
                 }
             }

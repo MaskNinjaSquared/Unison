@@ -1,4 +1,3 @@
-using Windows.ApplicationModel.Resources;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 
@@ -6,7 +5,7 @@ namespace Unison.Uwp.UI.Controls
 {
     /// <summary>
     /// Icon + section title row shared by Settings and Debug surfaces.
-    /// Optional <see cref="LocalizationUid"/> loads <c>{uid}.Text</c> into <see cref="Title"/>.
+    /// Parent sets <c>x:Uid</c> and an English <see cref="Text"/> fallback; MRT loads <c>{uid}.Text</c>.
     /// </summary>
     public sealed partial class SettingsSectionHeader : UserControl
     {
@@ -17,24 +16,16 @@ namespace Unison.Uwp.UI.Controls
                 typeof(SettingsSectionHeader),
                 new PropertyMetadata(string.Empty));
 
-        public static readonly DependencyProperty TitleProperty =
+        public static readonly DependencyProperty TextProperty =
             DependencyProperty.Register(
-                nameof(Title),
+                nameof(Text),
                 typeof(string),
                 typeof(SettingsSectionHeader),
                 new PropertyMetadata(string.Empty));
 
-        public static readonly DependencyProperty LocalizationUidProperty =
-            DependencyProperty.Register(
-                nameof(LocalizationUid),
-                typeof(string),
-                typeof(SettingsSectionHeader),
-                new PropertyMetadata(null));
-
         public SettingsSectionHeader()
         {
             this.InitializeComponent();
-            this.Loaded += SettingsSectionHeader_Loaded;
         }
 
         /// <summary>Segoe MDL2 glyph (e.g. E713).</summary>
@@ -44,39 +35,11 @@ namespace Unison.Uwp.UI.Controls
             set => SetValue(GlyphProperty, value);
         }
 
-        /// <summary>Section heading fallback text when localization is missing.</summary>
-        public string Title
+        /// <summary>Section heading; localized via parent <c>x:Uid</c> → <c>{uid}.Text</c>.</summary>
+        public string Text
         {
-            get => (string)GetValue(TitleProperty);
-            set => SetValue(TitleProperty, value);
-        }
-
-        /// <summary>Resource key prefix; loads <c>{LocalizationUid}.Text</c>.</summary>
-        public string LocalizationUid
-        {
-            get => (string)GetValue(LocalizationUidProperty);
-            set => SetValue(LocalizationUidProperty, value);
-        }
-
-        private void SettingsSectionHeader_Loaded(object sender, RoutedEventArgs e)
-        {
-            if (string.IsNullOrEmpty(LocalizationUid))
-            {
-                return;
-            }
-
-            try
-            {
-                var loader = ResourceLoader.GetForCurrentView();
-                string text = loader.GetString(LocalizationUid + "/Text");
-                if (!string.IsNullOrEmpty(text))
-                {
-                    Title = text;
-                }
-            }
-            catch
-            {
-            }
+            get => (string)GetValue(TextProperty);
+            set => SetValue(TextProperty, value);
         }
     }
 }

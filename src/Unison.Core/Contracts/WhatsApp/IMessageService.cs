@@ -141,5 +141,52 @@ namespace Unison.Core.Contracts.WhatsApp
         /// User action: ensure a chat row exists for <paramref name="jid"/> (new-chat flow).
         /// </summary>
         void StartNewChat(string jid);
+
+        /// <summary>
+        /// Live inbound announce: toast / badge / tile. From-me is a no-op. Mute is read from
+        /// <paramref name="chat"/> (after local store overlay) or the chat-store cache.
+        /// </summary>
+        void NotifyLiveIncoming(
+            string chatJid,
+            string chatName,
+            string senderName,
+            string preview,
+            bool isGroup,
+            bool isFromMe,
+            bool suppressToast,
+            int totalUnread,
+            ChatItem chat);
+
+        /// <summary>
+        /// Inserts or enriches a live/offline message in the in-memory timeline.
+        /// Alias consolidate side-effects (store delete, list dedupe) stay with the pump.
+        /// </summary>
+        IncomingTimelineAcceptResult AcceptIncomingTimeline(
+            string chatJid,
+            ChatMessage message,
+            bool isGroup);
+
+        /// <summary>Queues a message for debounced JSON/SQLite persist and schedules a flush.</summary>
+        void QueueIncomingPersist(string chatJid, ChatMessage message);
+
+        /// <summary>
+        /// Applies an inbound revoke protocol to the timeline (tombstone + persist).
+        /// Prefer this over calling the WhatsApp client from the pump.
+        /// </summary>
+        Task ApplyIncomingRevocationAsync(
+            string chatJid,
+            string targetMessageId,
+            string envelopeMessageId = null);
+
+        /// <summary>
+        /// Applies an inbound pin-in-chat protocol to the timeline.
+        /// Prefer this over calling the WhatsApp client from the pump.
+        /// </summary>
+        Task ApplyIncomingPinInChatAsync(
+            string chatJid,
+            string targetMessageId,
+            bool pin,
+            long senderTimestampMs,
+            uint durationSeconds = 0);
     }
 }

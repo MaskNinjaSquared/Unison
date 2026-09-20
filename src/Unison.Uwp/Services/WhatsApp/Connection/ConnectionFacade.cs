@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Unison.Core.Constants;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
+using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Uwp.Services;
 using Unison.Uwp.Services.Socket;
@@ -69,6 +70,58 @@ namespace Unison.Uwp.Services.WhatsApp.Connection
         public bool AutoUnlinkOnLogoutEnabled =>
             _localSettings.Get<bool>(LocalSettingsConstants.AutoUnlinkOnLogoutEnabled);
 
+        // ---------------------------------------------------------------------
+        // Startup
+        //
+        // Forwarding, and deliberately so: the shell drives launch in a fixed order and needs one
+        // thing to drive it through. Until the socket moves here (phase 4) the client is still
+        // what answers, but the shell no longer has to know that.
+        //
+        // A missing client is treated as "not connected, not registered, nothing saved" rather
+        // than as an error. The facade is built before the client is attached, and a screen that
+        // asks in that window should fall through to pairing, not throw.
+        // ---------------------------------------------------------------------
+
+        public bool IsConnected
+        {
+            get
+            {
+                var whatsApp = _whatsApp;
+                return whatsApp != null && whatsApp.IsConnected;
+            }
+        }
+
+        public Task InitializeConnectionStateAsync()
+        {
+            var whatsApp = _whatsApp;
+            return whatsApp == null ? Task.CompletedTask : whatsApp.InitializeConnectionStateAsync();
+        }
+
+        public Task<bool> IsRegisteredAsync()
+        {
+            var whatsApp = _whatsApp;
+            return whatsApp == null ? Task.FromResult(false) : whatsApp.IsRegisteredAsync();
+        }
+
+        public Task EnsureConnectedAsync(int timeoutMs = 35000, bool forceFreshTransport = false)
+        {
+            var whatsApp = _whatsApp;
+            return whatsApp == null
+                ? Task.CompletedTask
+                : whatsApp.EnsureConnectedAsync(timeoutMs, forceFreshTransport);
+        }
+
+        public Task LoadPersistedUiStateAsync()
+        {
+            var whatsApp = _whatsApp;
+            return whatsApp == null ? Task.CompletedTask : whatsApp.LoadPersistedUiStateAsync();
+        }
+
+        public void StartDeferredStartupMaintenance()
+        {
+            _whatsApp?.StartDeferredStartupMaintenance();
+        }
+
         public void AttachWhatsAppService(IWhatsAppService whatsApp)
         {
             if (ReferenceEquals(_whatsApp, whatsApp))
@@ -81,7 +134,7 @@ namespace Unison.Uwp.Services.WhatsApp.Connection
             HookClient(whatsApp);
         }
 
-        public void NotifyStreamError(string code)
+        private void NotifyStreamError(string code)
         {
             EvaluateAndMaybeUnlink(ClassifyStreamError(code), code, "stream-error");
         }
@@ -92,7 +145,7 @@ namespace Unison.Uwp.Services.WhatsApp.Connection
         /// for deleting credentials that the phone may still consider perfectly valid. It stops
         /// the reconnect loop and leaves the decision to unlink with the user.
         /// </summary>
-        public void NotifySuspectedInvalidSession(string trigger)
+        private void NotifySuspectedInvalidSession(string trigger)
         {
             EvaluateAndMaybeUnlink(DisconnectReason.BadSession, "500", trigger ?? "suspected-invalid");
         }
@@ -375,6 +428,8 @@ namespace Unison.Uwp.Services.WhatsApp.Connection
             whatsApp.OnSessionInitialized += Client_OnSessionInitialized;
             whatsApp.OnSessionCleared += Client_OnSessionCleared;
             whatsApp.OnError += Client_OnError;
+            whatsApp.OnStreamError += Client_OnStreamError;
+            whatsApp.OnInvalidSessionSuspected += Client_OnInvalidSessionSuspected;
         }
 
         private void UnhookClient(IWhatsAppService whatsApp)
@@ -390,6 +445,18 @@ namespace Unison.Uwp.Services.WhatsApp.Connection
             whatsApp.OnSessionInitialized -= Client_OnSessionInitialized;
             whatsApp.OnSessionCleared -= Client_OnSessionCleared;
             whatsApp.OnError -= Client_OnError;
+            whatsApp.OnStreamError -= Client_OnStreamError;
+            whatsApp.OnInvalidSessionSuspected -= Client_OnInvalidSessionSuspected;
+        }
+
+        private void Client_OnStreamError(object sender, string code)
+        {
+            NotifyStreamError(code);
+        }
+
+        private void Client_OnInvalidSessionSuspected(object sender, string trigger)
+        {
+            NotifySuspectedInvalidSession(trigger);
         }
 
         private void Client_OnQrCodeReceived(object sender, string qr)
@@ -439,13 +506,8 @@ namespace Unison.Uwp.Services.WhatsApp.Connection
             }
         }
 
-        private static bool IsRelinkReason(DisconnectReason reason)
-        {
-            return reason == DisconnectReason.LoggedOut ||
-                   reason == DisconnectReason.ConnectionReplaced ||
-                   reason == DisconnectReason.BadSession ||
-                   reason == DisconnectReason.Forbidden;
-        }
+        private static bool IsRelinkReason(DisconnectReason reason) =>
+            RelinkDisconnectReason.Matches(reason);
 
         private static string Describe(DisconnectReason reason, string code)
         {

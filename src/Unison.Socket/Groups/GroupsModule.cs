@@ -14,6 +14,7 @@
 // Ports: rc14 makeGroupsSocket in src/Socket/groups.ts
 // =============================================================================
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Unison.Baileys.Protocol;
 using Unison.Socket.Abstractions;
@@ -130,10 +131,45 @@ namespace Unison.Socket.Groups
 
             if (result.Groups.Count > 0)
             {
-                await _events.EmitAsync(WaEventKind.GroupsUpdate, result.Groups).ConfigureAwait(false);
+                // Projected to the shape this event is declared in. Emitting the raw metadata
+                // list typed this event differently from the other two emitters, and the batch
+                // reader casts with `as`: the mismatch came back as null, TryGet reported "no
+                // such event", and the refresh was dropped without a log or an exception. A
+                // group renamed while we were away only caught up on the next history sync.
+                await _events.EmitAsync(WaEventKind.GroupsUpdate, ToUpdates(result.Groups))
+                    .ConfigureAwait(false);
             }
 
             await _clean.ExecuteAsync("groups").ConfigureAwait(false);
+        }
+
+        private static IList<GroupUpdate> ToUpdates(IList<GroupMetadata> groups)
+        {
+            var updates = new List<GroupUpdate>(groups.Count);
+            for (int i = 0; i < groups.Count; i++)
+            {
+                GroupMetadata group = groups[i];
+                if (group == null || string.IsNullOrEmpty(group.Id))
+                {
+                    continue;
+                }
+
+                updates.Add(new GroupUpdate(group.Id)
+                {
+                    Subject = group.Subject,
+                    SubjectOwner = group.SubjectOwner,
+                    SubjectTime = group.SubjectTime == 0 ? (long?)null : group.SubjectTime,
+                    Description = group.Description,
+                    DescriptionId = group.DescriptionId,
+                    Announce = group.Announce,
+                    Restrict = group.Restrict,
+                    MemberAddMode = group.MemberAddMode,
+                    JoinApprovalMode = group.JoinApprovalMode,
+                    Size = group.Size
+                });
+            }
+
+            return updates;
         }
 
         private Task<GroupMetadata> ResolveMetadataAsync(string groupJid)

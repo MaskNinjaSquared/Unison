@@ -171,7 +171,15 @@ Outgoing **audio is converted to OGG** before upload (UWP media processor).
 
 ## Events
 
-`IWaEventBus` is the only Socket → host channel. During initial history sync, `WaEventBuffer` **buffers and merges** bursts (`MessagingHistorySet`, chats/contacts/messages upserts, receipts, group updates), then flushes. Timeout 30s auto-flush; nested flush debounce 100 ms.
+`IWaEventBus` is the only Socket → host channel. `WaEventBuffer` is the rc14 `event-buffer.ts` port: during initial history sync it opens a buffer, and `OfflineSyncCoordinator` releases it when the backlog drains. Timeout 30s auto-flush; nested flush debounce 100 ms.
+
+**The merge half is not built.** A kind is only held back when a merger is registered for it, and no
+`IWaEventMerger` implementation exists — `RegisterMerger` has no callers. So every event is dispatched
+individually today, and the buffer's open/release cycle is a no-op around that. The fail-safe is
+deliberate (an unmerged kind passes straight through rather than being lost); what is missing is the
+mergers themselves, for `MessagingHistorySet`, chats/contacts/messages upserts, receipts, and group
+updates. Until they exist, a first sync costs the host one dispatch per event rather than one batch,
+which is why `SocketBridge` still coalesces on its own side.
 
 QR travels on `ConnectionUpdate.Qr` (no separate QR event), matching rc14.
 
@@ -226,6 +234,26 @@ Logout notifies the **server** (`LogoutUseCase`) before wiping local state.
 7. `MessageEnvelope` instead of generated `WebMessageInfo` (LID fields missing in the current proto).
 8. Group history and call log are **off** in `HistorySyncConfig`.
 9. `ChatsModule` is split out of `makeChatsSocket`; app-state is its own module.
+
+## Known gaps in `Unison.Baileys` crypto
+
+These are **not** deviations we chose; they are verifications libsignal and rc14 perform and this port
+does not. Recorded so nobody rediscovers them as a surprise, and so nobody "cleans up" the unused
+material below thinking it is dead code — it is the input to checks that were never written.
+
+Turning any of these on is the change most able to break everything at once: if our side computes the
+value even slightly differently from the server's, every affected message starts being rejected, and no
+unit test will show it. Each needs a real account on a device to land safely.
+
+| Gap | Where | What it costs today |
+|---|---|---|
+| The 8-byte MAC on direct messages is extracted and never checked; `macKey` is derived and ignored | `Client/SignalHandler.cs` — extraction ~`:789`, derivation ~`:1989`, unused at ~`:2152` | The only integrity check left is AES-CBC padding. A corrupt ciphertext whose padding happens to validate is accepted, the ratchet advances past the real key, and that contact's later messages stop opening until the session is rebuilt |
+| The 64-byte signature on a group `skmsg` is sliced off and discarded | `Client/SignalHandler.cs:768` | `SenderKeyState.SigningKey` is stored for a check that never runs |
+| The signed pre-key signature in a fetched bundle is never verified | `Client/SignalHandler.cs` — `InitializeOutgoingSession` never reads `bundle.SignedPreKeySignature` | This is the check that stops the server handing us a pre-key of its own |
+| The server certificate in the Noise handshake is decrypted and dropped | `Protocol/NoiseHandler.cs:292` (`// TODO: Validate certificate chain`) | In Noise XX the responder's static key is authenticated by nothing else. `WA_CERT_SERIAL` is defined and unused |
+| Signal session read-modify-write is not atomic on the receive path | `Client/SignalHandler.cs` — read ~`:1402`, write ~`:1487`; compare `EncryptMessage`, which holds `_sessionLock` throughout | One JSON blob holds both the receive chain and the send chain. A decrypt that reads, an encrypt that commits, then the decrypt committing, rolls `SendingChainKey` back — the next message goes out with a repeated counter and the recipient drops it |
+
+`CryptoUtils.Verify` exists and works; outside pairing it has no callers.
 
 ## Transport seam
 

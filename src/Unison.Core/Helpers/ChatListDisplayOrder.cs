@@ -43,15 +43,27 @@ namespace Unison.Core.Helpers
 
                 ChatItem existing = deduped[existingIndex];
 
-                if (item.IsChatPinned && !existing.IsChatPinned && existing.PinnedTimestamp != 0)
+                if (item.IsChatPinned && !existing.IsChatPinned)
                 {
                     existing.IsChatPinned = true;
-                    existing.PinnedTimestamp = item.PinnedTimestamp;
+                    if ((item.PinnedTimestamp ?? 0) > 0)
+                    {
+                        existing.PinnedTimestamp = item.PinnedTimestamp;
+                    }
+                    else if (existing.PinnedTimestamp == null || existing.PinnedTimestamp == 0)
+                    {
+                        existing.PinnedTimestamp = 1;
+                    }
                 }
                 else if (item.IsChatPinned && existing.IsChatPinned &&
                          (item.PinnedTimestamp ?? 0) > (existing.PinnedTimestamp ?? 0))
                 {
                     existing.PinnedTimestamp = item.PinnedTimestamp;
+                }
+
+                if (item.MutedUntil != null && existing.MutedUntil == null)
+                {
+                    existing.MutedUntil = item.MutedUntil;
                 }
 
                 DateTime existingPreviewUtc = existing.LastMessageTimestampUtc ?? DateTime.MinValue;
@@ -70,10 +82,15 @@ namespace Unison.Core.Helpers
 
                 if (itemHasNewerPreview || samePreviewButBetterAvatar || samePreviewAndAvatarButBetterName)
                 {
-                    if (existing.IsChatPinned && !item.IsChatPinned && item.PinnedTimestamp != 0)
+                    if (existing.IsChatPinned && !item.IsChatPinned)
                     {
                         item.IsChatPinned = true;
-                        item.PinnedTimestamp = existing.PinnedTimestamp;
+                        item.PinnedTimestamp = existing.PinnedTimestamp ?? 1;
+                    }
+
+                    if (existing.MutedUntil != null && item.MutedUntil == null)
+                    {
+                        item.MutedUntil = existing.MutedUntil;
                     }
 
                     deduped[existingIndex] = item;

@@ -102,18 +102,15 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private void EnableScheduledPersist(string reason)
         {
-            bool shouldFlushPendingPersist = false;
-            if (_suppressStartupScheduledPersist)
+            var result = _persistScheduler.EnableAfterStartup();
+            if (result == PersistEnableResult.AlreadyEnabled)
             {
-                _suppressStartupScheduledPersist = false;
-                lock (_persistLock)
-                {
-                    shouldFlushPendingPersist = _persistPending;
-                }
-                Debug.WriteLine($"[WhatsAppService] Startup persist suppression lifted: {reason}");
+                return;
             }
 
-            if (shouldFlushPendingPersist)
+            Debug.WriteLine($"[WhatsAppService] Startup persist suppression lifted: {reason}");
+
+            if (result == PersistEnableResult.LiftedWithDeferredSave)
             {
                 Debug.WriteLine($"[WhatsAppService] Flushing deferred persist after startup warm-up: {reason}");
                 SchedulePersist();
@@ -143,6 +140,19 @@ namespace Unison.Uwp.Services.WhatsApp
                     "persisted-ui-loaded",
                     "chatRows=" + Chats.Count);
 
+                // Local avatar files are free for the socket; bind them before history catch-up
+                // or enrichment so the list shows faces while tips/names settle.
+                try
+                {
+                    await HydrateCachedAvatarUrisAsync("persisted-ui-loaded")
+                        .ConfigureAwait(false);
+                }
+                catch (Exception exHydrate)
+                {
+                    Debug.WriteLine(
+                        "[WhatsAppService] Startup avatar hydrate failed: " + exHydrate.Message);
+                }
+
                 // Catalog came from history_chat_preview; fix Last Message from history_message
                 // when the preview row is stale (deferred maintenance may have run with empty Chats).
                 try
@@ -166,63 +176,12 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             try
             {
-                var displayNames =
-                    new Dictionary<string, string>(
-                        StringComparer.OrdinalIgnoreCase);
-                foreach (ChatItem chat in Chats.ToList())
-                {
-                    if (chat == null ||
-                        string.IsNullOrWhiteSpace(chat.JID) ||
-                        string.IsNullOrWhiteSpace(chat.Name))
-                    {
-                        continue;
-                    }
-                    displayNames[chat.JID] = chat.Name;
-                }
-
-                // Group participants are not necessarily present as chat rows.
-                // Include names learned from WhatsApp and prefer the user's local
-                // address-book label when both are available.
-                foreach (var pair in ContactNames.ToList())
-                {
-                    if (!string.IsNullOrWhiteSpace(pair.Key) &&
-                        !string.IsNullOrWhiteSpace(pair.Value) &&
-                        !displayNames.ContainsKey(pair.Key))
-                    {
-                        displayNames[pair.Key] = pair.Value;
-                    }
-                }
-                foreach (var pair in PhoneContactNamesByJid.ToList())
-                {
-                    if (!string.IsNullOrWhiteSpace(pair.Key) &&
-                        !string.IsNullOrWhiteSpace(pair.Value))
-                    {
-                        displayNames[pair.Key] = pair.Value;
-                    }
-                }
-
-                // Mirror known PN/LID aliases so the external envelope can resolve
-                // whichever identity form the server used for this message.
-                foreach (var alias in JidAlias.ToList())
-                {
-                    if (string.IsNullOrWhiteSpace(alias.Key) ||
-                        string.IsNullOrWhiteSpace(alias.Value))
-                    {
-                        continue;
-                    }
-
-                    string name;
-                    if (displayNames.TryGetValue(alias.Key, out name) &&
-                        !displayNames.ContainsKey(alias.Value))
-                    {
-                        displayNames[alias.Value] = name;
-                    }
-                    else if (displayNames.TryGetValue(alias.Value, out name) &&
-                             !displayNames.ContainsKey(alias.Key))
-                    {
-                        displayNames[alias.Key] = name;
-                    }
-                }
+                // Copies first: these are live UI-thread collections.
+                var displayNames = BackgroundDisplayNameTable.Build(
+                    Chats.ToList(),
+                    ContactNames.ToList(),
+                    PhoneContactNamesByJid.ToList(),
+                    JidAlias.ToList());
 
                 await BackgroundDisplayNameStore.SaveAsync(
                     displayNames,
@@ -254,26 +213,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private List<ChatMessage> GetPendingPersistMessagesSnapshot(string chatJid)
         {
-            string canonical = GetCanonicalJid(NormalizeJid(chatJid));
-            var result = new List<ChatMessage>();
-
-            lock (_offlineReplayPersistLock)
-            {
-                foreach (var pair in _offlineReplayPendingMessagesByChat)
-                {
-                    if (!string.Equals(GetCanonicalJid(NormalizeJid(pair.Key)), canonical, StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
-
-                    if (pair.Value != null)
-                    {
-                        result.AddRange(pair.Value.Where(m => m != null));
-                    }
-                }
-            }
-
-            return result;
+            return _pendingMessages.SnapshotFor(chatJid, jid => GetCanonicalJid(NormalizeJid(jid)));
         }
 
         private async Task PersistLiveMessagesAsync(string chatJid, IList<ChatMessage> messages)
@@ -315,67 +255,15 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            var batch = messages.Where(m => m != null).ToList();
-            if (batch.Count == 0)
-            {
-                return;
-            }
+            var action = _pendingMessages.Add(jid, messages, DateTime.UtcNow, scheduleFlush);
 
-            bool shouldFlush = false;
-            lock (_offlineReplayPersistLock)
-            {
-                if (!_offlineReplayPendingMessagesByChat.TryGetValue(jid, out var pending))
-                {
-                    pending = new List<ChatMessage>();
-                    _offlineReplayPendingMessagesByChat[jid] = pending;
-                }
-
-                int addedToPending = 0;
-                foreach (var message in batch)
-                {
-                    if (message == null) continue;
-
-                    int existingIndex = !string.IsNullOrWhiteSpace(message.Id)
-                        ? pending.FindIndex(m => string.Equals(m?.Id, message.Id, StringComparison.Ordinal))
-                        : -1;
-                    if (existingIndex >= 0)
-                    {
-                        pending[existingIndex] = message;
-                    }
-                    else
-                    {
-                        pending.Add(message);
-                        addedToPending++;
-                    }
-                }
-
-                _offlineReplayDirtyChats.Add(jid);
-                _offlineReplayPendingMessageCount += addedToPending;
-
-                var now = DateTime.UtcNow;
-                bool thresholdReached = _offlineReplayPendingMessageCount >= OfflineReplayFlushMessageThreshold ||
-                    (_lastOfflineReplayFlushUtc != DateTime.MinValue &&
-                     now - _lastOfflineReplayFlushUtc >= OfflineReplayFlushInterval);
-
-                if (scheduleFlush && thresholdReached && !_offlineReplayFlushRequested)
-                {
-                    _offlineReplayFlushRequested = true;
-                    shouldFlush = true;
-                }
-                else if (scheduleFlush)
-                {
-                    ScheduleOfflineReplayFlushTimer_NoLock();
-                }
-
-                if (_lastOfflineReplayFlushUtc == DateTime.MinValue)
-                {
-                    _lastOfflineReplayFlushUtc = now;
-                }
-            }
-
-            if (shouldFlush)
+            if (action == PendingFlushAction.FlushNow)
             {
                 _ = FlushOfflineReplayMessagesAsync("message-batch-threshold");
+            }
+            else if (action == PendingFlushAction.ScheduleTimer)
+            {
+                ScheduleOfflineReplayFlushTimer();
             }
         }
 
@@ -384,24 +272,14 @@ namespace Unison.Uwp.Services.WhatsApp
             await _offlineReplayFlushLock.WaitAsync();
             try
             {
-                Dictionary<string, List<ChatMessage>> snapshot;
-                HashSet<string> dirtyChats;
-                lock (_offlineReplayPersistLock)
+                var drain = _pendingMessages.Drain(DateTime.UtcNow);
+                if (drain == null)
                 {
-                    if (_offlineReplayPendingMessageCount == 0)
-                    {
-                        return;
-                    }
+                    return;
+                }
 
-                    snapshot = _offlineReplayPendingMessagesByChat.ToDictionary(
-                        kvp => kvp.Key,
-                        kvp => kvp.Value.ToList(),
-                        StringComparer.OrdinalIgnoreCase);
-                    dirtyChats = new HashSet<string>(_offlineReplayDirtyChats, StringComparer.OrdinalIgnoreCase);
-                    _offlineReplayPendingMessagesByChat.Clear();
-                    _offlineReplayDirtyChats.Clear();
-                    _offlineReplayPendingMessageCount = 0;
-                    _lastOfflineReplayFlushUtc = DateTime.UtcNow;
+                lock (_offlineReplayTimerLock)
+                {
                     _offlineReplayFlushTimer?.Dispose();
                     _offlineReplayFlushTimer = null;
                 }
@@ -411,23 +289,14 @@ namespace Unison.Uwp.Services.WhatsApp
                     int saved = 0;
                     var outgoingIdsToRemove = new HashSet<string>(StringComparer.Ordinal);
                     var incomingIdsToRemove = new HashSet<string>(StringComparer.Ordinal);
-                    foreach (var kvp in snapshot)
+                    foreach (var kvp in drain.MessagesByChat)
                     {
                         if (kvp.Value == null || kvp.Value.Count == 0)
                         {
                             continue;
                         }
 
-                        var batchMessages = kvp.Value
-                            .Where(m => m != null)
-                            .GroupBy(
-                                m => string.IsNullOrWhiteSpace(m.Id) ? Guid.NewGuid().ToString() : m.Id,
-                                StringComparer.Ordinal)
-                            .Select(g => g.Last())
-                            .OrderByDescending(m => m.Timestamp)
-                            .Take(MaxPersistMessagesPerChatBatch)
-                            .OrderBy(m => m.Timestamp)
-                            .ToList();
+                        var batchMessages = _pendingMessages.SelectBatch(kvp.Value);
 
                         await PersistLiveMessagesAsync(kvp.Key, batchMessages);
 
@@ -463,65 +332,32 @@ namespace Unison.Uwp.Services.WhatsApp
                         await _messageStore.RemovePendingIncomingAsync(incomingIdsToRemove);
                     }
 
-                    Debug.WriteLine($"[WhatsAppService] Flushed {saved} queued message(s) across {snapshot.Count} chat(s), dirtyChats={dirtyChats.Count}, reason={reason}");
-                    if (!reason.StartsWith("shutdown", StringComparison.OrdinalIgnoreCase))
-                    {
-                        SchedulePersist();
-                    }
+                    Debug.WriteLine($"[WhatsAppService] Flushed {saved} queued message(s) across {drain.ChatCount} chat(s), dirtyChats={drain.DirtyChats.Count}, reason={reason}");
+
+                    // Guarded against a "shutdown" reason no caller passes. Suspension does
+                    // not come through here at all and is not meant to: it flushes the
+                    // append-only journal, which is what keeps these messages, and skips the
+                    // per-chat rewrite that would blow the suspend deadline. Recovery is
+                    // PrepareForSuspendAsync on the way out and incoming-journal-recovery on
+                    // the way back in.
+                    SchedulePersist();
                 }
                 catch (Exception ex)
                 {
-                    lock (_offlineReplayPersistLock)
-                    {
-                        foreach (var kvp in snapshot)
-                        {
-                            if (!_offlineReplayPendingMessagesByChat.TryGetValue(kvp.Key, out var pending))
-                            {
-                                pending = new List<ChatMessage>();
-                                _offlineReplayPendingMessagesByChat[kvp.Key] = pending;
-                            }
-
-                            foreach (var message in kvp.Value.Where(m => m != null))
-                            {
-                                int existingIndex = !string.IsNullOrWhiteSpace(message.Id)
-                                    ? pending.FindIndex(m => string.Equals(m?.Id, message.Id, StringComparison.Ordinal))
-                                    : -1;
-                                if (existingIndex >= 0)
-                                {
-                                    pending[existingIndex] = message;
-                                }
-                                else
-                                {
-                                    pending.Add(message);
-                                    _offlineReplayPendingMessageCount++;
-                                }
-                            }
-                        }
-
-                        foreach (var jid in dirtyChats)
-                        {
-                            _offlineReplayDirtyChats.Add(jid);
-                        }
-                    }
+                    _pendingMessages.Restore(drain);
 
                     RuntimeDiagnosticsService.Instance.RecordException(
                         "messages",
                         "message-batch-flush-deferred",
                         ex,
-                        "reason=" + reason + "; chats=" + snapshot.Count);
+                        "reason=" + reason + "; chats=" + drain.ChatCount);
                 }
             }
             finally
             {
-                bool scheduleAnother = false;
-                lock (_offlineReplayPersistLock)
+                if (_pendingMessages.CompleteFlush())
                 {
-                    _offlineReplayFlushRequested = false;
-                    scheduleAnother = _offlineReplayPendingMessageCount > 0;
-                    if (scheduleAnother)
-                    {
-                        ScheduleOfflineReplayFlushTimer_NoLock();
-                    }
+                    ScheduleOfflineReplayFlushTimer();
                 }
 
                 _offlineReplayFlushLock.Release();
@@ -532,7 +368,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// Persists current chats and messages to disk.
         /// </summary>
 
-        public async Task PersistDataAsync()
+        public async Task<bool> PersistDataAsync()
         {
             await _persistRunLock.WaitAsync();
             try
@@ -568,10 +404,12 @@ namespace Unison.Uwp.Services.WhatsApp
                 await _messageStore.SaveJidAliasesAsync(aliasSnapshot ?? new Dictionary<string, string>(), chatJids ?? new List<string>());
 
                 Debug.WriteLine($"[WhatsAppService] Persisted {(chatSnapshot?.Count ?? 0)} chat rows and contact metadata");
+                return true;
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[WhatsAppService] Failed to persist data: {ex.Message}");
+                return false;
             }
             finally
             {
@@ -611,28 +449,30 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         private void SchedulePersist()
         {
+            if (_persistScheduler.Request() == PersistScheduleAction.Deferred)
+            {
+                Debug.WriteLine("[WhatsAppService] SchedulePersist skipped during startup warm-up");
+                return;
+            }
+
             lock (_persistLock)
             {
-                if (_suppressStartupScheduledPersist)
-                {
-                    _persistPending = true;
-                    Debug.WriteLine("[WhatsAppService] SchedulePersist skipped during startup warm-up");
-                    return;
-                }
-
-                _persistPending = true;
-                
                 // Cancel existing timer and restart with 3 second delay
                 _persistTimer?.Dispose();
                 _persistTimer = new System.Threading.Timer(async _ =>
                 {
-                    lock (_persistLock)
+                    if (!_persistScheduler.TryBeginPersist())
                     {
-                        if (!_persistPending) return;
-                        _persistPending = false;
+                        return;
                     }
-                    
-                    await PersistDataAsync();
+
+                    // Put the save back if it did not land, or a transient disk error would
+                    // swallow the debt and the change would sit unsaved until something else
+                    // happened to dirty the catalogue again.
+                    if (!await PersistDataAsync())
+                    {
+                        _persistScheduler.Restore();
+                    }
                 }, null, 3000, Timeout.Infinite);
             }
         }
@@ -764,13 +604,12 @@ namespace Unison.Uwp.Services.WhatsApp
                         if (chat == null) continue;
 
                         string resolved = ResolveDisplayName(chat.JID, "chat");
-                        bool existingMeaningful = IsMeaningfulChatLabel(chat.Name, chat.JID, chat.IsGroup);
-                        bool resolvedMeaningful = IsMeaningfulChatLabel(resolved, chat.JID, chat.IsGroup);
-                        bool shouldReplace = !string.IsNullOrEmpty(resolved) &&
-                                             !string.Equals(chat.Name, resolved, StringComparison.Ordinal) &&
-                                             (resolvedMeaningful || !existingMeaningful);
-
-                        if (shouldReplace)
+                        if (ChatNameReplacement.ShouldReplace(
+                                chat.Name,
+                                resolved,
+                                resolvedMeaningful: IsMeaningfulChatLabel(resolved, chat.JID, chat.IsGroup),
+                                existingMeaningful: IsMeaningfulChatLabel(chat.Name, chat.JID, chat.IsGroup),
+                                isGroup: chat.IsGroup))
                         {
                             string oldName = chat.Name;
                             chat.Name = resolved;

@@ -6,7 +6,9 @@ How to add views, controls, and dialogs: [Coding standards](Coding-Standards).
 
 ## Navigation
 
-Routes live in Core (`NavigationRoutes`). Page types live only in `NavigatorService` (UWP). Auth boundaries use `NavigateAndClear` (no back stack into login).
+Destinations live in Core as `NavigationDestination` (enum). Pane `Tag` / `ActiveSection` strings stay in `NavigationRoutes`. Page types live only in the UWP `ShellThemeStrategy` map (via `IShellNavigationStrategy` / `NavigatorService`). Auth boundaries use `NavigateAndClear` (no back stack into login).
+
+**Settings** is an explicit action: `INavigator.OpenSettings()` → Unison opens `Shell/Unison/Views/SettingsView`; WhatsApp opens `Shell/WhatsApp/Dialogs/SettingsDialog` (SplitView: General / Customization / Advanced / About + profile footer; section switch in dialog code-behind).
 
 ```mermaid
 flowchart LR
@@ -16,25 +18,29 @@ flowchart LR
     Start --> Login[Login]
     Login -->|SessionEstablished| Shell
     Shell --> Chats[Chats]
+    Shell --> Archived[Archived chats]
     Shell --> Status[Status]
-    Shell --> Settings[Settings]
+    Shell --> Settings[OpenSettings]
     Shell --> Debug[Debug]
 ```
 
-| Route | Page | Frame |
+| Destination | Page (today) | Frame |
 |---|---|---|
-| `boot` | `BootView` | Root |
-| `start` | `StartView` | Root |
-| `login` | `LoginView` | Root |
-| `appshell` / `main` | `MainView` | Root (SplitView shell) |
-| `chats` | `ChatsView` | Shell content |
-| `status` | `StatusView` | Shell content |
-| `settings` | `SettingsView` | Shell content |
-| `debug` | `DebugView` | Shell content |
+| `Boot` | `UI/Views/BootView` | Root |
+| `Start` | `UI/Views/StartView` | Root |
+| `Login` | `UI/Views/LoginView` | Root |
+| `AppShell` | `MainView` | Root (SplitView shell) |
+| `Chats` | Unison: `Shell/Unison/Views/ChatsView` · WhatsApp: `UI/Views/ChatsView` | Shell content |
+| `Archived` | Unison: `Shell/Unison/Views/ArchivedChatsView` · WhatsApp: `UI/Views/ArchivedChatsView` | Shell content |
+| `Status` | `UI/Views/StatusView` | Shell content |
+| `Settings` | Unison: page · WhatsApp: `SettingsDialog` via `OpenSettings` | Shell / overlay |
+| `Debug` | `UI/Views/DebugView` | Shell content |
 
 `App.OnLaunched` and toast cold-start always go to **Boot**, not straight to Main. `ShellViewModel.InitializeAsync` decides Start vs AppShell.
 
-Master-detail stays on `ChatsView` and `StatusView` (list + detail), not a Frame push between list and conversation.
+Master-detail stays on `ChatsView`, `ArchivedChatsView`, and `StatusView` (list + detail), not a Frame push between list and conversation. `ArchivedChatsView` is its own shell page (same layout as `ChatsView`, `ChatListScope.Archived`); its list title reuses `Shell_Archived` and hides the filter flyout.
+
+Unison shell uses **separate** conversation pages under `Shell/Unison/Views/` (full XAML trees for W10M — no view wrapping). WhatsApp keeps `UI/Views`. Both share `ChatDetailViewModel` and `IChatDetailSurface` / `IConversationShellPage` for hosts and message templates.
 
 ### Status
 
@@ -109,6 +115,16 @@ Each message is a `ChatMessageViewModel`:
 - Quotes and reactions
 - Pin, download, open/save
 - Placeholder + progress until on-demand media is fetched
+
+Templates under `UI/Templates` stay shared. Shell-specific chrome is swapped by hosts that pick Unison vs WhatsApp from `SelectedShell` (`ShellUi`):
+
+| Host | Unison | WhatsApp |
+|---|---|---|
+| `MessageBubbleChromeHost` | `UnisonMessageBubbleChrome` (square + Path tips) | `MessageBubbleChrome` (rounded masks) |
+| `ChatAudioBubbleBarHost` | `UnisonChatAudioBubbleBar` (round brand play/pause) | `ChatAudioBubbleBar` (icon-only) |
+| `ChatMediaCircleButtonHost` | `UnisonMediaCircleButton` (`UnisonMediaCircleButtonStyle`) | icon / optional dark ellipse overlay |
+
+Unison-only styles/brushes live in `Themes/Unison/` (e.g. `UnisonMediaCircleButtonStyle`, `ChatDetail*MediaButton*Brush`). Hosts **create** the Unison control only when that shell is active so WhatsApp theme dictionaries do not need stub keys.
 
 Templates use bubble masks under `Assets/Bubbles/`.
 

@@ -16,7 +16,14 @@ namespace Unison.Core.Contracts
 
         Task UpsertManyAsync(IReadOnlyList<HistoryMessage> rows);
 
-        Task PersistWriteBatchAsync(HistoryMessageWriteBatch batch);
+        /// <summary>
+        /// Persists a history/live write batch. <see cref="HistoryWriteBatchResult.UpsertedCount"/>
+        /// counts new/rewritten bodies only (skipped existing under
+        /// <see cref="HistoryMessageWriteBatch.PreferDeltaSkipExistingBodies"/> do not count).
+        /// <see cref="HistoryWriteBatchResult.ChatJids"/> are chats that got a body write or a
+        /// pin/reaction/revoke side effect.
+        /// </summary>
+        Task<HistoryWriteBatchResult> PersistWriteBatchAsync(HistoryMessageWriteBatch batch);
 
         /// <summary>Live send/receive/outbox: upsert bodies and replace reactions for those ids.</summary>
         Task UpsertLiveMessagesAsync(string chatJid, IReadOnlyList<ChatMessage> messages);
@@ -82,6 +89,13 @@ namespace Unison.Core.Contracts
         Task<int> CountAsync(string syncId = null);
 
         Task ClearAsync(string reason = null);
+
+        /// <summary>
+        /// Drops every row for the given conversation keys (PN / LID / canonical) and their
+        /// reactions. Used when a chat is deleted: the preview tombstone hides the conversation,
+        /// this is what stops the messages from being reachable again if it returns.
+        /// </summary>
+        Task<int> DeleteForChatKeysAsync(IReadOnlyList<string> chatJids);
 
         event EventHandler<HistoryMessageChunkEventArgs> ChunkPersisted;
     }

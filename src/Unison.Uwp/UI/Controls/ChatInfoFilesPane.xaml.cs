@@ -23,13 +23,8 @@ namespace Unison.Uwp.UI.Controls
             EnsureScrollHook();
         }
 
-        public void Bind(IEnumerable items, bool hasItems, string emptyText, bool isLoading)
+        public void Bind(IEnumerable items, bool hasItems, bool isLoading)
         {
-            if (FilesEmptyText != null)
-            {
-                FilesEmptyText.Text = emptyText ?? string.Empty;
-            }
-
             if (FilesLoadingRing != null)
             {
                 FilesLoadingRing.IsActive = isLoading;

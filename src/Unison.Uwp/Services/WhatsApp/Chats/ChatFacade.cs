@@ -1,19 +1,22 @@
 // =============================================================================
 // ChatFacade
 //
-// The conversation itself as a subject: pinned or not, read or not.
+// The conversation itself as a subject: pinned or not, read or not, there or
+// gone.
 //
-// Both operations are two writes rather than one, and the two do different
+// Pin and mark-read are two writes rather than one, and the two do different
 // jobs. The app state patch is what the account agrees on - it moves the pin and
 // clears the badge on the phone. The receipt is what the other party sees. Only
 // sending the patch leaves contacts without blue ticks; only sending the receipt
 // leaves the chat unread everywhere but here.
 //
-// The local copy is written first and reverted on failure. The list has to react
-// to a tap immediately, and the round trip through the server is not fast enough
-// to be part of that.
+// For those two the local copy is written first and reverted on failure. The
+// list has to react to a tap immediately, and the round trip through the server
+// is not fast enough to be part of that. Delete is the exception: it removes the
+// messages, so there is nothing to revert to, and it waits for the patch.
 //
-// Ports: rc14 chatModify({ pin }), chatModify({ markRead }) and readMessages
+// Ports: rc14 chatModify({ pin }), chatModify({ markRead }),
+// chatModify({ delete }) and readMessages
 // =============================================================================
 using System;
 using System.Collections.Generic;
@@ -22,9 +25,12 @@ using System.Linq;
 using System.Threading.Tasks;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
+using Unison.Core.Helpers;
+using Unison.Core.Mappers;
 using Unison.Core.Models;
 using Unison.Socket.AppState;
 using Unison.Socket.UseCases.Messages;
+using Unison.Uwp.Helpers;
 using Unison.Uwp.Services.Socket;
 
 namespace Unison.Uwp.Services.WhatsApp.Chats
@@ -38,14 +44,24 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
         /// </summary>
         private const int MaxMarkReadMessages = 50;
 
+        /// <summary>
+        /// How much of the tail a delete names. RC14 sends the newest few: the range is there to
+        /// place the deletion, not to enumerate what is being removed.
+        /// </summary>
+        private const int MaxDeleteRangeMessages = 5;
+
         private readonly IWhatsAppSessionProvider _sessions;
         private readonly IWhatsAppService _appState;
-        private readonly IChatStore _chatStore;
+        private readonly IJidResolver _jids;
+        private readonly IContactService _contacts;
+        private readonly INotificationService _notifications;
 
         internal ChatFacade(
             IWhatsAppSessionProvider sessions,
             IWhatsAppService appState,
-            IChatStore chatStore)
+            IJidResolver jids,
+            IContactService contacts = null,
+            INotificationService notifications = null)
         {
             if (sessions == null)
             {
@@ -59,7 +75,9 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
 
             _sessions = sessions;
             _appState = appState;
-            _chatStore = chatStore;
+            _jids = jids ?? throw new ArgumentNullException(nameof(jids));
+            _contacts = contacts;
+            _notifications = notifications;
         }
 
         public async Task SetPinnedAsync(ChatItem chat, bool pinned)
@@ -72,7 +90,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             // RC14's chatModify writes the patch under the chat id exactly as the caller holds
             // it - it never rewrites PN to LID. The canonical JID is the same id the local row
             // and the mark-read path use, so the pin lands in the collection the phone reads.
-            var canonicalJid = _appState.GetCanonicalJid(chat.JID);
+            var canonicalJid = _jids.GetCanonicalJid(chat.JID);
             var wasPinned = chat.IsChatPinned;
 
             await _appState.ApplyChatPinAsync(canonicalJid, pinned).ConfigureAwait(false);
@@ -137,7 +155,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             }
 
             var unread = chat.UnreadCount;
-            var jid = _appState.GetCanonicalJid(chat.JID);
+            var jid = _jids.GetCanonicalJid(chat.JID);
 
             // Cleared first, and unconditionally: the badge is the part the user is looking at, it
             // should not wait for a round trip to disappear, and a PN/LID alias can leave a second
@@ -150,7 +168,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
                 return;
             }
 
-            var recent = CollectRecent(jid, unread);
+            var recent = CollectTail(jid, Math.Min(MaxMarkReadMessages, Math.Max(unread + 1, 1)));
             if (recent.Count == 0)
             {
                 return;
@@ -175,12 +193,442 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             }
         }
 
+        public async Task DeleteChatAsync(ChatItem chat)
+        {
+            if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
+            {
+                return;
+            }
+
+            var jid = _jids.GetCanonicalJid(chat.JID);
+
+            // The range is read before anything is removed: it names the tail the deletion covers,
+            // and after the local wipe there is nothing left to describe.
+            var range = CollectTail(jid, MaxDeleteRangeMessages);
+
+            var socket = _sessions.Socket;
+            if (socket != null && range.Count > 0)
+            {
+                try
+                {
+                    await socket
+                        .DeleteChatAsync(jid, range.Select(m => ToRangeMessage(jid, m)))
+                        .ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    // Nothing was removed yet, so the chat is still intact and the user can retry.
+                    // Wiping it here would leave this device disagreeing with the account forever:
+                    // the deletion is never reported back as a state that could repair it.
+                    var details =
+                        "chatJid=" + chat.JID +
+                        "; canonicalJid=" + jid +
+                        "; rangeCount=" + range.Count +
+                        "; socket=" + socket.GetType().FullName;
+
+                    Debug.WriteLine("[ChatFacade] Delete failed; " + details + Environment.NewLine + ex);
+                    RuntimeDiagnosticsService.Instance.RecordException(
+                        "app-state",
+                        "chat-delete-patch-failed",
+                        ex,
+                        details);
+
+                    throw;
+                }
+            }
+            else
+            {
+                // Offline, or a chat with no message to anchor the range - RC14's chatModify
+                // requires lastMessages, so there is nothing valid to send. The chat goes away
+                // here and the phone keeps it.
+                Debug.WriteLine(
+                    "[ChatFacade] Delete kept local: " +
+                    (socket == null ? "no socket" : "no messages to build the range with"));
+            }
+
+            await _appState.ApplyChatDeletionAsync(jid).ConfigureAwait(false);
+        }
+
+        // ---------------------------------------------------------------------
+        // Local state of the list
+        //
+        // None of these talk to the account. They are the parts of "the chat as a whole" that the
+        // UI asks about without changing anything the phone would need to hear, and they forward
+        // to the client because that is still where the rows live (phase 3.9).
+        // ---------------------------------------------------------------------
+
+        public void SetActiveChatJid(string jid)
+        {
+            _appState.SetActiveChatJid(jid);
+        }
+
+        public Task ClearUnreadForChatAsync(string jid)
+        {
+            return string.IsNullOrWhiteSpace(jid)
+                ? Task.CompletedTask
+                : _appState.ClearUnreadForChatAsync(jid);
+        }
+
+        public int GetTotalUnreadCount()
+        {
+            return _appState.GetTotalUnreadCount();
+        }
+
+        public void PersistChatListRows(IList<ChatItem> chats)
+        {
+            if (chats == null || chats.Count == 0)
+            {
+                return;
+            }
+
+            _appState.PersistChatListRowsPublic(chats);
+        }
+
+        public Task ReconcileChatPreviewsFromSqliteAsync(
+            IReadOnlyList<string> chatJids = null,
+            string reason = null)
+        {
+            return _appState.ReconcileChatPreviewsFromSqliteAsync(chatJids, reason);
+        }
+
+        public async Task RefreshChatPreviewAsync(
+            string chatJid,
+            string previewText,
+            DateTime timestamp,
+            bool isFromMe,
+            ChatPreviewKind? kindHint = null,
+            string authorPrefix = null)
+        {
+            if (string.IsNullOrWhiteSpace(chatJid))
+            {
+                return;
+            }
+
+            await _appState.RunOnUiThreadAsync(() =>
+            {
+                IReadOnlyList<ChatItem> rows = _appState.GetChatRowsForCanonicalJid(chatJid);
+                if (rows == null || rows.Count == 0)
+                {
+                    return;
+                }
+
+                string yesterday = LocalizedStrings.Get("Common_Yesterday", "Yesterday");
+                MessageSendState sendState = isFromMe
+                    ? MessageSendState.Sent
+                    : MessageSendState.NotApplicable;
+                ChatItem preferred = null;
+
+                foreach (ChatItem row in rows)
+                {
+                    if (row == null)
+                    {
+                        continue;
+                    }
+
+                    if (LiveChatPreviewApplier.ApplyIfNewer(
+                        row,
+                        previewText,
+                        timestamp,
+                        false,
+                        kindHint,
+                        authorPrefix,
+                        mentionedJids: null,
+                        isFromMe,
+                        sendState,
+                        messageId: null,
+                        yesterday))
+                    {
+                        preferred = preferred ?? row;
+                    }
+                }
+
+                if (preferred != null)
+                {
+                    int index = _appState.Chats.IndexOf(preferred);
+                    if (index > 0)
+                    {
+                        _appState.Chats.Move(index, 0);
+                    }
+                }
+            }).ConfigureAwait(false);
+        }
+
+        public Task RefreshAllChatPreviewsFromStoredAsync(string reason)
+        {
+            return _appState.RefreshAllChatPreviewsFromStoredAsync(reason);
+        }
+
+        public Task ReconcileChatListFromStoredAsync(string reason)
+        {
+            return _appState.ReconcileChatListFromStoredAsync(reason);
+        }
+
+        public async Task<LiveIncomingChatListApplyResult> ApplyLiveIncomingChatListAsync(
+            LiveIncomingChatListApplyRequest request)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.ChatJid))
+            {
+                return new LiveIncomingChatListApplyResult();
+            }
+
+            int unreadDelta = request.UnreadDelta;
+            if (unreadDelta == 0 && request.CountsAsUnread)
+            {
+                unreadDelta = 1;
+            }
+
+            LiveIncomingChatListApplyResult result = new LiveIncomingChatListApplyResult();
+            await _appState.RunOnUiThreadAsync(() =>
+            {
+                ChatItem chat = ApplyStripOnUiThread(
+                    request.ChatJid,
+                    request.PreviewText,
+                    request.Timestamp,
+                    request.PreviewKind,
+                    request.AuthorPrefix,
+                    request.MentionedJids,
+                    request.IsFromMe,
+                    request.SendState,
+                    request.MessageId,
+                    unreadDelta,
+                    request.IsGroup,
+                    request.AliasLid,
+                    request.AliasPn,
+                    createAtFront: true,
+                    out _);
+
+                result.Chat = chat;
+                result.DisplayName = chat != null ? chat.Name : null;
+                result.TotalUnread = _appState.GetTotalUnreadCount();
+            }).ConfigureAwait(false);
+
+            return result;
+        }
+
+        public async Task ApplyOfflineReplayChatSummariesAsync(
+            IReadOnlyList<OfflineReplayChatSummary> summaries,
+            string reason)
+        {
+            if (summaries == null || summaries.Count == 0)
+            {
+                return;
+            }
+
+            await _appState.RunOnUiThreadAsync(() =>
+            {
+                int created = 0;
+                int updated = 0;
+                int unreadAdded = 0;
+
+                foreach (OfflineReplayChatSummary summary in summaries)
+                {
+                    if (summary == null || string.IsNullOrWhiteSpace(summary.Jid))
+                    {
+                        continue;
+                    }
+
+                    bool createdRow;
+                    ChatItem preferred = ApplyStripOnUiThread(
+                        summary.Jid,
+                        summary.Preview ?? string.Empty,
+                        summary.Timestamp,
+                        summary.Kind,
+                        summary.AuthorPrefix,
+                        mentionedJids: null,
+                        summary.IsFromMe,
+                        HistoryLiveMessageMapper.FromStatus(summary.Status, summary.IsFromMe),
+                        messageId: null,
+                        summary.UnreadDelta,
+                        summary.IsGroup,
+                        aliasLid: null,
+                        aliasPn: null,
+                        createAtFront: false,
+                        out createdRow);
+
+                    if (createdRow)
+                    {
+                        created++;
+                    }
+
+                    if (preferred != null && summary.Timestamp != DateTime.MinValue)
+                    {
+                        updated++;
+                    }
+
+                    if (summary.UnreadDelta > 0)
+                    {
+                        unreadAdded += summary.UnreadDelta;
+                    }
+                }
+
+                ChatDisplayOrder.SortInPlace(_appState.Chats);
+                int totalUnread = _appState.GetTotalUnreadCount();
+                if (_notifications != null)
+                {
+                    _notifications.UpdateBadge(totalUnread);
+                }
+
+                RuntimeDiagnosticsService.Instance.Write(
+                    "messages",
+                    "offline-summary-applied",
+                    "reason=" + (reason ?? string.Empty) +
+                    "; chats=" + summaries.Count +
+                    "; created=" + created +
+                    "; previews=" + updated +
+                    "; unreadAdded=" + unreadAdded);
+            }).ConfigureAwait(false);
+        }
+
         /// <summary>
-        /// The tail of the conversation, oldest first. Unread counts are approximate after a
-        /// history sync, so a little more than the count is taken - the range only has to cover
-        /// what was unread, and covering slightly too much is harmless.
+        /// Shared live / offline strip write. Caller must already be on the UI thread.
         /// </summary>
-        private List<ChatMessage> CollectRecent(string jid, int unreadCount)
+        private ChatItem ApplyStripOnUiThread(
+            string jid,
+            string previewText,
+            DateTime timestamp,
+            ChatPreviewKind? previewKind,
+            string authorPrefix,
+            IList<string> mentionedJids,
+            bool isFromMe,
+            MessageSendState sendState,
+            string messageId,
+            int unreadDelta,
+            bool isGroup,
+            string aliasLid,
+            string aliasPn,
+            bool createAtFront,
+            out bool createdRow)
+        {
+            createdRow = false;
+            string canonicalLookup = _jids.GetCanonicalJid(jid) ?? jid;
+            ChatItem chat = _appState.Chats.FirstOrDefault(c =>
+                c != null &&
+                string.Equals(
+                    _jids.GetCanonicalJid(c.JID),
+                    canonicalLookup,
+                    StringComparison.OrdinalIgnoreCase));
+
+            if (chat == null)
+            {
+                string chatName = ResolveName(jid, "chat");
+                chat = new ChatItem
+                {
+                    JID = _jids.GetCanonicalJid(jid) ?? jid,
+                    Name = chatName,
+                    Kind = JidHelper.ResolveKind(jid, _jids.IsSelfLinked(jid)),
+                    UnreadCount = 0
+                };
+                if (createAtFront)
+                {
+                    _appState.Chats.Insert(0, chat);
+                }
+                else
+                {
+                    _appState.Chats.Add(chat);
+                }
+
+                createdRow = true;
+                Debug.WriteLine("[ChatFacade] Created new chat entry for " + jid + " (" + chatName + ")");
+                _appState.RequestChatListDedup(createAtFront ? "incoming-new-chat" : "offline-new-chat");
+
+                if (!string.IsNullOrWhiteSpace(aliasLid) && !string.IsNullOrWhiteSpace(aliasPn))
+                {
+                    _appState.RequestAliasChatMerge(aliasLid, aliasPn);
+                }
+
+                if (PlaceholderChatLabel.IsPlaceholder(
+                        chat.Name,
+                        chat.JID,
+                        SelfChatDisplayHelper.IsSelfMarkerLabel(chat.Name)))
+                {
+                    IContactService contacts = _contacts;
+                    if (contacts != null)
+                    {
+                        _ = contacts.ResolveMissingNamesAsync();
+                    }
+                }
+            }
+
+            chat.ApplyKind(chat.JID, _jids.IsSelfLinked(chat.JID));
+
+            string yesterday = LocalizedStrings.Get("Common_Yesterday", "Yesterday");
+            if (timestamp != DateTime.MinValue)
+            {
+                LiveChatPreviewApplier.ApplyIfNewer(
+                    chat,
+                    previewText,
+                    timestamp,
+                    false,
+                    previewKind,
+                    authorPrefix,
+                    mentionedJids,
+                    isFromMe,
+                    sendState,
+                    messageId,
+                    yesterday);
+
+                foreach (ChatItem equivalentRow in _appState.GetChatRowsForCanonicalJid(jid))
+                {
+                    if (!ReferenceEquals(equivalentRow, chat))
+                    {
+                        equivalentRow.ApplyKind(equivalentRow.JID, _jids.IsSelfLinked(equivalentRow.JID));
+                        LiveChatPreviewApplier.ApplyIfNewer(
+                            equivalentRow,
+                            previewText,
+                            timestamp,
+                            false,
+                            previewKind,
+                            authorPrefix,
+                            mentionedJids,
+                            isFromMe,
+                            sendState,
+                            messageId,
+                            yesterday);
+                    }
+                }
+            }
+
+            if (!isGroup &&
+                PlaceholderChatLabel.IsPlaceholder(
+                    chat.Name,
+                    jid,
+                    SelfChatDisplayHelper.IsSelfMarkerLabel(chat.Name)))
+            {
+                string resolvedChatName = ResolveName(jid, "chat");
+                if (!string.IsNullOrEmpty(resolvedChatName) && !resolvedChatName.Contains("@"))
+                {
+                    chat.Name = resolvedChatName;
+                }
+            }
+
+            if (createAtFront)
+            {
+                ChatDisplayOrder.Reposition(_appState.Chats, chat);
+            }
+
+            if (unreadDelta > 0)
+            {
+                ChatUnreadTally.Bump(chat, _appState.GetChatRowsForCanonicalJid(jid), unreadDelta);
+            }
+
+            return chat;
+        }
+
+        private string ResolveName(string jid, string context)
+        {
+            if (_contacts != null)
+            {
+                return _contacts.ResolveDisplayName(jid, context);
+            }
+
+            return _appState.ResolveDisplayName(jid, context);
+        }
+
+        /// <summary>
+        /// The last <paramref name="take"/> messages of the conversation, oldest first. Both
+        /// mark-read and delete send a range rather than a single id, and both only need the tail.
+        /// </summary>
+        private List<ChatMessage> CollectTail(string jid, int take)
         {
             List<ChatMessage> live;
             try
@@ -198,12 +646,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
                 return new List<ChatMessage>();
             }
 
-            var take = Math.Min(MaxMarkReadMessages, Math.Max(unreadCount + 1, 1));
-
-            return live
-                .Where(m => m != null && !string.IsNullOrEmpty(m.Id))
-                .Skip(Math.Max(0, live.Count - take))
-                .ToList();
+            return MessageTail.Addressable(live, take);
         }
 
         private static ReceiptTarget ToReceiptTarget(ChatMessage message)

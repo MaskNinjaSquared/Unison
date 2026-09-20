@@ -137,11 +137,14 @@ namespace Unison.Socket.AppState
 
             if (value.MuteAction != null)
             {
+                // Baileys processSyncAction: muted → muteEndTimestamp, else null.
+                // Zero is forever on ChatItem — never emit it for unmute.
                 chats.Add(new ChatUpdate(id)
                 {
+                    AppliesMute = true,
                     MuteEndTime = value.MuteAction.Muted
                         ? unchecked((long)value.MuteAction.MuteEndTimestamp)
-                        : 0
+                        : (long?)null
                 });
                 return;
             }
@@ -154,11 +157,21 @@ namespace Unison.Socket.AppState
 
             if (value.PinAction != null)
             {
-                // A pin is ordered by when it was pinned, so the sort key is the mutation's own
-                // timestamp rather than anything in the action.
+                // Baileys: pinned ? toNumber(action.timestamp) : null.
+                // Timestamp defaults to 0 in protobuf when absent — never emit 0 for a real pin
+                // (the host used to read Pinned > 0 and treat it as unpin).
+                long? pinnedAt = null;
+                if (value.PinAction.Pinned)
+                {
+                    pinnedAt = value.Timestamp > 0
+                        ? value.Timestamp
+                        : DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                }
+
                 chats.Add(new ChatUpdate(id)
                 {
-                    Pinned = value.PinAction.Pinned ? value.Timestamp : 0
+                    AppliesPin = true,
+                    Pinned = pinnedAt
                 });
                 return;
             }

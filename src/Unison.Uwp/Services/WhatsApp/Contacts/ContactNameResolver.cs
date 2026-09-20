@@ -16,6 +16,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
@@ -36,6 +37,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly IWhatsAppService _whatsAppService;
         private readonly AddressBookOverlay _addressBook;
         private readonly ContactDirectory _directory;
+        private readonly IJidResolver _jids;
 
         private DateTime _lastRefreshUtc = DateTime.MinValue;
         private volatile bool _isRunning;
@@ -43,11 +45,13 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         internal ContactNameResolver(
             IWhatsAppService whatsAppService,
             AddressBookOverlay addressBook,
-            ContactDirectory directory)
+            ContactDirectory directory,
+            IJidResolver jids)
         {
             _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
             _addressBook = addressBook ?? throw new ArgumentNullException(nameof(addressBook));
             _directory = directory ?? throw new ArgumentNullException(nameof(directory));
+            _jids = jids ?? throw new ArgumentNullException(nameof(jids));
         }
 
         public bool IsRunning => _isRunning;
@@ -96,11 +100,28 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                     await _directory.HarvestGroupMappingsAsync().ConfigureAwait(false);
                 }
 
-                var directJids = _whatsAppService.Chats
-                    .Where(c => c != null && !c.IsGroup && !string.IsNullOrEmpty(c.JID))
-                    .Select(c => JidHelper.Normalize(c.JID))
-                    .Distinct()
-                    .ToList();
+                // Snapshot on the UI thread, the way ResolveMissing does it below. Walking the
+                // live collection from here reads it while the UI thread may be adding a chat,
+                // and an observable collection answers that with InvalidOperationException -
+                // on a background task, with nobody to catch it.
+                var directJids = new List<string>();
+                await _whatsAppService.RunOnUiThreadAsync(() =>
+                {
+                    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (ChatItem chat in _whatsAppService.Chats)
+                    {
+                        if (chat == null || chat.IsGroup || string.IsNullOrEmpty(chat.JID))
+                        {
+                            continue;
+                        }
+
+                        string jid = JidHelper.Normalize(chat.JID);
+                        if (seen.Add(jid))
+                        {
+                            directJids.Add(jid);
+                        }
+                    }
+                });
 
                 if (!force && directJids.Count > 12)
                 {
@@ -241,11 +262,10 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
             foreach (var chat in chats)
             {
-                string bareJid = chat.JID.Split('@')[0];
-                bool isNaked = string.IsNullOrEmpty(chat.Name) ||
-                               chat.Name == bareJid ||
-                               chat.Name.Contains("@") ||
-                               SelfChatDisplayHelper.IsSelfMarkerLabel(chat.Name);
+                bool isNaked = PlaceholderChatLabel.IsPlaceholder(
+                    chat.Name,
+                    chat.JID,
+                    SelfChatDisplayHelper.IsSelfMarkerLabel(chat.Name));
                 if (!isNaked)
                 {
                     continue;
@@ -268,7 +288,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 // The name may be published under the LID rather than the phone number, so a
                 // known alias is worth asking about too.
                 string normJid = JidHelper.Normalize(chat.JID);
-                if (_whatsAppService.JidAlias.TryGetValue(normJid, out var aliasJid))
+                if (_jids.TryGetAlias(normJid, out var aliasJid))
                 {
                     jidsToResolve.Add(aliasJid);
                     Debug.WriteLine($"[ContactNameResolver]   Adding LID for resolution: {chat.JID} -> {aliasJid}");

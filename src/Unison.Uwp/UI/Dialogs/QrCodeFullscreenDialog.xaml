@@ -7,23 +7,53 @@
     mc:Ignorable="d"
     Title=""
     FullSizeDesired="True"
-    CloseButtonText="OK"
     Background="{ThemeResource LoginPageBackgroundBrush}">
 
-    <Grid Background="{ThemeResource LoginPageBackgroundBrush}" MinHeight="320">
-        <Border Padding="16"
+    <!-- Same zero chrome padding pattern as WhatsApp SettingsDialog (Imgur/Giuraffe). -->
+    <ContentDialog.Resources>
+        <Thickness x:Key="ContentDialogPadding">0</Thickness>
+        <x:Double x:Key="ContentDialogMaxWidth">960</x:Double>
+        <x:Double x:Key="ContentDialogMaxHeight">720</x:Double>
+        <x:Double x:Key="ContentDialogMinWidth">320</x:Double>
+    </ContentDialog.Resources>
+
+    <Grid Background="{ThemeResource LoginPageBackgroundBrush}"
+          HorizontalAlignment="Stretch"
+          VerticalAlignment="Stretch"
+          Padding="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0"
                 Background="{ThemeResource LoginQrCardBackgroundBrush}"
                 BorderBrush="{ThemeResource LoginQrCardBorderBrush}"
                 BorderThickness="1"
                 CornerRadius="4"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Center">
+                Padding="12"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Center"
+                MaxWidth="400">
             <Image x:Name="QrImage"
-                   Width="320"
-                   Height="320"
                    Stretch="Uniform"
-                   HorizontalAlignment="Center"
-                   VerticalAlignment="Center"/>
+                   HorizontalAlignment="Stretch"
+                   VerticalAlignment="Center"
+                   MinHeight="160"
+                   MaxHeight="400"/>
         </Border>
+
+        <!-- Same green CTA as StartView "Get started"; 10px margin keeps it off the edges. -->
+        <Button x:Name="CloseButton"
+                Grid.Row="1"
+                Content="Close"
+                MinWidth="200"
+                HorizontalAlignment="Center"
+                Padding="28,12"
+                FontSize="15"
+                Margin="10"
+                Background="{ThemeResource WhatsAppGreenFocusBrush}"
+                Foreground="White"
+                Click="CloseButton_Click"/>
     </Grid>
 </ContentDialog>

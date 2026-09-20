@@ -31,12 +31,20 @@
                     Visibility="{x:Bind IsRunStart, Mode=OneWay, Converter={StaticResource InvertedBooleanToVisibilityConverter}}"/>
 
             <Grid Grid.Row="1" HorizontalAlignment="Right">
-                <controls:MessageBubbleChrome
+                <controls:MessageBubbleChromeHost
                     IsFromMe="True"
-                    IsRunStart="{x:Bind ShowTail, Mode=OneWay}"/>
+                    IsRunStart="{x:Bind IsRunStart, Mode=OneWay}"
+                    IsRunEnd="{x:Bind IsRunEnd, Mode=OneWay}"
+                    IsGroupChat="{x:Bind IsGroupChat, Mode=OneWay}"/>
 
                 <Border Background="Transparent" Margin="0,1,0,0" Padding="12,8,16,8">
-                    <StackPanel>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <StackPanel Grid.Row="0">
                         <StackPanel x:Name="SentForwardedLabel"
                                     Orientation="Horizontal"
                                     Margin="0,0,0,4"
@@ -113,9 +121,18 @@
                                    FontWeight="SemiBold"
                                    Margin="0,0,0,6"
                                    x:Load="{x:Bind ShowStickerError, Mode=OneWay}"/>
-                        <Grid x:Name="SentImageDownload"
-                              Width="300" Height="300" Margin="0,0,0,6"
+                        </StackPanel>
+                        <Grid x:Name="SentMediaPlaceholderHost"
+                              Grid.Row="1"
                               HorizontalAlignment="Left"
+                              MaxWidth="250"
+                              MaxHeight="250"
+                              Loaded="MediaPlaceholder_Loaded"
+                              SizeChanged="MediaPlaceholder_SizeChanged">
+                        <Grid x:Name="SentImageDownload"
+                              HorizontalAlignment="Stretch"
+                              VerticalAlignment="Stretch"
+                              Margin="0,0,0,6"
                               x:Load="{x:Bind NeedsImageDownload, Mode=OneWay}">
                             <Border Background="{ThemeResource ChatDetailSentMediaDownloadOverlayBrush}" CornerRadius="4"/>
                             <Image Source="{x:Bind ThumbnailUri, Mode=OneWay, Converter={StaticResource StringToImageSourceConverter}, ConverterParameter=320}"
@@ -136,28 +153,19 @@
                                           Foreground="{ThemeResource ChatDetailSentMediaDownloadIconBrush}"
                                           IsActive="{x:Bind IsImageDownloading, Mode=OneWay}"
                                           Visibility="{x:Bind IsImageDownloading, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                            <Button Command="{x:Bind DownloadImageCommand, Mode=OneWay}"
-                                    Style="{StaticResource TransparentMediaButtonStyle}"
-                                    Width="56" Height="56"
-                                    MinWidth="56" MinHeight="56"
-                                    Padding="0"
-                                    HorizontalAlignment="Center"
-                                    VerticalAlignment="Center"
-                                    Visibility="{x:Bind ShowImageDownloadIcon, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                <Grid Width="56" Height="56">
-                                    <Ellipse Fill="#99000000"/>
-                                    <TextBlock Text="&#xE896;"
-                                               FontFamily="{StaticResource IconFont}"
-                                               FontSize="28"
-                                               Foreground="{ThemeResource ChatDetailSentMediaDownloadIconBrush}"
-                                               HorizontalAlignment="Center"
-                                               VerticalAlignment="Center"/>
-                                </Grid>
-                            </Button>
+                            <controls:ChatMediaCircleButtonHost
+                                    IsFromMe="True"
+                                    Glyph="&#xE896;"
+                                    Opacity="0.9"
+                                    UseOverlayChrome="True"
+                                    Command="{x:Bind DownloadImageCommand, Mode=OneWay}"
+                                    GlyphForeground="{ThemeResource ChatDetailSentMediaDownloadIconBrush}"
+                                    Visibility="{x:Bind ShowImageDownloadIcon, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                         </Grid>
                         <Grid x:Name="SentVideoDownload"
-                              Width="300" Height="300" Margin="0,0,0,6"
-                              HorizontalAlignment="Left"
+                              HorizontalAlignment="Stretch"
+                              VerticalAlignment="Stretch"
+                              Margin="0,0,0,6"
                               x:Load="{x:Bind NeedsVideoDownload, Mode=OneWay}">
                             <Border Background="{ThemeResource ChatDetailSentMediaDownloadOverlayBrush}" CornerRadius="4"/>
                             <Image Source="{x:Bind VideoPosterUri, Mode=OneWay, Converter={StaticResource StringToImageSourceConverter}, ConverterParameter=320}"
@@ -170,20 +178,21 @@
                                           Foreground="{ThemeResource ChatDetailSentMediaDownloadIconBrush}"
                                           IsActive="{x:Bind IsVideoDownloading, Mode=OneWay}"
                                           Visibility="{x:Bind IsVideoDownloading, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                            <Button Command="{x:Bind DownloadVideoCommand, Mode=OneWay}"
-                                    Style="{StaticResource TransparentMediaButtonStyle}"
-                                    Visibility="{x:Bind ShowVideoDownloadIcon, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                <TextBlock Text="&#xE896;"
-                                           FontFamily="{StaticResource IconFont}"
-                                           FontSize="36"
-                                           Foreground="{ThemeResource ChatDetailSentMediaDownloadIconBrush}"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center"/>
-                            </Button>
+                            <controls:ChatMediaCircleButtonHost
+                                    IsFromMe="True"
+                                    Glyph="&#xE896;"
+                                    Opacity="0.9"
+                                    UseOverlayChrome="True"
+                                    Command="{x:Bind DownloadVideoCommand, Mode=OneWay}"
+                                    GlyphForeground="{ThemeResource ChatDetailSentMediaDownloadIconBrush}"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Visibility="{x:Bind ShowVideoDownloadIcon, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                         </Grid>
                         <Grid x:Name="SentVideoPlay"
-                              Width="300" Height="300" Margin="0,0,0,6"
-                              HorizontalAlignment="Left"
+                              HorizontalAlignment="Stretch"
+                              VerticalAlignment="Stretch"
+                              Margin="0,0,0,6"
                               x:Load="{x:Bind ShowVideoPlayOverlay, Mode=OneWay}">
                             <Border Background="#FF111111" CornerRadius="4"/>
                             <Image Source="{x:Bind VideoPosterUri, Mode=OneWay, Converter={StaticResource StringToImageSourceConverter}, ConverterParameter=320}"
@@ -208,6 +217,8 @@
                                 </Grid>
                             </Button>
                         </Grid>
+                        </Grid>
+                        <StackPanel Grid.Row="2">
                         <RichTextBlock x:Name="SentCaption"
                                        helpers:CommentRichService.Text="{x:Bind Caption, Mode=OneWay}"
                                        helpers:CommentRichService.MentionedJids="{x:Bind MentionedJids, Mode=OneWay}"
@@ -223,22 +234,18 @@
                                        Margin="0,0,0,2"/>
                         <Grid x:Name="SentAudioHost"
                               x:Load="{x:Bind IsAudio, Mode=OneWay}"
-                              HorizontalAlignment="Left"
+                              HorizontalAlignment="Stretch"
                               Margin="0,0,0,2"
-                              MinWidth="250"
+                              MinWidth="0"
                               MinHeight="36">
                             <StackPanel Orientation="Horizontal"
                                         Visibility="{x:Bind ShowAudioDownloadIcon, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                <Grid Width="36" Height="36">
-                                    <Button Command="{x:Bind DownloadAudioCommand, Mode=OneWay}"
-                                            Style="{StaticResource WhatsAppIconButtonStyle}"
-                                            Padding="0"
-                                            MinWidth="36" MinHeight="36"
-                                            HorizontalAlignment="Stretch"
-                                            VerticalAlignment="Stretch">
-                                        <TextBlock Text="&#xE896;" FontFamily="{StaticResource IconFont}" FontSize="20"
-                                                   Foreground="{ThemeResource ChatDetailSentBubbleButtonBrush}"/>
-                                    </Button>
+                                <Grid HorizontalAlignment="Left" VerticalAlignment="Center">
+                                    <controls:ChatMediaCircleButtonHost
+                                        IsFromMe="True"
+                                        Glyph="&#xE896;"
+                                        Command="{x:Bind DownloadAudioCommand, Mode=OneWay}"
+                                        GlyphForeground="{ThemeResource ChatDetailSentBubbleButtonBrush}"/>
                                     <!-- Error badge sits on top of download glyph; tap still hits the button below -->
                                     <TextBlock Text="&#xEBFF;"
                                                FontFamily="{StaticResource IconFont}"
@@ -264,9 +271,10 @@
                             </StackPanel>
                             <!-- x:Load (not Visibility): defers construction so the WinUI2-styled Slider inside
                                  is never instantiated for non-audio bubbles (Collapsed still builds the tree). -->
-                            <controls:ChatAudioBubbleBar
+                            <controls:ChatAudioBubbleBarHost
                                 x:Name="SentAudioBubbleBar"
                                 x:Load="{x:Bind ShowAudioTransportBar, Mode=OneWay}"
+                                IsFromMe="True"
                                 GlyphForeground="{ThemeResource ChatDetailSentBubbleButtonBrush}"
                                 HorizontalAlignment="Stretch"/>
                         </Grid>
@@ -309,16 +317,12 @@
                             </Button>
                             <Grid Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0"
                                   Visibility="{x:Bind ShowDocumentDownloadIcon, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                <Grid Width="36" Height="36">
-                                    <Button Command="{x:Bind DownloadDocumentCommand, Mode=OneWay}"
-                                            Style="{StaticResource WhatsAppIconButtonStyle}"
-                                            Padding="0"
-                                            MinWidth="36" MinHeight="36"
-                                            HorizontalAlignment="Stretch"
-                                            VerticalAlignment="Stretch">
-                                        <TextBlock Text="&#xE896;" FontFamily="{StaticResource IconFont}" FontSize="20"
-                                                   Foreground="{ThemeResource ChatDetailSentBubbleButtonBrush}"/>
-                                    </Button>
+                                <Grid HorizontalAlignment="Left" VerticalAlignment="Center">
+                                    <controls:ChatMediaCircleButtonHost
+                                            IsFromMe="True"
+                                            Glyph="&#xE896;"
+                                            Command="{x:Bind DownloadDocumentCommand, Mode=OneWay}"
+                                            GlyphForeground="{ThemeResource ChatDetailSentBubbleButtonBrush}"/>
                                     <!-- Error badge on download glyph; tap still retries -->
                                     <TextBlock Text="&#xEBFF;"
                                                FontFamily="{StaticResource IconFont}"
@@ -432,19 +436,34 @@
                             <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                                 <TextBlock Text="&#xE718;" FontFamily="{StaticResource IconFont}" Foreground="{ThemeResource ChatDetailSentMetaBrush}" FontSize="10" Margin="0,0,4,0"
                                            Visibility="{x:Bind IsPinned, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                                <TextBlock Text="{x:Bind Timestamp, Mode=OneWay, Converter={StaticResource LocalTimeConverter}}" Foreground="{ThemeResource ChatDetailSentMetaBrush}" FontSize="11" FontFamily="{StaticResource MainFont}"/>
-                                <Image Source="{x:Bind StatusCheckmarkUri, Mode=OneWay, Converter={StaticResource StringToImageSourceConverter}, ConverterParameter=32}"
-                                       Visibility="{x:Bind HasStatusCheckmark, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
-                                       Width="16"
-                                       Height="12"
-                                       Stretch="Uniform"
-                                       Margin="4,1,0,0"
-                                       VerticalAlignment="Center"/>
+                                <TextBlock Text="{x:Bind Timestamp, Mode=OneWay, Converter={StaticResource LocalTimeConverter}}"
+                                           Foreground="{ThemeResource ChatDetailSentMetaBrush}"
+                                           FontSize="11"
+                                           FontFamily="{StaticResource MainFont}"
+                                           TextWrapping="NoWrap"
+                                           TextTrimming="CharacterEllipsis"
+                                           MaxLines="1"
+                                           MaxWidth="72"/>
+                                <FontIcon Glyph="{x:Bind StatusGlyph, Mode=OneWay}"
+                                          FontFamily="{StaticResource UnisonIconFont}"
+                                          FontSize="14"
+                                          Foreground="{ThemeResource ChatDetailStatusCheckSentBrush}"
+                                          Margin="4,1,0,0"
+                                          VerticalAlignment="Center"
+                                          Visibility="{x:Bind ShowUnreadStatusCheckmark, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                <FontIcon Glyph="{x:Bind StatusGlyph, Mode=OneWay}"
+                                          FontFamily="{StaticResource UnisonIconFont}"
+                                          FontSize="14"
+                                          Foreground="{ThemeResource ChatDetailStatusCheckReadBrush}"
+                                          Margin="4,1,0,0"
+                                          VerticalAlignment="Center"
+                                          Visibility="{x:Bind ShowReadStatusCheckmark, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                                 <TextBlock Text="!" Foreground="{ThemeResource ChatDetailSendFailedBrush}" FontSize="12" FontWeight="Bold" Margin="4,0,0,0"
                                            Visibility="{x:Bind IsSendFailed, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                             </StackPanel>
                         </Grid>
-                    </StackPanel>
+                        </StackPanel>
+                    </Grid>
                 </Border>
 
                 <!-- Brief flash when scrolled-to from a reply/quote tap. -->
@@ -455,9 +474,7 @@
             </Grid>
 
             <Button Grid.Row="2"
-                    HorizontalAlignment="Right"
-                    Margin="0,-4,4,0"
-                    Style="{StaticResource ChatDetailReactionChipButtonStyle}"
+                    Style="{StaticResource ChatDetailSentReactionChipButtonStyle}"
                     Background="{ThemeResource ChatDetailReactionChipSentBrush}"
                     BorderBrush="{ThemeResource ChatDetailReactionChipSentBorderBrush}"
                     Visibility="{x:Bind HasReactions, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
@@ -513,12 +530,20 @@
                 </Grid>
 
                 <Grid Grid.Column="1" HorizontalAlignment="Left">
-                <controls:MessageBubbleChrome
+                <controls:MessageBubbleChromeHost
                     IsFromMe="False"
-                    IsRunStart="{x:Bind ShowTail, Mode=OneWay}"/>
+                    IsRunStart="{x:Bind IsRunStart, Mode=OneWay}"
+                    IsRunEnd="{x:Bind IsRunEnd, Mode=OneWay}"
+                    IsGroupChat="{x:Bind IsGroupChat, Mode=OneWay}"/>
 
                 <Border Background="Transparent" Margin="0,1,0,0" Padding="16,8,12,8">
-                    <StackPanel>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <StackPanel Grid.Row="0">
                         <TextBlock Text="{x:Bind SenderName, Mode=OneWay}"
                                    Visibility="{x:Bind ShowGroupSenderName, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
                                    Foreground="{ThemeResource ChatDetailGroupSenderBrush}"
@@ -606,9 +631,18 @@
                                    FontWeight="SemiBold"
                                    Margin="0,0,0,6"
                                    x:Load="{x:Bind ShowStickerError, Mode=OneWay}"/>
-                        <Grid x:Name="ReceivedImageDownload"
-                              Width="300" Height="300" Margin="0,0,0,6"
+                        </StackPanel>
+                        <Grid x:Name="ReceivedMediaPlaceholderHost"
+                              Grid.Row="1"
                               HorizontalAlignment="Left"
+                              MaxWidth="250"
+                              MaxHeight="250"
+                              Loaded="MediaPlaceholder_Loaded"
+                              SizeChanged="MediaPlaceholder_SizeChanged">
+                        <Grid x:Name="ReceivedImageDownload"
+                              HorizontalAlignment="Stretch"
+                              VerticalAlignment="Stretch"
+                              Margin="0,0,0,6"
                               x:Load="{x:Bind NeedsImageDownload, Mode=OneWay}">
                             <Border Background="{ThemeResource ChatDetailReceivedMediaDownloadOverlayBrush}" CornerRadius="4"/>
                             <Image Source="{x:Bind ThumbnailUri, Mode=OneWay, Converter={StaticResource StringToImageSourceConverter}, ConverterParameter=320}"
@@ -628,28 +662,18 @@
                             <ProgressRing Width="36" Height="36"
                                           IsActive="{x:Bind IsImageDownloading, Mode=OneWay}"
                                           Visibility="{x:Bind IsImageDownloading, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                            <Button Command="{x:Bind DownloadImageCommand, Mode=OneWay}"
-                                    Style="{StaticResource TransparentMediaButtonStyle}"
-                                    Width="56" Height="56"
-                                    MinWidth="56" MinHeight="56"
-                                    Padding="0"
-                                    HorizontalAlignment="Center"
-                                    VerticalAlignment="Center"
-                                    Visibility="{x:Bind ShowImageDownloadIcon, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                <Grid Width="56" Height="56">
-                                    <Ellipse Fill="#99000000"/>
-                                    <TextBlock Text="&#xE896;"
-                                               FontFamily="{StaticResource IconFont}"
-                                               FontSize="28"
-                                               Foreground="{ThemeResource ChatDetailReceivedMediaDownloadIconBrush}"
-                                               HorizontalAlignment="Center"
-                                               VerticalAlignment="Center"/>
-                                </Grid>
-                            </Button>
+                            <controls:ChatMediaCircleButtonHost
+                                    IsFromMe="False"
+                                    Glyph="&#xE896;"
+                                    UseOverlayChrome="True"
+                                    Command="{x:Bind DownloadImageCommand, Mode=OneWay}"
+                                    GlyphForeground="{ThemeResource ChatDetailReceivedMediaDownloadIconBrush}"
+                                    Visibility="{x:Bind ShowImageDownloadIcon, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                         </Grid>
                         <Grid x:Name="ReceivedVideoDownload"
-                              Width="300" Height="300" Margin="0,0,0,6"
-                              HorizontalAlignment="Left"
+                              HorizontalAlignment="Stretch"
+                              VerticalAlignment="Stretch"
+                              Margin="0,0,0,6"
                               x:Load="{x:Bind NeedsVideoDownload, Mode=OneWay}">
                             <Border Background="{ThemeResource ChatDetailReceivedMediaDownloadOverlayBrush}" CornerRadius="4"/>
                             <Image Source="{x:Bind VideoPosterUri, Mode=OneWay, Converter={StaticResource StringToImageSourceConverter}, ConverterParameter=320}"
@@ -661,20 +685,20 @@
                             <ProgressRing Width="36" Height="36"
                                           IsActive="{x:Bind IsVideoDownloading, Mode=OneWay}"
                                           Visibility="{x:Bind IsVideoDownloading, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                            <Button Command="{x:Bind DownloadVideoCommand, Mode=OneWay}"
-                                    Style="{StaticResource TransparentMediaButtonStyle}"
-                                    Visibility="{x:Bind ShowVideoDownloadIcon, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                <TextBlock Text="&#xE896;"
-                                           FontFamily="{StaticResource IconFont}"
-                                           FontSize="36"
-                                           Foreground="{ThemeResource ChatDetailReceivedMediaDownloadIconBrush}"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center"/>
-                            </Button>
+                            <controls:ChatMediaCircleButtonHost
+                                    IsFromMe="False"
+                                    Glyph="&#xE896;"
+                                    UseOverlayChrome="True"
+                                    Command="{x:Bind DownloadVideoCommand, Mode=OneWay}"
+                                    GlyphForeground="{ThemeResource ChatDetailReceivedMediaDownloadIconBrush}"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Visibility="{x:Bind ShowVideoDownloadIcon, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                         </Grid>
                         <Grid x:Name="ReceivedVideoPlay"
-                              Width="300" Height="300" Margin="0,0,0,6"
-                              HorizontalAlignment="Left"
+                              HorizontalAlignment="Stretch"
+                              VerticalAlignment="Stretch"
+                              Margin="0,0,0,6"
                               x:Load="{x:Bind ShowVideoPlayOverlay, Mode=OneWay}">
                             <Border Background="#FF111111" CornerRadius="4"/>
                             <Image Source="{x:Bind VideoPosterUri, Mode=OneWay, Converter={StaticResource StringToImageSourceConverter}, ConverterParameter=320}"
@@ -699,6 +723,8 @@
                                 </Grid>
                             </Button>
                         </Grid>
+                        </Grid>
+                        <StackPanel Grid.Row="2">
                         <RichTextBlock x:Name="ReceivedCaption"
                                        helpers:CommentRichService.Text="{x:Bind Caption, Mode=OneWay}"
                                        helpers:CommentRichService.MentionedJids="{x:Bind MentionedJids, Mode=OneWay}"
@@ -715,22 +741,18 @@
                                        Margin="0,0,0,2"/>
                         <Grid x:Name="ReceivedAudioHost"
                               x:Load="{x:Bind IsAudio, Mode=OneWay}"
-                              HorizontalAlignment="Left"
+                              HorizontalAlignment="Stretch"
                               Margin="0,0,0,2"
-                              MinWidth="250"
+                              MinWidth="0"
                               MinHeight="36">
                             <StackPanel Orientation="Horizontal"
                                         Visibility="{x:Bind ShowAudioDownloadIcon, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                <Grid Width="36" Height="36">
-                                    <Button Command="{x:Bind DownloadAudioCommand, Mode=OneWay}"
-                                            Style="{StaticResource WhatsAppIconButtonStyle}"
-                                            Padding="0"
-                                            MinWidth="36" MinHeight="36"
-                                            HorizontalAlignment="Stretch"
-                                            VerticalAlignment="Stretch">
-                                        <TextBlock Text="&#xE896;" FontFamily="{StaticResource IconFont}" FontSize="20"
-                                                   Foreground="{ThemeResource ChatDetailReceivedBubbleButtonBrush}"/>
-                                    </Button>
+                                <Grid HorizontalAlignment="Left" VerticalAlignment="Center">
+                                    <controls:ChatMediaCircleButtonHost
+                                        IsFromMe="False"
+                                        Glyph="&#xE896;"
+                                        Command="{x:Bind DownloadAudioCommand, Mode=OneWay}"
+                                        GlyphForeground="{ThemeResource ChatDetailReceivedBubbleButtonBrush}"/>
                                     <TextBlock Text="&#xEBFF;"
                                                FontFamily="{StaticResource IconFont}"
                                                FontSize="14"
@@ -755,9 +777,10 @@
                             </StackPanel>
                             <!-- x:Load (not Visibility): defers construction so the WinUI2-styled Slider inside
                                  is never instantiated for non-audio bubbles (Collapsed still builds the tree). -->
-                            <controls:ChatAudioBubbleBar
+                            <controls:ChatAudioBubbleBarHost
                                 x:Name="ReceivedAudioBubbleBar"
                                 x:Load="{x:Bind ShowAudioTransportBar, Mode=OneWay}"
+                                IsFromMe="False"
                                 GlyphForeground="{ThemeResource ChatDetailReceivedBubbleButtonBrush}"
                                 HorizontalAlignment="Stretch"/>
                         </Grid>
@@ -799,16 +822,12 @@
                             </Button>
                             <Grid Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0"
                                   Visibility="{x:Bind ShowDocumentDownloadIcon, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                <Grid Width="36" Height="36">
-                                    <Button Command="{x:Bind DownloadDocumentCommand, Mode=OneWay}"
-                                            Style="{StaticResource WhatsAppIconButtonStyle}"
-                                            Padding="0"
-                                            MinWidth="36" MinHeight="36"
-                                            HorizontalAlignment="Stretch"
-                                            VerticalAlignment="Stretch">
-                                        <TextBlock Text="&#xE896;" FontFamily="{StaticResource IconFont}" FontSize="20"
-                                                   Foreground="{ThemeResource ChatDetailReceivedBubbleButtonBrush}"/>
-                                    </Button>
+                                <Grid HorizontalAlignment="Left" VerticalAlignment="Center">
+                                    <controls:ChatMediaCircleButtonHost
+                                            IsFromMe="False"
+                                            Glyph="&#xE896;"
+                                            Command="{x:Bind DownloadDocumentCommand, Mode=OneWay}"
+                                            GlyphForeground="{ThemeResource ChatDetailReceivedBubbleButtonBrush}"/>
                                     <!-- Error badge on download glyph; tap still retries -->
                                     <TextBlock Text="&#xEBFF;"
                                                FontFamily="{StaticResource IconFont}"
@@ -922,10 +941,18 @@
                             <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                                 <TextBlock Text="&#xE718;" FontFamily="{StaticResource IconFont}" Foreground="{ThemeResource ChatDetailReceivedMetaBrush}" FontSize="10" Margin="0,0,4,0"
                                            Visibility="{x:Bind IsPinned, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                                <TextBlock Text="{x:Bind Timestamp, Mode=OneWay, Converter={StaticResource LocalTimeConverter}}" Foreground="{ThemeResource ChatDetailReceivedMetaBrush}" FontSize="11" FontFamily="{StaticResource MainFont}"/>
+                                <TextBlock Text="{x:Bind Timestamp, Mode=OneWay, Converter={StaticResource LocalTimeConverter}}"
+                                           Foreground="{ThemeResource ChatDetailReceivedMetaBrush}"
+                                           FontSize="11"
+                                           FontFamily="{StaticResource MainFont}"
+                                           TextWrapping="NoWrap"
+                                           TextTrimming="CharacterEllipsis"
+                                           MaxLines="1"
+                                           MaxWidth="72"/>
                             </StackPanel>
                         </Grid>
-                    </StackPanel>
+                        </StackPanel>
+                    </Grid>
                 </Border>
 
                 <!-- Brief flash when scrolled-to from a reply/quote tap. -->

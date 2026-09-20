@@ -36,6 +36,7 @@ using Unison.Uwp.Services.WhatsApp.Chats;
 using Unison.Uwp.Services.WhatsApp.Connection;
 using Unison.Uwp.Services.WhatsApp.Contacts;
 using Unison.Uwp.Services.WhatsApp.Diagnostics;
+using Unison.Uwp.Services.WhatsApp.Groups;
 using Unison.Uwp.Services.WhatsApp.History;
 using Unison.Uwp.Services.WhatsApp.Messages;
 using Unison.Uwp.Services.WhatsApp.Profiles;
@@ -202,7 +203,14 @@ namespace Unison.Uwp
             services.AddSingleton<IChatStateStore>(sp => sp.GetRequiredService<ChatStateStore>());
             services.AddSingleton<IDialogService, DialogService>();
             services.AddSingleton<ILocalSettings, LocalSettingsService>();
-            services.AddSingleton<INavigator>(_ => new NavigatorService(rootFrame));
+            services.AddSingleton<ShellThemeService>();
+            services.AddSingleton<IShellThemeService>(sp => sp.GetRequiredService<ShellThemeService>());
+            services.AddSingleton<Unison.Uwp.Services.Themes.IShellNavigationStrategy>(
+                sp => sp.GetRequiredService<ShellThemeService>());
+            services.AddSingleton<INavigator>(sp =>
+                new NavigatorService(
+                    rootFrame,
+                    sp.GetRequiredService<Unison.Uwp.Services.Themes.IShellNavigationStrategy>()));
 
             services.AddSingleton<SessionLoggerAdapter>();
             services.AddSingleton<ISessionLogger>(sp => sp.GetRequiredService<SessionLoggerAdapter>());
@@ -213,17 +221,47 @@ namespace Unison.Uwp
             services.AddSingleton<IKeyStore>(_ => new FileKeyStore());
             services.AddSingleton<IMessageStore, MessageStore>();
             services.AddSingleton<IPersonStore, PersonStore>();
+            services.AddSingleton<IGroupRosterStore, GroupRosterStore>();
             services.AddSingleton<IChatStore, ChatStore>();
             services.AddSingleton<IHistoryMigrationStore, HistoryMigrationStore>();
             services.AddSingleton<IHistoryChatPreviewStore, HistoryChatPreviewStore>();
             services.AddSingleton<IHistoryMessageStore, HistoryMessageStore>();
             services.AddSingleton<IHistoryStatusStore, HistoryStatusStore>();
 
+            services.AddSingleton<IAvatarCache, AvatarCacheService>();
+            services.AddSingleton<MediaCacheService>();
+            services.AddSingleton<IMediaCache>(sp => sp.GetRequiredService<MediaCacheService>());
+            // Built by hand because the constructor is internal: type activation only sees
+            // public ones, and the transcoder needs the concrete cache for StorageFile access.
+            services.AddSingleton(sp => new MediaDerivationService(
+                sp.GetRequiredService<MediaCacheService>()));
+            services.AddSingleton<JidAliasTable>();
+            // Contacts and avatars query the same rate-limited directory surface, so they queue
+            // behind one gate even after they stop sharing an owner.
+            services.AddSingleton<IUsyncGate, UsyncGate>();
+            // Reaches the socket through the session provider's lazy accessor, so building it here
+            // does not resolve the client it will eventually be handed to.
+            services.AddSingleton(sp => new AvatarFetcher(
+                sp.GetRequiredService<IWhatsAppSessionProvider>(),
+                sp.GetRequiredService<IUsyncGate>(),
+                sp.GetRequiredService<IAvatarCache>()));
             services.AddSingleton<IWhatsAppService>(
                 sp => WhatsAppService.Create(
                     sp.GetRequiredService<ChatStateStore>(),
                     sp.GetRequiredService<IHistoryMessageStore>(),
-                    sp.GetRequiredService<IHistoryChatPreviewStore>()));
+                    sp.GetRequiredService<IHistoryChatPreviewStore>(),
+                    sp.GetRequiredService<IAvatarCache>(),
+                    sp.GetRequiredService<IUsyncGate>(),
+                    sp.GetRequiredService<AvatarFetcher>(),
+                    sp.GetRequiredService<IMediaCache>(),
+                    sp.GetRequiredService<JidAliasTable>(),
+                    sp.GetRequiredService<MediaDerivationService>()));
+            // Asking "is this the same person?" no longer means naming the client. The table is
+            // still built there; only the question moved.
+            services.AddSingleton<IJidResolver>(
+                sp => new JidResolver(
+                    sp.GetRequiredService<JidAliasTable>(),
+                    sp.GetRequiredService<IWhatsAppService>()));
 #if DEBUG
             // Dev-only tooling: file-watch based debug send. Never attached/started in Release.
             services.AddSingleton<IDebugSendService, DebugSendService>();
@@ -234,7 +272,8 @@ namespace Unison.Uwp
 
             services.AddSingleton<IProfileService>(sp => new ProfileFacade(
                 sp.GetRequiredService<IWhatsAppSessionProvider>(),
-                sp.GetRequiredService<IWhatsAppService>()));
+                sp.GetRequiredService<IWhatsAppService>(),
+                sp.GetRequiredService<IAvatarCache>()));
 
             // Falls back to the service's own resync when the socket is down and the session
             // provider has nothing to give it.
@@ -246,13 +285,16 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IHistoryChatPreviewStore>(),
                 sp.GetRequiredService<IHistoryMigrationStore>(),
                 sp.GetRequiredService<IHistoryMessageStore>(),
-                sp.GetRequiredService<IHistoryStatusStore>()));
+                sp.GetRequiredService<IHistoryStatusStore>(),
+                sp.GetRequiredService<INotificationService>(),
+                sp.GetRequiredService<IStringResources>()));
             services.AddSingleton<IHistoryService>(sp => sp.GetRequiredService<HistoryFacade>());
 
             services.AddSingleton(sp => new StatusFacade(
                 sp.GetRequiredService<IHistoryStatusStore>(),
                 sp.GetRequiredService<IPersonStore>(),
-                sp.GetRequiredService<IMessageService>()));
+                sp.GetRequiredService<IMessageService>(),
+                sp.GetRequiredService<IWhatsAppService>()));
             services.AddSingleton<IStatusService>(sp => sp.GetRequiredService<StatusFacade>());
 
             services.AddSingleton<IChatAuthorProjection, ChatAuthorProjection>();
@@ -273,11 +315,18 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IPersonStore>(),
                 sp.GetRequiredService<IWhatsAppService>(),
                 sp.GetRequiredService<LidMappingStore>(),
-                sp.GetRequiredService<ILocalSettings>()));
+                sp.GetRequiredService<ILocalSettings>(),
+                sp.GetRequiredService<IJidResolver>()));
             services.AddSingleton<IChatService>(sp => new ChatFacade(
                 sp.GetRequiredService<IWhatsAppSessionProvider>(),
                 sp.GetRequiredService<IWhatsAppService>(),
-                sp.GetRequiredService<IChatStore>()));
+                sp.GetRequiredService<IJidResolver>(),
+                sp.GetRequiredService<IContactService>(),
+                sp.GetRequiredService<INotificationService>()));
+            // Forwards for now: the w:g2 work is still inside the client (phase 3.2). What this
+            // registration buys is that the info pane and the composer stop naming it.
+            services.AddSingleton<IGroupService>(sp => new GroupFacade(
+                sp.GetRequiredService<IWhatsAppService>()));
             services.AddSingleton<ILiveTilesService>(_ => LiveTilesService.Instance);
             services.AddSingleton<IShortcutService, ShortcutService>();
             services.AddSingleton<INotificationService>(sp =>
@@ -309,7 +358,6 @@ namespace Unison.Uwp
             services.AddSingleton<ISystemInfoProvider, SystemInfoProvider>();
             services.AddSingleton<IStatusBarService, StatusBarService>();
             services.AddSingleton<ILocationKeepAliveService, LocationKeepAliveService>();
-            services.AddSingleton<IShellThemeService, ShellThemeService>();
             services.AddSingleton<IAppLanguageService, AppLanguageService>();
 
             // Validation harness for the Unison.Socket rewrite. Reachable only from the debug
@@ -335,18 +383,23 @@ namespace Unison.Uwp
             Services = services.BuildServiceProvider(validateScopes: true);
             var whatsApp = Services.GetRequiredService<IWhatsAppService>();
             var whatsAppImpl = (WhatsAppService)whatsApp;
+            // The root frame was built on the UI thread, so its dispatcher is the one the client
+            // has to marshal onto. Done here rather than from a page's Loaded so the client is
+            // never without one: whichever surface happens to come up first, the container is
+            // already built by then.
+            whatsAppImpl.AttachUiDispatcher(rootFrame?.Dispatcher);
             whatsAppImpl.AttachSystemInfoProvider(Services.GetRequiredService<ISystemInfoProvider>());
             whatsAppImpl.AttachMessageService(Services.GetRequiredService<IMessageService>());
-            whatsAppImpl.AttachStatusService(Services.GetRequiredService<IStatusService>());
+            whatsAppImpl.AttachChatService(Services.GetRequiredService<IChatService>());
             whatsAppImpl.AttachContactService(Services.GetRequiredService<IContactService>());
-            whatsAppImpl.AttachConnectionService(Services.GetRequiredService<IConnectionService>());
             Services.GetRequiredService<IConnectionService>().AttachWhatsAppService(whatsApp);
-            // The remaining facades relay client events to the screens, and they can only relay
-            // what they were around to hear. Build them now rather than when a screen first asks.
+            // The remaining facades subscribe to client events in their constructors, and they can
+            // only hear what they were around for. Build them now rather than when a screen first asks.
             Services.GetRequiredService<IProfileService>();
             Services.GetRequiredService<IHistoryService>();
             Services.GetRequiredService<IStatusService>();
             whatsAppImpl.AttachPersonStore(Services.GetRequiredService<IPersonStore>());
+            whatsAppImpl.AttachGroupRosterStore(Services.GetRequiredService<IGroupRosterStore>());
             whatsAppImpl.AttachChatStore(Services.GetRequiredService<IChatStore>());
             // Rewrites group author strips as names resolve, list open or not.
             Services.GetRequiredService<IChatAuthorProjection>().Start();
@@ -377,14 +430,7 @@ namespace Unison.Uwp
             // PrimaryLanguageOverride from LocalSettings (ctor also applies early for x:Uid).
             ReloadLanguageFromSettings();
 
-            try
-            {
-                Services.GetRequiredService<IShellThemeService>().ApplyFromSettings();
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine("[App] Apply shell theme: " + ex.Message);
-            }
+            ApplyShellThemeFromSettings();
 
             ApplyTimeFormatFromSettings();
 
@@ -428,12 +474,16 @@ namespace Unison.Uwp
                 NotificationService.Instance.Initialize();
                 LiveTilesService.Instance.Initialize();
                 EnsureWindowVisibilityTracking();
+
+                var toastArgs = args as ToastNotificationActivatedEventArgs;
+                // DI + theme before chrome: toast activation skips OnLaunched, so shell
+                // strategy / Theme.xaml / pending "Shell applied" toast must run here.
+                Frame rootFrame = EnsureRootFrame();
+                ApplyShellThemeFromSettings();
                 ConfigureAppChrome();
                 EnsureTitleBarHook();
                 EnsureStatusBarOrientationHook();
 
-                var toastArgs = args as ToastNotificationActivatedEventArgs;
-                Frame rootFrame = EnsureRootFrame();
                 string toastArgument = toastArgs?.Argument ?? string.Empty;
 
                 RuntimeDiagnosticsService.Instance.Write(
@@ -508,7 +558,7 @@ namespace Unison.Uwp
                 }
 
                 Services.GetRequiredService<INavigator>()
-                    .NavigateAndClear(NavigationRoutes.Boot, parameter);
+                    .NavigateAndClear(Unison.Core.Models.NavigationDestination.Boot, parameter);
             }
             catch (Exception ex)
             {
@@ -780,6 +830,9 @@ namespace Unison.Uwp
             RuntimeDiagnosticsService.Instance.Write("lifecycle", "resuming-start");
             try
             {
+                // Mobile often survives shell-change Exit(); resume never hits OnLaunched, so
+                // re-read SelectedShell + pending applied toast before chrome/reconnect.
+                ApplyShellThemeFromSettings();
                 ApplyWindowChromeBootstrap();
                 // Suspension intentionally closes the WebSocket. On Windows 10 Mobile
                 // OnLaunched is not called again when the process is resumed, so the
@@ -798,6 +851,27 @@ namespace Unison.Uwp
                     "resume-reconnect-failed",
                     ex);
                 System.Diagnostics.Debug.WriteLine($"[App] Resume reconnect failed: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Swaps Themes/{Shell}/Theme.xaml, rebuilds navigation strategy, shows pending
+        /// "Shell applied" toast. Safe when DI is not ready yet.
+        /// </summary>
+        private void ApplyShellThemeFromSettings()
+        {
+            try
+            {
+                if (Services == null)
+                {
+                    return;
+                }
+
+                Services.GetRequiredService<IShellThemeService>().ApplyFromSettings();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[App] Apply shell theme: " + ex.Message);
             }
         }
 

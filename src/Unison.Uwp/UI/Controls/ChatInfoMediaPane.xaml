@@ -38,6 +38,8 @@
                        FontFamily="{StaticResource IconFont}"
                        Style="{StaticResource ChatDetailInfoEmptyIconStyle}"/>
                     <TextBlock x:Name="MediaEmptyText"
+                       x:Uid="ChatDetailInfo_MediaEmpty"
+                       Text="Photos, videos and audio will appear here."
                        Style="{StaticResource ChatDetailInfoEmptyTextStyle}"
                        Margin="24,16,24,24"/>
         </StackPanel>

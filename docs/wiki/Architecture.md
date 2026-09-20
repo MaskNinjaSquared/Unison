@@ -148,10 +148,31 @@ Facades extracted **policy** around it (pairing/logout, pin/mark-read, contact o
 | `SqliteLidMappingStorage` | SQLite | PN ↔ LID map for the rc14 addressing model |
 | `ChatStore` / `PersonStore` | SQLite | Local chat flags (mute/pin) and people |
 | `MessageStore` | App data JSON | Leftover identity sidecars (contact names / aliases); chat/message JSON no longer the live path |
-| `HistoryChatPreviewStore` | SQLite `history_chat_preview` | List catalog (history chunks + live persist); UI hydrates via `ChatPreviewChunkPersisted` |
+| `HistoryChatPreviewStore` | SQLite `history_chat_preview` | List catalog, schema 6: `ChatStatus` Active/Deleted/Archived plus `DeletedAtUtc` tombstone; history chunks apply as **delta** (insert new / update lifecycle + tip when newer); UI hydrates via `ChatPreviewChunkPersisted` |
 | `HistoryMigrationStore` | SQLite `history_migration` | Gate: history batch landed for current MessageStore epoch |
-| `HistoryMessageStore` | SQLite `history_message` + `history_message_reaction` | Timeline bodies, quote/pin/revoke, reactions; schema 5 |
+| `HistoryMessageStore` | SQLite `history_message` + `history_message_reaction` | Timeline bodies, quote/pin/revoke, reactions; schema 5; history chunks skip existing bodies (`PreferDeltaSkipExistingBodies`) while still applying side effects |
 | Broker journal | `broker-frame-*.bin` (UBJ2 / UBD3) | Ordered frames + Noise checkpoint while backgrounded |
+
+### The credential value has an 8 KB ceiling, so only credentials go in it
+
+A `LocalSettings` value is capped at 8192 bytes and writing past it throws (`0x80073DC8`, "the size
+of the state manager setting value has exceeded the limit"). The keys are fixed-size and come to
+roughly 1 KB, so they fit with room to spare — but `SenderKeyMemory` used to sit in the same value,
+recording per group every participant **device** that already holds our sender key. A 50-member
+group runs around 2 KB, so a few active groups reached the ceiling, and the write that overflowed it
+was the group send itself: relaying emits `CredsUpdate`, which saves, which threw.
+
+It now lives in `sender-key-memory.json` in `LocalFolder`, written after the credentials and never
+in their way. It is a bandwidth cache: losing it re-sends the sender key to every member, which
+costs traffic, not correctness — so that write is allowed to fail quietly, while the credential
+write is not. Installs written before the split still carry the memory inline and are migrated on
+the next load.
+
+**Do not put anything unbounded back in that value.** The failure is not a lost write: credentials
+stop saving from that point on, and a load that cannot read them looks exactly like "never paired".
+Which is why `AuthStore` now tells the two apart — when a saved account is present but unreadable,
+it refuses to write an unregistered state over it, so one bad read costs a session instead of the
+device link. A pairing the user completes is registered, and does replace it.
 
 ## Where to go next
 

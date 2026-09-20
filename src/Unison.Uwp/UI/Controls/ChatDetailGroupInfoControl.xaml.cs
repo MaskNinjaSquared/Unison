@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using Unison.Core.Models;
 using Unison.Core.ViewModels;
 using Windows.UI.Xaml;
@@ -17,12 +17,15 @@ namespace Unison.Uwp.UI.Controls
                 new PropertyMetadata(null, OnInfoViewModelChanged));
 
         private ChatDetailInfoViewModel _boundInfo;
+        private bool _infoHooked;
+        private bool _isLoaded;
         private bool _notificationsToggleQuiet;
 
         public ChatDetailGroupInfoControl()
         {
             InitializeComponent();
-            Loaded += (s, e) => ApplyInfoViewModel();
+            Loaded += OnControlLoaded;
+            Unloaded += OnControlUnloaded;
         }
 
         public ChatDetailInfoViewModel InfoViewModel
@@ -39,16 +42,9 @@ namespace Unison.Uwp.UI.Controls
 
         private void OnInfoViewModelChanged(ChatDetailInfoViewModel oldVm, ChatDetailInfoViewModel newVm)
         {
-            if (_boundInfo != null)
-            {
-                _boundInfo.PropertyChanged -= Info_PropertyChanged;
-            }
-
+            UnhookInfo();
             _boundInfo = newVm;
-            if (_boundInfo != null)
-            {
-                _boundInfo.PropertyChanged += Info_PropertyChanged;
-            }
+            HookInfo();
 
             if (newVm != null)
             {
@@ -58,11 +54,51 @@ namespace Unison.Uwp.UI.Controls
             ApplyInfoViewModel();
         }
 
+        private void OnControlLoaded(object sender, RoutedEventArgs e)
+        {
+            _isLoaded = true;
+            HookInfo();
+            ApplyInfoViewModel();
+        }
+
+        private void OnControlUnloaded(object sender, RoutedEventArgs e)
+        {
+            _isLoaded = false;
+            UnhookInfo();
+        }
+
+        /// <summary>
+        /// Listens only while on screen. The view model outlives this control, so a subscription
+        /// left behind at unload keeps the whole visual tree alive and goes on laying out a pane
+        /// nobody is looking at.
+        /// </summary>
+        private void HookInfo()
+        {
+            if (_boundInfo == null || _infoHooked || !_isLoaded)
+            {
+                return;
+            }
+
+            _boundInfo.PropertyChanged += Info_PropertyChanged;
+            _infoHooked = true;
+        }
+
+        private void UnhookInfo()
+        {
+            if (_boundInfo == null || !_infoHooked)
+            {
+                return;
+            }
+
+            _boundInfo.PropertyChanged -= Info_PropertyChanged;
+            _infoHooked = false;
+        }
         private void Info_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
-            if (e.PropertyName == nameof(ChatDetailInfoViewModel.IsMembersAvatarsLoading))
+            if (e.PropertyName == nameof(ChatDetailInfoViewModel.IsMembersAvatarsLoading) ||
+                e.PropertyName == nameof(ChatDetailInfoViewModel.IsMembersRosterLoading))
             {
-                ApplyMembersAvatarsLoading();
+                ApplyMembersLoadingUi();
                 return;
             }
 
@@ -85,20 +121,61 @@ namespace Unison.Uwp.UI.Controls
 
             if (InfoPivot?.SelectedItem == MembersPivotItem && InfoViewModel != null)
             {
-                _ = InfoViewModel.EnsureMembersAvatarsHydratedAsync();
-                ApplyMembersAvatarsLoading();
+                _ = InfoViewModel.EnsureMembersPivotReadyAsync();
+                ApplyMembersLoadingUi();
             }
         }
 
-        private void ApplyMembersAvatarsLoading()
+        private void ApplyMembersLoadingUi()
         {
-            if (MembersAvatarsProgress == null)
+            var vm = InfoViewModel;
+            bool rosterLoading = vm?.IsMembersRosterLoading == true;
+            bool avatarsLoading = vm?.IsMembersAvatarsLoading == true;
+
+            if (MembersRosterLoadingRing != null)
             {
-                return;
+                MembersRosterLoadingRing.IsActive = rosterLoading;
+                MembersRosterLoadingRing.Visibility =
+                    rosterLoading ? Visibility.Visible : Visibility.Collapsed;
             }
 
-            bool loading = InfoViewModel?.IsMembersAvatarsLoading == true;
-            MembersAvatarsProgress.Visibility = loading ? Visibility.Visible : Visibility.Collapsed;
+            if (MembersAvatarsProgress != null)
+            {
+                MembersAvatarsProgress.Visibility =
+                    avatarsLoading && !rosterLoading ? Visibility.Visible : Visibility.Collapsed;
+            }
+
+            // Empty / list while roster IQ is in flight — avoid a false "no members" flash.
+            if (rosterLoading)
+            {
+                if (MembersEmptyText != null)
+                {
+                    MembersEmptyText.Visibility = Visibility.Collapsed;
+                }
+
+                if (MembersList != null)
+                {
+                    MembersList.Visibility = Visibility.Collapsed;
+                }
+            }
+            else if (vm != null)
+            {
+                ApplyMembersListVisibility(vm);
+            }
+        }
+
+        private void ApplyMembersListVisibility(ChatDetailInfoViewModel vm)
+        {
+            if (MembersEmptyText != null)
+            {
+                MembersEmptyText.Visibility = vm.HasMembers ? Visibility.Collapsed : Visibility.Visible;
+            }
+
+            if (MembersList != null)
+            {
+                MembersList.ItemsSource = vm.HasMembers ? vm.Members : null;
+                MembersList.Visibility = vm.HasMembers ? Visibility.Visible : Visibility.Collapsed;
+            }
         }
 
         private void NotificationsToggle_Toggled(object sender, RoutedEventArgs e)
@@ -141,32 +218,21 @@ namespace Unison.Uwp.UI.Controls
                 return;
             }
 
-            ProfilePivotItem.Header = ChatDetailInfoPivotHelper.Upper(vm.ProfilePivotHeader);
-            if (MembersPivotItem != null)
+            if (vm.IsMembersRosterLoading)
             {
-                MembersPivotItem.Header = ChatDetailInfoPivotHelper.Upper(vm.MembersPivotHeader);
-            }
+                if (MembersEmptyText != null)
+                {
+                    MembersEmptyText.Visibility = Visibility.Collapsed;
+                }
 
-            if (MediaPivotItem != null)
-            {
-                MediaPivotItem.Header = ChatDetailInfoPivotHelper.Upper(vm.MediaPivotHeader);
+                if (MembersList != null)
+                {
+                    MembersList.Visibility = Visibility.Collapsed;
+                }
             }
-
-            if (FilesPivotItem != null)
+            else
             {
-                FilesPivotItem.Header = ChatDetailInfoPivotHelper.Upper(vm.FilesPivotHeader);
-            }
-
-            if (MembersEmptyText != null)
-            {
-                MembersEmptyText.Text = vm.MembersEmptyText ?? string.Empty;
-                MembersEmptyText.Visibility = vm.HasMembers ? Visibility.Collapsed : Visibility.Visible;
-            }
-
-            if (MembersList != null)
-            {
-                MembersList.ItemsSource = vm.HasMembers ? vm.Members : null;
-                MembersList.Visibility = vm.HasMembers ? Visibility.Visible : Visibility.Collapsed;
+                ApplyMembersListVisibility(vm);
             }
 
             MediaPane?.AttachPaging(vm, isFilesPane: false);
@@ -179,19 +245,9 @@ namespace Unison.Uwp.UI.Controls
                 InfoAvatar.IsGroup = true;
             }
 
-            if (NameLabel != null)
-            {
-                NameLabel.Text = ChatDetailInfoPivotHelper.Upper(vm.NameSectionLabel);
-            }
-
             if (NameValue != null)
             {
                 NameValue.Text = vm.DisplayName ?? string.Empty;
-            }
-
-            if (StatusLabel != null)
-            {
-                StatusLabel.Text = ChatDetailInfoPivotHelper.Upper(vm.StatusSectionLabel);
             }
 
             if (StatusValue != null)
@@ -199,27 +255,17 @@ namespace Unison.Uwp.UI.Controls
                 StatusValue.Text = vm.HasStatusOrDescription ? vm.StatusOrDescription : "—";
             }
 
-            if (NotificationsLabel != null)
-            {
-                NotificationsLabel.Text = ChatDetailInfoPivotHelper.Upper(vm.NotificationsSectionLabel);
-            }
-
             ChatDetailInfoPivotHelper.ApplyNotificationsToggle(
                 NotificationsToggle,
                 vm,
                 ref _notificationsToggleQuiet);
-
-            if (MembersLabel != null)
-            {
-                MembersLabel.Text = ChatDetailInfoPivotHelper.Upper(vm.MembersSectionLabel);
-            }
 
             if (MembersValue != null)
             {
                 MembersValue.Text = vm.MembersCountText ?? "—";
             }
 
-            ApplyMembersAvatarsLoading();
+            ApplyMembersLoadingUi();
         }
 
         private void BindMediaPanes()
@@ -231,8 +277,8 @@ namespace Unison.Uwp.UI.Controls
             }
 
             bool loading = vm.IsMediaIndexLoading;
-            MediaPane?.Bind(vm.MediaItems, vm.HasMedia, vm.MediaEmptyText, loading);
-            FilesPane?.Bind(vm.FileItems, vm.HasFiles, vm.FilesEmptyText, loading);
+            MediaPane?.Bind(vm.MediaItems, vm.HasMedia, loading);
+            FilesPane?.Bind(vm.FileItems, vm.HasFiles, loading);
         }
     }
 }

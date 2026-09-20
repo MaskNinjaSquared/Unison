@@ -123,7 +123,13 @@ namespace Unison.Core.Helpers
         /// <summary>
         /// Push names travel in <see cref="HistorySync.Pushnames"/>, not on every envelope, so a
         /// history chunk's <c>WebMessageInfo.PushName</c> is usually empty. Indexed by normalized
-        /// JID and by bare phone/user so a LID participant still matches its PN entry.
+        /// JID. Bare phone keys are added only for PN (@s.whatsapp.net) so LID bare digits cannot
+        /// steal another person's push name.
+        /// <para>
+        /// The same chunk often lists LID↔PN pairs under <see cref="HistorySync.PhoneNumberToLidMappings"/>.
+        /// Group envelopes carry the LID while push names stay under the phone JID — without mirroring
+        /// those pairs the list strip falls back to bare digits until the group is opened.
+        /// </para>
         /// </summary>
         public static Dictionary<string, string> BuildPushNameMap(HistorySync sync)
         {
@@ -147,14 +153,88 @@ namespace Unison.Core.Helpers
                     map[jid] = name;
                 }
 
-                string bare = BareUser(jid);
-                if (!string.IsNullOrWhiteSpace(bare) && !map.ContainsKey(bare))
+                // PN only: bare phone → name. Never index @lid user parts (collides across people).
+                if (!string.IsNullOrWhiteSpace(jid) &&
+                    jid.EndsWith("@s.whatsapp.net", StringComparison.OrdinalIgnoreCase))
                 {
-                    map[bare] = name;
+                    string bare = BareUser(jid);
+                    if (!string.IsNullOrWhiteSpace(bare) && !map.ContainsKey(bare))
+                    {
+                        map[bare] = name;
+                    }
                 }
             }
 
+            MirrorPushNamesAcrossLidPn(map, sync);
             return map;
+        }
+
+        /// <summary>
+        /// Copies a known push name onto the other half of each LID↔PN pair in this chunk.
+        /// </summary>
+        private static void MirrorPushNamesAcrossLidPn(
+            Dictionary<string, string> map,
+            HistorySync sync)
+        {
+            if (map == null || map.Count == 0 || sync == null)
+            {
+                return;
+            }
+
+            if (sync.PhoneNumberToLidMappings != null)
+            {
+                foreach (var mapping in sync.PhoneNumberToLidMappings)
+                {
+                    if (mapping == null)
+                    {
+                        continue;
+                    }
+
+                    MirrorPair(map, mapping.LidJid, mapping.PnJid);
+                }
+            }
+
+            if (sync.Conversations == null)
+            {
+                return;
+            }
+
+            foreach (var conv in sync.Conversations)
+            {
+                if (conv == null ||
+                    string.IsNullOrWhiteSpace(conv.LidJid) ||
+                    string.IsNullOrWhiteSpace(conv.PnJid))
+                {
+                    continue;
+                }
+
+                MirrorPair(map, conv.LidJid, conv.PnJid);
+            }
+        }
+
+        private static void MirrorPair(Dictionary<string, string> map, string lidJid, string pnJid)
+        {
+            string lid = JidHelper.Normalize(lidJid);
+            string pn = JidHelper.Normalize(pnJid);
+            if (string.IsNullOrWhiteSpace(lid) || string.IsNullOrWhiteSpace(pn))
+            {
+                return;
+            }
+
+            string name;
+            if (map.TryGetValue(pn, out name) &&
+                !string.IsNullOrWhiteSpace(name) &&
+                !map.ContainsKey(lid))
+            {
+                map[lid] = name;
+            }
+
+            if (map.TryGetValue(lid, out name) &&
+                !string.IsNullOrWhiteSpace(name) &&
+                !map.ContainsKey(pn))
+            {
+                map[pn] = name;
+            }
         }
 
         /// <summary>
@@ -179,17 +259,27 @@ namespace Unison.Core.Helpers
             }
 
             string name;
+            string normalized = JidHelper.Normalize(participantJid) ?? participantJid;
+            if (pushNamesByJid.TryGetValue(normalized, out name) && !string.IsNullOrWhiteSpace(name))
+            {
+                return name.Trim();
+            }
+
             if (pushNamesByJid.TryGetValue(participantJid, out name) && !string.IsNullOrWhiteSpace(name))
             {
                 return name.Trim();
             }
 
-            string bare = BareUser(participantJid);
-            if (!string.IsNullOrWhiteSpace(bare) &&
-                pushNamesByJid.TryGetValue(bare, out name) &&
-                !string.IsNullOrWhiteSpace(name))
+            // Bare lookup only for PN participants (phone digits). LID bare must not hit PN map.
+            if (normalized.EndsWith("@s.whatsapp.net", StringComparison.OrdinalIgnoreCase))
             {
-                return name.Trim();
+                string bare = BareUser(normalized);
+                if (!string.IsNullOrWhiteSpace(bare) &&
+                    pushNamesByJid.TryGetValue(bare, out name) &&
+                    !string.IsNullOrWhiteSpace(name))
+                {
+                    return name.Trim();
+                }
             }
 
             return null;
@@ -366,56 +456,22 @@ namespace Unison.Core.Helpers
                 ?? current.GroupStatusMessageV2?.Message;
         }
 
+        /// <summary>
+        /// What this envelope says, for the one caller that decides whether it can be listed.
+        /// The tag on media is stripped again by <see cref="ChatPreviewNormalizer.NormalizeBody"/>.
+        /// </summary>
+        /// <remarks>
+        /// This used to be a second, shorter classification, which knew text and the four media
+        /// kinds and nothing else. A poll, a contact, a location or a call came back as empty text
+        /// of kind Text, HasRenderableContent said no, and the message was dropped from the sync
+        /// altogether: no row in the conversation, and not even a candidate for the list preview.
+        /// Live the same message showed. So they were there until a resync, and then they were not.
+        /// </remarks>
         public static void ExtractContent(Message msg, out string text, out ChatPreviewKind kind)
         {
-            text = string.Empty;
-            kind = ChatPreviewKind.Text;
-            if (msg == null)
-            {
-                return;
-            }
-
-            if (!string.IsNullOrEmpty(msg.Conversation))
-            {
-                text = msg.Conversation;
-                kind = ChatPreviewKind.Text;
-            }
-            else if (msg.ExtendedTextMessage != null)
-            {
-                text = msg.ExtendedTextMessage.Text ?? string.Empty;
-                kind = ChatPreviewKind.Text;
-            }
-            else if (msg.StickerMessage != null)
-            {
-                kind = ChatPreviewKind.Sticker;
-            }
-            else if (msg.ImageMessage != null)
-            {
-                text = msg.ImageMessage.Caption ?? string.Empty;
-                kind = ChatPreviewKind.Image;
-            }
-            else if (msg.VideoMessage != null)
-            {
-                text = msg.VideoMessage.Caption ?? string.Empty;
-                kind = ChatPreviewKind.Video;
-            }
-            else if (msg.AudioMessage != null)
-            {
-                kind = ChatPreviewKind.Voice;
-            }
-            else if (msg.DocumentMessage != null)
-            {
-                text = msg.DocumentMessage.Caption
-                       ?? msg.DocumentMessage.FileName
-                       ?? string.Empty;
-                kind = ChatPreviewKind.Document;
-            }
-            else if (msg.DocumentWithCaptionMessage?.Message?.DocumentMessage != null)
-            {
-                var doc = msg.DocumentWithCaptionMessage.Message.DocumentMessage;
-                text = doc.Caption ?? doc.FileName ?? string.Empty;
-                kind = ChatPreviewKind.Document;
-            }
+            MessageRenderInfo info = MessageRenderReader.Read(msg);
+            text = info?.Content ?? string.Empty;
+            kind = info == null ? ChatPreviewKind.Text : info.PreviewKind;
         }
 
         public static DateTime? ToUtc(ulong unixSeconds)

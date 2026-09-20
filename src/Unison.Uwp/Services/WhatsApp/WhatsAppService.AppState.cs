@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -109,6 +109,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
+            List<ChatItem> dirty = null;
+            int resolved = 0;
             await RunOnUiThreadAsync(() =>
             {
                 var rows = GetChatRowsForCanonicalJid(canonical);
@@ -122,13 +124,68 @@ namespace Unison.Uwp.Services.WhatsApp
                     };
                     Chats.Add(created);
                     rows.Add(created);
+                    dirty = new List<ChatItem> { created };
                 }
 
-                int value = read ? 0 : Math.Max(1, rows.Max(c => Math.Max(0, c.UnreadCount)));
-                foreach (var row in rows) row.UnreadCount = value;
+                resolved = AppStateChatMutation.ResolveUnreadCount(rows, read);
+                foreach (var row in rows)
+                {
+                    if (row.UnreadCount == resolved)
+                    {
+                        continue;
+                    }
+
+                    row.UnreadCount = resolved;
+                    if (dirty == null)
+                    {
+                        dirty = new List<ChatItem>();
+                    }
+
+                    if (!dirty.Contains(row))
+                    {
+                        dirty.Add(row);
+                    }
+                }
             });
+
+            if (dirty == null || dirty.Count == 0)
+            {
+                return;
+            }
+
             NotificationService.Instance.UpdateBadge(GetTotalUnreadCount());
-            SchedulePersist();
+
+            // Reading on the phone left the pinned tile showing the old count: only the
+            // local read path told the shortcut service, and this one is the same event
+            // arriving from the other direction.
+            try
+            {
+                App.Services?.GetService<IShortcutService>()?.UpdateChatUnread(canonical, resolved);
+            }
+            catch
+            {
+            }
+
+            // A slice, not a full persist. The local read path moved off SchedulePersist
+            // because rewriting every preview plus three JSON maps costs seconds on Mobile
+            // eMMC, and nothing about this copy makes it cheaper.
+            _ = PersistChatCatalogSliceAsync(dirty);
+        }
+
+        /// <summary>
+        /// Removes a conversation because the account says it is gone - either the phone deleted it
+        /// or we did.
+        /// </summary>
+        /// <remarks>
+        /// Dropping the in-memory rows is only the visible half. SQLite is what the list and the
+        /// timeline are rebuilt from on the next launch, so a chat cleared from RAM alone comes
+        /// straight back; a delete that leaves the tail behind is undone by the next history chunk.
+        /// Hence both: a tombstone on the preview and a real delete of the messages.
+        /// </remarks>
+        /// <inheritdoc />
+        public Task ApplyChatDeletionAsync(string jid)
+        {
+            return ApplyAppStateDeleteChatAsync(jid);
         }
 
         internal async Task ApplyAppStateDeleteChatAsync(string jid)
@@ -139,23 +196,100 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
+            List<string> keys = ExpandHistoryChatKeys(canonical);
+
             await RunOnUiThreadAsync(() =>
             {
-                var chat = Chats.FirstOrDefault(c => GetCanonicalJid(c.JID) == canonical);
-                if (chat != null)
+                // Both rows, for the same reason the storage side already expands the key:
+                // the conversation is listed under PN and under LID, and removing one left
+                // the other behind as an empty row until the next launch.
+                foreach (var chat in GetChatRowsForCanonicalJid(canonical))
                 {
-                    Chats.Remove(chat);
+                    if (chat != null)
+                    {
+                        Chats.Remove(chat);
+                    }
                 }
 
                 MessagesByChat.Remove(canonical);
-                _messageIdIndexByChat.Remove(canonical);
-                _pendingMissingMessagesByChat.Remove(canonical);
+                _messageIdIndex.RemoveChat(canonical);
+                ForgetMissingMessagesForChat(canonical);
                 _historyOnDemandMarkerByChat.Remove(canonical);
                 _historyOnDemandLastRequestIdByChat.Remove(canonical);
                 _historyOnDemandAttemptsByChat.Remove(canonical);
                 _historyOnDemandRejectedUntilUtcByChat.Remove(canonical);
                 _activeChatReconcileCooldownByChat.Remove(canonical);
             });
+
+            await ForgetChatInStorageAsync(canonical, keys).ConfigureAwait(false);
+
+            NotificationService.Instance.UpdateBadge(GetTotalUnreadCount());
+            SchedulePersist();
+        }
+
+        /// <summary>
+        /// The persistent half of a chat deletion: tombstone the list preview, drop the stored
+        /// messages, and take the chat out of the catalog the app rehydrates from.
+        /// </summary>
+        private async Task ForgetChatInStorageAsync(string canonical, IReadOnlyList<string> keys)
+        {
+            var jids = new List<string>();
+            if (keys != null)
+            {
+                jids.AddRange(keys);
+            }
+
+            if (!jids.Any(k => string.Equals(k, canonical, StringComparison.OrdinalIgnoreCase)))
+            {
+                jids.Add(canonical);
+            }
+
+            if (_chatPreviews != null)
+            {
+                try
+                {
+                    await _chatPreviews.MarkDeletedAsync(jids, DateTime.UtcNow).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[WhatsAppService] Chat preview tombstone failed: " + ex.Message);
+                }
+            }
+
+            if (_historyMessages != null)
+            {
+                try
+                {
+                    await _historyMessages.DeleteForChatKeysAsync(jids).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[WhatsAppService] Chat message delete failed: " + ex.Message);
+                }
+            }
+
+            try
+            {
+                _messageStore?.ClearMemoryCache();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[WhatsAppService] Message cache clear failed: " + ex.Message);
+            }
+
+            try
+            {
+                // Snapshot on the UI thread. By here we are several awaits deep on a pool
+                // thread, and Chats is bound to the list: enumerating it while the UI adds a
+                // row throws, and the catch below would turn that into a silently skipped save.
+                List<ChatItem> snapshot = null;
+                await RunOnUiThreadAsync(() => snapshot = Chats.Where(c => c != null).ToList());
+                await PersistChatCatalogAsync(snapshot ?? new List<ChatItem>()).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[WhatsAppService] Chat catalog persist failed: " + ex.Message);
+            }
         }
 
         internal async Task<bool> ApplyAppStateDeleteMessageAsync(string jid, string messageId)
@@ -181,47 +315,60 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
                 messages.Remove(message);
-                if (_messageIdIndexByChat.TryGetValue(canonical, out var idSet))
-                {
-                    idSet.Remove(messageId);
-                }
+                _messageIdIndex.Remove(canonical, messageId);
 
-                var chat = Chats.FirstOrDefault(c => GetCanonicalJid(c.JID) == canonical);
-                    if (chat != null)
+                // Every row sharing this identity, not just the first: a conversation is
+                // listed under both PN and LID, and correcting one left the other showing a
+                // preview of the message that was just deleted.
+                foreach (var chat in GetChatRowsForCanonicalJid(canonical))
+                {
+                    if (chat == null)
                     {
-                        var latest = messages.OrderByDescending(m => m?.Timestamp ?? DateTime.MinValue).FirstOrDefault();
-                        if (latest != null)
-                        {
-                            bool isGroup = canonical.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase) || chat.IsGroup;
-                            ApplyChatPreviewIfNewer(
-                                chat,
-                                ChatPreviewNormalizer.FormatListPreview(latest, isGroup),
-                                latest.Timestamp,
-                                true,
-                                ChatPreviewNormalizer.InferKindFromMessage(latest),
-                                ChatPreviewNormalizer.FormatListAuthorPrefix(latest, isGroup, SelfListDisplayName()),
-                                latest.MentionedJids,
-                                latest.IsFromMe,
-                                HistoryLiveMessageMapper.FromStatus(latest.Status, latest.IsFromMe),
-                                latest.Id);
-                        }
-                        else
-                        {
-                            chat.LastMessage = string.Empty;
-                            chat.LastMessageAuthor = string.Empty;
-                            chat.LastMessageMentionedJids = null;
-                            chat.LastMessageKind = ChatPreviewKind.Text;
-                            chat.LastMessageId = null;
-                            chat.Timestamp = string.Empty;
-                            chat.LastMessageTimestampUtc = null;
-                        }
+                        continue;
                     }
+
+                    var latest = ChatPreviewTip.PickLatest(messages);
+                    if (latest != null)
+                    {
+                        bool isGroup = JidHelper.IsGroupJid(canonical) || chat.IsGroup;
+                        ApplyChatPreviewIfNewer(
+                            chat,
+                            ChatPreviewNormalizer.FormatListPreview(latest, isGroup),
+                            latest.Timestamp,
+                            true,
+                            ChatPreviewNormalizer.InferKindFromMessage(latest),
+                            ChatPreviewNormalizer.FormatListAuthorPrefix(latest, isGroup, SelfListDisplayName()),
+                            latest.MentionedJids,
+                            latest.IsFromMe,
+                            HistoryLiveMessageMapper.FromStatus(latest.Status, latest.IsFromMe),
+                            latest.Id);
+                    }
+                    else
+                    {
+                        ChatPreviewTip.Clear(chat);
+                    }
+                }
 
                 removed = true;
             });
 
             if (removed)
             {
+                // Dropping the in-memory row is only the visible half, the same way it is for
+                // a deleted chat: SQLite is what the timeline is rebuilt from, so a message
+                // cleared from RAM alone comes back on the next load of this conversation.
+                if (_messageStore != null)
+                {
+                    try
+                    {
+                        await _messageStore.DeleteMessageAsync(canonical, messageId);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"[WhatsAppService] Deleting {messageId} from storage failed: {ex.Message}");
+                    }
+                }
+
                 QueueChatMessagesChanged(canonical);
             }
 
@@ -250,6 +397,15 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
+            var change = new ChatFlagChange
+            {
+                Archived = archived,
+                Pinned = pinned,
+                PinnedTimestamp = pinnedTimestamp,
+                MuteEndTimestamp = muteEndTimestamp,
+                AppliesMute = applyMute
+            };
+
             List<ChatItem> touched = null;
             await RunOnUiThreadAsync(() =>
             {
@@ -266,56 +422,66 @@ namespace Unison.Uwp.Services.WhatsApp
                     rows.Add(created);
                 }
 
-                long effectivePinnedTimestamp = pinnedTimestamp ??
-                    DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                long nowUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
                 touched = new List<ChatItem>();
                 foreach (var chat in rows)
                 {
-                    if (archived.HasValue)
-                    {
-                        chat.IsArchived = archived.Value;
-                    }
-
-                    if (pinned.HasValue)
-                    {
-                        chat.IsChatPinned = pinned.Value;
-                        // 0 marks an explicit unpin so PN/LID dedupe cannot resurrect the pin
-                        // from an alias row that has not received the same mutation yet.
-                        chat.PinnedTimestamp = pinned.Value
-                            ? (long?)(pinnedTimestamp ?? chat.PinnedTimestamp ?? effectivePinnedTimestamp)
-                            : 0;
-                    }
-
-                    if (applyMute)
-                    {
-                        // null = unmuted; WhatsApp forever may arrive as 0.
-                        chat.MutedUntil = muteEndTimestamp;
-                    }
-
+                    AppStateChatMutation.ApplyFlags(chat, change, nowUnixMs);
                     touched.Add(chat);
                 }
 
                 SortChatsForDisplay();
             });
 
-            if (touched != null && _chatStore != null && (pinned.HasValue || applyMute))
+            if (touched != null && _chatStore != null && change.TouchesAnything)
             {
                 foreach (var chat in touched)
                 {
                     try
                     {
-                        await _chatStore.UpsertAsync(
-                            chat.JID,
-                            chat.LocalStatus,
-                            chat.IsWidgetPinned,
-                            chat.IsChatPinned,
-                            chat.MutedUntil).ConfigureAwait(false);
+                        // Only what the mutation spoke about. A mute arriving for a pinned chat
+                        // used to carry the rest of the row with it, and whichever field the row
+                        // happened to be stale on was overwritten.
+                        if (change.Pinned.HasValue)
+                        {
+                            await _chatStore.SetChatPinnedAsync(chat.JID, change.Pinned.Value)
+                                .ConfigureAwait(false);
+                        }
+
+                        if (change.AppliesMute)
+                        {
+                            await _chatStore.SetMutedUntilAsync(chat.JID, change.MuteEndTimestamp)
+                                .ConfigureAwait(false);
+                        }
+
+                        if (change.Archived.HasValue)
+                        {
+                            await _chatStore.SetStatusAsync(chat.JID, chat.Status)
+                                .ConfigureAwait(false);
+                        }
                     }
                     catch (Exception ex)
                     {
                         Debug.WriteLine("[WhatsAppService] ChatStore upsert from app-state failed: " + ex.Message);
                     }
+                }
+            }
+
+            if (archived.HasValue && touched != null && touched.Count > 0)
+            {
+                ChatStatus status = archived.Value ? ChatStatus.Archived : ChatStatus.Active;
+                try
+                {
+                    await _chatPreviews.SetStatusAsync(
+                            ExpandHistoryChatKeys(canonical),
+                            status)
+                        .ConfigureAwait(false);
+                    await PersistChatCatalogAsync(touched).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[WhatsAppService] Archive status persist failed: " + ex.Message);
                 }
             }
 

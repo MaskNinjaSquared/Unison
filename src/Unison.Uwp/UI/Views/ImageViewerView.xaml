@@ -110,7 +110,8 @@
                     <Button Command="{x:Bind ViewModel.DownloadCommand, Mode=OneWay}"
                             Style="{StaticResource WhatsAppIconButtonStyle}"
                             Width="40" Height="40"
-                            ToolTipService.ToolTip="{x:Bind ViewModel.DownloadTooltip, Mode=OneWay}">
+                            x:Uid="ImageViewer_Download"
+                            ToolTipService.ToolTip="Download">
                         <TextBlock Text="&#xE896;"
                                    FontFamily="{StaticResource IconFont}"
                                    FontSize="18"
@@ -119,7 +120,8 @@
                     <Button Command="{x:Bind ViewModel.ShareCommand, Mode=OneWay}"
                             Style="{StaticResource WhatsAppIconButtonStyle}"
                             Width="40" Height="40"
-                            ToolTipService.ToolTip="{x:Bind ViewModel.ShareTooltip, Mode=OneWay}">
+                            x:Uid="ImageViewer_Share"
+                            ToolTipService.ToolTip="Share">
                         <TextBlock Text="&#xE72D;"
                                    FontFamily="{StaticResource IconFont}"
                                    FontSize="18"

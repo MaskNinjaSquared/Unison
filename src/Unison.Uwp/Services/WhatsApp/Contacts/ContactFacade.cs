@@ -37,6 +37,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
     {
         private readonly IPersonStore _personStore;
         private readonly IWhatsAppService _whatsAppService;
+        private readonly IJidResolver _jids;
         private readonly ILocalContactsService _localContacts;
         private readonly ILocalSettings _localSettings;
 
@@ -55,7 +56,8 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             IPersonStore personStore,
             IWhatsAppService whatsAppService,
             LidMappingStore lidMappings,
-            ILocalSettings localSettings)
+            ILocalSettings localSettings,
+            IJidResolver jids)
         {
             if (sessions == null) throw new ArgumentNullException(nameof(sessions));
             if (localContacts == null) throw new ArgumentNullException(nameof(localContacts));
@@ -63,14 +65,15 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
             _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
             _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
+            _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _localContacts = localContacts;
             _localSettings = localSettings ?? throw new ArgumentNullException(nameof(localSettings));
 
             _directory = new ContactDirectory(sessions, lidMappings);
-            _addressBook = new AddressBookOverlay(localContacts, personStore, whatsAppService);
-            _names = new ContactNameResolver(whatsAppService, _addressBook, _directory);
-            _avatars = new ChatAvatarPolicy(whatsAppService);
-            _roster = new GroupRosterPolicy(whatsAppService, this);
+            _addressBook = new AddressBookOverlay(localContacts, personStore, whatsAppService, jids);
+            _names = new ContactNameResolver(whatsAppService, _addressBook, _directory, jids);
+            _avatars = new ChatAvatarPolicy(whatsAppService, jids);
+            _roster = new GroupRosterPolicy(whatsAppService, this, jids);
 
             // Both live as long as the app does, so there is nothing to unhook from.
             _whatsAppService.OnDisplayNamesUpdated += (s, e) =>
@@ -84,9 +87,60 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                     Debug.WriteLine("[ContactFacade] DisplayNamesUpdated handler failed: " + ex.Message);
                 }
             };
+            _whatsAppService.OnAvatarCached += Client_OnAvatarCached;
+            _whatsAppService.OnJidAliasResolved += Client_OnJidAliasResolved;
+        }
+
+        /// <summary>
+        /// Not awaited: the write swallows its own failures and the client has nothing to do with
+        /// the result.
+        /// </summary>
+        private void Client_OnAvatarCached(object sender, AvatarCachedEventArgs e)
+        {
+            _ = NotifyAvatarCachedAsync(e.Jid, e.LocalAvatarUrl);
+        }
+
+        /// <summary>
+        /// An earlier lookup may have asked under only the LID or only the PN and stamped a false
+        /// "no-picture". Now that the pair is known, let the rows without an avatar retry at once.
+        /// </summary>
+        private void Client_OnJidAliasResolved(object sender, JidAliasResolvedEventArgs e)
+        {
+            ClearAvatarAttempted(e.LidJid);
+            ClearAvatarAttempted(e.PhoneJid);
+            ClearAvatarAttempted(_jids.GetCanonicalJid(e.PhoneJid));
         }
 
         public event EventHandler DisplayNamesUpdated;
+
+        /// <summary>
+        /// Still answered by the client: the name caches are filled while decrypting messages and
+        /// applying history, so moving the lookup here before those move would only add a hop.
+        /// </summary>
+        public string ResolveDisplayName(string jid, string context)
+        {
+            return _whatsAppService.ResolveDisplayName(jid, context);
+        }
+
+        /// <summary>
+        /// Handed out read-only. The overlay is rebuilt wholesale by the address-book pass, and a
+        /// caller that could write to it would be writing into state the next pass discards.
+        /// </summary>
+        public IReadOnlyDictionary<string, string> PhoneContactNamesByJid =>
+            _whatsAppService.PhoneContactNamesByJid ?? EmptyPhoneNames;
+
+        private static readonly IReadOnlyDictionary<string, string> EmptyPhoneNames =
+            new Dictionary<string, string>(0);
+
+        public void MarkAvatarImageLoadFailed(ChatItem chat, string reason)
+        {
+            if (chat == null)
+            {
+                return;
+            }
+
+            _whatsAppService.MarkAvatarImageLoadFailed(chat, reason);
+        }
 
         public bool IsContactRefreshRunning => _names.IsRunning;
 
@@ -292,12 +346,10 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             };
 
             add(jid);
-            add(_whatsAppService.GetCanonicalJid(jid));
+            string canonical = _jids.GetCanonicalJid(jid);
+            add(canonical);
             string alias;
-            string canonical = _whatsAppService.GetCanonicalJid(jid);
-            if (!string.IsNullOrWhiteSpace(canonical) &&
-                _whatsAppService.JidAlias != null &&
-                _whatsAppService.JidAlias.TryGetValue(canonical, out alias))
+            if (!string.IsNullOrWhiteSpace(canonical) && _jids.TryGetAlias(canonical, out alias))
             {
                 add(alias);
             }
@@ -318,7 +370,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 return person;
             }
 
-            string canonical = _whatsAppService.GetCanonicalJid(jid);
+            string canonical = _jids.GetCanonicalJid(jid);
             if (!string.IsNullOrWhiteSpace(canonical) &&
                 !string.Equals(canonical, jid, StringComparison.OrdinalIgnoreCase))
             {
@@ -330,20 +382,20 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
         private bool IsSelfJid(string jid)
         {
-            var profile = _whatsAppService.CurrentProfile;
+            var profile = _jids.Self;
             if (profile == null || string.IsNullOrWhiteSpace(jid))
             {
                 return false;
             }
 
-            string canonical = _whatsAppService.GetCanonicalJid(jid);
+            string canonical = _jids.GetCanonicalJid(jid);
             return string.Equals(
                        canonical,
-                       _whatsAppService.GetCanonicalJid(profile.Id),
+                       _jids.GetCanonicalJid(profile.Id),
                        StringComparison.OrdinalIgnoreCase) ||
                    string.Equals(
                        canonical,
-                       _whatsAppService.GetCanonicalJid(profile.Lid),
+                       _jids.GetCanonicalJid(profile.Lid),
                        StringComparison.OrdinalIgnoreCase);
         }
 
@@ -412,7 +464,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                     continue;
                 }
 
-                string remoteId = _whatsAppService.GetCanonicalJid(chat.JID) ?? chat.JID;
+                string remoteId = _jids.GetCanonicalJid(chat.JID) ?? chat.JID;
                 if (string.IsNullOrWhiteSpace(remoteId) || !seen.Add(remoteId))
                 {
                     continue;
@@ -476,7 +528,8 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             _avatars.RequestRefresh(chat, force);
         }
 
-        public void ClearAvatarAttempted(string jid)
+        /// <summary>Clears the "already attempted this session" marker so a JID can be retried at once.</summary>
+        private void ClearAvatarAttempted(string jid)
         {
             _avatars.ClearAttempted(jid);
         }

@@ -65,6 +65,12 @@ namespace Unison.Core.State
         /// </summary>
         Task MergeAddressBookNamesAsync(IEnumerable<KeyValuePair<string, string>> namesByJid);
 
+        /// <summary>
+        /// Asks listeners to re-read display names without merging anything new. Used when an
+        /// existing name becomes reachable under a newly learned LID/PN alias.
+        /// </summary>
+        void NotifyDisplayNamesChanged();
+
         /// <summary>Drops everything. Used when the session is wiped.</summary>
         Task ClearAsync();
     }

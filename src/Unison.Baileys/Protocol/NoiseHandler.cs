@@ -319,6 +319,18 @@ namespace Unison.Baileys.Protocol
         /// </summary>
         public byte[] EncodeFrame(byte[] data)
         {
+            // Every other member that touches this state takes the lock; this one did not,
+            // while reading _isFinished and writing _sentIntro. Two callers arriving together
+            // could both prepend the intro header, or neither. Encrypt takes the same lock
+            // and Monitor is reentrant, so nesting is fine.
+            lock (_stateLock)
+            {
+                return EncodeFrameLocked(data);
+            }
+        }
+
+        private byte[] EncodeFrameLocked(byte[] data)
+        {
             if (_isFinished)
             {
                 data = Encrypt(data);

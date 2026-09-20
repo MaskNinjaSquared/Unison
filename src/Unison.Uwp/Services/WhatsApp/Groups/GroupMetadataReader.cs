@@ -1,0 +1,495 @@
+// =============================================================================
+// GroupMetadataReader
+//
+// Turns a w:g2 IQ response into plain objects. Reading the wire and writing the
+// chat list were the same code, which meant the parser could only be reached
+// through the UI thread and could only be checked by watching rows change.
+//
+// This half is pure: give it a BinaryNode, get back a subject, a role, a member
+// list. No socket, no chat state, no dispatcher. The applying half stays with
+// whoever owns the rows, because that is a thread-affinity question, not a
+// protocol one.
+// =============================================================================
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Unison.Baileys.Protocol;
+using Unison.Core.Contracts;
+using Unison.Core.Helpers;
+using Unison.Core.Models;
+using Unison.Uwp.Client;
+using Unison.Uwp.Helpers;
+
+namespace Unison.Uwp.Services.WhatsApp.Groups
+{
+    /// <summary>What a group listing says about one group, read off the wire.</summary>
+    internal sealed class GroupListingEntry
+    {
+        public string Jid;
+        public string Subject;
+        public bool AnnounceOnly;
+        public GroupParticipantRole MyRole;
+        public int MemberCount;
+        public List<GroupMemberDraft> Members;
+    }
+
+    /// <summary>A participant as the wire describes it, before names and avatars are attached.</summary>
+    internal sealed class GroupMemberDraft
+    {
+        public string Jid;
+        public string PhoneNumber;
+        public string Lid;
+        public GroupParticipantRole Role;
+    }
+
+    internal sealed class GroupMetadataReader
+    {
+        /// <summary>
+        /// Large groups answer with thousands of participants. Rosters are for showing members
+        /// and resolving mentions, and neither needs the tail of a five-thousand-member list.
+        /// </summary>
+        private const int MaxMembers = 512;
+
+        private readonly IJidResolver _jids;
+
+        internal GroupMetadataReader(IJidResolver jids)
+        {
+            _jids = jids ?? throw new ArgumentNullException(nameof(jids));
+        }
+
+        /// <summary>
+        /// Every group in a participating-groups listing, keyed by canonical JID. Reading all of
+        /// them before anything is applied is deliberate: the listing answers for the whole
+        /// account at once, and applying group by group meant one hop to the UI thread and one
+        /// walk of the chat list each.
+        /// </summary>
+        public Dictionary<string, GroupListingEntry> ReadListing(List<BinaryNode> groupNodes)
+        {
+            var parsed = new Dictionary<string, GroupListingEntry>(StringComparer.OrdinalIgnoreCase);
+            if (groupNodes == null)
+            {
+                return parsed;
+            }
+
+            foreach (var node in groupNodes)
+            {
+                string id;
+                if (node?.Attrs == null ||
+                    !node.Attrs.TryGetValue("id", out id) ||
+                    string.IsNullOrWhiteSpace(id))
+                {
+                    continue;
+                }
+
+                string jid = id.Contains("@") ? id : id + "@g.us";
+                string subject;
+                node.Attrs.TryGetValue("subject", out subject);
+
+                parsed[_jids.GetCanonicalJid(JidHelper.Normalize(jid))] = new GroupListingEntry
+                {
+                    Jid = jid,
+                    Subject = subject,
+                    AnnounceOnly = IsAnnounceOnly(node),
+                    MyRole = ResolveMyRole(node),
+                    MemberCount = CountMembers(node),
+                    Members = ReadMemberDrafts(node)
+                };
+            }
+
+            return parsed;
+        }
+
+        /// <summary>
+        /// The group node for this JID inside a metadata response. A node with no id is accepted
+        /// because single-group queries answer without echoing it back.
+        /// </summary>
+        public BinaryNode FindGroupNode(BinaryNode response, string groupJid)
+        {
+            if (response == null)
+            {
+                return null;
+            }
+
+            string target = JidHelper.Normalize(groupJid);
+            foreach (var group in response.FindAllDescendants("group"))
+            {
+                if (group?.Attrs == null)
+                {
+                    continue;
+                }
+
+                string id;
+                group.Attrs.TryGetValue("id", out id);
+                if (MatchesGroup(id, target))
+                {
+                    return group;
+                }
+            }
+
+            // A response whose group nodes are nested somewhere the descendant walk did not reach
+            // still usually has one directly under the root.
+            return response.GetChild("group");
+        }
+
+        /// <summary>
+        /// Whether a group node's <c>id</c> attribute refers to the group being asked about.
+        /// </summary>
+        /// <remarks>
+        /// The server writes the id bare, without the <c>@g.us</c>, so it has to be completed
+        /// before comparing. Asking this with a plain normalize — which does not add the
+        /// suffix — never matched, and the caller fell through to the first group node in the
+        /// response. On a single-group answer that is the right node by luck; on a community
+        /// reply it is a different group's name.
+        ///
+        /// An id-less node still matches, because a single-group query answers without
+        /// echoing the id back.
+        /// </remarks>
+        private bool MatchesGroup(string id, string normalizedTarget)
+        {
+            string normalizedId = NormalizeGroupJid(id);
+            return string.IsNullOrWhiteSpace(normalizedId) ||
+                   string.Equals(normalizedId, normalizedTarget, StringComparison.OrdinalIgnoreCase);
+        }
+
+        public string ExtractSubject(BinaryNode response, string groupJid)
+        {
+            if (response == null)
+            {
+                return null;
+            }
+
+            foreach (var group in response.FindAllDescendants("group"))
+            {
+                if (group?.Attrs == null)
+                {
+                    continue;
+                }
+
+                string id;
+                string subject;
+                group.Attrs.TryGetValue("id", out id);
+                group.Attrs.TryGetValue("subject", out subject);
+                if (string.IsNullOrWhiteSpace(subject))
+                {
+                    continue;
+                }
+
+                if (MatchesGroup(id, JidHelper.Normalize(groupJid)))
+                {
+                    return subject;
+                }
+            }
+
+            var direct = response.GetChild("group");
+            string directSubject;
+            if (direct?.Attrs != null &&
+                direct.Attrs.TryGetValue("subject", out directSubject) &&
+                !string.IsNullOrWhiteSpace(directSubject))
+            {
+                return directSubject;
+            }
+
+            return null;
+        }
+
+        public bool IsAnnounceOnly(BinaryNode groupNode)
+        {
+            return groupNode?.GetChild("announcement") != null;
+        }
+
+        /// <summary>
+        /// Falls back to the listed participants when the <c>size</c> attribute is missing or
+        /// smaller — a truncated participant list still tells us more than a stale count.
+        /// </summary>
+        public int CountMembers(BinaryNode groupNode)
+        {
+            if (groupNode == null)
+            {
+                return 0;
+            }
+
+            int listed = 0;
+            List<BinaryNode> participants = groupNode.GetChildren("participant");
+            if (participants != null)
+            {
+                listed = participants.Count;
+            }
+
+            int size;
+            if (int.TryParse(groupNode.GetAttribute("size"), out size) && size > listed)
+            {
+                return size;
+            }
+
+            return listed;
+        }
+
+        public List<GroupMemberDraft> ReadMemberDrafts(BinaryNode groupNode)
+        {
+            var drafts = new List<GroupMemberDraft>();
+            if (groupNode == null)
+            {
+                return drafts;
+            }
+
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (BinaryNode participant in groupNode.GetChildren("participant"))
+            {
+                if (participant?.Attrs == null)
+                {
+                    continue;
+                }
+
+                string jid = participant.Attrs.GetDictionaryValueOrDefault("jid", string.Empty);
+                if (string.IsNullOrWhiteSpace(jid))
+                {
+                    continue;
+                }
+
+                string canonical = JidHelper.Normalize(jid);
+                if (string.IsNullOrWhiteSpace(canonical) || !seen.Add(canonical))
+                {
+                    continue;
+                }
+
+                string admin = participant.Attrs.GetDictionaryValueOrDefault("admin", string.Empty);
+                if (string.IsNullOrWhiteSpace(admin))
+                {
+                    admin = participant.Attrs.GetDictionaryValueOrDefault("type", string.Empty);
+                }
+
+                drafts.Add(new GroupMemberDraft
+                {
+                    Jid = canonical,
+                    PhoneNumber = participant.Attrs.GetDictionaryValueOrDefault("phone_number", string.Empty),
+                    Lid = participant.Attrs.GetDictionaryValueOrDefault("lid", string.Empty),
+                    Role = ParseRole(admin)
+                });
+
+                if (drafts.Count >= MaxMembers)
+                {
+                    break;
+                }
+            }
+
+            return drafts;
+        }
+
+        /// <summary>
+        /// The logged-in account's rank in this group. Matched against the PN, the LID and their
+        /// aliases, because the participant row can carry any of the three.
+        /// </summary>
+        public GroupParticipantRole ResolveMyRole(BinaryNode groupNode)
+        {
+            if (groupNode == null)
+            {
+                return GroupParticipantRole.Member;
+            }
+
+            foreach (BinaryNode participant in groupNode.GetChildren("participant"))
+            {
+                if (participant?.Attrs == null)
+                {
+                    continue;
+                }
+
+                string jid = participant.Attrs.GetDictionaryValueOrDefault("jid", string.Empty);
+                string phone = participant.Attrs.GetDictionaryValueOrDefault("phone_number", string.Empty);
+                string lid = participant.Attrs.GetDictionaryValueOrDefault("lid", string.Empty);
+                if (!_jids.IsSelfLinked(jid) && !_jids.IsSelfLinked(phone) && !_jids.IsSelfLinked(lid))
+                {
+                    continue;
+                }
+
+                return ParseRole(participant.Attrs.GetDictionaryValueOrDefault("admin", string.Empty));
+            }
+
+            return GroupParticipantRole.Member;
+        }
+
+        /// <summary>
+        /// Picture lookup order for a member. PN first: LID picture IQs often answer 404 and used
+        /// to burn the only attempt.
+        /// </summary>
+        public List<string> GetPictureCandidates(GroupMember member)
+        {
+            var candidates = new List<string>();
+            if (member == null)
+            {
+                return candidates;
+            }
+
+            Action<string> add = value =>
+            {
+                string normalized = JidHelper.Normalize(value);
+                if (!string.IsNullOrWhiteSpace(normalized) &&
+                    !candidates.Contains(normalized, StringComparer.OrdinalIgnoreCase))
+                {
+                    candidates.Add(normalized);
+                }
+            };
+
+            add(member.PhoneNumber);
+            add(_jids.GetCanonicalJid(member.PhoneNumber));
+            add(_jids.GetCanonicalJid(member.Jid));
+            add(member.Jid);
+            add(member.Lid);
+            add(_jids.GetCanonicalJid(member.Lid));
+            return candidates;
+        }
+
+        /// <summary>
+        /// True when a group label is just the chat id: <c>120363…</c> or the legacy
+        /// <c>phone-timestamp</c> user part. Those are placeholders, not subjects.
+        /// </summary>
+        public static bool IsIdPlaceholder(string label, string groupJid) =>
+            GroupIdPlaceholder.IsIdPlaceholder(label, groupJid);
+
+        /// <summary>
+        /// True when both sides hold the same set of member JIDs, which lets the caller merge
+        /// fields onto the existing instances instead of replacing the collection and forcing
+        /// the members list to relayout.
+        /// </summary>
+        public static bool RosterJidSetsEqual(
+            Dictionary<string, GroupMember> previousByJid,
+            List<GroupMember> next)
+        {
+            if (previousByJid == null || next == null || previousByJid.Count != next.Count)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < next.Count; i++)
+            {
+                GroupMember member = next[i];
+                if (member == null ||
+                    string.IsNullOrWhiteSpace(member.Jid) ||
+                    !previousByJid.ContainsKey(member.Jid))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Copies incoming fields onto the matching existing members. Blank incoming values are
+        /// skipped rather than written: a metadata response that omits a phone number is not
+        /// telling us the member lost one.
+        /// </summary>
+        public static void MergeInPlace(List<GroupMember> existing, List<GroupMember> incoming)
+        {
+            if (existing == null || incoming == null)
+            {
+                return;
+            }
+
+            var byJid = new Dictionary<string, GroupMember>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < incoming.Count; i++)
+            {
+                GroupMember src = incoming[i];
+                if (src == null || string.IsNullOrWhiteSpace(src.Jid))
+                {
+                    continue;
+                }
+
+                byJid[src.Jid] = src;
+            }
+
+            for (int i = 0; i < existing.Count; i++)
+            {
+                GroupMember dest = existing[i];
+                if (dest == null || string.IsNullOrWhiteSpace(dest.Jid))
+                {
+                    continue;
+                }
+
+                GroupMember src;
+                if (!byJid.TryGetValue(dest.Jid, out src) || src == null)
+                {
+                    continue;
+                }
+
+                if (!string.IsNullOrWhiteSpace(src.PhoneNumber))
+                {
+                    dest.PhoneNumber = src.PhoneNumber;
+                }
+
+                if (!string.IsNullOrWhiteSpace(src.Lid))
+                {
+                    dest.Lid = src.Lid;
+                }
+
+                dest.Role = src.Role;
+
+                if (!string.IsNullOrWhiteSpace(src.DisplayName))
+                {
+                    dest.DisplayName = src.DisplayName;
+                }
+
+                if (!string.IsNullOrWhiteSpace(src.AvatarUrl))
+                {
+                    dest.AvatarUrl = src.AvatarUrl;
+                }
+
+                if (src.AvatarFetchedAtUtc.HasValue)
+                {
+                    dest.AvatarFetchedAtUtc = src.AvatarFetchedAtUtc;
+                }
+
+                if (src.AvatarFetchFailedAtUtc.HasValue)
+                {
+                    dest.AvatarFetchFailedAtUtc = src.AvatarFetchFailedAtUtc;
+                }
+
+                if (!string.IsNullOrWhiteSpace(src.AvatarFetchFailureReason))
+                {
+                    dest.AvatarFetchFailureReason = src.AvatarFetchFailureReason;
+                }
+            }
+        }
+
+        public static GroupParticipantRole ParseRole(string adminAttr)
+        {
+            if (string.IsNullOrWhiteSpace(adminAttr))
+            {
+                return GroupParticipantRole.Member;
+            }
+
+            if (string.Equals(adminAttr, "superadmin", StringComparison.OrdinalIgnoreCase))
+            {
+                return GroupParticipantRole.SuperAdmin;
+            }
+
+            if (string.Equals(adminAttr, "admin", StringComparison.OrdinalIgnoreCase))
+            {
+                return GroupParticipantRole.Admin;
+            }
+
+            return GroupParticipantRole.Member;
+        }
+
+        /// <summary>A bare numeric id or an <c>@g.us</c> JID; anything else is not a group.</summary>
+        public string NormalizeGroupJid(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return null;
+            }
+
+            string value = raw.Trim();
+            if (value.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase))
+            {
+                return JidHelper.Normalize(value);
+            }
+
+            if (value.IndexOf('@') < 0 && value.All(char.IsDigit))
+            {
+                return JidHelper.Normalize(value + "@g.us");
+            }
+
+            return null;
+        }
+    }
+}

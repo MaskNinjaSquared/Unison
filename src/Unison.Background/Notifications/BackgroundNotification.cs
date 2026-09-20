@@ -325,6 +325,12 @@ namespace Unison.Background
             "UnisonSuppressReconnectToast";
         /// <summary>Same key as LocalSettingsConstants.NotificationsEnabled.</summary>
         private const string NotificationsEnabledSetting = "NotificationsEnabled";
+        /// <summary>Same key as LocalSettingsConstants.MessageNotificationSound (int).</summary>
+        private const string MessageNotificationSoundSetting = "MessageNotificationSound";
+        /// <summary>Same key as LocalSettingsConstants.GroupNotificationSound (int).</summary>
+        private const string GroupNotificationSoundSetting = "GroupNotificationSound";
+        /// <summary>Matches Unison.Core.Models.NotificationSound.SystemDefault.</summary>
+        private const int NotificationSoundSystemDefault = 0;
         /// <summary>Same container/key as AuthStore (WhatsAppAuth / auth_state).</summary>
         private const string AuthContainerName = "WhatsAppAuth";
         private const string AuthStateKey = "auth_state";
@@ -419,6 +425,57 @@ namespace Unison.Background
             catch
             {
                 return true;
+            }
+        }
+
+        /// <summary>
+        /// Maps persisted <c>NotificationSound</c> int → toast &lt;audio&gt;. Unknown values fall back
+        /// to the Windows default so older builds stay safe when new enum members ship later.
+        /// </summary>
+        private static string BuildToastAudioXml(bool isGroup)
+        {
+            int sound = ReadNotificationSound(
+                isGroup ? GroupNotificationSoundSetting : MessageNotificationSoundSetting);
+            string src = ResolveToastAudioSrc(sound);
+            return "<audio src=\"" + src + "\"/>";
+        }
+
+        private static int ReadNotificationSound(string settingKey)
+        {
+            try
+            {
+                object value =
+                    ApplicationData.Current.LocalSettings.Values[settingKey];
+                if (value is int)
+                {
+                    return (int)value;
+                }
+
+                if (value != null)
+                {
+                    int parsed;
+                    if (int.TryParse(value.ToString(), out parsed))
+                    {
+                        return parsed;
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return NotificationSoundSystemDefault;
+        }
+
+        private static string ResolveToastAudioSrc(int sound)
+        {
+            // NotificationSound.SystemDefault = 0 → OS default toast sound.
+            // Future enum members (IM, Mail, …) map here without touching Core from Background.
+            switch (sound)
+            {
+                case NotificationSoundSystemDefault:
+                default:
+                    return "ms-winsoundevent:Notification.Default";
             }
         }
 
@@ -523,6 +580,7 @@ namespace Unison.Background
                 string avatarSrc = string.IsNullOrWhiteSpace(content.AvatarSrc)
                     ? BackgroundPreviewResolver.ResolveAvatarSrc(null, content.IsGroup)
                     : content.AvatarSrc;
+                string audioXml = BuildToastAudioXml(content.IsGroup);
                 string xml =
                     "<toast launch=\"" + EscapeXml(launch) + "\">" +
                     "<visual><binding template=\"ToastGeneric\">" +
@@ -531,7 +589,7 @@ namespace Unison.Background
                     "<image placement=\"appLogoOverride\" hint-crop=\"circle\" src=\"" +
                     EscapeXml(avatarSrc) + "\"/>" +
                     "</binding></visual>" +
-                    "<audio src=\"ms-winsoundevent:Notification.IM\"/>" +
+                    audioXml +
                     "</toast>";
 
                 var document = new XmlDocument();

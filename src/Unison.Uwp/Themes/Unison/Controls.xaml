@@ -162,6 +162,14 @@
         </Setter>
     </Style>
 
+    <!-- Sent reactions: left under the bubble so they clear the bottom-right Unison tip. -->
+    <Style x:Key="ChatDetailSentReactionChipButtonStyle"
+           TargetType="Button"
+           BasedOn="{StaticResource ChatDetailReactionChipButtonStyle}">
+        <Setter Property="HorizontalAlignment" Value="Left"/>
+        <Setter Property="Margin" Value="4,-4,0,0"/>
+    </Style>
+
     <!-- Full-area transparent button (media download overlay; no chrome). -->
     <Style x:Key="TransparentMediaButtonStyle" TargetType="Button">
         <Setter Property="helpers:DesktopCursor.CursorKind" Value="Hand"/>
@@ -286,6 +294,71 @@
                                           HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
                     </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Round filled play/download for Unison. Size set by control (30 audio / 56 media overlay). -->
+    <Style x:Key="UnisonMediaCircleButtonStyle" TargetType="Button">
+        <Setter Property="helpers:DesktopCursor.CursorKind" Value="Hand"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{ThemeResource WhatsAppTextHighBrush}"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="MinWidth" Value="0"/>
+        <Setter Property="MinHeight" Value="0"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="UseSystemFocusVisuals" Value="False"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Grid Width="{TemplateBinding Width}" Height="{TemplateBinding Height}">
+                        <Ellipse x:Name="Fill"
+                                 Fill="{TemplateBinding Background}"/>
+                        <ContentPresenter x:Name="ContentPresenter"
+                                          Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Foreground="{TemplateBinding Foreground}"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          Padding="{TemplateBinding Padding}"/>
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal"/>
+                                <VisualState x:Name="PointerOver">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Fill" Storyboard.TargetProperty="Fill">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource ChatDetailMediaButtonHoverBackgroundBrush}"/>
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentPresenter" Storyboard.TargetProperty="Foreground">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource ChatDetailMediaButtonHoverGlyphBrush}"/>
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Fill" Storyboard.TargetProperty="Fill">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource ChatDetailMediaButtonHoverBackgroundBrush}"/>
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentPresenter" Storyboard.TargetProperty="Foreground">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource ChatDetailMediaButtonHoverGlyphBrush}"/>
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Disabled">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="ContentPresenter"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         To="0.4"
+                                                         Duration="0"/>
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                    </Grid>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
@@ -550,7 +623,7 @@
         </Setter>
     </Style>
 
-    <!-- Chat List Item Style (No scaling, rounded highlight) -->
+    <!-- Chat list item: edge-to-edge (L/R margin 0, no radius) for future swipe actions. -->
     <Style TargetType="ListViewItem" x:Key="WhatsAppChatListItemStyle">
         <Setter Property="helpers:DesktopCursor.CursorKind" Value="Hand"/>
         <Setter Property="FontFamily" Value="{StaticResource MainFont}" />
@@ -559,11 +632,11 @@
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="Padding" Value="0" />
-        <Setter Property="Margin" Value="8,2" />
+        <Setter Property="Margin" Value="0,2" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ListViewItem">
-                    <Border x:Name="RootGrid" Background="Transparent" CornerRadius="6">
+                    <Border x:Name="RootGrid" Background="Transparent" CornerRadius="0">
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CommonStates">
                                 <VisualState x:Name="Normal">
@@ -1175,5 +1248,14 @@
             </Setter.Value>
         </Setter>
     </Style>
+
+    <!--
+        Zero-padding ContentDialogs (Imgur/Giuraffe): do NOT replace the ControlTemplate.
+        On the dialog, set ContentDialog.Resources:
+          <Thickness x:Key="ContentDialogPadding">0</Thickness>
+          <x:Double x:Key="ContentDialogMaxWidth">960</x:Double>
+        Keep FullSizeDesired="False" and VerticalAlignment="Center".
+        Never set MinWidth/MaxWidth/Width on ContentDialog (breaks horizontal center).
+    -->
 
 </ResourceDictionary>

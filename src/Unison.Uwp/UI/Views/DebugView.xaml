@@ -59,9 +59,9 @@
                       HorizontalAlignment="Stretch" Grid.ColumnSpan="2">
             <StackPanel MaxWidth="800" HorizontalAlignment="Left">
 
-                <controls:SettingsSectionHeader Glyph="&#xE713;"
-                                                Title="Logging"
-                                                LocalizationUid="Debug_Logging"/>
+                <controls:SettingsSectionHeader x:Uid="Debug_Logging"
+                                                Text="Logging"
+                                                Glyph="&#xE713;"/>
 
                 <controls:SettingBox LocalizationUid="Debug_Verbose"
                                      Margin="5"
@@ -85,9 +85,9 @@
                     </controls:SettingBox.Control>
                 </controls:SettingBox>
 
-                <controls:SettingsSectionHeader Glyph="&#xE9D9;"
-                                                Title="Runtime Health"
-                                                LocalizationUid="Debug_RuntimeTitle"/>
+                <controls:SettingsSectionHeader x:Uid="Debug_RuntimeTitle"
+                                                Text="Runtime Health"
+                                                Glyph="&#xE9D9;"/>
 
                 <Border Background="{ThemeResource SettingBoxBackgroundBrush}"
                         BorderBrush="{ThemeResource SettingBoxBorderBrush}" BorderThickness="1"
@@ -125,9 +125,9 @@
                     </StackPanel>
                 </Border>
 
-                <controls:SettingsSectionHeader Glyph="&#xE8FD;"
-                                                Title="Live Stream"
-                                                LocalizationUid="Debug_LiveStream"/>
+                <controls:SettingsSectionHeader x:Uid="Debug_LiveStream"
+                                                Text="Live Stream"
+                                                Glyph="&#xE8FD;"/>
 
                 <Border Background="{ThemeResource SettingBoxBackgroundBrush}"
                         BorderBrush="{ThemeResource SettingBoxBorderBrush}" BorderThickness="1"
@@ -154,9 +154,9 @@
                 </Border>
 
                 <StackPanel Visibility="{Binding IsSocketSliceAvailable, Converter={StaticResource BooleanToVisibilityConverter}}">
-                    <controls:SettingsSectionHeader Glyph="&#xE968;"
-                                                    Title="Socket Rewrite (experimental)"
-                                                    LocalizationUid="Debug_SocketSlice"/>
+                    <controls:SettingsSectionHeader x:Uid="Debug_SocketSlice"
+                                                    Text="Socket Rewrite (experimental)"
+                                                    Glyph="&#xE968;"/>
 
                     <Border Background="{ThemeResource SettingBoxBackgroundBrush}"
                             BorderBrush="{ThemeResource SettingBoxBorderBrush}" BorderThickness="1"
@@ -190,9 +190,9 @@
                     </Border>
                 </StackPanel>
 
-                <controls:SettingsSectionHeader Glyph="&#xE90F;"
-                                                Title="Actions"
-                                                LocalizationUid="Debug_Actions"/>
+                <controls:SettingsSectionHeader x:Uid="Debug_Actions"
+                                                Text="Actions"
+                                                Glyph="&#xE90F;"/>
 
                 <controls:SettingBox LocalizationUid="Debug_WipeBox"
                                      Margin="5"

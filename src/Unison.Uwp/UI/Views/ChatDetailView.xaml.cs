@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.ObjectModel;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -11,6 +11,7 @@ using Unison.Core.Factories;
 using Unison.Core.Helpers;
 using Unison.Core.Mappers;
 using Unison.Core.Models;
+using Unison.Core.State;
 using Unison.Core.ViewModels;
 using Unison.Uwp.Client;
 using Unison.Uwp.Helpers;
@@ -33,7 +34,7 @@ using Windows.UI.Xaml.Media;
 
 namespace Unison.Uwp.UI.Views
 {
-    public sealed partial class ChatDetailView : UserControl
+    public sealed partial class ChatDetailView : UserControl, IChatDetailSurface
     {
         private ChatItem _activeChat;
         private ObservableCollection<ChatMessageViewModel> _messages;
@@ -45,7 +46,7 @@ namespace Unison.Uwp.UI.Views
         /// <summary>
         /// DI ViewModel owns composer, pin, audio prepare, presence watch, and timeline VMs.
         /// List chrome / MediaElement / Storyboards stay in code-behind.
-        /// Loaded â†’ InitializeAsync; Unloaded â†’ UninitializeAsync.
+        /// Loaded → InitializeAsync; Unloaded → UninitializeAsync.
         /// </summary>
         public ChatDetailViewModel ViewModel { get; private set; }
 
@@ -54,12 +55,22 @@ namespace Unison.Uwp.UI.Views
         private readonly IVoicePlaybackRoutingService _voiceRouting;
 
         /// <summary>
-        /// Chat state the timeline needs and the view model does not hold: canonical JIDs, older
-        /// pages of history, and which conversation is on screen for the notification suppressor.
-        /// Through the contract rather than the class, so this view survives the client behind it
-        /// being replaced.
+        /// The conversation as a whole: which one is on screen for the notification suppressor,
+        /// and the list strip when the timeline turns out to know something newer than the row.
         /// </summary>
-        private IWhatsAppService WhatsApp => App.GetWhatsAppService();
+        private IChatService ChatsFacade => App.Services?.GetService<IChatService>();
+
+        /// <summary>The chat list, for finding the row an alias JID belongs to.</summary>
+        private IChatStateStore ChatState => App.Services?.GetService<IChatStateStore>();
+
+        /// <summary>Labels for a header or an author line that the row itself does not carry.</summary>
+        private IContactService Contacts => App.Services?.GetService<IContactService>();
+
+        /// <summary>
+        /// Which JIDs are the same person. The timeline compares the chat it is showing against the
+        /// one an event names, and those two can arrive as a PN and a LID for the same contact.
+        /// </summary>
+        private IJidResolver Jids => App.Services?.GetService<IJidResolver>();
 
         /// <summary>
         /// Where message-shaped news comes from. The client above is still here for the UWP-only
@@ -240,6 +251,17 @@ namespace Unison.Uwp.UI.Views
             }
         }
 
+        /// <summary>Releases the state group, which outlives this page's handler otherwise.</summary>
+        private void UnhookLayoutStateChanges()
+        {
+            if (_layoutStates == null)
+            {
+                return;
+            }
+
+            _layoutStates.CurrentStateChanged -= LayoutStates_CurrentStateChanged;
+            _layoutStates = null;
+        }
         private void LayoutStates_CurrentStateChanged(object sender, VisualStateChangedEventArgs e)
         {
             if (e.NewState != null && e.NewState.Name != "Minimal")
@@ -372,6 +394,8 @@ namespace Unison.Uwp.UI.Views
             StopAudioPlayback();
             StopDateSeparatorTimer();
             _voiceRouting?.DetachPlayer();
+            TearDownAudioPlayer();
+            UnhookLayoutStateChanges();
             if (ViewModel != null)
             {
                 DetachViewModelEvents();
@@ -379,7 +403,7 @@ namespace Unison.Uwp.UI.Views
                 ViewModel.StopPresenceWatch();
                 _ = ViewModel.UninitializeAsync();
             }
-            WhatsApp.SetActiveChatJid(null);
+            ChatsFacade?.SetActiveChatJid(null);
 
             if (_activeChat != null)
             {
@@ -972,7 +996,7 @@ namespace Unison.Uwp.UI.Views
 
             try
             {
-                string requestedJid = WhatsApp.GetCanonicalJid(_activeChat.JID);
+                string requestedJid = Jids.GetCanonicalJid(_activeChat.JID);
                 Debug.WriteLine($"[ChatDetailView] Loading more messages for {requestedJid}. Current: {_messages.Count}");
 
                 // KeepItemsInView alone does not hold position here (variable bubble heights + many
@@ -984,7 +1008,7 @@ namespace Unison.Uwp.UI.Views
 
                 ChatTimelineLoadMoreResult result = await ViewModel.LoadMoreMessagesAsync();
                 if (_activeChat == null ||
-                    !string.Equals(WhatsApp.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
+                    !string.Equals(Jids.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
                 {
                     return;
                 }
@@ -1190,10 +1214,15 @@ namespace Unison.Uwp.UI.Views
                 return;
             }
 
-            // Mute can have been changed elsewhere since this chat was opened; the view model
-            // re-reads it so the menu offers the action that actually applies.
+            // Mute / pin can have changed since this chat was opened; re-read and swap
+            // Visibility. MenuFlyout Visibility bindings are unreliable on UWP, so this is
+            // done on Opening — texts stay on x:Uid, no Loc round-trip.
             ViewModel.RefreshLocalChatState();
             bool muted = ViewModel.ShowUnmuteOption;
+            bool widgetPinned = ViewModel.IsWidgetPinned;
+            bool archived = ViewModel.ActiveChat?.Status == Unison.Core.Models.ChatStatus.Archived;
+            bool compactHeader = IsCompactHeaderCallLayout();
+            bool canVoiceCall = ViewModel.CanCallPhone;
             foreach (var item in flyout.Items)
             {
                 var menuItem = item as MenuFlyoutItem;
@@ -1203,50 +1232,58 @@ namespace Unison.Uwp.UI.Views
                 if (string.Equals(tag, "localMuteSub", StringComparison.Ordinal) && subItem != null)
                 {
                     subItem.Visibility = muted ? Visibility.Collapsed : Visibility.Visible;
-                    subItem.Text = LocalizedStrings.Get("ChatDetail_MuteNotifications.Text", "Mute notifications");
                     subItem.Foreground = new SolidColorBrush(Windows.UI.Colors.White);
-                    foreach (var child in subItem.Items)
-                    {
-                        var duration = child as MenuFlyoutItem;
-                        if (duration == null)
-                        {
-                            continue;
-                        }
-
-                        string durationTag = duration.Tag as string;
-                        if (string.Equals(durationTag, "mute8h", StringComparison.Ordinal) ||
-                            duration.Command == ViewModel.MuteFor8HoursCommand)
-                        {
-                            duration.Text = LocalizedStrings.Get("ChatDetail_MuteFor8Hours.Text", "8 hours");
-                        }
-                        else if (string.Equals(durationTag, "mute1w", StringComparison.Ordinal) ||
-                                 duration.Command == ViewModel.MuteFor1WeekCommand)
-                        {
-                            duration.Text = LocalizedStrings.Get("ChatDetail_MuteFor1Week.Text", "1 week");
-                        }
-                        else if (string.Equals(durationTag, "muteForever", StringComparison.Ordinal) ||
-                                 duration.Command == ViewModel.MuteForeverCommand)
-                        {
-                            duration.Text = LocalizedStrings.Get("ChatDetail_MuteForever.Text", "Always");
-                        }
-                    }
                 }
                 else if (string.Equals(tag, "unmute", StringComparison.Ordinal) && menuItem != null)
                 {
                     menuItem.Visibility = muted ? Visibility.Visible : Visibility.Collapsed;
-                    menuItem.Text = LocalizedStrings.Get("ChatDetail_UnmuteNotifications.Text", "Unmute notifications");
                 }
                 else if (string.Equals(tag, "widgetPin", StringComparison.Ordinal) && menuItem != null)
                 {
-                    menuItem.Text = ViewModel.LiveTilePinMenuLabel;
+                    menuItem.Visibility = widgetPinned ? Visibility.Collapsed : Visibility.Visible;
+                }
+                else if (string.Equals(tag, "widgetUnpin", StringComparison.Ordinal) && menuItem != null)
+                {
+                    menuItem.Visibility = widgetPinned ? Visibility.Visible : Visibility.Collapsed;
                 }
                 else if (string.Equals(tag, "addContact", StringComparison.Ordinal) && menuItem != null)
                 {
-                    menuItem.Text = ViewModel.AddContactLabel;
                     menuItem.Visibility = ViewModel.CanAddToAddressBook
                         ? Visibility.Visible
                         : Visibility.Collapsed;
                 }
+                else if (string.Equals(tag, "headerVoiceCall", StringComparison.Ordinal) && menuItem != null)
+                {
+                    menuItem.Visibility = compactHeader && canVoiceCall
+                        ? Visibility.Visible
+                        : Visibility.Collapsed;
+                }
+                else if (string.Equals(tag, "headerVideoCall", StringComparison.Ordinal) && menuItem != null)
+                {
+                    // Same compact rule as the header button (still disabled until VoIP exists).
+                    menuItem.Visibility = compactHeader ? Visibility.Visible : Visibility.Collapsed;
+                }
+                else if (string.Equals(tag, "archiveChat", StringComparison.Ordinal) && menuItem != null)
+                {
+                    menuItem.Visibility = archived ? Visibility.Collapsed : Visibility.Visible;
+                }
+                else if (string.Equals(tag, "unarchiveChat", StringComparison.Ordinal) && menuItem != null)
+                {
+                    menuItem.Visibility = archived ? Visibility.Visible : Visibility.Collapsed;
+                }
+            }
+        }
+
+        /// <summary>Matches <c>HeaderCallsInMenu</c> AdaptiveTrigger (&lt; 400px window width).</summary>
+        private static bool IsCompactHeaderCallLayout()
+        {
+            try
+            {
+                return Window.Current.Bounds.Width < 400;
+            }
+            catch
+            {
+                return false;
             }
         }
 
@@ -1271,7 +1308,7 @@ namespace Unison.Uwp.UI.Views
         }
 
         /// <summary>Invoked from <see cref="Templates.MessageTemplates"/> when a loaded image is tapped.</summary>
-        internal void OnImageOpenButtonClick(object sender, RoutedEventArgs e)
+        public async void OnImageOpenButtonClick(object sender, RoutedEventArgs e)
         {
             var element = sender as FrameworkElement;
             var vm = element?.DataContext as ChatMessageViewModel;
@@ -1280,42 +1317,67 @@ namespace Unison.Uwp.UI.Views
                 return;
             }
 
-            OpenImageViewer(vm);
-        }
-
-        internal async void OpenInfoImage(ChatMessageViewModel vm)
-        {
-            if (vm == null)
-            {
-                return;
-            }
-
-            if (vm.NeedsImageDownload)
-            {
-                await vm.DownloadImageAsync();
-            }
-
+            // W10M: cached .webp ImageUri → PNG display before the viewer opens.
+            await vm.EnsureImageReadyAsync(showErrorDialog: false);
             if (vm.HasImage)
             {
                 OpenImageViewer(vm);
             }
         }
 
-        internal async void OpenInfoVideo(ChatMessageViewModel vm)
+        public async void OpenInfoImage(ChatMessageViewModel vm)
         {
             if (vm == null)
             {
                 return;
             }
 
-            if (vm.NeedsVideoDownload)
+            // Called by the info panes, not by XAML, so async void here has no handler above it: a
+            // download that fails on a bad connection closed the app instead of doing nothing.
+            try
             {
-                await vm.DownloadVideoAsync();
+                if (vm.NeedsImageDownload)
+                {
+                    await vm.DownloadImageAsync();
+                }
+                else
+                {
+                    await vm.EnsureImageReadyAsync(showErrorDialog: false);
+                }
+
+                if (vm.HasImage)
+                {
+                    OpenImageViewer(vm);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(string.Format("[ChatDetailView] Opening an image from the info pane failed: {0}", ex.Message));
+            }
+        }
+
+        public async void OpenInfoVideo(ChatMessageViewModel vm)
+        {
+            if (vm == null)
+            {
+                return;
             }
 
-            if (vm.HasLocalVideo)
+            try
             {
-                OpenVideoViewer(vm);
+                if (vm.NeedsVideoDownload)
+                {
+                    await vm.DownloadVideoAsync();
+                }
+
+                if (vm.HasLocalVideo)
+                {
+                    OpenVideoViewer(vm);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(string.Format("[ChatDetailView] Opening a video from the info pane failed: {0}", ex.Message));
             }
         }
 
@@ -1361,7 +1423,7 @@ namespace Unison.Uwp.UI.Views
         }
 
         /// <summary>Opens Imgur-style fullscreen video; stops bubble audio first.</summary>
-        internal void OnVideoOpenButtonClick(object sender, RoutedEventArgs e)
+        public void OnVideoOpenButtonClick(object sender, RoutedEventArgs e)
         {
             var element = sender as FrameworkElement;
             var vm = element?.DataContext as ChatMessageViewModel;
@@ -1373,13 +1435,13 @@ namespace Unison.Uwp.UI.Views
             OpenVideoViewer(vm);
         }
 
-        internal void OnDocumentReadyContextRequested(object sender, RightTappedRoutedEventArgs e)
+        public void OnDocumentReadyContextRequested(object sender, RightTappedRoutedEventArgs e)
         {
             ShowDocumentReadyMenu(sender as FrameworkElement, e?.GetPosition(sender as UIElement) ?? default(Point));
             e.Handled = true;
         }
 
-        internal void OnDocumentReadyHolding(object sender, HoldingRoutedEventArgs e)
+        public void OnDocumentReadyHolding(object sender, HoldingRoutedEventArgs e)
         {
             if (e.HoldingState != Windows.UI.Input.HoldingState.Started)
             {
@@ -1500,15 +1562,16 @@ namespace Unison.Uwp.UI.Views
             TryCloseVideoViewer();
             TryCloseImageViewer();
 
-            var service = WhatsApp;
+            var chats = ChatsFacade;
+            var contacts = Contacts;
             if (chat != null)
             {
-                string canonicalJid = service.GetCanonicalJid(chat.JID);
+                string canonicalJid = Jids.GetCanonicalJid(chat.JID);
                 if (!string.IsNullOrWhiteSpace(canonicalJid) &&
                     !string.Equals(canonicalJid, chat.JID, StringComparison.OrdinalIgnoreCase))
                 {
-                    var canonicalChat = service.Chats.FirstOrDefault(c =>
-                        string.Equals(service.GetCanonicalJid(c.JID), canonicalJid, StringComparison.OrdinalIgnoreCase));
+                    var canonicalChat = ChatState?.Chats.FirstOrDefault(c =>
+                        string.Equals(Jids.GetCanonicalJid(c.JID), canonicalJid, StringComparison.OrdinalIgnoreCase));
                     if (canonicalChat != null)
                     {
                         chat = canonicalChat;
@@ -1523,8 +1586,8 @@ namespace Unison.Uwp.UI.Views
                 // List rebuilds often replace ChatItem instances; only rebind the reference.
                 if (_activeChat != null &&
                     string.Equals(
-                        service.GetCanonicalJid(_activeChat.JID),
-                        service.GetCanonicalJid(chat.JID),
+                        Jids.GetCanonicalJid(_activeChat.JID),
+                        Jids.GetCanonicalJid(chat.JID),
                         StringComparison.OrdinalIgnoreCase))
                 {
                     if (!ReferenceEquals(_activeChat, chat))
@@ -1532,11 +1595,11 @@ namespace Unison.Uwp.UI.Views
                         _activeChat.PropertyChanged -= ActiveChat_PropertyChanged;
                         _activeChat = chat;
                         _activeChat.PropertyChanged += ActiveChat_PropertyChanged;
-                        service.SetActiveChatJid(chat.JID);
+                        chats?.SetActiveChatJid(chat.JID);
                         ViewModel?.SyncActiveChat(chat);
                         if (ActiveChatGrid.Visibility == Visibility.Visible)
                         {
-                            ApplyChatTitle(chat, service);
+                            ApplyChatTitle(chat, contacts);
                             ApplyHeaderAvatar(chat);
                             ApplyHeaderActions(
                                 isGroup: chat.IsGroup || (chat.JID ?? string.Empty).EndsWith("@g.us", StringComparison.OrdinalIgnoreCase),
@@ -1558,7 +1621,7 @@ namespace Unison.Uwp.UI.Views
             }
 
             _activeChat = chat;
-            service.SetActiveChatJid(chat?.JID);
+            chats?.SetActiveChatJid(chat?.JID);
             ViewModel?.SyncActiveChat(chat);
 
             // A menu belongs to the conversation it was opened over, so a different one arriving
@@ -1601,7 +1664,7 @@ namespace Unison.Uwp.UI.Views
             ChatStatusText.Visibility = Visibility.Collapsed;
             TitleTranslateTransform.Y = 0;
 
-            ApplyChatTitle(chat, service);
+            ApplyChatTitle(chat, contacts);
             ApplyHeaderAvatar(chat);
 
             if (_scrollViewer == null)
@@ -1655,8 +1718,8 @@ namespace Unison.Uwp.UI.Views
                 return;
             }
 
-            var service = WhatsApp;
-            string requestedJid = service.GetCanonicalJid(chat.JID);
+            var service = ChatsFacade;
+            string requestedJid = Jids.GetCanonicalJid(chat.JID);
             Debug.WriteLine($"[ChatDetailView] Loading messages for {requestedJid}");
 
             ViewModel.BeginLoadingMessages();
@@ -1673,7 +1736,7 @@ namespace Unison.Uwp.UI.Views
             }
 
             if (token.IsCancellationRequested || _activeChat == null ||
-                !string.Equals(service.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
+                !string.Equals(Jids.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
             {
                 ViewModel.EndLoadingMessages();
                 return;
@@ -1730,7 +1793,7 @@ namespace Unison.Uwp.UI.Views
 
                 if (lastMsg == null)
                 {
-                    _ = service.ReconcileChatPreviewsFromSqliteAsync(
+                    _ = service?.ReconcileChatPreviewsFromSqliteAsync(
                         new[] { requestedJid },
                         "chat-open-empty");
                 }
@@ -1788,7 +1851,7 @@ namespace Unison.Uwp.UI.Views
                         chat.Timestamp = WhatsAppMapper.FormatTimestamp(
                             lastMsg.Timestamp,
                             LocalizedStrings.Get("Common_Yesterday", "Yesterday"));
-                        service.PersistChatListRowsPublic(new[] { chat });
+                        service?.PersistChatListRows(new[] { chat });
                         Debug.WriteLine(
                             "[ChatDetailView] List preview from newest tip id=" +
                             (lastMsg.Id ?? "?") +
@@ -1796,7 +1859,7 @@ namespace Unison.Uwp.UI.Views
                             " ts=" + tipUtc.ToString("O"));
                     }
 
-                    _ = service.ReconcileChatPreviewsFromSqliteAsync(
+                    _ = service?.ReconcileChatPreviewsFromSqliteAsync(
                         new[] { requestedJid },
                         "chat-open");
                 }
@@ -1819,7 +1882,7 @@ namespace Unison.Uwp.UI.Views
             // ChangeView needs scroll enabled; lock is cleared in finally above.
             if (!token.IsCancellationRequested &&
                 _activeChat != null &&
-                string.Equals(service.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
+                string.Equals(Jids.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
             {
                 ScrollToBottom();
                 _ = StickScrollToBottomOnOpenAsync(token);
@@ -1927,11 +1990,12 @@ namespace Unison.Uwp.UI.Views
             {
                 _ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
                 {
-                    ApplyChatTitle(_activeChat, WhatsApp);
+                    ApplyChatTitle(_activeChat, Contacts);
                 });
             }
             else if (e.PropertyName == nameof(ChatItem.GroupMembers) ||
-                     e.PropertyName == nameof(ChatItem.HasGroupMembers))
+                     e.PropertyName == nameof(ChatItem.HasGroupMembers) ||
+                     e.PropertyName == nameof(ChatItem.MentionLookup))
             {
                 _ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
                 {
@@ -2004,7 +2068,7 @@ namespace Unison.Uwp.UI.Views
         /// Groups/direct use resolved labels; Personal uses <see cref="ChatItem.GetNameResolved"/>
         /// (marker via <see cref="IStringResources"/>) with optional Runs + subtitle.
         /// </summary>
-        private void ApplyChatTitle(ChatItem chat, IWhatsAppService service)
+        private void ApplyChatTitle(ChatItem chat, IContactService service)
         {
             if (chat == null || ChatTitleText == null)
             {
@@ -2311,9 +2375,8 @@ namespace Unison.Uwp.UI.Views
                 return;
             }
 
-            var service = WhatsApp;
-            string activeCanonical = service.GetCanonicalJid(_activeChat.JID);
-            string updatedCanonical = service.GetCanonicalJid(updatedJid);
+            string activeCanonical = Jids.GetCanonicalJid(_activeChat.JID);
+            string updatedCanonical = Jids.GetCanonicalJid(updatedJid);
             if (!string.Equals(activeCanonical, updatedCanonical, StringComparison.OrdinalIgnoreCase))
             {
                 return;
@@ -2381,14 +2444,13 @@ namespace Unison.Uwp.UI.Views
             }
 
             _isSyncingFromService = true;
-            var service = WhatsApp;
-            string requestedJid = service.GetCanonicalJid(_activeChat.JID);
+            string requestedJid = Jids.GetCanonicalJid(_activeChat.JID);
             try
             {
                 bool stickToBottom = ShouldStickScrollToBottom();
                 List<ChatMessage> serviceMessages = await MessagesFacade.LoadRecentMessagesForSyncAsync(requestedJid);
                 if (_activeChat == null ||
-                    !string.Equals(service.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(Jids.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase) ||
                     serviceMessages == null || serviceMessages.Count == 0)
                 {
                     return;
@@ -2397,7 +2459,7 @@ namespace Unison.Uwp.UI.Views
                 await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
                 {
                     if (_activeChat == null ||
-                        !string.Equals(service.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
+                        !string.Equals(Jids.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
                     {
                         return;
                     }
@@ -2528,7 +2590,7 @@ namespace Unison.Uwp.UI.Views
             string preview = _displayedPinnedMessage.Caption;
             if (string.IsNullOrWhiteSpace(preview)) preview = _displayedPinnedMessage.Content;
             PinnedMessagePreviewText.Text = string.IsNullOrWhiteSpace(preview)
-                ? "[MÃƒÂ­dia]"
+                ? "[Mídia]"
                 : preview.Replace("\r", " ").Replace("\n", " ");
             PinnedMessageTitleText.Text = _activePinnedMessages.Count > 1
                 ? LocalizedStrings.Format("ChatDetail_PinnedIndex", _displayedPinnedIndex + 1, _activePinnedMessages.Count)
@@ -2549,7 +2611,7 @@ namespace Unison.Uwp.UI.Views
         }
 
         /// <summary>Invoked from <see cref="Templates.MessageTemplates"/> when group author name/avatar is tapped.</summary>
-        internal void OnGroupParticipantTapped(object sender, TappedRoutedEventArgs e)
+        public void OnGroupParticipantTapped(object sender, TappedRoutedEventArgs e)
         {
             var sourceVm = (sender as FrameworkElement)?.DataContext as ChatMessageViewModel;
             string jid = sourceVm?.ParticipantJid;
@@ -2563,7 +2625,7 @@ namespace Unison.Uwp.UI.Views
         }
 
         /// <summary>Invoked from <see cref="Templates.MessageTemplates"/> when the quote author name is tapped.</summary>
-        internal void OnQuotedAuthorTapped(object sender, TappedRoutedEventArgs e)
+        public void OnQuotedAuthorTapped(object sender, TappedRoutedEventArgs e)
         {
             if (ViewModel == null || ViewModel.ActiveChat?.IsGroup != true)
             {
@@ -2582,7 +2644,7 @@ namespace Unison.Uwp.UI.Views
         }
 
         /// <summary>Invoked from <see cref="Templates.MessageTemplates"/> when the quote/reply block is tapped.</summary>
-        internal void OnQuotedMessageTapped(object sender, TappedRoutedEventArgs e)
+        public void OnQuotedMessageTapped(object sender, TappedRoutedEventArgs e)
         {
             string quotedId = ResolveQuotedMessageId(sender);
             if (string.IsNullOrWhiteSpace(quotedId) || ViewModel == null)
@@ -2716,7 +2778,7 @@ namespace Unison.Uwp.UI.Views
             }
             catch
             {
-                // Ignore â€” delay is only for UI timing.
+                // Ignore — delay is only for UI timing.
             }
 
             if (generation != _highlightGeneration || _highlightedMessage != target)
@@ -2739,14 +2801,14 @@ namespace Unison.Uwp.UI.Views
         }
 
         /// <summary>Invoked from <see cref="Templates.MessageTemplates"/> (external DataTemplate events).</summary>
-        internal void OnMessageBubbleRightTapped(object sender, RightTappedRoutedEventArgs e)
+        public void OnMessageBubbleRightTapped(object sender, RightTappedRoutedEventArgs e)
         {
             ShowMessageActions(sender as FrameworkElement);
             e.Handled = true;
         }
 
         /// <summary>Invoked from <see cref="Templates.MessageTemplates"/> (external DataTemplate events).</summary>
-        internal void OnMessageBubbleHolding(object sender, HoldingRoutedEventArgs e)
+        public void OnMessageBubbleHolding(object sender, HoldingRoutedEventArgs e)
         {
             if (e.HoldingState == Windows.UI.Input.HoldingState.Started)
             {
@@ -2826,26 +2888,33 @@ namespace Unison.Uwp.UI.Views
         }
 
         /// <summary>Play / resume / pause for a ready local audio bubble + SMTC.</summary>
-        internal async void OnAudioPlayButtonClick(object sender, RoutedEventArgs e)
+        public async void OnAudioPlayButtonClick(object sender, RoutedEventArgs e)
         {
             var element = sender as FrameworkElement;
             await PlayOrPauseAudioAsync(element?.DataContext as ChatMessageViewModel);
         }
 
-        internal async void PlayOrPauseAudioFromInfo(ChatMessageViewModel vm)
+        public async void PlayOrPauseAudioFromInfo(ChatMessageViewModel vm)
         {
             if (vm == null)
             {
                 return;
             }
 
-            if (!vm.HasLocalAudio || vm.ShowAudioDownloadIcon || vm.NeedsAudioDownload)
+            try
             {
-                await vm.DownloadAudioAsync();
-                return;
-            }
+                if (!vm.HasLocalAudio || vm.ShowAudioDownloadIcon || vm.NeedsAudioDownload)
+                {
+                    await vm.DownloadAudioAsync();
+                    return;
+                }
 
-            await PlayOrPauseAudioAsync(vm);
+                await PlayOrPauseAudioAsync(vm);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(string.Format("[ChatDetailView] Playing audio from the info pane failed: {0}", ex.Message));
+            }
         }
 
         private async System.Threading.Tasks.Task PlayOrPauseAudioAsync(ChatMessageViewModel vm)
@@ -2893,7 +2962,7 @@ namespace Unison.Uwp.UI.Views
                     return;
                 }
 
-                // Always resolve a playable URI (network if needed; oggâ†’wav via Concentus on Mobile).
+                // Always resolve a playable URI (network if needed; ogg→wav via Concentus on Mobile).
                 if (string.IsNullOrWhiteSpace(message.AudioUri) && vm != null)
                 {
                     vm.AudioPlaybackStatus = AudioPlaybackStatus.Downloading;
@@ -3061,7 +3130,7 @@ namespace Unison.Uwp.UI.Views
         }
 
         /// <summary>Seek the active bubble's MediaPlayer (Imgur PlayerSlider scrub).</summary>
-        internal void SeekAudioPlayback(ChatMessageViewModel vm, double seconds)
+        public void SeekAudioPlayback(ChatMessageViewModel vm, double seconds)
         {
             if (vm == null ||
                 _playingAudioVm == null ||
@@ -3198,9 +3267,10 @@ namespace Unison.Uwp.UI.Views
 
             try
             {
-                if (WhatsApp != null && !string.IsNullOrWhiteSpace(jid))
+                var contacts = Contacts;
+                if (contacts != null && !string.IsNullOrWhiteSpace(jid))
                 {
-                    string resolved = WhatsApp.ResolveDisplayName(jid, "sender");
+                    string resolved = contacts.ResolveDisplayName(jid, "sender");
                     if (!string.IsNullOrWhiteSpace(resolved))
                     {
                         return resolved.Trim();
@@ -3226,6 +3296,67 @@ namespace Unison.Uwp.UI.Views
             }
 
             return "Chat";
+        }
+
+        /// <summary>
+        /// Releases the player itself, which <see cref="StopAudioPlayback"/> deliberately does not:
+        /// stopping also happens when a video takes over, and the next voice note reuses this
+        /// instance. Only leaving the conversation ends it.
+        /// </summary>
+        /// <remarks>
+        /// Without this the player outlived the view it was created for. Its CommandManager and
+        /// transport controls keep it registered with the system, the four handlers below keep this
+        /// page alive through it, and both survive navigation - so every conversation with a voice
+        /// note left one behind, and the lock-screen controls pointed at the oldest of them.
+        /// Mirrors TearDownPlayer in VideoViewerView.
+        /// </remarks>
+        private void TearDownAudioPlayer()
+        {
+            var player = _audioMediaPlayer;
+            if (player == null)
+            {
+                return;
+            }
+
+            _audioMediaPlayer = null;
+
+            try
+            {
+                player.MediaEnded -= AudioMediaPlayer_MediaEnded;
+                player.MediaFailed -= AudioMediaPlayer_MediaFailed;
+                player.MediaOpened -= AudioMediaPlayer_MediaOpened;
+                player.PlaybackSession.PlaybackStateChanged -= AudioPlaybackSession_PlaybackStateChanged;
+                player.CommandManager.IsEnabled = false;
+                player.Pause();
+                player.Source = null;
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                player.SystemMediaTransportControls.IsEnabled = false;
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                AudioPlayer.SetMediaPlayer(null);
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                player.Dispose();
+            }
+            catch
+            {
+            }
         }
 
         private void StopAudioPlayback()
@@ -3296,16 +3427,25 @@ namespace Unison.Uwp.UI.Views
             }
         }
 
+        // Media Foundation raises this on its own thread, so nothing above us catches what escapes
+        // and an exception here ends the process. Its two siblings already guard for that reason.
         private async void AudioMediaPlayer_MediaEnded(MediaPlayer sender, object args)
         {
-            await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
+            try
             {
-                StopAudioPositionTimer();
-                _voiceRouting?.EndSession();
-                _playingAudioVm?.ResetAudioPlaybackToReady();
-                _playingAudioVm = null;
-                _playingAudioMessage = null;
-            });
+                await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
+                {
+                    StopAudioPositionTimer();
+                    _voiceRouting?.EndSession();
+                    _playingAudioVm?.ResetAudioPlaybackToReady();
+                    _playingAudioVm = null;
+                    _playingAudioMessage = null;
+                });
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(string.Format("[ChatDetailView] Audio ended handler failed: {0}", ex.Message));
+            }
         }
 
         private async void AudioMediaPlayer_MediaFailed(MediaPlayer sender, MediaPlayerFailedEventArgs args)
@@ -3317,21 +3457,30 @@ namespace Unison.Uwp.UI.Views
                 args?.ErrorMessage);
             LogAudio("media-failed", _playingAudioMessage, detail);
             Debug.WriteLine(string.Format("[ChatDetailView] MediaPlayer failed: {0}", args?.ErrorMessage));
-            await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
+            // Reached only when playback already went wrong; throwing on the way out would turn a
+            // voice note that will not open into a closed app.
+            try
             {
-                StopAudioPositionTimer();
-                _voiceRouting?.EndSession();
-                if (_playingAudioVm != null)
+                await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
                 {
-                    _playingAudioVm.MarkAudioUnavailable();
-                }
+                    StopAudioPositionTimer();
+                    _voiceRouting?.EndSession();
+                    if (_playingAudioVm != null)
+                    {
+                        _playingAudioVm.MarkAudioUnavailable();
+                    }
 
-                _playingAudioVm = null;
-                _playingAudioMessage = null;
-            });
+                    _playingAudioVm = null;
+                    _playingAudioMessage = null;
+                });
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(string.Format("[ChatDetailView] Audio failure handler failed: {0}", ex.Message));
+            }
         }
 
-        /// <summary>Session log (+ DebugView) for mobile audio diagnosis â€” always captured.</summary>
+        /// <summary>Session log (+ DebugView) for mobile audio diagnosis — always captured.</summary>
         private void LogAudio(string stage, ChatMessage message, string details)
         {
             string id = message?.Id ?? "?";
@@ -3351,7 +3500,7 @@ namespace Unison.Uwp.UI.Views
             }
         }
 
-        /// <summary>Trash: fade timer â†’ slide red mic onto trash â†’ flash trash â†’ cancel recording.</summary>
+        /// <summary>Trash: fade timer → slide red mic onto trash → flash trash → cancel recording.</summary>
         private async void CancelRecordingButton_Click(object sender, RoutedEventArgs e)
         {
             if (ViewModel == null || !ViewModel.IsRecording || _cancelRecordingAnimating)
@@ -3681,7 +3830,7 @@ namespace Unison.Uwp.UI.Views
         }
 
         /// <summary>
-        /// Fallback-only sequence: show "select for contact info" 5s â†’ fade out â†’ slide back
+        /// Fallback-only sequence: show "select for contact info" 5s → fade out → slide back
         /// </summary>
         private async Task AnimateFallbackOnlyAsync(CancellationToken ct)
         {

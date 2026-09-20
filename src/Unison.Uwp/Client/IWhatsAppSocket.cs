@@ -159,6 +159,11 @@ namespace Unison.Uwp.Client
         /// <summary>Pins or unpins a conversation for the whole account.</summary>
         Task SetChatPinnedAsync(string jid, bool pinned);
 
+        /// <summary>
+        /// Deletes a conversation for the whole account. The range names the tail it covers.
+        /// </summary>
+        Task DeleteChatAsync(string jid, IEnumerable<Unison.Socket.AppState.RangeMessage> lastMessages);
+
         /// <summary>Clears the conversation's unread state across the account's devices.</summary>
         Task MarkChatReadAsync(string jid, IEnumerable<Unison.Socket.AppState.RangeMessage> lastMessages);
 

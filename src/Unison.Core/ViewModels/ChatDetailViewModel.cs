@@ -27,12 +27,15 @@ namespace Unison.Core.ViewModels
     {
         // ── DI ────────────────────────────────────────────────────────────────
 
-        /// <summary>Load / live updates / presence for the active JID.</summary>
-        private readonly IWhatsAppService _whatsAppService;
+        /// <summary>Whether presence may be subscribed yet.</summary>
+        private readonly IConnectionService _connectionService;
+
+        /// <summary>Who may write in this group, and who is in it.</summary>
+        private readonly IGroupService _groupService;
 
         /// <summary>
-        /// The chat list. Message reads still go through the service, because finding a chat's
-        /// messages needs the canonical-JID mapping that the store knows nothing about.
+        /// The chat list. Message reads still go through the message facade, because finding a
+        /// chat's messages needs the canonical-JID mapping the store knows nothing about.
         /// </summary>
         private readonly IChatStateStore _chatState;
 
@@ -54,8 +57,11 @@ namespace Unison.Core.ViewModels
         /// <summary>File pickers — chat attach uses PickChatAttachmentAsync.</summary>
         private readonly IFilePicker _filePicker;
 
-        /// <summary>Confirm/preview/error dialogs (no ContentDialog in Core).</summary>
+        /// <summary>Confirm dialogs (delete chat, call phone, …).</summary>
         private readonly IDialogService _dialogs;
+
+        /// <summary>Opens system URIs (tel:, http, …).</summary>
+        private readonly IUriLauncher _uriLauncher;
 
         /// <summary>UI-thread marshaling for live updates / elapsed ticks.</summary>
         private readonly IDispatcher _dispatcher;
@@ -75,7 +81,7 @@ namespace Unison.Core.ViewModels
         /// <summary>Device People card for contacts not yet in the address book.</summary>
         private readonly IContactService _contactService;
 
-        /// <summary>Mobile vs desktop UI window sizes.</summary>
+        /// <summary>Device info (kept for other Mobile/desktop branching in this VM).</summary>
         private readonly ISystemInfoProvider _systemInfo;
 
         /// <summary>Debug session log (visible on Debug screen).</summary>
@@ -115,6 +121,12 @@ namespace Unison.Core.ViewModels
         /// </summary>
         private readonly GroupParticipantLookup _participants;
 
+        /// <summary>What participant resolution is allowed to reach. Shared with the lookup above.</summary>
+        private readonly ParticipantResolutionContext _participantContext;
+
+        /// <summary>Which JIDs are the same person (PN vs LID).</summary>
+        private readonly IJidResolver _jids;
+
         /// <summary>How many bubble VMs to materialize when opening a chat (service may hold more data).</summary>
         public int InitialUiMessageWindow { get; }
 
@@ -122,7 +134,6 @@ namespace Unison.Core.ViewModels
         public int MaxUiMessageWindow { get; }
 
         public ChatDetailViewModel(
-            IWhatsAppService whatsAppService,
             IChatStateStore chatState,
             IMessageService messageService,
             IShortcutService shortcutService,
@@ -134,15 +145,20 @@ namespace Unison.Core.ViewModels
             IChatMessageVmFactory messageFactory,
             IChatDetailInfoViewModelFactory infoFactory,
             IStringResources strings,
+            IJidResolver jids,
             IPersonStore personStore = null,
             ISessionLogger sessionLogger = null,
             IRuntimeDiagnostics diagnostics = null,
             IChatService chatService = null,
             IContactService contactService = null,
-            ISystemInfoProvider systemInfo = null)
+            ISystemInfoProvider systemInfo = null,
+            IUriLauncher uriLauncher = null,
+            IConnectionService connectionService = null,
+            IGroupService groupService = null)
         {
             _chatService = chatService;
-            _whatsAppService = whatsAppService;
+            _connectionService = connectionService;
+            _groupService = groupService;
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _messageService = messageService ?? throw new ArgumentNullException(nameof(messageService));
             _shortcutService = shortcutService;
@@ -150,19 +166,23 @@ namespace Unison.Core.ViewModels
             _audioRecording = audioRecording;
             _filePicker = filePicker;
             _dialogs = dialogs;
+            _uriLauncher = uriLauncher;
             _dispatcher = dispatcher;
             _messageFactory = messageFactory ?? throw new ArgumentNullException(nameof(messageFactory));
             _infoFactory = infoFactory ?? throw new ArgumentNullException(nameof(infoFactory));
             _strings = strings;
+            _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _personStore = personStore;
             _contactService = contactService;
             _systemInfo = systemInfo;
             _sessionLogger = sessionLogger;
             _diagnostics = diagnostics;
 
-            bool mobile = _systemInfo != null && _systemInfo.IsMobile();
-            InitialUiMessageWindow = mobile ? 30 : 50;
-            MaxUiMessageWindow = mobile ? 80 : 150;
+            _participantContext = new ParticipantResolutionContext(jids, contactService, chatState, personStore);
+
+            // Same UI window as desktop — Mobile used to use 30/80 for memory; keep PC limits for tests.
+            InitialUiMessageWindow = 50;
+            MaxUiMessageWindow = 150;
 
             Messages = new ObservableCollection<ChatMessageViewModel>();
 
@@ -204,6 +224,19 @@ namespace Unison.Core.ViewModels
             PinToStartCommand = new RelayCommand(
                 () => _ = ToggleWidgetPinAsync(),
                 () => ActiveChat != null && !string.IsNullOrWhiteSpace(ActiveChat.JID) && _shortcutService != null && _chatStore != null);
+            DeleteChatCommand = new RelayCommand(
+                () => _ = DeleteActiveChatAsync(),
+                () => CanDeleteActiveChat());
+            ArchiveChatCommand = new RelayCommand(
+                () => { },
+                () => ActiveChat != null &&
+                      !string.IsNullOrWhiteSpace(ActiveChat.JID) &&
+                      ActiveChat.Status == ChatStatus.Active);
+            UnarchiveChatCommand = new RelayCommand(
+                () => { },
+                () => ActiveChat != null &&
+                      !string.IsNullOrWhiteSpace(ActiveChat.JID) &&
+                      ActiveChat.Status == ChatStatus.Archived);
             MuteFor8HoursCommand = new RelayCommand(
                 () => _ = SetLocalMuteAsync(ChatMuteHelper.FromNow(ChatMuteHelper.EightHours)),
                 () => CanMuteActiveChat());
@@ -227,7 +260,11 @@ namespace Unison.Core.ViewModels
                 () => _ = AddContactAsync(),
                 () => CanAddToAddressBook);
 
-            _participants = new GroupParticipantLookup(_whatsAppService, _personStore, SelfListDisplayName);
+            CallPhoneCommand = new RelayCommand(
+                () => _ = CallPhoneAsync(),
+                () => CanCallPhone);
+
+            _participants = new GroupParticipantLookup(_participantContext, SelfListDisplayName);
             _participants.ParticipantAvatarChanged += OnParticipantAvatarChanged;
         }
 
@@ -629,6 +666,18 @@ namespace Unison.Core.ViewModels
         /// <summary>Pins/unpins the active chat Start live tile (toggles SQLite + SecondaryTile).</summary>
         public ICommand PinToStartCommand { get; }
 
+        /// <summary>
+        /// Deletes the open conversation for the account after asking, then leaves the surface -
+        /// there is nothing behind it once the messages are gone.
+        /// </summary>
+        public ICommand DeleteChatCommand { get; }
+
+        /// <summary>Placeholder until archive outbound is wired.</summary>
+        public ICommand ArchiveChatCommand { get; }
+
+        /// <summary>Placeholder until unarchive outbound is wired.</summary>
+        public ICommand UnarchiveChatCommand { get; }
+
         public ICommand MuteFor8HoursCommand { get; }
         public ICommand MuteFor1WeekCommand { get; }
         public ICommand MuteForeverCommand { get; }
@@ -645,24 +694,11 @@ namespace Unison.Core.ViewModels
 
         public ICommand AddContactCommand { get; }
 
-        /// <summary>Label for the live-tile pin menu (localized via string service when bound in code).</summary>
-        public string LiveTilePinMenuLabel
-        {
-            get
-            {
-                bool pinned = ActiveChat != null && ActiveChat.IsWidgetPinned;
-                if (pinned)
-                {
-                    return _strings != null
-                        ? _strings.Get("ChatDetail_UnpinFromStart.Text", "Unpin from Start")
-                        : "Unpin from Start";
-                }
+        /// <summary>1:1 only: confirm, then open the system dialer for the contact phone.</summary>
+        public ICommand CallPhoneCommand { get; }
 
-                return _strings != null
-                    ? _strings.Get("ChatDetail_PinToStart.Text", "Pin to Start")
-                    : "Pin to Start";
-            }
-        }
+        /// <summary>Whether the Start tile for this chat is pinned (drives pin/unpin menu Visibility).</summary>
+        public bool IsWidgetPinned => ActiveChat != null && ActiveChat.IsWidgetPinned;
 
         /// <summary>True when mute submenu should show duration options (not unmuted→unmute-only).</summary>
         public bool ShowMuteDurationOptions => ActiveChat != null && !ActiveChat.IsMutedLocally;
@@ -676,10 +712,55 @@ namespace Unison.Core.ViewModels
             !ActiveChat.IsPersonal &&
             _contactService.CanAddToAddressBook(ActiveChat.JID);
 
-        public string AddContactLabel =>
-            _strings != null
-                ? _strings.Get("ChatDetail_AddContact.Text", "Add contact")
-                : "Add contact";
+        /// <summary>1:1 chats with a resolvable phone number.</summary>
+        public bool CanCallPhone =>
+            ActiveChat != null &&
+            !ActiveChat.IsGroup &&
+            _uriLauncher != null &&
+            !string.IsNullOrEmpty(ResolveActiveChatPhone());
+
+        private string ResolveActiveChatPhone()
+        {
+            ChatItem chat = ActiveChat;
+            if (chat == null || chat.IsGroup)
+            {
+                return null;
+            }
+
+            if (_contactService != null)
+            {
+                string resolved = _contactService.TryResolvePhone(chat.JID);
+                if (!string.IsNullOrEmpty(resolved))
+                {
+                    return resolved;
+                }
+            }
+
+            return JidHelper.TryPhoneFromJid(chat.JID);
+        }
+
+        private async Task CallPhoneAsync()
+        {
+            if (!CanCallPhone)
+            {
+                return;
+            }
+
+            ChatItem chat = ActiveChat;
+            string phone = ResolveActiveChatPhone();
+            string label = chat.GetNameResolved(_strings);
+            if (string.IsNullOrWhiteSpace(label))
+            {
+                label = phone;
+            }
+
+            await PhoneCallPrompt.ConfirmAndCallAsync(
+                phone,
+                label,
+                _dialogs,
+                _uriLauncher,
+                _strings).ConfigureAwait(false);
+        }
 
         /// <summary>
         /// Re-reads the local chat row before the overflow menu is built. Mute can be changed from
@@ -707,27 +788,64 @@ namespace Unison.Core.ViewModels
 
             OnPropertyChanged(nameof(ShowMuteDurationOptions));
             OnPropertyChanged(nameof(ShowUnmuteOption));
-            OnPropertyChanged(nameof(LiveTilePinMenuLabel));
+            OnPropertyChanged(nameof(IsWidgetPinned));
             RaiseMuteCommandsCanExecuteChanged();
             RaiseCanAddToAddressBook();
         }
 
         private void Contacts_DisplayNamesUpdated(object sender, EventArgs e)
         {
+            GroupParticipantLookup.InvalidateDirectChatIndex();
+
             if (_dispatcher != null)
             {
-                _ = _dispatcher.RunAsync(RaiseCanAddToAddressBook);
+                _ = _dispatcher.RunAsync(RefreshGroupAuthorLabelsAfterNamesChanged);
                 return;
             }
 
+            RefreshGroupAuthorLabelsAfterNamesChanged();
+        }
+
+        /// <summary>
+        /// Roster / Person / push names often arrive after the first run layout. Rebuild the
+        /// participant index and re-label visible bubbles so short JIDs do not stick until leave/reenter.
+        /// </summary>
+        private void RefreshGroupAuthorLabelsAfterNamesChanged()
+        {
             RaiseCanAddToAddressBook();
+
+            ChatItem chat = ActiveChat;
+            if (chat == null || !LooksLikeGroupChat(chat) || Messages.Count == 0)
+            {
+                return;
+            }
+
+            RebuildParticipantLookup();
+
+            var models = new List<ChatMessage>(Messages.Count);
+            for (int i = 0; i < Messages.Count; i++)
+            {
+                ChatMessage model = Messages[i]?.Model;
+                if (model != null)
+                {
+                    models.Add(model);
+                }
+            }
+
+            if (models.Count == 0)
+            {
+                return;
+            }
+
+            ApplyMessageRunLayout(models, isGroup: true, chat);
         }
 
         private void RaiseCanAddToAddressBook()
         {
             OnPropertyChanged(nameof(CanAddToAddressBook));
-            OnPropertyChanged(nameof(AddContactLabel));
+            OnPropertyChanged(nameof(CanCallPhone));
             (AddContactCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (CallPhoneCommand as RelayCommand)?.RaiseCanExecuteChanged();
         }
 
         private async Task AddContactAsync()
@@ -777,14 +895,10 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
-            ChatDetailInfoViewModel previous = ChatDetailInfo;
-            ChatDetailInfoViewModel next = chat.IsGroup
+            ShowInfoPane(chat.IsGroup
                 ? _infoFactory.CreateGroup(chat)
-                : _infoFactory.CreateUser(chat);
+                : _infoFactory.CreateUser(chat));
 
-            ChatDetailInfo = next;
-            IsChatDetailInfoOpen = true;
-            previous?.Detach();
             (OpenChatDetailInfoCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (OpenChatDetailInfoFromAvatarCommand as RelayCommand)?.RaiseCanExecuteChanged();
         }
@@ -797,10 +911,39 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
+            ShowInfoPane(_infoFactory.CreateUser(contact));
+        }
+
+        /// <summary>
+        /// Swaps the pane, taking the previous one down first. The delete hook is attached here
+        /// rather than at each call site so a pane can never be shown without it.
+        /// </summary>
+        private void ShowInfoPane(ChatDetailInfoViewModel next)
+        {
             ChatDetailInfoViewModel previous = ChatDetailInfo;
-            ChatDetailInfo = _infoFactory.CreateUser(contact);
-            IsChatDetailInfoOpen = true;
+            if (previous != null)
+            {
+                previous.ChatDeleted -= ChatDetailInfo_ChatDeleted;
+            }
+
+            if (next != null)
+            {
+                next.ChatDeleted += ChatDetailInfo_ChatDeleted;
+            }
+
+            ChatDetailInfo = next;
+            IsChatDetailInfoOpen = next != null;
             previous?.Detach();
+        }
+
+        /// <summary>
+        /// The info pane deleted the conversation it was describing, so the whole surface goes -
+        /// closing only the pane would leave an empty timeline for a chat that is gone.
+        /// </summary>
+        private void ChatDetailInfo_ChatDeleted(object sender, EventArgs e)
+        {
+            CloseChatDetailInfo();
+            BackRequested?.Invoke(this, EventArgs.Empty);
         }
 
         /// <summary>Opens the group-member profile pane (media/files filtered to that author).</summary>
@@ -815,14 +958,10 @@ namespace Unison.Core.ViewModels
                 member,
                 participantJid ?? member.Jid ?? member.Lid ?? member.PhoneNumber,
                 ActiveChat,
-                _whatsAppService,
-                _personStore,
+                _participantContext,
                 nameHint);
 
-            ChatDetailInfoViewModel previous = ChatDetailInfo;
-            ChatDetailInfo = _infoFactory.CreateGroupMember(ActiveChat, member);
-            IsChatDetailInfoOpen = true;
-            previous?.Detach();
+            ShowInfoPane(_infoFactory.CreateGroupMember(ActiveChat, member));
         }
 
         /// <summary>
@@ -905,9 +1044,7 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
-            string canonical = _whatsAppService != null
-                ? _whatsAppService.GetCanonicalJid(participantJid)
-                : JidHelper.Normalize(participantJid);
+            string canonical = _jids.GetCanonicalJid(participantJid);
 
             for (int i = 0; i < Messages.Count; i++)
             {
@@ -943,9 +1080,7 @@ namespace Unison.Core.ViewModels
                 return true;
             }
 
-            string leftCanonical = _whatsAppService != null
-                ? _whatsAppService.GetCanonicalJid(left)
-                : JidHelper.Normalize(left);
+            string leftCanonical = _jids.GetCanonicalJid(left);
             return !string.IsNullOrWhiteSpace(leftCanonical) &&
                    !string.IsNullOrWhiteSpace(rightCanonical) &&
                    string.Equals(leftCanonical, rightCanonical, StringComparison.OrdinalIgnoreCase);
@@ -996,6 +1131,11 @@ namespace Unison.Core.ViewModels
             }
 
             ChatDetailInfoViewModel previous = ChatDetailInfo;
+            if (previous != null)
+            {
+                previous.ChatDeleted -= ChatDetailInfo_ChatDeleted;
+            }
+
             IsChatDetailInfoOpen = false;
             ChatDetailInfo = null;
             previous?.Detach();
@@ -1012,20 +1152,14 @@ namespace Unison.Core.ViewModels
         /// </remarks>
         public async Task MarkChatOpenedAsync(ChatItem chat)
         {
-            if (chat == null)
+            if (chat == null || _chatService == null)
             {
                 return;
             }
 
             try
             {
-                if (_chatService != null)
-                {
-                    await _chatService.MarkReadAsync(chat);
-                    return;
-                }
-
-                await _whatsAppService.ClearUnreadForChatAsync(chat.JID);
+                await _chatService.MarkReadAsync(chat);
             }
             catch (Exception ex)
             {
@@ -1058,7 +1192,7 @@ namespace Unison.Core.ViewModels
             RaiseMuteCommandsCanExecuteChanged();
             (OpenChatDetailInfoCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (OpenChatDetailInfoFromAvatarCommand as RelayCommand)?.RaiseCanExecuteChanged();
-            OnPropertyChanged(nameof(LiveTilePinMenuLabel));
+            OnPropertyChanged(nameof(IsWidgetPinned));
             OnPropertyChanged(nameof(ShowMuteDurationOptions));
             OnPropertyChanged(nameof(ShowUnmuteOption));
             OnPropertyChanged(nameof(IsGroupLockedForMessages));
@@ -1113,14 +1247,17 @@ namespace Unison.Core.ViewModels
 
         private async Task RefreshGroupSendPermissionsSafeAsync(string groupJid)
         {
-            if (string.IsNullOrWhiteSpace(groupJid) || _whatsAppService == null)
+            if (string.IsNullOrWhiteSpace(groupJid) || _groupService == null)
             {
                 return;
             }
 
             try
             {
-                await _whatsAppService.RefreshGroupSendPermissionsAsync(groupJid).ConfigureAwait(false);
+                await _groupService.EnsureGroupRosterLoadedFromStoreAsync(groupJid)
+                    .ConfigureAwait(false);
+                await _groupService.RefreshGroupSendPermissionsAsync(groupJid)
+                    .ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -1146,19 +1283,15 @@ namespace Unison.Core.ViewModels
                     if (tileExists != chat.IsWidgetPinned)
                     {
                         chat.IsWidgetPinned = tileExists;
-                        await _chatStore.UpsertAsync(
-                            chat.JID,
-                            chat.LocalStatus,
-                            chat.IsWidgetPinned,
-                            chat.IsChatPinned,
-                            chat.MutedUntil).ConfigureAwait(false);
+                        await _chatStore.SetWidgetPinnedAsync(chat.JID, chat.IsWidgetPinned)
+                            .ConfigureAwait(false);
                     }
                 }
 
                 await _dispatcher.RunAsync(() =>
                 {
                     RaiseMuteCommandsCanExecuteChanged();
-                    OnPropertyChanged(nameof(LiveTilePinMenuLabel));
+                    OnPropertyChanged(nameof(IsWidgetPinned));
                     OnPropertyChanged(nameof(ShowMuteDurationOptions));
                     OnPropertyChanged(nameof(ShowUnmuteOption));
                 }).ConfigureAwait(false);
@@ -1174,6 +1307,31 @@ namespace Unison.Core.ViewModels
             return ActiveChat != null &&
                    !string.IsNullOrWhiteSpace(ActiveChat.JID) &&
                    _chatStore != null;
+        }
+
+        private bool CanDeleteActiveChat()
+        {
+            return ActiveChat != null &&
+                   !string.IsNullOrWhiteSpace(ActiveChat.JID) &&
+                   _chatService != null;
+        }
+
+        /// <summary>
+        /// The timeline is closed on success rather than emptied: the conversation no longer
+        /// exists, so a chat detail still open on it would be showing a chat that is gone.
+        /// </summary>
+        private async Task DeleteActiveChatAsync()
+        {
+            bool deleted = await ChatDeletionPrompt.ConfirmAndDeleteAsync(
+                ActiveChat,
+                _chatService,
+                _dialogs,
+                _strings);
+
+            if (deleted)
+            {
+                BackRequested?.Invoke(this, EventArgs.Empty);
+            }
         }
 
         private async Task ToggleWidgetPinAsync()
@@ -1198,13 +1356,8 @@ namespace Unison.Core.ViewModels
                 }
 
                 chat.IsWidgetPinned = nextPinned;
-                await _chatStore.UpsertAsync(
-                    chat.JID,
-                    chat.LocalStatus,
-                    chat.IsWidgetPinned,
-                    chat.IsChatPinned,
-                    chat.MutedUntil);
-                OnPropertyChanged(nameof(LiveTilePinMenuLabel));
+                await _chatStore.SetWidgetPinnedAsync(chat.JID, chat.IsWidgetPinned);
+                OnPropertyChanged(nameof(IsWidgetPinned));
             }
             catch (Exception ex)
             {
@@ -1223,12 +1376,7 @@ namespace Unison.Core.ViewModels
             try
             {
                 chat.MutedUntil = mutedUntilUnixSeconds;
-                await _chatStore.UpsertAsync(
-                    chat.JID,
-                    chat.LocalStatus,
-                    chat.IsWidgetPinned,
-                    chat.IsChatPinned,
-                    chat.MutedUntil);
+                await _chatStore.SetMutedUntilAsync(chat.JID, chat.MutedUntil);
                 RaiseMuteCommandsCanExecuteChanged();
                 OnPropertyChanged(nameof(ShowMuteDurationOptions));
                 OnPropertyChanged(nameof(ShowUnmuteOption));
@@ -1719,6 +1867,9 @@ namespace Unison.Core.ViewModels
         private void RaisePinToStartCanExecuteChanged()
         {
             (PinToStartCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (DeleteChatCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (ArchiveChatCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (UnarchiveChatCommand as RelayCommand)?.RaiseCanExecuteChanged();
             RaiseMuteCommandsCanExecuteChanged();
         }
 
@@ -1773,7 +1924,10 @@ namespace Unison.Core.ViewModels
                         break;
                     }
 
-                    if (!subscribed && !string.IsNullOrEmpty(subscribeJid) && _whatsAppService.IsConnected)
+                    if (!subscribed &&
+                        !string.IsNullOrEmpty(subscribeJid) &&
+                        _connectionService != null &&
+                        _connectionService.IsConnected)
                     {
                         await _messageService.SubscribeToPresenceAsync(subscribeJid);
                         subscribed = true;

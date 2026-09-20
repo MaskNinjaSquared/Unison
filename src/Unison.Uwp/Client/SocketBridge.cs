@@ -875,6 +875,22 @@ namespace Unison.Uwp.Client
         }
 
         /// <summary>
+        /// Deletes a conversation for the whole account.
+        /// </summary>
+        /// <remarks>
+        /// The range names the tail the deletion covers; the phone reads it to decide what
+        /// "delete this chat" applies to. RC14's chatModify({ delete }) requires lastMessages for
+        /// the same reason, so a caller with no tail to offer is better off not sending at all.
+        ///
+        /// The account never reports this back as a state: a deleted chat simply stops appearing.
+        /// The local tombstone is what keeps it from returning on the next history sync.
+        /// </remarks>
+        public Task DeleteChatAsync(string jid, IEnumerable<RangeMessage> lastMessages)
+        {
+            return RequireAppState().Patch.ExecuteAsync(AppStatePatchFactory.DeleteChat(jid, lastMessages));
+        }
+
+        /// <summary>
         /// The id we encode app-state writes with. RC14 reads this off creds.myAppStateKeyId;
         /// without it a pin patch cannot be built and the UI change is reverted.
         /// </summary>
@@ -1166,14 +1182,27 @@ namespace Unison.Uwp.Client
 
             // Writing is not awaited: callers announce mappings from the receive path, and a
             // database round trip there would slow down message handling for a cache fill.
-            var stored = _lidMappings.StoreMappingsAsync(mappings);
+            // Not awaited is not the same as not watched, though - GC.KeepAlive observes
+            // nothing, so a failed write took the pairing with it in silence and the contact
+            // went back to showing a bare number.
+            _ = ReportIfStoreFailsAsync(_lidMappings.StoreMappingsAsync(mappings), source);
 
             if (writeLog)
             {
                 Diag.W("[Bridge] Stored " + mappings.Count + " LID mapping(s) from " + source);
             }
+        }
 
-            GC.KeepAlive(stored);
+        private static async Task ReportIfStoreFailsAsync(Task write, string source)
+        {
+            try
+            {
+                await write.ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Diag.W("[Bridge] Storing LID mappings from " + source + " failed: " + ex.Message);
+            }
         }
 
         public void Dispose()

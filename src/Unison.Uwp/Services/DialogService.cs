@@ -193,6 +193,31 @@ namespace Unison.Uwp.Services
             }
         }
 
+        public async Task ShowWhatsAppSettingsAsync(SettingsViewModel settingsVm)
+        {
+            if (settingsVm == null)
+            {
+                throw new ArgumentNullException(nameof(settingsVm));
+            }
+
+            try
+            {
+                var dialog = new Unison.Uwp.Shell.WhatsApp.Dialogs.SettingsDialog();
+                dialog.Bind(settingsVm);
+                await dialog.ShowAsync();
+            }
+            catch (System.Runtime.InteropServices.COMException ex)
+                when (ex.Message.Contains("single ContentDialog") ||
+                      ex.HResult == unchecked((int)0x80070057))
+            {
+                System.Diagnostics.Debug.WriteLine("[DialogService] Another dialog is already open (WhatsApp settings).");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[DialogService] ShowWhatsAppSettingsAsync: " + ex.Message);
+            }
+        }
+
         public async Task ShowReactionsDialogAsync(ChatMessageViewModel messageVm)
         {
             if (messageVm == null || !messageVm.HasReactions || App.Services == null)
@@ -221,7 +246,41 @@ namespace Unison.Uwp.Services
             }
         }
 
-        public async Task ShowQrFullscreenAsync(string qrData)
+        public async Task ShowRuntimeDiagnosticsAsync()
+        {
+            try
+            {
+                var dialog = new RuntimeDiagnosticsDialog();
+                await dialog.ShowAsync();
+            }
+            catch (System.Runtime.InteropServices.COMException ex)
+                when (ex.Message.Contains("single ContentDialog") ||
+                      ex.HResult == unchecked((int)0x80070057))
+            {
+                System.Diagnostics.Debug.WriteLine("[DialogService] Another dialog is already open (runtime diagnostics).");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[DialogService] ShowRuntimeDiagnosticsAsync: " + ex.Message);
+            }
+        }
+
+        public Task ShowQrFullscreenAsync(LoginViewModel loginVm)
+        {
+            if (loginVm == null || string.IsNullOrEmpty(loginVm.QRData))
+            {
+                return Task.CompletedTask;
+            }
+
+            return ShowQrFullscreenCoreAsync(loginVm.QRData, loginVm);
+        }
+
+        public Task ShowQrFullscreenAsync(string qrData)
+        {
+            return ShowQrFullscreenCoreAsync(qrData, loginVm: null);
+        }
+
+        private async Task ShowQrFullscreenCoreAsync(string qrData, LoginViewModel loginVm)
         {
             if (string.IsNullOrEmpty(qrData))
             {
@@ -231,7 +290,16 @@ namespace Unison.Uwp.Services
             try
             {
                 var dialog = new QrCodeFullscreenDialog();
-                dialog.SetQrPayload(qrData);
+                if (loginVm != null)
+                {
+                    // Same LoginViewModel as the pairing surface (Imgur-style target).
+                    dialog.DataContext = loginVm;
+                }
+                else
+                {
+                    dialog.SetQrPayload(qrData);
+                }
+
                 await dialog.ShowAsync();
             }
             catch (System.Runtime.InteropServices.COMException ex)

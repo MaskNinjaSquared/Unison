@@ -35,6 +35,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.State;
 using Unison.Socket.UseCases.Contacts;
+using Unison.Uwp.Services.WhatsApp.Groups;
 using Unison.Uwp.Helpers;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -54,41 +55,43 @@ namespace Unison.Uwp.Services.WhatsApp
                    NormalizeJid(jid).EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
         }
 
+        private static bool IsGroupIdPlaceholder(string label, string groupJid) =>
+            GroupIdPlaceholder.IsIdPlaceholder(label, groupJid);
+
         /// <summary>
-        /// True when a group label is just the chat id: <c>120363…</c> or the legacy
-        /// <c>phone-timestamp</c> user part. Those are placeholders, not subjects.
+        /// Whether we already hold a usable name for this group, counting the label on the
+        /// row as well as the cached one.
         /// </summary>
-        private static bool IsGroupIdPlaceholder(string label, string groupJid)
+        /// <remarks>
+        /// The row counts because a name can reach it before it reaches the cache. Written
+        /// three ways across the group paths and only one consulted the row, so a synced
+        /// subject that the blacklist would otherwise hold back could overwrite a good name
+        /// through one path and not the other.
+        /// </remarks>
+        private bool HasMeaningfulGroupLabel(string groupJid, string rowName)
         {
-            if (string.IsNullOrWhiteSpace(label))
+            string cached;
+            if (ContactNames.TryGetValue(groupJid, out cached) &&
+                IsMeaningfulChatLabel(cached, groupJid, true))
             {
                 return true;
             }
 
-            string trimmed = label.Trim();
-            if (trimmed.Contains("@"))
+            return IsMeaningfulChatLabel(rowName, groupJid, true);
+        }
+
+        private string FindGroupRowName(string groupJid)
+        {
+            var rows = GetChatRowsForCanonicalJid(GetCanonicalJid(groupJid));
+            for (int i = 0; i < rows.Count; i++)
             {
-                return true;
+                if (rows[i] != null && !string.IsNullOrWhiteSpace(rows[i].Name))
+                {
+                    return rows[i].Name;
+                }
             }
 
-            string bare = (groupJid ?? string.Empty).Split('@')[0];
-            if (!string.IsNullOrEmpty(bare) &&
-                string.Equals(trimmed, bare, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-
-            if (trimmed.All(char.IsDigit))
-            {
-                return true;
-            }
-
-            string labelDigits = ExtractDigitsOnly(trimmed);
-            string jidDigits = ExtractDigitsOnly(bare);
-            bool hasLetters = trimmed.Any(char.IsLetter);
-            return !hasLetters &&
-                   jidDigits.Length >= 7 &&
-                   string.Equals(labelDigits, jidDigits, StringComparison.Ordinal);
+            return null;
         }
 
         public Task QueryAllGroupsAsync() => QueryAllGroupsAsync(false);
@@ -206,11 +209,149 @@ namespace Unison.Uwp.Services.WhatsApp
             try
             {
                 var response = await socket.QueryGroupMetadataAsync(canonical);
-                await ApplyGroupMetadataFromResponseAsync(response, canonical, hydrateAvatars: false);
+                await ApplyGroupMetadataFromResponseAsync(response, canonical);
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[WhatsAppService] RefreshGroupSendPermissionsAsync failed for {canonical}: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Fills <see cref="ChatItem.GroupMembers"/> from SQLite when the in-memory list is empty.
+        /// </summary>
+        private async Task EnsureGroupRosterLoadedFromStoreAsync(string groupJid)
+        {
+            if (_groupRosterStore == null)
+            {
+                return;
+            }
+
+            string canonical = GetCanonicalJid(groupJid);
+            if (string.IsNullOrWhiteSpace(canonical) ||
+                !canonical.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            ChatItem target = null;
+            bool needsLoad = false;
+            await RunOnUiThreadAsync(() =>
+            {
+                target = Chats.FirstOrDefault(c =>
+                    c != null &&
+                    string.Equals(GetCanonicalJid(c.JID), canonical, StringComparison.OrdinalIgnoreCase));
+                needsLoad = target != null && !target.HasGroupMembers;
+            }).ConfigureAwait(false);
+
+            if (!needsLoad || target == null)
+            {
+                return;
+            }
+
+            IReadOnlyList<GroupMember> stored;
+            try
+            {
+                await _groupRosterStore.InitializeAsync().ConfigureAwait(false);
+                stored = await _groupRosterStore.GetForGroupAsync(canonical).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[WhatsAppService] Group roster store read failed: " + ex.Message);
+                return;
+            }
+
+            if (stored == null || stored.Count == 0)
+            {
+                return;
+            }
+
+            var hydrated = new List<GroupMember>(stored.Count);
+            for (int i = 0; i < stored.Count; i++)
+            {
+                GroupMember row = stored[i];
+                if (row == null || string.IsNullOrWhiteSpace(row.Jid))
+                {
+                    continue;
+                }
+
+                string display = row.DisplayName;
+                if (string.IsNullOrWhiteSpace(display))
+                {
+                    display = ResolveGroupMemberDisplayName(row.Jid);
+                }
+
+                hydrated.Add(new GroupMember
+                {
+                    Jid = row.Jid,
+                    PhoneNumber = row.PhoneNumber,
+                    Lid = row.Lid,
+                    DisplayName = display,
+                    Role = row.Role,
+                    AvatarUrl = row.AvatarUrl,
+                    AvatarFetchedAtUtc = row.AvatarFetchedAtUtc,
+                    AvatarFetchFailedAtUtc = row.AvatarFetchFailedAtUtc,
+                    AvatarFetchFailureReason = row.AvatarFetchFailureReason
+                });
+            }
+
+            if (hydrated.Count == 0)
+            {
+                return;
+            }
+
+            await RunOnUiThreadAsync(() =>
+            {
+                if (target.HasGroupMembers)
+                {
+                    return;
+                }
+
+                target.GroupMembers = hydrated;
+                if (target.GroupMemberCount < hydrated.Count)
+                {
+                    target.GroupMemberCount = hydrated.Count;
+                }
+
+                if (!target.IsGroup)
+                {
+                    target.IsGroup = true;
+                }
+            }).ConfigureAwait(false);
+
+            Debug.WriteLine(
+                "[WhatsAppService] Restored group roster from store count=" +
+                hydrated.Count +
+                " jid=" +
+                canonical);
+        }
+
+        private void SchedulePersistGroupRoster(string groupJid, List<GroupMember> members)
+        {
+            if (_groupRosterStore == null || string.IsNullOrWhiteSpace(groupJid) || members == null)
+            {
+                return;
+            }
+
+            List<GroupMember> snapshot = CloneGroupMembers(members);
+            if (snapshot == null || snapshot.Count == 0)
+            {
+                return;
+            }
+
+            _ = PersistGroupRosterAsync(groupJid, snapshot);
+        }
+
+        private async Task PersistGroupRosterAsync(string groupJid, List<GroupMember> members)
+        {
+            try
+            {
+                await _groupRosterStore.InitializeAsync().ConfigureAwait(false);
+                await _groupRosterStore.ReplaceForGroupAsync(groupJid, members).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[WhatsAppService] Group roster persist failed: " + ex.Message);
             }
         }
 
@@ -269,8 +410,13 @@ namespace Unison.Uwp.Services.WhatsApp
                     if (!string.IsNullOrWhiteSpace(subject) &&
                         !IsGroupIdPlaceholder(subject, chat.JID))
                     {
-                        ContactNames[chat.JID] = subject;
-                        resolved++;
+                        if (GroupNameSyncBlacklist.ShouldCacheSyncedSubject(
+                                subject,
+                                HasMeaningfulGroupLabel(chat.JID, chat.Name)))
+                        {
+                            ContactNames[chat.JID] = subject;
+                            resolved++;
+                        }
                     }
 
                     ApplyGroupSendPermissionsFromMetadata(response, chat.JID);
@@ -301,27 +447,24 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         private void ApplyGroupSendPermissionsFromMetadata(BinaryNode response, string groupJid)
         {
-            _ = ApplyGroupMetadataFromResponseAsync(response, groupJid, hydrateAvatars: false);
+            _ = ApplyGroupMetadataFromResponseAsync(response, groupJid);
         }
 
-        private async Task ApplyGroupMetadataFromResponseAsync(
-            BinaryNode response,
-            string groupJid,
-            bool hydrateAvatars)
+        private async Task ApplyGroupMetadataFromResponseAsync(BinaryNode response, string groupJid)
         {
             if (response == null || string.IsNullOrWhiteSpace(groupJid))
             {
                 return;
             }
 
-            BinaryNode groupNode = FindGroupNode(response, groupJid);
+            BinaryNode groupNode = _groupMetadata.FindGroupNode(response, groupJid);
             if (groupNode == null)
             {
                 return;
             }
 
-            bool announceOnly = groupNode.GetChild("announcement") != null;
-            GroupParticipantRole myRole = ResolveMyGroupRole(groupNode);
+            bool announceOnly = _groupMetadata.IsAnnounceOnly(groupNode);
+            GroupParticipantRole myRole = _groupMetadata.ResolveMyRole(groupNode);
             string canonical = GetCanonicalJid(groupJid);
 
             await RunOnUiThreadAsync(() =>
@@ -341,47 +484,19 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 chat.IsAnnounceOnly = announceOnly;
                 chat.MyGroupRole = myRole;
-                int memberCount = CountGroupMembers(groupNode);
+                int memberCount = _groupMetadata.CountMembers(groupNode);
                 if (memberCount > 0)
                 {
                     chat.GroupMemberCount = memberCount;
                 }
 
-                ApplyGroupMembersToChat(chat, ReadGroupMemberDrafts(groupNode));
+                ApplyGroupMembersToChat(chat, _groupMetadata.ReadMemberDrafts(groupNode));
                 SchedulePersist();
             });
-
-            if (hydrateAvatars && _contactService != null)
-            {
-                await _contactService.HydrateGroupMemberAvatarsAsync(canonical);
-            }
         }
 
-        private string ExtractGroupSubject(BinaryNode response, string groupJid)
-        {
-            if (response == null) return null;
-
-            var groups = response.FindAllDescendants("group");
-            foreach (var g in groups)
-            {
-                if (g?.Attrs == null) continue;
-                g.Attrs.TryGetValue("id", out var id);
-                g.Attrs.TryGetValue("subject", out var subject);
-                if (!string.IsNullOrWhiteSpace(subject) &&
-                    (string.IsNullOrWhiteSpace(id) || string.Equals(NormalizeJid(id), NormalizeJid(groupJid), StringComparison.OrdinalIgnoreCase)))
-                {
-                    return subject;
-                }
-            }
-
-            var directGroup = response.GetChild("group");
-            if (directGroup?.Attrs != null && directGroup.Attrs.TryGetValue("subject", out var directSubject) && !string.IsNullOrWhiteSpace(directSubject))
-            {
-                return directSubject;
-            }
-
-            return null;
-        }
+        private string ExtractGroupSubject(BinaryNode response, string groupJid) =>
+            _groupMetadata.ExtractSubject(response, groupJid);
 
         private async Task ProcessGroupNodes(List<BinaryNode> groupNodes)
         {
@@ -397,28 +512,7 @@ namespace Unison.Uwp.Services.WhatsApp
             // the account's groups at once, so doing this a group at a time meant one hop to the
             // UI thread and one walk of the chat list each - hundreds of both, back to back,
             // while the list was trying to render the sync that provoked the query.
-            var parsed = new Dictionary<string, GroupListingEntry>(StringComparer.OrdinalIgnoreCase);
-            foreach (var g in groupNodes)
-            {
-                if (g?.Attrs == null || !g.Attrs.TryGetValue("id", out var id) || string.IsNullOrWhiteSpace(id))
-                {
-                    continue;
-                }
-
-                var jid = id.Contains("@") ? id : id + "@g.us";
-                g.Attrs.TryGetValue("subject", out var subject);
-
-                parsed[GetCanonicalJid(NormalizeJid(jid))] = new GroupListingEntry
-                {
-                    Jid = jid,
-                    Subject = subject,
-                    AnnounceOnly = g.GetChild("announcement") != null,
-                    MyRole = ResolveMyGroupRole(g),
-                    MemberCount = CountGroupMembers(g),
-                    Members = ReadGroupMemberDrafts(g)
-                };
-            }
-
+            var parsed = _groupMetadata.ReadListing(groupNodes);
             if (parsed.Count == 0)
             {
                 return;
@@ -431,8 +525,13 @@ namespace Unison.Uwp.Services.WhatsApp
                     if (!string.IsNullOrWhiteSpace(entry.Subject) &&
                         !IsGroupIdPlaceholder(entry.Subject, entry.Jid))
                     {
-                        ContactNames[entry.Jid] = entry.Subject;
-                        Debug.WriteLine($"[WhatsAppService] Group resolved: {entry.Jid} -> {entry.Subject}");
+                        if (GroupNameSyncBlacklist.ShouldCacheSyncedSubject(
+                                entry.Subject,
+                                HasMeaningfulGroupLabel(entry.Jid, FindGroupRowName(entry.Jid))))
+                        {
+                            ContactNames[entry.Jid] = entry.Subject;
+                            Debug.WriteLine($"[WhatsAppService] Group resolved: {entry.Jid} -> {entry.Subject}");
+                        }
                     }
                 }
 
@@ -455,7 +554,10 @@ namespace Unison.Uwp.Services.WhatsApp
                         string resolved = ResolveDisplayName(chat.JID, "chat");
                         bool incomingMeaningful = IsMeaningfulChatLabel(resolved, chat.JID, true);
                         bool existingMeaningful = IsMeaningfulChatLabel(chat.Name, chat.JID, true);
-                        if (incomingMeaningful || !existingMeaningful)
+                        if (GroupNameSyncBlacklist.ShouldApplySyncedSubject(
+                                resolved,
+                                incomingMeaningful,
+                                existingMeaningful))
                         {
                             chat.Name = resolved;
                         }
@@ -478,76 +580,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 SchedulePersist();
             });
-        }
-
-        /// <summary>What a group listing says about one group, read off the wire.</summary>
-        private sealed class GroupListingEntry
-        {
-            public string Jid;
-            public string Subject;
-            public bool AnnounceOnly;
-            public GroupParticipantRole MyRole;
-            public int MemberCount;
-            public List<GroupMemberDraft> Members;
-        }
-
-        private sealed class GroupMemberDraft
-        {
-            public string Jid;
-            public string PhoneNumber;
-            public string Lid;
-            public GroupParticipantRole Role;
-        }
-
-        private List<GroupMemberDraft> ReadGroupMemberDrafts(BinaryNode groupNode)
-        {
-            var drafts = new List<GroupMemberDraft>();
-            if (groupNode == null)
-            {
-                return drafts;
-            }
-
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (BinaryNode participantNode in groupNode.GetChildren("participant"))
-            {
-                if (participantNode?.Attrs == null)
-                {
-                    continue;
-                }
-
-                string jid = participantNode.Attrs.GetDictionaryValueOrDefault("jid", string.Empty);
-                if (string.IsNullOrWhiteSpace(jid))
-                {
-                    continue;
-                }
-
-                string canonical = NormalizeJid(jid);
-                if (string.IsNullOrWhiteSpace(canonical) || !seen.Add(canonical))
-                {
-                    continue;
-                }
-
-                string admin = participantNode.Attrs.GetDictionaryValueOrDefault("admin", string.Empty);
-                if (string.IsNullOrWhiteSpace(admin))
-                {
-                    admin = participantNode.Attrs.GetDictionaryValueOrDefault("type", string.Empty);
-                }
-
-                drafts.Add(new GroupMemberDraft
-                {
-                    Jid = canonical,
-                    PhoneNumber = participantNode.Attrs.GetDictionaryValueOrDefault("phone_number", string.Empty),
-                    Lid = participantNode.Attrs.GetDictionaryValueOrDefault("lid", string.Empty),
-                    Role = ParseParticipantAdminRole(admin)
-                });
-
-                if (drafts.Count >= MaxPersistedGroupMembers)
-                {
-                    break;
-                }
-            }
-
-            return drafts;
         }
 
         private void ApplyGroupMembersToChat(ChatItem chat, List<GroupMemberDraft> drafts)
@@ -613,9 +645,9 @@ namespace Unison.Uwp.Services.WhatsApp
             // Same JID set → merge fields onto existing instances (no GroupMembers replace / relayout).
             if (previousList != null &&
                 previousList.Count == next.Count &&
-                RosterJidSetsEqual(previous, next))
+                GroupMetadataReader.RosterJidSetsEqual(previous, next))
             {
-                MergeGroupMembersInPlace(previousList, next);
+                GroupMetadataReader.MergeInPlace(previousList, next);
                 chat.RefreshMentionLookupFromRoster();
                 if (chat.GroupMemberCount < previousList.Count)
                 {
@@ -623,6 +655,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
                 SchedulePersistGroupMemberships(chat.JID, previousList);
+                SchedulePersistGroupRoster(chat.JID, previousList);
                 return;
             }
 
@@ -633,103 +666,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             SchedulePersistGroupMemberships(chat.JID, next);
-        }
-
-        private static bool RosterJidSetsEqual(
-            Dictionary<string, GroupMember> previousByJid,
-            List<GroupMember> next)
-        {
-            if (previousByJid == null || next == null || previousByJid.Count != next.Count)
-            {
-                return false;
-            }
-
-            for (int i = 0; i < next.Count; i++)
-            {
-                GroupMember member = next[i];
-                if (member == null ||
-                    string.IsNullOrWhiteSpace(member.Jid) ||
-                    !previousByJid.ContainsKey(member.Jid))
-                {
-                    return false;
-                }
-            }
-
-            return true;
-        }
-
-        private static void MergeGroupMembersInPlace(
-            List<GroupMember> existing,
-            List<GroupMember> incoming)
-        {
-            if (existing == null || incoming == null)
-            {
-                return;
-            }
-
-            var byJid = new Dictionary<string, GroupMember>(StringComparer.OrdinalIgnoreCase);
-            for (int i = 0; i < incoming.Count; i++)
-            {
-                GroupMember src = incoming[i];
-                if (src == null || string.IsNullOrWhiteSpace(src.Jid))
-                {
-                    continue;
-                }
-
-                byJid[src.Jid] = src;
-            }
-
-            for (int i = 0; i < existing.Count; i++)
-            {
-                GroupMember dest = existing[i];
-                if (dest == null || string.IsNullOrWhiteSpace(dest.Jid))
-                {
-                    continue;
-                }
-
-                GroupMember src;
-                if (!byJid.TryGetValue(dest.Jid, out src) || src == null)
-                {
-                    continue;
-                }
-
-                if (!string.IsNullOrWhiteSpace(src.PhoneNumber))
-                {
-                    dest.PhoneNumber = src.PhoneNumber;
-                }
-
-                if (!string.IsNullOrWhiteSpace(src.Lid))
-                {
-                    dest.Lid = src.Lid;
-                }
-
-                dest.Role = src.Role;
-
-                if (!string.IsNullOrWhiteSpace(src.DisplayName))
-                {
-                    dest.DisplayName = src.DisplayName;
-                }
-
-                if (!string.IsNullOrWhiteSpace(src.AvatarUrl))
-                {
-                    dest.AvatarUrl = src.AvatarUrl;
-                }
-
-                if (src.AvatarFetchedAtUtc.HasValue)
-                {
-                    dest.AvatarFetchedAtUtc = src.AvatarFetchedAtUtc;
-                }
-
-                if (src.AvatarFetchFailedAtUtc.HasValue)
-                {
-                    dest.AvatarFetchFailedAtUtc = src.AvatarFetchFailedAtUtc;
-                }
-
-                if (!string.IsNullOrWhiteSpace(src.AvatarFetchFailureReason))
-                {
-                    dest.AvatarFetchFailureReason = src.AvatarFetchFailureReason;
-                }
-            }
+            SchedulePersistGroupRoster(chat.JID, next);
         }
 
         private GroupMember FindPreviousGroupMember(
@@ -865,34 +802,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 StringComparison.OrdinalIgnoreCase);
         }
 
-        private List<string> GetGroupMemberPictureCandidates(GroupMember member)
-        {
-            var candidates = new List<string>();
-            Action<string> add = value =>
-            {
-                string normalized = NormalizeJid(value);
-                if (!string.IsNullOrWhiteSpace(normalized) &&
-                    !candidates.Contains(normalized, StringComparer.OrdinalIgnoreCase))
-                {
-                    candidates.Add(normalized);
-                }
-            };
-
-            if (member == null)
-            {
-                return candidates;
-            }
-
-            // PN first: LID picture IQs often 404 and used to burn the only attempt.
-            add(member.PhoneNumber);
-            add(GetCanonicalJid(member.PhoneNumber));
-            add(GetCanonicalJid(member.Jid));
-            add(member.Jid);
-            add(member.Lid);
-            add(GetCanonicalJid(member.Lid));
-            return candidates;
-        }
-
         public Task<GroupMemberAvatarFetchResult> FetchGroupMemberAvatarAsync(
             GroupMember member,
             CancellationToken token)
@@ -917,13 +826,12 @@ namespace Unison.Uwp.Services.WhatsApp
             bool sawTransient = false;
             string lastReason = null;
 
-            foreach (string candidate in GetGroupMemberPictureCandidates(member))
+            foreach (string candidate in _groupMetadata.GetPictureCandidates(member))
             {
                 token.ThrowIfCancellationRequested();
 
                 ProfilePictureResult result = null;
-                await _usyncLock.WaitAsync(token);
-                try
+                using (await _usyncGate.AcquireAsync(token))
                 {
                     if (_socket == null || !_socket.IsHandshakeComplete)
                     {
@@ -936,17 +844,10 @@ namespace Unison.Uwp.Services.WhatsApp
 
                     result = await _socket.GetProfilePictureUrlResultAsync(candidate, "preview");
                 }
-                finally
-                {
-                    _usyncLock.Release();
-                }
 
                 if (!string.IsNullOrWhiteSpace(result?.Url))
                 {
-                    string localUri = await DownloadAndCacheAvatarAsync(
-                        member.Jid,
-                        result.Url,
-                        token);
+                    string localUri = await _avatarFetcher.CachePreviewAsync(member.Jid, result.Url, token);
                     if (!string.IsNullOrWhiteSpace(localUri))
                     {
                         return new GroupMemberAvatarFetchResult { LocalUri = localUri };
@@ -1016,21 +917,15 @@ namespace Unison.Uwp.Services.WhatsApp
 
                     if (result.HasPicture)
                     {
-                        member.AvatarUrl = result.LocalUri;
-                        member.AvatarFetchedAtUtc = nowUtc;
-                        member.AvatarFetchFailedAtUtc = null;
-                        member.AvatarFetchFailureReason = null;
+                        ChatAvatarOutcome.RecordCached(member, result.LocalUri, nowUtc);
                     }
                     else if (result.IsNotFound)
                     {
-                        member.AvatarFetchedAtUtc = nowUtc;
-                        member.AvatarFetchFailedAtUtc = null;
-                        member.AvatarFetchFailureReason = "no-picture";
+                        ChatAvatarOutcome.RecordAbsent(member, "no-picture", nowUtc);
                     }
                     else
                     {
-                        member.AvatarFetchFailedAtUtc = nowUtc;
-                        member.AvatarFetchFailureReason = result.FailureReason ?? "fetch-failed";
+                        ChatAvatarOutcome.RecordFailure(member, result.FailureReason ?? "fetch-failed", nowUtc);
                     }
                 }
             }
@@ -1080,27 +975,5 @@ namespace Unison.Uwp.Services.WhatsApp
             return clone.Count == 0 ? null : clone;
         }
 
-        private static int CountGroupMembers(BinaryNode groupNode)
-        {
-            if (groupNode == null)
-            {
-                return 0;
-            }
-
-            int listed = 0;
-            List<BinaryNode> participants = groupNode.GetChildren("participant");
-            if (participants != null)
-            {
-                listed = participants.Count;
-            }
-
-            int size;
-            if (int.TryParse(groupNode.GetAttribute("size"), out size) && size > listed)
-            {
-                return size;
-            }
-
-            return listed;
-        }
     }
 }

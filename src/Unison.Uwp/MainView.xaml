@@ -131,12 +131,11 @@
                             </StackPanel>
                         </ListViewItem>
 
-                        <ListViewItem Tag="archived" IsEnabled="False" Foreground="{ThemeResource WhatsAppTextLowBrush}">
+                        <ListViewItem Tag="archived">
                             <StackPanel Orientation="Horizontal" Padding="12,0">
                                 <TextBlock Text="&#xE7B8;" FontFamily="{StaticResource IconFont}" FontSize="20" VerticalAlignment="Center" Width="24"
-                                           Foreground="{ThemeResource WhatsAppTextLowBrush}"/>
-                                <TextBlock x:Uid="Shell_Archived" Text="Archived chats" Margin="16,0,0,0" FontSize="14" VerticalAlignment="Center"
-                                           Foreground="{ThemeResource WhatsAppTextLowBrush}"/>
+                                           Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
+                                <TextBlock x:Uid="Shell_Archived" Text="Archived chats" Margin="16,0,0,0" FontSize="14" VerticalAlignment="Center"/>
                             </StackPanel>
                         </ListViewItem>
                     </ListView>

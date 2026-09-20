@@ -1,0 +1,8 @@
+<UserControl
+    x:Class="Unison.Uwp.UI.Controls.ChatAudioBubbleBarHost"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Active shell bar is created in code so Unison-only styles/brushes are never parsed on WhatsApp. -->
+    <Grid x:Name="Root"/>
+</UserControl>

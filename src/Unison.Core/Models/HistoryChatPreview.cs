@@ -18,7 +18,25 @@ namespace Unison.Core.Models
 
         public bool IsGroup { get; set; }
 
+        public ChatStatus Status { get; set; } = ChatStatus.Active;
+
         public int UnreadCount { get; set; }
+
+        /// <summary>
+        /// Pin from the history Conversation. Null means this chunk did not speak about pin.
+        /// </summary>
+        public bool? IsChatPinned { get; set; }
+
+        /// <summary>Pin sort key when <see cref="IsChatPinned"/> is true; 0 marks an explicit unpin.</summary>
+        public long? PinnedTimestamp { get; set; }
+
+        /// <summary>
+        /// True when the Conversation carried a mute field. Null <see cref="MutedUntil"/> then means unmuted.
+        /// </summary>
+        public bool AppliesMute { get; set; }
+
+        /// <summary>Unix seconds mute deadline (0 = forever). Only read when <see cref="AppliesMute"/>.</summary>
+        public long? MutedUntil { get; set; }
 
         public string LastMessage { get; set; }
 

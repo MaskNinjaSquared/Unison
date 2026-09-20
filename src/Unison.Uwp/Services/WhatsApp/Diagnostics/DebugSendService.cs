@@ -28,13 +28,15 @@ namespace Unison.Uwp.Services.WhatsApp.Diagnostics
         private const string DebugSendResultFileName = "debug-send-result.json";
 
         private readonly IWhatsAppService _whatsAppService;
+        private readonly IJidResolver _jids;
         private readonly SemaphoreSlim _debugSendLock = new SemaphoreSlim(1, 1);
         private CancellationTokenSource _debugSendCts;
         private string _lastDebugSendRequestId;
 
-        public DebugSendService(IWhatsAppService whatsAppService)
+        public DebugSendService(IWhatsAppService whatsAppService, IJidResolver jids)
         {
             _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
+            _jids = jids ?? throw new ArgumentNullException(nameof(jids));
         }
 
         private sealed class DebugSendRequest
@@ -321,14 +323,14 @@ namespace Unison.Uwp.Services.WhatsApp.Diagnostics
             };
 
             add(targetJid);
-            add(_whatsAppService.GetCanonicalJid(targetJid));
+            add(_jids.GetCanonicalJid(targetJid));
 
             string normalizedTarget = JidHelper.Normalize(targetJid);
             if (!string.IsNullOrWhiteSpace(normalizedTarget) &&
-                _whatsAppService.JidAlias.TryGetValue(normalizedTarget, out var alias))
+                _jids.TryGetAlias(normalizedTarget, out var alias))
             {
                 add(alias);
-                add(_whatsAppService.GetCanonicalJid(alias));
+                add(_jids.GetCanonicalJid(alias));
             }
 
             return candidates;

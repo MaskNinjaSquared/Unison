@@ -14,8 +14,8 @@ namespace Unison.Core.Helpers
     /// </summary>
     public sealed class GroupParticipantLookup : IDisposable
     {
-        private readonly IWhatsAppService _whatsApp;
-        private readonly IPersonStore _personStore;
+        private readonly ParticipantResolutionContext _context;
+        private readonly IJidResolver _jids;
         private readonly Func<string> _selfDisplayLabel;
 
         private Dictionary<string, string> _participantNames =
@@ -42,13 +42,43 @@ namespace Unison.Core.Helpers
 
         private bool _disposed;
 
+        /// <summary>
+        /// Shared across open-chat lookups so opening group B does not rebuild the 1:1 index
+        /// just because group A already paid for it. Invalidated when the chat list mutates.
+        /// </summary>
+        private static readonly object DirectIndexGate = new object();
+        private static object _sharedDirectChatsRef;
+        private static int _sharedDirectChatCount = -1;
+        private static Dictionary<string, string> _sharedDirectAvatars;
+        private static Dictionary<string, string> _sharedDirectNames;
+        private static bool _directChatsCollectionHooked;
+
+        /// <summary>Large rosters: skip per-member PropertyChanged (hundreds of hooks thrash Mobile).</summary>
+        private const int MaxRosterAvatarHooks = 48;
+
+        /// <summary>Drop the shared 1:1 name/avatar index (chat list or display-name batch changed).</summary>
+        public static void InvalidateDirectChatIndex()
+        {
+            lock (DirectIndexGate)
+            {
+                _sharedDirectChatsRef = null;
+                _sharedDirectChatCount = -1;
+                _sharedDirectAvatars = null;
+                _sharedDirectNames = null;
+            }
+        }
+
         public GroupParticipantLookup(
-            IWhatsAppService whatsApp,
-            IPersonStore personStore,
+            ParticipantResolutionContext context,
             Func<string> selfDisplayLabel)
         {
-            _whatsApp = whatsApp;
-            _personStore = personStore;
+            if (context == null)
+            {
+                throw new ArgumentNullException(nameof(context));
+            }
+
+            _context = context;
+            _jids = context.Jids;
             _selfDisplayLabel = selfDisplayLabel ?? (() => "You");
         }
 
@@ -79,6 +109,7 @@ namespace Unison.Core.Helpers
                 return;
             }
 
+            IJidResolver jids = _jids;
             for (int i = 0; i < chat.GroupMembers.Count; i++)
             {
                 GroupMember member = chat.GroupMembers[i];
@@ -94,8 +125,8 @@ namespace Unison.Core.Helpers
                 IndexParticipantKey(roster, names, avatars, member.Lid, member, name, avatar);
                 IndexParticipantKey(roster, names, avatars, member.PhoneNumber, member, name, avatar);
 
-                string canonical = _whatsApp != null
-                    ? _whatsApp.GetCanonicalJid(member.Jid)
+                string canonical = jids != null
+                    ? jids.GetCanonicalJid(member.Jid)
                     : JidHelper.Normalize(member.Jid);
                 IndexParticipantKey(roster, names, avatars, canonical, member, name, avatar);
             }
@@ -132,8 +163,8 @@ namespace Unison.Core.Helpers
                 return null;
             }
 
-            string canonical = _whatsApp != null
-                ? _whatsApp.GetCanonicalJid(participantJid)
+            string canonical = _jids != null
+                ? _jids.GetCanonicalJid(participantJid)
                 : JidHelper.Normalize(participantJid);
 
             GroupMember member;
@@ -160,7 +191,7 @@ namespace Unison.Core.Helpers
                 return false;
             }
 
-            if (SelfIdentity.IsSelf(jid, _whatsApp))
+            if (SelfIdentity.IsSelf(jid, _jids))
             {
                 name = SelfDisplayLabel();
                 return true;
@@ -177,8 +208,8 @@ namespace Unison.Core.Helpers
                 return true;
             }
 
-            string canonical = _whatsApp != null
-                ? _whatsApp.GetCanonicalJid(jid)
+            string canonical = _jids != null
+                ? _jids.GetCanonicalJid(jid)
                 : JidHelper.Normalize(jid);
             return !string.IsNullOrWhiteSpace(canonical) &&
                    _participantNames.TryGetValue(canonical, out name) &&
@@ -200,8 +231,8 @@ namespace Unison.Core.Helpers
                 return true;
             }
 
-            string canonical = _whatsApp != null
-                ? _whatsApp.GetCanonicalJid(jid)
+            string canonical = _jids != null
+                ? _jids.GetCanonicalJid(jid)
                 : JidHelper.Normalize(jid);
             return !string.IsNullOrWhiteSpace(canonical) &&
                    _participantAvatars.TryGetValue(canonical, out avatar) &&
@@ -239,10 +270,10 @@ namespace Unison.Core.Helpers
             string resolved = GroupParticipantResolver.ResolveAvatar(
                 jid,
                 groupChat,
-                _whatsApp,
-                _personStore,
+                _context,
                 roster,
-                _directChatAvatars);
+                _directChatAvatars,
+                _rosterByCanonical);
             if (!string.IsNullOrWhiteSpace(resolved))
             {
                 CacheAvatar(jid, resolved);
@@ -270,13 +301,19 @@ namespace Unison.Core.Helpers
             string cached;
             if (TryGetName(participant, out cached))
             {
-                message.SenderName = cached;
-                return;
+                if (GroupParticipantResolver.IsUsableDisplayLabel(cached, participant))
+                {
+                    message.SenderName = cached;
+                    return;
+                }
+
+                // Drop a short-JID / garbage cache entry so roster/Person can replace it.
+                RemoveCachedName(participant);
             }
 
             GroupMember roster = Find(participant);
             if (!string.IsNullOrWhiteSpace(roster?.DisplayName) &&
-                roster.DisplayName.IndexOf('@') < 0)
+                GroupParticipantResolver.IsUsableDisplayLabel(roster.DisplayName, participant))
             {
                 message.SenderName = roster.DisplayName.Trim();
                 CacheName(participant, message.SenderName);
@@ -284,26 +321,37 @@ namespace Unison.Core.Helpers
             }
 
             string fromDirect;
-            if (TryGetDirectChatName(participant, out fromDirect))
+            if (TryGetDirectChatName(participant, out fromDirect) &&
+                GroupParticipantResolver.IsUsableDisplayLabel(fromDirect, participant))
             {
                 message.SenderName = fromDirect;
                 CacheName(participant, fromDirect);
                 return;
             }
 
+            // Do not prefer a stale short-JID hint stored on the message from the first open.
+            string hint = message.SenderName;
+            if (!GroupParticipantResolver.IsUsableDisplayLabel(hint, participant))
+            {
+                hint = null;
+            }
+
             string resolved = GroupParticipantResolver.ResolveDisplayName(
                 participant,
                 groupChat,
-                _whatsApp,
-                _personStore,
-                message.SenderName,
+                _context,
+                hint,
                 roster,
-                _directChatNames);
+                _directChatNames,
+                _rosterByCanonical);
 
             if (!string.IsNullOrWhiteSpace(resolved))
             {
                 message.SenderName = resolved;
-                CacheName(participant, resolved);
+                if (GroupParticipantResolver.IsUsableDisplayLabel(resolved, participant))
+                {
+                    CacheName(participant, resolved);
+                }
             }
         }
 
@@ -335,13 +383,18 @@ namespace Unison.Core.Helpers
             string cached;
             if (TryGetName(participant, out cached))
             {
-                message.QuotedSenderName = cached;
-                return;
+                if (GroupParticipantResolver.IsUsableDisplayLabel(cached, participant))
+                {
+                    message.QuotedSenderName = cached;
+                    return;
+                }
+
+                RemoveCachedName(participant);
             }
 
             GroupMember roster = Find(participant);
             if (!string.IsNullOrWhiteSpace(roster?.DisplayName) &&
-                roster.DisplayName.IndexOf('@') < 0)
+                GroupParticipantResolver.IsUsableDisplayLabel(roster.DisplayName, participant))
             {
                 message.QuotedSenderName = roster.DisplayName.Trim();
                 CacheName(participant, message.QuotedSenderName);
@@ -349,26 +402,36 @@ namespace Unison.Core.Helpers
             }
 
             string fromDirect;
-            if (TryGetDirectChatName(participant, out fromDirect))
+            if (TryGetDirectChatName(participant, out fromDirect) &&
+                GroupParticipantResolver.IsUsableDisplayLabel(fromDirect, participant))
             {
                 message.QuotedSenderName = fromDirect;
                 CacheName(participant, fromDirect);
                 return;
             }
 
+            string hint = message.QuotedSenderName;
+            if (!GroupParticipantResolver.IsUsableDisplayLabel(hint, participant))
+            {
+                hint = null;
+            }
+
             string resolved = GroupParticipantResolver.ResolveDisplayName(
                 participant,
                 groupChat,
-                _whatsApp,
-                _personStore,
-                message.QuotedSenderName,
+                _context,
+                hint,
                 roster,
-                _directChatNames);
+                _directChatNames,
+                _rosterByCanonical);
 
             if (!string.IsNullOrWhiteSpace(resolved))
             {
                 message.QuotedSenderName = resolved;
-                CacheName(participant, resolved);
+                if (GroupParticipantResolver.IsUsableDisplayLabel(resolved, participant))
+                {
+                    CacheName(participant, resolved);
+                }
             }
         }
 
@@ -380,9 +443,14 @@ namespace Unison.Core.Helpers
                 return;
             }
 
-            if (SelfIdentity.IsSelf(jid, _whatsApp))
+            if (SelfIdentity.IsSelf(jid, _jids))
             {
                 name = SelfDisplayLabel();
+            }
+            else if (!GroupParticipantResolver.IsUsableDisplayLabel(name, jid))
+            {
+                // Never pin a short-JID placeholder — blocks later roster/Person resolution.
+                return;
             }
 
             if (_participantNames == null)
@@ -392,12 +460,30 @@ namespace Unison.Core.Helpers
 
             string norm = JidHelper.Normalize(jid) ?? jid;
             _participantNames[norm] = name;
-            string canonical = _whatsApp != null
-                ? _whatsApp.GetCanonicalJid(jid)
+            string canonical = _jids != null
+                ? _jids.GetCanonicalJid(jid)
                 : null;
             if (!string.IsNullOrWhiteSpace(canonical))
             {
                 _participantNames[canonical] = name;
+            }
+        }
+
+        private void RemoveCachedName(string jid)
+        {
+            if (_participantNames == null || string.IsNullOrWhiteSpace(jid))
+            {
+                return;
+            }
+
+            string norm = JidHelper.Normalize(jid) ?? jid;
+            _participantNames.Remove(norm);
+            string canonical = _jids != null
+                ? _jids.GetCanonicalJid(jid)
+                : null;
+            if (!string.IsNullOrWhiteSpace(canonical))
+            {
+                _participantNames.Remove(canonical);
             }
         }
 
@@ -416,8 +502,8 @@ namespace Unison.Core.Helpers
 
             string norm = JidHelper.Normalize(jid) ?? jid;
             _participantAvatars[norm] = avatar;
-            string canonical = _whatsApp != null
-                ? _whatsApp.GetCanonicalJid(jid)
+            string canonical = _jids != null
+                ? _jids.GetCanonicalJid(jid)
                 : null;
             if (!string.IsNullOrWhiteSpace(canonical))
             {
@@ -452,16 +538,41 @@ namespace Unison.Core.Helpers
 
         private void RebuildDirectChatIndex()
         {
+            EnsureDirectChatsCollectionHooked();
+
+            var chats = _context.ChatState?.Chats;
+            lock (DirectIndexGate)
+            {
+                if (chats != null &&
+                    _sharedDirectAvatars != null &&
+                    _sharedDirectNames != null &&
+                    object.ReferenceEquals(_sharedDirectChatsRef, chats) &&
+                    _sharedDirectChatCount == chats.Count)
+                {
+                    _directChatAvatars = _sharedDirectAvatars;
+                    _directChatNames = _sharedDirectNames;
+                    return;
+                }
+            }
+
             var avatars = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var chats = _whatsApp?.Chats;
             if (chats == null || chats.Count == 0)
             {
+                lock (DirectIndexGate)
+                {
+                    _sharedDirectChatsRef = chats;
+                    _sharedDirectChatCount = chats?.Count ?? 0;
+                    _sharedDirectAvatars = avatars;
+                    _sharedDirectNames = names;
+                }
+
                 _directChatAvatars = avatars;
                 _directChatNames = names;
                 return;
             }
 
+            IJidResolver jids = _jids;
             for (int i = 0; i < chats.Count; i++)
             {
                 ChatItem chat = chats[i];
@@ -471,8 +582,8 @@ namespace Unison.Core.Helpers
                 }
 
                 string raw = JidHelper.Normalize(chat.JID) ?? chat.JID;
-                string canonical = _whatsApp != null
-                    ? _whatsApp.GetCanonicalJid(chat.JID)
+                string canonical = jids != null
+                    ? jids.GetCanonicalJid(chat.JID)
                     : raw;
                 if (string.IsNullOrWhiteSpace(canonical))
                 {
@@ -488,16 +599,53 @@ namespace Unison.Core.Helpers
 
                 if (!string.IsNullOrWhiteSpace(chat.Name) &&
                     chat.Name.IndexOf('@') < 0 &&
-                    !string.Equals(chat.Name, "Me", StringComparison.OrdinalIgnoreCase) &&
-                    !string.Equals(chat.Name, "You", StringComparison.OrdinalIgnoreCase))
+                    !SelfChatNaming.IsKnownFallback(chat.Name))
                 {
                     IndexDirectMap(names, raw, chat.Name.Trim());
                     IndexDirectMap(names, canonical, chat.Name.Trim());
                 }
             }
 
+            lock (DirectIndexGate)
+            {
+                _sharedDirectChatsRef = chats;
+                _sharedDirectChatCount = chats.Count;
+                _sharedDirectAvatars = avatars;
+                _sharedDirectNames = names;
+            }
+
             _directChatAvatars = avatars;
             _directChatNames = names;
+        }
+
+        private void EnsureDirectChatsCollectionHooked()
+        {
+            if (_directChatsCollectionHooked)
+            {
+                return;
+            }
+
+            var chats = _context.ChatState?.Chats as System.Collections.Specialized.INotifyCollectionChanged;
+            if (chats == null)
+            {
+                return;
+            }
+
+            lock (DirectIndexGate)
+            {
+                if (_directChatsCollectionHooked)
+                {
+                    return;
+                }
+
+                chats.CollectionChanged += OnSharedDirectChatsChanged;
+                _directChatsCollectionHooked = true;
+            }
+        }
+
+        private static void OnSharedDirectChatsChanged(object sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+        {
+            InvalidateDirectChatIndex();
         }
 
         private static void IndexDirectMap(Dictionary<string, string> map, string key, string value)
@@ -516,6 +664,13 @@ namespace Unison.Core.Helpers
         private void HookRosterAvatarChanges(IList<GroupMember> members)
         {
             if (members == null || members.Count == 0)
+            {
+                return;
+            }
+
+            // Hundreds of PropertyChanged subscriptions stall Lumia-class devices on group open.
+            // Avatars still land via DisplayNamesUpdated / hydrate paths.
+            if (members.Count > MaxRosterAvatarHooks)
             {
                 return;
             }
@@ -620,7 +775,7 @@ namespace Unison.Core.Helpers
                 _participantNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             }
 
-            Profile me = _whatsApp?.CurrentProfile;
+            Profile me = _jids?.Self;
             if (me == null)
             {
                 return;
@@ -640,8 +795,8 @@ namespace Unison.Core.Helpers
 
             string norm = JidHelper.Normalize(rawJid) ?? rawJid;
             _participantNames[norm] = label;
-            string canonical = _whatsApp != null
-                ? _whatsApp.GetCanonicalJid(rawJid)
+            string canonical = _jids != null
+                ? _jids.GetCanonicalJid(rawJid)
                 : null;
             if (!string.IsNullOrWhiteSpace(canonical))
             {
@@ -656,7 +811,7 @@ namespace Unison.Core.Helpers
                 return false;
             }
 
-            if (SelfIdentity.IsSelf(message.QuotedParticipantJid, _whatsApp))
+            if (SelfIdentity.IsSelf(message.QuotedParticipantJid, _jids))
             {
                 return true;
             }
@@ -684,8 +839,8 @@ namespace Unison.Core.Helpers
                 return true;
             }
 
-            string canonical = _whatsApp != null
-                ? _whatsApp.GetCanonicalJid(participantJid)
+            string canonical = _jids != null
+                ? _jids.GetCanonicalJid(participantJid)
                 : JidHelper.Normalize(participantJid);
             return !string.IsNullOrWhiteSpace(canonical) &&
                    _directChatAvatars.TryGetValue(canonical, out avatar) &&
@@ -706,8 +861,8 @@ namespace Unison.Core.Helpers
                 return true;
             }
 
-            string canonical = _whatsApp != null
-                ? _whatsApp.GetCanonicalJid(participantJid)
+            string canonical = _jids != null
+                ? _jids.GetCanonicalJid(participantJid)
                 : JidHelper.Normalize(participantJid);
             return !string.IsNullOrWhiteSpace(canonical) &&
                    _directChatNames.TryGetValue(canonical, out name) &&

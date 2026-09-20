@@ -56,7 +56,7 @@ Visual Studio often adds this when you “Add → Existing Item”. If the file 
 |---|---|---|
 | `x:Uid="Settings_Title"` on a `TextBlock` | `Settings_Title.Text` | MRT sets `Text` |
 | `SettingBox LocalizationUid="Settings_Language"` | `Settings_Language.Header` and `Settings_Language.Text` | `SettingBox` loads `{uid}/Header` and `{uid}/Text` on Loaded |
-| `SettingsSectionHeader LocalizationUid="Settings_General"` | `Settings_General.Text` | `{uid}/Text` |
+| `SettingsSectionHeader x:Uid="Settings_General"` | `Settings_General.Text` | MRT sets `Text` on the control |
 | ViewModel / `IStringResources.Get` | `Settings_DisconnectTitle` (no `.Property`) | `Get("Settings_DisconnectTitle", "Disconnect?")` |
 
 `LocalizedStrings` maps dots to slashes: `Foo.Text` in resw is requested as `Foo/Text`.

@@ -1,11 +1,17 @@
+using System;
+using System.Threading.Tasks;
+using Unison.Core.Contracts;
+using Unison.Core.ViewModels;
 using Windows.UI;
 using Windows.UI.ViewManagement;
+using Windows.UI.Xaml.Controls;
 
 namespace Unison.Uwp.Services.Themes
 {
     /// <summary>
     /// WhatsApp shell: OS-default title bar background; green caption text + min/max/close glyphs.
     /// Sync feedback always stays in the chat-list header.
+    /// Settings: <see cref="IDialogService.ShowWhatsAppSettingsAsync"/> overlay (not a shell page).
     /// </summary>
     public sealed class WhatsAppThemeStrategy : ShellThemeStrategy
     {
@@ -14,6 +20,16 @@ namespace Unison.Uwp.Services.Themes
 
         /// <summary>Slightly brighter glyph on hover (#25D366).</summary>
         private static readonly Color CaptionGreenHover = Color.FromArgb(0xFF, 0x25, 0xD3, 0x66);
+
+        private readonly IDialogService _dialogs;
+        private readonly Func<SettingsViewModel> _settingsVmFactory;
+        private bool _settingsOpen;
+
+        public WhatsAppThemeStrategy(IDialogService dialogs, Func<SettingsViewModel> settingsVmFactory)
+        {
+            _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
+            _settingsVmFactory = settingsVmFactory ?? throw new ArgumentNullException(nameof(settingsVmFactory));
+        }
 
         public override bool DisplaySyncInChatList => true;
 
@@ -47,9 +63,49 @@ namespace Unison.Uwp.Services.Themes
                 titleBar.ButtonHoverForegroundColor = CaptionGreenHover;
                 titleBar.ButtonPressedForegroundColor = CaptionGreen;
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine("[WhatsAppTheme] SetTitleBar: " + ex.Message);
+            }
+        }
+
+        public override void OpenSettings(Frame shellFrame)
+        {
+            // Keep the current shell page (usually Chats); settings is an overlay dialog.
+            if (_settingsOpen || _dialogs == null)
+            {
+                return;
+            }
+
+            _ = OpenSettingsOverlayAsync();
+        }
+
+        public override bool IsSettingsPage(object content)
+        {
+            // Settings is never a Frame page on WhatsApp shell.
+            return false;
+        }
+
+        private async Task OpenSettingsOverlayAsync()
+        {
+            if (_settingsOpen)
+            {
+                return;
+            }
+
+            _settingsOpen = true;
+            try
+            {
+                SettingsViewModel vm = _settingsVmFactory();
+                await _dialogs.ShowWhatsAppSettingsAsync(vm);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[WhatsAppTheme] OpenSettings: " + ex.Message);
+            }
+            finally
+            {
+                _settingsOpen = false;
             }
         }
     }
