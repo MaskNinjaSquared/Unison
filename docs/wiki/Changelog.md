@@ -4,6 +4,16 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Contact lookup — one usync path (3.6)
+
+`ResolveContactsAsync` kept a hand-built usync query behind the `ResolveContactNamesUseCase` path. It
+could only run on a disconnected session, through that session, so it always failed; it is removed
+along with `allowBatchFallback` and `IWhatsAppSocket.QueryUsyncAsync`. Numbers for the live query now
+come from `ContactLookupNumber` (brackets and dots stripped, device suffix cut), and a LID with no
+known phone pair is skipped (`UnmappedLid`) instead of being queried as a fake number.
+
+---
+
 ## FULL_HISTORY catch-up — ACK-only loops + debug controls
 
 Catch-up idle lots treated `ack-accepted` and `banner-begin` as progress signals, so

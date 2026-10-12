@@ -153,7 +153,7 @@ namespace Unison.Core.Contracts.WhatsApp
         string ResolveDisplayName(string jid, string context);
 
         /// <summary>Raw usync query for a batch of JIDs (name resolution primitive used by <see cref="IContactService"/>).</summary>
-        Task ResolveContactsAsync(string[] jids, bool allowBatchFallback = true);
+        Task ResolveContactsAsync(string[] jids);
 
         /// <summary>Queries metadata for all joined groups.</summary>
         Task QueryAllGroupsAsync();

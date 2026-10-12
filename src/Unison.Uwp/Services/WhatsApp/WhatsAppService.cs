@@ -37,6 +37,7 @@ using Unison.Core.State;
 using Unison.Uwp.Services.WhatsApp.Contacts;
 using Unison.Uwp.Services.WhatsApp.Groups;
 using Unison.Uwp.Services.WhatsApp.Messages;
+using Unison.Socket.Session;
 using Unison.Socket.UseCases.Contacts;
 using Unison.Uwp.Helpers;
 using Microsoft.Extensions.DependencyInjection;
@@ -7647,23 +7648,25 @@ namespace Unison.Uwp.Services.WhatsApp
         /// aliasing the two addresses of one person, merging the chats that resulted from not
         /// knowing they were the same person, and fetching avatars.
         /// </summary>
-        private async Task ResolveContactsViaSocketAsync(string[] jids)
+        private async Task ResolveContactsViaSocketAsync(string[] jids, WhatsAppSession session)
         {
-            var session = ((SocketBridge)_socket).Session;
-
-            // LIDs are mapped back to the number first: this endpoint answers by phone number,
-            // and asking it with a LID returns an empty entry that reads as "no such account".
+            // This endpoint answers by phone number; a LID with no known pair has none to ask with.
             var lookup = new List<string>();
-            var meId = NormalizeJid(_authState?.Me?.Id);
             foreach (var jid in jids)
             {
-                if (string.IsNullOrWhiteSpace(jid) || NormalizeJid(jid) == meId)
+                if (string.IsNullOrWhiteSpace(jid))
                 {
                     continue;
                 }
 
-                var canonical = GetCanonicalJid(jid);
-                lookup.Add(string.IsNullOrWhiteSpace(canonical) ? jid : canonical);
+                ContactLookupNumber number = ContactLookupNumber.For(jid, GetCanonicalJid(jid), _authState?.Me?.Id);
+                if (!number.IsUsable)
+                {
+                    Debug.WriteLine("[WhatsAppService] ResolveContactsAsync: skipping " + jid + " (" + number.Skip + ")");
+                    continue;
+                }
+
+                lookup.Add(number.Number);
             }
 
             if (lookup.Count == 0)

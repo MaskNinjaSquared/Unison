@@ -138,13 +138,6 @@ namespace Unison.Uwp.Client
 
         Task<BinaryNode> QueryParticipatingGroupsAsync();
 
-        Task<BinaryNode> QueryUsyncAsync(
-            List<BinaryNode> userNodes,
-            string context,
-            string mode,
-            List<BinaryNode> queryProtocols,
-            int timeoutMs = 60000);
-
         Task<ProfilePictureResult> GetProfilePictureUrlResultAsync(string jid, string type = "preview");
 
         Task<byte[]> DownloadAndDecryptMediaAsync(

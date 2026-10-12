@@ -507,9 +507,18 @@ number-as-name but not for a self-marker, so a contact pushing "(You)" could be 
 canonical row during a merge even though the sanitizer blocks that everywhere else. The orchestration
 stays; only the decision left.
 
-What remains in `.Identity.cs` is the larger half and is not this shape: `ResolveContactsAsync` and
-`RefreshContactNamesAsync` (usync over the socket, ~380 lines) and the alias follow-up scheduling.
-Those are 3.6's move onto `ContactFacade`, not a rule to lift out of a method.
+What remains in `.Identity.cs` is the larger half and is not this shape: the alias follow-up
+scheduling and what `ResolveContactsViaSocketAsync` does with an answer (alias, identity heal,
+duplicate-chat merge, avatar fetch). Those are 3.6's move onto `ContactFacade`, not a rule to lift
+out of a method.
+
+**The hand-built usync query is gone.** `ResolveContactsAsync` had two bodies: the live one over
+`ResolveContactNamesUseCase`, and ~300 lines that built the `<usync>` node by hand. The second ran only
+when the bridge reported a completed handshake on a disconnected session — and it sent through that
+same connection, so it could only fail. It is deleted, with `allowBatchFallback` (its retry flag) and
+`IWhatsAppSocket.QueryUsyncAsync` (its only caller). The live path now picks numbers through
+`ContactLookupNumber`, which gained `UnmappedLid`: a LID with no known phone pair used to be read as
+digits and queried as a number that belongs to nobody.
 
 **Two more rules left before the façade move.** `MeaningfulChatLabel` (with `GroupIdPlaceholder`)
 is the single "is this label recognisable?" answer — UWP's `IsMeaningfulChatLabel` and history's

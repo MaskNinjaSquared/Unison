@@ -749,43 +749,6 @@ namespace Unison.Uwp.Client
             await ForwardMappingsAsync(mappings, source).ConfigureAwait(false);
         }
 
-        public Task<BinaryNode> QueryUsyncAsync(
-            List<BinaryNode> userNodes,
-            string context,
-            string mode,
-            List<BinaryNode> queryProtocols,
-            int timeoutMs = 60000)
-        {
-            var usync = new BinaryNode(
-                "usync",
-                new Dictionary<string, string>
-                {
-                    { "sid", NextTag() },
-                    { "mode", mode },
-                    { "last", "true" },
-                    { "index", "0" },
-                    { "context", context }
-                },
-                new List<BinaryNode>
-                {
-                    new BinaryNode("query", null, queryProtocols),
-                    new BinaryNode("list", null, userNodes)
-                });
-
-            return QueryAsync(
-                new BinaryNode(
-                    "iq",
-                    new Dictionary<string, string>
-                    {
-                        { "id", NextTag() },
-                        { "to", JidUtils.ServerWhatsApp },
-                        { "type", "get" },
-                        { "xmlns", "usync" }
-                    },
-                    usync),
-                TimeSpan.FromMilliseconds(timeoutMs));
-        }
-
         public async Task<ProfilePictureResult> GetProfilePictureUrlResultAsync(string jid, string type = "preview")
         {
             if (string.IsNullOrEmpty(jid))
