@@ -11,6 +11,7 @@
 // =============================================================================
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Unison.Baileys.Protocol;
 using Unison.Core.Contracts;
 using Unison.Core.Helpers;
