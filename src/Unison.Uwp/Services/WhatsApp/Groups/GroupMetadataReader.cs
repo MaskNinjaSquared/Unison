@@ -5,10 +5,9 @@
 // chat list were the same code, which meant the parser could only be reached
 // through the UI thread and could only be checked by watching rows change.
 //
-// This half is pure: give it a BinaryNode, get back a subject, a role, a member
-// list. No socket, no chat state, no dispatcher. The applying half stays with
-// whoever owns the rows, because that is a thread-affinity question, not a
-// protocol one.
+// This half is pure: give it a BinaryNode, get back a GroupMetadataSnapshot.
+// No socket, no chat state, no dispatcher. Putting it on the rows is
+// GroupMetadataApply (Core).
 // =============================================================================
 using System;
 using System.Collections.Generic;
@@ -22,26 +21,6 @@ using Unison.Uwp.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp.Groups
 {
-    /// <summary>What a group listing says about one group, read off the wire.</summary>
-    internal sealed class GroupListingEntry
-    {
-        public string Jid;
-        public string Subject;
-        public bool AnnounceOnly;
-        public GroupParticipantRole MyRole;
-        public int MemberCount;
-        public List<GroupMemberDraft> Members;
-    }
-
-    /// <summary>A participant as the wire describes it, before names and avatars are attached.</summary>
-    internal sealed class GroupMemberDraft
-    {
-        public string Jid;
-        public string PhoneNumber;
-        public string Lid;
-        public GroupParticipantRole Role;
-    }
-
     internal sealed class GroupMetadataReader
     {
         /// <summary>
@@ -63,9 +42,9 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
         /// account at once, and applying group by group meant one hop to the UI thread and one
         /// walk of the chat list each.
         /// </summary>
-        public Dictionary<string, GroupListingEntry> ReadListing(List<BinaryNode> groupNodes)
+        public Dictionary<string, GroupMetadataSnapshot> ReadListing(List<BinaryNode> groupNodes)
         {
-            var parsed = new Dictionary<string, GroupListingEntry>(StringComparer.OrdinalIgnoreCase);
+            var parsed = new Dictionary<string, GroupMetadataSnapshot>(StringComparer.OrdinalIgnoreCase);
             if (groupNodes == null)
             {
                 return parsed;
@@ -85,18 +64,34 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
                 string subject;
                 node.Attrs.TryGetValue("subject", out subject);
 
-                parsed[_jids.GetCanonicalJid(JidHelper.Normalize(jid))] = new GroupListingEntry
-                {
-                    Jid = jid,
-                    Subject = subject,
-                    AnnounceOnly = IsAnnounceOnly(node),
-                    MyRole = ResolveMyRole(node),
-                    MemberCount = CountMembers(node),
-                    Members = ReadMemberDrafts(node)
-                };
+                parsed[_jids.GetCanonicalJid(JidHelper.Normalize(jid))] = ReadGroup(node, jid, subject);
             }
 
             return parsed;
+        }
+
+        /// <summary>
+        /// One group's metadata reply, or null when the response holds no group node. The
+        /// subject is left out: a single-group reply is applied for its flags and roster, and
+        /// its subject goes through <see cref="ExtractSubject"/> where it is wanted.
+        /// </summary>
+        public GroupMetadataSnapshot ReadMetadata(BinaryNode response, string groupJid)
+        {
+            BinaryNode groupNode = FindGroupNode(response, groupJid);
+            return groupNode == null ? null : ReadGroup(groupNode, groupJid, null);
+        }
+
+        private GroupMetadataSnapshot ReadGroup(BinaryNode groupNode, string jid, string subject)
+        {
+            return new GroupMetadataSnapshot
+            {
+                Jid = jid,
+                Subject = subject,
+                AnnounceOnly = IsAnnounceOnly(groupNode),
+                MyRole = ResolveMyRole(groupNode),
+                MemberCount = CountMembers(groupNode),
+                Members = ReadMemberDrafts(groupNode)
+            };
         }
 
         /// <summary>
@@ -344,111 +339,6 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
         /// </summary>
         public static bool IsIdPlaceholder(string label, string groupJid) =>
             GroupIdPlaceholder.IsIdPlaceholder(label, groupJid);
-
-        /// <summary>
-        /// True when both sides hold the same set of member JIDs, which lets the caller merge
-        /// fields onto the existing instances instead of replacing the collection and forcing
-        /// the members list to relayout.
-        /// </summary>
-        public static bool RosterJidSetsEqual(
-            Dictionary<string, GroupMember> previousByJid,
-            List<GroupMember> next)
-        {
-            if (previousByJid == null || next == null || previousByJid.Count != next.Count)
-            {
-                return false;
-            }
-
-            for (int i = 0; i < next.Count; i++)
-            {
-                GroupMember member = next[i];
-                if (member == null ||
-                    string.IsNullOrWhiteSpace(member.Jid) ||
-                    !previousByJid.ContainsKey(member.Jid))
-                {
-                    return false;
-                }
-            }
-
-            return true;
-        }
-
-        /// <summary>
-        /// Copies incoming fields onto the matching existing members. Blank incoming values are
-        /// skipped rather than written: a metadata response that omits a phone number is not
-        /// telling us the member lost one.
-        /// </summary>
-        public static void MergeInPlace(List<GroupMember> existing, List<GroupMember> incoming)
-        {
-            if (existing == null || incoming == null)
-            {
-                return;
-            }
-
-            var byJid = new Dictionary<string, GroupMember>(StringComparer.OrdinalIgnoreCase);
-            for (int i = 0; i < incoming.Count; i++)
-            {
-                GroupMember src = incoming[i];
-                if (src == null || string.IsNullOrWhiteSpace(src.Jid))
-                {
-                    continue;
-                }
-
-                byJid[src.Jid] = src;
-            }
-
-            for (int i = 0; i < existing.Count; i++)
-            {
-                GroupMember dest = existing[i];
-                if (dest == null || string.IsNullOrWhiteSpace(dest.Jid))
-                {
-                    continue;
-                }
-
-                GroupMember src;
-                if (!byJid.TryGetValue(dest.Jid, out src) || src == null)
-                {
-                    continue;
-                }
-
-                if (!string.IsNullOrWhiteSpace(src.PhoneNumber))
-                {
-                    dest.PhoneNumber = src.PhoneNumber;
-                }
-
-                if (!string.IsNullOrWhiteSpace(src.Lid))
-                {
-                    dest.Lid = src.Lid;
-                }
-
-                dest.Role = src.Role;
-
-                if (!string.IsNullOrWhiteSpace(src.DisplayName))
-                {
-                    dest.DisplayName = src.DisplayName;
-                }
-
-                if (!string.IsNullOrWhiteSpace(src.AvatarUrl))
-                {
-                    dest.AvatarUrl = src.AvatarUrl;
-                }
-
-                if (src.AvatarFetchedAtUtc.HasValue)
-                {
-                    dest.AvatarFetchedAtUtc = src.AvatarFetchedAtUtc;
-                }
-
-                if (src.AvatarFetchFailedAtUtc.HasValue)
-                {
-                    dest.AvatarFetchFailedAtUtc = src.AvatarFetchFailedAtUtc;
-                }
-
-                if (!string.IsNullOrWhiteSpace(src.AvatarFetchFailureReason))
-                {
-                    dest.AvatarFetchFailureReason = src.AvatarFetchFailureReason;
-                }
-            }
-        }
 
         public static GroupParticipantRole ParseRole(string adminAttr)
         {

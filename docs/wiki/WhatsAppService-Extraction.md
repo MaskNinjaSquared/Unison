@@ -47,7 +47,7 @@ No behaviour change for users. Prep so later diffs are one cluster, not a 16k-li
 | `WhatsAppService.Receipts.cs` | Receipt nodes → send state |
 | `WhatsAppService.IncomingPump.cs` | Decrypted-message queue, placeholders, offline replay summaries |
 | `WhatsAppService.OutgoingHost.cs` | Explicit `IOutgoingMessageHost`: the caches and socket the send flows on `MessageFacade` reach (3.4) |
-| `WhatsAppService.GroupRosterHost.cs` | Explicit `IGroupRosterHost`: UI dispatch and member labels for the roster restore on `GroupFacade` (3.2b) |
+| `WhatsAppService.GroupHost.cs` | Explicit `IGroupHost`: UI dispatch, name caches, avatar lookup and roster/membership/chat-list saves for the group flows in Core (3.2b) |
 
 `IWhatsAppService` is unchanged as the façade-facing surface (minus the deleted history body). Do not grow it for UI; add members on the façade that owns the subject ([Coding standards](Coding-Standards) §6).
 
@@ -173,7 +173,7 @@ Self-contained first. List/persist last.
 | 3.1b | Avatar fetch (done) | `AvatarFetcher`, behind `IUsyncGate` |
 | 3.1c | Avatar apply to the row (done) | `ChatAvatarOutcome` (Core); fallback + fetch stay in the client |
 | 3.2a | Group protocol reading (done) | `GroupMetadataReader` |
-| 3.2b | Group apply + roster persist | **Roster rules out (`GroupRosterRules`, Core); roster restore on `GroupFacade` (done)** via `GroupRosterRestore` over `IGroupRosterHost`. Metadata/listing apply stays in the client until 3.6 / 3.9b — see below |
+| 3.2b | Group apply + roster persist | **Done.** Listing / metadata / roster apply in `GroupMetadataApply`, roster restore in `GroupRosterRestore`, rules in `GroupRosterRules` (all Core) over `IGroupHost`. Send-permission refresh and restore run on `GroupFacade`. The query passes stay in the client — see below |
 | 3.3a | Media cache + file naming (done) | `IMediaCache` / `MediaCacheService`, `MediaFileExtensions` |
 | 3.3b | Derived renditions — transcode / poster / WebP (done) | `MediaDerivationService` |
 | 3.3c | Download reading (done) | `MediaDownloadPlan` (Core). Orchestration stays — see below |
@@ -233,8 +233,8 @@ both functions into `IJidResolver`, which the reader takes now.
 The rest of `.Groups.cs` is apply and orchestration, and it is blocked on three other steps, not on
 itself: it walks `Chats` on the UI thread and calls `SchedulePersist` (3.9), writes `ContactNames`
 and calls `ResolveDisplayName` (3.6), and canonicalises through the client's alias table (3.7). Move
-it when those land, not before. 3.7 has landed; what 3.2b could take without the other two is in
-its own section below.
+it when those land, not before. 3.2b did it without waiting, by reaching the 3.6 / 3.9b primitives
+through a port rather than moving them — see its section below.
 
 **3.3a is done: storage left, downloading stayed.** `IMediaCache` / `MediaCacheService` owns
 `LocalFolder/MediaCache/{Images,Audio,Documents,Video,VideoPosters}`; `MediaFileExtensions` (Core,
@@ -476,7 +476,7 @@ four separate field-writes scattered through one method, which is exactly how th
 
 **What is left is no longer shaped like these.** 3.4 (send), 3.6 (names / usync) and 3.10
 (`IncomingPump`) are not extractions of a rule from a method — they are moves of whole responsibilities
-onto façades, with the socket and the UI thread on both sides. The 3.2b apply still waits on 3.6; 3.3c is a
+onto façades, with the socket and the UI thread on both sides. 3.3c is a
 façade move too. The test suite does not reach any of them, because they are all in the UWP head.
 
 **None of this has been run.** Every slice from the pending message queue onward is compile-checked
@@ -508,28 +508,43 @@ Behaviour is kept as it was, two quirks included and pinned by tests: an image i
 note. Two deliberate differences: image and audio now apply any receipt that arrived before the bubble
 existed (text always did), and an empty image is rejected before reconnecting rather than after.
 
-### 3.2b — roster rules out, restore on `GroupFacade`; the apply stays
+### 3.2b — group apply and roster out; the query passes stay
 
-`GroupRosterRules` (Core) holds the decisions a roster goes through: the detached copy written to the
-store, rebuilding rows from the store with a name for members persisted before one was known,
-putting a restored roster on a row (never over one that is already there — a live reply that landed
-during the read is fresher), matching a wire participant to the member it already was across
-LID / PN / bare phone, and the person keys groups-in-common is written under. The client calls these
-instead of its own copies, so the metadata apply and the restore cannot drift apart.
+**Rules.** `GroupRosterRules` (Core) holds the decisions a roster goes through: the detached copy
+written to the store, rebuilding rows from the store with a name for members persisted before one was
+known, putting a restored roster on a row (never over one that is already there — a live reply that
+landed during the read is fresher), matching a wire participant to the member it already was across
+LID / PN / bare phone, the person keys groups-in-common is written under, and the same-JID-set test
+plus in-place merge that keep the Members list from relaying out (moved from `GroupMetadataReader`).
 
-The restore itself left the client. `GroupRosterRestore` (Core, built for `GroupFacade`) reads
-`IGroupRosterStore`, finds the canonical row in `IChatStateStore.Chats` and announces through
-`NotifyGroupRosterChanged`. It reaches the client through `IGroupRosterHost` for two things: the UI
-dispatcher — which drops a pass when none is attached yet, unlike `IDispatcher`, which runs inline,
-so the port keeps that — and the member label, which still reads the name caches and the self-chat
-wording. `EnsureGroupRosterLoadedFromStoreAsync` left `IWhatsAppService`.
+**Apply.** `GroupMetadataApply` (Core) puts a reply on the rows: the subject into the name cache
+under the placeholder and blacklist rules, the synced label onto the row, announce-only, the
+account's role, the member count, and the roster replace-or-merge followed by the roster and
+membership saves and `NotifyGroupRosterChanged`. A listing is still one UI pass for the whole
+account, then one `SchedulePersist`. The reader now hands it `GroupMetadataSnapshot` /
+`GroupMemberDraft` (Core models) — `ReadListing` for the listing, `ReadMetadata` for one group.
 
-**What stays:** the listing and metadata apply (`ProcessGroupNodes`, `ApplyGroupMetadataFromResponseAsync`,
-`ApplyGroupMembersToChat`) and the unresolved-group pass. They write `ContactNames` under the
-blacklist rules (3.6) and call `SchedulePersist` (3.9b) in the same UI pass that touches the row, and
-splitting that pass is the half-move the risks section warns about. The roster-store and
-membership writes stay beside them for the same reason. `QueryAllGroupsAsync` is also gated on
-replay and sync traffic, which is connection state (phase 4).
+**Restore.** `GroupRosterRestore` (Core) reads `IGroupRosterStore`, finds the canonical row in
+`IChatStateStore.Chats` and fills it if it is still empty.
+
+**The port.** Both flows reach the client through `IGroupHost`, implemented explicitly in
+`WhatsAppService.GroupHost.cs`. Every member is a primitive the client owns for another reason: the
+UI dispatcher (which drops a pass when none is attached yet, unlike `IDispatcher`, which runs
+inline), the contact-name cache and the localized self wording (3.6), the 1:1 avatar lookup, and
+the debounced chat-list save plus the late-attached roster and person stores (3.9b). That is how
+this landed before 3.6 and 3.9b: the UI pass that writes the row, the name cache and the save is not
+split, it is driven from Core and calls back for the writes.
+
+**Owners.** `GroupMetadataApply` is stateless, so there are two: the client builds one for its own
+query passes, and `GroupFacade` gets one from the container. `GroupFacade` now runs
+`RefreshGroupSendPermissionsAsync` itself — query through `IWhatsAppSessionProvider`, read, apply —
+and the restore. Both left `IWhatsAppService`.
+
+**What stays:** `QueryAllGroupsAsync` and the unresolved-group pass. The first is gated on replay
+drain and sync traffic and owns the reuse window; the second paces one IQ per group with progress in
+the sync banner. That is connection and sync state (phase 4 / 3.10), and both have callers inside
+the client. They now only query, read and hand off to the applier. The high-quality group picture
+still forwards into the avatar cluster.
 
 ### 3.6 — the name rules are out; usync is not
 

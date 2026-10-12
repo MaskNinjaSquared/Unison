@@ -192,12 +192,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>Queries metadata for group chats whose display name is still unresolved.</summary>
         Task QueryUnresolvedGroupMetadataAsync(int limit = 25);
 
-        /// <summary>
-        /// Refreshes group announce-only + current user's admin rank from w:g2 metadata
-        /// and applies it to the matching <see cref="ChatItem"/> (for composer lock UI).
-        /// </summary>
-        Task RefreshGroupSendPermissionsAsync(string groupJid);
-
         /// <summary>True while a reconnect/history replay drain is in progress; background refreshes should back off.</summary>
         bool IsReplayDrainActive { get; }
 

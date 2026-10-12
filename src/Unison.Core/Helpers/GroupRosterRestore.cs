@@ -18,13 +18,13 @@ namespace Unison.Core.Helpers
     {
         private const string GroupServer = "@g.us";
 
-        private readonly IGroupRosterHost _host;
+        private readonly IGroupHost _host;
         private readonly IJidResolver _jids;
         private readonly IChatStateStore _chats;
         private readonly IGroupRosterStore _store;
 
         public GroupRosterRestore(
-            IGroupRosterHost host,
+            IGroupHost host,
             IJidResolver jids,
             IChatStateStore chats,
             IGroupRosterStore store)

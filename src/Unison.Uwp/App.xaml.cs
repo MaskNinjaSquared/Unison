@@ -336,14 +336,21 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IDispatcher>(),
                 sp.GetRequiredService<IContactService>(),
                 sp.GetRequiredService<IChatService>()));
-            // The roster restore lives on GroupFacade; the dispatcher and the member labels it
-            // needs are still the client's, reached only through this narrow port.
-            services.AddSingleton<IGroupRosterHost>(
+            // The group apply and the roster restore live in Core and run from GroupFacade; the
+            // dispatcher, the name caches and the persistence they need are still the client's,
+            // reached only through this narrow port.
+            services.AddSingleton<IGroupHost>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IGroupService>(sp => new GroupFacade(
                 sp.GetRequiredService<IWhatsAppService>(),
+                sp.GetRequiredService<IWhatsAppSessionProvider>(),
+                sp.GetRequiredService<IJidResolver>(),
+                new GroupMetadataApply(
+                    sp.GetRequiredService<IGroupHost>(),
+                    sp.GetRequiredService<IJidResolver>(),
+                    sp.GetRequiredService<IChatStateStore>()),
                 new GroupRosterRestore(
-                    sp.GetRequiredService<IGroupRosterHost>(),
+                    sp.GetRequiredService<IGroupHost>(),
                     sp.GetRequiredService<IJidResolver>(),
                     sp.GetRequiredService<IChatStateStore>(),
                     sp.GetRequiredService<IGroupRosterStore>())));

@@ -25,7 +25,7 @@ namespace Unison.Core.Tests.Helpers
                 new GroupMember { Jid = "111@s.whatsapp.net", DisplayName = "Ana" },
                 new GroupMember { Jid = "222@s.whatsapp.net" }
             };
-            fixture.Host.Names["222@s.whatsapp.net"] = "Bia";
+            fixture.Host.MemberNames["222@s.whatsapp.net"] = "Bia";
 
             await fixture.Restore.EnsureLoadedAsync("1203-alias@g.us");
 
@@ -104,7 +104,7 @@ namespace Unison.Core.Tests.Helpers
                 Restore = new GroupRosterRestore(Host, Jids, Chats, Store);
             }
 
-            public FakeHost Host { get; } = new FakeHost();
+            public FakeGroupHost Host { get; } = new FakeGroupHost();
 
             public FakeJids Jids { get; } = new FakeJids();
 
@@ -121,27 +121,6 @@ namespace Unison.Core.Tests.Helpers
                 var chat = new ChatItem { JID = jid };
                 Chats.Chats.Add(chat);
                 return chat;
-            }
-        }
-
-        private sealed class FakeHost : IGroupRosterHost
-        {
-            public Dictionary<string, string> Names { get; } =
-                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-            public int UiPasses { get; private set; }
-
-            public Task RunOnUiThreadAsync(Action action)
-            {
-                UiPasses++;
-                action();
-                return Task.CompletedTask;
-            }
-
-            public string ResolveMemberDisplayName(string jid)
-            {
-                string name;
-                return Names.TryGetValue(jid, out name) ? name : jid;
             }
         }
 

@@ -273,6 +273,111 @@ namespace Unison.Core.Helpers
             return null;
         }
 
+        /// <summary>
+        /// True when both sides hold the same set of member JIDs, which lets the caller merge
+        /// fields onto the existing instances instead of replacing the collection and forcing
+        /// the members list to relayout.
+        /// </summary>
+        public static bool RosterJidSetsEqual(
+            IDictionary<string, GroupMember> previousByJid,
+            IList<GroupMember> next)
+        {
+            if (previousByJid == null || next == null || previousByJid.Count != next.Count)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < next.Count; i++)
+            {
+                GroupMember member = next[i];
+                if (member == null ||
+                    string.IsNullOrWhiteSpace(member.Jid) ||
+                    !previousByJid.ContainsKey(member.Jid))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Copies incoming fields onto the matching existing members. Blank incoming values are
+        /// skipped rather than written: a metadata response that omits a phone number is not
+        /// telling us the member lost one.
+        /// </summary>
+        public static void MergeInPlace(IList<GroupMember> existing, IList<GroupMember> incoming)
+        {
+            if (existing == null || incoming == null)
+            {
+                return;
+            }
+
+            var byJid = new Dictionary<string, GroupMember>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < incoming.Count; i++)
+            {
+                GroupMember src = incoming[i];
+                if (src == null || string.IsNullOrWhiteSpace(src.Jid))
+                {
+                    continue;
+                }
+
+                byJid[src.Jid] = src;
+            }
+
+            for (int i = 0; i < existing.Count; i++)
+            {
+                GroupMember dest = existing[i];
+                if (dest == null || string.IsNullOrWhiteSpace(dest.Jid))
+                {
+                    continue;
+                }
+
+                GroupMember src;
+                if (!byJid.TryGetValue(dest.Jid, out src) || src == null)
+                {
+                    continue;
+                }
+
+                if (!string.IsNullOrWhiteSpace(src.PhoneNumber))
+                {
+                    dest.PhoneNumber = src.PhoneNumber;
+                }
+
+                if (!string.IsNullOrWhiteSpace(src.Lid))
+                {
+                    dest.Lid = src.Lid;
+                }
+
+                dest.Role = src.Role;
+
+                if (!string.IsNullOrWhiteSpace(src.DisplayName))
+                {
+                    dest.DisplayName = src.DisplayName;
+                }
+
+                if (!string.IsNullOrWhiteSpace(src.AvatarUrl))
+                {
+                    dest.AvatarUrl = src.AvatarUrl;
+                }
+
+                if (src.AvatarFetchedAtUtc.HasValue)
+                {
+                    dest.AvatarFetchedAtUtc = src.AvatarFetchedAtUtc;
+                }
+
+                if (src.AvatarFetchFailedAtUtc.HasValue)
+                {
+                    dest.AvatarFetchFailedAtUtc = src.AvatarFetchFailedAtUtc;
+                }
+
+                if (!string.IsNullOrWhiteSpace(src.AvatarFetchFailureReason))
+                {
+                    dest.AvatarFetchFailureReason = src.AvatarFetchFailureReason;
+                }
+            }
+        }
+
         private static bool MatchesCanonical(string jid, string canonical, IJidResolver jids)
         {
             if (string.IsNullOrWhiteSpace(jid))

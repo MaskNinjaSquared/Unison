@@ -235,6 +235,62 @@ namespace Unison.Core.Tests.Helpers
             Assert.Null(GroupRosterRules.FindPrevious(null, null, "111@s.whatsapp.net", null, null, new FakeJids()));
         }
 
+        [Fact]
+        public void RosterJidSetsEqual_needs_the_same_jids_and_count()
+        {
+            var previous = ByJid(Previous(
+                new GroupMember { Jid = "111@s.whatsapp.net" },
+                new GroupMember { Jid = "222@s.whatsapp.net" }));
+
+            Assert.True(GroupRosterRules.RosterJidSetsEqual(previous, new List<GroupMember>
+            {
+                new GroupMember { Jid = "222@S.WHATSAPP.NET" },
+                new GroupMember { Jid = "111@s.whatsapp.net" }
+            }));
+            Assert.False(GroupRosterRules.RosterJidSetsEqual(previous, new List<GroupMember>
+            {
+                new GroupMember { Jid = "111@s.whatsapp.net" }
+            }));
+            Assert.False(GroupRosterRules.RosterJidSetsEqual(previous, new List<GroupMember>
+            {
+                new GroupMember { Jid = "111@s.whatsapp.net" },
+                new GroupMember { Jid = "333@s.whatsapp.net" }
+            }));
+            Assert.False(GroupRosterRules.RosterJidSetsEqual(null, new List<GroupMember>()));
+        }
+
+        [Fact]
+        public void MergeInPlace_writes_only_what_the_reply_actually_carried()
+        {
+            var fetched = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            var dest = new GroupMember
+            {
+                Jid = "111@s.whatsapp.net",
+                PhoneNumber = "111",
+                Lid = "999@lid",
+                DisplayName = "Ana",
+                Role = GroupParticipantRole.Admin,
+                AvatarUrl = "old.jpg",
+                AvatarFetchedAtUtc = fetched,
+                AvatarFetchFailureReason = "timeout"
+            };
+            var existing = new List<GroupMember> { dest };
+
+            GroupRosterRules.MergeInPlace(existing, new List<GroupMember>
+            {
+                new GroupMember { Jid = "111@s.whatsapp.net", Role = GroupParticipantRole.Member, DisplayName = "Ana Paula" }
+            });
+
+            Assert.Same(dest, existing[0]);
+            Assert.Equal("111", dest.PhoneNumber);
+            Assert.Equal("999@lid", dest.Lid);
+            Assert.Equal("Ana Paula", dest.DisplayName);
+            Assert.Equal(GroupParticipantRole.Member, dest.Role);
+            Assert.Equal("old.jpg", dest.AvatarUrl);
+            Assert.Equal(fetched, dest.AvatarFetchedAtUtc);
+            Assert.Equal("timeout", dest.AvatarFetchFailureReason);
+        }
+
         private static List<GroupMember> Previous(params GroupMember[] members) => members.ToList();
 
         private static Dictionary<string, GroupMember> ByJid(List<GroupMember> members) =>

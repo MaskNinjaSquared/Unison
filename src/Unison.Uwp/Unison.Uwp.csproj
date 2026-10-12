@@ -219,7 +219,7 @@
     <Compile Include="Services\WhatsApp\WhatsAppService.Receipts.cs" />
     <Compile Include="Services\WhatsApp\WhatsAppService.IncomingPump.cs" />
     <Compile Include="Services\WhatsApp\WhatsAppService.OutgoingHost.cs" />
-    <Compile Include="Services\WhatsApp\WhatsAppService.GroupRosterHost.cs" />
+    <Compile Include="Services\WhatsApp\WhatsAppService.GroupHost.cs" />
     <Compile Include="Services\WhatsApp\Diagnostics\DebugSendService.cs" />
     <Compile Include="Services\LocalContactsService.cs" />
     <Compile Include="Services\WindowsContactListPublisher.cs" />

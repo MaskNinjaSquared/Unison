@@ -224,6 +224,9 @@ namespace Unison.Uwp.Services.WhatsApp
 
         /// <summary>The alias table as the Core rules read it. Built after <see cref="JidAlias"/>.</summary>
         private readonly IJidResolver _jids;
+
+        /// <summary>Puts listing and metadata replies onto the rows for this client's own query passes.</summary>
+        private readonly GroupMetadataApply _groupApply;
         private IMessageService _messageService;
         private IChatService _chatService;
         private IContactService _contactService;
@@ -1710,6 +1713,7 @@ namespace Unison.Uwp.Services.WhatsApp
             var jidResolver = new JidResolver(JidAlias, this);
             _jids = jidResolver;
             _groupMetadata = new GroupMetadataReader(jidResolver);
+            _groupApply = new GroupMetadataApply(this, jidResolver, _chatState);
             _receipts = new ReceiptReader(jidResolver);
             _chatState.Chats.CollectionChanged += (s, e) => InvalidateChatRowIndex();
         }
@@ -3800,8 +3804,6 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         Task IWhatsAppService.QueryUnresolvedGroupMetadataAsync(int limit) => QueryUnresolvedGroupMetadataAsync(limit);
-
-        Task IWhatsAppService.RefreshGroupSendPermissionsAsync(string groupJid) => RefreshGroupSendPermissionsAsync(groupJid);
 
         private string FindExistingAvatarUrl(string jid, string phone, string lid)
         {

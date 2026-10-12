@@ -4,6 +4,17 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Group apply — moved to Core, refresh on `GroupFacade` (3.2b)
+
+Putting a w:g2 listing or metadata reply on the chat rows no longer runs inside `WhatsAppService`.
+`GroupMetadataApply` (Core) owns the subject cache, the synced label, announce-only, role, member
+count and the roster replace-or-merge with its saves, and still applies a whole listing in one UI
+pass. `GroupFacade` runs the send-permission refresh itself; `RefreshGroupSendPermissionsAsync`
+left `IWhatsAppService`. The reader returns `GroupMetadataSnapshot` (Core). The client port grew
+from `IGroupRosterHost` into `IGroupHost`. The query passes stay in the client.
+
+---
+
 ## Group roster — rules out, restore on `GroupFacade` (3.2b)
 
 `GroupRosterRules` (Core) owns the roster copy for the store, the rebuild from the store, the
