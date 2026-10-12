@@ -6,15 +6,16 @@
 //
 // The send-permission refresh and the roster restore run here: the w:g2 query
 // goes out through the session, GroupMetadataReader reads it, and the Core flows
-// (GroupMetadataApply, GroupRosterRestore) put it on the row. The high-quality
-// picture fetch still forwards into the client's avatar cluster. The listing and the
-// per-group fallback run here too: one GroupQueryWindow, so the name refresh and the
-// background pass cannot each start a pass of their own.
+// (GroupMetadataApply, GroupRosterRestore) put it on the row. The listing, the
+// per-group fallback and the full-size group picture run here too. Member pictures
+// stay with the client's avatar cluster. One GroupQueryWindow, so the name refresh
+// and the background pass cannot each start a listing of their own.
 // =============================================================================
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Unison.Baileys.Protocol;
 using Unison.Core.Contracts;
@@ -23,6 +24,7 @@ using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.Uwp.Services.Socket;
+using Unison.Uwp.Services.WhatsApp.Contacts;
 
 namespace Unison.Uwp.Services.WhatsApp.Groups
 {
@@ -40,6 +42,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
         private readonly GroupMetadataReader _reader;
         private readonly GroupMetadataApply _apply;
         private readonly GroupRosterRestore _rosterRestore;
+        private readonly AvatarFetcher _avatars;
         private readonly GroupQueryWindow _queryWindow = new GroupQueryWindow();
 
         internal GroupFacade(
@@ -49,7 +52,8 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
             IChatStateStore chats,
             IJidResolver jids,
             GroupMetadataApply apply,
-            GroupRosterRestore rosterRestore)
+            GroupRosterRestore rosterRestore,
+            AvatarFetcher avatars)
         {
             _client = client ?? throw new ArgumentNullException(nameof(client));
             _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
@@ -58,6 +62,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _apply = apply ?? throw new ArgumentNullException(nameof(apply));
             _rosterRestore = rosterRestore ?? throw new ArgumentNullException(nameof(rosterRestore));
+            _avatars = avatars ?? throw new ArgumentNullException(nameof(avatars));
             _reader = new GroupMetadataReader(jids);
         }
 
@@ -97,9 +102,25 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
             return _rosterRestore.EnsureLoadedAsync(groupJid);
         }
 
-        public Task EnsureHighQualityGroupAvatarAsync(ChatItem chat)
+        public async Task EnsureHighQualityGroupAvatarAsync(ChatItem chat)
         {
-            return chat == null ? Task.CompletedTask : _client.EnsureHighQualityGroupAvatarAsync(chat);
+            if (chat == null || !GroupHighAvatar.ShouldFetch(chat.IsGroup, chat.JID, chat.AvatarHighUrl))
+            {
+                return;
+            }
+
+            string alias;
+            _jids.TryGetAlias(chat.JID, out alias);
+            string localUri = await _avatars.FetchHighResolutionAsync(
+                chat.JID,
+                ChatPinStoreKeys.For(chat.JID, _jids.GetCanonicalJid(chat.JID), alias),
+                CancellationToken.None);
+            if (string.IsNullOrWhiteSpace(localUri))
+            {
+                return;
+            }
+
+            await _host.RunOnUiThreadAsync(() => chat.AvatarHighUrl = localUri);
         }
 
         public Task QueryAllGroupsAsync() => QueryAllGroupsAsync(false);

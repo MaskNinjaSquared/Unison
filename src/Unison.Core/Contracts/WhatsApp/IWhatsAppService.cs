@@ -241,11 +241,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         void ApplyGroupMemberAvatarOutcome(string memberJid, GroupMemberAvatarFetchResult result);
 
-        /// <summary>
-        /// Baileys <c>type=image</c> (full-size) for a group, cached as <c>*_high.jpg</c>.
-        /// No-op for 1:1 chats or when the high file is already on disk.
-        /// </summary>
-        Task EnsureHighQualityGroupAvatarAsync(ChatItem chat);
         void MarkAvatarImageLoadFailed(ChatItem chat, string reason);
         void RequestAvatarRefresh(ChatItem chat, bool force = false);
         void SetActiveChatJid(string jid);

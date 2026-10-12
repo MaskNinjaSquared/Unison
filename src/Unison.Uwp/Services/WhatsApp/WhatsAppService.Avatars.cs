@@ -54,48 +54,10 @@ namespace Unison.Uwp.Services.WhatsApp
             var lookupCandidates = GetAvatarLookupCandidates(chat);
             var result = await _avatarFetcher.FetchPreviewAsync(lookupCandidates, token);
             await ApplyAvatarResultAsync(chat, result, token);
-            if (fetchHighQuality)
+            if (fetchHighQuality && _groupService != null)
             {
-                _ = EnsureHighQualityGroupAvatarAsync(chat);
+                _ = _groupService.EnsureHighQualityGroupAvatarAsync(chat);
             }
-        }
-
-        public Task EnsureHighQualityGroupAvatarAsync(ChatItem chat)
-        {
-            return EnsureHighQualityGroupAvatarCoreAsync(chat);
-        }
-
-        private async Task EnsureHighQualityGroupAvatarCoreAsync(ChatItem chat)
-        {
-            if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
-            {
-                return;
-            }
-
-            // Both interfaces declare this a no-op for 1:1 chats and the guard was missing,
-            // so every visible direct chat spent a second CDN round trip on a file nothing
-            // reads: the cache hydration that restores AvatarHighUrl between sessions is
-            // itself group-only, so a contact's high file was fetched and then forgotten.
-            if (!chat.IsGroup)
-            {
-                return;
-            }
-
-            if (!string.IsNullOrWhiteSpace(chat.AvatarHighUrl))
-            {
-                return;
-            }
-
-            string localUri = await _avatarFetcher.FetchHighResolutionAsync(
-                chat.JID,
-                GetAvatarLookupCandidates(chat),
-                CancellationToken.None);
-            if (string.IsNullOrWhiteSpace(localUri))
-            {
-                return;
-            }
-
-            await RunOnUiThreadAsync(() => chat.AvatarHighUrl = localUri);
         }
 
         public Task<string> GetProfilePictureUrlAsync(string jid, string type = "preview")

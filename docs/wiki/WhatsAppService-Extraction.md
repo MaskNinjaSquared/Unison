@@ -138,7 +138,7 @@ the order.
 
 ### Facades still depend on the client
 
-`ContactFacade`, `MessageFacade`, `ChatFacade`, `GroupFacade`, `HistoryFacade`, `ProfileFacade`, `StatusFacade`, `ConnectionFacade` take `IWhatsAppService` (or `AttachWhatsAppService`). Policy is already on the façade; **primitives** (fetch avatar, send bytes, persist, canonical JID) still run inside the client. Group send-permission refresh and roster restore are the exception: they run in Core and call back through `IGroupHost`. `GroupFacade` still asks the client for the high-quality group picture.
+`ContactFacade`, `MessageFacade`, `ChatFacade`, `GroupFacade`, `HistoryFacade`, `ProfileFacade`, `StatusFacade`, `ConnectionFacade` take `IWhatsAppService` (or `AttachWhatsAppService`). Policy is already on the façade; **primitives** (fetch avatar, send bytes, persist, canonical JID) still run inside the client. Group send-permission refresh and roster restore are the exception: they run in Core and call back through `IGroupHost`. The full-size group picture is fetched by `GroupFacade` too. Member pictures still go through the client.
 
 Helpers under `Contacts/` (`ContactNameResolver`, `ChatAvatarPolicy`, `GroupRosterPolicy`, `AddressBookOverlay`) are the largest non-UI consumers of client members (`RunOnUiThreadAsync`, `SchedulePersistPublic`, `RaiseSyncStatus`, `FetchAndApplyAvatarAsync`, `FetchGroupMemberAvatarAsync`, `IsTransportReady`, …). Extracting avatars/names is mostly moving those primitives so the helpers stop needing the god client.
 
@@ -173,7 +173,7 @@ Self-contained first. List/persist last.
 | 3.1b | Avatar fetch (done) | `AvatarFetcher`, behind `IUsyncGate` |
 | 3.1c | Avatar apply to the row (done) | `ChatAvatarOutcome` (Core); fallback + fetch stay in the client |
 | 3.2a | Group protocol reading (done) | `GroupMetadataReader` |
-| 3.2b | Group apply + roster persist | **Done.** Listing, unresolved-metadata fallback, metadata apply and roster restore run from `GroupFacade` (`GroupQueryWindow`, `GroupMetadataApply`, `GroupRosterRestore`) over `IGroupHost`. High-quality group picture still forwards |
+| 3.2b | Group apply + roster persist | **Done.** Listing, unresolved-metadata fallback, metadata apply, roster restore and the full-size group picture run from `GroupFacade`. Member pictures stay in the client |
 | 3.3a | Media cache + file naming (done) | `IMediaCache` / `MediaCacheService`, `MediaFileExtensions` |
 | 3.3b | Derived renditions — transcode / poster / WebP (done) | `MediaDerivationService` |
 | 3.3c | Download reading (done) | `MediaDownloadPlan` (Core). Orchestration stays — see below |
@@ -536,16 +536,9 @@ the debounced chat-list save plus the late-attached roster and person stores (3.
 this landed before 3.6 and 3.9b: the UI pass that writes the row, the name cache and the save is not
 split, it is driven from Core and calls back for the writes.
 
-**Owners.** `GroupMetadataApply` is stateless, so there are two: the client builds one for its own
-query passes, and `GroupFacade` gets one from the container. `GroupFacade` now runs
-`RefreshGroupSendPermissionsAsync` itself — query through `IWhatsAppSessionProvider`, read, apply —
-and the restore. Both left `IWhatsAppService`.
+**Owners.** `GroupMetadataApply` is stateless. `GroupFacade` holds the one that serves the listing, the send-permission refresh and the unresolved pass, plus `GroupQueryWindow` so those callers share the two minutes. The client keeps a second applier for the receipt path, which still applies a metadata reply it fetched itself. The full-size group picture is fetched by the façade.
 
-**What stays:** the high-quality group picture, which still forwards into the avatar cluster. The
-listing and the unresolved-group pass moved with the rest: `GroupFacade` owns them, gated on
-`IsReplayDrainActive` and `ShouldDeferAvatarFetch`, paced and bannered the way they were, and held
-to one `GroupQueryWindow` so the name refresh and the background pass share the two minutes. The
-client's own background pass calls back through `AttachGroupService`.
+**What stays:** member pictures. `FetchGroupMemberAvatarAsync` still runs in the client, because it shares the usync gate and the picture cache with the 1:1 avatar pass. The full-size group picture left with the rest: `GroupFacade` asks `AvatarFetcher` and writes `AvatarHighUrl` on the UI thread, and a direct chat still does not take that round trip (`GroupHighAvatar`).
 
 ### 3.6 — the name rules are out; usync is not
 

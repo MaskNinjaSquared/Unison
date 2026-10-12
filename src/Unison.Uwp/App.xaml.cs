@@ -356,7 +356,8 @@ namespace Unison.Uwp
                     sp.GetRequiredService<IGroupHost>(),
                     sp.GetRequiredService<IJidResolver>(),
                     sp.GetRequiredService<IChatStateStore>(),
-                    sp.GetRequiredService<IGroupRosterStore>())));
+                    sp.GetRequiredService<IGroupRosterStore>()),
+                sp.GetRequiredService<AvatarFetcher>()));
             services.AddSingleton<ILiveTilesService>(_ => LiveTilesService.Instance);
             services.AddSingleton<IShortcutService, ShortcutService>();
             services.AddSingleton<INotificationService>(sp =>

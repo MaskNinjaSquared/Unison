@@ -4,6 +4,15 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Group picture — full size on `GroupFacade` (3.2b)
+
+The full-size group picture no longer runs inside `WhatsAppService`. `GroupFacade` fetches it
+through `AvatarFetcher` and writes `AvatarHighUrl` on the UI thread. A direct chat still skips
+the round trip. `EnsureHighQualityGroupAvatarAsync` left `IWhatsAppService`. Member pictures stay
+in the client.
+
+---
+
 ## Group listing — on `GroupFacade` (3.2b)
 
 `QueryAllGroupsAsync` and the per-group metadata fallback left `WhatsAppService`. `GroupFacade`
