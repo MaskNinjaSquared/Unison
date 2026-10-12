@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -1092,5 +1092,29 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
   </data>
   <data name="Debug_RuntimeDialog.Title" xml:space="preserve">
     <value>Diagnostica runtime</value>
+  </data>
+  <data name="Debug_CopyReport.[using:Windows.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Copy to clipboard</value>
+  </data>
+  <data name="Debug_CopyReport.AutomationProperties.Name" xml:space="preserve">
+    <value>Copy to clipboard</value>
+  </data>
+  <data name="Debug_RequestFullHistory.Content" xml:space="preserve">
+    <value>Request Full History On-demand</value>
+  </data>
+  <data name="Debug_FullHistoryRequesting" xml:space="preserve">
+    <value>Requesting full history…</value>
+  </data>
+  <data name="Debug_FullHistoryRequested" xml:space="preserve">
+    <value>Full history on-demand requested.</value>
+  </data>
+  <data name="Debug_FullHistorySkipped" xml:space="preserve">
+    <value>Full history request was not sent (socket not ready or skipped).</value>
+  </data>
+  <data name="Debug_FullHistoryUnavailable" xml:space="preserve">
+    <value>History service unavailable.</value>
+  </data>
+  <data name="Debug_FullHistoryFailed" xml:space="preserve">
+    <value>Full history request failed: </value>
   </data>
 </root>

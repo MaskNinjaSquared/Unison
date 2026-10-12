@@ -96,5 +96,12 @@ namespace Unison.Core.Contracts.WhatsApp
         /// stays linked; only what we hold locally is thrown away.
         /// </summary>
         Task ResyncConversationsAsync(IProgress<ConversationResyncPhase> progress = null);
+
+        /// <summary>
+        /// Asks the phone for a FULL_HISTORY_SYNC_ON_DEMAND lot without wiping local data.
+        /// Debug / catch-up repair. When <paramref name="force"/> is true, clears a stuck
+        /// in-flight gate so another request can go out.
+        /// </summary>
+        Task<bool> RequestFullHistoryOnDemandAsync(string reason = null, bool force = false);
     }
 }

@@ -21,6 +21,7 @@ namespace Unison.Core.ViewModels
         private readonly IConnectionService _connectionService;
         private readonly IDialogService _dialogService;
         private readonly IStringResources _strings;
+        private readonly IHistoryService _history;
 
         private bool _isSessionLoggingEnabled;
         private bool _isVerboseLoggingEnabled;
@@ -38,12 +39,14 @@ namespace Unison.Core.ViewModels
             IDiagnosticsConsole console,
             IConnectionService connectionService,
             IDialogService dialogService,
-            IStringResources strings)
+            IStringResources strings,
+            IHistoryService history)
         {
             _console = console;
             _connectionService = connectionService;
             _dialogService = dialogService;
             _strings = strings;
+            _history = history;
 
             _isSessionLoggingEnabled = console.IsCaptureEnabled;
             _isVerboseLoggingEnabled = console.IsVerboseLoggingEnabled;
@@ -64,6 +67,7 @@ namespace Unison.Core.ViewModels
             RefreshRuntimeCommand = new RelayCommand(RefreshRuntimeHealth);
             SaveRuntimeReportCommand = new RelayCommand(async () => await SaveRuntimeReportAsync());
             ClearRuntimeLogCommand = new RelayCommand(async () => await ClearRuntimeLogAsync());
+            RequestFullHistoryCommand = new RelayCommand(async () => await RequestFullHistoryAsync());
             RunSocketSliceCommand = new RelayCommand(async () => await RunSocketSliceAsync());
             StopSocketSliceCommand = new RelayCommand(async () => await StopSocketSliceAsync());
 
@@ -223,6 +227,9 @@ namespace Unison.Core.ViewModels
         /// <summary>Clears the runtime diagnostics journal and refreshes the UI.</summary>
         public ICommand ClearRuntimeLogCommand { get; }
 
+        /// <summary>Asks the phone for FULL_HISTORY_SYNC_ON_DEMAND (no wipe).</summary>
+        public ICommand RequestFullHistoryCommand { get; }
+
         /// <summary>
         /// Runs the new Unison.Socket stack against the real servers on throwaway credentials.
         /// Nothing in the app depends on the result; this only proves the rewrite works.
@@ -323,6 +330,40 @@ namespace Unison.Core.ViewModels
         {
             await _console.ClearRuntimeLogAsync();
             RuntimeExportStatusText = _strings.Get("Debug_RuntimeCleared", "Runtime log cleared.");
+            RefreshRuntimeHealth();
+        }
+
+        private async Task RequestFullHistoryAsync()
+        {
+            if (_history == null)
+            {
+                RuntimeExportStatusText = _strings.Get(
+                    "Debug_FullHistoryUnavailable",
+                    "History service unavailable.");
+                return;
+            }
+
+            RuntimeExportStatusText = _strings.Get(
+                "Debug_FullHistoryRequesting",
+                "Requesting full history…");
+            try
+            {
+                bool ok = await _history.RequestFullHistoryOnDemandAsync(
+                    "debug-view",
+                    force: true).ConfigureAwait(false);
+                RuntimeExportStatusText = ok
+                    ? _strings.Get("Debug_FullHistoryRequested", "Full history on-demand requested.")
+                    : _strings.Get(
+                        "Debug_FullHistorySkipped",
+                        "Full history request was not sent (socket not ready or skipped).");
+            }
+            catch (Exception ex)
+            {
+                RuntimeExportStatusText = _strings.Get(
+                    "Debug_FullHistoryFailed",
+                    "Full history request failed: ") + ex.Message;
+            }
+
             RefreshRuntimeHealth();
         }
 

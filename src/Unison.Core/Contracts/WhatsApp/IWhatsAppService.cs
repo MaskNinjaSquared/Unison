@@ -115,6 +115,12 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         Task ClearConversationCachesAsync();
 
+        /// <summary>
+        /// Re-applies pin/mute/archive from app-state even when LT-hash is already current.
+        /// Call after a local conversation wipe — otherwise <c>pin_v1</c> is never re-emitted.
+        /// </summary>
+        Task ResyncChatListAppStateFlagsAsync();
+
         void Disconnect();
 
         /// <summary>
@@ -334,6 +340,13 @@ namespace Unison.Core.Contracts.WhatsApp
 
         Task<bool> EnsureHistoryOnDemandAsync(string jid, int count);
         bool IsHistoryOnDemandPending(string jid);
+
+        /// <summary>
+        /// Asks the phone for a FULL_HISTORY_SYNC_ON_DEMAND lot (no local wipe).
+        /// Prefer <see cref="IHistoryService.RequestFullHistoryOnDemandAsync"/> from UI.
+        /// When <paramref name="force"/> is true, clears any in-flight session gate first.
+        /// </summary>
+        Task<bool> RequestFullHistoryOnDemandAsync(string reason = null, bool force = false);
 
         Task<ChatMessage> SendTextMessageAsync(string jid, string text);
         Task SendImageAsync(string jid, byte[] imageBytes, string caption);

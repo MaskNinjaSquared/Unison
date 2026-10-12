@@ -106,7 +106,9 @@
                             <Button x:Uid="Debug_SaveReport" Content="Save Diagnostic Report"
                                     Command="{Binding SaveRuntimeReportCommand}" Margin="0,0,8,0"/>
                             <Button x:Uid="Debug_ClearRuntime" Content="Clear Runtime Log"
-                                    Command="{Binding ClearRuntimeLogCommand}"/>
+                                    Command="{Binding ClearRuntimeLogCommand}" Margin="0,0,8,0"/>
+                            <Button x:Uid="Debug_RequestFullHistory" Content="Request Full History On-demand"
+                                    Command="{Binding RequestFullHistoryCommand}"/>
                         </StackPanel>
                         <TextBlock Text="{Binding RuntimeExportStatusText}" FontSize="12" Opacity="0.7"
                                    Margin="12,8,12,0" TextWrapping="Wrap"

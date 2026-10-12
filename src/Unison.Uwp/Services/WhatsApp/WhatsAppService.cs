@@ -935,7 +935,8 @@ namespace Unison.Uwp.Services.WhatsApp
 
         /// <summary>
         /// Stamps progress on the in-flight FULL_HISTORY catch-up so the idle watchdog does not
-        /// abort while tips/chunks are still arriving on Mobile.
+        /// abort while tips/chunks are still arriving on Mobile. ACK/banner only refresh the idle
+        /// clock; they must not bump <see cref="HistoryOnDemandRequestState.ProgressSignalCount"/>.
         /// </summary>
         private void NoteFullHistoryCatchUpProgress(string reason)
         {
@@ -949,6 +950,7 @@ namespace Unison.Uwp.Services.WhatsApp
             DateTime nowUtc = DateTime.UtcNow;
             string requestId;
             int signalCount;
+            bool countsAsLot = HistoryCatchUpProgressSignal.CountsAsLotProgress(reason);
             lock (_historyOnDemandLock)
             {
                 requestId = _fullHistoryOnDemandRequestId;
@@ -972,7 +974,11 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 state.LastProgressUtc = nowUtc;
                 state.LastProgressReason = reason ?? string.Empty;
-                state.ProgressSignalCount++;
+                if (countsAsLot)
+                {
+                    state.ProgressSignalCount++;
+                }
+
                 signalCount = state.ProgressSignalCount;
             }
 
@@ -981,6 +987,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 "catch-up-progress",
                 "requestId=" + (requestId ?? "<none>") +
                 "; signal=" + signalCount +
+                "; lotProgress=" + countsAsLot +
                 "; reason=" + (reason ?? string.Empty));
         }
 
@@ -1404,7 +1411,9 @@ namespace Unison.Uwp.Services.WhatsApp
             System.Collections.Generic.IList<string> mentionedJids = null,
             bool? isFromMe = null,
             MessageSendState? sendState = null,
-            string messageId = null)
+            string messageId = null,
+            string participantJid = null,
+            string senderName = null)
         {
             return LiveChatPreviewApplier.ApplyIfNewer(
                 chat,
@@ -1417,7 +1426,9 @@ namespace Unison.Uwp.Services.WhatsApp
                 isFromMe,
                 sendState,
                 messageId,
-                LocalizedStrings.Get("Common_Yesterday", "Yesterday"));
+                LocalizedStrings.Get("Common_Yesterday", "Yesterday"),
+                participantJid,
+                senderName);
         }
 
         private static int CompareChatsForDisplay(ChatItem left, ChatItem right) =>
@@ -1987,6 +1998,25 @@ namespace Unison.Uwp.Services.WhatsApp
                     _fullHistoryRepairRequestId = null;
                 }
             });
+        }
+
+        /// <inheritdoc />
+        public async Task ResyncChatListAppStateFlagsAsync()
+        {
+            try
+            {
+                var bridge = _socket as SocketBridge;
+                if (bridge == null)
+                {
+                    return;
+                }
+
+                await bridge.ResyncAppStateReportingAllAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[WhatsAppService] ResyncChatListAppStateFlags failed: " + ex.Message);
+            }
         }
 
         /// <summary>
@@ -2730,8 +2760,21 @@ namespace Unison.Uwp.Services.WhatsApp
                                     replacement.Timestamp,
                                     true,
                                     ChatPreviewNormalizer.InferKindFromMessage(replacement),
-                                    ChatPreviewNormalizer.FormatListAuthorPrefix(replacement, isGroup, SelfListDisplayName()),
-                                    replacement.MentionedJids);
+                                    ChatPreviewNormalizer.FormatListAuthorPrefix(
+                                        replacement,
+                                        isGroup,
+                                        SelfListDisplayName(),
+                                        GetCanonicalJid(replacement.ParticipantJid)),
+                                    replacement.MentionedJids,
+                                    replacement.IsFromMe,
+                                    HistoryLiveMessageMapper.FromStatus(replacement.Status, replacement.IsFromMe),
+                                    replacement.Id,
+                                    isGroup
+                                        ? ParticipantStripIdentity.PreferForDisplay(
+                                            replacement.ParticipantJid,
+                                            GetCanonicalJid(replacement.ParticipantJid))
+                                        : null,
+                                    isGroup && !replacement.IsFromMe ? replacement.SenderName : null);
                             }
                             else
                             {
@@ -2919,16 +2962,32 @@ namespace Unison.Uwp.Services.WhatsApp
 
                     bool isGroup = canonical.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
                     string preview = ChatPreviewNormalizer.FormatListPreview(best, isGroup);
+                    string stripParticipant = isGroup
+                        ? ParticipantStripIdentity.PreferForDisplay(
+                            best.ParticipantJid,
+                            GetCanonicalJid(best.ParticipantJid))
+                        : null;
                     string author = ChatPreviewNormalizer.FormatListAuthorPrefix(
                         best,
                         isGroup,
-                        SelfListDisplayName());
+                        SelfListDisplayName(),
+                        stripParticipant);
 
                     foreach (var chat in GetChatRowsForCanonicalJid(canonical))
                     {
                         // Tip from DB/memory by TimestampUtc; swap when MessageId differs (or body).
                         if (ChatPreviewTip.IsAlreadyShowing(chat, best, preview))
                         {
+                            // Same tip body — still promote a bubble-resolved author onto the strip.
+                            if (isGroup)
+                            {
+                                LiveChatPreviewApplier.ApplyAuthorParts(
+                                    chat,
+                                    stripParticipant,
+                                    best.IsFromMe ? null : best.SenderName,
+                                    author);
+                            }
+
                             continue;
                         }
 
@@ -2945,7 +3004,9 @@ namespace Unison.Uwp.Services.WhatsApp
                             best.MentionedJids,
                             best.IsFromMe,
                             HistoryLiveMessageMapper.FromStatus(best.Status, best.IsFromMe),
-                            best.Id);
+                            best.Id,
+                            stripParticipant,
+                            isGroup && !best.IsFromMe ? best.SenderName : null);
 
                         // Schema v4 upgrade: old preview rows have no LastMessageId. Stamp it from
                         // history_message without a WhatsApp history resync when the tip already matches.
@@ -4991,6 +5052,35 @@ namespace Unison.Uwp.Services.WhatsApp
         private Task<bool> RequestFullHistoryBootstrapIfNeededAsync(string reason)
         {
             return RequestFullHistoryOnDemandTrackedAsync(reason, false);
+        }
+
+        /// <inheritdoc />
+        public Task<bool> RequestFullHistoryOnDemandAsync(string reason = null, bool force = false)
+        {
+            if (force)
+            {
+                lock (_historyOnDemandLock)
+                {
+                    if (!string.IsNullOrWhiteSpace(_fullHistoryOnDemandRequestId))
+                    {
+                        _historyOnDemandRequestById.Remove(_fullHistoryOnDemandRequestId);
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(_fullHistoryRepairRequestId) &&
+                        !string.Equals(_fullHistoryRepairRequestId, _fullHistoryOnDemandRequestId, StringComparison.Ordinal))
+                    {
+                        _historyOnDemandRequestById.Remove(_fullHistoryRepairRequestId);
+                    }
+
+                    _fullHistoryOnDemandRequestedThisSession = false;
+                    _fullHistoryOnDemandRequestId = null;
+                    _fullHistoryRepairRequestId = null;
+                }
+            }
+
+            return RequestFullHistoryOnDemandTrackedAsync(
+                string.IsNullOrWhiteSpace(reason) ? "manual-full-history" : reason,
+                isFreshnessRepair: true);
         }
 
         /// <summary>

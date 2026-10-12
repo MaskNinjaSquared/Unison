@@ -749,9 +749,28 @@ namespace Unison.Uwp.Services.WhatsApp.History
                 Debug.WriteLine("[ConversationResync] Could not clear notifications: " + ex.Message);
             }
 
+            // LT-hash still says app-state is current, so a normal sync would skip pin_v1.
+            // Force a snapshot re-report so pins/mutes land again on the rebuilt list.
+            try
+            {
+                await _appState.ResyncChatListAppStateFlagsAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ConversationResync] App-state flag resync failed: " + ex.Message);
+            }
+
             // Set before the request rather than after it: if the app dies between the wipe and
             // the answer, this is what stops it from starting up permanently empty.
             TrySetForceHistoryRepair(true);
+        }
+
+        /// <inheritdoc />
+        public Task<bool> RequestFullHistoryOnDemandAsync(string reason = null, bool force = false)
+        {
+            return _appState.RequestFullHistoryOnDemandAsync(
+                string.IsNullOrWhiteSpace(reason) ? "ui-full-history-on-demand" : reason,
+                force);
         }
 
         /// <summary>

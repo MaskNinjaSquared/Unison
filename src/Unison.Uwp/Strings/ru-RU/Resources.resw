@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
     <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
@@ -1033,5 +1033,29 @@
   </data>
   <data name="Debug_RuntimeDialog.Title" xml:space="preserve">
     <value>Диагностика среды выполнения</value>
+  </data>
+  <data name="Debug_CopyReport.[using:Windows.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Copy to clipboard</value>
+  </data>
+  <data name="Debug_CopyReport.AutomationProperties.Name" xml:space="preserve">
+    <value>Copy to clipboard</value>
+  </data>
+  <data name="Debug_RequestFullHistory.Content" xml:space="preserve">
+    <value>Request Full History On-demand</value>
+  </data>
+  <data name="Debug_FullHistoryRequesting" xml:space="preserve">
+    <value>Requesting full history…</value>
+  </data>
+  <data name="Debug_FullHistoryRequested" xml:space="preserve">
+    <value>Full history on-demand requested.</value>
+  </data>
+  <data name="Debug_FullHistorySkipped" xml:space="preserve">
+    <value>Full history request was not sent (socket not ready or skipped).</value>
+  </data>
+  <data name="Debug_FullHistoryUnavailable" xml:space="preserve">
+    <value>History service unavailable.</value>
+  </data>
+  <data name="Debug_FullHistoryFailed" xml:space="preserve">
+    <value>Full history request failed: </value>
   </data>
 </root>
