@@ -173,7 +173,7 @@ Self-contained first. List/persist last.
 | 3.1b | Avatar fetch (done) | `AvatarFetcher`, behind `IUsyncGate` |
 | 3.1c | Avatar apply to the row (done) | `ChatAvatarOutcome` (Core); fallback + fetch stay in the client |
 | 3.2a | Group protocol reading (done) | `GroupMetadataReader` |
-| 3.2b | Group apply + roster persist | **Done.** Listing / metadata / roster apply in `GroupMetadataApply`, roster restore in `GroupRosterRestore`, rules in `GroupRosterRules` (all Core) over `IGroupHost`. Send-permission refresh and restore run on `GroupFacade`. The query passes stay in the client — see below |
+| 3.2b | Group apply + roster persist | **Done.** Listing, unresolved-metadata fallback, metadata apply and roster restore run from `GroupFacade` (`GroupQueryWindow`, `GroupMetadataApply`, `GroupRosterRestore`) over `IGroupHost`. High-quality group picture still forwards |
 | 3.3a | Media cache + file naming (done) | `IMediaCache` / `MediaCacheService`, `MediaFileExtensions` |
 | 3.3b | Derived renditions — transcode / poster / WebP (done) | `MediaDerivationService` |
 | 3.3c | Download reading (done) | `MediaDownloadPlan` (Core). Orchestration stays — see below |
@@ -541,11 +541,11 @@ query passes, and `GroupFacade` gets one from the container. `GroupFacade` now r
 `RefreshGroupSendPermissionsAsync` itself — query through `IWhatsAppSessionProvider`, read, apply —
 and the restore. Both left `IWhatsAppService`.
 
-**What stays:** `QueryAllGroupsAsync` and the unresolved-group pass. The first is gated on replay
-drain and sync traffic and owns the reuse window; the second paces one IQ per group with progress in
-the sync banner. That is connection and sync state (phase 4 / 3.10), and both have callers inside
-the client. They now only query, read and hand off to the applier. The high-quality group picture
-still forwards into the avatar cluster.
+**What stays:** the high-quality group picture, which still forwards into the avatar cluster. The
+listing and the unresolved-group pass moved with the rest: `GroupFacade` owns them, gated on
+`IsReplayDrainActive` and `ShouldDeferAvatarFetch`, paced and bannered the way they were, and held
+to one `GroupQueryWindow` so the name refresh and the background pass share the two minutes. The
+client's own background pass calls back through `AttachGroupService`.
 
 ### 3.6 — the name rules are out; usync is not
 

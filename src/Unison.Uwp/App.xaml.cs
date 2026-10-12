@@ -320,7 +320,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<LidMappingStore>(),
                 sp.GetRequiredService<ILocalSettings>(),
                 sp.GetRequiredService<IJidResolver>(),
-                sp.GetRequiredService<IUsyncGate>()));
+                sp.GetRequiredService<IUsyncGate>(),
+                sp.GetRequiredService<IGroupService>()));
             services.AddSingleton<IChatService>(sp => new ChatFacade(
                 sp.GetRequiredService<IWhatsAppSessionProvider>(),
                 sp.GetRequiredService<IWhatsAppService>(),
@@ -344,6 +345,8 @@ namespace Unison.Uwp
             services.AddSingleton<IGroupService>(sp => new GroupFacade(
                 sp.GetRequiredService<IWhatsAppService>(),
                 sp.GetRequiredService<IWhatsAppSessionProvider>(),
+                sp.GetRequiredService<IGroupHost>(),
+                sp.GetRequiredService<IChatStateStore>(),
                 sp.GetRequiredService<IJidResolver>(),
                 new GroupMetadataApply(
                     sp.GetRequiredService<IGroupHost>(),
@@ -419,6 +422,7 @@ namespace Unison.Uwp
             whatsAppImpl.AttachMessageService(Services.GetRequiredService<IMessageService>());
             whatsAppImpl.AttachChatService(Services.GetRequiredService<IChatService>());
             whatsAppImpl.AttachContactService(Services.GetRequiredService<IContactService>());
+            whatsAppImpl.AttachGroupService(Services.GetRequiredService<IGroupService>());
             Services.GetRequiredService<IConnectionService>().AttachWhatsAppService(whatsApp);
             // The remaining facades subscribe to client events in their constructors, and they can
             // only hear what they were around for. Build them now rather than when a screen first asks.

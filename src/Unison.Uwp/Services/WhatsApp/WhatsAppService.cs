@@ -229,6 +229,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly GroupMetadataApply _groupApply;
         private IMessageService _messageService;
         private IChatService _chatService;
+        private IGroupService _groupService;
         private IContactService _contactService;
         private IPersonStore _personStore;
         private IGroupRosterStore _groupRosterStore;
@@ -248,6 +249,11 @@ namespace Unison.Uwp.Services.WhatsApp
         public void AttachChatService(IChatService chatService)
         {
             _chatService = chatService;
+        }
+
+        public void AttachGroupService(IGroupService groupService)
+        {
+            _groupService = groupService;
         }
 
         /// <summary>
@@ -1129,10 +1135,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
         public Dictionary<string, string> ContactNames => _chatState.PushNames;
         public Dictionary<string, string> PhoneContactNamesByJid => _chatState.AddressBookNames;
-        /// <summary>How long a group listing stays good enough to serve the next caller.</summary>
-        private static readonly TimeSpan GroupQueryReuseWindow = TimeSpan.FromMinutes(2);
-
-        private DateTime _lastGroupQueryUtc = DateTime.MinValue;
 
         public JidAliasTable JidAlias { get; }
 
@@ -3588,7 +3590,10 @@ namespace Unison.Uwp.Services.WhatsApp
                     {
                         using (TraceStartupPhase("background-groups"))
                         {
-                            await QueryAllGroupsAsync();
+                            if (_groupService != null)
+                            {
+                                await _groupService.QueryAllGroupsAsync();
+                            }
                         }
                     }
                     catch (Exception exGroup)
@@ -3802,8 +3807,6 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             await RetrieveContactPicturesCoreAsync(token);
         }
-
-        Task IWhatsAppService.QueryUnresolvedGroupMetadataAsync(int limit) => QueryUnresolvedGroupMetadataAsync(limit);
 
         private string FindExistingAvatarUrl(string jid, string phone, string lid)
         {

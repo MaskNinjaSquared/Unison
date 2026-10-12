@@ -180,18 +180,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         string FindKnownJidByPhoneDigits(string digits);
 
-        /// <summary>Queries metadata for all joined groups.</summary>
-        Task QueryAllGroupsAsync();
-
-        /// <summary>
-        /// Same, but ignores the window that suppresses a repeat pass. For callers that ask
-        /// because a group is still showing its JID rather than on a schedule.
-        /// </summary>
-        Task QueryAllGroupsAsync(bool force);
-
-        /// <summary>Queries metadata for group chats whose display name is still unresolved.</summary>
-        Task QueryUnresolvedGroupMetadataAsync(int limit = 25);
-
         /// <summary>True while a reconnect/history replay drain is in progress; background refreshes should back off.</summary>
         bool IsReplayDrainActive { get; }
 

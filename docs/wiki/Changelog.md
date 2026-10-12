@@ -4,6 +4,15 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Group listing — on `GroupFacade` (3.2b)
+
+`QueryAllGroupsAsync` and the per-group metadata fallback left `WhatsAppService`. `GroupFacade`
+runs both, and `GroupQueryWindow` is the one two-minute reuse window the name refresh and the
+background pass share. `QueryAllGroupsAsync` and `QueryUnresolvedGroupMetadataAsync` left
+`IWhatsAppService`. The high-quality group picture still forwards to the client.
+
+---
+
 ## Group info pane — one roster rule (3.2b)
 
 The member-message match and the groups-in-common lookup in `ChatDetailInfoViewModel` now call

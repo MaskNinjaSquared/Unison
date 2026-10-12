@@ -35,6 +35,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private DateTime _lastForcedGroupPassUtc = DateTime.MinValue;
 
         private readonly IWhatsAppService _whatsAppService;
+        private readonly IGroupService _groups;
         private readonly AddressBookOverlay _addressBook;
         private readonly ContactDirectory _directory;
         private readonly ContactUsyncResolver _usync;
@@ -48,9 +49,11 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             AddressBookOverlay addressBook,
             ContactDirectory directory,
             ContactUsyncResolver usync,
-            IJidResolver jids)
+            IJidResolver jids,
+            IGroupService groups)
         {
             _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
+            _groups = groups ?? throw new ArgumentNullException(nameof(groups));
             _addressBook = addressBook ?? throw new ArgumentNullException(nameof(addressBook));
             _directory = directory ?? throw new ArgumentNullException(nameof(directory));
             _usync = usync ?? throw new ArgumentNullException(nameof(usync));
@@ -139,7 +142,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
                 if (includeGroups)
                 {
-                    await _whatsAppService.QueryAllGroupsAsync(force);
+                    await _groups.QueryAllGroupsAsync(force);
                 }
 
                 await _addressBook.RefreshAsync(force);
@@ -215,7 +218,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                     // Forced, because we only got here by finding a group that still shows its
                     // JID: the reuse window exists to suppress redundant passes, and after the
                     // first sync it was suppressing the only pass that would have named them.
-                    await _whatsAppService.QueryAllGroupsAsync(force: true);
+                    await _groups.QueryAllGroupsAsync(force: true);
                 }
                 catch (Exception exGroup)
                 {

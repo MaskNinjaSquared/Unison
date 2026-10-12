@@ -59,12 +59,14 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             LidMappingStore lidMappings,
             ILocalSettings localSettings,
             IJidResolver jids,
-            IUsyncGate usyncGate)
+            IUsyncGate usyncGate,
+            IGroupService groups)
         {
             if (sessions == null) throw new ArgumentNullException(nameof(sessions));
             if (localContacts == null) throw new ArgumentNullException(nameof(localContacts));
             if (lidMappings == null) throw new ArgumentNullException(nameof(lidMappings));
             if (usyncGate == null) throw new ArgumentNullException(nameof(usyncGate));
+            if (groups == null) throw new ArgumentNullException(nameof(groups));
 
             _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
             _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
@@ -75,7 +77,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             _directory = new ContactDirectory(sessions, lidMappings);
             _addressBook = new AddressBookOverlay(localContacts, personStore, whatsAppService, jids);
             _usync = new ContactUsyncResolver(whatsAppService, _directory, usyncGate, jids);
-            _names = new ContactNameResolver(whatsAppService, _addressBook, _directory, _usync, jids);
+            _names = new ContactNameResolver(whatsAppService, _addressBook, _directory, _usync, jids, groups);
             _avatars = new ChatAvatarPolicy(whatsAppService, jids);
             _roster = new GroupRosterPolicy(whatsAppService, this, jids);
 
