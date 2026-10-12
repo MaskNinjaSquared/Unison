@@ -41,16 +41,41 @@ namespace Unison.Core.Contracts.WhatsApp
         public object TransportToken { get; set; }
     }
 
+    /// <summary>An audio clip on its way out.</summary>
+    public sealed class OutgoingAudio
+    {
+        public byte[] Bytes { get; set; }
+
+        public string MimeType { get; set; }
+
+        public uint DurationSeconds { get; set; }
+
+        /// <summary>Recorded in the app (push-to-talk) rather than picked as a file.</summary>
+        public bool IsVoiceMessage { get; set; }
+    }
+
     /// <summary>
-    /// What the send flow needs from whoever still owns the timeline caches and the socket.
+    /// What the send flows need from whoever still owns the timeline caches and the socket.
     /// </summary>
     /// <remarks>
     /// Transitional: the client implements it because the in-memory timeline, the outbox and
     /// the socket lifecycle are still its own. The flow that decides what happens in what
-    /// order lives in <see cref="OutgoingTextSend"/> instead.
+    /// order lives in <see cref="OutgoingTextSend"/> and <see cref="OutgoingMediaSend"/> instead.
     /// </remarks>
     public interface IOutgoingMessageHost
     {
+        /// <summary>Reconnects with the default budget when the socket is down.</summary>
+        Task EnsureConnectedAsync();
+
+        /// <summary>Uploads and sends. Returns the message id; throws when the send fails.</summary>
+        Task<string> SendImageAsync(string jid, byte[] imageBytes, string caption);
+
+        /// <summary>Uploads and sends. Returns the message id; throws when the send fails.</summary>
+        Task<string> SendAudioAsync(string jid, OutgoingAudio audio);
+
+        /// <summary>Starts decoding the clip into something this device can play, without waiting.</summary>
+        void PrepareLocalPlayback(ChatMessage message);
+
         /// <summary>Files the bubble in memory: pending receipts applied, inserted in order, id indexed.</summary>
         void AcceptOutgoing(string chatJid, ChatMessage message);
 

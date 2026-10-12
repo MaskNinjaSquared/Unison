@@ -1125,8 +1125,6 @@ namespace Unison.Uwp.Services.WhatsApp
             return list != null ? new List<ChatMessage>(list) : new List<ChatMessage>();
         }
 
-        public Task SendImageAsync(string jid, byte[] imageBytes, string caption)
-            => SendImageMessageAsync(jid, imageBytes, caption);
         public Dictionary<string, string> ContactNames => _chatState.PushNames;
         public Dictionary<string, string> PhoneContactNamesByJid => _chatState.AddressBookNames;
         /// <summary>How long a group listing stays good enough to serve the next caller.</summary>
@@ -5793,86 +5791,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 "connection",
                 "socket-invalidated",
                 "reason=" + reason);
-        }
-
-        /// <summary>
-        /// Sends an image message and stores a local chat model immediately.
-        /// </summary>
-        public async Task<ChatMessage> SendImageMessageAsync(string jid, byte[] imageBytes, string caption = null)
-        {
-            await EnsureConnectedAsync();
-            if (imageBytes == null || imageBytes.Length == 0)
-                throw new ArgumentException("Image payload is empty", nameof(imageBytes));
-            string normJid = NormalizeJid(jid);
-
-            string msgId = await Task.Run(async () => await _socket.SendImageMessageAsync(jid, imageBytes, caption));
-            string preview = MediaPreviewTag.ForImage(caption);
-            string localUri = await SaveImageBytesToCacheAsync(imageBytes, msgId + "_out", "image/jpeg");
-
-            var msg = new ChatMessage
-            {
-                Id = msgId,
-                Content = preview,
-                Kind = ChatMessageKind.Image,
-                IsImage = true,
-                ImageUri = localUri,
-                Caption = caption ?? "",
-                IsFromMe = true,
-                Timestamp = DateTime.UtcNow,
-                SenderName = "Me",
-                RemoteJid = normJid,
-                ParticipantJid = _authState?.Me?.Id,
-                Status = ResolveSentStatus(normJid)
-            };
-
-            if (!MessagesByChat.ContainsKey(normJid))
-                MessagesByChat[normJid] = new List<ChatMessage>();
-            ChatMessageOrder.InsertSorted(MessagesByChat[normJid], msg);
-            TrimInMemoryMessageWindow(normJid);
-            RegisterMessageId(normJid, msg.Id);
-            await UpdateChatPreviewForLocalSendAsync(normJid, preview, msg.Timestamp, ChatPreviewKind.Image, null, msg.Id, msg.Status);
-
-            QueueOfflineReplayMessageForPersist(normJid, msg);
-            SchedulePersist();
-            QueueChatMessagesChanged(normJid);
-            return msg;
-        }
-
-        public async Task<ChatMessage> SendAudioMessageAsync(string jid, byte[] audioBytes, string mimeType, uint durationSeconds, bool isVoiceMessage = false)
-        {
-            await EnsureConnectedAsync();
-            if (audioBytes == null || audioBytes.Length == 0) throw new ArgumentException("Audio payload is empty", nameof(audioBytes));
-            string normJid = GetCanonicalJid(NormalizeJid(jid));
-            string msgId = await _socket.SendAudioMessageAsync(jid, audioBytes, mimeType, durationSeconds, isVoiceMessage);
-            string preview = MediaPreviewTag.ForAudio(isVoiceMessage);
-            string localUri = await SaveAudioBytesToCacheAsync(audioBytes, msgId + "_out", mimeType);
-            var msg = new ChatMessage
-            {
-                Id = msgId,
-                Content = preview,
-                Kind = isVoiceMessage ? ChatMessageKind.Voice : ChatMessageKind.Audio,
-                IsAudio = true,
-                IsVoiceMessage = isVoiceMessage,
-                AudioUri = localUri,
-                AudioMimeType = mimeType,
-                AudioDurationSeconds = durationSeconds,
-                IsFromMe = true,
-                Timestamp = DateTime.UtcNow,
-                SenderName = "Me",
-                RemoteJid = normJid,
-                ParticipantJid = _authState?.Me?.Id,
-                Status = ResolveSentStatus(normJid)
-            };
-            if (!MessagesByChat.ContainsKey(normJid)) MessagesByChat[normJid] = new List<ChatMessage>();
-            ChatMessageOrder.InsertSorted(MessagesByChat[normJid], msg);
-            TrimInMemoryMessageWindow(normJid);
-            RegisterMessageId(normJid, msg.Id);
-            await UpdateChatPreviewForLocalSendAsync(normJid, preview, msg.Timestamp, ChatPreviewKind.Voice, null, msg.Id, msg.Status);
-            QueueOfflineReplayMessageForPersist(normJid, msg);
-            SchedulePersist();
-            QueueChatMessagesChanged(normJid);
-            PrepareLocalPlaybackInBackground(msg);
-            return msg;
         }
 
         /// <summary>

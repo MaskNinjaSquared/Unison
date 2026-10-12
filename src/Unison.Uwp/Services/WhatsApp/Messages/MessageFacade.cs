@@ -30,6 +30,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
         private readonly INotificationService _notifications;
         private readonly IChatStore _chatStore;
         private readonly OutgoingTextSend _textSend;
+        private readonly OutgoingMediaSend _mediaSend;
         private readonly int _sqlOpenPageSize;
         private readonly int _sqlLoadMorePageSize;
         private readonly int _thinTimelineThreshold;
@@ -44,6 +45,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             IJidResolver jids,
             INotificationService notifications,
             IOutgoingMessageHost outgoingHost,
+            IMediaCache mediaCache,
             IChatStore chatStore = null,
             IChatStateStore chatState = null,
             ISystemInfoProvider systemInfo = null)
@@ -59,9 +61,16 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             _notifications = notifications ?? throw new ArgumentNullException(nameof(notifications));
             _chatStore = chatStore;
             _chatState = chatState;
-            _textSend = new OutgoingTextSend(
-                outgoingHost ?? throw new ArgumentNullException(nameof(outgoingHost)),
-                _jids);
+            if (outgoingHost == null)
+            {
+                throw new ArgumentNullException(nameof(outgoingHost));
+            }
+
+            _textSend = new OutgoingTextSend(outgoingHost, _jids);
+            _mediaSend = new OutgoingMediaSend(
+                outgoingHost,
+                _jids,
+                mediaCache ?? throw new ArgumentNullException(nameof(mediaCache)));
             // systemInfo kept in the ctor for DI compatibility; page sizes match desktop on all devices.
             _ = systemInfo;
 
@@ -747,12 +756,18 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
 
         public Task SendImageAsync(string jid, byte[] imageBytes, string caption)
         {
-            return _whatsAppService.SendImageAsync(jid, imageBytes, caption);
+            return _mediaSend.SendImageAsync(jid, imageBytes, caption);
         }
 
         public Task<ChatMessage> SendAudioMessageAsync(string jid, byte[] audioBytes, string mimeType, uint durationSeconds, bool isVoiceMessage = false)
         {
-            return _whatsAppService.SendAudioMessageAsync(jid, audioBytes, mimeType, durationSeconds, isVoiceMessage);
+            return _mediaSend.SendAudioAsync(jid, new OutgoingAudio
+            {
+                Bytes = audioBytes,
+                MimeType = mimeType,
+                DurationSeconds = durationSeconds,
+                IsVoiceMessage = isVoiceMessage
+            });
         }
 
         public Task<string> EnsureAudioAvailableAsync(ChatMessage message)

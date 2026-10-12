@@ -16,11 +16,30 @@ namespace Unison.Uwp.Services.WhatsApp
     /// <remarks>
     /// Implemented explicitly so none of it shows on the client's own surface: the only way in
     /// is the <see cref="IOutgoingMessageHost"/> registration, and the only caller is the
-    /// façade. Each member is one step the old <c>SendTextMessageAsync</c> took inline; the
-    /// order they run in is decided by <see cref="OutgoingTextSend"/>.
+    /// façade. Each member is one step the old send methods took inline; the order they run
+    /// in is decided by <see cref="OutgoingTextSend"/> and <see cref="OutgoingMediaSend"/>.
     /// </remarks>
     public partial class WhatsAppService : IOutgoingMessageHost
     {
+        Task IOutgoingMessageHost.EnsureConnectedAsync() => EnsureConnectedAsync();
+
+        Task<string> IOutgoingMessageHost.SendImageAsync(string jid, byte[] imageBytes, string caption)
+        {
+            return Task.Run(async () => await _socket.SendImageMessageAsync(jid, imageBytes, caption));
+        }
+
+        Task<string> IOutgoingMessageHost.SendAudioAsync(string jid, OutgoingAudio audio)
+        {
+            return _socket.SendAudioMessageAsync(
+                jid,
+                audio.Bytes,
+                audio.MimeType,
+                audio.DurationSeconds,
+                audio.IsVoiceMessage);
+        }
+
+        void IOutgoingMessageHost.PrepareLocalPlayback(ChatMessage message) => PrepareLocalPlaybackInBackground(message);
+
         void IOutgoingMessageHost.AcceptOutgoing(string chatJid, ChatMessage message)
         {
             ApplyPendingStateToMessage(chatJid, message);

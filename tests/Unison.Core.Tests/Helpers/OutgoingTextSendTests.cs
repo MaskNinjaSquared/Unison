@@ -186,6 +186,14 @@ namespace Unison.Core.Tests.Helpers
             public List<Exception> Errors { get; } = new List<Exception>();
             public string StatusAppliedOnAccept { get; set; }
 
+            public Task EnsureConnectedAsync() => throw new NotSupportedException();
+
+            public Task<string> SendImageAsync(string jid, byte[] imageBytes, string caption) => throw new NotSupportedException();
+
+            public Task<string> SendAudioAsync(string jid, OutgoingAudio audio) => throw new NotSupportedException();
+
+            public void PrepareLocalPlayback(ChatMessage message) => throw new NotSupportedException();
+
             public void AcceptOutgoing(string chatJid, ChatMessage message)
             {
                 Log.Add("accept:" + chatJid + ":" + message.Status);

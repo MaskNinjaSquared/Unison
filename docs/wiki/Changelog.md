@@ -4,6 +4,16 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Send — moved to `MessageFacade` (3.4)
+
+Text, image and audio sends no longer run inside `WhatsAppService`. `OutgoingTextSend` and
+`OutgoingMediaSend` (Core, built by `MessageFacade`) own the whole flow: the bubble, the retry, the
+settled status and the order of the side effects. They reach the timeline caches, the outbox and
+the socket through `IOutgoingMessageHost`, which the client implements explicitly. The three send
+methods left `IWhatsAppService`; the debug sender goes through `IMessageService`.
+
+---
+
 ## Diagnostics, unix time, self push name, and MessageKey alt JID
 
 `DiagnosticJidMask` keeps four characters of a JID in the journal. `UnixTime` and

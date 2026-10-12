@@ -36,7 +36,7 @@ No behaviour change for users. Prep so later diffs are one cluster, not a 16k-li
 
 | File | Cluster |
 |---|---|
-| `WhatsAppService.cs` | Fields, properties, ctor/`Create`/`Attach*`, send, history SQLite notify, leftovers |
+| `WhatsAppService.cs` | Fields, properties, ctor/`Create`/`Attach*`, pin-in-chat send, history SQLite notify, leftovers |
 | `WhatsAppService.Connection.cs` | Connect / resume / pairing / reconnect / suspend / broker transfer |
 | `WhatsAppService.Media.cs` | On-demand decrypt + cache (`Ensure*AvailableAsync`) |
 | `WhatsAppService.Groups.cs` | w:g2 metadata, members, send permissions |
@@ -46,6 +46,7 @@ No behaviour change for users. Prep so later diffs are one cluster, not a 16k-li
 | `WhatsAppService.Persistence.cs` | chats.json debounce, load persisted UI, suspend tail |
 | `WhatsAppService.Receipts.cs` | Receipt nodes → send state |
 | `WhatsAppService.IncomingPump.cs` | Decrypted-message queue, placeholders, offline replay summaries |
+| `WhatsAppService.OutgoingHost.cs` | Explicit `IOutgoingMessageHost`: the caches and socket the send flows on `MessageFacade` reach (3.4) |
 
 `IWhatsAppService` is unchanged as the façade-facing surface (minus the deleted history body). Do not grow it for UI; add members on the façade that owns the subject ([Coding standards](Coding-Standards) §6).
 
@@ -175,7 +176,7 @@ Self-contained first. List/persist last.
 | 3.3a | Media cache + file naming (done) | `IMediaCache` / `MediaCacheService`, `MediaFileExtensions` |
 | 3.3b | Derived renditions — transcode / poster / WebP (done) | `MediaDerivationService` |
 | 3.3c | Download reading (done) | `MediaDownloadPlan` (Core). Orchestration stays — see below |
-| 3.4 | Send (main file) | `MessageFacade` over use cases; client only “send this node”. **Retry decision out — see the nibble below.** |
+| 3.4 | Send (main file) | **Text, image and audio orchestration on `MessageFacade` (done)** via `OutgoingTextSend` / `OutgoingMediaSend` (Core) over `IOutgoingMessageHost`. Client keeps the timeline caches, outbox and socket behind that port — see below |
 | 3.5a | Receipt reading (done) | `ReceiptReader` |
 | 3.5b | Receipt aggregation state (done) | `GroupReceiptTally` (Core) |
 | 3.6 | Names / usync (`.Identity.cs`) | `ContactFacade` / `ContactUsyncResolver`. **Rules and usync orchestration out — see below.** Cache-write primitives remain on the client |
@@ -479,6 +480,31 @@ façade move too. The test suite does not reach any of them, because they are al
 **None of this has been run.** Every slice from the pending message queue onward is compile-checked
 and test-covered and has not been on a device. That debt keeps growing and is the next thing to spend
 time on, ahead of any further extraction.
+
+### 3.4 — send moved to `MessageFacade`
+
+The flow left the client whole, and it lives in Core, so the suite reaches it now. `OutgoingTextSend`
+owns validation, the canonical chat, the id, the optimistic bubble, the bounded retry
+(`OutgoingTextSendRetry`), settlement (`OutgoingSendSettlement` + `SelfChatStatusPolicy`) and the
+order of every side effect. `OutgoingMediaSend` does the same for image and audio, including the
+`_out` cache write through `IMediaCache`. `OutgoingChatMessage` is the one place that says what an
+outgoing bubble looks like.
+
+What they reach through is `IOutgoingMessageHost`, a narrow Core port the client implements
+**explicitly** (`WhatsAppService.OutgoingHost.cs`), registered in `App.ConfigureServices` as a cast of
+the client the way `BridgeSessionProvider` already is. It is not on `IWhatsAppService`, which lost
+`SendTextMessageAsync`, `SendImageAsync` and `SendAudioMessageAsync`. `DebugSendService` sends
+through `IMessageService` like the chat page does.
+
+The host keeps what the client still owns: the in-memory timeline (pending receipts, ordered insert,
+trim, id index), the local-send chat-row preview, the outbox and batched flush, the socket and its
+invalidation, the send counters for the health snapshot, and `OnError`. A transport attempt hands
+back the socket it used, so dropping it after a failure cannot kill a newer connection.
+
+Behaviour is kept as it was, two quirks included and pinned by tests: an image is filed under the
+**normalized** JID while text and audio use the canonical one, and plain audio previews as a voice
+note. Two deliberate differences: image and audio now apply any receipt that arrived before the bubble
+existed (text always did), and an empty image is rejected before reconnecting rather than after.
 
 ### 3.6 — the name rules are out; usync is not
 
