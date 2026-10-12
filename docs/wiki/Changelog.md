@@ -4,6 +4,35 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Diagnostics, unix time, self push name, and MessageKey alt JID
+
+`DiagnosticJidMask` keeps four characters of a JID in the journal. `UnixTime` and
+`DiagnosticUtcTicks` are the two clock conversions the client was doing inline.
+`SelfPushNameCapture` rejects a dash and refuses to overwrite a trusted self name except from
+app-state. `MessageKeyAltJidScan` reads an undeclared user JID out of MessageKey bytes; turning
+the protobuf into bytes stays on the client. `FirstNonBlankText` is the shared fallback pick.
+
+---
+
+## Send path, disconnect text, and replay noise — rules left the client
+
+`OutgoingMessageId` formats the companion id (`3EB0` + hex). `OutgoingSendSettlement` refuses to
+overwrite a bubble whose status already moved past pending. `DuplicateChatRowPick` chooses which
+PN/LID row a local send repositions, and the first non-blank group name. `FatalStreamCodeText`
+reads a close code out of an exception message. `ReplayDiagnosticNoise` recognises the protocol
+lines a history replay may drop. A typed `WaConnectionException` is still trusted first, and the
+replay suppression switch stays on the client.
+
+---
+
+## Text send retry — the decision left the client (3.4)
+
+`OutgoingTextSendRetry` decides, for one text-send attempt, whether to drop the socket and try
+again. Two attempts; the second gets a shorter connect budget; a refusal stops immediately and
+keeps the connection. The loop, the diagnostics and the socket still live on the client.
+
+---
+
 ## Usync contact resolution — moved to `ContactFacade` (3.6)
 
 `ContactUsyncResolver` (built by `ContactFacade`) owns the usync pass end to end: number selection,

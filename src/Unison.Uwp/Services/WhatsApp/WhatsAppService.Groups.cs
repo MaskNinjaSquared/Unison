@@ -82,16 +82,8 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private string FindGroupRowName(string groupJid)
         {
-            var rows = GetChatRowsForCanonicalJid(GetCanonicalJid(groupJid));
-            for (int i = 0; i < rows.Count; i++)
-            {
-                if (rows[i] != null && !string.IsNullOrWhiteSpace(rows[i].Name))
-                {
-                    return rows[i].Name;
-                }
-            }
-
-            return null;
+            return DuplicateChatRowPick.FirstNonBlankName(
+                GetChatRowsForCanonicalJid(GetCanonicalJid(groupJid)));
         }
 
         public Task QueryAllGroupsAsync() => QueryAllGroupsAsync(false);

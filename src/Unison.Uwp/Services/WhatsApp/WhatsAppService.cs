@@ -79,32 +79,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private static bool _verboseLogging = false;
         private static bool _loggingSettingsInitialized;
         private static volatile bool _suppressReplayDiagnostics;
-        private static readonly string[] ReplayDiagnosticPrefixes =
-        {
-            "[Noise] Encrypted ",
-            "[Noise] Decrypted ",
-            "[Noise] Encoded frame:",
-            "[Noise] Received ",
-            "[Noise] Decoded frame:",
-            "[Noise] Waiting for more data,",
-            "[Socket] Decrypted Signal payload:",
-            "[Socket] Unpadded payload:",
-            "[Signal] Processing skmsg ",
-            "[Signal] Processing pkmsg ",
-            "[Signal] Processing msg ",
-            "[Signal] No SenderKey found ",
-            "[Signal] Invalid SenderKeyState ",
-            "[Signal] SenderKey keyId mismatch:",
-            "[Signal] SenderKey: too many iterations ahead",
-            "[Signal] SenderKey decryption failed:",
-            "[Signal] Successfully decrypted payload ",
-            "[Signal] SenderKey old-iteration replay path:",
-            "[Signal] SenderKey cache hit ",
-            "[Signal] SenderKey cache miss ",
-            "[Signal] Direct skipped-key cache hit ",
-            "[Signal] Direct skipped-key cache miss ",
-            "[Signal] Direct skipped-key cache stored "
-        };
+
         public static bool VerboseLogging
         {
             get => _verboseLogging;
@@ -164,20 +139,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private static bool ShouldSuppressReplayDiagnostic(string message)
         {
-            if (!_suppressReplayDiagnostics || string.IsNullOrEmpty(message))
-            {
-                return false;
-            }
-
-            for (int i = 0; i < ReplayDiagnosticPrefixes.Length; i++)
-            {
-                if (message.StartsWith(ReplayDiagnosticPrefixes[i], StringComparison.Ordinal))
-                {
-                    return true;
-                }
-            }
-
-            return false;
+            return _suppressReplayDiagnostics && ReplayDiagnosticNoise.Matches(message);
         }
 
         /// <summary>
@@ -1121,7 +1083,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private static DateTime DiagnosticsDateTime(long ticks)
         {
-            return ticks <= 0 ? DateTime.MinValue : new DateTime(ticks, DateTimeKind.Utc);
+            return DiagnosticUtcTicks.ToDateTime(ticks);
         }
 
         // The chat list and the per-chat messages now live in ChatStateStore. These properties
@@ -2114,14 +2076,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private static string GenerateOutgoingMessageId()
         {
-            var randomBytes = CryptoUtils.RandomBytes(10);
-            var builder = new System.Text.StringBuilder(24);
-            builder.Append("3EB0");
-            for (int i = 0; i < randomBytes.Length; i++)
-            {
-                builder.Append(randomBytes[i].ToString("X2"));
-            }
-            return builder.ToString();
+            return OutgoingMessageId.FromRandomBytes(CryptoUtils.RandomBytes(OutgoingMessageId.RandomByteCount));
         }
 
         private void SchedulePostReplayMaintenance(int offlineCount)
@@ -3069,16 +3024,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         private static string MaskJidForDiagnostics(string jid)
         {
-            if (string.IsNullOrWhiteSpace(jid))
-            {
-                return "-";
-            }
-
-            int at = jid.IndexOf('@');
-            string user = at > 0 ? jid.Substring(0, at) : jid;
-            string domain = at > 0 ? jid.Substring(at) : string.Empty;
-            string tail = user.Length <= 4 ? user : user.Substring(user.Length - 4);
-            return "*" + tail + domain;
+            return DiagnosticJidMask.Apply(jid);
         }
 
         /// <summary>
@@ -5476,51 +5422,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
             }
 
-            string message = ex?.Message;
-            if (string.IsNullOrWhiteSpace(message))
-            {
-                return null;
-            }
-
-            // Prefer explicit stream codes from TranslateStreamError.
-            if (message.IndexOf("(401)", StringComparison.Ordinal) >= 0)
-            {
-                return "401";
-            }
-
-            if (message.IndexOf("(440)", StringComparison.Ordinal) >= 0)
-            {
-                return "440";
-            }
-
-            if (message.IndexOf("(403)", StringComparison.Ordinal) >= 0)
-            {
-                return "403";
-            }
-
-            if (message.IndexOf("(500)", StringComparison.Ordinal) >= 0)
-            {
-                return "500";
-            }
-
-            if (message.IndexOf("Logged out", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                message.IndexOf("device_removed", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                message.IndexOf("device-removed", StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return "401";
-            }
-
-            if (message.IndexOf("Connection replaced", StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return "440";
-            }
-
-            if (message.IndexOf("Bad session", StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return "500";
-            }
-
-            return null;
+            return FatalStreamCodeText.Read(ex?.Message);
         }
 
 
@@ -5539,9 +5441,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private static DateTime UnixMillisecondsToUtc(long milliseconds)
         {
-            long seconds = milliseconds / 1000;
-            long remainder = milliseconds % 1000;
-            return DateTimeOffset.FromUnixTimeSeconds(seconds).UtcDateTime.AddMilliseconds(remainder);
+            return UnixTime.FromMilliseconds(milliseconds);
         }
 
         private void StorePendingOutgoingStatus(string messageId, string status)
@@ -5878,16 +5778,6 @@ namespace Unison.Uwp.Services.WhatsApp
             await ApplyPinnedMessageStateAsync(canonical, message.Id, pin, now, pin ? now.AddSeconds(durationSeconds) : (DateTime?)null);
         }
 
-        /// <summary>
-        /// Whether a failure means the connection itself is gone, as opposed to the message
-        /// having been refused by something above it.
-        /// </summary>
-        private static bool IsTransportFailure(Exception ex, IWhatsAppSocket socket)
-        {
-            bool socketUsable = socket != null && socket.IsConnected && socket.IsHandshakeComplete;
-            return OutgoingFailureClassification.IsTransportFailure(ex, socketUsable);
-        }
-
         private void InvalidateCurrentSocket(IWhatsAppSocket socket, string reason)
         {
             if (socket == null)
@@ -5914,20 +5804,22 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             Exception lastError = null;
 
-            for (int attempt = 1; attempt <= 2; attempt++)
+            for (int attempt = 1; attempt <= OutgoingTextSendRetry.MaxAttempts; attempt++)
             {
-                await EnsureConnectedAsync(attempt == 1 ? 35000 : 25000);
+                await EnsureConnectedAsync((int)OutgoingTextSendRetry.ConnectTimeout(attempt).TotalMilliseconds);
                 var socket = _socket;
+                OutgoingSendAttemptOutcome outcome;
                 if (socket == null || !socket.IsConnected || !socket.IsHandshakeComplete)
                 {
                     lastError = new InvalidOperationException("WhatsApp socket is not ready");
+                    outcome = OutgoingSendAttemptOutcome.SocketNotReady;
                 }
                 else
                 {
                     try
                     {
                         Task<string> sendTask = socket.SendTextMessageAsync(jid, text, messageId);
-                        Task completed = await Task.WhenAny(sendTask, Task.Delay(15000));
+                        Task completed = await Task.WhenAny(sendTask, Task.Delay(OutgoingTextSendRetry.WriteTimeout));
                         if (completed != sendTask)
                         {
                             throw new TimeoutException("Timed out writing the message to the WhatsApp transport");
@@ -5945,25 +5837,25 @@ namespace Unison.Uwp.Services.WhatsApp
                             ex,
                             "messageId=" + messageId + "; attempt=" + attempt);
 
-                        // Only a broken pipe justifies throwing the connection away. A refusal
-                        // from the layers above it - no session with a device, a group we cannot
-                        // read - fails this one message on a connection that is still fine, and
-                        // tearing it down there leaves the whole app offline over one send.
-                        if (IsTransportFailure(ex, socket))
-                        {
-                            InvalidateCurrentSocket(socket, "send-attempt-" + attempt);
-                        }
-                        else
-                        {
-                            break;
-                        }
+                        bool socketUsable = socket.IsConnected && socket.IsHandshakeComplete;
+                        outcome = OutgoingFailureClassification.IsTransportFailure(ex, socketUsable)
+                            ? OutgoingSendAttemptOutcome.TransportFailure
+                            : OutgoingSendAttemptOutcome.MessageRefused;
                     }
                 }
 
-                if (attempt < 2)
+                OutgoingTextSendStep step = OutgoingTextSendRetry.After(attempt, outcome);
+                if (step.InvalidateSocket)
                 {
-                    await Task.Delay(500);
+                    InvalidateCurrentSocket(socket, "send-attempt-" + attempt);
                 }
+
+                if (!step.Retry)
+                {
+                    break;
+                }
+
+                await Task.Delay(step.RetryDelay);
             }
 
             throw lastError ?? new InvalidOperationException("Unable to send the message");
@@ -6023,7 +5915,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 // reconnect/retry so a stale transport cannot leave the send button
                 // waiting forever or create a duplicate bubble.
                 await SendTextTransportWithRetryAsync(normJid, text, msgId);
-                if (string.Equals(msg.Status, ChatMessage.StatusPending, StringComparison.OrdinalIgnoreCase))
+                if (OutgoingSendSettlement.ShouldPromotePending(msg.Status))
                 {
                     msg.Status = ResolveSentStatus(normJid);
                 }
@@ -6209,11 +6101,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         true, HistoryLiveMessageMapper.FromStatus(status ?? ChatMessage.StatusPending, true), messageId);
                 }
 
-                var preferred = matchingRows
-                    .OrderByDescending(c => !string.IsNullOrWhiteSpace(c.AvatarUrl))
-                    .ThenByDescending(c => !string.IsNullOrWhiteSpace(c.Name))
-                    .First();
-                RepositionChatForDisplay(preferred);
+                RepositionChatForDisplay(DuplicateChatRowPick.PreferredForPreview(matchingRows));
             });
 
             _ = DeduplicateChatsAsync("local-send-preview");
@@ -6863,7 +6751,7 @@ namespace Unison.Uwp.Services.WhatsApp
             // WhatsApp occasionally emits packets carrying only a placeholder "-" as the name.
             // Our self-name capture is deliberately eager, so without this it would overwrite the
             // real display name with a dash until the next genuine update arrived.
-            if (string.Equals(pushName.Trim(), "-", StringComparison.Ordinal))
+            if (SelfPushNameCapture.IsDashPlaceholder(pushName))
             {
                 Debug.WriteLine(
                     "[WhatsAppService] Ignoring placeholder self push name '-' from " + (source ?? "unknown"));
@@ -6888,9 +6776,8 @@ namespace Unison.Uwp.Services.WhatsApp
             // phone number on screen. Substituting it here lets the rest of the method put both
             // back in step.
             string established = ResolveEstablishedSelfName();
-            if (!string.IsNullOrWhiteSpace(established) &&
-                !string.Equals(established, sanitized, StringComparison.Ordinal) &&
-                !string.Equals(source, SelfPushNameAppStateSource, StringComparison.Ordinal))
+            bool fromAppState = string.Equals(source, SelfPushNameAppStateSource, StringComparison.Ordinal);
+            if (!string.Equals(sanitized, SelfPushNameCapture.PreferEstablished(established, sanitized, fromAppState), StringComparison.Ordinal))
             {
                 Debug.WriteLine(
                     "[WhatsAppService] Keeping established self name '" + established + "'; ignoring '" +
@@ -7113,99 +7000,12 @@ namespace Unison.Uwp.Services.WhatsApp
                 return null;
             }
 
-            int index = 0;
-            while (index < bytes.Length)
-            {
-                if (!TryReadProtoVarint(bytes, ref index, out ulong tag))
-                {
-                    break;
-                }
-
-                int fieldNumber = (int)(tag >> 3);
-                int wireType = (int)(tag & 0x7);
-                if (wireType == 2) // length-delimited
-                {
-                    if (!TryReadProtoVarint(bytes, ref index, out ulong length) ||
-                        length > (ulong)(bytes.Length - index))
-                    {
-                        break;
-                    }
-
-                    int len = (int)length;
-                    // Skip known field 4 (participant) — already read via the typed API.
-                    if (fieldNumber != 4 && len > 0 && len < 256)
-                    {
-                        string candidate = System.Text.Encoding.UTF8.GetString(bytes, index, len);
-                        if (LooksLikeUserJid(candidate))
-                        {
-                            return candidate;
-                        }
-                    }
-
-                    index += len;
-                }
-                else if (wireType == 0) // varint
-                {
-                    if (!TryReadProtoVarint(bytes, ref index, out _))
-                    {
-                        break;
-                    }
-                }
-                else if (wireType == 1) // 64-bit
-                {
-                    index += 8;
-                }
-                else if (wireType == 5) // 32-bit
-                {
-                    index += 4;
-                }
-                else
-                {
-                    break;
-                }
-            }
-
-            return null;
-        }
-
-        private static bool LooksLikeUserJid(string value) =>
-            UserJidShape.Matches(value);
-
-        private static bool TryReadProtoVarint(byte[] buffer, ref int index, out ulong value)
-        {
-            value = 0;
-            int shift = 0;
-            while (index < buffer.Length && shift < 64)
-            {
-                byte b = buffer[index++];
-                value |= (ulong)(b & 0x7F) << shift;
-                if ((b & 0x80) == 0)
-                {
-                    return true;
-                }
-
-                shift += 7;
-            }
-
-            return false;
+            return MessageKeyAltJidScan.Read(bytes);
         }
 
         private static string FirstNonEmptyString(params string[] values)
         {
-            if (values == null)
-            {
-                return null;
-            }
-
-            foreach (var value in values)
-            {
-                if (!string.IsNullOrWhiteSpace(value))
-                {
-                    return value.Trim();
-                }
-            }
-
-            return null;
+            return FirstNonBlankText.Pick(values);
         }
 
         private bool IsSelfJid(string jid) => JidAlias.IsSelfJid(jid);

@@ -1,8 +1,9 @@
 // =============================================================================
 // OutgoingFailureClassification and SelfChatStatusPolicy
 //
-// Two small rules from the send path that were stated inline, where they read
-// as incidental conditions rather than as the decisions they are.
+// Three small rules from the send path that were stated inline, where they read
+// as incidental conditions rather than as the decisions they are. The third is
+// the text-send retry: when to drop the socket and when to stop.
 // =============================================================================
 using System;
 using System.IO;
@@ -65,6 +66,72 @@ namespace Unison.Core.Helpers
                 string.Equals(status, ChatMessage.StatusDelivered, StringComparison.OrdinalIgnoreCase);
 
             return reachedTheServer ? ChatMessage.StatusRead : status;
+        }
+    }
+
+    /// <summary>What the text-send loop observed on one attempt.</summary>
+    public enum OutgoingSendAttemptOutcome
+    {
+        /// <summary>No socket, or the handshake is not done. Nothing was written.</summary>
+        SocketNotReady,
+
+        /// <summary>The server took the message.</summary>
+        Accepted,
+
+        /// <summary>The pipe itself failed. The socket is no longer trustworthy.</summary>
+        TransportFailure,
+
+        /// <summary>Something above the pipe refused this message. The connection is still fine.</summary>
+        MessageRefused
+    }
+
+    /// <summary>
+    /// What to do after one text-send attempt: drop the socket, try again, or stop.
+    /// </summary>
+    public struct OutgoingTextSendStep
+    {
+        public bool InvalidateSocket;
+
+        public bool Retry;
+
+        public TimeSpan RetryDelay;
+    }
+
+    /// <summary>
+    /// The bounded retry around a text send. Two attempts, a shorter connect budget on the
+    /// second, and a refusal that must not take the connection down with it.
+    /// </summary>
+    public static class OutgoingTextSendRetry
+    {
+        public const int MaxAttempts = 2;
+
+        public static readonly TimeSpan WriteTimeout = TimeSpan.FromSeconds(15);
+
+        public static readonly TimeSpan RetryDelay = TimeSpan.FromMilliseconds(500);
+
+        /// <summary>First attempt waits longer for a reconnect; the second does not.</summary>
+        public static TimeSpan ConnectTimeout(int attempt)
+        {
+            return attempt <= 1
+                ? TimeSpan.FromMilliseconds(35000)
+                : TimeSpan.FromMilliseconds(25000);
+        }
+
+        public static OutgoingTextSendStep After(int attempt, OutgoingSendAttemptOutcome outcome)
+        {
+            if (outcome == OutgoingSendAttemptOutcome.Accepted ||
+                outcome == OutgoingSendAttemptOutcome.MessageRefused)
+            {
+                return new OutgoingTextSendStep();
+            }
+
+            bool attemptsRemain = attempt < MaxAttempts;
+            return new OutgoingTextSendStep
+            {
+                InvalidateSocket = outcome == OutgoingSendAttemptOutcome.TransportFailure,
+                Retry = attemptsRemain,
+                RetryDelay = attemptsRemain ? RetryDelay : TimeSpan.Zero
+            };
         }
     }
 }

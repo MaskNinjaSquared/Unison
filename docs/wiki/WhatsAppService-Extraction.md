@@ -175,7 +175,7 @@ Self-contained first. List/persist last.
 | 3.3a | Media cache + file naming (done) | `IMediaCache` / `MediaCacheService`, `MediaFileExtensions` |
 | 3.3b | Derived renditions — transcode / poster / WebP (done) | `MediaDerivationService` |
 | 3.3c | Download reading (done) | `MediaDownloadPlan` (Core). Orchestration stays — see below |
-| 3.4 | Send (main file) | `MessageFacade` over use cases; client only “send this node” |
+| 3.4 | Send (main file) | `MessageFacade` over use cases; client only “send this node”. **Retry decision out — see the nibble below.** |
 | 3.5a | Receipt reading (done) | `ReceiptReader` |
 | 3.5b | Receipt aggregation state (done) | `GroupReceiptTally` (Core) |
 | 3.6 | Names / usync (`.Identity.cs`) | `ContactFacade` / `ContactUsyncResolver`. **Rules and usync orchestration out — see below.** Cache-write primitives remain on the client |
@@ -764,7 +764,12 @@ host `MessagesByChat`). Pump still owns alias-consolidate side-effects, offline 
 
 When a method is still too large to move whole, lift the pure decision first: write tests that
 match today’s client code, add a Core helper, forward with a one-liner, commit extract then wire.
-Recent lifts from `WhatsAppService` / façades include catch-up continue + freshness stale,
+Recent lifts from `WhatsAppService` / façades include diagnostic JID masking, unix milliseconds,
+self push-name capture, MessageKey alt-JID scan, outgoing message ids (`OutgoingMessageId`),
+whether a text send may still promote a pending bubble (`OutgoingSendSettlement`), which duplicate
+chat row a local send repositions (`DuplicateChatRowPick`), the text fallback for a fatal stream
+code (`FatalStreamCodeText`), which log lines a replay may drop (`ReplayDiagnosticNoise`), the text-send retry (`OutgoingTextSendRetry`:
+two attempts, invalidate only on a broken pipe, stop on a refusal), catch-up continue + freshness stale,
 placeholder recovery trigger, explicit logout stream codes, list enrichment phases, user-JID
 shape, on-demand sync type, group avatar fallback, relink disconnect reasons, WebP cache URI,
 and web-message status map. Orchestration stays behind the forward.
