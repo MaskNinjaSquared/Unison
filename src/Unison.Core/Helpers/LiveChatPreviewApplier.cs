@@ -22,6 +22,14 @@ namespace Unison.Core.Helpers
         /// Writes the strip when the candidate is allowed. Returns false when the tip is stale
         /// or the row already shows the same tip with the same body.
         /// </summary>
+        /// <param name="participantJid">
+        /// Who wrote the tip in a group (prefer PN when the envelope had participantAlt). Without
+        /// this <see cref="ChatAuthorProjection"/> cannot upgrade a bare strip later.
+        /// </param>
+        /// <param name="senderName">
+        /// Best name known for that participant at tip time (bubble / push name). Phone/LID
+        /// stand-ins must not overwrite a real name the projection already fixed.
+        /// </param>
         public static bool ApplyIfNewer(
             ChatItem chat,
             string preview,
@@ -33,7 +41,9 @@ namespace Unison.Core.Helpers
             bool? isFromMe = null,
             MessageSendState? sendState = null,
             string messageId = null,
-            string yesterdayLabel = null)
+            string yesterdayLabel = null,
+            string participantJid = null,
+            string senderName = null)
         {
             if (chat == null)
             {
@@ -64,6 +74,8 @@ namespace Unison.Core.Helpers
                 ChatPreviewNormalizer.Normalize(peekRaw, kindHint, out _, out var peekClean);
                 if (string.Equals(chat.LastMessage, peekClean, StringComparison.Ordinal))
                 {
+                    // Body frozen, but the bubble may have resolved the author after the tip landed.
+                    ApplyAuthorParts(chat, participantJid, senderName, authorPrefix);
                     return false;
                 }
             }
@@ -83,7 +95,19 @@ namespace Unison.Core.Helpers
 
             ChatPreviewNormalizer.Normalize(raw, kindHint, out var kind, out var cleanPreview);
 
-            chat.LastMessageAuthor = author ?? string.Empty;
+            // Never blank a strip the projection already named on the *same* tip: an empty
+            // incoming prefix (sync echo with only a LID) must not wipe "Ana: ". A newer tip
+            // with no author still clears — that message has a different sender.
+            bool sameTip = !string.IsNullOrWhiteSpace(messageId) &&
+                           string.Equals(chat.LastMessageId, messageId, StringComparison.Ordinal);
+            bool preserveAuthor = string.IsNullOrEmpty(author) &&
+                                  !string.IsNullOrEmpty(chat.LastMessageAuthor) &&
+                                  sameTip;
+            if (!preserveAuthor)
+            {
+                chat.LastMessageAuthor = author ?? string.Empty;
+            }
+
             chat.LastMessage = cleanPreview;
             chat.LastMessageKind = kind;
             chat.LastMessageMentionedJids = mentionedJids != null && mentionedJids.Count > 0
@@ -118,7 +142,100 @@ namespace Unison.Core.Helpers
             chat.LastMessageTimestampUtc = candidateUtc == DateTime.MinValue
                 ? (DateTime?)null
                 : candidateUtc;
+
+            ApplyAuthorParts(chat, participantJid, senderName, authorPrefix);
             return true;
+        }
+
+        /// <summary>
+        /// Copies the tip's sender onto the row so the strip and ChatAuthorProjection share the
+        /// same identity the bubble used. A bare LID/phone must not wipe a name the projection
+        /// already fixed.
+        /// </summary>
+        public static void ApplyAuthorParts(
+            ChatItem chat,
+            string participantJid,
+            string senderName,
+            string authorPrefix = null)
+        {
+            if (chat == null)
+            {
+                return;
+            }
+
+            string participant = string.IsNullOrWhiteSpace(participantJid)
+                ? null
+                : participantJid.Trim();
+
+            bool incomingSenderUsable = GroupParticipantResolver.IsUsableDisplayLabel(
+                senderName,
+                participant ?? chat.LastMessageParticipantJid);
+            // Group title must never label the author strip (legacy sync fallback).
+            if (incomingSenderUsable &&
+                chat.IsGroup &&
+                !string.IsNullOrWhiteSpace(chat.Name) &&
+                string.Equals(senderName.Trim(), chat.Name.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                incomingSenderUsable = false;
+                senderName = null;
+                authorPrefix = null;
+            }
+
+            bool existingSenderUsable = GroupParticipantResolver.IsUsableDisplayLabel(
+                chat.LastMessageSenderName,
+                chat.LastMessageParticipantJid);
+            // Drop a strip that was poisoned with the group title so the next pass can fix it.
+            if (existingSenderUsable &&
+                chat.IsGroup &&
+                !string.IsNullOrWhiteSpace(chat.Name) &&
+                string.Equals(
+                    chat.LastMessageSenderName.Trim(),
+                    chat.Name.Trim(),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                existingSenderUsable = false;
+                chat.LastMessageSenderName = null;
+                if (!string.IsNullOrEmpty(chat.LastMessageAuthor) &&
+                    chat.LastMessageAuthor.StartsWith(chat.Name.Trim(), StringComparison.OrdinalIgnoreCase))
+                {
+                    chat.LastMessageAuthor = string.Empty;
+                }
+            }
+
+            bool keepExistingSender = !incomingSenderUsable && existingSenderUsable;
+
+            if (keepExistingSender)
+            {
+                // Projection already named this tip; only fill a blank strip prefix.
+                if (string.IsNullOrEmpty(chat.LastMessageAuthor) &&
+                    !string.IsNullOrEmpty(authorPrefix))
+                {
+                    chat.LastMessageAuthor = authorPrefix;
+                }
+
+                return;
+            }
+
+            if (participant != null)
+            {
+                chat.LastMessageParticipantJid = participant;
+            }
+
+            if (incomingSenderUsable)
+            {
+                chat.LastMessageSenderName = senderName.Trim();
+            }
+            else if (participant != null)
+            {
+                // New tip identity with no name yet — clear a stale name from the previous tip.
+                chat.LastMessageSenderName = null;
+            }
+
+            if (!string.IsNullOrEmpty(authorPrefix) &&
+                !string.Equals(chat.LastMessageAuthor, authorPrefix, StringComparison.Ordinal))
+            {
+                chat.LastMessageAuthor = authorPrefix;
+            }
         }
 
         /// <summary>

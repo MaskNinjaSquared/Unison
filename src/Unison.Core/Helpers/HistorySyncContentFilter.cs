@@ -170,6 +170,80 @@ namespace Unison.Core.Helpers
         }
 
         /// <summary>
+        /// LID JID → phone JID for every pair this chunk lists. The group envelopes carry the LID,
+        /// so without this the strip has no number to fall back on when nobody named the sender.
+        /// </summary>
+        public static Dictionary<string, string> BuildLidToPhoneMap(HistorySync sync)
+        {
+            var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (sync == null)
+            {
+                return map;
+            }
+
+            if (sync.PhoneNumberToLidMappings != null)
+            {
+                foreach (var mapping in sync.PhoneNumberToLidMappings)
+                {
+                    AddLidPhonePair(map, mapping?.LidJid, mapping?.PnJid);
+                }
+            }
+
+            if (sync.Conversations != null)
+            {
+                foreach (var conv in sync.Conversations)
+                {
+                    AddLidPhonePair(map, conv?.LidJid, conv?.PnJid);
+                }
+            }
+
+            return map;
+        }
+
+        private static void AddLidPhonePair(Dictionary<string, string> map, string lidJid, string pnJid)
+        {
+            string lid = JidHelper.Normalize(lidJid);
+            string pn = JidHelper.Normalize(pnJid);
+            if (string.IsNullOrWhiteSpace(lid) ||
+                string.IsNullOrWhiteSpace(pn) ||
+                !JidHelper.IsLidJid(lid) ||
+                !JidHelper.IsPhoneJid(pn))
+            {
+                return;
+            }
+
+            map[lid] = pn;
+        }
+
+        /// <summary>
+        /// Resolves a participant to its phone JID when this chunk knows the pair. Returns null
+        /// when it does not — the caller must not invent a number.
+        /// </summary>
+        public static string ResolveParticipantPhoneJid(
+            string participantJid,
+            IDictionary<string, string> lidToPhone)
+        {
+            string normalized = JidHelper.Normalize(participantJid);
+            if (string.IsNullOrWhiteSpace(normalized))
+            {
+                return null;
+            }
+
+            if (JidHelper.IsPhoneJid(normalized))
+            {
+                return normalized;
+            }
+
+            string phone;
+            if (lidToPhone != null && lidToPhone.TryGetValue(normalized, out phone))
+            {
+                return phone;
+            }
+
+            return null;
+        }
+
+        /// <summary>
         /// Copies a known push name onto the other half of each LID↔PN pair in this chunk.
         /// </summary>
         private static void MirrorPushNamesAcrossLidPn(

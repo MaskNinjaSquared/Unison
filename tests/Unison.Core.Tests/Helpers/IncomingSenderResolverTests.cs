@@ -37,7 +37,7 @@ public class IncomingSenderResolverTests
     }
 
     [Fact]
-    public void A_group_message_without_a_participant_falls_back_to_the_chat_name()
+    public void A_group_message_without_a_participant_does_not_use_the_group_title()
     {
         IncomingSenderResolution r = IncomingSenderResolver.Resolve(
             isGroup: true,
@@ -48,7 +48,8 @@ public class IncomingSenderResolverTests
             chatResolvedName: "Grupo",
             hasParticipant: false);
 
-        Assert.Equal("Grupo", r.SenderName);
+        Assert.Null(r.SenderName);
+        Assert.False(r.IsFromMe);
     }
 
     [Fact]

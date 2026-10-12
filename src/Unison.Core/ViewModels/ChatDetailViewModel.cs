@@ -90,6 +90,9 @@ namespace Unison.Core.ViewModels
         /// <summary>Runtime diagnostics journal (Debug screen).</summary>
         private readonly IRuntimeDiagnostics _diagnostics;
 
+        /// <summary>Keeps the chat-list author strip in step with the names resolved here.</summary>
+        private readonly IChatAuthorProjection _authorProjection;
+
         // ── State ─────────────────────────────────────────────────────────────
 
         private ChatItem _activeChat;
@@ -154,7 +157,8 @@ namespace Unison.Core.ViewModels
             ISystemInfoProvider systemInfo = null,
             IUriLauncher uriLauncher = null,
             IConnectionService connectionService = null,
-            IGroupService groupService = null)
+            IGroupService groupService = null,
+            IChatAuthorProjection authorProjection = null)
         {
             _chatService = chatService;
             _connectionService = connectionService;
@@ -177,6 +181,7 @@ namespace Unison.Core.ViewModels
             _systemInfo = systemInfo;
             _sessionLogger = sessionLogger;
             _diagnostics = diagnostics;
+            _authorProjection = authorProjection;
 
             _participantContext = new ParticipantResolutionContext(jids, contactService, chatState, personStore);
 
@@ -1200,6 +1205,11 @@ namespace Unison.Core.ViewModels
             if (LooksLikeGroupChat(chat))
             {
                 _ = RefreshGroupSendPermissionsSafeAsync(chat.JID);
+
+                // Opening a group resolves its senders here (roster + contacts) while the list row
+                // may still be sitting on the number a history chunk left behind. Ask the strip to
+                // catch up so the two do not disagree on the same person.
+                _authorProjection?.Refresh();
             }
 
             if (chat == null)

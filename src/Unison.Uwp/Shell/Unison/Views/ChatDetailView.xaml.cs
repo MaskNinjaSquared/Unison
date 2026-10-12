@@ -1803,10 +1803,16 @@ namespace Unison.Uwp.Shell.Unison.Views
                     bool isGroup = chat.IsGroup ||
                         (chat.JID ?? string.Empty).EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
                     string rawPreview = ChatPreviewNormalizer.FormatListPreview(lastMsg, isGroup);
+                    string stripParticipant = isGroup
+                        ? ParticipantStripIdentity.PreferForDisplay(
+                            lastMsg.ParticipantJid,
+                            Jids.GetCanonicalJid(lastMsg.ParticipantJid))
+                        : null;
                     string authorPrefix = ChatPreviewNormalizer.FormatListAuthorPrefix(
                         lastMsg,
                         isGroup,
-                        _strings?.Get("Chat_SelfFallbackName", "You") ?? "You");
+                        _strings?.Get("Chat_SelfFallbackName", "You") ?? "You",
+                        stripParticipant);
                     ChatPreviewNormalizer.Normalize(
                         rawPreview,
                         ChatPreviewNormalizer.InferKindFromMessage(lastMsg),
@@ -1852,12 +1858,29 @@ namespace Unison.Uwp.Shell.Unison.Views
                         chat.Timestamp = WhatsAppMapper.FormatTimestamp(
                             lastMsg.Timestamp,
                             LocalizedStrings.Get("Common_Yesterday", "Yesterday"));
+                        LiveChatPreviewApplier.ApplyAuthorParts(
+                            chat,
+                            stripParticipant,
+                            lastMsg.IsFromMe ? null : lastMsg.SenderName,
+                            authorPrefix);
                         service?.PersistChatListRows(new[] { chat });
                         Debug.WriteLine(
                             "[ChatDetailView] List preview from newest tip id=" +
                             (lastMsg.Id ?? "?") +
                             " fromMe=" + lastMsg.IsFromMe +
                             " ts=" + tipUtc.ToString("O"));
+                    }
+                    else if (isGroup &&
+                             !string.IsNullOrWhiteSpace(lastMsg.Id) &&
+                             string.Equals(chat.LastMessageId, lastMsg.Id, StringComparison.Ordinal))
+                    {
+                        // Same tip the bubble just named — promote author without moving the strip time.
+                        LiveChatPreviewApplier.ApplyAuthorParts(
+                            chat,
+                            stripParticipant,
+                            lastMsg.IsFromMe ? null : lastMsg.SenderName,
+                            authorPrefix);
+                        service?.PersistChatListRows(new[] { chat });
                     }
 
                     _ = service?.ReconcileChatPreviewsFromSqliteAsync(

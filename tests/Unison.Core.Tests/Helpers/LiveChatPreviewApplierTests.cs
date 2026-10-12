@@ -102,7 +102,7 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
-        public void An_author_prefix_is_stored_separately_from_the_body()
+        public void Author_parts_are_written_with_the_tip()
         {
             ChatItem chat = Row(string.Empty, null);
 
@@ -111,10 +111,126 @@ namespace Unison.Core.Tests.Helpers
                 "hello",
                 Noon,
                 authorPrefix: "Ana: ",
-                yesterdayLabel: "Yesterday");
+                yesterdayLabel: "Yesterday",
+                participantJid: "5511988887777@s.whatsapp.net",
+                senderName: "Ana");
 
             Assert.Equal("Ana: ", chat.LastMessageAuthor);
-            Assert.Equal("hello", chat.LastMessage);
+            Assert.Equal("5511988887777@s.whatsapp.net", chat.LastMessageParticipantJid);
+            Assert.Equal("Ana", chat.LastMessageSenderName);
+        }
+
+        [Fact]
+        public void A_phone_stand_in_does_not_wipe_a_resolved_sender_name()
+        {
+            ChatItem chat = Row("hello", Noon, messageId: "3EB0");
+            chat.LastMessageIsFromMe = false;
+            chat.LastMessageSendState = MessageSendState.NotApplicable;
+            chat.LastMessageParticipantJid = "199999999999@lid";
+            chat.LastMessageSenderName = "Ana";
+            chat.LastMessageAuthor = "Ana: ";
+
+            LiveChatPreviewApplier.ApplyIfNewer(
+                chat,
+                "hello",
+                Noon,
+                messageId: "3EB0",
+                isFromMe: false,
+                sendState: MessageSendState.NotApplicable,
+                authorPrefix: "5511988887777: ",
+                yesterdayLabel: "Yesterday",
+                participantJid: "5511988887777@s.whatsapp.net",
+                senderName: "5511988887777");
+
+            Assert.Equal("Ana", chat.LastMessageSenderName);
+            Assert.Equal("Ana: ", chat.LastMessageAuthor);
+        }
+
+        [Fact]
+        public void An_empty_author_prefix_on_the_same_tip_does_not_wipe_a_resolved_strip()
+        {
+            ChatItem chat = Row("hello", Noon, messageId: "3EB0");
+            chat.LastMessageIsFromMe = false;
+            chat.LastMessageSendState = MessageSendState.NotApplicable;
+            chat.LastMessageAuthor = "Ana: ";
+            chat.LastMessageSenderName = "Ana";
+            chat.LastMessageParticipantJid = "5511988887777@s.whatsapp.net";
+
+            bool applied = LiveChatPreviewApplier.ApplyIfNewer(
+                chat,
+                "hello caption",
+                Noon,
+                messageId: "3EB0",
+                isFromMe: false,
+                sendState: MessageSendState.NotApplicable,
+                authorPrefix: string.Empty,
+                yesterdayLabel: "Yesterday",
+                participantJid: "5511988887777@s.whatsapp.net",
+                senderName: null);
+
+            Assert.True(applied);
+            Assert.Equal("hello caption", chat.LastMessage);
+            Assert.Equal("Ana: ", chat.LastMessageAuthor);
+            Assert.Equal("Ana", chat.LastMessageSenderName);
+        }
+
+        [Fact]
+        public void A_newer_tip_with_no_author_clears_the_previous_strip()
+        {
+            ChatItem chat = Row("hello", Noon, messageId: "3EB0");
+            chat.LastMessageAuthor = "Ana: ";
+            chat.LastMessageSenderName = "Ana";
+            chat.LastMessageParticipantJid = "5511988887777@s.whatsapp.net";
+
+            bool applied = LiveChatPreviewApplier.ApplyIfNewer(
+                chat,
+                "other",
+                Noon.AddMinutes(1),
+                messageId: "3EB1",
+                authorPrefix: string.Empty,
+                yesterdayLabel: "Yesterday",
+                participantJid: "199999999999@lid",
+                senderName: null);
+
+            Assert.True(applied);
+            Assert.Equal(string.Empty, chat.LastMessageAuthor);
+        }
+
+        [Fact]
+        public void ApplyAuthorParts_rejects_the_group_title_as_sender_name()
+        {
+            ChatItem chat = Row("hello", Noon, messageId: "3EB0");
+            chat.Name = "Família";
+            chat.LastMessageAuthor = "Família: ";
+            chat.LastMessageSenderName = "Família";
+            chat.LastMessageParticipantJid = "199999999999@lid";
+
+            LiveChatPreviewApplier.ApplyAuthorParts(
+                chat,
+                "199999999999@lid",
+                "Família",
+                "Família: ");
+
+            Assert.Null(chat.LastMessageSenderName);
+            Assert.Equal(string.Empty, chat.LastMessageAuthor);
+        }
+
+        [Fact]
+        public void ApplyAuthorParts_promotes_a_bubble_resolved_name_onto_the_same_tip()
+        {
+            ChatItem chat = Row("hello", Noon, messageId: "3EB0");
+            chat.LastMessageParticipantJid = "199999999999@lid";
+            chat.LastMessageAuthor = string.Empty;
+
+            LiveChatPreviewApplier.ApplyAuthorParts(
+                chat,
+                "5511988887777@s.whatsapp.net",
+                "Ana",
+                "Ana: ");
+
+            Assert.Equal("5511988887777@s.whatsapp.net", chat.LastMessageParticipantJid);
+            Assert.Equal("Ana", chat.LastMessageSenderName);
+            Assert.Equal("Ana: ", chat.LastMessageAuthor);
         }
 
         [Fact]

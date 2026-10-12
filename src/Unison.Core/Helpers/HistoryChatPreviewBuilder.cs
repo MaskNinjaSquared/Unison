@@ -22,6 +22,7 @@ namespace Unison.Core.Helpers
             string syncType = sync.SyncType.ToString();
             DateTime now = DateTime.UtcNow;
             var pushNames = HistorySyncContentFilter.BuildPushNameMap(sync);
+            var lidToPhone = HistorySyncContentFilter.BuildLidToPhoneMap(sync);
 
             foreach (var conv in sync.Conversations)
             {
@@ -37,9 +38,18 @@ namespace Unison.Core.Helpers
                 }
 
                 bool isGroup = JidHelper.IsGroupJid(jid);
+                HistoryConversationFlags flags = HistoryConversationFlagsReader.Read(conv);
                 WebMessageInfo newest = HistorySyncContentFilter.FindNewestListable(conv);
                 if (newest == null)
                 {
+                    // Pin/mute can arrive on a Conversation with no listable tip yet. Skipping
+                    // the whole row dropped IsChatPinned before ChatStore ever saw it.
+                    if (!flags.Pinned.HasValue && !flags.AppliesMute)
+                    {
+                        continue;
+                    }
+
+                    results.Add(BuildFlagOnlyPreview(conv, jid, isGroup, flags, syncId, syncType, now));
                     continue;
                 }
 
@@ -52,12 +62,24 @@ namespace Unison.Core.Helpers
                         out kind,
                         out ts))
                 {
+                    if (!flags.Pinned.HasValue && !flags.AppliesMute)
+                    {
+                        continue;
+                    }
+
+                    results.Add(BuildFlagOnlyPreview(conv, jid, isGroup, flags, syncId, syncType, now));
                     continue;
                 }
 
                 ChatPreviewNormalizer.Normalize(lastMessage, kind, out kind, out string normalizedText);
                 if (!HistorySyncContentFilter.HasRenderableContent(normalizedText, kind))
                 {
+                    if (!flags.Pinned.HasValue && !flags.AppliesMute)
+                    {
+                        continue;
+                    }
+
+                    results.Add(BuildFlagOnlyPreview(conv, jid, isGroup, flags, syncId, syncType, now));
                     continue;
                 }
 
@@ -86,10 +108,10 @@ namespace Unison.Core.Helpers
                             SenderName = senderName,
                             ParticipantJid = participant
                         },
-                        true)
+                        true,
+                        null,
+                        HistorySyncContentFilter.ResolveParticipantPhoneJid(participant, lidToPhone))
                     : string.Empty;
-
-                HistoryConversationFlags flags = HistoryConversationFlagsReader.Read(conv);
 
                 results.Add(new HistoryChatPreview
                 {
@@ -121,6 +143,44 @@ namespace Unison.Core.Helpers
             }
 
             return results;
+        }
+
+        private static HistoryChatPreview BuildFlagOnlyPreview(
+            Conversation conv,
+            string jid,
+            bool isGroup,
+            HistoryConversationFlags flags,
+            string syncId,
+            string syncType,
+            DateTime now)
+        {
+            string name = isGroup
+                ? PreferNonBlacklistedGroupName(conv.DisplayName, conv.Name, conv.Username)
+                : FirstNonEmpty(conv.DisplayName, conv.Name, conv.Username);
+            if (string.IsNullOrWhiteSpace(name) && !isGroup)
+            {
+                name = JidHelper.TryPhoneFromJid(jid) ?? jid.Split('@')[0];
+            }
+
+            return new HistoryChatPreview
+            {
+                Jid = jid,
+                LidJid = string.IsNullOrWhiteSpace(conv.LidJid) ? null : JidHelper.Normalize(conv.LidJid),
+                PnJid = string.IsNullOrWhiteSpace(conv.PnJid) ? null : JidHelper.Normalize(conv.PnJid),
+                Name = name ?? string.Empty,
+                IsGroup = isGroup,
+                Status = conv.Archived ? ChatStatus.Archived : ChatStatus.Active,
+                UnreadCount = conv.HasUnreadCount ? Math.Max(0, (int)conv.UnreadCount) : 0,
+                IsChatPinned = flags.Pinned,
+                PinnedTimestamp = flags.PinnedTimestamp,
+                AppliesMute = flags.AppliesMute,
+                MutedUntil = flags.MutedUntil,
+                LastMessage = string.Empty,
+                LastMessageKind = ChatPreviewKind.Text,
+                SyncId = syncId ?? string.Empty,
+                SyncType = syncType,
+                UpdatedAtUtc = now
+            };
         }
 
         private static string FirstNonEmpty(params string[] values)

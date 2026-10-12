@@ -43,7 +43,9 @@ namespace Unison.Core.Helpers
             string status,
             string authorPrefix,
             bool incrementUnread,
-            DateTime utcNow)
+            DateTime utcNow,
+            string participantJid = null,
+            string senderName = null)
         {
             if (summary == null)
             {
@@ -65,7 +67,9 @@ namespace Unison.Core.Helpers
                     isFromMe,
                     kind,
                     status,
-                    authorPrefix);
+                    authorPrefix,
+                    participantJid,
+                    senderName);
             }
 
             if (incrementUnread)
@@ -97,7 +101,9 @@ namespace Unison.Core.Helpers
                     returned.IsFromMe,
                     returned.Kind,
                     returned.Status,
-                    returned.AuthorPrefix);
+                    returned.AuthorPrefix,
+                    returned.ParticipantJid,
+                    returned.SenderName);
             }
 
             current.UnreadDelta += returned.UnreadDelta;
@@ -111,7 +117,9 @@ namespace Unison.Core.Helpers
             bool isFromMe,
             ChatPreviewKind kind,
             string status,
-            string authorPrefix)
+            string authorPrefix,
+            string participantJid = null,
+            string senderName = null)
         {
             summary.Timestamp = comparableTimestamp;
             summary.Preview = preview ?? string.Empty;
@@ -120,6 +128,8 @@ namespace Unison.Core.Helpers
             summary.Kind = kind;
             summary.Status = status;
             summary.AuthorPrefix = authorPrefix ?? string.Empty;
+            summary.ParticipantJid = participantJid;
+            summary.SenderName = senderName;
         }
     }
 }

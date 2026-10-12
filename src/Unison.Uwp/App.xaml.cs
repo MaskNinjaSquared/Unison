@@ -297,7 +297,6 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IWhatsAppService>()));
             services.AddSingleton<IStatusService>(sp => sp.GetRequiredService<StatusFacade>());
 
-            services.AddSingleton<IChatAuthorProjection, ChatAuthorProjection>();
             services.AddSingleton<IMessageService, MessageFacade>();
             services.AddSingleton<IChatMessageVmFactory, ChatMessageVmFactory>();
             services.AddSingleton<IChatDetailInfoViewModelFactory, ChatDetailInfoViewModelFactory>();
@@ -323,6 +322,15 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IJidResolver>(),
                 sp.GetRequiredService<IContactService>(),
                 sp.GetRequiredService<INotificationService>()));
+            // After IChatService: the projection persists resolved strip rows so cold start keeps names.
+            services.AddSingleton<IChatAuthorProjection>(sp => new ChatAuthorProjection(
+                sp.GetRequiredService<IChatStateStore>(),
+                sp.GetRequiredService<IPersonStore>(),
+                sp.GetRequiredService<IJidResolver>(),
+                sp.GetRequiredService<IStringResources>(),
+                sp.GetRequiredService<IDispatcher>(),
+                sp.GetRequiredService<IContactService>(),
+                sp.GetRequiredService<IChatService>()));
             // Forwards for now: the w:g2 work is still inside the client (phase 3.2). What this
             // registration buys is that the info pane and the composer stop naming it.
             services.AddSingleton<IGroupService>(sp => new GroupFacade(

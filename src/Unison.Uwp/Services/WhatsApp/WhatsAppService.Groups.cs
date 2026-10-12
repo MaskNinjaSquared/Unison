@@ -317,6 +317,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 {
                     target.IsGroup = true;
                 }
+
+                _chatState?.NotifyGroupRosterChanged(target.JID);
             }).ConfigureAwait(false);
 
             Debug.WriteLine(
@@ -656,6 +658,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 SchedulePersistGroupMemberships(chat.JID, previousList);
                 SchedulePersistGroupRoster(chat.JID, previousList);
+                _chatState?.NotifyGroupRosterChanged(chat.JID);
                 return;
             }
 
@@ -667,6 +670,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             SchedulePersistGroupMemberships(chat.JID, next);
             SchedulePersistGroupRoster(chat.JID, next);
+            _chatState?.NotifyGroupRosterChanged(chat.JID);
         }
 
         private GroupMember FindPreviousGroupMember(

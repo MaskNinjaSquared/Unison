@@ -275,7 +275,15 @@ namespace Unison.Core.Helpers
         /// <param name="selfDisplayName">
         /// Localized label for own messages (e.g. <c>Chat_SelfFallbackName</c>). Defaults to "You".
         /// </param>
-        public static string FormatListAuthorPrefix(ChatMessage message, bool isGroup, string selfDisplayName = null)
+        /// <param name="canonicalParticipantJid">
+        /// Sender after LID → PN resolution, when the caller has a resolver. Lets the no-name
+        /// fallback print the phone number instead of dropping the author.
+        /// </param>
+        public static string FormatListAuthorPrefix(
+            ChatMessage message,
+            bool isGroup,
+            string selfDisplayName = null,
+            string canonicalParticipantJid = null)
         {
             if (message == null || !isGroup)
             {
@@ -296,8 +304,11 @@ namespace Unison.Core.Helpers
                 string.Equals(name, "Me", StringComparison.OrdinalIgnoreCase) ||
                 IsKnownSelfFallback(name))
             {
-                // Keep the group strip visible when push name is missing (common on sync).
-                name = ShortParticipantLabel(message.ParticipantJid);
+                // Push name missing (common on sync): the number is a label a person recognises,
+                // LID digits are not. No number known → no author rather than a bogus one.
+                name = ParticipantStripLabel.ForParticipant(
+                    message.ParticipantJid,
+                    canonicalParticipantJid);
                 if (string.IsNullOrEmpty(name))
                 {
                     return string.Empty;
@@ -308,29 +319,6 @@ namespace Unison.Core.Helpers
         }
 
         private static bool IsKnownSelfFallback(string name) => SelfChatNaming.IsKnownFallback(name);
-
-        private static string ShortParticipantLabel(string participantJid)
-        {
-            if (string.IsNullOrWhiteSpace(participantJid))
-            {
-                return string.Empty;
-            }
-
-            string user = participantJid.Trim();
-            int at = user.IndexOf('@');
-            if (at > 0)
-            {
-                user = user.Substring(0, at);
-            }
-
-            int colon = user.IndexOf(':');
-            if (colon > 0)
-            {
-                user = user.Substring(0, colon);
-            }
-
-            return user.Trim();
-        }
 
         /// <summary>
         /// Peels legacy "~ Name: " prefixes from stored list previews.

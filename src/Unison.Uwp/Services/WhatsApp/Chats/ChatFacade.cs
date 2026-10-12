@@ -297,7 +297,9 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             DateTime timestamp,
             bool isFromMe,
             ChatPreviewKind? kindHint = null,
-            string authorPrefix = null)
+            string authorPrefix = null,
+            string participantJid = null,
+            string senderName = null)
         {
             if (string.IsNullOrWhiteSpace(chatJid))
             {
@@ -336,7 +338,9 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
                         isFromMe,
                         sendState,
                         messageId: null,
-                        yesterday))
+                        yesterday,
+                        participantJid,
+                        senderName))
                     {
                         preferred = preferred ?? row;
                     }
@@ -344,11 +348,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
 
                 if (preferred != null)
                 {
-                    int index = _appState.Chats.IndexOf(preferred);
-                    if (index > 0)
-                    {
-                        _appState.Chats.Move(index, 0);
-                    }
+                    ChatDisplayOrder.Reposition(_appState.Chats, preferred);
                 }
             }).ConfigureAwait(false);
         }
@@ -395,7 +395,9 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
                     request.AliasLid,
                     request.AliasPn,
                     createAtFront: true,
-                    out _);
+                    out _,
+                    request.ParticipantJid,
+                    request.SenderName);
 
                 result.Chat = chat;
                 result.DisplayName = chat != null ? chat.Name : null;
@@ -443,7 +445,9 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
                         aliasLid: null,
                         aliasPn: null,
                         createAtFront: false,
-                        out createdRow);
+                        out createdRow,
+                        summary.ParticipantJid,
+                        summary.SenderName);
 
                     if (createdRow)
                     {
@@ -497,7 +501,9 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             string aliasLid,
             string aliasPn,
             bool createAtFront,
-            out bool createdRow)
+            out bool createdRow,
+            string participantJid = null,
+            string senderName = null)
         {
             createdRow = false;
             string canonicalLookup = _jids.GetCanonicalJid(jid) ?? jid;
@@ -565,7 +571,9 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
                     isFromMe,
                     sendState,
                     messageId,
-                    yesterday);
+                    yesterday,
+                    participantJid,
+                    senderName);
 
                 foreach (ChatItem equivalentRow in _appState.GetChatRowsForCanonicalJid(jid))
                 {
@@ -583,7 +591,9 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
                             isFromMe,
                             sendState,
                             messageId,
-                            yesterday);
+                            yesterday,
+                            participantJid,
+                            senderName);
                     }
                 }
             }

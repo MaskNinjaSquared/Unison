@@ -53,9 +53,9 @@ namespace Unison.Core.Helpers
 
                 return new IncomingSenderResolution
                 {
-                    SenderName = hasParticipant
-                        ? participantResolvedName
-                        : chatResolvedName,
+                    // Never fall back to the group chat's own name — that labelled the strip with
+                    // the group title when the envelope omitted participant (common on sync).
+                    SenderName = hasParticipant ? participantResolvedName : null,
                     IsFromMe = false
                 };
             }

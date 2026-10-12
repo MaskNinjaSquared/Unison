@@ -799,17 +799,26 @@ namespace Unison.Uwp.Services.WhatsApp
                                 preview = MediaPreviewTag.ForKind(kind) ?? "[Message]";
                             }
 
+                            bool isGroupMsg = JidHelper.IsGroupJid(item.Key);
+                            string stripParticipant = isGroupMsg
+                                ? ParticipantStripIdentity.PreferForDisplay(
+                                    message?.ParticipantJid,
+                                    GetCanonicalJid(message?.ParticipantJid))
+                                : null;
                             await RefreshChatPreviewViaFacadeAsync(
                                 item.Key,
                                 preview,
                                 message?.Timestamp ?? DateTime.MinValue,
-                                JidHelper.IsGroupJid(item.Key),
+                                isGroupMsg,
                                 message?.IsFromMe == true,
                                 kind,
                                 ChatPreviewNormalizer.FormatListAuthorPrefix(
                                     message,
-                                    JidHelper.IsGroupJid(item.Key),
-                                    SelfListDisplayName()));
+                                    isGroupMsg,
+                                    SelfListDisplayName(),
+                                    stripParticipant),
+                                stripParticipant,
+                                isGroupMsg && message?.IsFromMe != true ? message?.SenderName : null);
                         }
 
                         RuntimeDiagnosticsService.Instance.Write(
@@ -986,7 +995,12 @@ namespace Unison.Uwp.Services.WhatsApp
                     ChatPreviewNormalizer.FormatListAuthorPrefix(
                         target,
                         JidHelper.IsGroupJid(canonical),
-                        SelfListDisplayName()));
+                        SelfListDisplayName(),
+                        GetCanonicalJid(target.ParticipantJid)),
+                    ParticipantStripIdentity.PreferForDisplay(
+                        target.ParticipantJid,
+                        GetCanonicalJid(target.ParticipantJid)),
+                    target.IsFromMe ? null : target.SenderName);
             }
         }
 
@@ -1864,15 +1878,29 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
                 // Resolve sender name and true 'IsFromMe' status.
+                // Envelope participant is often a LID; participantAlt carries the phone. The bubble
+                // walks aliases/roster later — the strip tip must prefer the phone up front or
+                // ChatAuthorProjection never finds the name keyed under the PN.
                 string participantJid = NormalizeJid(e.Participant);
+                string participantAltJid = NormalizeJid(e.ParticipantAlt);
+                string stripParticipantJid = ParticipantStripIdentity.PreferForDisplay(
+                    participantJid,
+                    participantAltJid);
+                string resolvedParticipantName =
+                    (!string.IsNullOrEmpty(stripParticipantJid)
+                        ? GetResolvedName(stripParticipantJid)
+                        : null)
+                    ?? (!string.IsNullOrEmpty(participantJid)
+                        ? GetResolvedName(participantJid)
+                        : null);
                 IncomingSenderResolution sender = IncomingSenderResolver.Resolve(
                     isGroup,
                     e.IsFromMe,
                     _authState?.Me?.Name,
                     SelfListDisplayName(),
-                    string.IsNullOrEmpty(participantJid) ? null : GetResolvedName(participantJid),
+                    resolvedParticipantName,
                     GetResolvedName(jid),
-                    !string.IsNullOrEmpty(participantJid));
+                    !string.IsNullOrEmpty(participantJid) || !string.IsNullOrEmpty(stripParticipantJid));
                 string senderName = sender.SenderName;
                 bool isActuallyFromMe = sender.IsFromMe;
                 
@@ -1884,9 +1912,8 @@ namespace Unison.Uwp.Services.WhatsApp
                     Unison.Uwp.App.IsWindowVisible);
 
                 // List preview body is unprefixed; group author is applied via LastMessageAuthor.
-                // ParticipantJid is required when SenderName is still empty — otherwise the strip
-                // has nothing to fall back to and the live path draws a blank while history draws
-                // the short LID/phone label for the same message.
+                // Strip identity prefers PN when known; FormatListAuthorPrefix falls back to the
+                // phone digits rather than printing a LID.
                 string displayContent = content;
                 string listAuthorPrefix = isGroup
                     ? ChatPreviewNormalizer.FormatListAuthorPrefix(
@@ -1897,7 +1924,8 @@ namespace Unison.Uwp.Services.WhatsApp
                             ParticipantJid = participantJid
                         },
                         true,
-                        SelfListDisplayName())
+                        SelfListDisplayName(),
+                        stripParticipantJid)
                     : string.Empty;
 
                 SetIncomingMessagePumpStage("model", e);
@@ -1975,7 +2003,9 @@ namespace Unison.Uwp.Services.WhatsApp
                                 isGroup,
                                 isActuallyFromMe,
                                 previewKind,
-                                listAuthorPrefix));
+                                listAuthorPrefix,
+                                isGroup ? stripParticipantJid : null,
+                                isGroup && !isActuallyFromMe ? senderName : null));
                     }
                     else
                     {
@@ -1989,7 +2019,9 @@ namespace Unison.Uwp.Services.WhatsApp
                             countUnread: false,
                             previewKind,
                             chatMessage.Status,
-                            listAuthorPrefix);
+                            listAuthorPrefix,
+                            isGroup ? stripParticipantJid : null,
+                            isGroup && !isActuallyFromMe ? senderName : null);
                     }
                     if (!e.IsOffline)
                     {
@@ -2022,7 +2054,9 @@ namespace Unison.Uwp.Services.WhatsApp
                                 isGroup,
                                 isActuallyFromMe,
                                 previewKind,
-                                listAuthorPrefix));
+                                listAuthorPrefix,
+                                isGroup ? stripParticipantJid : null,
+                                isGroup && !isActuallyFromMe ? senderName : null));
                     }
                     else
                     {
@@ -2036,7 +2070,9 @@ namespace Unison.Uwp.Services.WhatsApp
                             countUnread: false,
                             previewKind,
                             chatMessage.Status,
-                            listAuthorPrefix);
+                            listAuthorPrefix,
+                            isGroup ? stripParticipantJid : null,
+                            isGroup && !isActuallyFromMe ? senderName : null);
                     }
                     if (!e.IsOffline)
                     {
@@ -2061,7 +2097,9 @@ namespace Unison.Uwp.Services.WhatsApp
                         countUnread: true,
                         previewKind,
                         chatMessage.Status,
-                        listAuthorPrefix);
+                        listAuthorPrefix,
+                        isGroup ? stripParticipantJid : null,
+                        isGroup && !isActuallyFromMe ? senderName : null);
                     _messageService.QueueIncomingPersist(jid, chatMessage);
 
                     if (IsActiveChatJid(jid))
@@ -2120,6 +2158,8 @@ namespace Unison.Uwp.Services.WhatsApp
                         IsFromMe = chatMessage.IsFromMe,
                         SendState = HistoryLiveMessageMapper.FromStatus(chatMessage.Status, chatMessage.IsFromMe),
                         MessageId = chatMessage.Id,
+                        ParticipantJid = isGroup ? stripParticipantJid : null,
+                        SenderName = isGroup && !isActuallyFromMe ? senderName : null,
                         UnreadDelta = attention.CountsAsUnread ? 1 : 0,
                         CountsAsUnread = attention.CountsAsUnread,
                         IsGroup = isGroup,
@@ -2310,7 +2350,9 @@ namespace Unison.Uwp.Services.WhatsApp
             bool countUnread,
             ChatPreviewKind kind = ChatPreviewKind.Text,
             string status = null,
-            string authorPrefix = null)
+            string authorPrefix = null,
+            string participantJid = null,
+            string senderName = null)
         {
             string canonical = GetCanonicalJid(NormalizeJid(jid));
             if (string.IsNullOrWhiteSpace(canonical))
@@ -2344,7 +2386,9 @@ namespace Unison.Uwp.Services.WhatsApp
                     status,
                     authorPrefix,
                     incrementUnread,
-                    DateTime.UtcNow);
+                    DateTime.UtcNow,
+                    participantJid,
+                    senderName);
 
                 // Throttle instead of debounce: show the first recovered conversation
                 // within ~180 ms even while a long replay continues. Further messages
@@ -2454,7 +2498,9 @@ namespace Unison.Uwp.Services.WhatsApp
             bool isGroup,
             bool isFromMe,
             ChatPreviewKind? kindHint = null,
-            string authorPrefix = null)
+            string authorPrefix = null,
+            string participantJid = null,
+            string senderName = null)
         {
             if (_chatService != null)
             {
@@ -2464,7 +2510,9 @@ namespace Unison.Uwp.Services.WhatsApp
                     timestamp,
                     isFromMe,
                     kindHint,
-                    authorPrefix);
+                    authorPrefix,
+                    participantJid,
+                    senderName);
             }
 
             return RefreshChatPreviewFromReplayAsync(
@@ -2474,7 +2522,9 @@ namespace Unison.Uwp.Services.WhatsApp
                 isGroup,
                 isFromMe,
                 kindHint,
-                authorPrefix);
+                authorPrefix,
+                participantJid,
+                senderName);
         }
         private async Task RefreshChatPreviewFromReplayAsync(
             string jid,
@@ -2483,7 +2533,9 @@ namespace Unison.Uwp.Services.WhatsApp
             bool isGroup,
             bool isFromMe,
             ChatPreviewKind? kindHint = null,
-            string authorPrefix = null)
+            string authorPrefix = null,
+            string participantJid = null,
+            string senderName = null)
         {
             if (string.IsNullOrWhiteSpace(jid))
             {
@@ -2510,7 +2562,10 @@ namespace Unison.Uwp.Services.WhatsApp
                             authorPrefix,
                             null,
                             isFromMe,
-                            isFromMe ? MessageSendState.Sent : MessageSendState.NotApplicable))
+                            isFromMe ? MessageSendState.Sent : MessageSendState.NotApplicable,
+                            messageId: null,
+                            participantJid,
+                            senderName))
                         {
                             preferred = preferred ?? row;
                         }
@@ -2518,11 +2573,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
                     if (preferred != null)
                     {
-                        int index = Chats.IndexOf(preferred);
-                        if (index > 0)
-                        {
-                            Chats.Move(index, 0);
-                        }
+                        ChatDisplayOrder.Reposition(Chats, preferred);
                     }
 
                     Log($"[WhatsAppService] Replay preview refresh applied for {jid} at {timestamp:O}");
@@ -2559,7 +2610,16 @@ namespace Unison.Uwp.Services.WhatsApp
 
                     bool isGroup = canonicalJid.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
                     string preview = ChatPreviewNormalizer.FormatListPreview(latest, isGroup);
-                    string author = ChatPreviewNormalizer.FormatListAuthorPrefix(latest, isGroup, SelfListDisplayName());
+                    string stripParticipant = isGroup
+                        ? ParticipantStripIdentity.PreferForDisplay(
+                            latest.ParticipantJid,
+                            GetCanonicalJid(latest.ParticipantJid))
+                        : null;
+                    string author = ChatPreviewNormalizer.FormatListAuthorPrefix(
+                        latest,
+                        isGroup,
+                        SelfListDisplayName(),
+                        stripParticipant);
 
                     if (ApplyChatPreviewIfNewer(
                         chat,
@@ -2571,7 +2631,9 @@ namespace Unison.Uwp.Services.WhatsApp
                         latest.MentionedJids,
                         latest.IsFromMe,
                         HistoryLiveMessageMapper.FromStatus(latest.Status, latest.IsFromMe),
-                        latest.Id))
+                        latest.Id,
+                        stripParticipant,
+                        isGroup && !latest.IsFromMe ? latest.SenderName : null))
                     {
                         updated++;
                     }
@@ -2590,7 +2652,6 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 int refreshed = 0;
                 int created = 0;
-                var latestByChat = new List<Tuple<ChatItem, DateTime>>();
 
                 foreach (var kvp in MessagesByChat)
                 {
@@ -2622,17 +2683,29 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
 
                     string preview = latest.Content ?? string.Empty;
+                    bool isGroup = JidHelper.IsGroupJid(canonicalJid);
+                    string stripParticipant = isGroup
+                        ? ParticipantStripIdentity.PreferForDisplay(
+                            latest.ParticipantJid,
+                            GetCanonicalJid(latest.ParticipantJid))
+                        : null;
                     ApplyChatPreviewIfNewer(
                         chat,
                         preview,
                         latest.Timestamp,
                         false,
                         ChatPreviewNormalizer.InferKindFromMessage(latest),
-                        ChatPreviewNormalizer.FormatListAuthorPrefix(latest, JidHelper.IsGroupJid(canonicalJid), SelfListDisplayName()),
+                        ChatPreviewNormalizer.FormatListAuthorPrefix(
+                            latest,
+                            isGroup,
+                            SelfListDisplayName(),
+                            stripParticipant),
                         latest.MentionedJids,
                         latest.IsFromMe,
                         HistoryLiveMessageMapper.FromStatus(latest.Status, latest.IsFromMe),
-                        latest.Id);
+                        latest.Id,
+                        stripParticipant,
+                        isGroup && !latest.IsFromMe ? latest.SenderName : null);
                     ApplyChatKind(chat);
 
                     if (!chat.IsGroup && PlaceholderChatLabel.IsPlaceholder(chat.Name, canonicalJid, IsSelfMarkerLabel(chat.Name)))
@@ -2640,23 +2713,11 @@ namespace Unison.Uwp.Services.WhatsApp
                         chat.Name = ResolveDisplayName(canonicalJid, "chat");
                     }
 
-                    DateTime effectivePreviewTimestamp = chat.LastMessageTimestampUtc.HasValue
-                        ? ToComparableUtc(chat.LastMessageTimestampUtc.Value)
-                        : ToComparableUtc(latest.Timestamp);
-                    latestByChat.Add(Tuple.Create(chat, effectivePreviewTimestamp));
                     refreshed++;
                 }
 
-                int targetIndex = 0;
-                foreach (var entry in latestByChat.OrderByDescending(t => t.Item2))
-                {
-                    int currentIndex = Chats.IndexOf(entry.Item1);
-                    if (currentIndex >= 0 && currentIndex != targetIndex)
-                    {
-                        Chats.Move(currentIndex, targetIndex);
-                    }
-                    targetIndex++;
-                }
+                // Pin-aware order — tip time alone was shoving pinned rows mid-list on reconcile.
+                ChatDisplayOrder.SortInPlace(Chats);
 
                 Log($"[WhatsAppService] Reconciled {refreshed} chat previews from cached messages (created={created}, reason={reason})");
             });

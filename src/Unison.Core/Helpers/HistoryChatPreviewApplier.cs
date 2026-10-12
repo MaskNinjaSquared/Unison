@@ -214,7 +214,8 @@ namespace Unison.Core.Helpers
 
         /// <summary>
         /// Rebuilds the group author strip in the current UI language from the stored parts.
-        /// Falls back to the prefix pre-composed at sync time when the parts resolve to nothing.
+        /// When re-compose yields nothing (LID participant, no push name), keep the prefix that
+        /// was already persisted — wiping it left the list blank after every cold start.
         /// </summary>
         private static string ComposeAuthor(HistoryChatPreview preview, string selfDisplayName)
         {
@@ -227,15 +228,49 @@ namespace Unison.Core.Helpers
                 new ChatMessage
                 {
                     IsFromMe = preview.LastMessageIsFromMe,
-                    SenderName = preview.LastMessageSenderName,
+                    SenderName = IsGroupTitleMisuse(preview) ? null : preview.LastMessageSenderName,
                     ParticipantJid = preview.LastMessageParticipantJid
                 },
                 true,
-                selfDisplayName);
+                selfDisplayName,
+                JidHelper.IsPhoneJid(preview.LastMessageParticipantJid)
+                    ? preview.LastMessageParticipantJid
+                    : null);
 
-            return string.IsNullOrEmpty(composed)
-                ? (preview.LastMessageAuthor ?? string.Empty)
-                : composed;
+            if (!string.IsNullOrEmpty(composed))
+            {
+                return composed;
+            }
+
+            // Persisted strip from a prior session (projection / live tip). Re-composing with only
+            // a LID and no sender name must not blank it on LoadPersistedChats — unless that
+            // strip was the group title (legacy sync fallback).
+            if (!string.IsNullOrWhiteSpace(preview.LastMessageAuthor) &&
+                !IsGroupTitleMisuse(preview))
+            {
+                return preview.LastMessageAuthor;
+            }
+
+            return string.Empty;
+        }
+
+        /// <summary>
+        /// True when the stored sender label is the group subject — never a real author.
+        /// </summary>
+        private static bool IsGroupTitleMisuse(HistoryChatPreview preview)
+        {
+            if (preview == null ||
+                !preview.IsGroup ||
+                string.IsNullOrWhiteSpace(preview.Name) ||
+                string.IsNullOrWhiteSpace(preview.LastMessageSenderName))
+            {
+                return false;
+            }
+
+            return string.Equals(
+                preview.LastMessageSenderName.Trim(),
+                preview.Name.Trim(),
+                StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>

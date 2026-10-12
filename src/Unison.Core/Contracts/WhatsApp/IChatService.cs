@@ -96,7 +96,9 @@ namespace Unison.Core.Contracts.WhatsApp
             DateTime timestamp,
             bool isFromMe,
             ChatPreviewKind? kindHint = null,
-            string authorPrefix = null);
+            string authorPrefix = null,
+            string participantJid = null,
+            string senderName = null);
 
         /// <summary>Re-tips every open row from the in-memory message cache.</summary>
         Task RefreshAllChatPreviewsFromStoredAsync(string reason);

@@ -1532,10 +1532,33 @@ namespace Unison.Core.ViewModels
 
             foreach (var preview in rows)
             {
-                if (preview == null ||
-                    string.IsNullOrWhiteSpace(preview.Jid) ||
-                    !HistoryChatPreviewApplier.IsListable(preview))
+                if (preview == null || string.IsNullOrWhiteSpace(preview.Jid))
                 {
+                    continue;
+                }
+
+                if (!HistoryChatPreviewApplier.IsListable(preview))
+                {
+                    // Conversation carried pin/mute but no listable tip — still land flags in ChatStore
+                    // so a later tip hydrate / ApplyTo can show the pin icon.
+                    if (preview.IsChatPinned.HasValue || preview.AppliesMute)
+                    {
+                        ChatItem flagTarget = FindChatInIndex(index, preview);
+                        if (flagTarget != null)
+                        {
+                            HistoryChatPreviewApplier.ApplyLocalFlags(preview, flagTarget);
+                            PersistHistoryLocalFlags(flagTarget, preview);
+                            TryApplyCanonicalPinFallback(flagTarget);
+                            updated++;
+                        }
+                        else
+                        {
+                            PersistHistoryLocalFlags(
+                                new ChatItem { JID = preview.Jid },
+                                preview);
+                        }
+                    }
+
                     continue;
                 }
 
@@ -2498,7 +2521,7 @@ namespace Unison.Core.ViewModels
                     // (another batch tick) cannot treat a mute-only stub as "not pinned".
                     if (chat.IsChatPinned)
                     {
-                        _chatStore.RememberChatPinned(chat.JID, true);
+                        RememberPinnedUnderAliases(chat.JID, true);
                     }
 
                     if (chat.MutedUntil != null)
@@ -2515,9 +2538,9 @@ namespace Unison.Core.ViewModels
         }
 
         /// <summary>
-        /// Pin may be stored under the canonical PN while the list row is still a LID (or the
-        /// reverse). Borrow pin/mute from the alias when this address has not answered, or only
-        /// answered a different field (a mute-only stub must not block the borrow).
+        /// Pin may be stored under the PN while the list row is still a LID (or the reverse).
+        /// <see cref="IJidResolver.GetCanonicalJid"/> alone is not enough: when the row is already
+        /// the canonical PN, the pin often lives under the LID alias from <c>pin_v1</c>.
         /// </summary>
         private void TryApplyCanonicalPinFallback(ChatItem chat)
         {
@@ -2526,52 +2549,91 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
-            string canonical = GetCanonical(chat.JID);
-            if (string.IsNullOrWhiteSpace(canonical) ||
-                string.Equals(
-                    JidHelper.Normalize(canonical),
-                    JidHelper.Normalize(chat.JID),
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-
             ChatLocalState exact = _chatStore.TryGetCached(chat.JID);
-            ChatLocalState alt = _chatStore.TryGetCached(canonical);
-            if (alt == null)
+            // An explicit unpin under this exact JID wins over any alias.
+            if (exact != null && exact.Knows(ChatLocalStateFields.Pin) && !exact.IsChatPinned)
             {
                 return;
             }
 
-            // An explicit unpin under this exact JID wins over the alias.
-            if (!chat.IsChatPinned &&
-                !(exact != null && exact.Knows(ChatLocalStateFields.Pin) && !exact.IsChatPinned) &&
-                alt.Knows(ChatLocalStateFields.Pin) &&
-                alt.IsChatPinned)
+            IReadOnlyList<string> keys = ChatPinStoreKeys.For(chat.JID, _jids);
+            for (int i = 0; i < keys.Count; i++)
             {
-                chat.IsChatPinned = true;
-                if (chat.PinnedTimestamp == null || chat.PinnedTimestamp == 0)
+                string key = keys[i];
+                if (string.Equals(
+                        JidHelper.Normalize(key),
+                        JidHelper.Normalize(chat.JID),
+                        StringComparison.OrdinalIgnoreCase))
                 {
-                    chat.PinnedTimestamp = 1;
+                    continue;
                 }
 
-                _chatStore.RememberChatPinned(chat.JID, true);
+                ChatLocalState alt = _chatStore.TryGetCached(key);
+                if (alt == null || !alt.Knows(ChatLocalStateFields.Pin) || !alt.IsChatPinned)
+                {
+                    continue;
+                }
+
+                if (!chat.IsChatPinned)
+                {
+                    chat.IsChatPinned = true;
+                    if (chat.PinnedTimestamp == null || chat.PinnedTimestamp == 0)
+                    {
+                        chat.PinnedTimestamp = 1;
+                    }
+
+                    RememberPinnedUnderAliases(chat.JID, true);
+                }
+
+                break;
             }
 
-            if (!chat.IsWidgetPinned &&
-                alt.Knows(ChatLocalStateFields.WidgetPin) &&
-                alt.IsWidgetPinned)
+            for (int i = 0; i < keys.Count; i++)
             {
-                chat.IsWidgetPinned = true;
+                string key = keys[i];
+                if (string.Equals(
+                        JidHelper.Normalize(key),
+                        JidHelper.Normalize(chat.JID),
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                ChatLocalState alt = _chatStore.TryGetCached(key);
+                if (alt == null)
+                {
+                    continue;
+                }
+
+                if (!chat.IsWidgetPinned &&
+                    alt.Knows(ChatLocalStateFields.WidgetPin) &&
+                    alt.IsWidgetPinned)
+                {
+                    chat.IsWidgetPinned = true;
+                }
+
+                if (chat.MutedUntil == null &&
+                    !(exact != null && exact.Knows(ChatLocalStateFields.Mute)) &&
+                    alt.Knows(ChatLocalStateFields.Mute) &&
+                    alt.MutedUntil != null)
+                {
+                    chat.MutedUntil = alt.MutedUntil;
+                    _chatStore.RememberMutedUntil(chat.JID, alt.MutedUntil);
+                }
+            }
+        }
+
+        private void RememberPinnedUnderAliases(string jid, bool pinned)
+        {
+            if (_chatStore == null)
+            {
+                return;
             }
 
-            if (chat.MutedUntil == null &&
-                !(exact != null && exact.Knows(ChatLocalStateFields.Mute)) &&
-                alt.Knows(ChatLocalStateFields.Mute) &&
-                alt.MutedUntil != null)
+            IReadOnlyList<string> keys = ChatPinStoreKeys.For(jid, _jids);
+            for (int i = 0; i < keys.Count; i++)
             {
-                chat.MutedUntil = alt.MutedUntil;
-                _chatStore.RememberMutedUntil(chat.JID, alt.MutedUntil);
+                _chatStore.RememberChatPinned(keys[i], pinned);
             }
         }
 
@@ -2588,9 +2650,28 @@ namespace Unison.Core.ViewModels
 
             if (preview.IsChatPinned.HasValue)
             {
-                // Cache first so the next ApplyTo (batch / refresh) cannot wipe the pin before SQLite.
-                _chatStore.RememberChatPinned(chat.JID, preview.IsChatPinned.Value);
+                // Cache under PN and LID so ApplyTo on either address cannot miss the pin.
+                RememberPinnedUnderAliases(chat.JID, preview.IsChatPinned.Value);
+                if (!string.IsNullOrWhiteSpace(preview.LidJid))
+                {
+                    _chatStore.RememberChatPinned(preview.LidJid, preview.IsChatPinned.Value);
+                }
+
+                if (!string.IsNullOrWhiteSpace(preview.PnJid))
+                {
+                    _chatStore.RememberChatPinned(preview.PnJid, preview.IsChatPinned.Value);
+                }
+
                 _ = PersistHistoryPinnedAsync(chat.JID, preview.IsChatPinned.Value);
+                if (!string.IsNullOrWhiteSpace(preview.LidJid))
+                {
+                    _ = PersistHistoryPinnedAsync(preview.LidJid, preview.IsChatPinned.Value);
+                }
+
+                if (!string.IsNullOrWhiteSpace(preview.PnJid))
+                {
+                    _ = PersistHistoryPinnedAsync(preview.PnJid, preview.IsChatPinned.Value);
+                }
             }
 
             if (preview.AppliesMute)
@@ -2604,7 +2685,11 @@ namespace Unison.Core.ViewModels
         {
             try
             {
-                await _chatStore.SetChatPinnedAsync(jid, pinned).ConfigureAwait(false);
+                IReadOnlyList<string> keys = ChatPinStoreKeys.For(jid, _jids);
+                for (int i = 0; i < keys.Count; i++)
+                {
+                    await _chatStore.SetChatPinnedAsync(keys[i], pinned).ConfigureAwait(false);
+                }
             }
             catch (Exception ex)
             {

@@ -10,5 +10,12 @@ namespace Unison.Core.Contracts
     {
         /// <summary>Subscribes to the name sources and does one initial pass. Idempotent.</summary>
         void Start();
+
+        /// <summary>
+        /// Asks for another pass without a name having changed. Used when a screen that resolves
+        /// senders itself opens (a group chat), so the list agrees with what the bubbles show.
+        /// Passes are coalesced, so calling this per navigation is cheap.
+        /// </summary>
+        void Refresh();
     }
 }
