@@ -135,7 +135,7 @@ namespace Unison.Uwp.Services.WhatsApp
                                 GroupMemberCount = c.GroupMemberCount,
                                 MyGroupRole = c.MyGroupRole,
                                 IsAnnounceOnly = c.IsAnnounceOnly,
-                                GroupMembers = CloneGroupMembers(c.GroupMembers)
+                                GroupMembers = GroupRosterRules.CopyForStore(c.GroupMembers)
                             })
                             .ToList();
 

@@ -4,6 +4,17 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Group roster — rules out, restore on `GroupFacade` (3.2b)
+
+`GroupRosterRules` (Core) owns the roster copy for the store, the rebuild from the store, the
+"never over a live roster" check, prior-member matching across LID / PN / phone, and the
+groups-in-common person keys. The client's metadata apply calls it. Restoring a persisted roster
+onto a group row now runs in `GroupRosterRestore`, built for `GroupFacade`, which reaches the client
+only through `IGroupRosterHost` (UI dispatch and member labels).
+`EnsureGroupRosterLoadedFromStoreAsync` left `IWhatsAppService`.
+
+---
+
 ## Alias keys — one expansion, and a device suffix no longer hides the pair (3.7)
 
 History reads, avatar lookups and contact phone lookup were each rebuilding the same

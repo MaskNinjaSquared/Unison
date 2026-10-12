@@ -336,10 +336,17 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IDispatcher>(),
                 sp.GetRequiredService<IContactService>(),
                 sp.GetRequiredService<IChatService>()));
-            // Forwards for now: the w:g2 work is still inside the client (phase 3.2). What this
-            // registration buys is that the info pane and the composer stop naming it.
+            // The roster restore lives on GroupFacade; the dispatcher and the member labels it
+            // needs are still the client's, reached only through this narrow port.
+            services.AddSingleton<IGroupRosterHost>(
+                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IGroupService>(sp => new GroupFacade(
-                sp.GetRequiredService<IWhatsAppService>()));
+                sp.GetRequiredService<IWhatsAppService>(),
+                new GroupRosterRestore(
+                    sp.GetRequiredService<IGroupRosterHost>(),
+                    sp.GetRequiredService<IJidResolver>(),
+                    sp.GetRequiredService<IChatStateStore>(),
+                    sp.GetRequiredService<IGroupRosterStore>())));
             services.AddSingleton<ILiveTilesService>(_ => LiveTilesService.Instance);
             services.AddSingleton<IShortcutService, ShortcutService>();
             services.AddSingleton<INotificationService>(sp =>

@@ -221,6 +221,9 @@ namespace Unison.Uwp.Services.WhatsApp
 
         /// <summary>Reads group listings through the alias table. Built after <see cref="JidAlias"/>.</summary>
         private readonly GroupMetadataReader _groupMetadata;
+
+        /// <summary>The alias table as the Core rules read it. Built after <see cref="JidAlias"/>.</summary>
+        private readonly IJidResolver _jids;
         private IMessageService _messageService;
         private IChatService _chatService;
         private IContactService _contactService;
@@ -1705,6 +1708,7 @@ namespace Unison.Uwp.Services.WhatsApp
             // After JidAlias: the readers below capture the table now rather than calling back
             // into this instance later, so the property has to be set before they are built.
             var jidResolver = new JidResolver(JidAlias, this);
+            _jids = jidResolver;
             _groupMetadata = new GroupMetadataReader(jidResolver);
             _receipts = new ReceiptReader(jidResolver);
             _chatState.Chats.CollectionChanged += (s, e) => InvalidateChatRowIndex();
@@ -3799,66 +3803,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
         Task IWhatsAppService.RefreshGroupSendPermissionsAsync(string groupJid) => RefreshGroupSendPermissionsAsync(groupJid);
 
-        Task IWhatsAppService.EnsureGroupRosterLoadedFromStoreAsync(string groupJid) =>
-            EnsureGroupRosterLoadedFromStoreAsync(groupJid);
-
-
-        private IEnumerable<string> EnumerateMembershipPersonKeys(GroupMember member)
-        {
-            if (member == null)
-            {
-                yield break;
-            }
-
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            void Consider(string raw)
-            {
-                if (string.IsNullOrWhiteSpace(raw))
-                {
-                    return;
-                }
-
-                string key = NormalizeJid(raw);
-                if (string.IsNullOrEmpty(key) || IsGroupJid(key))
-                {
-                    return;
-                }
-
-                seen.Add(key);
-            }
-
-            Consider(member.Jid);
-            Consider(GetCanonicalJid(member.Jid));
-            Consider(member.Lid);
-            if (!string.IsNullOrWhiteSpace(member.Lid))
-            {
-                Consider(GetCanonicalJid(member.Lid));
-            }
-
-            string phone = member.PhoneNumber;
-            if (!string.IsNullOrWhiteSpace(phone))
-            {
-                if (phone.IndexOf('@') >= 0)
-                {
-                    Consider(phone);
-                }
-                else
-                {
-                    string digits = PhoneNumberHelper.NormalizePhoneDigits(phone);
-                    if (!string.IsNullOrEmpty(digits))
-                    {
-                        Consider(digits + "@s.whatsapp.net");
-                    }
-                }
-            }
-
-            foreach (string key in seen)
-            {
-                yield return key;
-            }
-        }
-
         private string FindExistingAvatarUrl(string jid, string phone, string lid)
         {
             string fromChat = FindAvatarOnChatRows(jid);
@@ -3886,26 +3830,6 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             return null;
-        }
-
-        private bool MemberMatchesJid(GroupMember member, string canonical)
-        {
-            if (member == null || string.IsNullOrWhiteSpace(canonical))
-            {
-                return false;
-            }
-
-            if (JidsMatchCanonical(member.Jid, canonical))
-            {
-                return true;
-            }
-
-            if (JidsMatchCanonical(member.PhoneNumber, canonical))
-            {
-                return true;
-            }
-
-            return JidsMatchCanonical(member.Lid, canonical);
         }
 
         private static long ToUnixMilliseconds(DateTime timestamp)

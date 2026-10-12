@@ -4,14 +4,15 @@
 // The address the info pane and the composer use for group questions, so neither
 // of them has to name the compatibility client.
 //
-// Everything here forwards. The w:g2 metadata reads, the roster hydrate and the
-// high-quality picture fetch all still run inside WhatsAppService.Groups, and
-// moving those bodies is phase 3.2. What this buys now is that the callers stop
-// depending on where the work happens to live today.
+// The roster restore runs here, through GroupRosterRestore (Core). The w:g2
+// metadata reads and the high-quality picture fetch still forward into
+// WhatsAppService.Groups: the apply that follows a metadata reply writes the name
+// caches and schedules the chat-list persist, and those move with 3.6 / 3.9b.
 // =============================================================================
 using System;
 using System.Threading.Tasks;
 using Unison.Core.Contracts.WhatsApp;
+using Unison.Core.Helpers;
 using Unison.Core.Models;
 
 namespace Unison.Uwp.Services.WhatsApp.Groups
@@ -19,10 +20,12 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
     public sealed class GroupFacade : IGroupService
     {
         private readonly IWhatsAppService _client;
+        private readonly GroupRosterRestore _rosterRestore;
 
-        internal GroupFacade(IWhatsAppService client)
+        internal GroupFacade(IWhatsAppService client, GroupRosterRestore rosterRestore)
         {
             _client = client ?? throw new ArgumentNullException(nameof(client));
+            _rosterRestore = rosterRestore ?? throw new ArgumentNullException(nameof(rosterRestore));
         }
 
         public Task RefreshGroupSendPermissionsAsync(string groupJid)
@@ -34,9 +37,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
 
         public Task EnsureGroupRosterLoadedFromStoreAsync(string groupJid)
         {
-            return string.IsNullOrWhiteSpace(groupJid)
-                ? Task.CompletedTask
-                : _client.EnsureGroupRosterLoadedFromStoreAsync(groupJid);
+            return _rosterRestore.EnsureLoadedAsync(groupJid);
         }
 
         public Task EnsureHighQualityGroupAvatarAsync(ChatItem chat)

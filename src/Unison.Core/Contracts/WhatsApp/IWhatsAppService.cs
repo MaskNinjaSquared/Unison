@@ -198,12 +198,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         Task RefreshGroupSendPermissionsAsync(string groupJid);
 
-        /// <summary>
-        /// Hydrates <see cref="ChatItem.GroupMembers"/> from the local roster store when empty.
-        /// Does not hit the network; Members pivot / chat open use this before a background IQ.
-        /// </summary>
-        Task EnsureGroupRosterLoadedFromStoreAsync(string groupJid);
-
         /// <summary>True while a reconnect/history replay drain is in progress; background refreshes should back off.</summary>
         bool IsReplayDrainActive { get; }
 
