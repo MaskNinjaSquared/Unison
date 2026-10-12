@@ -4,13 +4,65 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## FULL_HISTORY catch-up — ACK-only loops + debug controls
+
+Catch-up idle lots treated `ack-accepted` and `banner-begin` as progress signals, so
+`stagnant` never rose and adjacent FULL_HISTORY kept firing forever when the phone only ACKed.
+Those notes still refresh the idle clock; only sqlite/offline/tip work bumps lot progress.
+
+Diagnostics dialog: copy-to-clipboard (copy glyph) + **Request Full History On-demand**.
+Debug view: same history button (`IHistoryService.RequestFullHistoryOnDemandAsync`, force clears a stuck gate).
+
+---
+
+## Chat-list pins still missing after resync — protocol path fixed
+
+Baileys returns pins from **two** places: app-state `pin_v1` / `pinAction` (timestamp|null on
+`chats.update`) and optional `Conversation.pinned` on history. Unison already decoded both, but:
+
+1. After a local conversation wipe, LT-hash was already current so `regular_low` mutations
+   (including every `pin_v1`) were **not re-reported** — force snapshot + `reportAllMutations`.
+2. Pin was written under one JID while the list row used the PN/LID sibling — dual-write +
+   alias fallback (`ChatPinStoreKeys`).
+3. History skipped Conversations with pin/mute but no listable tip — flags now reach ChatStore.
+
+---
+
+## Pin ≠ Favourites — undo bad alias
+
+During the pin protocol fix, `ChatItem.IsFavorite` was briefly aliased to `IsChatPinned` so the
+Favorites filter would show pins. That is wrong: pin is `pinAction` / `Conversation.pinned` (icon +
+top of list); Favourites is `favoritesAction` (~500 contacts) with no store/UI yet. `IsFavorite`
+is a stub again (`false`). List pin UI and sort keep using `IsChatPinned` only.
+
+---
+
+## Status viewer — black screen / stuck at 0 progress (Baileys-aligned)
+
+Compared with Baileys rc14: Status media is the same `imageMessage` / `videoMessage` envelope as
+chat (`status@broadcast` + participant). List rows only need author + time; opening needs keys.
+
+Fixes:
+
+- **`HistoryStatusStore` upsert** merges media fields so a later history chunk without keys cannot
+  wipe `mediaKey` / `directPath` / materialized thumbs (`HistoryStatusMediaMerge`).
+- **`StatusFacade.EnsureMediaAsync`** persists a successful full-media URI and falls back to poster /
+  thumb when download fails (Baileys also shows media from the same envelope fields).
+- **Viewer** never waits forever for `NaturalDuration` when proto `seconds` is 0; thumb URIs for
+  video render as images (`StatusMediaDisplay`); `MediaOpened` without a timespan still advances.
+
+---
+
 ## Protocol pins still missing after mute fix — timestamp 0 = unpin
 
 Baileys emits `pinned: timestamp` when `pinAction.pinned` is true, else `null`. Our processor wrote
 `Pinned = timestamp` and the host decided pin with `Pinned > 0`. Protobuf leaves
 `SyncActionValue.timestamp` at **0** when absent, so a real pin collapsed to unpin and never set
-`IsChatPinned`. `AppliesPin` + fallback timestamp (like the legacy path) fix that. Also
-`IsFavorite` was hardcoded `false`, so the Favorites filter could never show pins.
+`IsChatPinned`. `AppliesPin` + fallback timestamp (like the legacy path) fix that.
+
+**Not Favourites.** Chat-list pin (`pinAction` / `Conversation.pinned` → `IsChatPinned`, pin icon +
+top of list) is unrelated to WhatsApp Favourites (`favoritesAction`, ~500 contacts). Favourites
+have no store/UI yet; `IsFavorite` stays a stub (`false`). Do not alias Favourites to pin.
 
 ---
 
@@ -34,7 +86,7 @@ Compared with rc14 `processSyncAction` (`chat-utils.ts`):
 
 The earlier write-merge fix was necessary but not sufficient. `RememberMutedUntil` (and any
 single-field remember) created a cache row whose *other* fields defaulted to off. `ApplyTo` then
-treated `IsChatPinned = false` as an answer and cleared favourites that history or app-state had
+treated `IsChatPinned = false` as an answer and cleared chat-list pins that history or app-state had
 already put on the row. Warming the store from SQLite could also overwrite a pin still only in the
 cache.
 
