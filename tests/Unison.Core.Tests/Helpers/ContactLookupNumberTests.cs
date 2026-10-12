@@ -74,6 +74,21 @@ public class ContactLookupNumberTests
         Assert.Equal("+5511988887777", result.Number);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("123456789@lid")]
+    [InlineData("123456789:3@lid")]
+    public void A_lid_with_no_known_number_is_skipped_not_read_as_digits(string? canonical)
+    {
+        // The resolver hands back the LID itself when no pair is known. Its digits are an opaque
+        // id, so reading them as a phone number asks the server about an account that does not
+        // exist — and the empty answer reads as "not on WhatsApp".
+        ContactLookupNumber result = ContactLookupNumber.For("123456789@lid", canonical, Self);
+
+        Assert.False(result.IsUsable);
+        Assert.Equal(ContactLookupSkip.UnmappedLid, result.Skip);
+    }
+
     [Fact]
     public void Our_own_account_is_never_queried()
     {

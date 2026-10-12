@@ -15,7 +15,10 @@ namespace Unison.Core.Helpers
         NotDirectChat,
 
         /// <summary>Nothing number-like survived. Usually a name typed into a phone field.</summary>
-        NoDigits
+        NoDigits,
+
+        /// <summary>A LID whose phone pair is not known yet. Its digits are an id, not a number.</summary>
+        UnmappedLid
     }
 
     /// <summary>
@@ -81,6 +84,11 @@ namespace Unison.Core.Helpers
             if (HasServer(value, ServerPn) || HasServer(value, ServerLid))
             {
                 source = string.IsNullOrWhiteSpace(canonicalJid) ? value : canonicalJid.Trim();
+            }
+
+            if (HasServer(source, ServerLid))
+            {
+                return new ContactLookupNumber(null, ContactLookupSkip.UnmappedLid);
             }
 
             // The device suffix goes before the digits are read. Reading digits first would fold
