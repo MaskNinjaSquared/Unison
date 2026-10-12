@@ -512,6 +512,12 @@ scheduling and what `ResolveContactsViaSocketAsync` does with an answer (alias, 
 duplicate-chat merge, avatar fetch). Those are 3.6's move onto `ContactFacade`, not a rule to lift
 out of a method.
 
+**The apply decision left the method.** `ResolvedContactApplyPlan` answers, for one usync
+contact, whether to file the alias, merge the two chats (only the first time that LID is seen),
+store the push name, and fetch an avatar (only when a listed chat has none). Writing the alias,
+healing identity, merging and the picture round-trip stay on the client — those caches have not
+moved.
+
 **The hand-built usync query is gone.** `ResolveContactsAsync` had two bodies: the live one over
 `ResolveContactNamesUseCase`, and ~300 lines that built the `<usync>` node by hand. The second ran only
 when the bridge reported a completed handshake on a disconnected session — and it sent through that

@@ -7729,53 +7729,60 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             var normalizedUser = NormalizeJid(contact.Jid);
-            var changed = false;
-
-            if (!string.IsNullOrEmpty(contact.Lid))
+            string normalizedLid = string.IsNullOrEmpty(contact.Lid) ? null : NormalizeJid(contact.Lid);
+            bool pairAccepted = false;
+            string acceptedLid = null;
+            string acceptedPn = null;
+            if (!string.IsNullOrEmpty(normalizedLid))
             {
-                var normalizedLid = NormalizeJid(contact.Lid);
-                var knownAlready = JidAlias.ContainsKey(normalizedLid);
+                pairAccepted = AliasPairPolicy.TryAcceptPair(
+                    normalizedLid,
+                    normalizedUser,
+                    JidAlias,
+                    out acceptedLid,
+                    out acceptedPn);
+            }
 
-                if (AliasPairPolicy.TryAcceptPair(normalizedLid, normalizedUser, JidAlias, out string contactLid, out string contactPn))
+            string pushName = SanitizeContactLabel(contact.Name, normalizedUser);
+            bool listedWithoutAvatar = !string.IsNullOrEmpty(contact.PictureId) &&
+                Chats.Any(c => c != null &&
+                    NormalizeJid(c.JID) == normalizedUser &&
+                    string.IsNullOrEmpty(c.AvatarUrl));
+
+            ResolvedContactApplyPlan plan = ResolvedContactApplyPlan.Decide(
+                hasLid: !string.IsNullOrEmpty(normalizedLid),
+                lidAlreadyAliased: !string.IsNullOrEmpty(normalizedLid) && JidAlias.ContainsKey(normalizedLid),
+                pairAccepted: pairAccepted,
+                hasPushName: !string.IsNullOrEmpty(pushName),
+                listedChatHasNoAvatar: listedWithoutAvatar);
+
+            if (plan.WriteAlias)
+            {
+                JidAlias[acceptedLid] = acceptedPn;
+                JidAlias[acceptedPn] = acceptedLid;
+                RegisterSocketAlias(normalizedUser, normalizedLid, "contact-usync");
+                HealOwnIdentity(normalizedUser, normalizedLid);
+
+                // Two chats for one person, which is what happens when the pair was learned late.
+                if (plan.MergeDuplicateChats)
                 {
-                    JidAlias[contactLid] = contactPn;
-                    JidAlias[contactPn] = contactLid;
-                    RegisterSocketAlias(normalizedUser, normalizedLid, "contact-usync");
-                    changed = true;
-
-                    HealOwnIdentity(normalizedUser, normalizedLid);
-
-                    // Two chats for one person, which is what happens when the pair was learned late.
-                    // Only worth doing the first time, hence the check before the alias was written.
-                    if (!knownAlready)
-                    {
-                        _ = CheckAndMergeDuplicateChatsAsync(normalizedLid, normalizedUser);
-                    }
+                    _ = CheckAndMergeDuplicateChatsAsync(normalizedLid, normalizedUser);
                 }
             }
 
-            var pushName = SanitizeContactLabel(contact.Name, normalizedUser);
-            if (!string.IsNullOrEmpty(pushName))
+            if (plan.StorePushName)
             {
                 ContactNames[normalizedUser] = pushName;
-                changed = true;
                 Debug.WriteLine("[WhatsAppService] usync name resolved: " + contact.Jid + " -> " + pushName);
             }
 
-            // The id only says the picture exists and which one it is; the URL is a separate
-            // round trip, so it is worth making only for a chat that is showing no avatar.
-            if (!string.IsNullOrEmpty(contact.PictureId))
+            // The id only says the picture exists and which one it is; the URL is a separate round trip.
+            if (plan.FetchAvatar)
             {
-                var needsAvatar = Chats.FirstOrDefault(
-                    c => NormalizeJid(c.JID) == normalizedUser && string.IsNullOrEmpty(c.AvatarUrl));
-
-                if (needsAvatar != null)
-                {
-                    _ = FetchAvatarForResolvedContactAsync(contact.Jid, normalizedUser);
-                }
+                _ = FetchAvatarForResolvedContactAsync(contact.Jid, normalizedUser);
             }
 
-            return changed;
+            return plan.CachesChanged;
         }
 
         /// <summary>

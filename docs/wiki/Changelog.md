@@ -4,6 +4,15 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Usync contact apply — the decision left the client (3.6)
+
+`ResolvedContactApplyPlan` decides what one usync answer may change: file the alias, merge the two
+chats only the first time that LID is seen, store the push name, and fetch an avatar only for a
+listed chat that has none. The writes still run on the client, because the alias table, name cache
+and auth state have not moved.
+
+---
+
 ## Contact lookup — one usync path (3.6)
 
 `ResolveContactsAsync` kept a hand-built usync query behind the `ResolveContactNamesUseCase` path. It
