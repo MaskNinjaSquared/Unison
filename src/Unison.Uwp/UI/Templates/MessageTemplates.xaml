@@ -122,13 +122,9 @@
                                    Margin="0,0,0,6"
                                    x:Load="{x:Bind ShowStickerError, Mode=OneWay}"/>
                         </StackPanel>
-                        <Grid x:Name="SentMediaPlaceholderHost"
+                        <controls:ChatMediaPlaceholderHost x:Name="SentMediaPlaceholderHost"
                               Grid.Row="1"
-                              HorizontalAlignment="Left"
-                              MaxWidth="250"
-                              MaxHeight="250"
-                              Loaded="MediaPlaceholder_Loaded"
-                              SizeChanged="MediaPlaceholder_SizeChanged">
+                              HorizontalAlignment="Left">
                         <Grid x:Name="SentImageDownload"
                               HorizontalAlignment="Stretch"
                               VerticalAlignment="Stretch"
@@ -217,7 +213,7 @@
                                 </Grid>
                             </Button>
                         </Grid>
-                        </Grid>
+                        </controls:ChatMediaPlaceholderHost>
                         <StackPanel Grid.Row="2">
                         <RichTextBlock x:Name="SentCaption"
                                        helpers:CommentRichService.Text="{x:Bind Caption, Mode=OneWay}"
@@ -632,13 +628,9 @@
                                    Margin="0,0,0,6"
                                    x:Load="{x:Bind ShowStickerError, Mode=OneWay}"/>
                         </StackPanel>
-                        <Grid x:Name="ReceivedMediaPlaceholderHost"
+                        <controls:ChatMediaPlaceholderHost x:Name="ReceivedMediaPlaceholderHost"
                               Grid.Row="1"
-                              HorizontalAlignment="Left"
-                              MaxWidth="250"
-                              MaxHeight="250"
-                              Loaded="MediaPlaceholder_Loaded"
-                              SizeChanged="MediaPlaceholder_SizeChanged">
+                              HorizontalAlignment="Left">
                         <Grid x:Name="ReceivedImageDownload"
                               HorizontalAlignment="Stretch"
                               VerticalAlignment="Stretch"
@@ -723,7 +715,7 @@
                                 </Grid>
                             </Button>
                         </Grid>
-                        </Grid>
+                        </controls:ChatMediaPlaceholderHost>
                         <StackPanel Grid.Row="2">
                         <RichTextBlock x:Name="ReceivedCaption"
                                        helpers:CommentRichService.Text="{x:Bind Caption, Mode=OneWay}"
