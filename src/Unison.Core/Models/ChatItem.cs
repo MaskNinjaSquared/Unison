@@ -177,10 +177,11 @@ namespace Unison.Core.Models
         public bool HasUnread => _unreadCount > 0;
 
         /// <summary>
-        /// Favourite / pinned chat for list filters. Same flag as the pin icon
-        /// (<see cref="IsChatPinned"/>) — the protocol has no separate favourites store.
+        /// WhatsApp Favourites list (app-state <c>favoritesAction</c> / label list FAVORITES).
+        /// Separate from chat-list pin (<see cref="IsChatPinned"/>). Stub until that store exists —
+        /// the Favorites filter stays empty on purpose.
         /// </summary>
-        public bool IsFavorite => IsChatPinned;
+        public bool IsFavorite => false;
 
         /// <summary>
         /// Local unsent draft. Always false until drafts are stored on the chat row.
@@ -445,7 +446,6 @@ namespace Unison.Core.Models
                 if (_isChatPinned == value) return;
                 _isChatPinned = value;
                 OnPropertyChanged();
-                OnPropertyChanged(nameof(IsFavorite));
             }
         }
 

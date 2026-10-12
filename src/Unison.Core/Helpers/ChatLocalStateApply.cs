@@ -11,7 +11,7 @@ namespace Unison.Core.Helpers
     /// for either — so it is what stands between a restart and a list with every icon missing.
     ///
     /// Only fields the store <em>knows</em> are applied. A mute-only cache stub used to carry
-    /// <c>IsChatPinned = false</c> by default; applying that default mid-sync wiped favourites.
+    /// <c>IsChatPinned = false</c> by default; applying that default mid-sync wiped chat-list pins.
     /// </remarks>
     public static class ChatLocalStateApply
     {

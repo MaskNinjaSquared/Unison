@@ -32,6 +32,13 @@ namespace Unison.Core.State
         /// <summary>Raised when resolved display names changed, so lists can re-render labels.</summary>
         event EventHandler DisplayNamesChanged;
 
+        /// <summary>
+        /// Raised with the group JID whose participant roster was applied. One event per apply:
+        /// a metadata reply merges fields onto every member, and a per-member notification would
+        /// be as many events as the group has people for a single answer.
+        /// </summary>
+        event EventHandler<string> GroupRosterChanged;
+
         ChatItem FindChat(string jid);
 
         /// <summary>A snapshot ordered oldest to newest. Never null.</summary>
@@ -70,6 +77,12 @@ namespace Unison.Core.State
         /// existing name becomes reachable under a newly learned LID/PN alias.
         /// </summary>
         void NotifyDisplayNamesChanged();
+
+        /// <summary>
+        /// Announces that a group's roster was applied, so labels resolved from participants can
+        /// catch up. Call once per apply, after the members are in place.
+        /// </summary>
+        void NotifyGroupRosterChanged(string groupJid);
 
         /// <summary>Drops everything. Used when the session is wiped.</summary>
         Task ClearAsync();

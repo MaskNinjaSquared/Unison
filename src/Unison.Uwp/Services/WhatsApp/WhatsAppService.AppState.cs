@@ -331,17 +331,28 @@ namespace Unison.Uwp.Services.WhatsApp
                     if (latest != null)
                     {
                         bool isGroup = JidHelper.IsGroupJid(canonical) || chat.IsGroup;
+                        string stripParticipant = isGroup
+                            ? ParticipantStripIdentity.PreferForDisplay(
+                                latest.ParticipantJid,
+                                GetCanonicalJid(latest.ParticipantJid))
+                            : null;
                         ApplyChatPreviewIfNewer(
                             chat,
                             ChatPreviewNormalizer.FormatListPreview(latest, isGroup),
                             latest.Timestamp,
                             true,
                             ChatPreviewNormalizer.InferKindFromMessage(latest),
-                            ChatPreviewNormalizer.FormatListAuthorPrefix(latest, isGroup, SelfListDisplayName()),
+                            ChatPreviewNormalizer.FormatListAuthorPrefix(
+                                latest,
+                                isGroup,
+                                SelfListDisplayName(),
+                                stripParticipant),
                             latest.MentionedJids,
                             latest.IsFromMe,
                             HistoryLiveMessageMapper.FromStatus(latest.Status, latest.IsFromMe),
-                            latest.Id);
+                            latest.Id,
+                            stripParticipant,
+                            isGroup && !latest.IsFromMe ? latest.SenderName : null);
                     }
                     else
                     {
@@ -445,8 +456,28 @@ namespace Unison.Uwp.Services.WhatsApp
                         // happened to be stale on was overwritten.
                         if (change.Pinned.HasValue)
                         {
-                            await _chatStore.SetChatPinnedAsync(chat.JID, change.Pinned.Value)
-                                .ConfigureAwait(false);
+                            // pin_v1 indexes one address; history/list rows often use the other.
+                            string alias;
+                            JidAlias.TryGetValue(chat.JID, out alias);
+                            IReadOnlyList<string> pinKeys = ChatPinStoreKeys.For(
+                                chat.JID,
+                                GetCanonicalJid(chat.JID),
+                                alias);
+                            IReadOnlyList<string> wireKeys = ChatPinStoreKeys.For(
+                                jid,
+                                GetCanonicalJid(jid),
+                                null);
+                            for (int i = 0; i < pinKeys.Count; i++)
+                            {
+                                await _chatStore.SetChatPinnedAsync(pinKeys[i], change.Pinned.Value)
+                                    .ConfigureAwait(false);
+                            }
+
+                            for (int i = 0; i < wireKeys.Count; i++)
+                            {
+                                await _chatStore.SetChatPinnedAsync(wireKeys[i], change.Pinned.Value)
+                                    .ConfigureAwait(false);
+                            }
                         }
 
                         if (change.AppliesMute)

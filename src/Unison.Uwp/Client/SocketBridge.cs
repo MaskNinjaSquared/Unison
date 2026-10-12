@@ -875,6 +875,25 @@ namespace Unison.Uwp.Client
         }
 
         /// <summary>
+        /// Re-emits pin/mute/archive mutations even when LT-hash says we are current.
+        /// </summary>
+        public async Task ResyncAppStateReportingAllAsync()
+        {
+            AppStateModule appState;
+            lock (_gate)
+            {
+                appState = _appState;
+            }
+
+            if (appState == null)
+            {
+                return;
+            }
+
+            await appState.SyncAllAsync(reportAllMutations: true).ConfigureAwait(false);
+        }
+
+        /// <summary>
         /// Deletes a conversation for the whole account.
         /// </summary>
         /// <remarks>

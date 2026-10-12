@@ -78,7 +78,14 @@ namespace Unison.Socket.UseCases.AppState
         /// means - the same patch is a chat update, a contact rename or a deleted message
         /// depending on its index.
         /// </summary>
-        public async Task<IList<ChatMutation>> ExecuteAsync(IEnumerable<string> collections)
+        /// <param name="reportAllMutations">
+        /// When true, every decoded mutation is returned even if the collection version did not
+        /// advance. Needed after a local conversation wipe: LT-hash state still says we are
+        /// current, so a normal sync would skip <c>pin_v1</c> / mute rows and the list stays bare.
+        /// </param>
+        public async Task<IList<ChatMutation>> ExecuteAsync(
+            IEnumerable<string> collections,
+            bool reportAllMutations = false)
         {
             var pending = new List<string>();
             foreach (var collection in collections)
@@ -113,7 +120,7 @@ namespace Unison.Socket.UseCases.AppState
                 }
 
                 var response = await _connection
-                    .QueryAsync(AppStateSyncNodes.BuildQuery(versions))
+                    .QueryAsync(AppStateSyncNodes.BuildQuery(versions, forceSnapshot: reportAllMutations))
                     .ConfigureAwait(false);
 
                 var chunks = AppStateSyncNodes.Extract(response);
@@ -131,8 +138,7 @@ namespace Unison.Socket.UseCases.AppState
                         continue;
                     }
 
-                    long minimum;
-                    initialVersions.TryGetValue(name, out minimum);
+                    long? minimum = reportAllMutations ? (long?)null : initialVersions[name];
 
                     try
                     {

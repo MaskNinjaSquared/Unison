@@ -48,6 +48,8 @@ namespace Unison.Core.State
 
         public event EventHandler DisplayNamesChanged;
 
+        public event EventHandler<string> GroupRosterChanged;
+
         // ---------------------------------------------------------------------
         // Migration seams
         //
@@ -335,6 +337,20 @@ namespace Unison.Core.State
         public void NotifyDisplayNamesChanged()
         {
             RaiseDisplayNamesChanged();
+        }
+
+        public void NotifyGroupRosterChanged(string groupJid)
+        {
+            if (string.IsNullOrWhiteSpace(groupJid))
+            {
+                return;
+            }
+
+            var handler = GroupRosterChanged;
+            if (handler != null)
+            {
+                handler(this, groupJid);
+            }
         }
 
         public Task ClearAsync()

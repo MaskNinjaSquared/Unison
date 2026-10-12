@@ -110,11 +110,14 @@ namespace Unison.Socket.AppState
         /// Syncs the named collections and publishes whatever changed. This is the entry point for
         /// both the login sync and the nudges that arrive later.
         /// </summary>
-        public async Task SyncAsync(IEnumerable<string> collections)
+        /// <param name="reportAllMutations">
+        /// Re-emit pin/mute/archive even when LT-hash is already current (after a local wipe).
+        /// </param>
+        public async Task SyncAsync(IEnumerable<string> collections, bool reportAllMutations = false)
         {
             try
             {
-                var mutations = await Resync.ExecuteAsync(collections).ConfigureAwait(false);
+                var mutations = await Resync.ExecuteAsync(collections, reportAllMutations).ConfigureAwait(false);
                 await Actions.ProcessAsync(mutations).ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -124,9 +127,9 @@ namespace Unison.Socket.AppState
         }
 
         /// <summary>Syncs everything. Used on login, when nothing is known to have changed.</summary>
-        public Task SyncAllAsync()
+        public Task SyncAllAsync(bool reportAllMutations = false)
         {
-            return SyncAsync(WaPatchName.All);
+            return SyncAsync(WaPatchName.All, reportAllMutations);
         }
 
         /// <summary>

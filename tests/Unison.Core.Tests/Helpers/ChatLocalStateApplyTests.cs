@@ -121,7 +121,7 @@ public class ChatLocalStateApplyTests
     public void A_mute_only_stub_does_not_wipe_a_pin_already_on_the_row()
     {
         // RememberMutedUntil used to create a cache row whose pin defaulted to false. ApplyTo
-        // then treated that default as authoritative and cleared favourites mid-sync.
+        // then treated that default as authoritative and cleared chat-list pins mid-sync.
         var chat = new ChatItem
         {
             JID = "a@s.whatsapp.net",
