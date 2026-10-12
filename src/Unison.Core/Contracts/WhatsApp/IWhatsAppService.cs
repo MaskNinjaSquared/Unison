@@ -370,7 +370,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         Task<bool> RequestFullHistoryOnDemandAsync(string reason = null, bool force = false);
 
-        Task<ChatMessage> SendTextMessageAsync(string jid, string text);
         Task SendImageAsync(string jid, byte[] imageBytes, string caption);
         Task<ChatMessage> SendAudioMessageAsync(string jid, byte[] audioBytes, string mimeType, uint durationSeconds, bool isVoiceMessage = false);
         Task<string> EnsureAudioAvailableAsync(ChatMessage message);

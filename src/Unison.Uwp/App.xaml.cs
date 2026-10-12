@@ -256,6 +256,10 @@ namespace Unison.Uwp
                     sp.GetRequiredService<IMediaCache>(),
                     sp.GetRequiredService<JidAliasTable>(),
                     sp.GetRequiredService<MediaDerivationService>()));
+            // The send flow lives on MessageFacade; the timeline caches and the socket it writes
+            // through are still the client's, reached only through this narrow port.
+            services.AddSingleton<IOutgoingMessageHost>(
+                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             // Asking "is this the same person?" no longer means naming the client. The table is
             // still built there; only the question moved.
             services.AddSingleton<IJidResolver>(

@@ -29,6 +29,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
         private readonly IChatStateStore _chatState;
         private readonly INotificationService _notifications;
         private readonly IChatStore _chatStore;
+        private readonly OutgoingTextSend _textSend;
         private readonly int _sqlOpenPageSize;
         private readonly int _sqlLoadMorePageSize;
         private readonly int _thinTimelineThreshold;
@@ -42,6 +43,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             IHistoryMessageStore historyMessageStore,
             IJidResolver jids,
             INotificationService notifications,
+            IOutgoingMessageHost outgoingHost,
             IChatStore chatStore = null,
             IChatStateStore chatState = null,
             ISystemInfoProvider systemInfo = null)
@@ -57,6 +59,9 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             _notifications = notifications ?? throw new ArgumentNullException(nameof(notifications));
             _chatStore = chatStore;
             _chatState = chatState;
+            _textSend = new OutgoingTextSend(
+                outgoingHost ?? throw new ArgumentNullException(nameof(outgoingHost)),
+                _jids);
             // systemInfo kept in the ctor for DI compatibility; page sizes match desktop on all devices.
             _ = systemInfo;
 
@@ -731,9 +736,13 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             return _whatsAppService.IsHistoryOnDemandPending(jid);
         }
 
+        /// <summary>
+        /// Shows the bubble at once, then sends with one bounded reconnect. A transport failure
+        /// is the returned message's <see cref="ChatMessage.StatusFailed"/>, not an exception.
+        /// </summary>
         public Task<ChatMessage> SendTextMessageAsync(string jid, string text)
         {
-            return _whatsAppService.SendTextMessageAsync(jid, text);
+            return _textSend.SendAsync(jid, text);
         }
 
         public Task SendImageAsync(string jid, byte[] imageBytes, string caption)
