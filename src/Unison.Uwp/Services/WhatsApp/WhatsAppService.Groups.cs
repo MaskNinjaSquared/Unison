@@ -133,143 +133,14 @@ namespace Unison.Uwp.Services.WhatsApp
             return GetResolvedName(jid) ?? jid;
         }
 
-        public Task<GroupMemberAvatarFetchResult> FetchGroupMemberAvatarAsync(
-            GroupMember member,
-            CancellationToken token)
-        {
-            return FetchAndCacheGroupMemberAvatarAsync(member, token);
-        }
-
-        private async Task<GroupMemberAvatarFetchResult> FetchAndCacheGroupMemberAvatarAsync(
-            GroupMember member,
-            CancellationToken token)
-        {
-            if (member == null || _socket == null || !_socket.IsHandshakeComplete)
-            {
-                return new GroupMemberAvatarFetchResult
-                {
-                    IsTransientFailure = true,
-                    FailureReason = "socket-not-ready"
-                };
-            }
-
-            bool sawNotFound = false;
-            bool sawTransient = false;
-            string lastReason = null;
-
-            foreach (string candidate in _groupMetadata.GetPictureCandidates(member))
-            {
-                token.ThrowIfCancellationRequested();
-
-                ProfilePictureResult result = null;
-                using (await _usyncGate.AcquireAsync(token))
-                {
-                    if (_socket == null || !_socket.IsHandshakeComplete)
-                    {
-                        return new GroupMemberAvatarFetchResult
-                        {
-                            IsTransientFailure = true,
-                            FailureReason = "socket-not-ready"
-                        };
-                    }
-
-                    result = await _socket.GetProfilePictureUrlResultAsync(candidate, "preview");
-                }
-
-                if (!string.IsNullOrWhiteSpace(result?.Url))
-                {
-                    string localUri = await _avatarFetcher.CachePreviewAsync(member.Jid, result.Url, token);
-                    if (!string.IsNullOrWhiteSpace(localUri))
-                    {
-                        return new GroupMemberAvatarFetchResult { LocalUri = localUri };
-                    }
-
-                    sawTransient = true;
-                    lastReason = "download:empty";
-                    continue;
-                }
-
-                if (result != null && result.IsNotFound)
-                {
-                    sawNotFound = true;
-                    lastReason = "no-picture";
-                    continue;
-                }
-
-                sawTransient = true;
-                if (result != null && result.IsTimeout)
-                {
-                    lastReason = "timeout";
-                }
-                else
-                {
-                    lastReason = result?.FailureReason ?? "no-url";
-                }
-            }
-
-            if (sawNotFound && !sawTransient)
-            {
-                return new GroupMemberAvatarFetchResult
-                {
-                    IsNotFound = true,
-                    FailureReason = "no-picture"
-                };
-            }
-
-            return new GroupMemberAvatarFetchResult
-            {
-                IsTransientFailure = true,
-                FailureReason = lastReason ?? "no-url"
-            };
-        }
-
-        public void ApplyGroupMemberAvatarOutcome(string memberJid, GroupMemberAvatarFetchResult result)
-        {
-            if (string.IsNullOrWhiteSpace(memberJid) || result == null)
-            {
-                return;
-            }
-
-            DateTime nowUtc = DateTime.UtcNow;
-            string canonical = GetCanonicalJid(NormalizeJid(memberJid));
-            foreach (var chat in Chats)
-            {
-                if (chat?.GroupMembers == null || chat.GroupMembers.Count == 0)
-                {
-                    continue;
-                }
-
-                foreach (var member in chat.GroupMembers)
-                {
-                    if (member == null || !GroupRosterRules.MemberMatches(member, canonical, _jids))
-                    {
-                        continue;
-                    }
-
-                    if (result.HasPicture)
-                    {
-                        ChatAvatarOutcome.RecordCached(member, result.LocalUri, nowUtc);
-                    }
-                    else if (result.IsNotFound)
-                    {
-                        ChatAvatarOutcome.RecordAbsent(member, "no-picture", nowUtc);
-                    }
-                    else
-                    {
-                        ChatAvatarOutcome.RecordFailure(member, result.FailureReason ?? "fetch-failed", nowUtc);
-                    }
-                }
-            }
-        }
-
         private void StampGroupMemberAvatars(string memberJid, string localUri)
         {
-            if (string.IsNullOrWhiteSpace(memberJid) || string.IsNullOrWhiteSpace(localUri))
+            if (_groupService == null || string.IsNullOrWhiteSpace(memberJid) || string.IsNullOrWhiteSpace(localUri))
             {
                 return;
             }
 
-            ApplyGroupMemberAvatarOutcome(
+            _groupService.ApplyGroupMemberAvatarOutcome(
                 memberJid,
                 new GroupMemberAvatarFetchResult { LocalUri = localUri });
         }

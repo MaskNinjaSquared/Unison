@@ -29,7 +29,7 @@ Unison.Core/
 | `IConnectionService` | `ConnectionFacade` | Pairing (QR / code), disconnect policy, server logout, session wipe, startup order (`InitializeConnectionStateAsync`, `IsRegisteredAsync`, `EnsureConnectedAsync`, `LoadPersistedUiStateAsync`, `StartDeferredStartupMaintenance`, `IsConnected`) |
 | `IMessageService` | `MessageFacade` | Send, on-demand media, message pin, reactions, `GetChatMessage`, new chat |
 | `IChatService` | `ChatFacade` | Account pin/unpin (app-state) + mark-read, active chat, unread total, list-row persist + SQLite preview reconcile |
-| `IGroupService` | `GroupFacade` | Group listing, send-permission refresh, roster hydrate and the full-size group picture. Member pictures still go through the client |
+| `IGroupService` | `GroupFacade` | Group listing, send-permission refresh, roster hydrate, the full-size group picture and member pictures |
 | `IContactService` | `ContactFacade` | Address-book overlay, name refresh, avatar policy, phone search, People add-contact card, optional Unison `UserDataAccount` in People |
 | `IProfileService` | `ProfileFacade` | “Me” hydrate + profile picture IQ |
 | `IHistoryService` | `HistoryFacade` | Sync status, chunks, on-demand full resync, initial-sync counters + frugal budget |

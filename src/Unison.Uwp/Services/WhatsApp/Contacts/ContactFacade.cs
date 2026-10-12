@@ -79,7 +79,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             _usync = new ContactUsyncResolver(whatsAppService, _directory, usyncGate, jids);
             _names = new ContactNameResolver(whatsAppService, _addressBook, _directory, _usync, jids, groups);
             _avatars = new ChatAvatarPolicy(whatsAppService, jids);
-            _roster = new GroupRosterPolicy(whatsAppService, this, jids);
+            _roster = new GroupRosterPolicy(whatsAppService, groups, this, jids);
 
             // Both live as long as the app does, so there is nothing to unhook from.
             _whatsAppService.OnDisplayNamesUpdated += (s, e) =>

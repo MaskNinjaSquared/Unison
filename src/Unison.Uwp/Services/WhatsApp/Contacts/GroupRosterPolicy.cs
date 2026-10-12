@@ -30,6 +30,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private const int BatchSize = 16;
 
         private readonly IWhatsAppService _whatsAppService;
+        private readonly IGroupService _groups;
         private readonly IContactService _contacts;
         private readonly IJidResolver _jids;
 
@@ -41,9 +42,14 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             new Dictionary<string, CancellationTokenSource>(StringComparer.OrdinalIgnoreCase);
         private int _fullHydrateInFlight;
 
-        internal GroupRosterPolicy(IWhatsAppService whatsAppService, IContactService contacts, IJidResolver jids)
+        internal GroupRosterPolicy(
+            IWhatsAppService whatsAppService,
+            IGroupService groups,
+            IContactService contacts,
+            IJidResolver jids)
         {
             _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
+            _groups = groups ?? throw new ArgumentNullException(nameof(groups));
             _contacts = contacts ?? throw new ArgumentNullException(nameof(contacts));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
         }
@@ -225,7 +231,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 try
                 {
                     GroupMemberAvatarFetchResult result =
-                        await _whatsAppService.FetchGroupMemberAvatarAsync(member, token)
+                        await _groups.FetchGroupMemberAvatarAsync(member, token)
                             .ConfigureAwait(false);
                     if (result == null)
                     {
@@ -237,7 +243,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                     }
 
                     await _whatsAppService.RunOnUiThreadAsync(
-                        () => _whatsAppService.ApplyGroupMemberAvatarOutcome(member.Jid, result))
+                        () => _groups.ApplyGroupMemberAvatarOutcome(member.Jid, result))
                         .ConfigureAwait(false);
 
                     if (result.HasPicture)

@@ -230,17 +230,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         Task FetchAndApplyAvatarAsync(ChatItem chat, CancellationToken token, bool fetchHighQuality = true);
 
-        /// <summary>One member picture GET (PN candidates first). Does not stamp the roster.</summary>
-        Task<GroupMemberAvatarFetchResult> FetchGroupMemberAvatarAsync(
-            GroupMember member,
-            CancellationToken token);
-
-        /// <summary>
-        /// Writes a picture hit, a confirmed miss (<c>no-picture</c>), or a transient failure
-        /// onto every roster row that matches <paramref name="memberJid"/>.
-        /// </summary>
-        void ApplyGroupMemberAvatarOutcome(string memberJid, GroupMemberAvatarFetchResult result);
-
         void MarkAvatarImageLoadFailed(ChatItem chat, string reason);
         void RequestAvatarRefresh(ChatItem chat, bool force = false);
         void SetActiveChatJid(string jid);

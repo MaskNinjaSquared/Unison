@@ -7,8 +7,8 @@
 // The send-permission refresh and the roster restore run here: the w:g2 query
 // goes out through the session, GroupMetadataReader reads it, and the Core flows
 // (GroupMetadataApply, GroupRosterRestore) put it on the row. The listing, the
-// per-group fallback and the full-size group picture run here too. Member pictures
-// stay with the client's avatar cluster. One GroupQueryWindow, so the name refresh
+// per-group fallback, the full-size group picture and member pictures run here too.
+// One GroupQueryWindow, so the name refresh
 // and the background pass cannot each start a listing of their own.
 // =============================================================================
 using System;
@@ -23,6 +23,7 @@ using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.State;
+using Unison.Uwp.Client;
 using Unison.Uwp.Services.Socket;
 using Unison.Uwp.Services.WhatsApp.Contacts;
 
@@ -43,6 +44,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
         private readonly GroupMetadataApply _apply;
         private readonly GroupRosterRestore _rosterRestore;
         private readonly AvatarFetcher _avatars;
+        private readonly IUsyncGate _usyncGate;
         private readonly GroupQueryWindow _queryWindow = new GroupQueryWindow();
 
         internal GroupFacade(
@@ -53,7 +55,8 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
             IJidResolver jids,
             GroupMetadataApply apply,
             GroupRosterRestore rosterRestore,
-            AvatarFetcher avatars)
+            AvatarFetcher avatars,
+            IUsyncGate usyncGate)
         {
             _client = client ?? throw new ArgumentNullException(nameof(client));
             _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
@@ -63,6 +66,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
             _apply = apply ?? throw new ArgumentNullException(nameof(apply));
             _rosterRestore = rosterRestore ?? throw new ArgumentNullException(nameof(rosterRestore));
             _avatars = avatars ?? throw new ArgumentNullException(nameof(avatars));
+            _usyncGate = usyncGate ?? throw new ArgumentNullException(nameof(usyncGate));
             _reader = new GroupMetadataReader(jids);
         }
 
@@ -121,6 +125,112 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
             }
 
             await _host.RunOnUiThreadAsync(() => chat.AvatarHighUrl = localUri);
+        }
+
+        public async Task<GroupMemberAvatarFetchResult> FetchGroupMemberAvatarAsync(
+            GroupMember member,
+            CancellationToken token)
+        {
+            var socket = _sessions.Socket;
+            if (member == null || socket == null || !socket.IsHandshakeComplete)
+            {
+                return NotReady();
+            }
+
+            var attempt = new GroupMemberAvatarAttempt();
+            foreach (string candidate in _reader.GetPictureCandidates(member))
+            {
+                token.ThrowIfCancellationRequested();
+
+                ProfilePictureResult result = null;
+                using (await _usyncGate.AcquireAsync(token))
+                {
+                    socket = _sessions.Socket;
+                    if (socket == null || !socket.IsHandshakeComplete)
+                    {
+                        return NotReady();
+                    }
+
+                    result = await socket.GetProfilePictureUrlResultAsync(candidate, "preview");
+                }
+
+                if (!string.IsNullOrWhiteSpace(result?.Url))
+                {
+                    string localUri = await _avatars.CachePreviewAsync(member.Jid, result.Url, token);
+                    if (!string.IsNullOrWhiteSpace(localUri))
+                    {
+                        return attempt.Picture(localUri);
+                    }
+
+                    attempt.NoteEmptyDownload();
+                    continue;
+                }
+
+                if (result != null && result.IsNotFound)
+                {
+                    attempt.NoteNotFound();
+                    continue;
+                }
+
+                if (result != null && result.IsTimeout)
+                {
+                    attempt.NoteTimeout();
+                }
+                else
+                {
+                    attempt.NoteOtherFailure(result?.FailureReason);
+                }
+            }
+
+            return attempt.Finish();
+        }
+
+        public void ApplyGroupMemberAvatarOutcome(string memberJid, GroupMemberAvatarFetchResult result)
+        {
+            if (string.IsNullOrWhiteSpace(memberJid) || result == null)
+            {
+                return;
+            }
+
+            DateTime nowUtc = DateTime.UtcNow;
+            string canonical = _jids.GetCanonicalJid(JidHelper.Normalize(memberJid));
+            foreach (var chat in _chats.Chats)
+            {
+                if (chat?.GroupMembers == null || chat.GroupMembers.Count == 0)
+                {
+                    continue;
+                }
+
+                foreach (var member in chat.GroupMembers)
+                {
+                    if (member == null || !GroupRosterRules.MemberMatches(member, canonical, _jids))
+                    {
+                        continue;
+                    }
+
+                    if (result.HasPicture)
+                    {
+                        ChatAvatarOutcome.RecordCached(member, result.LocalUri, nowUtc);
+                    }
+                    else if (result.IsNotFound)
+                    {
+                        ChatAvatarOutcome.RecordAbsent(member, "no-picture", nowUtc);
+                    }
+                    else
+                    {
+                        ChatAvatarOutcome.RecordFailure(member, result.FailureReason ?? "fetch-failed", nowUtc);
+                    }
+                }
+            }
+        }
+
+        private static GroupMemberAvatarFetchResult NotReady()
+        {
+            return new GroupMemberAvatarFetchResult
+            {
+                IsTransientFailure = true,
+                FailureReason = "socket-not-ready"
+            };
         }
 
         public Task QueryAllGroupsAsync() => QueryAllGroupsAsync(false);

@@ -4,6 +4,15 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Member pictures — on `GroupFacade`
+
+A member picture GET and the stamp onto every matching roster row left `WhatsAppService`.
+`GroupFacade` asks through the same usync gate as a 1:1 picture. A confirmed miss is still
+remembered, and any transient failure still puts the member back in the queue. The queue itself
+stays in `GroupRosterPolicy`.
+
+---
+
 ## Group picture fallback — which addresses to try
 
 When a group has no picture of its own, the parent and community addresses to ask now come from

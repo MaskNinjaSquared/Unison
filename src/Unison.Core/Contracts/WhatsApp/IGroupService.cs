@@ -1,3 +1,4 @@
+using System.Threading;
 using System.Threading.Tasks;
 using Unison.Core.Models;
 
@@ -10,7 +11,7 @@ namespace Unison.Core.Contracts.WhatsApp
     /// <remarks>
     /// Introduced so the info pane and the composer stop naming the compatibility client for
     /// questions the domain already has a word for. Send permissions, the roster restore and the
-    /// group listing run here. The high-quality picture fetch still forwards into the client.
+    /// group listing, the full-size picture and member pictures run here.
     /// </remarks>
     public interface IGroupService
     {
@@ -41,5 +42,17 @@ namespace Unison.Core.Contracts.WhatsApp
         /// whose high-quality file is already on disk.
         /// </summary>
         Task EnsureHighQualityGroupAvatarAsync(ChatItem chat);
+
+        /// <summary>One member picture GET (PN candidates first). Does not stamp the roster.</summary>
+        Task<GroupMemberAvatarFetchResult> FetchGroupMemberAvatarAsync(
+            GroupMember member,
+            CancellationToken token);
+
+        /// <summary>
+        /// Writes a picture hit, a confirmed miss (<c>no-picture</c>), or a transient failure
+        /// onto every roster row that matches <paramref name="memberJid"/>. The caller is on the
+        /// UI thread.
+        /// </summary>
+        void ApplyGroupMemberAvatarOutcome(string memberJid, GroupMemberAvatarFetchResult result);
     }
 }
