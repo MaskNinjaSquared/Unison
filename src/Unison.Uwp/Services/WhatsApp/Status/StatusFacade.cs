@@ -138,28 +138,50 @@ namespace Unison.Uwp.Services.WhatsApp.Status
             ChatMessage message = HistoryStatusMapper.ToChatMessage(status);
             if (message == null)
             {
-                return null;
+                return StatusMediaDisplay.ResolveUri(null, status);
             }
 
+            string downloaded = null;
             try
             {
                 if (message.Kind == ChatMessageKind.Video)
                 {
-                    return await _messages.EnsureVideoAvailableAsync(message).ConfigureAwait(false);
+                    downloaded = await _messages.EnsureVideoAvailableAsync(message).ConfigureAwait(false);
                 }
-
-                if (message.Kind == ChatMessageKind.Image || message.Kind == ChatMessageKind.Sticker)
+                else if (message.Kind == ChatMessageKind.Image || message.Kind == ChatMessageKind.Sticker)
                 {
-                    return await _messages.EnsureImageAvailableAsync(message).ConfigureAwait(false);
+                    downloaded = await _messages.EnsureImageAvailableAsync(message).ConfigureAwait(false);
                 }
             }
             catch (Exception ex)
             {
                 Debug.WriteLine("[StatusFacade] EnsureMedia failed id=" + status.MessageId + ": " + ex.Message);
-                return null;
+                downloaded = null;
             }
 
-            return null;
+            if (!string.IsNullOrWhiteSpace(downloaded) &&
+                !HistoryMessageMapper.IsThumbCacheUri(downloaded))
+            {
+                status.MediaLocalUri = downloaded;
+                if (message.Kind == ChatMessageKind.Video &&
+                    !string.IsNullOrWhiteSpace(message.VideoPosterUri))
+                {
+                    status.MediaPosterUri = message.VideoPosterUri;
+                }
+
+                try
+                {
+                    await _store.UpsertManyAsync(new[] { status }).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[StatusFacade] Persist media uri failed id=" + status.MessageId + ": " + ex.Message);
+                }
+
+                return downloaded;
+            }
+
+            return StatusMediaDisplay.ResolveUri(downloaded, status);
         }
 
         /// <summary>

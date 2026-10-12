@@ -86,7 +86,15 @@ namespace Unison.Uwp.Data
                             continue;
                         }
 
-                        conn.InsertOrReplace(ToRow(model));
+                        string id = HistoryStatusRow.MakeId(model.AuthorJid, model.MessageId);
+                        HistoryStatusRow existingRow = conn.Find<HistoryStatusRow>(id);
+                        HistoryStatus toWrite = model;
+                        if (existingRow != null)
+                        {
+                            toWrite = HistoryStatusMediaMerge.Merge(ToModel(existingRow), model);
+                        }
+
+                        conn.InsertOrReplace(ToRow(toWrite));
                         upserted++;
                     }
                 }).ConfigureAwait(false);

@@ -19,6 +19,7 @@ namespace Unison.Core.Helpers
             var message = new ChatMessage
             {
                 Id = row.MessageId,
+                RemoteJid = JidHelper.StatusBroadcastJid,
                 Content = row.Body ?? string.Empty,
                 Timestamp = HistoryMessageMapper.AsUtc(row.TimestampUtc) ?? System.DateTime.UtcNow,
                 IsFromMe = row.IsFromMe,

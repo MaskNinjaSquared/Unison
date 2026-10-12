@@ -298,14 +298,16 @@ namespace Unison.Core.ViewModels
             }
 
             IsLoading = false;
-            MediaUri = uri;
-            IsVideo = isVideo && !string.IsNullOrWhiteSpace(uri);
-            IsImage = isImage && !string.IsNullOrWhiteSpace(uri) && !IsVideo;
+            string displayUri = StatusMediaDisplay.ResolveUri(uri, item);
+            MediaUri = displayUri;
+            IsVideo = StatusMediaDisplay.ShowAsVideo(item.Kind, displayUri);
+            IsImage = StatusMediaDisplay.ShowAsImage(item.Kind, displayUri);
             _itemShownUtc = DateTime.UtcNow;
 
             if (IsVideo)
             {
                 // Proto seconds &lt; 1 are treated as unknown (often bad/zero-ish payloads).
+                // Always start a photo-length fallback so a dead MediaOpened cannot freeze at 0.
                 if (item.MediaDurationSeconds >= 1)
                 {
                     StartTimer(TimeSpan.FromSeconds(item.MediaDurationSeconds));
@@ -313,11 +315,12 @@ namespace Unison.Core.ViewModels
                 else
                 {
                     _waitingForNaturalDuration = true;
+                    StartTimer(TimeSpan.FromSeconds(PhotoDisplaySeconds));
                 }
             }
             else
             {
-                // Photo, sticker, text, or failed media — always give a readable beat.
+                // Photo, sticker, text, thumb fallback, or failed media — always a readable beat.
                 StartTimer(TimeSpan.FromSeconds(PhotoDisplaySeconds));
             }
         }
