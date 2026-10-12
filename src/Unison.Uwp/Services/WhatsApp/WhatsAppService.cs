@@ -219,11 +219,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly MediaDerivationService _mediaDerivation;
         private readonly ReceiptReader _receipts;
 
-        /// <summary>
-        /// Built here rather than injected: it needs canonical JIDs and self-recognition, and both
-        /// still read tables this class owns until phase 3.7. Taking them as functions keeps the
-        /// reader itself free of the client.
-        /// </summary>
+        /// <summary>Reads group listings through the alias table. Built after <see cref="JidAlias"/>.</summary>
         private readonly GroupMetadataReader _groupMetadata;
         private IMessageService _messageService;
         private IChatService _chatService;
@@ -3149,42 +3145,19 @@ namespace Unison.Uwp.Services.WhatsApp
             ChatPreviewTip.PickNewer(sql, memory);
 
         /// <summary>
-        /// PN + LID (+ canonical) keys for SQLite history reads — mirrors MessageFacade.ResolveChatKeys.
+        /// PN + LID (+ canonical) keys for SQLite history reads and avatar lookups. The same
+        /// expansion <see cref="ChatPinStoreKeys"/> does for pins.
         /// </summary>
         private List<string> ExpandHistoryChatKeys(string jid)
         {
-            var keys = new List<string>();
-            void AddKey(string raw)
-            {
-                string norm = JidHelper.Normalize(raw);
-                if (string.IsNullOrWhiteSpace(norm))
-                {
-                    return;
-                }
-
-                for (int i = 0; i < keys.Count; i++)
-                {
-                    if (string.Equals(keys[i], norm, StringComparison.OrdinalIgnoreCase))
-                    {
-                        return;
-                    }
-                }
-
-                keys.Add(norm);
-            }
-
-            AddKey(jid);
-            AddKey(GetCanonicalJid(jid));
-
+            string alias = null;
             string normalized = JidHelper.Normalize(jid);
-            if (!string.IsNullOrWhiteSpace(normalized) &&
-                JidAlias != null &&
-                JidAlias.TryGetValue(normalized, out string alias))
+            if (!string.IsNullOrWhiteSpace(normalized) && JidAlias != null)
             {
-                AddKey(alias);
+                JidAlias.TryGetValue(normalized, out alias);
             }
 
-            return keys;
+            return new List<string>(ChatPinStoreKeys.For(jid, GetCanonicalJid(jid), alias));
         }
 
         public void StartDeferredStartupMaintenance()
@@ -3810,27 +3783,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private List<string> GetAvatarLookupCandidates(ChatItem chat)
         {
-            var candidates = new List<string>();
-            Action<string> add = value =>
-            {
-                string normalized = NormalizeJid(value);
-                if (!string.IsNullOrWhiteSpace(normalized) &&
-                    !candidates.Contains(normalized, StringComparer.OrdinalIgnoreCase))
-                {
-                    candidates.Add(normalized);
-                }
-            };
-
-            add(chat?.JID);
-            add(GetCanonicalJid(chat?.JID));
-
-            string normalizedChat = NormalizeJid(chat?.JID);
-            if (!string.IsNullOrWhiteSpace(normalizedChat) && JidAlias.TryGetValue(normalizedChat, out var alias))
-            {
-                add(alias);
-            }
-
-            return candidates;
+            return ExpandHistoryChatKeys(chat?.JID);
         }
 
 

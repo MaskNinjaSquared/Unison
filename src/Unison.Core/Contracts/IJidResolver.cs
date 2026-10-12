@@ -19,8 +19,9 @@ namespace Unison.Core.Contracts
         string GetCanonicalJid(string jid);
 
         /// <summary>
-        /// The other half of a PN/LID pair, when the session has seen both. The key is matched as
-        /// given, so callers that hold a raw JID should canonicalize it first.
+        /// The other half of a PN/LID pair, when the session has seen both. The key is normalized
+        /// first, the same way <see cref="GetCanonicalJid"/> is, so a device suffix cannot hide
+        /// a pair the session already knows.
         /// </summary>
         bool TryGetAlias(string jid, out string alias);
 

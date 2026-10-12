@@ -5,9 +5,9 @@ using Unison.Core.Contracts;
 namespace Unison.Core.Helpers
 {
     /// <summary>
-    /// JIDs under which a chat-list pin may be stored or looked up. App-state
-    /// <c>pin_v1</c> indexes one address; history rows often use the other (PN vs LID).
-    /// Writing and reading only the row JID leaves the pin invisible after sync.
+    /// Every address one person is filed under: the row JID, its canonical form, and the
+    /// other side of the PN/LID pair. Pins, history reads and avatar lookups all use it.
+    /// Writing and reading only the row JID leaves the other spelling behind.
     /// </summary>
     public static class ChatPinStoreKeys
     {
@@ -22,13 +22,14 @@ namespace Unison.Core.Helpers
                 Add(keys, canonical);
 
                 string alias;
-                if (jids.TryGetAlias(jid, out alias))
+                // The table stores normalized keys. A canonical answer can still be the raw
+                // ":device" form, and asking with that misses the pair.
+                if (jids.TryGetAlias(NormalizeForLookup(jid), out alias))
                 {
                     Add(keys, alias);
                 }
 
-                if (!string.IsNullOrWhiteSpace(canonical) &&
-                    jids.TryGetAlias(canonical, out alias))
+                if (jids.TryGetAlias(NormalizeForLookup(canonical), out alias))
                 {
                     Add(keys, alias);
                 }
@@ -47,6 +48,12 @@ namespace Unison.Core.Helpers
             Add(keys, canonicalJid);
             Add(keys, aliasJid);
             return keys;
+        }
+
+        private static string NormalizeForLookup(string jid)
+        {
+            string normalized = JidHelper.Normalize(jid);
+            return string.IsNullOrWhiteSpace(normalized) ? string.Empty : normalized;
         }
 
         private static void Add(List<string> keys, string jid)

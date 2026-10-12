@@ -1,5 +1,6 @@
 using System;
 using Unison.Core.Contracts;
+using Unison.Core.Helpers;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Models;
 using Unison.Core.State;
@@ -40,7 +41,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return false;
             }
 
-            return _aliases.TryGetValue(jid, out alias);
+            return _aliases.TryGetValue(JidHelper.Normalize(jid), out alias);
         }
     }
 }

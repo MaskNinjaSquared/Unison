@@ -4,6 +4,16 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Alias keys — one expansion, and a device suffix no longer hides the pair (3.7)
+
+History reads, avatar lookups and contact phone lookup were each rebuilding the same
+PN/LID key list that `ChatPinStoreKeys` already owned for pins. They call it now.
+`ChatPinStoreKeys` and `JidResolver.TryGetAlias` normalize before asking the table, so a
+`:device` address finds the pair stored under the plain one. A pin write does the same
+for the row it is updating.
+
+---
+
 ## Send — moved to `MessageFacade` (3.4)
 
 Text, image and audio sends no longer run inside `WhatsAppService`. `OutgoingTextSend` and

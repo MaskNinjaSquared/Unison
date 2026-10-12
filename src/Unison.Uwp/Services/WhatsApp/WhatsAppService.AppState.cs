@@ -457,8 +457,12 @@ namespace Unison.Uwp.Services.WhatsApp
                         if (change.Pinned.HasValue)
                         {
                             // pin_v1 indexes one address; history/list rows often use the other.
-                            string alias;
-                            JidAlias.TryGetValue(chat.JID, out alias);
+                            string alias = null;
+                            string normalizedRow = JidHelper.Normalize(chat.JID);
+                            if (!string.IsNullOrWhiteSpace(normalizedRow))
+                            {
+                                JidAlias.TryGetValue(normalizedRow, out alias);
+                            }
                             IReadOnlyList<string> pinKeys = ChatPinStoreKeys.For(
                                 chat.JID,
                                 GetCanonicalJid(chat.JID),

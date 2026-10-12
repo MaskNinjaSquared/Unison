@@ -60,7 +60,7 @@ No logic moved. The UI stopped naming the client; every member below is still im
 | Was on `IWhatsAppService` | New owner |
 |---|---|
 | `Chats` | `IChatStateStore.Chats` |
-| `GetCanonicalJid`, `JidAlias` | `IJidResolver` (phase A; table still on the concrete client until 3.7) |
+| `GetCanonicalJid`, `JidAlias` | `IJidResolver` (phase A). Table is `JidAliasTable` since 3.7a |
 | `ResolveDisplayName`, `PhoneContactNamesByJid`, `MarkAvatarImageLoadFailed` | `IContactService` |
 | `RefreshGroupSendPermissionsAsync`, `EnsureGroupRosterLoadedFromStoreAsync`, `EnsureHighQualityGroupAvatarAsync` | new `IGroupService` / `GroupFacade` |
 | `ClearUnreadForChatAsync`, `SetActiveChatJid`, `GetTotalUnreadCount`, `PersistChatListRowsPublic`, `ReconcileChatPreviewsFromSqliteAsync` | `IChatService` |
@@ -208,9 +208,9 @@ can be called from a background batch, a row scrolling into view, or the group i
 of them agreeing about threads. `FetchBestProfilePictureResultAsync`, `GetProfilePictureAsync` and the
 high-resolution loop are gone from the client; `GetProfilePictureUrlAsync` is a one-line forward.
 
-Candidates are passed in rather than resolved inside, for two reasons: the PN/LID table is still the
-client's until 3.7, and injecting `IJidResolver` here would close a DI cycle (`IJidResolver`
-eagerly resolves `IWhatsAppService`, which now takes the fetcher).
+Candidates are passed in rather than resolved inside. The table itself moved in 3.7a, but injecting
+`IJidResolver` here would still close a DI cycle (`IJidResolver` eagerly resolves `IWhatsAppService`,
+which takes the fetcher). Callers build the list with `ChatPinStoreKeys`.
 
 What is left of avatars in the client is the **apply**, and it is deliberately parked: it writes
 `ChatItem` rows on the UI thread and calls `SchedulePersist` (3.9), and the group-avatar fallback is
@@ -225,11 +225,9 @@ cluster that can be checked without watching rows change. `GroupListingEntry` an
 moved with it.
 
 It takes **two functions** rather than `IJidResolver`: canonical JID, and "is this the logged-in
-account". The second one reads the PN/LID alias table, which is still the client's until 3.7 — a
-participant row can carry a device-suffixed PN whose base LID is the account's real identity, and
-`IsSelfLinkedJid` is the only place that knows it. Reimplementing that in the reader would have been
-a silent behaviour change in the role the composer trusts for announce-only groups. At 3.7 both
-functions collapse into the resolver.
+account". The second one reads the PN/LID alias table. Reimplementing that in the reader would have been
+a silent behaviour change in the role the composer trusts for announce-only groups. 3.7a collapsed
+both functions into `IJidResolver`, which the reader takes now.
 
 The rest of `.Groups.cs` is apply and orchestration, and it is blocked on three other steps, not on
 itself: it walks `Chats` on the UI thread and calls `SchedulePersist` (3.9), writes `ContactNames`
@@ -304,7 +302,9 @@ read it — `GetCanonicalJid`, `IsSelfLinked`, `IsSelfJid`, `IsLidLike`, `GetCan
 moved verbatim. The client keeps its private methods as one-line forwards, so no call site changed.
 `JidResolver` now reads the table directly rather than wrapping the client, and `IJidResolver` gained
 `IsSelfLinked` — which let `GroupMetadataReader` drop the two delegates 3.2a gave it and take the
-resolver, closing that note.
+resolver, closing that note. `TryGetAlias` normalizes before the lookup, matching `GetCanonicalJid`,
+so a device suffix cannot miss a pair. History, avatars and contact phone lookup expand keys through
+`ChatPinStoreKeys` instead of three private copies of the same list.
 
 The table learns the logged-in account through `BindSelf`, two functions rather than two strings.
 The account's own LID arrives after pairing and is written in place on the existing auth state, so a

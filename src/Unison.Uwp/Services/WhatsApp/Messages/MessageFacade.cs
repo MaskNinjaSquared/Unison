@@ -316,54 +316,14 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
         /// </summary>
         private List<string> ResolveChatKeys(string jid)
         {
-            var keys = new List<string>();
-            void AddKey(string key)
+            string alias = null;
+            string norm = JidHelper.Normalize(jid);
+            if (!string.IsNullOrWhiteSpace(norm))
             {
-                if (string.IsNullOrWhiteSpace(key))
-                {
-                    return;
-                }
-
-                string norm = JidHelper.Normalize(key);
-                if (string.IsNullOrWhiteSpace(norm))
-                {
-                    return;
-                }
-
-                for (int i = 0; i < keys.Count; i++)
-                {
-                    if (string.Equals(keys[i], norm, StringComparison.OrdinalIgnoreCase))
-                    {
-                        return;
-                    }
-                }
-
-                keys.Add(norm);
+                _jids.TryGetAlias(norm, out alias);
             }
 
-            AddKey(jid);
-            try
-            {
-                AddKey(_jids.GetCanonicalJid(jid));
-            }
-            catch
-            {
-            }
-
-            try
-            {
-                string norm = JidHelper.Normalize(jid);
-                if (!string.IsNullOrWhiteSpace(norm) &&
-                    _jids.TryGetAlias(norm, out string alias))
-                {
-                    AddKey(alias);
-                }
-            }
-            catch
-            {
-            }
-
-            return keys;
+            return new List<string>(ChatPinStoreKeys.For(jid, _jids.GetCanonicalJid(jid), alias));
         }
 
         public async Task<List<ChatMessage>> LoadChatMediaIndexAsync(string jid, int limit = 400)

@@ -352,31 +352,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
         private IEnumerable<string> EnumerateLookupJids(string jid)
         {
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            Action<string> add = raw =>
-            {
-                if (string.IsNullOrWhiteSpace(raw))
-                {
-                    return;
-                }
-
-                string normalized = JidHelper.Normalize(raw);
-                if (string.IsNullOrEmpty(normalized) || !seen.Add(normalized))
-                {
-                    return;
-                }
-            };
-
-            add(jid);
-            string canonical = _jids.GetCanonicalJid(jid);
-            add(canonical);
-            string alias;
-            if (!string.IsNullOrWhiteSpace(canonical) && _jids.TryGetAlias(canonical, out alias))
-            {
-                add(alias);
-            }
-
-            return seen;
+            return ChatPinStoreKeys.For(jid, _jids);
         }
 
         private Person TryPerson(string jid)
