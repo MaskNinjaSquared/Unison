@@ -172,7 +172,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         /// construction because the socket is replaced on every reconnect, and a resolver bound
         /// to a closed session fails silently.
         /// </summary>
-        private WhatsAppSession GetReadySession()
+        public WhatsAppSession GetReadySession()
         {
             var session = _sessions.Current;
             if (session == null || !_sessions.IsReady)

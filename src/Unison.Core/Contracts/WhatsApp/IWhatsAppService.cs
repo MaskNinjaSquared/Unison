@@ -152,8 +152,33 @@ namespace Unison.Core.Contracts.WhatsApp
         Task RefreshContactNamesAsync(bool includeGroups, bool force);
         string ResolveDisplayName(string jid, string context);
 
-        /// <summary>Raw usync query for a batch of JIDs (name resolution primitive used by <see cref="IContactService"/>).</summary>
-        Task ResolveContactsAsync(string[] jids);
+        // Usync contact apply (3.6). The contact façade decides; these write the caches the client
+        // still owns. Not for ViewModels.
+
+        /// <summary>
+        /// Files a usync LID/phone pair when <see cref="Unison.Core.Helpers.AliasPairPolicy"/> accepts it, and
+        /// heals our own identity if the pair touches it. <paramref name="wasAlreadyAliased"/> is read
+        /// before the write.
+        /// </summary>
+        bool TryFileUsyncAlias(string userJid, string lidJid, out bool wasAlreadyAliased);
+
+        /// <summary>Sanitizes and stores a usync push name. False when nothing usable was offered.</summary>
+        bool StoreUsyncPushName(string jid, string rawName);
+
+        /// <summary>True when a listed chat for this JID is showing no avatar.</summary>
+        bool HasListedChatWithoutAvatar(string jid);
+
+        /// <summary>Fetches the picture URL and applies it to the listed chat if it still has none.</summary>
+        Task FetchAvatarForResolvedContactAsync(string jid);
+
+        /// <summary>Collapses the LID and phone rows of one person into one chat.</summary>
+        Task MergeDuplicateChatsAsync(string lidJid, string pnJid);
+
+        /// <summary>
+        /// A JID already known (alias table or name cache) whose user part starts with these digits.
+        /// Null when none is.
+        /// </summary>
+        string FindKnownJidByPhoneDigits(string digits);
 
         /// <summary>Queries metadata for all joined groups.</summary>
         Task QueryAllGroupsAsync();
@@ -330,9 +355,6 @@ namespace Unison.Core.Contracts.WhatsApp
 
         /// <summary>Prefer <see cref="IMessageService.StartNewChat"/> from ViewModels.</summary>
         void StartNewChat(string jid);
-
-        /// <summary>Prefer <see cref="IContactService.SearchContactAsync"/> from ViewModels.</summary>
-        Task<string> SearchContactAsync(string phone);
 
         Task<List<ChatMessage>> LoadMessagesForChatAsync(string jid);
         Task<List<ChatMessage>> LoadMoreMessagesAsync(string jid);

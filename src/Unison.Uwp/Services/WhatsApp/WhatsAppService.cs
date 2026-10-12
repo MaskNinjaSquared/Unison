@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -37,7 +37,6 @@ using Unison.Core.State;
 using Unison.Uwp.Services.WhatsApp.Contacts;
 using Unison.Uwp.Services.WhatsApp.Groups;
 using Unison.Uwp.Services.WhatsApp.Messages;
-using Unison.Socket.Session;
 using Unison.Socket.UseCases.Contacts;
 using Unison.Uwp.Helpers;
 using Microsoft.Extensions.DependencyInjection;
@@ -7641,149 +7640,49 @@ namespace Unison.Uwp.Services.WhatsApp
             return _contactService?.ResolveMissingNamesAsync() ?? Task.CompletedTask;
         }
 
-        /// <summary>
-        /// Name resolution over the new stack. The query, the retry and the parsing belong to
-        /// <see cref="ResolveContactNamesUseCase"/>; what stays here is everything the protocol
-        /// has no opinion about - repairing our own identity when the server disagrees with it,
-        /// aliasing the two addresses of one person, merging the chats that resulted from not
-        /// knowing they were the same person, and fetching avatars.
-        /// </summary>
-        private async Task ResolveContactsViaSocketAsync(string[] jids, WhatsAppSession session)
+        public bool TryFileUsyncAlias(string userJid, string lidJid, out bool wasAlreadyAliased)
         {
-            // This endpoint answers by phone number; a LID with no known pair has none to ask with.
-            var lookup = new List<string>();
-            foreach (var jid in jids)
-            {
-                if (string.IsNullOrWhiteSpace(jid))
-                {
-                    continue;
-                }
-
-                ContactLookupNumber number = ContactLookupNumber.For(jid, GetCanonicalJid(jid), _authState?.Me?.Id);
-                if (!number.IsUsable)
-                {
-                    Debug.WriteLine("[WhatsAppService] ResolveContactsAsync: skipping " + jid + " (" + number.Skip + ")");
-                    continue;
-                }
-
-                lookup.Add(number.Number);
-            }
-
-            if (lookup.Count == 0)
-            {
-                return;
-            }
-
-            try
-            {
-                using (await _usyncGate.AcquireAsync().ConfigureAwait(false))
-                {
-                    if (_socket == null || !_socket.IsHandshakeComplete)
-                    {
-                        Debug.WriteLine("[WhatsAppService] ResolveContactsAsync skipped after lock (socket not ready)");
-                        return;
-                    }
-
-                    var useCase = new ResolveContactNamesUseCase(session.Connection);
-                    var timeout = TimeSpan.FromSeconds(lookup.Count > 1 ? 15 : 8);
-                    var contacts = await useCase.ExecuteAsync(lookup, "interactive", timeout).ConfigureAwait(false);
-
-                    var cacheUpdated = false;
-                    foreach (var contact in contacts)
-                    {
-                        if (ApplyResolvedContact(contact))
-                        {
-                            cacheUpdated = true;
-                        }
-                    }
-
-                    if (cacheUpdated)
-                    {
-                        await ApplyResolvedNamesToChatsAsync().ConfigureAwait(false);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[WhatsAppService] ResolveContactsAsync failed: " + ex);
-                try
-                {
-                    RuntimeDiagnosticsService.Instance.RecordException(
-                        "contacts",
-                        "resolve-contacts-failed",
-                        ex,
-                        "count=" + lookup.Count);
-                }
-                catch
-                {
-                }
-            }
-        }
-
-        /// <summary>Returns true when the name or alias caches changed and the chats need redrawing.</summary>
-        private bool ApplyResolvedContact(ResolvedContact contact)
-        {
-            if (contact == null || string.IsNullOrEmpty(contact.Jid))
+            string normalizedUser = NormalizeJid(userJid);
+            string normalizedLid = NormalizeJid(lidJid);
+            wasAlreadyAliased = !string.IsNullOrEmpty(normalizedLid) && JidAlias.ContainsKey(normalizedLid);
+            if (string.IsNullOrEmpty(normalizedUser) || string.IsNullOrEmpty(normalizedLid) ||
+                !AliasPairPolicy.TryAcceptPair(normalizedLid, normalizedUser, JidAlias, out string acceptedLid, out string acceptedPn))
             {
                 return false;
             }
 
-            var normalizedUser = NormalizeJid(contact.Jid);
-            string normalizedLid = string.IsNullOrEmpty(contact.Lid) ? null : NormalizeJid(contact.Lid);
-            bool pairAccepted = false;
-            string acceptedLid = null;
-            string acceptedPn = null;
-            if (!string.IsNullOrEmpty(normalizedLid))
+            JidAlias[acceptedLid] = acceptedPn;
+            JidAlias[acceptedPn] = acceptedLid;
+            RegisterSocketAlias(normalizedUser, normalizedLid, "contact-usync");
+            HealOwnIdentity(normalizedUser, normalizedLid);
+            return true;
+        }
+
+        public bool StoreUsyncPushName(string jid, string rawName)
+        {
+            string normalizedUser = NormalizeJid(jid);
+            string pushName = SanitizeContactLabel(rawName, normalizedUser);
+            if (string.IsNullOrEmpty(normalizedUser) || string.IsNullOrEmpty(pushName))
             {
-                pairAccepted = AliasPairPolicy.TryAcceptPair(
-                    normalizedLid,
-                    normalizedUser,
-                    JidAlias,
-                    out acceptedLid,
-                    out acceptedPn);
+                return false;
             }
 
-            string pushName = SanitizeContactLabel(contact.Name, normalizedUser);
-            bool listedWithoutAvatar = !string.IsNullOrEmpty(contact.PictureId) &&
+            ContactNames[normalizedUser] = pushName;
+            Debug.WriteLine("[WhatsAppService] usync name resolved: " + jid + " -> " + pushName);
+            return true;
+        }
+
+        public bool HasListedChatWithoutAvatar(string jid)
+        {
+            string normalizedUser = NormalizeJid(jid);
+            return !string.IsNullOrEmpty(normalizedUser) &&
                 Chats.Any(c => c != null &&
                     NormalizeJid(c.JID) == normalizedUser &&
                     string.IsNullOrEmpty(c.AvatarUrl));
-
-            ResolvedContactApplyPlan plan = ResolvedContactApplyPlan.Decide(
-                hasLid: !string.IsNullOrEmpty(normalizedLid),
-                lidAlreadyAliased: !string.IsNullOrEmpty(normalizedLid) && JidAlias.ContainsKey(normalizedLid),
-                pairAccepted: pairAccepted,
-                hasPushName: !string.IsNullOrEmpty(pushName),
-                listedChatHasNoAvatar: listedWithoutAvatar);
-
-            if (plan.WriteAlias)
-            {
-                JidAlias[acceptedLid] = acceptedPn;
-                JidAlias[acceptedPn] = acceptedLid;
-                RegisterSocketAlias(normalizedUser, normalizedLid, "contact-usync");
-                HealOwnIdentity(normalizedUser, normalizedLid);
-
-                // Two chats for one person, which is what happens when the pair was learned late.
-                if (plan.MergeDuplicateChats)
-                {
-                    _ = CheckAndMergeDuplicateChatsAsync(normalizedLid, normalizedUser);
-                }
-            }
-
-            if (plan.StorePushName)
-            {
-                ContactNames[normalizedUser] = pushName;
-                Debug.WriteLine("[WhatsAppService] usync name resolved: " + contact.Jid + " -> " + pushName);
-            }
-
-            // The id only says the picture exists and which one it is; the URL is a separate round trip.
-            if (plan.FetchAvatar)
-            {
-                _ = FetchAvatarForResolvedContactAsync(contact.Jid, normalizedUser);
-            }
-
-            return plan.CachesChanged;
         }
+
+        public Task MergeDuplicateChatsAsync(string lidJid, string pnJid) =>
+            CheckAndMergeDuplicateChatsAsync(NormalizeJid(lidJid), NormalizeJid(pnJid));
 
         /// <summary>
         /// Reconciles our own identity with what the server just said. A companion learns its LID
@@ -7822,8 +7721,10 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        private async Task FetchAvatarForResolvedContactAsync(string jid, string normalizedUser)
+        /// <summary>The id only says the picture exists and which one it is; the URL is a separate round trip.</summary>
+        public async Task FetchAvatarForResolvedContactAsync(string jid)
         {
+            string normalizedUser = NormalizeJid(jid);
             var url = await GetProfilePictureAsync(jid).ConfigureAwait(false);
             if (string.IsNullOrEmpty(url))
             {

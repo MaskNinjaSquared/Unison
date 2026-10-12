@@ -43,6 +43,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
         private readonly ContactDirectory _directory;
         private readonly AddressBookOverlay _addressBook;
+        private readonly ContactUsyncResolver _usync;
         private readonly ContactNameResolver _names;
         private readonly ChatAvatarPolicy _avatars;
         private readonly GroupRosterPolicy _roster;
@@ -57,11 +58,13 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             IWhatsAppService whatsAppService,
             LidMappingStore lidMappings,
             ILocalSettings localSettings,
-            IJidResolver jids)
+            IJidResolver jids,
+            IUsyncGate usyncGate)
         {
             if (sessions == null) throw new ArgumentNullException(nameof(sessions));
             if (localContacts == null) throw new ArgumentNullException(nameof(localContacts));
             if (lidMappings == null) throw new ArgumentNullException(nameof(lidMappings));
+            if (usyncGate == null) throw new ArgumentNullException(nameof(usyncGate));
 
             _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
             _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
@@ -71,7 +74,8 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
             _directory = new ContactDirectory(sessions, lidMappings);
             _addressBook = new AddressBookOverlay(localContacts, personStore, whatsAppService, jids);
-            _names = new ContactNameResolver(whatsAppService, _addressBook, _directory, jids);
+            _usync = new ContactUsyncResolver(whatsAppService, _directory, usyncGate, jids);
+            _names = new ContactNameResolver(whatsAppService, _addressBook, _directory, _usync, jids);
             _avatars = new ChatAvatarPolicy(whatsAppService, jids);
             _roster = new GroupRosterPolicy(whatsAppService, this, jids);
 
@@ -168,8 +172,26 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                     return null;
 
                 default:
-                    return await _whatsAppService.SearchContactAsync(phoneNumber).ConfigureAwait(false);
+                    return await SearchKnownContactsAsync(phoneNumber).ConfigureAwait(false);
             }
+        }
+
+        /// <summary>
+        /// The older path: a usync pass, then a prefix match over what it filed. Whatever the user
+        /// typed is reduced to digits first; anything else in the string can only make the match miss.
+        /// </summary>
+        private async Task<string> SearchKnownContactsAsync(string phoneNumber)
+        {
+            string digits = PhoneNumberHelper.NormalizePhoneDigits(phoneNumber);
+            if (string.IsNullOrEmpty(digits))
+            {
+                return null;
+            }
+
+            await _usync.ResolveAsync(new[] { digits }).ConfigureAwait(false);
+            string jid = _whatsAppService.FindKnownJidByPhoneDigits(digits);
+            Debug.WriteLine("[ContactFacade] Known-contact search for " + digits + ": " + (jid ?? "none"));
+            return jid;
         }
 
         public string TryResolvePhone(string jid, string phoneDigits = null)

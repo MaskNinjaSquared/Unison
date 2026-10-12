@@ -621,70 +621,26 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             return _contactService?.RefreshContactNamesAsync(includeGroups, force) ?? Task.CompletedTask;
         }
-    
-        /// <summary>
-        /// Usync over the session. Every query goes through the session's connection, so when it
-        /// is not connected there is nothing to fall back to.
-        /// </summary>
-        public Task ResolveContactsAsync(string[] jids)
+
+        /// <summary>Usync files what it learns as an alias pair or a name, so a hit lands in one of those two.</summary>
+        public string FindKnownJidByPhoneDigits(string digits)
         {
-            if (jids == null || jids.Length == 0)
+            if (string.IsNullOrEmpty(digits))
             {
-                return Task.CompletedTask;
+                return null;
             }
 
-            var session = (_socket as SocketBridge)?.Session;
-            if (_socket == null || !_socket.IsHandshakeComplete || session == null || !session.Connection.IsConnected)
-            {
-                Debug.WriteLine("[WhatsAppService] ResolveContactsAsync skipped (session not connected)");
-                return Task.CompletedTask;
-            }
-
-            return ResolveContactsViaSocketAsync(jids, session);
-        }
-
-        public async Task<string> SearchContactAsync(string phoneNumber)
-        {
-            if (string.IsNullOrEmpty(phoneNumber)) return null;
-
-            // Whatever the user typed into the phone field, reduced to the digits a JID starts
-            // with — the matching below is a prefix test against stored JIDs, so anything else
-            // in the string can only make it miss.
-            string cleaned = PhoneNumberHelper.NormalizePhoneDigits(phoneNumber);
-            if (string.IsNullOrEmpty(cleaned)) return null;
-
-            Debug.WriteLine($"[WhatsAppService] SearchContactAsync: Searching for {cleaned}...");
-            
-            // Trigger resolution (ResolveContactsAsync handles phone nodes if no @ is present)
-            await ResolveContactsAsync(new string[] { cleaned });
-
-            // Check if we found a mapping or a name for this
-            // USync adds the resolved JID as an alias or key in ContactNames
-            // Let's find any JID that contains this phone number
-            string foundJid = null;
-            
-            // Check JidAlias first (USync often returns LID <-> JID)
             foreach (var alias in JidAlias)
             {
-                if (alias.Key.StartsWith(cleaned)) { foundJid = alias.Key; break; }
-                if (alias.Value.StartsWith(cleaned)) { foundJid = alias.Value; break; }
+                if (alias.Key.StartsWith(digits)) return alias.Key;
+                if (alias.Value.StartsWith(digits)) return alias.Value;
             }
 
-            if (foundJid == null)
+            foreach (var name in ContactNames)
             {
-                foreach (var name in ContactNames)
-                {
-                    if (name.Key.StartsWith(cleaned)) { foundJid = name.Key; break; }
-                }
+                if (name.Key.StartsWith(digits)) return name.Key;
             }
 
-            if (foundJid != null)
-            {
-                Debug.WriteLine($"[WhatsAppService] SearchContactAsync: Found {foundJid} for {cleaned}");
-                return foundJid;
-            }
-
-            Debug.WriteLine($"[WhatsAppService] SearchContactAsync: No contact found for {cleaned}");
             return null;
         }
     }

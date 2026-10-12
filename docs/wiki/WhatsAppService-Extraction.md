@@ -178,7 +178,7 @@ Self-contained first. List/persist last.
 | 3.4 | Send (main file) | `MessageFacade` over use cases; client only “send this node” |
 | 3.5a | Receipt reading (done) | `ReceiptReader` |
 | 3.5b | Receipt aggregation state (done) | `GroupReceiptTally` (Core) |
-| 3.6 | Names / usync (`.Identity.cs`) | `ContactFacade` / `ContactDirectory`. **Name rules out — see below.** usync + merge remain |
+| 3.6 | Names / usync (`.Identity.cs`) | `ContactFacade` / `ContactUsyncResolver`. **Rules and usync orchestration out — see below.** Cache-write primitives remain on the client |
 | 3.7a | Alias LID/PN + canonical (done) | `JidAliasTable` (Core), read through `IJidResolver` |
 | 3.7b | Converge onto `LidMappingStore` | Blocked: that store is async, canonicalization is not. See below |
 | 3.8 | `.AppState.cs` | **Rewritten — the premise was stale.** See below |
@@ -517,6 +517,19 @@ contact, whether to file the alias, merge the two chats (only the first time tha
 store the push name, and fetch an avatar (only when a listed chat has none). Writing the alias,
 healing identity, merging and the picture round-trip stay on the client — those caches have not
 moved.
+
+**The usync orchestration moved to the façade.** `ContactUsyncResolver` (in `Contacts/`, built by
+`ContactFacade`) now owns everything that decides: which numbers to ask about (`ContactLookupNumber`
+against `IJidResolver`), `IUsyncGate`, the session (`ContactDirectory.GetReadySession`), the
+`ResolveContactNamesUseCase` call and the per-contact `ResolvedContactApplyPlan`. `ContactNameResolver`
+calls it instead of the client, and the number-search fallback (`SearchContactAsync`) now lives on
+the façade. `ResolveContactsAsync` and `SearchContactAsync` are gone from `IWhatsAppService`.
+
+What the client keeps is six narrow, façade-only primitives over caches it still owns:
+`TryFileUsyncAlias` (accept, write both directions, register, heal identity), `StoreUsyncPushName`,
+`HasListedChatWithoutAvatar`, `FetchAvatarForResolvedContactAsync`, `MergeDuplicateChatsAsync` and
+`FindKnownJidByPhoneDigits`. They go when the alias table, name cache and chat rows move — that is
+3.7b / 3.10, not more of 3.6.
 
 **The hand-built usync query is gone.** `ResolveContactsAsync` had two bodies: the live one over
 `ResolveContactNamesUseCase`, and ~300 lines that built the `<usync>` node by hand. The second ran only

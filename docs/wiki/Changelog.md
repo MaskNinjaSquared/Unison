@@ -4,6 +4,16 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Usync contact resolution — moved to `ContactFacade` (3.6)
+
+`ContactUsyncResolver` (built by `ContactFacade`) owns the usync pass end to end: number selection,
+`IUsyncGate`, the session, `ResolveContactNamesUseCase` and the per-contact apply plan. The
+number-search fallback moved with it. `IWhatsAppService.ResolveContactsAsync` and
+`SearchContactAsync` are removed; the client keeps narrow façade-only primitives for the alias, name
+and avatar writes.
+
+---
+
 ## Usync contact apply — the decision left the client (3.6)
 
 `ResolvedContactApplyPlan` decides what one usync answer may change: file the alias, merge the two

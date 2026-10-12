@@ -315,7 +315,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IWhatsAppService>(),
                 sp.GetRequiredService<LidMappingStore>(),
                 sp.GetRequiredService<ILocalSettings>(),
-                sp.GetRequiredService<IJidResolver>()));
+                sp.GetRequiredService<IJidResolver>(),
+                sp.GetRequiredService<IUsyncGate>()));
             services.AddSingleton<IChatService>(sp => new ChatFacade(
                 sp.GetRequiredService<IWhatsAppSessionProvider>(),
                 sp.GetRequiredService<IWhatsAppService>(),

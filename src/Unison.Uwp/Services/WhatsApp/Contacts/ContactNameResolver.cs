@@ -37,6 +37,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly IWhatsAppService _whatsAppService;
         private readonly AddressBookOverlay _addressBook;
         private readonly ContactDirectory _directory;
+        private readonly ContactUsyncResolver _usync;
         private readonly IJidResolver _jids;
 
         private DateTime _lastRefreshUtc = DateTime.MinValue;
@@ -46,11 +47,13 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             IWhatsAppService whatsAppService,
             AddressBookOverlay addressBook,
             ContactDirectory directory,
+            ContactUsyncResolver usync,
             IJidResolver jids)
         {
             _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
             _addressBook = addressBook ?? throw new ArgumentNullException(nameof(addressBook));
             _directory = directory ?? throw new ArgumentNullException(nameof(directory));
+            _usync = usync ?? throw new ArgumentNullException(nameof(usync));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
         }
 
@@ -313,12 +316,12 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
                 try
                 {
-                    await _whatsAppService.ResolveContactsAsync(chunk);
+                    await _usync.ResolveAsync(chunk);
                 }
                 catch (Exception ex)
                 {
                     Debug.WriteLine(
-                        $"[ContactNameResolver] ResolveContactsAsync chunk failed ({chunk.Length} JIDs): {ex.Message}");
+                        $"[ContactNameResolver] Usync chunk failed ({chunk.Length} JIDs): {ex.Message}");
                 }
             }
         }
@@ -352,7 +355,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 {
                     _whatsAppService.RaiseSyncStatus(
                         SyncPhaseStatus.Format(SyncPhaseStatus.Names, retried++, unresolved.Count));
-                    await _whatsAppService.ResolveContactsAsync(new[] { jid });
+                    await _usync.ResolveAsync(new[] { jid });
                 }
                 catch (Exception ex)
                 {
