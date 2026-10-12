@@ -11,7 +11,6 @@
 // =============================================================================
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using Unison.Baileys.Protocol;
 using Unison.Core.Contracts;
 using Unison.Core.Helpers;
@@ -355,23 +354,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
         /// <summary>A bare numeric id or an <c>@g.us</c> JID; anything else is not a group.</summary>
         public string NormalizeGroupJid(string raw)
         {
-            if (string.IsNullOrWhiteSpace(raw))
-            {
-                return null;
-            }
-
-            string value = raw.Trim();
-            if (value.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase))
-            {
-                return JidHelper.Normalize(value);
-            }
-
-            if (value.IndexOf('@') < 0 && value.All(char.IsDigit))
-            {
-                return JidHelper.Normalize(value + "@g.us");
-            }
-
-            return null;
+            return GroupAvatarFallbackJids.NormalizeGroupJid(raw);
         }
     }
 }

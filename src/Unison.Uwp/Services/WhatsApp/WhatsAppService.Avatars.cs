@@ -304,44 +304,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private List<string> ExtractGroupAvatarFallbackJids(BinaryNode response, string groupJid)
         {
-            var candidates = new List<string>();
-            var group = _groupMetadata.FindGroupNode(response, groupJid);
-            if (group == null)
-            {
-                return candidates;
-            }
-
-            AddGroupAvatarCandidate(candidates, group.GetChild("linked_parent"));
-            AddGroupAvatarCandidate(candidates, group.GetChild("parent"));
-            AddGroupAvatarCandidate(candidates, group.GetChild("default_sub_group"));
-            AddGroupAvatarCandidate(candidates, group.GetChild("default_sub_community"));
-
-            return candidates
-                .Where(j => !string.IsNullOrWhiteSpace(j) &&
-                            !string.Equals(NormalizeJid(j), NormalizeJid(groupJid), StringComparison.OrdinalIgnoreCase))
-                .Select(NormalizeJid)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-        }
-
-        private void AddGroupAvatarCandidate(List<string> candidates, BinaryNode node)
-        {
-            if (node?.Attrs == null)
-            {
-                return;
-            }
-
-            foreach (var key in new[] { "jid", "id", "parent", "linked_parent" })
-            {
-                if (node.Attrs.TryGetValue(key, out var raw))
-                {
-                    string jid = _groupMetadata.NormalizeGroupJid(raw);
-                    if (!string.IsNullOrWhiteSpace(jid))
-                    {
-                        candidates.Add(jid);
-                    }
-                }
-            }
+            return GroupAvatarFallbackJids.From(_groupMetadata.FindGroupNode(response, groupJid), groupJid);
         }
 
         public void MarkAvatarImageLoadFailed(ChatItem chat, string reason)

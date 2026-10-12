@@ -4,6 +4,14 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Group picture fallback — which addresses to try
+
+When a group has no picture of its own, the parent and community addresses to ask now come from
+`GroupAvatarFallbackJids`. The fetch stays in the client. The group's own address is still left out,
+a bare id is still completed to `@g.us`, and the same address is still asked once.
+
+---
+
 ## Group picture — full size on `GroupFacade` (3.2b)
 
 The full-size group picture no longer runs inside `WhatsAppService`. `GroupFacade` fetches it

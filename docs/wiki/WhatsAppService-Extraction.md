@@ -831,7 +831,8 @@ chat row a local send repositions (`DuplicateChatRowPick`), the text fallback fo
 code (`FatalStreamCodeText`), which log lines a replay may drop (`ReplayDiagnosticNoise`), the text-send retry (`OutgoingTextSendRetry`:
 two attempts, invalidate only on a broken pipe, stop on a refusal), catch-up continue + freshness stale,
 placeholder recovery trigger, explicit logout stream codes, list enrichment phases, user-JID
-shape, on-demand sync type, group avatar fallback, relink disconnect reasons, WebP cache URI,
+shape, on-demand sync type, group avatar fallback, the parent and community addresses that fallback
+asks (`GroupAvatarFallbackJids`), relink disconnect reasons, WebP cache URI,
 and web-message status map. Orchestration stays behind the forward.
 
 ### Phase 4 — What remains is connection
