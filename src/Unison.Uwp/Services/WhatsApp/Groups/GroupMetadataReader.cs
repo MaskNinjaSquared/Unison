@@ -17,7 +17,6 @@ using Unison.Core.Contracts;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Uwp.Client;
-using Unison.Uwp.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp.Groups
 {
@@ -332,13 +331,6 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
             add(_jids.GetCanonicalJid(member.Lid));
             return candidates;
         }
-
-        /// <summary>
-        /// True when a group label is just the chat id: <c>120363…</c> or the legacy
-        /// <c>phone-timestamp</c> user part. Those are placeholders, not subjects.
-        /// </summary>
-        public static bool IsIdPlaceholder(string label, string groupJid) =>
-            GroupIdPlaceholder.IsIdPlaceholder(label, groupJid);
 
         public static GroupParticipantRole ParseRole(string adminAttr)
         {

@@ -112,6 +112,10 @@ namespace Unison.Core.Helpers
         /// phone number, and the canonical form of each — so groups-in-common answers whichever
         /// one the UI happens to hold.
         /// </summary>
+        /// <param name="jids">
+        /// Null when the caller has no resolver: only the addresses the member already carries
+        /// are returned, with no canonical half.
+        /// </param>
         public static IReadOnlyList<string> MembershipPersonKeys(GroupMember member, IJidResolver jids)
         {
             var keys = new List<string>();
@@ -142,9 +146,13 @@ namespace Unison.Core.Helpers
             }
 
             Consider(member.Jid);
-            Consider(jids.GetCanonicalJid(member.Jid));
+            if (jids != null)
+            {
+                Consider(jids.GetCanonicalJid(member.Jid));
+            }
+
             Consider(member.Lid);
-            if (!string.IsNullOrWhiteSpace(member.Lid))
+            if (jids != null && !string.IsNullOrWhiteSpace(member.Lid))
             {
                 Consider(jids.GetCanonicalJid(member.Lid));
             }
@@ -212,6 +220,9 @@ namespace Unison.Core.Helpers
         }
 
         /// <summary>Whether any of the member's addresses resolves to <paramref name="canonical"/>.</summary>
+        /// <param name="jids">
+        /// Null compares the normalized addresses only, which is what a caller without a resolver can know.
+        /// </param>
         public static bool MemberMatches(GroupMember member, string canonical, IJidResolver jids)
         {
             if (member == null || string.IsNullOrWhiteSpace(canonical))
@@ -385,10 +396,14 @@ namespace Unison.Core.Helpers
                 return false;
             }
 
-            return string.Equals(
-                jids.GetCanonicalJid(JidHelper.Normalize(jid)),
-                canonical,
-                StringComparison.OrdinalIgnoreCase);
+            string normalized = JidHelper.Normalize(jid);
+            string other = jids != null ? jids.GetCanonicalJid(normalized) : normalized;
+            if (string.IsNullOrWhiteSpace(other))
+            {
+                other = normalized;
+            }
+
+            return string.Equals(other, canonical, StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool IsGroup(string normalizedJid) =>

@@ -4,6 +4,15 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Group info pane — one roster rule (3.2b)
+
+The member-message match and the groups-in-common lookup in `ChatDetailInfoViewModel` now call
+`GroupRosterRules`, the same rule the metadata apply writes memberships with. A missing resolver
+still lists and compares the addresses the member already carries. The reader's unused
+`IsIdPlaceholder` forward is gone; callers use `GroupIdPlaceholder`.
+
+---
+
 ## Group apply — moved to Core, refresh on `GroupFacade` (3.2b)
 
 Putting a w:g2 listing or metadata reply on the chat rows no longer runs inside `WhatsAppService`.

@@ -161,6 +161,34 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
+        public void MembershipPersonKeys_without_a_resolver_lists_the_raw_addresses()
+        {
+            // The info pane is built without a resolver when no participant context was given.
+            // It still has to ask for the addresses the member actually carries.
+            var member = new GroupMember
+            {
+                Jid = "999:3@lid",
+                Lid = "999@lid",
+                PhoneNumber = "+55 (11) 111"
+            };
+
+            IReadOnlyList<string> keys = GroupRosterRules.MembershipPersonKeys(member, null);
+
+            Assert.Equal(new[] { "999@lid", "5511111@s.whatsapp.net" }, keys);
+        }
+
+        [Fact]
+        public void MemberMatches_without_a_resolver_compares_the_normalized_addresses()
+        {
+            Assert.True(GroupRosterRules.MemberMatches(
+                new GroupMember { Jid = "111:2@s.whatsapp.net" }, "111@s.whatsapp.net", null));
+            Assert.True(GroupRosterRules.MemberMatches(
+                new GroupMember { PhoneNumber = "111@s.whatsapp.net" }, "111@s.whatsapp.net", null));
+            Assert.False(GroupRosterRules.MemberMatches(
+                new GroupMember { Lid = "999@lid" }, "111@s.whatsapp.net", null));
+        }
+
+        [Fact]
         public void Memberships_writes_one_row_per_person_key_without_duplicates()
         {
             var jids = new FakeJids();

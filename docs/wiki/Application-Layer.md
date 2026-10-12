@@ -29,7 +29,7 @@ Unison.Core/
 | `IConnectionService` | `ConnectionFacade` | Pairing (QR / code), disconnect policy, server logout, session wipe, startup order (`InitializeConnectionStateAsync`, `IsRegisteredAsync`, `EnsureConnectedAsync`, `LoadPersistedUiStateAsync`, `StartDeferredStartupMaintenance`, `IsConnected`) |
 | `IMessageService` | `MessageFacade` | Send, on-demand media, message pin, reactions, `GetChatMessage`, new chat |
 | `IChatService` | `ChatFacade` | Account pin/unpin (app-state) + mark-read, active chat, unread total, list-row persist + SQLite preview reconcile |
-| `IGroupService` | `GroupFacade` | Send permissions, roster hydrate, high-quality group avatar (forwards to the client until phase 3.2) |
+| `IGroupService` | `GroupFacade` | Send-permission refresh and roster hydrate (Core flows over `IGroupHost`). High-quality group avatar still forwards to the client |
 | `IContactService` | `ContactFacade` | Address-book overlay, name refresh, avatar policy, phone search, People add-contact card, optional Unison `UserDataAccount` in People |
 | `IProfileService` | `ProfileFacade` | “Me” hydrate + profile picture IQ |
 | `IHistoryService` | `HistoryFacade` | Sync status, chunks, on-demand full resync, initial-sync counters + frugal budget |
@@ -72,10 +72,12 @@ Unison.Uwp/Services/WhatsApp/
   Profiles/ProfileFacade.cs
   History/HistoryFacade.cs
   Status/StatusFacade.cs
+  Groups/GroupFacade.cs
+  Groups/GroupMetadataReader.cs
   Diagnostics/DebugSendService.cs
   WhatsAppService.cs         compatibility client (partial)
-  WhatsAppService.*.cs       Connection / Media / Groups / Avatars / Identity /
-                             AppState / Persistence / Receipts / IncomingPump
+  WhatsAppService.*.cs       Connection / Media / Groups / GroupHost / Avatars / Identity /
+                             AppState / Persistence / Receipts / IncomingPump / OutgoingHost
 ```
 
 `IWhatsAppSessionProvider` / `BridgeSessionProvider` hand the **live** `WhatsAppSession` to facades. They do not cache it: reconnect replaces the session.

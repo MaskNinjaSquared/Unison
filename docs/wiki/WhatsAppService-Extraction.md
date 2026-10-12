@@ -138,7 +138,7 @@ the order.
 
 ### Facades still depend on the client
 
-`ContactFacade`, `MessageFacade`, `ChatFacade`, `GroupFacade`, `HistoryFacade`, `ProfileFacade`, `StatusFacade`, `ConnectionFacade` take `IWhatsAppService` (or `AttachWhatsAppService`). Policy is already on the façade; **primitives** (fetch avatar, send bytes, persist, canonical JID) still run inside the client.
+`ContactFacade`, `MessageFacade`, `ChatFacade`, `GroupFacade`, `HistoryFacade`, `ProfileFacade`, `StatusFacade`, `ConnectionFacade` take `IWhatsAppService` (or `AttachWhatsAppService`). Policy is already on the façade; **primitives** (fetch avatar, send bytes, persist, canonical JID) still run inside the client. Group send-permission refresh and roster restore are the exception: they run in Core and call back through `IGroupHost`. `GroupFacade` still asks the client for the high-quality group picture.
 
 Helpers under `Contacts/` (`ContactNameResolver`, `ChatAvatarPolicy`, `GroupRosterPolicy`, `AddressBookOverlay`) are the largest non-UI consumers of client members (`RunOnUiThreadAsync`, `SchedulePersistPublic`, `RaiseSyncStatus`, `FetchAndApplyAvatarAsync`, `FetchGroupMemberAvatarAsync`, `IsTransportReady`, …). Extracting avatars/names is mostly moving those primitives so the helpers stop needing the god client.
 
@@ -223,7 +223,8 @@ into plain objects — subject, announce-only, member count, participant drafts,
 list algebra the roster merge needs (`RosterJidSetsEqual`, `MergeInPlace`) and the placeholder-name
 test. It holds no socket, no chat state and no dispatcher, so it is the first piece of the group
 cluster that can be checked without watching rows change. `GroupListingEntry` and `GroupMemberDraft`
-moved with it.
+moved with it; 3.2b replaced both with `GroupMetadataSnapshot` in Core and took the list algebra
+along.
 
 It takes **two functions** rather than `IJidResolver`: canonical JID, and "is this the logged-in
 account". The second one reads the PN/LID alias table. Reimplementing that in the reader would have been
