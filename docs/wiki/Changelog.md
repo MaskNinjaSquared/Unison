@@ -4,6 +4,14 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Placeholder resend book
+
+The missing-message ledger now owns each step of a repair: arm the timer, claim it,
+record the stanza, expire it, give the try back when the send throws, take a peer-data
+answer, mark an ack, and start the per-chat quiet period. `PlaceholderResendAck` reads
+the ack node. `PlaceholderResendDeferral` names why a resend waits. `IncomingPumpStall`
+says when the pump has sat too long. The pump still waits, sends, and holds the queue.
+
 ## Placeholder resend permit
 
 A missing message is asked again only when it is under two tries, nothing is in flight,

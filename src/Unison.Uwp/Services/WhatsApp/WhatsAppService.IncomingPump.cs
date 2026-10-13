@@ -251,17 +251,14 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             DateTime utcNow = DateTime.UtcNow;
-            CancellationTokenSource scheduleCts = null;
-            lock (_missing.Gate)
+            CancellationTokenSource scheduleCts = _missing.TryBeginSchedule(
+                candidate,
+                utcNow,
+                PlaceholderResendResponseTimeout,
+                PlaceholderResendDispatchDelay);
+            if (scheduleCts == null)
             {
-                if (!PlaceholderResendPermit.MaySchedule(candidate, utcNow, PlaceholderResendResponseTimeout))
-                {
-                    return Task.FromResult(false);
-                }
-
-                scheduleCts = new CancellationTokenSource();
-                candidate.PlaceholderScheduleCts = scheduleCts;
-                candidate.PlaceholderScheduledForUtc = utcNow.Add(PlaceholderResendDispatchDelay);
+                return Task.FromResult(false);
             }
 
             Debug.WriteLine($"[WhatsAppService] placeholder resend scheduled for {candidate.MessageId} in {candidate.ChatJid} (trigger={trigger}, dueInMs={(int)PlaceholderResendDispatchDelay.TotalMilliseconds})");
@@ -279,17 +276,9 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
                 MissingMessageCandidate currentCandidate;
-                lock (_missing.Gate)
+                if (!_missing.TryClaimScheduled(chatJid, messageId, scheduleCts, out currentCandidate))
                 {
-                    if (!TryGetMissingMessage(chatJid, messageId, out currentCandidate) ||
-                        currentCandidate.PlaceholderScheduleCts != scheduleCts)
-                    {
-                        return;
-                    }
-
-                    currentCandidate.PlaceholderScheduleCts = null;
-                    currentCandidate.PlaceholderScheduledForUtc = DateTime.MinValue;
-                    currentCandidate.PlaceholderRequestInFlight = true;
+                    return;
                 }
 
                 string stanzaId = null;
@@ -304,23 +293,9 @@ namespace Unison.Uwp.Services.WhatsApp
                     };
 
                     stanzaId = _socket.GenerateMessageId();
-                    lock (_missing.Gate)
+                    if (!_missing.RecordSend(chatJid, messageId, stanzaId, trigger, DateTime.UtcNow, out currentCandidate))
                     {
-                        if (!TryGetMissingMessage(chatJid, messageId, out currentCandidate))
-                        {
-                            return;
-                        }
-
-                        currentCandidate.LastPlaceholderRequestUtc = DateTime.UtcNow;
-                        currentCandidate.PlaceholderRequestCount++;
-                        currentCandidate.LastPlaceholderRequestId = stanzaId;
-                        _missing.Resends[stanzaId] = new PlaceholderResendRequestState
-                        {
-                            ChatJid = currentCandidate.ChatJid,
-                            MessageId = currentCandidate.MessageId,
-                            RequestedAtUtc = DateTime.UtcNow,
-                            Trigger = trigger
-                        };
+                        return;
                     }
 
                     string sentStanzaId = await _socket.RequestPlaceholderResendAsync(key, stanzaId);
@@ -335,19 +310,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     {
                         await Task.Delay(PlaceholderResendResponseTimeout);
 
-                        PlaceholderResendRequestState timedOutState = null;
-                        lock (_missing.Gate)
-                        {
-                            if (_missing.Resends.TryGetValue(stanzaId, out timedOutState))
-                            {
-                                _missing.Resends.Remove(stanzaId);
-                                if (TryGetMissingMessage(timedOutState.ChatJid, timedOutState.MessageId, out var timedOutCandidate) &&
-                                    string.Equals(timedOutCandidate.LastPlaceholderRequestId, stanzaId, StringComparison.Ordinal))
-                                {
-                                    timedOutCandidate.PlaceholderRequestInFlight = false;
-                                }
-                            }
-                        }
+                        PlaceholderResendRequestState timedOutState = _missing.Expire(stanzaId);
 
                         if (timedOutState != null)
                         {
@@ -358,22 +321,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
                 catch (Exception ex)
                 {
-                    lock (_missing.Gate)
-                    {
-                        if (!string.IsNullOrWhiteSpace(stanzaId))
-                        {
-                            _missing.Resends.Remove(stanzaId);
-                        }
-                        if (TryGetMissingMessage(chatJid, messageId, out currentCandidate))
-                        {
-                            currentCandidate.PlaceholderRequestInFlight = false;
-                            if (string.Equals(currentCandidate.LastPlaceholderRequestId, stanzaId, StringComparison.Ordinal))
-                            {
-                                currentCandidate.LastPlaceholderRequestId = null;
-                                currentCandidate.PlaceholderRequestCount = Math.Max(0, currentCandidate.PlaceholderRequestCount - 1);
-                            }
-                        }
-                    }
+                    _missing.FailSend(chatJid, messageId, stanzaId);
 
                     Debug.WriteLine($"[WhatsAppService] PLACEHOLDER_MESSAGE_RESEND send failed for {messageId} in {chatJid}: {ex.Message}");
                 }
@@ -388,41 +336,24 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private bool ShouldDeferPlaceholderResend(string trigger, out string reason)
         {
-            reason = null;
-
             if (_socket == null || !_socket.IsHandshakeComplete)
             {
+                reason = null;
                 return false;
             }
 
-            if (ShouldDeferReconnectReplayWork())
-            {
-                reason = "reconnect-replay-active";
-                return true;
-            }
-
-            if (_socket.IsAwaitingInitialSync)
-            {
-                reason = "awaiting-initial-sync";
-                return true;
-            }
-
-                if (_historyBackfillActive)
-                {
-                    reason = "history-backfill-active";
-                    return true;
-                }
-
+            bool historyOnDemandInFlight;
             lock (_historyOnDemandLock)
             {
-                if (_historyOnDemandInFlight.Count > 0)
-                {
-                    reason = "history-on-demand-in-flight";
-                    return true;
-                }
+                historyOnDemandInFlight = _historyOnDemandInFlight.Count > 0;
             }
 
-            return false;
+            return PlaceholderResendDeferral.IsDeferred(
+                ShouldDeferReconnectReplayWork(),
+                _socket.IsAwaitingInitialSync,
+                _historyBackfillActive,
+                historyOnDemandInFlight,
+                out reason);
         }
 
         private static string DescribeMissingMessageCandidate(MissingMessageCandidate candidate)
@@ -513,23 +444,12 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             DateTime utcNow = DateTime.UtcNow;
-            lock (_missing.Gate)
+            if (!_missing.TryBeginReconcile(normJid, utcNow, ActiveChatReconcileCooldown))
             {
-                if (_missing.Cooldowns.TryGetValue(normJid, out var cooldownUntil) &&
-                    cooldownUntil > utcNow)
-                {
-                    return false;
-                }
-                _missing.Cooldowns[normJid] = utcNow.Add(ActiveChatReconcileCooldown);
+                return false;
             }
 
-            List<string> pendingIds;
-            lock (_missing.Gate)
-            {
-                pendingIds = _missing.Pending.TryGetValue(normJid, out var byMessageId)
-                    ? byMessageId.Keys.Take(maxRequests).ToList()
-                    : new List<string>();
-            }
+            List<string> pendingIds = _missing.CopyPendingIds(normJid, maxRequests);
 
             if (pendingIds.Count == 0)
             {
@@ -848,21 +768,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             Debug.WriteLine($"[WhatsAppService] PeerDataOperationResponse received: stanzaId={response.StanzaId}, requestType={response.PeerDataOperationRequestType}, resultCount={response.PeerDataOperationResult?.Count ?? 0}");
 
-            PlaceholderResendRequestState requestState = null;
-            lock (_missing.Gate)
-            {
-                if (!string.IsNullOrWhiteSpace(response.StanzaId))
-                {
-                    _missing.Resends.TryGetValue(response.StanzaId, out requestState);
-                    _missing.Resends.Remove(response.StanzaId);
-                    if (requestState != null &&
-                        TryGetMissingMessage(requestState.ChatJid, requestState.MessageId, out var candidate) &&
-                        string.Equals(candidate.LastPlaceholderRequestId, response.StanzaId, StringComparison.Ordinal))
-                    {
-                        candidate.PlaceholderRequestInFlight = false;
-                    }
-                }
-            }
+            PlaceholderResendRequestState requestState = _missing.TakePeerResponse(response.StanzaId);
 
             HistoryOnDemandRequestState historyRequestState = null;
             lock (_historyOnDemandLock)
@@ -925,35 +831,16 @@ namespace Unison.Uwp.Services.WhatsApp
             node.Attrs.TryGetValue("id", out var ackId);
             node.Attrs.TryGetValue("error", out var ackError);
 
-            if (!string.Equals(ackClass, "message", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(ackId))
+            bool rejected;
+            if (!PlaceholderResendAck.TryRead(ackClass, ackId, ackError, out rejected))
             {
                 return;
             }
 
-            PlaceholderResendRequestState requestState = null;
-            bool rejected = !string.IsNullOrWhiteSpace(ackError);
-
-            lock (_missing.Gate)
+            PlaceholderResendRequestState requestState;
+            if (!_missing.TryApplyAck(ackId, rejected, DateTime.UtcNow, out requestState))
             {
-                if (!_missing.Resends.TryGetValue(ackId, out requestState))
-                {
-                    return;
-                }
-
-                if (rejected)
-                {
-                    _missing.Resends.Remove(ackId);
-                    if (TryGetMissingMessage(requestState.ChatJid, requestState.MessageId, out var candidate) &&
-                        string.Equals(candidate.LastPlaceholderRequestId, ackId, StringComparison.Ordinal))
-                    {
-                        candidate.PlaceholderRequestInFlight = false;
-                    }
-                }
-                else
-                {
-                    requestState.AckAccepted = true;
-                    requestState.AckAcceptedUtc = DateTime.UtcNow;
-                }
+                return;
             }
 
             if (requestState == null)
@@ -1169,21 +1056,15 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             lock (_incomingMessageQueueLock)
             {
-                if (!_incomingMessagePumpRunning || _incomingMessagePumpStageUtcTicks <= 0)
-                {
-                    return false;
-                }
-
                 bool hasWork = _incomingMessagePumpCurrent != null ||
                                _liveIncomingMessageQueue.Count > 0 ||
                                _offlineIncomingMessageQueue.Count > 0;
-                if (!hasWork)
-                {
-                    return false;
-                }
-
-                var stageUtc = new DateTime(_incomingMessagePumpStageUtcTicks, DateTimeKind.Utc);
-                return DateTime.UtcNow - stageUtc > limit;
+                return IncomingPumpStall.IsStalled(
+                    _incomingMessagePumpRunning,
+                    _incomingMessagePumpStageUtcTicks,
+                    hasWork,
+                    DateTime.UtcNow,
+                    limit);
             }
         }
 
