@@ -133,17 +133,5 @@ namespace Unison.Uwp.Services.WhatsApp
             return GetResolvedName(jid) ?? jid;
         }
 
-        private void StampGroupMemberAvatars(string memberJid, string localUri)
-        {
-            if (_groupService == null || string.IsNullOrWhiteSpace(memberJid) || string.IsNullOrWhiteSpace(localUri))
-            {
-                return;
-            }
-
-            _groupService.ApplyGroupMemberAvatarOutcome(
-                memberJid,
-                new GroupMemberAvatarFetchResult { LocalUri = localUri });
-        }
-
     }
 }

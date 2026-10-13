@@ -24,6 +24,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
+using Unison.Core.State;
 using Unison.Core.Constants;
 using Unison.Socket.Signal;
 using Unison.Uwp.Services.Socket;
@@ -60,13 +61,19 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             ILocalSettings localSettings,
             IJidResolver jids,
             IUsyncGate usyncGate,
-            IGroupService groups)
+            IGroupService groups,
+            AvatarFetcher avatars,
+            IChatStateStore chats,
+            IAvatarReport avatarReport)
         {
             if (sessions == null) throw new ArgumentNullException(nameof(sessions));
             if (localContacts == null) throw new ArgumentNullException(nameof(localContacts));
             if (lidMappings == null) throw new ArgumentNullException(nameof(lidMappings));
             if (usyncGate == null) throw new ArgumentNullException(nameof(usyncGate));
             if (groups == null) throw new ArgumentNullException(nameof(groups));
+            if (avatars == null) throw new ArgumentNullException(nameof(avatars));
+            if (chats == null) throw new ArgumentNullException(nameof(chats));
+            if (avatarReport == null) throw new ArgumentNullException(nameof(avatarReport));
 
             _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
             _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
@@ -78,7 +85,10 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             _addressBook = new AddressBookOverlay(localContacts, personStore, whatsAppService, jids);
             _usync = new ContactUsyncResolver(whatsAppService, _directory, usyncGate, jids);
             _names = new ContactNameResolver(whatsAppService, _addressBook, _directory, _usync, jids, groups);
-            _avatars = new ChatAvatarPolicy(whatsAppService, jids);
+            _avatars = new ChatAvatarPolicy(
+                whatsAppService,
+                jids,
+                new ChatAvatarFetch(whatsAppService, sessions, groups, jids, chats, avatarReport, avatars));
             _roster = new GroupRosterPolicy(whatsAppService, groups, this, jids);
 
             // Both live as long as the app does, so there is nothing to unhook from.

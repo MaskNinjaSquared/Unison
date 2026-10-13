@@ -332,6 +332,8 @@ namespace Unison.Uwp
             services.AddSingleton<ILidMappingStorage, SqliteLidMappingStorage>();
             services.AddSingleton(sp => new LidMappingStore(sp.GetRequiredService<ILidMappingStorage>()));
 
+            services.AddSingleton<IAvatarReport>(
+                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IContactService>(sp => new ContactFacade(
                 sp.GetRequiredService<IWhatsAppSessionProvider>(),
                 sp.GetRequiredService<ILocalContactsService>(),
@@ -341,7 +343,10 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ILocalSettings>(),
                 sp.GetRequiredService<IJidResolver>(),
                 sp.GetRequiredService<IUsyncGate>(),
-                sp.GetRequiredService<IGroupService>()));
+                sp.GetRequiredService<IGroupService>(),
+                sp.GetRequiredService<AvatarFetcher>(),
+                sp.GetRequiredService<IChatStateStore>(),
+                sp.GetRequiredService<IAvatarReport>()));
             services.AddSingleton<IChatService>(sp => new ChatFacade(
                 sp.GetRequiredService<IWhatsAppSessionProvider>(),
                 sp.GetRequiredService<IWhatsAppService>(),

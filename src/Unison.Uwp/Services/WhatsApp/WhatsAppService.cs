@@ -43,7 +43,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IMediaDownloadHost
+    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IMediaDownloadHost, IAvatarReport
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -713,8 +713,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private DateTime _lastCatchUpContinueUtc = DateTime.MinValue;
         // Default retry delay for the deferred background-resolution pass (names+avatars+groups).
         private static readonly TimeSpan AvatarFetchNextBatchDelay = TimeSpan.FromSeconds(20);
-        // Also used by ContactService (duplicated) when composing an avatar-miss failure reason.
-        private const string GroupAvatarFallbackMissReason = "group-avatar-fallback-miss";
         private DateTime _replayDrainCompletedUtc = DateTime.MinValue;
         private DateTime _lastPostReplayLiveActivityUtc = DateTime.MinValue;
         private static readonly TimeSpan[] PostReplayAppStateFollowUpDelays =
@@ -1619,6 +1617,11 @@ namespace Unison.Uwp.Services.WhatsApp
         private void ReportStreamError(string code)
         {
             RaiseReport(() => OnStreamError?.Invoke(this, code), nameof(OnStreamError));
+        }
+
+        void IAvatarReport.ReportCached(string jid, string localUri)
+        {
+            ReportAvatarCached(jid, localUri);
         }
 
         private void ReportAvatarCached(string jid, string localAvatarUrl)
@@ -3694,91 +3697,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
             return false;
         }
-
-        // NeedsAvatarRefresh/IsAvatarFetchBackoffActive/IsLegacyGroupAvatarMissReason (batch/single-refresh
-        // policy) now live in ContactService. FindSiblingGroupAvatarSource stays here (also used by the
-        // group-avatar fallback protocol path below) and is duplicated in ContactService for its own policy check.
-        private ChatItem FindSiblingGroupAvatarSource(ChatItem chat)
-        {
-            return SiblingGroupAvatar.Find(chat, Chats);
-        }
-
-        private async Task ApplyAvatarResultAsync(ChatItem chat, ProfilePictureResult result, CancellationToken token)
-        {
-            if (chat == null || result == null)
-            {
-                return;
-            }
-
-            DateTime nowUtc = DateTime.UtcNow;
-            if (!string.IsNullOrWhiteSpace(result.Url))
-            {
-                string localUri = null;
-                try
-                {
-                    localUri = await _avatarFetcher.CachePreviewAsync(chat.JID, result.Url, token);
-                }
-                catch (Exception ex)
-                {
-                    await RunOnUiThreadAsync(() =>
-                        ChatAvatarOutcome.RecordFailure(chat, "download:" + ex.Message, nowUtc));
-                    Debug.WriteLine($"[WhatsAppService] Avatar download/cache failed for {chat.JID}: target={result.TargetJid}, reason={ex.Message}");
-                    return;
-                }
-
-                if (string.IsNullOrWhiteSpace(localUri))
-                {
-                    await RunOnUiThreadAsync(() =>
-                        ChatAvatarOutcome.RecordFailure(chat, "download:empty", nowUtc));
-                    return;
-                }
-
-                await RunOnUiThreadAsync(() =>
-                    {
-                        ChatAvatarOutcome.RecordCached(chat, localUri, nowUtc);
-                        StampGroupMemberAvatars(chat.JID, localUri);
-                    });
-                ReportAvatarCached(chat.JID, localUri);
-                return;
-            }
-
-            if (result.IsNotFound)
-            {
-                if (await TryApplyGroupAvatarFallbackAsync(chat, result, token))
-                {
-                    return;
-                }
-
-                string failureReason = result.FailureReason ?? "no-picture";
-                if (chat.IsGroup && ShouldTryGroupAvatarFallback(result))
-                {
-                    failureReason = failureReason + ":" + GroupAvatarFallbackMissReason;
-                }
-
-                await RunOnUiThreadAsync(() =>
-                    ChatAvatarOutcome.RecordAbsent(chat, failureReason, nowUtc));
-                Debug.WriteLine($"[WhatsAppService] Avatar confirmed absent for {chat.JID}: target={result.TargetJid}, reason={failureReason}");
-                return;
-            }
-
-            if (await TryApplyGroupAvatarFallbackAsync(chat, result, token))
-            {
-                return;
-            }
-
-            await RunOnUiThreadAsync(() =>
-                ChatAvatarOutcome.RecordFailure(
-                    chat,
-                    result.FailureReason ?? (result.IsTimeout ? "timeout" : "transient"),
-                    nowUtc));
-            Debug.WriteLine($"[WhatsAppService] Avatar refresh failed without clearing existing image for {chat.JID}: target={result.TargetJid}, lookup={result.TokenLookupJid}, reason={chat.AvatarFetchFailureReason}");
-        }
-
-        private List<string> GetAvatarLookupCandidates(ChatItem chat)
-        {
-            return ExpandHistoryChatKeys(chat?.JID);
-        }
-
 
         /// <summary>
         /// Fetches profile pictures for chats that don't have one yet

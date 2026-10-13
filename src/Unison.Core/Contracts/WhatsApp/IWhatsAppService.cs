@@ -223,13 +223,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>Promotes avatar files already cached on disk into each chat's AvatarUrl before a fetch pass.</summary>
         Task HydrateCachedAvatarUrisAsync(string reason);
 
-        /// <summary>
-        /// Fetches the best available profile picture for a chat (incl. group-avatar fallback) and applies it.
-        /// When <paramref name="fetchHighQuality"/> is false, skips the extra group <c>type=image</c> pass
-        /// (startup batch); visible refresh / chat-info should pass true.
-        /// </summary>
-        Task FetchAndApplyAvatarAsync(ChatItem chat, CancellationToken token, bool fetchHighQuality = true);
-
         void MarkAvatarImageLoadFailed(ChatItem chat, string reason);
         void RequestAvatarRefresh(ChatItem chat, bool force = false);
         void SetActiveChatJid(string jid);

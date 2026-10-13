@@ -3,7 +3,7 @@
 //
 // When a chat picture is worth fetching, and when asking again would only cost.
 //
-// The fetch itself still belongs to WhatsAppService; what lives here is the
+// The fetch itself lives in ChatAvatarFetch; what lives here is the
 // deciding. Two callers ask - the background batch and a row scrolling into
 // view - and both consult the same in-flight and already-attempted sets, which
 // is why they are one class: a row that arrives while the batch is fetching it
@@ -40,6 +40,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
         private readonly IWhatsAppService _whatsAppService;
         private readonly IJidResolver _jids;
+        private readonly ChatAvatarFetch _fetch;
 
         private readonly object _requestLock = new object();
         private readonly HashSet<string> _inFlight = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -47,10 +48,11 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         /// <summary>JIDs realized on screen; background batches pull these first.</summary>
         private readonly HashSet<string> _viewportPriority = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        internal ChatAvatarPolicy(IWhatsAppService whatsAppService, IJidResolver jids)
+        internal ChatAvatarPolicy(IWhatsAppService whatsAppService, IJidResolver jids, ChatAvatarFetch fetch)
         {
             _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
+            _fetch = fetch ?? throw new ArgumentNullException(nameof(fetch));
         }
 
         /// <summary>
@@ -110,7 +112,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
                     // Preview only during the background queue; high-res group art is deferred to
                     // visible refresh / chat-info so Mobile does not pay a second CDN hit per group.
-                    await _whatsAppService.FetchAndApplyAvatarAsync(chat, token, fetchHighQuality: false);
+                    await _fetch.FetchAndApplyAsync(chat, token, fetchHighQuality: false);
                     anyUpdated = true;
                     fetched++;
                     ClearViewportPriority(chat);
@@ -207,7 +209,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             {
                 try
                 {
-                    await _whatsAppService.FetchAndApplyAvatarAsync(chat, CancellationToken.None, fetchHighQuality: true);
+                    await _fetch.FetchAndApplyAsync(chat, CancellationToken.None, fetchHighQuality: true);
                     _whatsAppService.SchedulePersistPublic();
                     ClearViewportPriority(chat);
                 }

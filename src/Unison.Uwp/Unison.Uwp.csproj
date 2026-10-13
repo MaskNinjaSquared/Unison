@@ -154,6 +154,7 @@
     <Compile Include="Services\WhatsApp\Contacts\ContactFacade.cs" />
     <Compile Include="Services\WhatsApp\Contacts\AddressBookOverlay.cs" />
     <Compile Include="Services\WhatsApp\Contacts\ChatAvatarPolicy.cs" />
+    <Compile Include="Services\WhatsApp\Contacts\ChatAvatarFetch.cs" />
     <Compile Include="Services\WhatsApp\Contacts\GroupRosterPolicy.cs" />
     <Compile Include="Services\WhatsApp\Contacts\ContactDirectory.cs" />
     <Compile Include="Services\WhatsApp\Contacts\ContactNameResolver.cs" />

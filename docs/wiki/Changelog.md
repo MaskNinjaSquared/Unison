@@ -4,6 +4,14 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Chat picture fetch — on `ContactFacade`
+
+Fetching a chat picture and writing it on the row, including a group's parent or a sibling with
+the same name, left `WhatsAppService`. `ChatAvatarFetch` does that work. Pictures already on
+disk are still filled in by the client at startup.
+
+---
+
 ## Live image and sticker — on `MessageFacade`
 
 An image or a sticker that arrives on its own is no longer downloaded inside the incoming pump.
