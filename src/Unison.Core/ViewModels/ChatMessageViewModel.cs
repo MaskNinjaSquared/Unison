@@ -27,6 +27,7 @@ namespace Unison.Core.ViewModels
         private readonly IFilePicker _filePicker;
         private readonly ISessionLogger _sessionLogger;
         private readonly IRuntimeDiagnostics _diagnostics;
+        private readonly IHistoryMessageStore _history;
         private bool _isExpanded;
         private bool _isHighlighted;
         private bool? _canExpandCached;
@@ -44,7 +45,8 @@ namespace Unison.Core.ViewModels
             IUriLauncher uriLauncher = null,
             IFilePicker filePicker = null,
             ISessionLogger sessionLogger = null,
-            IRuntimeDiagnostics diagnostics = null)
+            IRuntimeDiagnostics diagnostics = null,
+            IHistoryMessageStore history = null)
         {
             Model = model ?? throw new ArgumentNullException(nameof(model));
             _strings = strings;
@@ -54,6 +56,7 @@ namespace Unison.Core.ViewModels
             _filePicker = filePicker;
             _sessionLogger = sessionLogger;
             _diagnostics = diagnostics;
+            _history = history;
 
             ShowReactionsCommand = new RelayCommand(
                 () => _ = ShowReactionsAsync(),

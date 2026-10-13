@@ -27,6 +27,8 @@ namespace Unison.Core.ViewModels
         private readonly IAppLanguageService _appLanguage;
         private readonly IStringResources _strings;
         private readonly IDialogService _dialogService;
+        private readonly IStartTilePinService _startTiles;
+        private readonly IMediaDiskUsageService _diskUsage;
 
         /// <summary>Owns leaving the account: unlink on the server, then wipe locally.</summary>
         private readonly IConnectionService _connectionService;
@@ -43,6 +45,9 @@ namespace Unison.Core.ViewModels
         private bool _groupSoundChangeBusy;
         private bool _disconnectBusy;
         private bool _publishContactsBusy;
+        private bool _diskMeasured;
+        private bool _diskBusy;
+        private string _diskUsageText = "Calculando...";
 
         public SettingsViewModel(
             ILocalSettings localSettings,
@@ -53,6 +58,8 @@ namespace Unison.Core.ViewModels
             IAppLanguageService appLanguage,
             IStringResources strings,
             IDialogService dialogService,
+            IStartTilePinService startTiles,
+            IMediaDiskUsageService diskUsage,
             IConnectionService connectionService,
             ShellViewModel shell,
             IContactService contacts = null)
@@ -65,6 +72,8 @@ namespace Unison.Core.ViewModels
             _appLanguage = appLanguage;
             _strings = strings;
             _dialogService = dialogService;
+            _startTiles = startTiles ?? throw new ArgumentNullException(nameof(startTiles));
+            _diskUsage = diskUsage ?? throw new ArgumentNullException(nameof(diskUsage));
             _connectionService = connectionService ?? throw new ArgumentNullException(nameof(connectionService));
             _shell = shell;
             _contacts = contacts;
@@ -72,6 +81,10 @@ namespace Unison.Core.ViewModels
             _shell.PropertyChanged += OnShellPropertyChanged;
 
             LeaveCommand = new RelayCommand(() => LeaveRequested?.Invoke(this, EventArgs.Empty));
+            ChooseStartTileCommand = new RelayCommand(() => { _ = ChooseStartTileAsync(); });
+            CleanMediaCacheCommand = new RelayCommand(
+                () => { _ = CleanMediaCacheAsync(); },
+                () => CanCleanMediaCache);
             ChangeShellCommand = new RelayCommand<int>(index =>
             {
                 if (_shellChangeBusy)
@@ -336,8 +349,100 @@ namespace Unison.Core.ViewModels
             "@Negociation (Thiago Araujo)" + Environment.NewLine +
             "@jjb-pro";
 
+        private async Task ChooseStartTileAsync()
+        {
+            StartTileMark current = StartTileMarkPolicy.Resolve(
+                _localSettings.Get<int>(LocalSettingsConstants.StartTileMark));
+            StartTileMark? chosen = await _dialogService.ShowStartTileMarkAsync(current);
+            if (!chosen.HasValue)
+            {
+                return;
+            }
+
+            _localSettings.Set(LocalSettingsConstants.StartTileMark, (int)chosen.Value);
+            await _startTiles.PinAsync(chosen.Value);
+        }
+
+        public async Task LoadDiskUsageAsync()
+        {
+            SetDiskState(busy: true, measured: false);
+            DiskUsageText = Text("Settings_DiskUsageCalculating", "Calculando...");
+            try
+            {
+                MediaDiskUsage usage = await _diskUsage.MeasureAsync();
+                DiskUsageText = string.Format(
+                    Text("Settings_DiskUsageSummary", "{0} em {1} arquivos"),
+                    ByteSizeFormat.Format(usage.TotalBytes),
+                    usage.FileCount);
+                SetDiskState(busy: false, measured: true);
+            }
+            catch (Exception ex)
+            {
+                DiskUsageText = Text("Settings_DiskUsageFailed", "Não foi possível calcular");
+                SetDiskState(busy: false, measured: false);
+                System.Diagnostics.Debug.WriteLine("[Settings] Disk usage failed: " + ex.Message);
+            }
+        }
+
+        private async Task CleanMediaCacheAsync()
+        {
+            if (!CanCleanMediaCache)
+            {
+                return;
+            }
+
+            SetDiskState(busy: true, measured: true);
+            DiskUsageText = Text("Settings_DiskUsageCalculating", "Calculando...");
+            try
+            {
+                await _diskUsage.CleanAsync();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[Settings] Media clean failed: " + ex.Message);
+            }
+
+            await LoadDiskUsageAsync();
+        }
+
+        private string Text(string key, string fallback)
+        {
+            if (_strings == null)
+            {
+                return fallback;
+            }
+
+            return _strings.Get(key, fallback);
+        }
+
+        private void SetDiskState(bool busy, bool measured)
+        {
+            _diskBusy = busy;
+            _diskMeasured = measured;
+            OnPropertyChanged(nameof(CanCleanMediaCache));
+            (CleanMediaCacheCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        }
+
         /// <summary>Leaves Settings and returns to the chats section.</summary>
         public ICommand LeaveCommand { get; }
+
+        /// <summary>Opens the Start-tile picker and pins the chosen glyph.</summary>
+        public ICommand ChooseStartTileCommand { get; }
+
+        /// <summary>Shown while media size is being measured, then the total.</summary>
+        public string DiskUsageText
+        {
+            get => _diskUsageText;
+            private set => Set(ref _diskUsageText, value);
+        }
+
+        /// <summary>Clean stays off until the measure finishes, and while a clean is running.</summary>
+        public bool CanCleanMediaCache
+        {
+            get => _diskMeasured && !_diskBusy;
+        }
+
+        public ICommand CleanMediaCacheCommand { get; }
 
         /// <summary>Applies a new app shell theme. Parameter: 0 = Unison, 1 = WhatsApp.</summary>
         public ICommand ChangeShellCommand { get; }
@@ -380,13 +485,13 @@ namespace Unison.Core.ViewModels
         /// </remarks>
         public void Attach()
         {
-            if (_shell == null)
+            if (_shell != null)
             {
-                return;
+                _shell.PropertyChanged -= OnShellPropertyChanged;
+                _shell.PropertyChanged += OnShellPropertyChanged;
             }
 
-            _shell.PropertyChanged -= OnShellPropertyChanged;
-            _shell.PropertyChanged += OnShellPropertyChanged;
+            _ = LoadDiskUsageAsync();
         }
 
         /// <summary>Drops the shell subscription when the surface closes.</summary>

@@ -97,6 +97,15 @@ namespace Unison.Core.Contracts
         /// </summary>
         Task<int> DeleteForChatKeysAsync(IReadOnlyList<string> chatJids);
 
+        /// <summary>Local media still on disk. Rows already marked deleted are omitted.</summary>
+        Task<IReadOnlyList<CachedMediaEntry>> ListCachedMediaAsync();
+
+        /// <summary>Sets flag_deleted. Does not remove the conversation row.</summary>
+        Task MarkMediaDeletedAsync(IReadOnlyList<CachedMediaEntry> entries);
+
+        /// <summary>True when cache cleanup already marked this message's file deleted.</summary>
+        Task<bool> IsMediaDeletedAsync(string chatJid, string messageId);
+
         event EventHandler<HistoryMessageChunkEventArgs> ChunkPersisted;
     }
 }

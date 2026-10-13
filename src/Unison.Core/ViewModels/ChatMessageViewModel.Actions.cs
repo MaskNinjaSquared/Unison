@@ -365,9 +365,53 @@ namespace Unison.Core.ViewModels
             }
         }
 
+        /// <summary>
+        /// True when cache cleanup already removed this file. Shows the error dialog.
+        /// </summary>
+        public async Task<bool> NotifyIfMediaDeletedAsync()
+        {
+            if (_history == null ||
+                string.IsNullOrWhiteSpace(Model.RemoteJid) ||
+                string.IsNullOrWhiteSpace(Model.Id))
+            {
+                return false;
+            }
+
+            bool deleted;
+            try
+            {
+                deleted = await _history.IsMediaDeletedAsync(Model.RemoteJid, Model.Id);
+            }
+            catch (Exception ex)
+            {
+                LogMedia("media-deleted-check-failed", ex.Message);
+                return false;
+            }
+
+            if (!deleted)
+            {
+                return false;
+            }
+
+            if (_dialogs != null)
+            {
+                await _dialogs.ShowMessageAsync(
+                    Text("MediaDeleted.Title", "Erro"),
+                    Text("MediaDeleted.Message", "Arquivo Apagado no Dispositivo"),
+                    Text("MediaDeleted.Close", "OK"));
+            }
+
+            return true;
+        }
+
         public async Task DocumentPrimaryAsync()
         {
             if (!Model.IsDocument)
+            {
+                return;
+            }
+
+            if (await NotifyIfMediaDeletedAsync())
             {
                 return;
             }
@@ -384,6 +428,11 @@ namespace Unison.Core.ViewModels
         public async Task OpenDocumentAsync()
         {
             if (!Model.IsDocument)
+            {
+                return;
+            }
+
+            if (await NotifyIfMediaDeletedAsync())
             {
                 return;
             }
@@ -538,6 +587,11 @@ namespace Unison.Core.ViewModels
             catch
             {
             }
+        }
+
+        private string Text(string key, string fallback)
+        {
+            return _strings == null ? fallback : _strings.Get(key, fallback);
         }
 
         private void LogMedia(string eventName, string details = null)

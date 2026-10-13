@@ -77,6 +77,9 @@ namespace Unison.Core.Models
         /// <summary>Local file URI after on-demand download.</summary>
         public string MediaLocalUri { get; set; }
 
+        /// <summary>Local media was removed by cache cleanup. The conversation row stays.</summary>
+        public bool FlagDeleted { get; set; }
+
         /// <summary>Local video poster URI after on-demand download.</summary>
         public string MediaPosterUri { get; set; }
 

@@ -14,6 +14,7 @@ namespace Unison.Core.Factories
         private readonly IFilePicker _filePicker;
         private readonly ISessionLogger _sessionLogger;
         private readonly IRuntimeDiagnostics _diagnostics;
+        private readonly IHistoryMessageStore _history;
 
         public ChatMessageVmFactory(
             IStringResources strings = null,
@@ -22,7 +23,8 @@ namespace Unison.Core.Factories
             IUriLauncher uriLauncher = null,
             IFilePicker filePicker = null,
             ISessionLogger sessionLogger = null,
-            IRuntimeDiagnostics diagnostics = null)
+            IRuntimeDiagnostics diagnostics = null,
+            IHistoryMessageStore history = null)
         {
             _strings = strings;
             _messages = messages;
@@ -31,6 +33,7 @@ namespace Unison.Core.Factories
             _filePicker = filePicker;
             _sessionLogger = sessionLogger;
             _diagnostics = diagnostics;
+            _history = history;
         }
 
         public ChatMessageViewModel Create(ChatMessage model) =>
@@ -42,6 +45,7 @@ namespace Unison.Core.Factories
                 _uriLauncher,
                 _filePicker,
                 _sessionLogger,
-                _diagnostics);
+                _diagnostics,
+                _history);
     }
 }

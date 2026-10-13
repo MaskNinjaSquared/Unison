@@ -42,6 +42,12 @@ namespace Unison.Core.Constants
         public const string LiveTilesEnabled = "LiveTilesEnabled";
 
         /// <summary>
+        /// Glyph of the pinned Start tile (<see cref="Models.StartTileMark"/> stored as int).
+        /// Default <see cref="Models.StartTileMark.Unison"/>.
+        /// </summary>
+        public const string StartTileMark = "StartTileMark";
+
+        /// <summary>
         /// LocationTracking extended execution keep-alive (Unogram pattern).
         /// Off by default — needs location capability / user consent.
         /// </summary>
@@ -122,6 +128,7 @@ namespace Unison.Core.Constants
                 { MessageNotificationSound, (int)NotificationSound.SystemDefault },
                 { GroupNotificationSound, (int)NotificationSound.SystemDefault },
                 { LiveTilesEnabled, true },
+                { StartTileMark, (int)Models.StartTileMark.Unison },
                 { LocationKeepAliveEnabled, false },
                 { AutoUnlinkOnLogoutEnabled, false },
                 { SelectedShell, (int)AppShell.Unison },

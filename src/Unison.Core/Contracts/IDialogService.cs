@@ -1,4 +1,5 @@
 using System.Threading.Tasks;
+using Unison.Core.Models;
 using Unison.Core.ViewModels;
 
 namespace Unison.Core.Contracts
@@ -80,5 +81,11 @@ namespace Unison.Core.Contracts
         /// Mobile-friendly runtime health dialog (snapshot + recent journal + save to disk).
         /// </summary>
         Task ShowRuntimeDiagnosticsAsync();
+
+        /// <summary>
+        /// Picks the Start tile glyph. Returns null when the user cancels.
+        /// The caller pins the tile only after a choice.
+        /// </summary>
+        Task<StartTileMark?> ShowStartTileMarkAsync(StartTileMark current);
     }
 }
