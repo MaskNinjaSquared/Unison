@@ -848,7 +848,17 @@ two attempts, invalidate only on a broken pipe, stop on a refusal), catch-up con
 placeholder recovery trigger, explicit logout stream codes, list enrichment phases, user-JID
 shape, on-demand sync type, group avatar fallback, the parent and community addresses that fallback
 asks (`GroupAvatarFallbackJids`), relink disconnect reasons, WebP cache URI,
-and web-message status map. Orchestration stays behind the forward.
+web-message status map, the open chat's in-memory window (`ActiveChatMessageWindow`) and the
+dedupe pass's survivor order and row merge (`DuplicateChatRowMerge`). Orchestration stays behind the forward.
+
+The last two each carried a defect of a shape already recorded here. The window chose its newest
+messages with `OrderByDescending` on the raw `DateTime` — the fourth sighting of the un-normalised
+comparison — and its `GroupBy` keyed id-less messages on a fresh `Guid`, so a pinned message with no
+id was kept twice. The dedupe merge was written twice, once per branch, and the PN/LID branch copied
+the text and the clock but not `LastPreview` or `LastMessageId`: the half-preview `TransientChatMerge`
+already documents. Both branches now go through one `Absorb`. What the dedupe pass still does in the
+client — moving messages between keys, filing the alias, removing rows — is chat-state surgery and
+stays until the timeline leaves the client.
 
 ### Phase 4 — What remains is connection
 

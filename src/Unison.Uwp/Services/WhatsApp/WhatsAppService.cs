@@ -576,30 +576,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            if (messages.Count > MaxActiveChatMessagesInMemory)
-            {
-                DateTime nowUtc = DateTime.UtcNow;
-                var pinned = messages
-                    .Where(m => m != null && m.IsPinned &&
-                                (!m.PinExpiresAtUtc.HasValue || m.PinExpiresAtUtc.Value > nowUtc))
-                    .OrderBy(m => m.Timestamp)
-                    .ToList();
-                var pinnedIds = new HashSet<string>(
-                    pinned.Where(m => !string.IsNullOrWhiteSpace(m.Id)).Select(m => m.Id),
-                    StringComparer.Ordinal);
-                int regularCapacity = Math.Max(0, MaxActiveChatMessagesInMemory - pinned.Count);
-                var recentRegular = messages
-                    .Where(m => m != null && (string.IsNullOrWhiteSpace(m.Id) || !pinnedIds.Contains(m.Id)))
-                    .OrderByDescending(m => m.Timestamp)
-                    .Take(regularCapacity)
-                    .ToList();
-                messages.Clear();
-                messages.AddRange(pinned.Concat(recentRegular)
-                    .GroupBy(m => m.Id ?? Guid.NewGuid().ToString(), StringComparer.Ordinal)
-                    .Select(g => g.First())
-                    .OrderBy(m => m.Timestamp));
-            }
-
+            ActiveChatMessageWindow.TrimInPlace(messages, MaxActiveChatMessagesInMemory, DateTime.UtcNow);
             _messageIdIndex.Rebuild(normalized, messages);
         }
         private AuthState _authState;
@@ -6553,11 +6530,10 @@ namespace Unison.Uwp.Services.WhatsApp
 
                     foreach (var group in groups)
                     {
-                        var ordered = group
-                            .OrderByDescending(c => !IsLidLikeJid(NormalizeJid(c.JID)))
-                            .ThenByDescending(c => !string.IsNullOrWhiteSpace(c.AvatarUrl))
-                            .ThenByDescending(c => MessagesByChat.TryGet(NormalizeJid(c.JID), out var msgs) ? msgs.Count : 0)
-                            .ToList();
+                        var ordered = DuplicateChatRowMerge.OrderForMerge(
+                            group,
+                            c => IsLidLikeJid(NormalizeJid(c.JID)),
+                            c => MessagesByChat.TryGet(NormalizeJid(c.JID), out var msgs) ? msgs.Count : 0);
 
                         var primary = ordered[0];
                         string primaryNorm = NormalizeJid(primary.JID);
@@ -6570,41 +6546,9 @@ namespace Unison.Uwp.Services.WhatsApp
                             string secondaryNorm = NormalizeJid(secondary.JID);
                             if (string.Equals(primaryNorm, secondaryNorm, StringComparison.OrdinalIgnoreCase))
                             {
-                                DateTime primaryPreviewUtc = primary.LastMessageTimestampUtc.HasValue
-                                    ? ToComparableUtc(primary.LastMessageTimestampUtc.Value)
-                                    : DateTime.MinValue;
-                                DateTime secondaryPreviewUtc = secondary.LastMessageTimestampUtc.HasValue
-                                    ? ToComparableUtc(secondary.LastMessageTimestampUtc.Value)
-                                    : DateTime.MinValue;
-                                if ((secondaryPreviewUtc > primaryPreviewUtc || string.IsNullOrWhiteSpace(primary.LastMessage)) &&
-                                    !string.IsNullOrWhiteSpace(secondary.LastMessage))
-                                {
-                                    primary.LastMessage = secondary.LastMessage;
-                                    primary.LastMessageKind = secondary.LastMessageKind;
-                                    primary.LastPreview.CopyFrom(secondary.LastPreview);
-                                    primary.Timestamp = secondary.Timestamp;
-                                    primary.LastMessageTimestampUtc = secondary.LastMessageTimestampUtc;
-                                }
-                                if (string.IsNullOrWhiteSpace(primary.AvatarUrl) && !string.IsNullOrWhiteSpace(secondary.AvatarUrl))
-                                {
-                                    primary.AvatarUrl = secondary.AvatarUrl;
-                                    primary.AvatarFetchedAtUtc = secondary.AvatarFetchedAtUtc;
-                                    primary.AvatarFetchFailedAtUtc = secondary.AvatarFetchFailedAtUtc;
-                                    primary.AvatarFetchFailureReason = secondary.AvatarFetchFailureReason;
-                                }
-                                if (primary.UnreadCount < secondary.UnreadCount)
-                                {
-                                    primary.UnreadCount = secondary.UnreadCount;
-                                }
-                                if (secondary.IsChatPinned && secondary.PinnedTimestamp != 0)
-                                {
-                                    if (!primary.IsChatPinned ||
-                                        (secondary.PinnedTimestamp ?? 0) > (primary.PinnedTimestamp ?? 0))
-                                    {
-                                        primary.IsChatPinned = true;
-                                        primary.PinnedTimestamp = secondary.PinnedTimestamp;
-                                    }
-                                }
+                                MessagesByChat.TryGet(primaryNorm, out var sharedMessages);
+                                DateTime sharedNewestUtc = ChatMessageOrder.NewestComparableUtc(sharedMessages);
+                                DuplicateChatRowMerge.Absorb(primary, secondary, sharedNewestUtc, sharedNewestUtc);
                                 Chats.Remove(secondary);
                                 mergedCount++;
                                 continue;
@@ -6655,63 +6599,15 @@ namespace Unison.Uwp.Services.WhatsApp
                                 }
                             }
 
-                            if (primary.UnreadCount < secondary.UnreadCount)
-                            {
-                                primary.UnreadCount = secondary.UnreadCount;
-                            }
-
-                            // history_chat_preview has no pin columns; carry ChatStore pin across
-                            // PN/LID merge or a sync-created unpinned primary wins and sinks the row.
-                            if (secondary.IsChatPinned && secondary.PinnedTimestamp != 0)
-                            {
-                                if (!primary.IsChatPinned ||
-                                    (secondary.PinnedTimestamp ?? 0) > (primary.PinnedTimestamp ?? 0))
-                                {
-                                    primary.IsChatPinned = true;
-                                    primary.PinnedTimestamp = secondary.PinnedTimestamp;
-                                }
-                            }
-
-                            if (string.IsNullOrWhiteSpace(primary.AvatarUrl) && !string.IsNullOrWhiteSpace(secondary.AvatarUrl))
-                            {
-                                primary.AvatarUrl = secondary.AvatarUrl;
-                                primary.AvatarFetchedAtUtc = secondary.AvatarFetchedAtUtc;
-                                primary.AvatarFetchFailedAtUtc = secondary.AvatarFetchFailedAtUtc;
-                                primary.AvatarFetchFailureReason = secondary.AvatarFetchFailureReason;
-                            }
-
-                            // Both sides go through ToComparableUtc, like the LastMessageTimestampUtc
-                            // branch below: these lists mix live messages with rows read back from
-                            // SQLite, so the raw timestamps are not comparable to each other.
+                            // The secondary messages have already moved under the primary key, so a
+                            // secondary row without a stamp is dated MinValue here.
                             MessagesByChat.TryGet(primaryNorm, out var primaryPreviewMessages);
-                            DateTime primaryLatestMessageTimestamp =
-                                ChatMessageOrder.NewestComparableUtc(primaryPreviewMessages);
-
                             MessagesByChat.TryGet(secondaryNorm, out var secondaryPreviewMessages);
-                            DateTime secondaryLatestMessageTimestamp =
-                                ChatMessageOrder.NewestComparableUtc(secondaryPreviewMessages);
-
-                            DateTime primaryPreviewTimestamp = primary.LastMessageTimestampUtc.HasValue
-                                ? ToComparableUtc(primary.LastMessageTimestampUtc.Value)
-                                : primaryLatestMessageTimestamp;
-                            DateTime secondaryPreviewTimestamp = secondary.LastMessageTimestampUtc.HasValue
-                                ? ToComparableUtc(secondary.LastMessageTimestampUtc.Value)
-                                : secondaryLatestMessageTimestamp;
-
-                            bool secondaryHasNewerPreview =
-                                secondaryPreviewTimestamp > primaryPreviewTimestamp &&
-                                !string.IsNullOrWhiteSpace(secondary.LastMessage);
-                            bool primaryPreviewMissing =
-                                string.IsNullOrWhiteSpace(primary.LastMessage) &&
-                                !string.IsNullOrWhiteSpace(secondary.LastMessage);
-
-                            if (secondaryHasNewerPreview || primaryPreviewMissing)
-                            {
-                                primary.LastMessage = secondary.LastMessage;
-                                primary.LastMessageKind = secondary.LastMessageKind;
-                                primary.Timestamp = secondary.Timestamp;
-                                primary.LastMessageTimestampUtc = secondary.LastMessageTimestampUtc;
-                            }
+                            DuplicateChatRowMerge.Absorb(
+                                primary,
+                                secondary,
+                                ChatMessageOrder.NewestComparableUtc(primaryPreviewMessages),
+                                ChatMessageOrder.NewestComparableUtc(secondaryPreviewMessages));
 
                             Chats.Remove(secondary);
                             mergedCount++;

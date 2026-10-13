@@ -4,6 +4,16 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Chat window trim and duplicate-row merge rules
+
+The open chat's in-memory window (`ActiveChatMessageWindow`) and the dedupe pass's
+row merge (`DuplicateChatRowMerge`) are Core rules with tests. Three fixes came with
+them: the window picks its newest messages by comparable UTC instead of the raw clock,
+so a row read back from SQLite is no longer dropped in favour of an older live one; a
+pinned message without an id is no longer kept twice; and a merged LID/phone row takes
+the whole preview, including the author line and message id, instead of only the text
+and clock.
+
 ## App logo
 
 The start tile, splash and boot screen use the isometric mark. Live tiles are
