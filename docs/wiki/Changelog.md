@@ -4,6 +4,13 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Incoming message queue
+
+The two lanes the incoming pump drains (live first, then offline replay), the generation
+that retires a stalled drain, the current stage, and the retry-once list for live
+messages that time out are one Core type, `IncomingMessageQueue<T>`, under one lock. The
+pump still runs the loop, waits on each message and decides when to reset.
+
 ## Placeholder resend book
 
 The missing-message ledger now owns each step of a repair: arm the timer, claim it,

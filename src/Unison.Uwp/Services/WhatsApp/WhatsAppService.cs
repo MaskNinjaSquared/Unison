@@ -658,21 +658,12 @@ namespace Unison.Uwp.Services.WhatsApp
         // SocketClient must not wait for UI, storage or avatar work while it is reading
         // WhatsApp stanzas. Live messages use a priority queue so they can jump ahead
         // of a large offline/history replay without breaking the ordered decrypt path.
-        private readonly object _incomingMessageQueueLock = new object();
-        private readonly Queue<Client.DecryptedMessageEventArgs> _liveIncomingMessageQueue =
-            new Queue<Client.DecryptedMessageEventArgs>();
-        private readonly Queue<Client.DecryptedMessageEventArgs> _offlineIncomingMessageQueue =
-            new Queue<Client.DecryptedMessageEventArgs>();
-        private bool _incomingMessagePumpRunning;
-        private Task _incomingMessagePumpTask = Task.CompletedTask;
-        private int _incomingMessagePumpGeneration;
-        private Client.DecryptedMessageEventArgs _incomingMessagePumpCurrent;
-        private readonly HashSet<string> _incomingMessageTimeoutIds =
-            new HashSet<string>(StringComparer.Ordinal);
+        private readonly IncomingMessageQueue<Client.DecryptedMessageEventArgs> _incoming =
+            new IncomingMessageQueue<Client.DecryptedMessageEventArgs>(
+                message => message.IsOffline,
+                message => message.MessageId);
         private readonly object _messageControlQueueLock = new object();
         private Task _messageControlQueueTail = Task.CompletedTask;
-        private string _incomingMessagePumpStage = "idle";
-        private long _incomingMessagePumpStageUtcTicks;
         private const int LiveIncomingMessageTimeoutMs = 12000;
         private CoreDispatcher _uiDispatcher;
         private readonly ChatStateStore _chatState;
@@ -1009,16 +1000,14 @@ namespace Unison.Uwp.Services.WhatsApp
                 snapshot.IsReconnecting = _isReconnecting;
             }
 
-            lock (_incomingMessageQueueLock)
-            {
-                snapshot.LiveIncomingQueueDepth = _liveIncomingMessageQueue.Count;
-                snapshot.OfflineIncomingQueueDepth = _offlineIncomingMessageQueue.Count;
-                snapshot.IncomingPumpRunning = _incomingMessagePumpRunning;
-                snapshot.IncomingPumpGeneration = _incomingMessagePumpGeneration;
-                snapshot.IncomingPumpStage = _incomingMessagePumpStage;
-                snapshot.IncomingPumpMessageId = _incomingMessagePumpCurrent?.MessageId;
-                snapshot.IncomingPumpStageUtc = DiagnosticsDateTime(_incomingMessagePumpStageUtcTicks);
-            }
+            IncomingQueueSnapshot incoming = _incoming.Snapshot();
+            snapshot.LiveIncomingQueueDepth = incoming.LiveDepth;
+            snapshot.OfflineIncomingQueueDepth = incoming.OfflineDepth;
+            snapshot.IncomingPumpRunning = incoming.Running;
+            snapshot.IncomingPumpGeneration = incoming.Generation;
+            snapshot.IncomingPumpStage = incoming.Stage;
+            snapshot.IncomingPumpMessageId = incoming.CurrentMessageId;
+            snapshot.IncomingPumpStageUtc = DiagnosticsDateTime(incoming.StageUtcTicks);
 
             snapshot.PersistPending = _persistScheduler.IsPending;
 

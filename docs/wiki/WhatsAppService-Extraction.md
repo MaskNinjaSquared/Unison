@@ -186,7 +186,7 @@ Self-contained first. List/persist last.
 | 3.8 | `.AppState.cs` | **Rewritten — the premise was stale.** See below |
 | 3.9a | List display order (done) | `ChatDisplayOrder` (Core) |
 | 3.9b | `.Persistence.cs` + preview reconcile + the appliers from 3.8 | `ChatFacade` + `ChatStateStore` + `IChatStore` / `IMessageStore`. Close the transitional public dictionaries on `ChatStateStore`. **Persistence rules out; appliers remain — see below** |
-| 3.10 | `.IncomingPump.cs` | Decode/dispatch stays with connection. **Rules closed.** **Notify + timeline accept + persist enqueue + revoke + pin-in-chat on MessageFacade.** **Live + offline list apply + tip refresh/reconcile on ChatFacade.** **Resend row transitions on `MissingMessageLedger`.** Pump keeps queue/locks, the resend timer and socket send, alias-consolidate orchestration, offline summary *record* |
+| 3.10 | `.IncomingPump.cs` | Decode/dispatch stays with connection. **Rules closed.** **Notify + timeline accept + persist enqueue + revoke + pin-in-chat on MessageFacade.** **Live + offline list apply + tip refresh/reconcile on ChatFacade.** **Resend row transitions on `MissingMessageLedger`.** **Queue lanes, generation and stage on `IncomingMessageQueue<T>`.** Pump keeps the drain loop, the resend timer and socket send, alias-consolidate orchestration, offline summary *record* |
 
 **3.1a is done.** The avatar half of `MediaCache` is `IAvatarCache` / `AvatarCacheService`: `TryGet`,
 `SaveAsync`, `DeleteIfCached`. It took `BuildSafeAvatarFileName`, `TryGetCachedAvatarUri`,
@@ -823,8 +823,9 @@ Inbound pin-in-chat is `IMessageService.ApplyIncomingPinInChatAsync` (host still
 SQLite). Tip refresh / bulk re-tip / in-memory list reconcile is `IChatService.RefreshChatPreviewAsync` /
 `RefreshAllChatPreviewsFromStoredAsync` / `ReconcileChatListFromStoredAsync` (bulk paths still walk
 host `MessagesByChat`). Pump still owns alias-consolidate side-effects, offline summary
-*recording*, the resend timer and socket send, and the queue itself. The missing-message
-ledger owns the row transitions under the same lock.
+*recording*, the resend timer and socket send, and the drain loop. The missing-message
+ledger owns the row transitions under the same lock; `IncomingMessageQueue<T>` owns the
+lanes, generation, stage and timeout retry list.
 
 ### Pure-rule nibble (ongoing, before façade moves)
 

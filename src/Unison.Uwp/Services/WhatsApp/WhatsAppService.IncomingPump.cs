@@ -907,37 +907,19 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            lock (_incomingMessageQueueLock)
-            {
-                if (message.IsOffline)
-                {
-                    _offlineIncomingMessageQueue.Enqueue(message);
-                }
-                else
-                {
-                    _liveIncomingMessageQueue.Enqueue(message);
-                }
-            }
-
+            _incoming.Enqueue(message);
             RestartIncomingMessagePumpIfNeeded();
         }
 
         private void RestartIncomingMessagePumpIfNeeded()
         {
             int generation;
-            lock (_incomingMessageQueueLock)
+            if (!_incoming.TryStart(
+                    started => Task.Run(() => ProcessIncomingMessageQueueAsync(started)),
+                    DateTime.UtcNow,
+                    out generation))
             {
-                if (_incomingMessagePumpRunning ||
-                    (_liveIncomingMessageQueue.Count == 0 && _offlineIncomingMessageQueue.Count == 0))
-                {
-                    return;
-                }
-
-                _incomingMessagePumpRunning = true;
-                generation = _incomingMessagePumpGeneration;
-                _incomingMessagePumpStage = "starting";
-                _incomingMessagePumpStageUtcTicks = DateTime.UtcNow.Ticks;
-                _incomingMessagePumpTask = Task.Run(() => ProcessIncomingMessageQueueAsync(generation));
+                return;
             }
 
             RuntimeDiagnosticsService.Instance.Write(
@@ -948,12 +930,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private void SetIncomingMessagePumpStage(string stage, Client.DecryptedMessageEventArgs message = null)
         {
-            lock (_incomingMessageQueueLock)
-            {
-                _incomingMessagePumpStage = string.IsNullOrWhiteSpace(stage) ? "unknown" : stage;
-                _incomingMessagePumpCurrent = message ?? _incomingMessagePumpCurrent;
-                _incomingMessagePumpStageUtcTicks = DateTime.UtcNow.Ticks;
-            }
+            _incoming.SetStage(stage, message, DateTime.UtcNow);
         }
 
         /// <summary>
@@ -1015,94 +992,30 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private void ResetIncomingMessagePump(string reason, bool requeueCurrent)
         {
-            int generation;
-            int liveDepth;
-            int offlineDepth;
-            lock (_incomingMessageQueueLock)
-            {
-                var current = _incomingMessagePumpCurrent;
-                _incomingMessagePumpGeneration++;
-                generation = _incomingMessagePumpGeneration;
-
-                if (requeueCurrent && current != null)
-                {
-                    if (current.IsOffline)
-                    {
-                        _offlineIncomingMessageQueue.Enqueue(current);
-                    }
-                    else
-                    {
-                        _liveIncomingMessageQueue.Enqueue(current);
-                    }
-                }
-
-                _incomingMessagePumpCurrent = null;
-                _incomingMessagePumpRunning = false;
-                _incomingMessagePumpTask = Task.CompletedTask;
-                _incomingMessagePumpStage = "reset:" + reason;
-                _incomingMessagePumpStageUtcTicks = DateTime.UtcNow.Ticks;
-                liveDepth = _liveIncomingMessageQueue.Count;
-                offlineDepth = _offlineIncomingMessageQueue.Count;
-            }
+            IncomingQueueReset reset = _incoming.Reset(reason, requeueCurrent, DateTime.UtcNow);
 
             RuntimeDiagnosticsService.Instance.Write(
                 "messages",
                 "incoming-pump-reset",
-                "reason=" + reason + "; generation=" + generation +
-                "; requeued=" + requeueCurrent + "; qLive=" + liveDepth + "; qOffline=" + offlineDepth);
+                "reason=" + reason + "; generation=" + reset.Generation +
+                "; requeued=" + requeueCurrent + "; qLive=" + reset.LiveDepth + "; qOffline=" + reset.OfflineDepth);
         }
 
         private bool IsIncomingMessagePumpStalled(TimeSpan limit)
         {
-            lock (_incomingMessageQueueLock)
-            {
-                bool hasWork = _incomingMessagePumpCurrent != null ||
-                               _liveIncomingMessageQueue.Count > 0 ||
-                               _offlineIncomingMessageQueue.Count > 0;
-                return IncomingPumpStall.IsStalled(
-                    _incomingMessagePumpRunning,
-                    _incomingMessagePumpStageUtcTicks,
-                    hasWork,
-                    DateTime.UtcNow,
-                    limit);
-            }
+            return _incoming.IsStalled(limit, DateTime.UtcNow);
         }
 
         private async Task ProcessIncomingMessageQueueAsync(int generation)
         {
             while (true)
             {
-                Client.DecryptedMessageEventArgs next = null;
-                lock (_incomingMessageQueueLock)
+                // Offline replay records are timestamp-guarded, so serving live traffic
+                // first cannot let them overwrite a newer preview.
+                Client.DecryptedMessageEventArgs next;
+                if (!_incoming.TryTakeNext(generation, DateTime.UtcNow, out next))
                 {
-                    if (generation != _incomingMessagePumpGeneration)
-                    {
-                        return;
-                    }
-
-                    // Always service real-time traffic first. Offline replay records are
-                    // timestamp-guarded, so processing them later cannot overwrite a
-                    // newer preview.
-                    if (_liveIncomingMessageQueue.Count > 0)
-                    {
-                        next = _liveIncomingMessageQueue.Dequeue();
-                    }
-                    else if (_offlineIncomingMessageQueue.Count > 0)
-                    {
-                        next = _offlineIncomingMessageQueue.Dequeue();
-                    }
-                    else
-                    {
-                        _incomingMessagePumpCurrent = null;
-                        _incomingMessagePumpRunning = false;
-                        _incomingMessagePumpStage = "idle";
-                        _incomingMessagePumpStageUtcTicks = DateTime.UtcNow.Ticks;
-                        return;
-                    }
-
-                    _incomingMessagePumpCurrent = next;
-                    _incomingMessagePumpStage = "handle";
-                    _incomingMessagePumpStageUtcTicks = DateTime.UtcNow.Ticks;
+                    return;
                 }
 
                 try
@@ -1117,7 +1030,7 @@ namespace Unison.Uwp.Services.WhatsApp
                                 "messages",
                                 "incoming-message-timeout",
                                 "id=" + (next.MessageId ?? "<none>") +
-                                "; stage=" + _incomingMessagePumpStage +
+                                "; stage=" + _incoming.Stage +
                                 "; timeoutMs=" + LiveIncomingMessageTimeoutMs);
 
                             _ = handleTask.ContinueWith(
@@ -1134,18 +1047,7 @@ namespace Unison.Uwp.Services.WhatsApp
                                 },
                                 TaskScheduler.Default);
 
-                            bool requeueTimedOutMessage = true;
-                            lock (_incomingMessageQueueLock)
-                            {
-                                if (!string.IsNullOrWhiteSpace(next.MessageId))
-                                {
-                                    // Requeue once. If the same message blocks again,
-                                    // skip that one item so the rest of the conversation
-                                    // and all other chats can continue updating.
-                                    requeueTimedOutMessage = _incomingMessageTimeoutIds.Add(next.MessageId);
-                                }
-                            }
-
+                            bool requeueTimedOutMessage = _incoming.ShouldRetryTimedOut(next);
                             ResetIncomingMessagePump(
                                 requeueTimedOutMessage ? "message-timeout-retry" : "message-timeout-skip",
                                 requeueCurrent: requeueTimedOutMessage);
@@ -1155,13 +1057,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
 
                     await handleTask;
-                    if (!string.IsNullOrWhiteSpace(next.MessageId))
-                    {
-                        lock (_incomingMessageQueueLock)
-                        {
-                            _incomingMessageTimeoutIds.Remove(next.MessageId);
-                        }
-                    }
+                    _incoming.ForgetTimeout(next);
                     Interlocked.Increment(ref _diagnosticsAppliedMessageCount);
                     Interlocked.Exchange(ref _diagnosticsLastAppliedMessageUtcTicks, DateTime.UtcNow.Ticks);
                 }
@@ -1174,32 +1070,18 @@ namespace Unison.Uwp.Services.WhatsApp
                         ex,
                         "offline=" + (next != null && next.IsOffline) +
                         "; id=" + (next?.MessageId ?? "<none>") +
-                        "; stage=" + _incomingMessagePumpStage);
+                        "; stage=" + _incoming.Stage);
                 }
                 finally
                 {
-                    lock (_incomingMessageQueueLock)
-                    {
-                        if (generation == _incomingMessagePumpGeneration &&
-                            ReferenceEquals(_incomingMessagePumpCurrent, next))
-                        {
-                            _incomingMessagePumpCurrent = null;
-                            _incomingMessagePumpStage = "next";
-                            _incomingMessagePumpStageUtcTicks = DateTime.UtcNow.Ticks;
-                        }
-                    }
+                    _incoming.Finish(generation, next, DateTime.UtcNow);
                 }
             }
         }
 
         private async Task WaitForIncomingMessageQueueDrainAsync(int timeoutMs)
         {
-            Task pump;
-            lock (_incomingMessageQueueLock)
-            {
-                pump = _incomingMessagePumpTask ?? Task.CompletedTask;
-            }
-
+            Task pump = _incoming.PumpTask;
             if (pump.IsCompleted)
             {
                 return;
@@ -1906,7 +1788,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     "messages",
                     "handle-decrypted-failed",
                     ex,
-                    "id=" + (e?.MessageId ?? "<none>") + "; stage=" + _incomingMessagePumpStage);
+                    "id=" + (e?.MessageId ?? "<none>") + "; stage=" + _incoming.Stage);
                 throw;
             }
         }
