@@ -7,7 +7,9 @@
 // =============================================================================
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
+using Unison.Core.Helpers;
 
 namespace Unison.Core.State
 {
@@ -185,6 +187,50 @@ namespace Unison.Core.State
                 }
 
                 return dropped;
+            }
+        }
+
+        /// <summary>
+        /// Copies the repairs a drain may ask about, peer and self first, and keeps only
+        /// <paramref name="maxRequests"/> of them. <paramref name="totalEligible"/> is the full count.
+        /// </summary>
+        public List<MissingMessageCandidate> SelectForDrain(int maxRequests, out int totalEligible)
+        {
+            lock (_gate)
+            {
+                List<MissingMessageCandidate> pending = _pending
+                    .Values
+                    .SelectMany(byMessageId => byMessageId.Values)
+                    .Where(candidate =>
+                        candidate != null &&
+                        !candidate.PlaceholderRequestInFlight &&
+                        candidate.PlaceholderScheduleCts == null &&
+                        candidate.PlaceholderRequestCount < 2)
+                    .Select(candidate => new MissingMessageCandidate
+                    {
+                        ChatJid = candidate.ChatJid,
+                        Participant = candidate.Participant,
+                        MessageId = candidate.MessageId,
+                        IsFromMe = candidate.IsFromMe,
+                        MessageTimestamp = candidate.MessageTimestamp,
+                        Reason = candidate.Reason,
+                        FirstSeenUtc = candidate.FirstSeenUtc,
+                        LastSeenUtc = candidate.LastSeenUtc,
+                        PlaceholderRequestCount = candidate.PlaceholderRequestCount
+                    })
+                    .OrderBy(candidate => candidate.PlaceholderRequestCount)
+                    .ThenByDescending(candidate => MissingMessagePriority.IsPeerOrSelf(candidate.IsFromMe, candidate.ChatJid))
+                    .ThenByDescending(candidate => ChatMessageOrder.ToComparableUtc(candidate.MessageTimestamp))
+                    .ThenByDescending(candidate => candidate.LastSeenUtc)
+                    .ToList();
+
+                totalEligible = pending.Count;
+                if (maxRequests < 0)
+                {
+                    maxRequests = 0;
+                }
+
+                return pending.Take(maxRequests).ToList();
             }
         }
     }

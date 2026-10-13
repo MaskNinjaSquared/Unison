@@ -77,5 +77,25 @@ namespace Unison.Core.Tests.State
             Assert.Null(ledger.Resolve(" ", "m1").ScheduledResend);
             Assert.Empty(ledger.ForgetChat(null));
         }
+
+        [Fact]
+        public void The_drain_asks_a_direct_chat_before_a_group_and_stops_at_the_limit()
+        {
+            var ledger = new MissingMessageLedger();
+            DateTime older = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            ledger.Note("999@g.us", "group", null, false, older, "gap", older);
+            ledger.Note("111@s.whatsapp.net", "direct", null, false, older, "gap", older);
+            MissingMessageCandidate busy;
+            ledger.TryGet("999@g.us", "group", out busy);
+            ledger.Note("999@g.us", "busy", null, false, older, "gap", older);
+            ledger.TryGet("999@g.us", "busy", out busy);
+            busy.PlaceholderRequestInFlight = true;
+
+            int total;
+            var selected = ledger.SelectForDrain(1, out total);
+
+            Assert.Equal(2, total);
+            Assert.Equal("direct", selected[0].MessageId);
+        }
     }
 }
