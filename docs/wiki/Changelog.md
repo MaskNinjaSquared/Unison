@@ -4,6 +4,19 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Placeholder resend permit
+
+A missing message is asked again only when it is under two tries, nothing is in flight,
+and the previous answer has had its wait. That is `PlaceholderResendPermit`.
+
+## Missing-message drain order
+
+The repairs a drain may send are chosen by `MissingMessageLedger`: not in flight, not
+already timed, under two tries, a direct chat before a group, then only as many as the
+budget allows.
+
+---
+
 ## Name lookup addresses
 
 The phone, the LID and the stored alias of either are one set, `NameLookupCandidates`.

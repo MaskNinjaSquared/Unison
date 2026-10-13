@@ -254,15 +254,7 @@ namespace Unison.Uwp.Services.WhatsApp
             CancellationTokenSource scheduleCts = null;
             lock (_missing.Gate)
             {
-                if (candidate.PlaceholderRequestCount >= 2 ||
-                    candidate.PlaceholderRequestInFlight ||
-                    candidate.PlaceholderScheduleCts != null)
-                {
-                    return Task.FromResult(false);
-                }
-
-                if (candidate.LastPlaceholderRequestUtc != DateTime.MinValue &&
-                    utcNow - candidate.LastPlaceholderRequestUtc < PlaceholderResendResponseTimeout)
+                if (!PlaceholderResendPermit.MaySchedule(candidate, utcNow, PlaceholderResendResponseTimeout))
                 {
                     return Task.FromResult(false);
                 }
@@ -433,16 +425,6 @@ namespace Unison.Uwp.Services.WhatsApp
             return false;
         }
 
-        private static bool IsPeerOrSelfMissingMessage(MissingMessageCandidate candidate)
-        {
-            if (candidate == null)
-            {
-                return false;
-            }
-
-            return MissingMessagePriority.IsPeerOrSelf(candidate.IsFromMe, candidate.ChatJid);
-        }
-
         private static string DescribeMissingMessageCandidate(MissingMessageCandidate candidate)
         {
             if (candidate == null)
@@ -468,39 +450,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             List<MissingMessageCandidate> pending;
             int totalEligible;
-            lock (_missing.Gate)
-            {
-                pending = _missing.Pending
-                    .Values
-                    .SelectMany(byMessageId => byMessageId.Values)
-                    .Where(candidate =>
-                        candidate != null &&
-                        !candidate.PlaceholderRequestInFlight &&
-                        candidate.PlaceholderScheduleCts == null &&
-                        candidate.PlaceholderRequestCount < 2)
-                    .Select(candidate => new MissingMessageCandidate
-                    {
-                        ChatJid = candidate.ChatJid,
-                        Participant = candidate.Participant,
-                        MessageId = candidate.MessageId,
-                        IsFromMe = candidate.IsFromMe,
-                        MessageTimestamp = candidate.MessageTimestamp,
-                        Reason = candidate.Reason,
-                        FirstSeenUtc = candidate.FirstSeenUtc,
-                        LastSeenUtc = candidate.LastSeenUtc,
-                        PlaceholderRequestCount = candidate.PlaceholderRequestCount
-                    })
-                    .OrderBy(candidate => candidate.PlaceholderRequestCount)
-                    .ThenByDescending(IsPeerOrSelfMissingMessage)
-                    .ThenByDescending(candidate => ChatMessageOrder.ToComparableUtc(candidate.MessageTimestamp))
-                    .ThenByDescending(candidate => candidate.LastSeenUtc)
-                    .ToList();
-
-                totalEligible = pending.Count;
-                pending = pending
-                    .Take(maxRequests)
-                    .ToList();
-            }
+            pending = _missing.SelectForDrain(maxRequests, out totalEligible);
 
             if (pending.Count == 0)
             {
