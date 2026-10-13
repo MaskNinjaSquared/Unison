@@ -6,6 +6,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
+using Unison.Socket.Abstractions;
 using Unison.Uwp.Client;
 using Unison.Uwp.Helpers;
 using Windows.Storage;
@@ -21,6 +22,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
     {
         private readonly IWhatsAppService _client;
         private readonly IMediaDownloadHost _host;
+        private readonly IEncryptedMediaDownloader _downloader;
         private readonly IJidResolver _jids;
         private readonly IMediaCache _cache;
         private readonly MediaDerivationService _derivation;
@@ -29,6 +31,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
         public MediaAvailability(
             IWhatsAppService client,
             IMediaDownloadHost host,
+            IEncryptedMediaDownloader downloader,
             IJidResolver jids,
             IMediaCache cache,
             MediaDerivationService derivation,
@@ -36,6 +39,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
         {
             _client = client ?? throw new ArgumentNullException(nameof(client));
             _host = host ?? throw new ArgumentNullException(nameof(host));
+            _downloader = downloader ?? throw new ArgumentNullException(nameof(downloader));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _cache = cache ?? throw new ArgumentNullException(nameof(cache));
             _derivation = derivation ?? throw new ArgumentNullException(nameof(derivation));
@@ -99,7 +103,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                     return await EnsurePlayableAudioUriAsync(message, cached);
                 }
 
-                var bytes = await _host.DownloadAndDecryptAsync(
+                var bytes = await DownloadAsync(
                     plan.Url,
                     plan.DirectPath,
                     plan.MediaKey,
@@ -199,7 +203,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                     return await EnsureWebPDisplayUriAsync(message);
                 }
 
-                var bytes = await _host.DownloadAndDecryptAsync(
+                var bytes = await DownloadAsync(
                     plan.Url,
                     plan.DirectPath,
                     plan.MediaKey,
@@ -276,7 +280,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                     return await EnsureVideoPosterAsync(message);
                 }
 
-                var bytes = await _host.DownloadAndDecryptAsync(
+                var bytes = await DownloadAsync(
                     plan.Url,
                     plan.DirectPath,
                     plan.MediaKey,
@@ -352,7 +356,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                     return cachedDocument;
                 }
 
-                var bytes = await _host.DownloadAndDecryptAsync(
+                var bytes = await DownloadAsync(
                     plan.Url,
                     plan.DirectPath,
                     plan.MediaKey,
@@ -382,6 +386,55 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             {
                 _gate.Release();
             }
+        }
+
+        /// <summary>
+        /// Decodes a voice note the user just sent into something the platform can play,
+        /// without making the sender wait for it.
+        /// </summary>
+        /// <remarks>
+        /// What we send is Ogg/Opus, which this platform does not play. Left until the first
+        /// press, the decode stalls the one bubble the user is most likely to press. Failure is
+        /// silent because the play path performs the same conversion on demand.
+        /// </remarks>
+        public void PrepareLocalPlaybackInBackground(ChatMessage message)
+        {
+            if (message == null || string.IsNullOrWhiteSpace(message.AudioUri))
+            {
+                return;
+            }
+
+            var ignored = Task.Run(async () =>
+            {
+                try
+                {
+                    await EnsurePlayableAudioUriAsync(message, message.AudioUri).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[WhatsAppService] Outgoing audio playback prep failed: " + ex.Message);
+                }
+            });
+        }
+
+        /// <summary>
+        /// The expected ciphertext hash is not passed on: the downloader checks the MAC that
+        /// travels with the blob, which is the stronger of the two and fails the same way.
+        /// </summary>
+        private Task<byte[]> DownloadAsync(
+            string url,
+            string directPath,
+            byte[] mediaKey,
+            string mediaType,
+            byte[] expectedFileEncSha256)
+        {
+            return _downloader.DownloadAsync(new EncryptedMediaRequest
+            {
+                Url = url,
+                DirectPath = directPath,
+                MediaKey = mediaKey,
+                MediaType = mediaType
+            });
         }
 
         private async Task RememberAsync(ChatMessage message)
@@ -629,7 +682,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                 {
                     try
                     {
-                        byte[] decryptedBytes = await _host.DownloadAndDecryptAsync(
+                        byte[] decryptedBytes = await DownloadAsync(
                             imageMessage.Url,
                             imageMessage.DirectPath,
                             mediaKey,
@@ -736,7 +789,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                 {
                     try
                     {
-                        byte[] decryptedBytes = await _host.DownloadAndDecryptAsync(
+                        byte[] decryptedBytes = await DownloadAsync(
                             stickerMessage.Url,
                             stickerMessage.DirectPath,
                             mediaKey,

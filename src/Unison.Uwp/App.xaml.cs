@@ -26,6 +26,7 @@ using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.Core.ViewModels;
 using Unison.Socket.Abstractions;
+using Unison.Socket.Media;
 using Unison.Socket.Signal;
 using Unison.Uwp.Client;
 using Unison.Uwp.Data;
@@ -253,8 +254,7 @@ namespace Unison.Uwp
                     sp.GetRequiredService<IUsyncGate>(),
                     sp.GetRequiredService<AvatarFetcher>(),
                     sp.GetRequiredService<IMediaCache>(),
-                    sp.GetRequiredService<JidAliasTable>(),
-                    sp.GetRequiredService<MediaDerivationService>()));
+                    sp.GetRequiredService<JidAliasTable>()));
             // The send flow lives on MessageFacade; the timeline caches and the socket it writes
             // through are still the client's, reached only through this narrow port.
             services.AddSingleton<IOutgoingMessageHost>(
@@ -302,6 +302,8 @@ namespace Unison.Uwp
 
             services.AddSingleton<IMediaDownloadHost>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+            services.AddSingleton<IEncryptedMediaDownloader>(_ => new HttpEncryptedMediaDownloader(
+                new DelegateSocketLog(line => Diag.W("[Media] " + line))));
             services.AddSingleton(sp => new MediaDownloadGate(
                 () => ((WhatsAppService)sp.GetRequiredService<IWhatsAppService>()).UsesSingleMediaDownloadSlot));
             services.AddSingleton<IMessageService>(sp => new MessageFacade(
@@ -318,6 +320,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<MediaDerivationService>(),
                 sp.GetRequiredService<MediaDownloadGate>(),
                 sp.GetRequiredService<IMediaDownloadHost>(),
+                sp.GetRequiredService<IEncryptedMediaDownloader>(),
                 sp.GetRequiredService<IChatStore>(),
                 sp.GetRequiredService<IChatStateStore>(),
                 sp.GetRequiredService<ISystemInfoProvider>()));

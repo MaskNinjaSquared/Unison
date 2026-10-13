@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -215,7 +215,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly IUsyncGate _usyncGate;
         private readonly AvatarFetcher _avatarFetcher;
         private readonly IMediaCache _mediaCache;
-        private readonly MediaDerivationService _mediaDerivation;
         private readonly ReceiptReader _receipts;
 
         /// <summary>Reads group listings through the alias table. Built after <see cref="JidAlias"/>.</summary>
@@ -1623,8 +1622,7 @@ namespace Unison.Uwp.Services.WhatsApp
             IUsyncGate usyncGate,
             AvatarFetcher avatarFetcher,
             IMediaCache mediaCache,
-            JidAliasTable jidAlias,
-            MediaDerivationService mediaDerivation)
+            JidAliasTable jidAlias)
         {
             if (chatState == null)
             {
@@ -1637,7 +1635,6 @@ namespace Unison.Uwp.Services.WhatsApp
             _usyncGate = usyncGate ?? throw new ArgumentNullException(nameof(usyncGate));
             _avatarFetcher = avatarFetcher ?? throw new ArgumentNullException(nameof(avatarFetcher));
             _mediaCache = mediaCache ?? throw new ArgumentNullException(nameof(mediaCache));
-            _mediaDerivation = mediaDerivation ?? throw new ArgumentNullException(nameof(mediaDerivation));
             JidAlias = jidAlias ?? throw new ArgumentNullException(nameof(jidAlias));
             JidAlias.BindSelf(() => _authState?.Me?.Id, () => _authState?.Me?.Lid);
             JidAlias.Changed += (s, e) => InvalidateChatRowIndex();
@@ -1663,11 +1660,10 @@ namespace Unison.Uwp.Services.WhatsApp
             IUsyncGate usyncGate,
             AvatarFetcher avatarFetcher,
             IMediaCache mediaCache,
-            JidAliasTable jidAlias,
-            MediaDerivationService mediaDerivation)
+            JidAliasTable jidAlias)
         {
             return _instance ?? (_instance = new WhatsAppService(
-                chatState, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, mediaDerivation));
+                chatState, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias));
         }
 
         /// <summary>
@@ -5489,38 +5485,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 "connection",
                 "socket-invalidated",
                 "reason=" + reason);
-        }
-
-        /// <summary>
-        /// Decodes an outgoing voice note into something the platform can play, without making
-        /// the sender wait for it.
-        /// </summary>
-        /// <remarks>
-        /// What we send is Ogg/Opus, and this platform plays neither. The bubble reports itself
-        /// as ready the moment the file is cached, so leaving the decode until the user presses
-        /// play means the first press on their own message stalls - the one message they are
-        /// most likely to press, right after recording it. Doing it here trades nothing: the
-        /// work happens either way, just off the tap. Failure is silent because the play path
-        /// still performs the same conversion on demand.
-        /// </remarks>
-        private void PrepareLocalPlaybackInBackground(ChatMessage message)
-        {
-            if (message == null || string.IsNullOrWhiteSpace(message.AudioUri))
-            {
-                return;
-            }
-
-            var ignored = Task.Run(async () =>
-            {
-                try
-                {
-                    await EnsurePlayableAudioUriAsync(message, message.AudioUri).ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine("[WhatsAppService] Outgoing audio playback prep failed: " + ex.Message);
-                }
-            });
         }
 
         private async Task UpdateChatPreviewForLocalSendAsync(

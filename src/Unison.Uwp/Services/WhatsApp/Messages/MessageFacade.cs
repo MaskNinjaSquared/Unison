@@ -9,6 +9,7 @@ using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.State;
+using Unison.Socket.Abstractions;
 using Unison.Uwp.Services.WhatsApp.History;
 using Unison.Uwp.Services;
 
@@ -51,6 +52,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             MediaDerivationService derivation,
             MediaDownloadGate downloadGate,
             IMediaDownloadHost mediaHost,
+            IEncryptedMediaDownloader mediaDownloader,
             IChatStore chatStore = null,
             IChatStateStore chatState = null,
             ISystemInfoProvider systemInfo = null)
@@ -79,6 +81,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             _availability = new MediaAvailability(
                 _whatsAppService,
                 mediaHost ?? throw new ArgumentNullException(nameof(mediaHost)),
+                mediaDownloader ?? throw new ArgumentNullException(nameof(mediaDownloader)),
                 _jids,
                 mediaCache,
                 derivation ?? throw new ArgumentNullException(nameof(derivation)),
@@ -731,15 +734,17 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             return _mediaSend.SendImageAsync(jid, imageBytes, caption);
         }
 
-        public Task<ChatMessage> SendAudioMessageAsync(string jid, byte[] audioBytes, string mimeType, uint durationSeconds, bool isVoiceMessage = false)
+        public async Task<ChatMessage> SendAudioMessageAsync(string jid, byte[] audioBytes, string mimeType, uint durationSeconds, bool isVoiceMessage = false)
         {
-            return _mediaSend.SendAudioAsync(jid, new OutgoingAudio
+            ChatMessage message = await _mediaSend.SendAudioAsync(jid, new OutgoingAudio
             {
                 Bytes = audioBytes,
                 MimeType = mimeType,
                 DurationSeconds = durationSeconds,
                 IsVoiceMessage = isVoiceMessage
             });
+            _availability.PrepareLocalPlaybackInBackground(message);
+            return message;
         }
 
         public Task<string> EnsureAudioAvailableAsync(ChatMessage message)

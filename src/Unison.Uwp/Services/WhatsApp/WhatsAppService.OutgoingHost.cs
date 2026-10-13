@@ -38,8 +38,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 audio.IsVoiceMessage);
         }
 
-        void IOutgoingMessageHost.PrepareLocalPlayback(ChatMessage message) => PrepareLocalPlaybackInBackground(message);
-
         void IOutgoingMessageHost.AcceptOutgoing(string chatJid, ChatMessage message)
         {
             ApplyPendingStateToMessage(chatJid, message);

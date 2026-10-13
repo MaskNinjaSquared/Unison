@@ -4,6 +4,14 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Media fetch off the client
+
+On-demand media downloads fetch the blob through `IEncryptedMediaDownloader` directly
+instead of asking the client to reach its socket. The fetch was already plain HTTP, so it
+now also works in the window where the client has dropped its socket reference. A voice
+note you just sent is prepared for playback by the message façade; the client's copy of
+that path is removed. The quiet save of the repaired row still goes through the client.
+
 ## List strip from one stored message
 
 Delete, bulk refresh, reconcile and the history tip were each assembling the same

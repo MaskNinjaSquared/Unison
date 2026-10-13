@@ -43,57 +43,6 @@ namespace Unison.Uwp.Services.WhatsApp
     public partial class WhatsAppService
     {
 
-
-        /// <summary>If source is ogg/opus, prefer m4a (MF) then WAV (Concentus) for Mobile playback.</summary>
-        private async Task<string> EnsurePlayableAudioUriAsync(ChatMessage message, string sourceUri)
-        {
-            if (message == null || string.IsNullOrWhiteSpace(sourceUri))
-            {
-                return sourceUri;
-            }
-
-            PlayableAudioFile playable = await _mediaDerivation.EnsurePlayableAsync(
-                message.AudioMimeType,
-                sourceUri,
-                message.Id);
-            if (playable == null ||
-                string.IsNullOrWhiteSpace(playable.Uri) ||
-                string.Equals(playable.Uri, sourceUri, StringComparison.Ordinal))
-            {
-                return sourceUri;
-            }
-
-            message.AudioUri = playable.Uri;
-            message.AudioMimeType = playable.MimeType;
-            string chatJid = GetCanonicalJid(message.RemoteJid);
-            if (!string.IsNullOrWhiteSpace(chatJid))
-            {
-                try
-                {
-                    await SaveMessageAsync(chatJid, message);
-                    QueueChatMessagesChanged(chatJid);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine("[WhatsAppService] Persist playable uri failed: " + ex.Message);
-                }
-            }
-
-            return playable.Uri;
-        }
-
-
-
-        Task<byte[]> IMediaDownloadHost.DownloadAndDecryptAsync(
-            string url,
-            string directPath,
-            byte[] mediaKey,
-            string mediaType,
-            byte[] expectedFileEncSha256)
-        {
-            return _socket.DownloadAndDecryptMediaAsync(url, directPath, mediaKey, mediaType, expectedFileEncSha256);
-        }
-
         Task IMediaDownloadHost.SaveMessageQuietAsync(string chatJid, ChatMessage message)
         {
             return SaveMessageAsync(chatJid, message);
