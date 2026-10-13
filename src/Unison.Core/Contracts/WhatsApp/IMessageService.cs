@@ -88,6 +88,20 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>Downloads + decrypts a document on demand, caching the local URI on the message.</summary>
         Task<string> EnsureDocumentAvailableAsync(ChatMessage message);
 
+        /// <summary>Downloads an image that just arrived, beside the incoming pump.</summary>
+        Task HydrateIncomingImageAsync(
+            ChatMessage message,
+            Message.Types.ImageMessage image,
+            string messageId,
+            string chatJid);
+
+        /// <summary>Downloads a sticker that just arrived, beside the incoming pump.</summary>
+        Task HydrateIncomingStickerAsync(
+            ChatMessage message,
+            Message.Types.StickerMessage sticker,
+            string messageId,
+            string chatJid);
+
         /// <summary>Pins/unpins a message for the given chat (WhatsApp pin duration, default 7 days).</summary>
         Task SetMessagePinnedAsync(string chatJid, ChatMessage message, bool pin, uint durationSeconds = 604800);
 

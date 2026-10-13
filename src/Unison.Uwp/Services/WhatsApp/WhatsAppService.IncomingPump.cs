@@ -1272,7 +1272,7 @@ namespace Unison.Uwp.Services.WhatsApp
             if (plan.HasSticker)
             {
                 ObserveIncomingWork(
-                    HydrateStickerForMessageAsync(chatMessage, plan.Sticker, messageId, jid),
+                    _messageService.HydrateIncomingStickerAsync(chatMessage, plan.Sticker, messageId, jid),
                     "hydrate-sticker",
                     messageId);
             }
@@ -1280,7 +1280,7 @@ namespace Unison.Uwp.Services.WhatsApp
             if (plan.HasImage)
             {
                 ObserveIncomingWork(
-                    HydrateImageForMessageAsync(chatMessage, plan.Image, messageId, jid),
+                    _messageService.HydrateIncomingImageAsync(chatMessage, plan.Image, messageId, jid),
                     "hydrate-image",
                     messageId);
             }

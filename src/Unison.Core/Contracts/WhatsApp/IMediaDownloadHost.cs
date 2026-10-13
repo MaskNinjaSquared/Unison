@@ -19,5 +19,8 @@ namespace Unison.Core.Contracts.WhatsApp
         Task SaveMessageQuietAsync(string chatJid, ChatMessage message);
 
         void NotifyMessagesChanged(string chatJid);
+
+        /// <summary>True when the live socket exists. A missing socket used to skip hydrate entirely.</summary>
+        bool HasLiveSocket { get; }
     }
 }

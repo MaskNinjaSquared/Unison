@@ -4,6 +4,14 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Live image and sticker — on `MessageFacade`
+
+An image or a sticker that arrives on its own is no longer downloaded inside the incoming pump.
+`MessageFacade` fetches it, including the embedded thumbnail and a Lottie that cannot be shown.
+It waits on the same download gate as a file the user opens.
+
+---
+
 ## On-demand media download — on `MessageFacade`
 
 Opening an image, a sticker, a voice note, a video or a document no longer downloads inside

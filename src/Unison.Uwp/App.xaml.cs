@@ -441,7 +441,6 @@ namespace Unison.Uwp
             // already built by then.
             whatsAppImpl.AttachUiDispatcher(rootFrame?.Dispatcher);
             whatsAppImpl.AttachSystemInfoProvider(Services.GetRequiredService<ISystemInfoProvider>());
-            whatsAppImpl.AttachMediaDownloadGate(Services.GetRequiredService<MediaDownloadGate>());
             whatsAppImpl.AttachMessageService(Services.GetRequiredService<IMessageService>());
             whatsAppImpl.AttachChatService(Services.GetRequiredService<IChatService>());
             whatsAppImpl.AttachContactService(Services.GetRequiredService<IContactService>());

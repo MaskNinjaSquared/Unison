@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.Threading.Tasks;
+using Proto;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
@@ -572,6 +573,222 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             {
                 Debug.WriteLine("[WhatsAppService] Document size fill failed: " + ex.Message);
             }
+        }
+
+        public async Task HydrateImageAsync(
+            ChatMessage chatMessage,
+            Message.Types.ImageMessage imageMessage,
+            string messageId,
+            string chatJid)
+        {
+            if (chatMessage == null || imageMessage == null || !_host.HasLiveSocket)
+            {
+                return;
+            }
+
+            IncomingMediaMetadata.ApplyImage(chatMessage, imageMessage);
+
+            string mediaKeyId = MediaCacheNaming.ResolveFileBase(
+                imageMessage.FileEncSha256 != null ? imageMessage.FileEncSha256.ToByteArray() : null,
+                messageId);
+
+            if (imageMessage.JpegThumbnail != null &&
+                imageMessage.JpegThumbnail.Length > 0 &&
+                string.IsNullOrWhiteSpace(chatMessage.ThumbnailUri))
+            {
+                try
+                {
+                    string thumbUri = await SaveCachedImageAsync(
+                        imageMessage.JpegThumbnail.ToByteArray(),
+                        mediaKeyId + "_thumb",
+                        "image/jpeg");
+                    if (!string.IsNullOrWhiteSpace(thumbUri))
+                    {
+                        chatMessage.ThumbnailUri = thumbUri;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    WhatsAppService.Log($"[WhatsAppService] Image jpegThumbnail save failed for {messageId}: {ex.Message}");
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(chatMessage.ImageUri))
+            {
+                await EnsureWebPDisplayUriAsync(chatMessage);
+                return;
+            }
+
+            await _gate.WaitAsync();
+            try
+            {
+                byte[] mediaKey = imageMessage.MediaKey?.ToByteArray();
+                byte[] expectedEncSha = imageMessage.FileEncSha256?.ToByteArray();
+
+                if (mediaKey != null && mediaKey.Length > 0)
+                {
+                    try
+                    {
+                        byte[] decryptedBytes = await _host.DownloadAndDecryptAsync(
+                            imageMessage.Url,
+                            imageMessage.DirectPath,
+                            mediaKey,
+                            "image",
+                            expectedEncSha);
+
+                        string uri = await SaveImageBytesForDisplayAsync(
+                            decryptedBytes,
+                            mediaKeyId,
+                            imageMessage.Mimetype);
+                        if (!string.IsNullOrWhiteSpace(uri))
+                        {
+                            chatMessage.ImageUri = uri;
+                            await RememberLiveAsync(chatJid, chatMessage);
+                            return;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        WhatsAppService.Log($"[WhatsAppService] Image decrypt/download failed for {messageId}: {ex.Message}");
+                    }
+                }
+
+                if (imageMessage.JpegThumbnail != null && imageMessage.JpegThumbnail.Length > 0)
+                {
+                    string thumbUri = await SaveCachedImageAsync(
+                        imageMessage.JpegThumbnail.ToByteArray(),
+                        mediaKeyId + "_thumb",
+                        "image/jpeg");
+                    if (!string.IsNullOrWhiteSpace(thumbUri))
+                    {
+                        chatMessage.ThumbnailUri = thumbUri;
+                        await RememberLiveAsync(chatJid, chatMessage);
+                    }
+                }
+                else
+                {
+                    await RememberLiveAsync(chatJid, chatMessage);
+                }
+            }
+            finally
+            {
+                _gate.Release();
+            }
+        }
+
+        public async Task HydrateStickerAsync(
+            ChatMessage chatMessage,
+            Message.Types.StickerMessage stickerMessage,
+            string messageId,
+            string chatJid)
+        {
+            if (chatMessage == null || stickerMessage == null || !_host.HasLiveSocket)
+            {
+                return;
+            }
+
+            IncomingMediaMetadata.ApplySticker(chatMessage, stickerMessage);
+            if (!string.IsNullOrWhiteSpace(chatMessage.ImageUri))
+            {
+                await EnsureWebPDisplayUriAsync(chatMessage);
+                return;
+            }
+
+            if (stickerMessage.IsLottie)
+            {
+                chatMessage.IsStickerFailed = true;
+                await RememberLiveAsync(chatJid, chatMessage);
+                return;
+            }
+
+            string mediaKeyId = MediaCacheNaming.ResolveFileBase(
+                stickerMessage.FileEncSha256 != null ? stickerMessage.FileEncSha256.ToByteArray() : null,
+                messageId);
+
+            if (stickerMessage.PngThumbnail != null && stickerMessage.PngThumbnail.Length > 0)
+            {
+                try
+                {
+                    string thumbUri = await SaveCachedImageAsync(
+                        stickerMessage.PngThumbnail.ToByteArray(),
+                        mediaKeyId + "_thumb",
+                        "image/png");
+                    if (!string.IsNullOrWhiteSpace(thumbUri))
+                    {
+                        chatMessage.ImageUri = thumbUri;
+                        chatMessage.IsStickerFailed = false;
+                        await RememberLiveAsync(chatJid, chatMessage);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    WhatsAppService.Log($"[WhatsAppService] Sticker thumbnail save failed for {messageId}: {ex.Message}");
+                }
+            }
+
+            await _gate.WaitAsync();
+            try
+            {
+                byte[] mediaKey = stickerMessage.MediaKey?.ToByteArray();
+                byte[] expectedEncSha = stickerMessage.FileEncSha256?.ToByteArray();
+
+                if (mediaKey != null && mediaKey.Length > 0)
+                {
+                    try
+                    {
+                        byte[] decryptedBytes = await _host.DownloadAndDecryptAsync(
+                            stickerMessage.Url,
+                            stickerMessage.DirectPath,
+                            mediaKey,
+                            "image",
+                            expectedEncSha);
+
+                        string uri = await SaveImageBytesForDisplayAsync(
+                            decryptedBytes,
+                            mediaKeyId,
+                            stickerMessage.Mimetype ?? "image/webp");
+                        if (!string.IsNullOrWhiteSpace(uri))
+                        {
+                            chatMessage.ImageUri = uri;
+                            chatMessage.IsStickerFailed = false;
+                            await RememberLiveAsync(chatJid, chatMessage);
+                            return;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        WhatsAppService.Log($"[WhatsAppService] Sticker decrypt/download failed for {messageId}: {ex.Message}");
+                    }
+                }
+
+                if (!string.IsNullOrWhiteSpace(chatMessage.ImageUri))
+                {
+                    return;
+                }
+
+                chatMessage.IsStickerFailed = true;
+                await RememberLiveAsync(chatJid, chatMessage);
+            }
+            finally
+            {
+                _gate.Release();
+            }
+        }
+
+        private async Task RememberLiveAsync(string chatJid, ChatMessage message)
+        {
+            await _host.SaveMessageQuietAsync(chatJid, message);
+            _client.SchedulePersistPublic();
+            _host.NotifyMessagesChanged(chatJid);
+        }
+
+        private Task<string> SaveCachedImageAsync(byte[] imageBytes, string fileBase, string mimeType)
+        {
+            return _cache.SaveAsync(
+                MediaCacheKind.Image,
+                fileBase,
+                MediaFileExtensions.ForImage(mimeType),
+                imageBytes);
         }
     }
 }

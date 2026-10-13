@@ -762,6 +762,24 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             return _availability.EnsureDocumentAsync(message);
         }
 
+        public Task HydrateIncomingImageAsync(
+            ChatMessage message,
+            Message.Types.ImageMessage image,
+            string messageId,
+            string chatJid)
+        {
+            return _availability.HydrateImageAsync(message, image, messageId, chatJid);
+        }
+
+        public Task HydrateIncomingStickerAsync(
+            ChatMessage message,
+            Message.Types.StickerMessage sticker,
+            string messageId,
+            string chatJid)
+        {
+            return _availability.HydrateStickerAsync(message, sticker, messageId, chatJid);
+        }
+
         public Task SetMessagePinnedAsync(string chatJid, ChatMessage message, bool pin, uint durationSeconds = 604800)
         {
             return _whatsAppService.SetMessagePinnedAsync(chatJid, message, pin, durationSeconds);

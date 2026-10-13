@@ -34,7 +34,6 @@ using Unison.Core.Constants;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.State;
-using Unison.Uwp.Services;
 using Unison.Uwp.Services.WhatsApp.Contacts;
 using Unison.Uwp.Services.WhatsApp.Groups;
 using Unison.Uwp.Services.WhatsApp.Messages;
@@ -238,7 +237,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private ISystemInfoProvider _systemInfo;
         private IDebugSendService _debugSendService;
         private bool _isWindowsMobile;
-        private MediaDownloadGate _mediaDownloadGate;
 
         /// <summary>Wired from App DI so history sync goes through MessageFacade (Person upsert + domain mapping).</summary>
         public void AttachMessageService(IMessageService messageService)
@@ -366,11 +364,6 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         internal bool UsesSingleMediaDownloadSlot => IsWindowsMobile;
-
-        public void AttachMediaDownloadGate(MediaDownloadGate gate)
-        {
-            _mediaDownloadGate = gate;
-        }
 
         /// <summary>Alias used by startup/enrichment timings.</summary>
         private bool UseFrugalSyncBudget => PreferFrugalSyncBudget;
