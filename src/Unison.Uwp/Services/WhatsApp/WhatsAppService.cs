@@ -43,7 +43,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IMediaDownloadHost, IAvatarReport, IOfflineReplayHost
+    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IMediaDownloadHost, IAvatarReport, IOfflineReplayHost, IPlaceholderResendSocket
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -1451,6 +1451,7 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         private readonly MissingMessageLedger _missing = new MissingMessageLedger();
+        private PlaceholderResendDispatch _placeholderResends;
         private string _lastResolvedSelfDisplayNameForLog;
         private static readonly TimeSpan HistoryBackfillCooldown = TimeSpan.FromHours(2);
         private static readonly TimeSpan HistoryBackfillStaleThreshold = TimeSpan.FromHours(8);

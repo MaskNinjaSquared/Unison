@@ -239,89 +239,22 @@ namespace Unison.Uwp.Services.WhatsApp
                 return Task.FromResult(false);
             }
 
-            DateTime utcNow = DateTime.UtcNow;
-            CancellationTokenSource scheduleCts = _missing.TryBeginSchedule(
-                candidate,
-                utcNow,
-                PlaceholderResendResponseTimeout,
-                PlaceholderResendDispatchDelay);
-            if (scheduleCts == null)
-            {
-                return Task.FromResult(false);
-            }
-
-            Debug.WriteLine($"[WhatsAppService] placeholder resend scheduled for {candidate.MessageId} in {candidate.ChatJid} (trigger={trigger}, dueInMs={(int)PlaceholderResendDispatchDelay.TotalMilliseconds})");
-
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await Task.Delay(PlaceholderResendDispatchDelay, scheduleCts.Token);
-                }
-                catch (TaskCanceledException)
-                {
-                    Debug.WriteLine($"[WhatsAppService] placeholder resend cancelled before send for {messageId} in {chatJid} (trigger={trigger})");
-                    return;
-                }
-
-                MissingMessageCandidate currentCandidate;
-                if (!_missing.TryClaimScheduled(chatJid, messageId, scheduleCts, out currentCandidate))
-                {
-                    return;
-                }
-
-                string stanzaId = null;
-                try
-                {
-                    var key = new Proto.MessageKey
-                    {
-                        RemoteJid = currentCandidate.ChatJid,
-                        Id = currentCandidate.MessageId,
-                        FromMe = currentCandidate.IsFromMe,
-                        Participant = currentCandidate.Participant ?? string.Empty
-                    };
-
-                    stanzaId = _socket.GenerateMessageId();
-                    if (!_missing.RecordSend(chatJid, messageId, stanzaId, trigger, DateTime.UtcNow, out currentCandidate))
-                    {
-                        return;
-                    }
-
-                    string sentStanzaId = await _socket.RequestPlaceholderResendAsync(key, stanzaId);
-                    if (!string.Equals(sentStanzaId, stanzaId, StringComparison.Ordinal))
-                    {
-                        Debug.WriteLine($"[WhatsAppService] PLACEHOLDER_MESSAGE_RESEND stanza id changed unexpectedly: tracked={stanzaId}, sent={sentStanzaId}");
-                    }
-
-                    Debug.WriteLine($"[WhatsAppService] placeholder resend sent for {messageId} in {chatJid} (trigger={trigger}, stanzaId={stanzaId})");
-
-                    _ = Task.Run(async () =>
-                    {
-                        await Task.Delay(PlaceholderResendResponseTimeout);
-
-                        PlaceholderResendRequestState timedOutState = _missing.Expire(stanzaId);
-
-                        if (timedOutState != null)
-                        {
-                            string timeoutKind = timedOutState.AckAccepted ? $"accepted/no-payload, ackAt={timedOutState.AckAcceptedUtc:O}" : "no-ack";
-                            Debug.WriteLine($"[WhatsAppService] placeholder resend timed out for {timedOutState.MessageId} in {timedOutState.ChatJid} (stanzaId={stanzaId}, {timeoutKind})");
-                        }
-                    });
-                }
-                catch (Exception ex)
-                {
-                    _missing.FailSend(chatJid, messageId, stanzaId);
-
-                    Debug.WriteLine($"[WhatsAppService] PLACEHOLDER_MESSAGE_RESEND send failed for {messageId} in {chatJid}: {ex.Message}");
-                }
-                finally
-                {
-                    scheduleCts.Dispose();
-                }
-            });
-
-            return Task.FromResult(true);
+            Task dispatched = PlaceholderResends.TryDispatch(candidate, chatJid, messageId, trigger);
+            return Task.FromResult(dispatched != null);
         }
+
+        private PlaceholderResendDispatch PlaceholderResends =>
+            _placeholderResends ??= new PlaceholderResendDispatch(
+                _missing,
+                this,
+                line => Debug.WriteLine("[WhatsAppService] " + line),
+                PlaceholderResendDispatchDelay,
+                PlaceholderResendResponseTimeout);
+
+        string IPlaceholderResendSocket.GenerateMessageId() => _socket.GenerateMessageId();
+
+        Task<string> IPlaceholderResendSocket.RequestPlaceholderResendAsync(Proto.MessageKey key, string stanzaId) =>
+            _socket.RequestPlaceholderResendAsync(key, stanzaId);
 
         private bool ShouldDeferPlaceholderResend(string trigger, out string reason)
         {

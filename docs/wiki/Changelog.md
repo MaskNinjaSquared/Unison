@@ -4,6 +4,13 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Placeholder resend dispatch
+
+The 5-second wait before a resend, the send itself, and the 15-second window for its
+answer are `PlaceholderResendDispatch` (Core). It reaches the socket through
+`IPlaceholderResendSocket`. The client still decides whether a resend may start at all
+(socket up, nothing deferring it).
+
 ## Incoming timeline accept
 
 Whether an arriving message is moved from the contact's other address, only upgrades a
