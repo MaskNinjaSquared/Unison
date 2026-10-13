@@ -331,28 +331,24 @@ namespace Unison.Uwp.Services.WhatsApp
                     if (latest != null)
                     {
                         bool isGroup = JidHelper.IsGroupJid(canonical) || chat.IsGroup;
-                        string stripParticipant = isGroup
-                            ? ParticipantStripIdentity.PreferForDisplay(
-                                latest.ParticipantJid,
-                                GetCanonicalJid(latest.ParticipantJid))
-                            : null;
+                        ChatListStrip strip = ChatListStrip.FromMessage(
+                            latest,
+                            isGroup,
+                            SelfListDisplayName(),
+                            GetCanonicalJid(latest.ParticipantJid));
                         ApplyChatPreviewIfNewer(
                             chat,
-                            ChatPreviewNormalizer.FormatListPreview(latest, isGroup),
-                            latest.Timestamp,
+                            strip.Preview,
+                            strip.Timestamp,
                             true,
-                            ChatPreviewNormalizer.InferKindFromMessage(latest),
-                            ChatPreviewNormalizer.FormatListAuthorPrefix(
-                                latest,
-                                isGroup,
-                                SelfListDisplayName(),
-                                stripParticipant),
-                            latest.MentionedJids,
-                            latest.IsFromMe,
-                            HistoryLiveMessageMapper.FromStatus(latest.Status, latest.IsFromMe),
-                            latest.Id,
-                            stripParticipant,
-                            isGroup && !latest.IsFromMe ? latest.SenderName : null);
+                            strip.Kind,
+                            strip.AuthorPrefix,
+                            strip.MentionedJids,
+                            strip.IsFromMe,
+                            strip.SendState,
+                            strip.MessageId,
+                            strip.ParticipantJid,
+                            strip.SenderName);
                     }
                     else
                     {

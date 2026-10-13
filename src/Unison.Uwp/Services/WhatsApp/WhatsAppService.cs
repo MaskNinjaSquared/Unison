@@ -2842,31 +2842,25 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
 
                     bool isGroup = canonical.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
-                    string preview = ChatPreviewNormalizer.FormatListPreview(best, isGroup);
-                    string stripParticipant = isGroup
-                        ? ParticipantStripIdentity.PreferForDisplay(
-                            best.ParticipantJid,
-                            GetCanonicalJid(best.ParticipantJid))
-                        : null;
-                    string author = ChatPreviewNormalizer.FormatListAuthorPrefix(
+                    ChatListStrip strip = ChatListStrip.FromMessage(
                         best,
                         isGroup,
                         SelfListDisplayName(),
-                        stripParticipant);
+                        GetCanonicalJid(best.ParticipantJid));
 
                     foreach (var chat in GetChatRowsForCanonicalJid(canonical))
                     {
                         // Tip from DB/memory by TimestampUtc; swap when MessageId differs (or body).
-                        if (ChatPreviewTip.IsAlreadyShowing(chat, best, preview))
+                        if (ChatPreviewTip.IsAlreadyShowing(chat, best, strip.Preview))
                         {
                             // Same tip body — still promote a bubble-resolved author onto the strip.
                             if (isGroup)
                             {
                                 LiveChatPreviewApplier.ApplyAuthorParts(
                                     chat,
-                                    stripParticipant,
-                                    best.IsFromMe ? null : best.SenderName,
-                                    author);
+                                    strip.ParticipantJid,
+                                    strip.SenderName,
+                                    strip.AuthorPrefix);
                             }
 
                             continue;
@@ -2877,17 +2871,17 @@ namespace Unison.Uwp.Services.WhatsApp
                         // not win the stale gate and keep an older Last Message.
                         bool applied = ApplyChatPreviewIfNewer(
                             chat,
-                            preview,
-                            best.Timestamp,
+                            strip.Preview,
+                            strip.Timestamp,
                             true,
-                            ChatPreviewNormalizer.InferKindFromMessage(best),
-                            author,
-                            best.MentionedJids,
-                            best.IsFromMe,
-                            HistoryLiveMessageMapper.FromStatus(best.Status, best.IsFromMe),
-                            best.Id,
-                            stripParticipant,
-                            isGroup && !best.IsFromMe ? best.SenderName : null);
+                            strip.Kind,
+                            strip.AuthorPrefix,
+                            strip.MentionedJids,
+                            strip.IsFromMe,
+                            strip.SendState,
+                            strip.MessageId,
+                            strip.ParticipantJid,
+                            strip.SenderName);
 
                         // Schema v4 upgrade: old preview rows have no LastMessageId. Stamp it from
                         // history_message without a WhatsApp history resync when the tip already matches.

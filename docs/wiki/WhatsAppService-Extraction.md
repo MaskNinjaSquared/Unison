@@ -185,7 +185,7 @@ Self-contained first. List/persist last.
 | 3.7b | Converge onto `LidMappingStore` | Blocked: that store is async, canonicalization is not. See below |
 | 3.8 | `.AppState.cs` | **Rewritten — the premise was stale.** See below |
 | 3.9a | List display order (done) | `ChatDisplayOrder` (Core) |
-| 3.9b | `.Persistence.cs` + preview reconcile + the appliers from 3.8 | `ChatFacade` + `ChatStateStore` + `IChatStore` / `IMessageStore`. Close the transitional public dictionaries on `ChatStateStore`. **Persistence rules out; appliers remain — see below.** **Name maps closed (`DisplayNameTable`). `MessagesByChat` is `ChatMessageCache` (conversation set locked); the per-chat lists are still edited in place by the client** |
+| 3.9b | `.Persistence.cs` + preview reconcile + the appliers from 3.8 | `ChatFacade` + `ChatStateStore` + `IChatStore` / `IMessageStore`. Close the transitional public dictionaries on `ChatStateStore`. **Persistence rules out; appliers remain — see below.** **Name maps closed (`DisplayNameTable`). `MessagesByChat` is `ChatMessageCache` (conversation set locked); the per-chat lists are still edited in place by the client.** **Repeated list-strip assembly is `ChatListStrip`. Phone-digit lookup is `KnownJidByPhoneDigits`. Delete/persist I/O stays** |
 | 3.10 | `.IncomingPump.cs` | Decode/dispatch stays with connection. **Rules closed.** **Notify + timeline accept + persist enqueue + revoke + pin-in-chat on MessageFacade.** **Live + offline list apply + tip refresh/reconcile on ChatFacade.** **Resend row transitions on `MissingMessageLedger`.** **Queue lanes, generation and stage on `IncomingMessageQueue<T>`.** **Offline replay tips on ChatFacade.** **Timeline accept (alias move / duplicate / insert) on `IncomingTimeline`.** **Resend wait / send / answer window on `PlaceholderResendDispatch`.** Pump keeps the drain loop and the go/no-go before a resend |
 
 **3.1a is done.** The avatar half of `MediaCache` is `IAvatarCache` / `AvatarCacheService`: `TryGet`,
@@ -593,7 +593,7 @@ the façade. `ResolveContactsAsync` and `SearchContactAsync` are gone from `IWha
 What the client keeps is six narrow, façade-only primitives over caches it still owns:
 `TryFileUsyncAlias` (accept, write both directions, register, heal identity), `StoreUsyncPushName`,
 `HasListedChatWithoutAvatar`, `FetchAvatarForResolvedContactAsync`, `MergeDuplicateChatsAsync` and
-`FindKnownJidByPhoneDigits`. They go when the alias table, name cache and chat rows move — that is
+`FindKnownJidByPhoneDigits` (the match itself is `KnownJidByPhoneDigits`; the client still supplies the two maps). They go when the alias table, name cache and chat rows move — that is
 3.7b / 3.10, not more of 3.6.
 
 **The hand-built usync query is gone.** `ResolveContactsAsync` had two bodies: the live one over

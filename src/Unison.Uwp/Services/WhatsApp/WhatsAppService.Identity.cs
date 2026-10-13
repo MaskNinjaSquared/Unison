@@ -613,23 +613,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// <summary>Usync files what it learns as an alias pair or a name, so a hit lands in one of those two.</summary>
         public string FindKnownJidByPhoneDigits(string digits)
         {
-            if (string.IsNullOrEmpty(digits))
-            {
-                return null;
-            }
-
-            foreach (var alias in JidAlias)
-            {
-                if (alias.Key.StartsWith(digits)) return alias.Key;
-                if (alias.Value.StartsWith(digits)) return alias.Value;
-            }
-
-            foreach (var name in ContactNames)
-            {
-                if (name.Key.StartsWith(digits)) return name.Key;
-            }
-
-            return null;
+            return KnownJidByPhoneDigits.Find(digits, JidAlias, ContactNames.Keys);
         }
     }
 }

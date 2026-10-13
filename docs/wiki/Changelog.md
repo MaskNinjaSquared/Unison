@@ -4,6 +4,14 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## List strip from one stored message
+
+Delete, bulk refresh, reconcile and the history tip were each assembling the same
+chat-list fields. That assembly is `ChatListStrip` (Core). Whether a typed number
+already matches an alias or a stored name is `KnownJidByPhoneDigits`. The download
+orchestration and the broker handoff are unchanged: the first still differs per
+kind, and `TransferSocketToBrokerAsync` still returns false.
+
 ## Message cache behind ChatMessageCache
 
 `MessagesByChat` is a `ChatMessageCache` (Core) instead of a bare dictionary. Which

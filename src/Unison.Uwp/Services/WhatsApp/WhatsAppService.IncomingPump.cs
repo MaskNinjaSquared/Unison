@@ -1962,31 +1962,25 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
 
                     bool isGroup = canonicalJid.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
-                    string preview = ChatPreviewNormalizer.FormatListPreview(latest, isGroup);
-                    string stripParticipant = isGroup
-                        ? ParticipantStripIdentity.PreferForDisplay(
-                            latest.ParticipantJid,
-                            GetCanonicalJid(latest.ParticipantJid))
-                        : null;
-                    string author = ChatPreviewNormalizer.FormatListAuthorPrefix(
+                    ChatListStrip strip = ChatListStrip.FromMessage(
                         latest,
                         isGroup,
                         SelfListDisplayName(),
-                        stripParticipant);
+                        GetCanonicalJid(latest.ParticipantJid));
 
                     if (ApplyChatPreviewIfNewer(
                         chat,
-                        preview,
-                        latest.Timestamp,
+                        strip.Preview,
+                        strip.Timestamp,
                         false,
-                        ChatPreviewNormalizer.InferKindFromMessage(latest),
-                        author,
-                        latest.MentionedJids,
-                        latest.IsFromMe,
-                        HistoryLiveMessageMapper.FromStatus(latest.Status, latest.IsFromMe),
-                        latest.Id,
-                        stripParticipant,
-                        isGroup && !latest.IsFromMe ? latest.SenderName : null))
+                        strip.Kind,
+                        strip.AuthorPrefix,
+                        strip.MentionedJids,
+                        strip.IsFromMe,
+                        strip.SendState,
+                        strip.MessageId,
+                        strip.ParticipantJid,
+                        strip.SenderName))
                     {
                         updated++;
                     }
@@ -2035,30 +2029,25 @@ namespace Unison.Uwp.Services.WhatsApp
                         created++;
                     }
 
-                    string preview = latest.Content ?? string.Empty;
                     bool isGroup = JidHelper.IsGroupJid(canonicalJid);
-                    string stripParticipant = isGroup
-                        ? ParticipantStripIdentity.PreferForDisplay(
-                            latest.ParticipantJid,
-                            GetCanonicalJid(latest.ParticipantJid))
-                        : null;
+                    ChatListStrip strip = ChatListStrip.FromMessage(
+                        latest,
+                        isGroup,
+                        SelfListDisplayName(),
+                        GetCanonicalJid(latest.ParticipantJid));
                     ApplyChatPreviewIfNewer(
                         chat,
-                        preview,
-                        latest.Timestamp,
+                        strip.Preview,
+                        strip.Timestamp,
                         false,
-                        ChatPreviewNormalizer.InferKindFromMessage(latest),
-                        ChatPreviewNormalizer.FormatListAuthorPrefix(
-                            latest,
-                            isGroup,
-                            SelfListDisplayName(),
-                            stripParticipant),
-                        latest.MentionedJids,
-                        latest.IsFromMe,
-                        HistoryLiveMessageMapper.FromStatus(latest.Status, latest.IsFromMe),
-                        latest.Id,
-                        stripParticipant,
-                        isGroup && !latest.IsFromMe ? latest.SenderName : null);
+                        strip.Kind,
+                        strip.AuthorPrefix,
+                        strip.MentionedJids,
+                        strip.IsFromMe,
+                        strip.SendState,
+                        strip.MessageId,
+                        strip.ParticipantJid,
+                        strip.SenderName);
                     ApplyChatKind(chat);
 
                     if (!chat.IsGroup && PlaceholderChatLabel.IsPlaceholder(chat.Name, canonicalJid, IsSelfMarkerLabel(chat.Name)))
