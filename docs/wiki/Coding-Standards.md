@@ -180,6 +180,8 @@ Do not grow `IWhatsAppService` for UI features. Add the member on the façade th
 
 `SocketBridge` implements `IWhatsAppSocket` so the client can keep working. New protocol features go on Socket use cases / modules, then a façade — not on `IWhatsAppSocket` unless the client still must see them.
 
+Core rules lifted out of the client live in `Unison.Core/Helpers/<Domain>/`, with the same folder names as `Services/WhatsApp/` (`Chats`, `Contacts`, `Groups`, `Messages`, `History`, `Connection`, `Status`, plus `Diagnostics`). The namespace stays `Unison.Core.Helpers`: the folders are for finding a rule, not module boundaries, because the rules call across domains. Generic helpers (`RelayCommand`, `Observable`, `JidHelper`, `UnixTime`, …) stay at the root.
+
 Text normalization: `ChatPreviewNormalizer.Normalize` is the **chat-list preview** (one line, 50-char cap). Message bodies and media captions — anything persisted or shown in a bubble — use `NormalizeBody`, which keeps the text whole and keeps line breaks.
 
 ---
