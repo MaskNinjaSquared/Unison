@@ -356,8 +356,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return Chats.Count >= 80
                     || _initialSyncSafeModeActive
                     || IsReplayDrainActive
-                    || (_fullHistoryOnDemandRequestedThisSession &&
-                        !string.IsNullOrWhiteSpace(_fullHistoryOnDemandRequestId));
+                    || _historyRequests.IsFullInFlight;
             }
         }
 
@@ -843,50 +842,21 @@ namespace Unison.Uwp.Services.WhatsApp
         /// <summary>
         /// Stamps progress on the in-flight FULL_HISTORY catch-up so the idle watchdog does not
         /// abort while tips/chunks are still arriving on Mobile. ACK/banner only refresh the idle
-        /// clock; they must not bump <see cref="HistoryOnDemandRequestState.ProgressSignalCount"/>.
+        /// clock; they must not bump <see cref="HistoryOnDemandRequest.ProgressSignalCount"/>.
         /// </summary>
         private void NoteFullHistoryCatchUpProgress(string reason)
         {
             if (Volatile.Read(ref _historyCatchUpBannerActive) == 0 &&
-                !_fullHistoryOnDemandRequestedThisSession &&
-                string.IsNullOrWhiteSpace(_fullHistoryOnDemandRequestId))
+                !_historyRequests.IsFullClaimed &&
+                string.IsNullOrWhiteSpace(_historyRequests.FullRequestId))
             {
                 return;
             }
 
-            DateTime nowUtc = DateTime.UtcNow;
-            string requestId;
-            int signalCount;
             bool countsAsLot = HistoryCatchUpProgressSignal.CountsAsLotProgress(reason);
-            lock (_historyOnDemandLock)
+            if (!_historyRequests.NoteFullProgress(reason, countsAsLot, DateTime.UtcNow, out string requestId, out int signalCount))
             {
-                requestId = _fullHistoryOnDemandRequestId;
-                HistoryOnDemandRequestState state = null;
-                if (!string.IsNullOrWhiteSpace(requestId))
-                {
-                    _historyOnDemandRequestById.TryGetValue(requestId, out state);
-                }
-
-                if (state == null && !string.IsNullOrWhiteSpace(_fullHistoryRepairRequestId))
-                {
-                    requestId = _fullHistoryRepairRequestId;
-                    _historyOnDemandRequestById.TryGetValue(requestId, out state);
-                }
-
-                if (state == null ||
-                    !string.Equals(state.RequestType, "FullHistorySyncOnDemand", StringComparison.Ordinal))
-                {
-                    return;
-                }
-
-                state.LastProgressUtc = nowUtc;
-                state.LastProgressReason = reason ?? string.Empty;
-                if (countsAsLot)
-                {
-                    state.ProgressSignalCount++;
-                }
-
-                signalCount = state.ProgressSignalCount;
+                return;
             }
 
             RuntimeDiagnosticsService.Instance.Write(
@@ -929,11 +899,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 SuppressReconnect = _suppressReconnect || _fatalSessionEnded,
                 HistorySyncProcessing = _initialSyncSafeModeActive ||
                                         Volatile.Read(ref _historyCatchUpBannerActive) == 1 ||
-                                        _fullHistoryOnDemandRequestedThisSession,
+                                        _historyRequests.IsFullClaimed,
                 HistoryCatchUpBannerActive = Volatile.Read(ref _historyCatchUpBannerActive) == 1,
-                FullHistoryOnDemandPending = _fullHistoryOnDemandRequestedThisSession ||
-                                             !string.IsNullOrWhiteSpace(_fullHistoryOnDemandRequestId),
-                FullHistoryOnDemandRequestId = _fullHistoryOnDemandRequestId,
                 FullHistoryTriggerReason = null,
                 FullHistoryAckAccepted = false,
                 FullHistoryProgressSignalCount = 0,
@@ -1012,22 +979,16 @@ namespace Unison.Uwp.Services.WhatsApp
                 // must never interfere with the current UI/protocol paths.
             }
 
-            lock (_historyOnDemandLock)
+            _historyRequests.ReadFullDiagnostics(out bool fullPending, out string fullId, out HistoryOnDemandRequest fullState);
+            snapshot.FullHistoryOnDemandPending = fullPending;
+            snapshot.FullHistoryOnDemandRequestId = fullId;
+            if (fullState != null)
             {
-                string fullId = _fullHistoryOnDemandRequestId;
-                snapshot.FullHistoryOnDemandPending =
-                    _fullHistoryOnDemandRequestedThisSession || !string.IsNullOrWhiteSpace(fullId);
-                snapshot.FullHistoryOnDemandRequestId = fullId;
-                if (!string.IsNullOrWhiteSpace(fullId) &&
-                    _historyOnDemandRequestById.TryGetValue(fullId, out HistoryOnDemandRequestState fullState) &&
-                    fullState != null)
-                {
-                    snapshot.FullHistoryTriggerReason = fullState.TriggerReason ?? fullState.Marker;
-                    snapshot.FullHistoryAckAccepted = fullState.AckAccepted;
-                    snapshot.FullHistoryProgressSignalCount = fullState.ProgressSignalCount;
-                    snapshot.FullHistoryLastProgressReason = fullState.LastProgressReason;
-                    snapshot.FullHistoryLastProgressUtc = fullState.LastProgressUtc;
-                }
+                snapshot.FullHistoryTriggerReason = fullState.TriggerReason ?? fullState.Marker;
+                snapshot.FullHistoryAckAccepted = fullState.AckAccepted;
+                snapshot.FullHistoryProgressSignalCount = fullState.ProgressSignalCount;
+                snapshot.FullHistoryLastProgressReason = fullState.LastProgressReason;
+                snapshot.FullHistoryLastProgressUtc = fullState.LastProgressUtc;
             }
 
             return snapshot;
@@ -1094,26 +1055,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private string _pendingAliasFollowUpSource;
         private CancellationTokenSource _aliasFollowUpCts;
         private int _aliasFollowUpRunning;
-        private sealed class HistoryOnDemandRequestState
-        {
-            public string RequestId { get; set; }
-            public string RequestType { get; set; }
-            public string ChatJid { get; set; }
-            public string Marker { get; set; }
-            public DateTime RequestedAtUtc { get; set; }
-            public int BaselineMessageCount { get; set; }
-            public bool AckAccepted { get; set; }
-            public DateTime AckAcceptedUtc { get; set; }
-            public bool TimeoutTaskStarted { get; set; }
-            public string TriggerReason { get; set; }
-
-            /// <summary>Last tip/chunk/offline signal while waiting for FULL_HISTORY catch-up.</summary>
-            public DateTime LastProgressUtc { get; set; }
-
-            public string LastProgressReason { get; set; }
-
-            public int ProgressSignalCount { get; set; }
-        }
         private sealed class HistoryBackfillCandidate
         {
             public string Jid { get; set; }
@@ -1125,19 +1066,11 @@ namespace Unison.Uwp.Services.WhatsApp
             public string SelectionReason { get; set; }
         }
         private readonly MessageIdIndex _messageIdIndex = new MessageIdIndex();
-        private readonly Dictionary<string, string> _historyOnDemandMarkerByChat = new Dictionary<string, string>();
-        private readonly HashSet<string> _historyOnDemandInFlight = new HashSet<string>();
-        private readonly Dictionary<string, HistoryOnDemandRequestState> _historyOnDemandRequestById = new Dictionary<string, HistoryOnDemandRequestState>();
-        private readonly Dictionary<string, string> _historyOnDemandLastRequestIdByChat = new Dictionary<string, string>();
-        private readonly Dictionary<string, int> _historyOnDemandAttemptsByChat = new Dictionary<string, int>();
-        private readonly Dictionary<string, DateTime> _historyOnDemandRejectedUntilUtcByChat = new Dictionary<string, DateTime>();
-        private readonly object _historyOnDemandLock = new object();
-        private volatile bool _fullHistoryOnDemandRequestedThisSession = false;
-        private string _fullHistoryOnDemandRequestId;
+        /// <summary>Per-chat and full-history requests sent and still owed.</summary>
+        private readonly HistoryOnDemandRegistry _historyRequests = new HistoryOnDemandRegistry();
         private DateTime _lastHistorySyncReceivedUtc = DateTime.MinValue;
         private Proto.HistorySync.Types.HistorySyncType? _lastHistorySyncTypeReceived = null;
         private DateTime _lastFullHistoryRepairCompletedUtc = DateTime.MinValue;
-        private string _fullHistoryRepairRequestId;
         private TaskCompletionSource<bool> _userResyncHistoryTcs;
         private static readonly TimeSpan UserResyncHistoryWaitTimeout = TimeSpan.FromMinutes(3);
         private readonly SemaphoreSlim _historyBackfillLock = new SemaphoreSlim(1, 1);
@@ -1857,16 +1790,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 Chats.Clear();
                 MessagesByChat.Clear();
                 _messageIdIndex.Clear();
-                lock (_historyOnDemandLock)
-                {
-                    _historyOnDemandMarkerByChat.Clear();
-                    _historyOnDemandInFlight.Clear();
-                    _historyOnDemandRequestById.Clear();
-                    _historyOnDemandLastRequestIdByChat.Clear();
-                    _fullHistoryOnDemandRequestedThisSession = false;
-                    _fullHistoryOnDemandRequestId = null;
-                    _fullHistoryRepairRequestId = null;
-                }
+                _historyRequests.ClearRequests();
+                _historyRequests.ReleaseFull();
             });
         }
 
@@ -1920,12 +1845,7 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 // Reset the per-session gate cleared above; otherwise a failed first
                 // attempt that flipped the flag without a real send would block retry.
-                lock (_historyOnDemandLock)
-                {
-                    _fullHistoryOnDemandRequestedThisSession = false;
-                    _fullHistoryOnDemandRequestId = null;
-                    _fullHistoryRepairRequestId = null;
-                }
+                _historyRequests.ReleaseFull();
 
                 await EnsureConnectedAsync(timeoutMs: 45000, forceFreshTransport: true)
                     .ConfigureAwait(false);
@@ -1951,7 +1871,7 @@ namespace Unison.Uwp.Services.WhatsApp
             await TryConsumeMessageStoreForceHistoryRepairAsync(reason + ":post-reconnect-consume")
                 .ConfigureAwait(false);
 
-            return _fullHistoryOnDemandRequestedThisSession;
+            return _historyRequests.IsFullClaimed;
         }
 
         private void CompleteUserResyncHistoryWait(string reason)
@@ -2107,8 +2027,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            if (_fullHistoryOnDemandRequestedThisSession &&
-                !string.IsNullOrWhiteSpace(_fullHistoryOnDemandRequestId))
+            if (_historyRequests.IsFullInFlight)
             {
                 Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 1);
                 Debug.WriteLine(
@@ -2391,58 +2310,23 @@ namespace Unison.Uwp.Services.WhatsApp
                 // request-cleared before DecideCatchUpAfterIdleBatch could solicit the next
                 // page, so only one bounce ever ran. Hand the lot to the continue decision
                 // instead (same path as idle/hard-timeout).
-                string lotRequestId = null;
-                bool lotAckAccepted = false;
-                int lotProgressSignals = 0;
-                string lotTrigger = "sqlite-lot-quiet";
-                bool handOffCatchUp = false;
-                lock (_historyOnDemandLock)
-                {
-                    string pendingId = !string.IsNullOrWhiteSpace(_fullHistoryOnDemandRequestId)
-                        ? _fullHistoryOnDemandRequestId
-                        : _fullHistoryRepairRequestId;
-                    HistoryOnDemandRequestState pendingState = null;
-                    if (!string.IsNullOrWhiteSpace(pendingId))
-                    {
-                        _historyOnDemandRequestById.TryGetValue(pendingId, out pendingState);
-                    }
-
-                    bool catchUpBanner = Volatile.Read(ref _historyCatchUpBannerActive) == 1 ||
-                                         _catchUpContinueRound > 0;
-                    bool pendingFull = pendingState != null &&
-                        string.Equals(
-                            pendingState.RequestType,
-                            "FullHistorySyncOnDemand",
-                            StringComparison.Ordinal);
-
-                    if (catchUpBanner || pendingFull)
-                    {
-                        handOffCatchUp = true;
-                        lotRequestId = pendingId;
-                        if (pendingState != null)
-                        {
-                            lotAckAccepted = pendingState.AckAccepted;
-                            lotProgressSignals = pendingState.ProgressSignalCount;
-                            lotTrigger = pendingState.TriggerReason ?? lotTrigger;
-                            ClearHistoryRequestStateLocked(pendingState);
-                        }
-                        else
-                        {
-                            _fullHistoryOnDemandRequestedThisSession = false;
-                            _fullHistoryOnDemandRequestId = null;
-                            _fullHistoryRepairRequestId = null;
-                        }
-
-                        Debug.WriteLine(
-                            "[WhatsAppService] SQLite quiet lot handed to catch-up continue: requestId=" +
-                            (lotRequestId ?? "<none>") +
-                            ", signals=" + lotProgressSignals +
-                            ", banner=" + (Volatile.Read(ref _historyCatchUpBannerActive) == 1));
-                    }
-                }
+                bool catchUpBanner = Volatile.Read(ref _historyCatchUpBannerActive) == 1 ||
+                                     _catchUpContinueRound > 0;
+                bool handOffCatchUp = _historyRequests.TryHandOffQuietLot(
+                    catchUpBanner,
+                    out string lotRequestId,
+                    out HistoryOnDemandRequest lotRequest);
+                bool lotAckAccepted = lotRequest?.AckAccepted ?? false;
+                int lotProgressSignals = lotRequest?.ProgressSignalCount ?? 0;
+                string lotTrigger = lotRequest?.TriggerReason ?? "sqlite-lot-quiet";
 
                 if (handOffCatchUp)
                 {
+                    Debug.WriteLine(
+                        "[WhatsAppService] SQLite quiet lot handed to catch-up continue: requestId=" +
+                        (lotRequestId ?? "<none>") +
+                        ", signals=" + lotProgressSignals +
+                        ", banner=" + (Volatile.Read(ref _historyCatchUpBannerActive) == 1));
                     RuntimeDiagnosticsService.Instance.Write(
                         "history",
                         "catch-up-sqlite-lot-quiet",
@@ -2539,27 +2423,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            lock (_historyOnDemandLock)
-            {
-                foreach (string raw in chatJids)
-                {
-                    string normJid = NormalizeJid(raw);
-                    if (string.IsNullOrWhiteSpace(normJid))
-                    {
-                        continue;
-                    }
-
-                    _historyOnDemandInFlight.Remove(normJid);
-                    if (_historyOnDemandLastRequestIdByChat.TryGetValue(normJid, out var requestId))
-                    {
-                        _historyOnDemandLastRequestIdByChat.Remove(normJid);
-                        _historyOnDemandRequestById.Remove(requestId);
-                    }
-
-                    _historyOnDemandAttemptsByChat.Remove(normJid);
-                    _historyOnDemandRejectedUntilUtcByChat.Remove(normJid);
-                }
-            }
+            _historyRequests.CompleteChats(chatJids.Select(NormalizeJid).ToList());
         }
 
         private async Task RepairLegacyDeletedPreviewsAsync()
@@ -3561,36 +3425,13 @@ namespace Unison.Uwp.Services.WhatsApp
                 return true;
             }
 
-            lock (_historyOnDemandLock)
+            reason = _historyRequests.ProbeAvatarDeferral(out string staleCleared);
+            if (staleCleared != null)
             {
-                if (!string.IsNullOrWhiteSpace(_fullHistoryOnDemandRequestId))
-                {
-                    if (_historyOnDemandRequestById.ContainsKey(_fullHistoryOnDemandRequestId))
-                    {
-                        reason = "full-history-on-demand-in-flight:" + _fullHistoryOnDemandRequestId;
-                        return true;
-                    }
-
-                    Debug.WriteLine($"[WhatsAppService] Clearing stale full-history request marker before avatar fetch: requestId={_fullHistoryOnDemandRequestId}");
-                    _fullHistoryOnDemandRequestId = null;
-                    _fullHistoryRepairRequestId = null;
-                    _fullHistoryOnDemandRequestedThisSession = false;
-                }
-                else if (_fullHistoryOnDemandRequestedThisSession)
-                {
-                    Debug.WriteLine("[WhatsAppService] Clearing stale full-history requested flag before avatar fetch.");
-                    _fullHistoryOnDemandRequestedThisSession = false;
-                    _fullHistoryRepairRequestId = null;
-                }
-
-                if (_historyOnDemandInFlight.Count > 0)
-                {
-                    reason = "history-on-demand-in-flight:" + _historyOnDemandInFlight.Count;
-                    return true;
-                }
+                Debug.WriteLine("[WhatsAppService] Cleared stale full-history state before avatar fetch: " + staleCleared);
             }
 
-            return false;
+            return reason != null;
         }
 
         /// <summary>
@@ -3645,17 +3486,11 @@ namespace Unison.Uwp.Services.WhatsApp
         /// no catch-up progress (tips / SQLite chunks / offline apply). Progress resets
         /// the idle clock — Mobile often needs several minutes of slow peer delivery.
         /// </summary>
-        private void ScheduleFullHistoryCatchUpWatchdog(HistoryOnDemandRequestState state)
+        private void ScheduleFullHistoryCatchUpWatchdog(HistoryOnDemandRequest state)
         {
             if (state == null || string.IsNullOrWhiteSpace(state.RequestId))
             {
                 return;
-            }
-
-            if (state.LastProgressUtc == DateTime.MinValue)
-            {
-                state.LastProgressUtc = DateTime.UtcNow;
-                state.LastProgressReason = "watchdog-armed";
             }
 
             _ = Task.Run(async () =>
@@ -3675,34 +3510,8 @@ namespace Unison.Uwp.Services.WhatsApp
                     {
                         await Task.Delay(FullHistoryCatchUpProgressPoll).ConfigureAwait(false);
 
-                        bool stillPending = false;
-                        bool ackAccepted = false;
-                        DateTime ackAcceptedUtc = DateTime.MinValue;
-                        DateTime lastProgressUtc = DateTime.MinValue;
-                        string lastProgressReason = null;
-                        int progressSignals = 0;
-                        int baselineCount = state.BaselineMessageCount;
-                        string triggerReason = state.TriggerReason ?? "unspecified";
-                        DateTime requestedAtUtc = state.RequestedAtUtc;
-
-                        lock (_historyOnDemandLock)
-                        {
-                            if (_historyOnDemandRequestById.TryGetValue(state.RequestId, out var pendingState) &&
-                                object.ReferenceEquals(pendingState, state))
-                            {
-                                stillPending = true;
-                                ackAccepted = pendingState.AckAccepted;
-                                ackAcceptedUtc = pendingState.AckAcceptedUtc;
-                                lastProgressUtc = pendingState.LastProgressUtc;
-                                lastProgressReason = pendingState.LastProgressReason;
-                                progressSignals = pendingState.ProgressSignalCount;
-                                baselineCount = pendingState.BaselineMessageCount;
-                                triggerReason = pendingState.TriggerReason ?? "unspecified";
-                                requestedAtUtc = pendingState.RequestedAtUtc;
-                            }
-                        }
-
-                        if (!stillPending)
+                        HistoryOnDemandRequest pending = _historyRequests.TrySnapshot(state);
+                        if (pending == null)
                         {
                             RuntimeDiagnosticsService.Instance.Write(
                                 "history",
@@ -3710,6 +3519,14 @@ namespace Unison.Uwp.Services.WhatsApp
                                 "requestId=" + state.RequestId + "; reason=request-cleared");
                             return;
                         }
+
+                        bool ackAccepted = pending.AckAccepted;
+                        DateTime lastProgressUtc = pending.LastProgressUtc;
+                        string lastProgressReason = pending.LastProgressReason;
+                        int progressSignals = pending.ProgressSignalCount;
+                        int baselineCount = pending.BaselineMessageCount;
+                        string triggerReason = pending.TriggerReason ?? "unspecified";
+                        DateTime requestedAtUtc = pending.RequestedAtUtc;
 
                         DateTime nowUtc = DateTime.UtcNow;
                         if (lastProgressUtc == DateTime.MinValue)
@@ -3741,18 +3558,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             continue;
                         }
 
-                        bool clearedPendingRequest = false;
-                        lock (_historyOnDemandLock)
-                        {
-                            if (_historyOnDemandRequestById.TryGetValue(state.RequestId, out var pendingState) &&
-                                object.ReferenceEquals(pendingState, state))
-                            {
-                                ClearHistoryRequestStateLocked(pendingState);
-                                clearedPendingRequest = true;
-                            }
-                        }
-
-                        if (!clearedPendingRequest)
+                        if (!_historyRequests.TryClear(state))
                         {
                             return;
                         }
@@ -3778,30 +3584,24 @@ namespace Unison.Uwp.Services.WhatsApp
             });
         }
 
-        private void ScheduleAcceptedHistoryRequestTimeout(HistoryOnDemandRequestState state)
+        private void ScheduleAcceptedHistoryRequestTimeout(HistoryOnDemandRequest state)
         {
             if (state == null || string.IsNullOrWhiteSpace(state.RequestId))
             {
                 return;
             }
 
-            lock (_historyOnDemandLock)
+            if (!_historyRequests.TryArmTimeout(state))
             {
-                if (!_historyOnDemandRequestById.TryGetValue(state.RequestId, out var currentState) ||
-                    !object.ReferenceEquals(currentState, state) ||
-                    state.TimeoutTaskStarted)
-                {
-                    return;
-                }
-
-                state.TimeoutTaskStarted = true;
+                return;
             }
 
-            TimeSpan timeout = string.Equals(state.RequestType, "FullHistorySyncOnDemand", StringComparison.Ordinal)
+            bool isFullHistory = state.Kind == HistoryOnDemandKind.FullHistory;
+            TimeSpan timeout = isFullHistory
                 ? FullHistoryOnDemandResponseTimeout
                 : HistoryOnDemandResponseTimeout;
 
-            if (string.Equals(state.RequestType, "FullHistorySyncOnDemand", StringComparison.Ordinal))
+            if (isFullHistory)
             {
                 ScheduleFullHistoryCatchUpWatchdog(state);
             }
@@ -3810,72 +3610,29 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 await Task.Delay(timeout);
 
-                bool requestStillPending = false;
-                int currentMessageCount = 0;
-                int progressSignals = 0;
-                string lastProgressReason = null;
-                DateTime lastProgressUtc = DateTime.MinValue;
-
-                lock (_historyOnDemandLock)
-                {
-                    if (_historyOnDemandRequestById.TryGetValue(state.RequestId, out var pendingState) &&
-                        object.ReferenceEquals(pendingState, state))
-                    {
-                        requestStillPending = true;
-                        progressSignals = pendingState.ProgressSignalCount;
-                        lastProgressReason = pendingState.LastProgressReason;
-                        lastProgressUtc = pendingState.LastProgressUtc;
-                        _historyOnDemandRequestById.Remove(state.RequestId);
-
-                        if (string.Equals(state.RequestType, "HistorySyncOnDemand", StringComparison.Ordinal))
-                        {
-                            _historyOnDemandInFlight.Remove(state.ChatJid);
-                            if (_historyOnDemandLastRequestIdByChat.TryGetValue(state.ChatJid, out var lastRequestId) &&
-                                string.Equals(lastRequestId, state.RequestId, StringComparison.Ordinal))
-                            {
-                                _historyOnDemandLastRequestIdByChat.Remove(state.ChatJid);
-                            }
-
-                            if (_historyOnDemandMarkerByChat.TryGetValue(state.ChatJid, out var existingMarker) &&
-                                string.Equals(existingMarker, state.Marker, StringComparison.Ordinal))
-                            {
-                                _historyOnDemandMarkerByChat.Remove(state.ChatJid);
-                            }
-
-                            if (MessagesByChat.TryGet(state.ChatJid, out var currentMessages) && currentMessages != null)
-                            {
-                                currentMessageCount = currentMessages.Count;
-                            }
-                        }
-                        else if (string.Equals(state.RequestType, "FullHistorySyncOnDemand", StringComparison.Ordinal))
-                        {
-                            if (string.Equals(_fullHistoryOnDemandRequestId, state.RequestId, StringComparison.Ordinal))
-                            {
-                                _fullHistoryOnDemandRequestId = null;
-                            }
-
-                            if (string.Equals(_fullHistoryRepairRequestId, state.RequestId, StringComparison.Ordinal))
-                            {
-                                _fullHistoryRepairRequestId = null;
-                            }
-
-                            _fullHistoryOnDemandRequestedThisSession = false;
-                        }
-                    }
-                }
-
-                if (!requestStillPending)
+                HistoryOnDemandRequest expired = _historyRequests.TryExpire(state);
+                if (expired == null)
                 {
                     return;
                 }
 
-                if (string.Equals(state.RequestType, "FullHistorySyncOnDemand", StringComparison.Ordinal))
+                int progressSignals = expired.ProgressSignalCount;
+                string lastProgressReason = expired.LastProgressReason;
+                DateTime lastProgressUtc = expired.LastProgressUtc;
+                int currentMessageCount;
+                if (isFullHistory)
                 {
                     currentMessageCount = GetStoredMessageCount();
                 }
+                else
+                {
+                    currentMessageCount = MessagesByChat.TryGet(state.ChatJid, out var currentMessages) && currentMessages != null
+                        ? currentMessages.Count
+                        : 0;
+                }
 
                 Debug.WriteLine(
-                    "[WhatsAppService] " + state.RequestType + " timed out: requestId=" + state.RequestId +
+                    "[WhatsAppService] " + state.TypeName + " timed out: requestId=" + state.RequestId +
                     ", chat=" + (state.ChatJid ?? "<full-history>") +
                     ", baseline=" + state.BaselineMessageCount +
                     ", current=" + currentMessageCount +
@@ -3885,7 +3642,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     ", lastProgressUtc=" + (lastProgressUtc == DateTime.MinValue ? "<none>" : lastProgressUtc.ToString("O")) +
                     ", trigger=" + (state.TriggerReason ?? "unspecified"));
 
-                if (string.Equals(state.RequestType, "FullHistorySyncOnDemand", StringComparison.Ordinal))
+                if (isFullHistory)
                 {
                     Debug.WriteLine(
                         "[WhatsAppService] FullHistorySyncOnDemand hard timeout: evaluating catch-up continue.");
@@ -3900,7 +3657,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         "; trigger=" + (state.TriggerReason ?? string.Empty));
                     DecideCatchUpAfterIdleBatch(
                         state.RequestId,
-                        state.AckAccepted,
+                        expired.AckAccepted,
                         progressSignals,
                         state.TriggerReason ?? "hard-timeout",
                         (int)timeout.TotalMilliseconds);
@@ -3908,81 +3665,19 @@ namespace Unison.Uwp.Services.WhatsApp
             });
         }
 
-        private void ClearHistoryRequestStateLocked(HistoryOnDemandRequestState state)
-        {
-            if (state == null)
-            {
-                return;
-            }
-
-            _historyOnDemandRequestById.Remove(state.RequestId);
-
-            if (string.Equals(state.RequestType, "HistorySyncOnDemand", StringComparison.Ordinal))
-            {
-                _historyOnDemandInFlight.Remove(state.ChatJid);
-
-                if (_historyOnDemandLastRequestIdByChat.TryGetValue(state.ChatJid, out var lastRequestId) &&
-                    string.Equals(lastRequestId, state.RequestId, StringComparison.Ordinal))
-                {
-                    _historyOnDemandLastRequestIdByChat.Remove(state.ChatJid);
-                }
-
-                if (_historyOnDemandMarkerByChat.TryGetValue(state.ChatJid, out var marker) &&
-                    string.Equals(marker, state.Marker, StringComparison.Ordinal))
-                {
-                    _historyOnDemandMarkerByChat.Remove(state.ChatJid);
-                }
-            }
-            else if (string.Equals(state.RequestType, "FullHistorySyncOnDemand", StringComparison.Ordinal))
-            {
-                if (string.Equals(_fullHistoryOnDemandRequestId, state.RequestId, StringComparison.Ordinal))
-                {
-                    _fullHistoryOnDemandRequestId = null;
-                }
-
-                if (string.Equals(_fullHistoryRepairRequestId, state.RequestId, StringComparison.Ordinal))
-                {
-                    _fullHistoryRepairRequestId = null;
-                }
-
-                _fullHistoryOnDemandRequestedThisSession = false;
-            }
-        }
-
         private void ClearFullHistoryOnDemandRequestState(string reason)
         {
-            lock (_historyOnDemandLock)
+            switch (_historyRequests.ClearFull(out string requestId, out string repairId))
             {
-                string requestId = _fullHistoryOnDemandRequestId;
-                if (!string.IsNullOrWhiteSpace(requestId) &&
-                    _historyOnDemandRequestById.TryGetValue(requestId, out var state))
-                {
-                    ClearHistoryRequestStateLocked(state);
+                case HistoryOnDemandFullClear.Tracked:
                     Debug.WriteLine($"[WhatsAppService] Cleared full-history request state after {reason}: requestId={requestId}");
                     EndHistoryCatchUpBanner("clear-full-history:" + reason);
                     return;
-                }
 
-                if (_fullHistoryOnDemandRequestedThisSession ||
-                    !string.IsNullOrWhiteSpace(_fullHistoryOnDemandRequestId) ||
-                    !string.IsNullOrWhiteSpace(_fullHistoryRepairRequestId))
-                {
-                    if (!string.IsNullOrWhiteSpace(_fullHistoryOnDemandRequestId))
-                    {
-                        _historyOnDemandRequestById.Remove(_fullHistoryOnDemandRequestId);
-                    }
-
-                    if (!string.IsNullOrWhiteSpace(_fullHistoryRepairRequestId))
-                    {
-                        _historyOnDemandRequestById.Remove(_fullHistoryRepairRequestId);
-                    }
-
-                    Debug.WriteLine($"[WhatsAppService] Cleared stale full-history request flags after {reason}: requestId={_fullHistoryOnDemandRequestId ?? "<none>"}, repairId={_fullHistoryRepairRequestId ?? "<none>"}");
-                    _fullHistoryOnDemandRequestedThisSession = false;
-                    _fullHistoryOnDemandRequestId = null;
-                    _fullHistoryRepairRequestId = null;
+                case HistoryOnDemandFullClear.Stale:
+                    Debug.WriteLine($"[WhatsAppService] Cleared stale full-history request flags after {reason}: requestId={requestId ?? "<none>"}, repairId={repairId ?? "<none>"}");
                     EndHistoryCatchUpBanner("clear-full-history:" + reason);
-                }
+                    return;
             }
         }
 
@@ -4392,45 +4087,22 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            HistoryOnDemandRequestState state;
-            bool hasState;
-            lock (_historyOnDemandLock)
+            HistoryOnDemandRequest state = _historyRequests.Ack(ackId, ackError, DateTime.UtcNow);
+            if (state == null)
             {
-                hasState = _historyOnDemandRequestById.TryGetValue(ackId, out state);
-                if (!hasState) return;
-
-                if (!string.IsNullOrWhiteSpace(ackError))
-                {
-                    ClearHistoryRequestStateLocked(state);
-                }
-                else
-                {
-                    state.AckAccepted = true;
-                    state.AckAcceptedUtc = DateTime.UtcNow;
-                }
+                return;
             }
 
             if (!string.IsNullOrWhiteSpace(ackError))
             {
-                if (string.Equals(state.RequestType, "HistorySyncOnDemand", StringComparison.Ordinal))
-                {
-                    lock (_historyOnDemandLock)
-                    {
-                        TimeSpan backoff = string.Equals(ackError, "479", StringComparison.OrdinalIgnoreCase)
-                            ? TimeSpan.FromMinutes(15)
-                            : TimeSpan.FromMinutes(3);
-                        _historyOnDemandRejectedUntilUtcByChat[state.ChatJid] = DateTime.UtcNow.Add(backoff);
-                    }
-                }
-
-                Debug.WriteLine($"[WhatsAppService] {state.RequestType} ack rejected: id={ackId}, chat={state.ChatJid ?? "<full-history>"}, error={ackError}, trigger={state.TriggerReason ?? "unspecified"}");
-                if (string.Equals(state.RequestType, "HistorySyncOnDemand", StringComparison.Ordinal) &&
+                Debug.WriteLine($"[WhatsAppService] {state.TypeName} ack rejected: id={ackId}, chat={state.ChatJid ?? "<full-history>"}, error={ackError}, trigger={state.TriggerReason ?? "unspecified"}");
+                if (state.Kind == HistoryOnDemandKind.Chat &&
                     string.Equals(ackError, "479", StringComparison.OrdinalIgnoreCase))
                 {
                     Debug.WriteLine($"[WhatsAppService] Not escalating HISTORY_SYNC_ON_DEMAND 479 for {state.ChatJid} into FULL_HISTORY_SYNC_ON_DEMAND. Treating as server rejection with backoff.");
                 }
 
-                if (string.Equals(state.RequestType, "FullHistorySyncOnDemand", StringComparison.Ordinal) &&
+                if (state.Kind == HistoryOnDemandKind.FullHistory &&
                     IsUserConversationResyncWaiting())
                 {
                     EndHistoryCatchUpBanner("full-history-ack-rejected");
@@ -4441,8 +4113,8 @@ namespace Unison.Uwp.Services.WhatsApp
             }
             else
             {
-                Debug.WriteLine($"[WhatsAppService] {state.RequestType} ack accepted: id={ackId}, chat={state.ChatJid ?? "<full-history>"}, baseline={state.BaselineMessageCount}, trigger={state.TriggerReason ?? "unspecified"}. Waiting for follow-up payload.");
-                if (string.Equals(state.RequestType, "FullHistorySyncOnDemand", StringComparison.Ordinal))
+                Debug.WriteLine($"[WhatsAppService] {state.TypeName} ack accepted: id={ackId}, chat={state.ChatJid ?? "<full-history>"}, baseline={state.BaselineMessageCount}, trigger={state.TriggerReason ?? "unspecified"}. Waiting for follow-up payload.");
+                if (state.Kind == HistoryOnDemandKind.FullHistory)
                 {
                     NoteFullHistoryCatchUpProgress("ack-accepted");
                 }
@@ -4459,11 +4131,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return false;
             }
 
-            lock (_historyOnDemandLock)
-            {
-                return _historyOnDemandInFlight.Contains(normJid) ||
-                       _historyOnDemandLastRequestIdByChat.ContainsKey(normJid);
-            }
+            return _historyRequests.IsChatPending(normJid);
         }
 
         public Task<bool> EnsureHistoryOnDemandAsync(string chatJid, int count = 30)
@@ -4491,55 +4159,23 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             string marker = $"{oldest.Id}|{oldest.IsFromMe}|{ToUnixMilliseconds(oldest.Timestamp)}";
-            DateTime utcNow = DateTime.UtcNow;
-            lock (_historyOnDemandLock)
+            HistoryOnDemandChatGate gate = _historyRequests.TryBeginChat(normJid, marker, DateTime.UtcNow, out DateTime rejectedUntilUtc);
+            if (gate == HistoryOnDemandChatGate.BackedOff)
             {
-                if (_historyOnDemandInFlight.Contains(normJid))
-                {
-                    return false;
-                }
-
-                if (_historyOnDemandRejectedUntilUtcByChat.TryGetValue(normJid, out var rejectedUntilUtc) &&
-                    rejectedUntilUtc > utcNow)
-                {
-                    Debug.WriteLine($"[WhatsAppService] HISTORY_SYNC_ON_DEMAND skipped for {normJid}: backoff active until {rejectedUntilUtc:O}");
-                    return false;
-                }
-
-                if (_historyOnDemandMarkerByChat.TryGetValue(normJid, out var previousMarker) &&
-                    string.Equals(previousMarker, marker, StringComparison.Ordinal))
-                {
-                    return false;
-                }
-
-                _historyOnDemandInFlight.Add(normJid);
+                Debug.WriteLine($"[WhatsAppService] HISTORY_SYNC_ON_DEMAND skipped for {normJid}: backoff active until {rejectedUntilUtc:O}");
             }
 
+            if (gate != HistoryOnDemandChatGate.Started)
+            {
+                return false;
+            }
+
+            string requestId = null;
             try
             {
-                string requestId = _socket.GenerateMessageId();
-                int baselineCount;
-                lock (_historyOnDemandLock)
-                {
-                    _historyOnDemandMarkerByChat[normJid] = marker;
-                    baselineCount = (MessagesByChat.TryGet(normJid, out var msgList) && msgList != null) ? msgList.Count : 0;
-                    _historyOnDemandRequestById[requestId] = new HistoryOnDemandRequestState
-                    {
-                        RequestId = requestId,
-                        RequestType = "HistorySyncOnDemand",
-                        ChatJid = normJid,
-                        Marker = marker,
-                        RequestedAtUtc = DateTime.UtcNow,
-                        BaselineMessageCount = baselineCount,
-                        TriggerReason = triggerReason
-                    };
-                    _historyOnDemandLastRequestIdByChat[normJid] = requestId;
-                    if (!_historyOnDemandAttemptsByChat.ContainsKey(normJid))
-                    {
-                        _historyOnDemandAttemptsByChat[normJid] = 0;
-                    }
-                    _historyOnDemandAttemptsByChat[normJid]++;
-                }
+                requestId = _socket.GenerateMessageId();
+                int baselineCount = (MessagesByChat.TryGet(normJid, out var msgList) && msgList != null) ? msgList.Count : 0;
+                _historyRequests.RegisterChat(normJid, requestId, marker, baselineCount, triggerReason, DateTime.UtcNow);
 
                 string sentRequestId = await _socket.RequestHistorySyncOnDemandAsync(
                     normJid,
@@ -4559,15 +4195,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
             catch (Exception ex)
             {
-                lock (_historyOnDemandLock)
-                {
-                    _historyOnDemandInFlight.Remove(normJid);
-                    if (_historyOnDemandLastRequestIdByChat.TryGetValue(normJid, out var failedRequestId))
-                    {
-                        _historyOnDemandRequestById.Remove(failedRequestId);
-                        _historyOnDemandLastRequestIdByChat.Remove(normJid);
-                    }
-                }
+                _historyRequests.FailChat(normJid, requestId);
                 Debug.WriteLine($"[WhatsAppService] HISTORY_SYNC_ON_DEMAND request failed for {normJid}: {ex.Message}");
                 return false;
             }
@@ -4575,9 +4203,9 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private async Task<bool> RequestFullHistoryOnDemandTrackedAsync(string reason, bool isFreshnessRepair)
         {
-            if (_fullHistoryOnDemandRequestedThisSession)
+            if (_historyRequests.IsFullClaimed)
             {
-                Debug.WriteLine($"[WhatsAppService] FULL_HISTORY_SYNC_ON_DEMAND skipped ({reason}): request already pending this session, requestId={_fullHistoryOnDemandRequestId ?? "<none>"}");
+                Debug.WriteLine($"[WhatsAppService] FULL_HISTORY_SYNC_ON_DEMAND skipped ({reason}): request already pending this session, requestId={_historyRequests.FullRequestId ?? "<none>"}");
                 return false;
             }
 
@@ -4587,33 +4215,17 @@ namespace Unison.Uwp.Services.WhatsApp
                 return false;
             }
 
-            _fullHistoryOnDemandRequestedThisSession = true;
+            if (!_historyRequests.TryClaimFull())
+            {
+                Debug.WriteLine($"[WhatsAppService] FULL_HISTORY_SYNC_ON_DEMAND skipped ({reason}): claimed concurrently");
+                return false;
+            }
+
             try
             {
-                DateTime requestedAtUtc = DateTime.UtcNow;
                 int baselineCount = GetStoredMessageCount();
                 string stanzaId = _socket.GenerateMessageId();
-                lock (_historyOnDemandLock)
-                {
-                    _fullHistoryOnDemandRequestId = stanzaId;
-                    if (isFreshnessRepair)
-                    {
-                        _fullHistoryRepairRequestId = stanzaId;
-                    }
-
-                    _historyOnDemandRequestById[stanzaId] = new HistoryOnDemandRequestState
-                    {
-                        RequestId = stanzaId,
-                        RequestType = "FullHistorySyncOnDemand",
-                        RequestedAtUtc = requestedAtUtc,
-                        BaselineMessageCount = baselineCount,
-                        Marker = reason ?? string.Empty,
-                        TriggerReason = reason,
-                        LastProgressUtc = requestedAtUtc,
-                        LastProgressReason = "request-sent",
-                        ProgressSignalCount = 0
-                    };
-                }
+                _historyRequests.RegisterFull(stanzaId, isFreshnessRepair, baselineCount, reason, DateTime.UtcNow);
 
                 string sentStanzaId = await _socket.RequestFullHistorySyncOnDemandAsync(stanzaId);
                 if (!string.Equals(sentStanzaId, stanzaId, StringComparison.Ordinal))
@@ -4645,19 +4257,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
             catch (Exception ex)
             {
-                lock (_historyOnDemandLock)
-                {
-                    if (!string.IsNullOrWhiteSpace(_fullHistoryOnDemandRequestId))
-                    {
-                        _historyOnDemandRequestById.Remove(_fullHistoryOnDemandRequestId);
-                    }
-                    _fullHistoryOnDemandRequestedThisSession = false;
-                    _fullHistoryOnDemandRequestId = null;
-                    if (isFreshnessRepair)
-                    {
-                        _fullHistoryRepairRequestId = null;
-                    }
-                }
+                _historyRequests.FailFull(isFreshnessRepair);
                 Debug.WriteLine($"[WhatsAppService] FULL_HISTORY_SYNC_ON_DEMAND request failed ({reason}): {ex.Message}");
                 return false;
             }
@@ -4673,23 +4273,7 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             if (force)
             {
-                lock (_historyOnDemandLock)
-                {
-                    if (!string.IsNullOrWhiteSpace(_fullHistoryOnDemandRequestId))
-                    {
-                        _historyOnDemandRequestById.Remove(_fullHistoryOnDemandRequestId);
-                    }
-
-                    if (!string.IsNullOrWhiteSpace(_fullHistoryRepairRequestId) &&
-                        !string.Equals(_fullHistoryRepairRequestId, _fullHistoryOnDemandRequestId, StringComparison.Ordinal))
-                    {
-                        _historyOnDemandRequestById.Remove(_fullHistoryRepairRequestId);
-                    }
-
-                    _fullHistoryOnDemandRequestedThisSession = false;
-                    _fullHistoryOnDemandRequestId = null;
-                    _fullHistoryRepairRequestId = null;
-                }
+                _historyRequests.ForceReleaseFull();
             }
 
             return RequestFullHistoryOnDemandTrackedAsync(
@@ -4849,11 +4433,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
                 // Adjacent pages: flag must be clear (watchdog / ConnectAsync already clears it).
-                if (_fullHistoryOnDemandRequestedThisSession &&
-                    string.IsNullOrWhiteSpace(_fullHistoryOnDemandRequestId))
-                {
-                    _fullHistoryOnDemandRequestedThisSession = false;
-                }
+                _historyRequests.ReleaseFullIfUntracked();
 
                 bool ok = await RequestFullHistoryOnDemandTrackedAsync(
                     reason,

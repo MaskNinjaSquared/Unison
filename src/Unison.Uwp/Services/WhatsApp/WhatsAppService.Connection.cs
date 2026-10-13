@@ -664,13 +664,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 Chats.Clear();
                 MessagesByChat.Clear();
                 _messageIdIndex.Clear();
-                lock (_historyOnDemandLock)
-                {
-                    _historyOnDemandMarkerByChat.Clear();
-                    _historyOnDemandInFlight.Clear();
-                    _historyOnDemandRequestById.Clear();
-                    _historyOnDemandLastRequestIdByChat.Clear();
-                }
+                _historyRequests.ClearRequests();
                 ContactNames.Clear();
                 PhoneContactNamesByJid.Clear();
                 JidAlias.Clear();
@@ -1170,20 +1164,11 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
                 Debug.WriteLine($"[WhatsAppService] ConnectAsync using AuthState (ObjID: {auth.GetHashCode()}), Registered: {auth.Registered}, Me: {auth.Me?.Id}");
-                _fullHistoryOnDemandRequestedThisSession = false;
-                _fullHistoryOnDemandRequestId = null;
-                _fullHistoryRepairRequestId = null;
+                _historyRequests.ReleaseFull();
                 _lastHistorySyncReceivedUtc = DateTime.MinValue;
                 _lastHistorySyncTypeReceived = null;
-                lock (_historyOnDemandLock)
-                {
-                    _historyOnDemandMarkerByChat.Clear();
-                    _historyOnDemandInFlight.Clear();
-                    _historyOnDemandRequestById.Clear();
-                    _historyOnDemandLastRequestIdByChat.Clear();
-                    _historyOnDemandAttemptsByChat.Clear();
-                    _historyOnDemandRejectedUntilUtcByChat.Clear();
-                }
+                _historyRequests.ClearRequests();
+                _historyRequests.ClearBackoff();
                 
                 bool reuseLoadedKeyState = _sharedKeyStore != null &&
                                            (auth.Sessions.Count > 0 || auth.PreKeys.Count > 0);

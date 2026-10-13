@@ -214,10 +214,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 MessagesByChat.Remove(canonical);
                 _messageIdIndex.RemoveChat(canonical);
                 ForgetMissingMessagesForChat(canonical);
-                _historyOnDemandMarkerByChat.Remove(canonical);
-                _historyOnDemandLastRequestIdByChat.Remove(canonical);
-                _historyOnDemandAttemptsByChat.Remove(canonical);
-                _historyOnDemandRejectedUntilUtcByChat.Remove(canonical);
+                _historyRequests.ForgetChat(canonical);
                 _missing.Cooldowns.Remove(canonical);
             });
 

@@ -860,6 +860,31 @@ already documents. Both branches now go through one `Absorb`. What the dedupe pa
 client — moving messages between keys, filing the alias, removing rows — is chat-state surgery and
 stays until the timeline leaves the client.
 
+### History on demand — the bookkeeping left first
+
+The on-demand history cluster (per-chat `HISTORY_SYNC_ON_DEMAND`, the paginated
+`FULL_HISTORY_SYNC_ON_DEMAND` catch-up, its watchdog and timeouts) is headed for `HistoryFacade`,
+but it reaches the socket, the reconnect path, the catch-up banner and the enrichment gate, so it
+moves in slices. **Slice 1 is done:** `HistoryOnDemandRegistry` (`Unison.Core/State`, 33 tests) owns
+what was asked and is still owed — six collections, three full-history fields and a nested state
+class that four partials reached into, some of them (`AppState`, the frugal-budget and enrichment
+reads, the avatar-fetch deferral) outside the lock. The "forget this request" rule was written out
+three times (the shared helper, an inline copy in the timeout, the stale-flags branch); it is one
+method now, and the 479 / three-minute backoff moved with the ack.
+
+Behaviour kept, two edges recorded rather than endorsed: a failed chat send keeps its anchor, so the
+same page is not retried until the next connect; deleting a chat leaves a request already out to be
+answered or time out. Deliberate differences: claiming the full catch-up is atomic (it was a
+check-then-set on a volatile flag); a failure before an id is registered no longer drops the
+*previous* request's entry; the quiet-SQLite hand-off finds the pending full request the same way
+progress stamping does (full id, then repair id); the per-chat attempt counter is gone (written,
+never read); and the banner is ended outside the lock instead of inside it.
+
+**Next slices:** the catch-up continuation state (`_catchUpWatermarkUtc`, round, stagnant cycles,
+the post-offline-drain decision) as a Core type; then the request / watchdog / timeout orchestration
+onto `HistoryFacade` behind a host port. The two soft-reconnect fallbacks stay in the client — they
+are connection lifecycle (phase 4).
+
 ### Phase 4 — What remains is connection
 
 `.Connection.cs` is this phase's target file. **No further pure-rule extraction there:**

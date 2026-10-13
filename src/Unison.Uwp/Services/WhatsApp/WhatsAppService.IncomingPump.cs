@@ -264,11 +264,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return false;
             }
 
-            bool historyOnDemandInFlight;
-            lock (_historyOnDemandLock)
-            {
-                historyOnDemandInFlight = _historyOnDemandInFlight.Count > 0;
-            }
+            bool historyOnDemandInFlight = _historyRequests.ChatsInFlight > 0;
 
             return PlaceholderResendDeferral.IsDeferred(
                 ShouldDeferReconnectReplayWork(),
@@ -692,14 +688,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             PlaceholderResendRequestState requestState = _missing.TakePeerResponse(response.StanzaId);
 
-            HistoryOnDemandRequestState historyRequestState = null;
-            lock (_historyOnDemandLock)
-            {
-                if (!string.IsNullOrWhiteSpace(response.StanzaId))
-                {
-                    _historyOnDemandRequestById.TryGetValue(response.StanzaId, out historyRequestState);
-                }
-            }
+            HistoryOnDemandRequest historyRequestState = _historyRequests.Find(response.StanzaId);
 
             foreach (var result in response.PeerDataOperationResult ?? Enumerable.Empty<Proto.Message.Types.PeerDataOperationRequestResponseMessage.Types.PeerDataOperationResult>())
             {
@@ -738,7 +727,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 (response.PeerDataOperationRequestType == Proto.Message.Types.PeerDataOperationRequestType.FullHistorySyncOnDemand ||
                  response.PeerDataOperationRequestType == Proto.Message.Types.PeerDataOperationRequestType.HistorySyncOnDemand))
             {
-                Debug.WriteLine($"[WhatsAppService] PeerDataOperationResponse completed without immediate history payload: requestType={historyRequestState.RequestType}, stanzaId={response.StanzaId}, chat={historyRequestState.ChatJid ?? "<full-history>"}, baseline={historyRequestState.BaselineMessageCount}, trigger={historyRequestState.TriggerReason ?? "unspecified"}");
+                Debug.WriteLine($"[WhatsAppService] PeerDataOperationResponse completed without immediate history payload: requestType={historyRequestState.TypeName}, stanzaId={response.StanzaId}, chat={historyRequestState.ChatJid ?? "<full-history>"}, baseline={historyRequestState.BaselineMessageCount}, trigger={historyRequestState.TriggerReason ?? "unspecified"}");
             }
         }
 

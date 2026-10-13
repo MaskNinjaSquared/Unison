@@ -4,6 +4,14 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## On-demand history bookkeeping
+
+What history has been requested from the phone and is still owed — per-chat pages and
+the full catch-up — is one Core type (`HistoryOnDemandRegistry`) instead of nine fields
+spread over four files. Every read and write now happens under its lock (deleting a
+chat, the frugal-budget check and the avatar-fetch deferral used to read or write
+outside it), and claiming the full catch-up can no longer be won by two callers at once.
+
 ## Chat window trim and duplicate-row merge rules
 
 The open chat's in-memory window (`ActiveChatMessageWindow`) and the dedupe pass's
