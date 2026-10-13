@@ -749,11 +749,8 @@ namespace Unison.Uwp.Services.WhatsApp
         // Offline messages are intentionally kept off the UI thread while a large replay
         // is draining. Keep a compact per-chat summary so the chat list can still be
         // updated after the in-memory message cache is released for inactive chats.
-        private readonly object _offlineReplayUiLock = new object();
         private readonly SemaphoreSlim _offlineReplayUiApplyLock = new SemaphoreSlim(1, 1);
-        private readonly Dictionary<string, OfflineReplayChatSummary> _offlineReplayUiSummaries =
-            new Dictionary<string, OfflineReplayChatSummary>(StringComparer.OrdinalIgnoreCase);
-        private System.Threading.Timer _offlineReplayUiTimer;
+        private readonly OfflineReplaySummaryBook _offlineReplay = new OfflineReplaySummaryBook();
         private static readonly TimeSpan OfflineReplayUiDebounce = TimeSpan.FromMilliseconds(180);
 
         // Somente a conversa aberta deve manter uma janela grande de mensagens em RAM.

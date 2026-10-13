@@ -4,6 +4,19 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Offline replay tips — one book
+
+The compact per-chat tips gathered during an offline replay now live in
+`OfflineReplaySummaryBook`. Recording a tip and putting it back after a failed
+list apply share that book. The 180 ms timer still fires from the incoming pump.
+
+## Alias addresses for one person
+
+Which direct chats to search when a message might already exist under the contact's
+other identity is `AliasLinkedDirectChats`. A group address is not one of them.
+
+---
+
 ## Alias duplicate bubble — one move
 
 When the same message is held under both addresses of one person, moving it onto the

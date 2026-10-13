@@ -65,23 +65,10 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private IReadOnlyList<string> GetAliasLinkedDirectChatJids(string chatJid)
         {
-            var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var candidate in ExpandNameLookupCandidates(chatJid))
-            {
-                string normalized = NormalizeJid(candidate);
-                if (string.IsNullOrWhiteSpace(normalized) || normalized.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                candidates.Add(normalized);
-                candidates.Add(GetCanonicalJid(normalized));
-            }
-
-            return candidates
-                .Where(c => !string.IsNullOrWhiteSpace(c))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
+            return AliasLinkedDirectChats.Collect(
+                ExpandNameLookupCandidates(chatJid),
+                NormalizeJid,
+                GetCanonicalJid);
         }
 
         private bool TryFindAliasLinkedMessage(string chatJid, string messageId, out string existingChatJid, out ChatMessage existingMessage)
@@ -2271,50 +2258,38 @@ namespace Unison.Uwp.Services.WhatsApp
                     IsActiveChatJid(canonical),
                     Unison.Uwp.App.IsWindowVisible).CountsAsUnread;
 
-            lock (_offlineReplayUiLock)
-            {
-                if (!_offlineReplayUiSummaries.TryGetValue(canonical, out var summary))
+            // Throttle instead of debounce: the book arms one timer, so the first recovered
+            // conversation shows within ~180 ms even while a long replay continues.
+            _offlineReplay.Record(
+                canonical,
+                preview,
+                timestamp,
+                isGroup,
+                isFromMe,
+                kind,
+                status,
+                authorPrefix,
+                incrementUnread,
+                DateTime.UtcNow,
+                participantJid,
+                senderName,
+                OfflineReplayUiDebounce,
+                () =>
                 {
-                    summary = OfflineReplaySummaryMerge.Create(canonical, isGroup);
-                    _offlineReplayUiSummaries[canonical] = summary;
-                }
-
-                OfflineReplaySummaryMerge.Record(
-                    summary,
-                    preview,
-                    timestamp,
-                    isGroup,
-                    isFromMe,
-                    kind,
-                    status,
-                    authorPrefix,
-                    incrementUnread,
-                    DateTime.UtcNow,
-                    participantJid,
-                    senderName);
-
-                // Throttle instead of debounce: show the first recovered conversation
-                // within ~180 ms even while a long replay continues. Further messages
-                // schedule the next small UI batch after the current timer is consumed.
-                if (_offlineReplayUiTimer == null)
-                {
-                    _offlineReplayUiTimer = new System.Threading.Timer(async _ =>
+                    ApplyOfflineReplayChatSummariesAsync("replay-progressive").ContinueWith(finished =>
                     {
-                        try
+                        if (finished.Exception == null)
                         {
-                            await ApplyOfflineReplayChatSummariesAsync("replay-progressive");
+                            return;
                         }
-                        catch (Exception ex)
-                        {
-                            RuntimeDiagnosticsService.Instance.RecordException(
-                                "messages",
-                                "offline-summary-apply-failed",
-                                ex,
-                                "reason=replay-progressive");
-                        }
-                    }, null, (int)OfflineReplayUiDebounce.TotalMilliseconds, Timeout.Infinite);
-                }
-            }
+
+                        RuntimeDiagnosticsService.Instance.RecordException(
+                            "messages",
+                            "offline-summary-apply-failed",
+                            finished.Exception.GetBaseException(),
+                            "reason=replay-progressive");
+                    });
+                });
         }
 
         private async Task ApplyOfflineReplayChatSummariesAsync(string reason)
@@ -2323,32 +2298,10 @@ namespace Unison.Uwp.Services.WhatsApp
             Dictionary<string, OfflineReplayChatSummary> snapshot = null;
             try
             {
-                lock (_offlineReplayUiLock)
+                snapshot = _offlineReplay.Take();
+                if (snapshot == null)
                 {
-                    if (_offlineReplayUiSummaries.Count == 0)
-                    {
-                        return;
-                    }
-
-                    snapshot = _offlineReplayUiSummaries.ToDictionary(
-                        pair => pair.Key,
-                        pair => new OfflineReplayChatSummary
-                        {
-                            Jid = pair.Value.Jid,
-                            Preview = pair.Value.Preview,
-                            Timestamp = pair.Value.Timestamp,
-                            IsGroup = pair.Value.IsGroup,
-                            IsFromMe = pair.Value.IsFromMe,
-                            UnreadDelta = pair.Value.UnreadDelta,
-                            Kind = pair.Value.Kind,
-                            Status = pair.Value.Status,
-                            AuthorPrefix = pair.Value.AuthorPrefix
-                        },
-                        StringComparer.OrdinalIgnoreCase);
-
-                    _offlineReplayUiSummaries.Clear();
-                    _offlineReplayUiTimer?.Dispose();
-                    _offlineReplayUiTimer = null;
+                    return;
                 }
 
                 if (_chatService == null)
@@ -2371,19 +2324,7 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 if (snapshot != null)
                 {
-                    lock (_offlineReplayUiLock)
-                    {
-                        foreach (var pair in snapshot)
-                        {
-                            if (!_offlineReplayUiSummaries.TryGetValue(pair.Key, out var current))
-                            {
-                                _offlineReplayUiSummaries[pair.Key] = pair.Value;
-                                continue;
-                            }
-
-                            OfflineReplaySummaryMerge.Reapply(current, pair.Value);
-                        }
-                    }
+                    _offlineReplay.Restore(snapshot);
                 }
                 throw;
             }
