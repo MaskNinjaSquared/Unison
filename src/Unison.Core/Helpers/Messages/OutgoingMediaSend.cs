@@ -86,7 +86,6 @@ namespace Unison.Core.Helpers
                 audio.DurationSeconds,
                 audio.IsVoiceMessage);
             await ShowAsync(chatJid, message, ChatPreviewKind.Voice);
-            _host.PrepareLocalPlayback(message);
             return message;
         }
 

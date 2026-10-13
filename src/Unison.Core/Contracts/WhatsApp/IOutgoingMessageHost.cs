@@ -73,9 +73,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>Uploads and sends. Returns the message id; throws when the send fails.</summary>
         Task<string> SendAudioAsync(string jid, OutgoingAudio audio);
 
-        /// <summary>Starts decoding the clip into something this device can play, without waiting.</summary>
-        void PrepareLocalPlayback(ChatMessage message);
-
         /// <summary>Files the bubble in memory: pending receipts applied, inserted in order, id indexed.</summary>
         void AcceptOutgoing(string chatJid, ChatMessage message);
 

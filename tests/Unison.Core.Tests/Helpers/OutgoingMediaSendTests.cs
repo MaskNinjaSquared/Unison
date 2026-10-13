@@ -109,8 +109,7 @@ namespace Unison.Core.Tests.Helpers
                     "accept:555@s.whatsapp.net:sent",
                     "preview:555@s.whatsapp.net:Voice",
                     "queue-persist:555@s.whatsapp.net",
-                    "changed:555@s.whatsapp.net",
-                    "prepare-playback:AUD1"
+                    "changed:555@s.whatsapp.net"
                 },
                 _host.Log);
             Assert.Equal("555@s.whatsapp.net", m.RemoteJid);
@@ -164,8 +163,6 @@ namespace Unison.Core.Tests.Helpers
                 Log.Add("send-audio:" + jid);
                 return Task.FromResult("AUD1");
             }
-
-            public void PrepareLocalPlayback(ChatMessage message) => Log.Add("prepare-playback:" + message.Id);
 
             public void AcceptOutgoing(string chatJid, ChatMessage message) =>
                 Log.Add("accept:" + chatJid + ":" + message.Status);

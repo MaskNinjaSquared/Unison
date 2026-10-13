@@ -192,8 +192,6 @@ namespace Unison.Core.Tests.Helpers
 
             public Task<string> SendAudioAsync(string jid, OutgoingAudio audio) => throw new NotSupportedException();
 
-            public void PrepareLocalPlayback(ChatMessage message) => throw new NotSupportedException();
-
             public void AcceptOutgoing(string chatJid, ChatMessage message)
             {
                 Log.Add("accept:" + chatJid + ":" + message.Status);
