@@ -301,7 +301,27 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IWhatsAppService>()));
             services.AddSingleton<IStatusService>(sp => sp.GetRequiredService<StatusFacade>());
 
-            services.AddSingleton<IMessageService, MessageFacade>();
+            services.AddSingleton<IMediaDownloadHost>(
+                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+            services.AddSingleton(sp => new MediaDownloadGate(
+                () => ((WhatsAppService)sp.GetRequiredService<IWhatsAppService>()).UsesSingleMediaDownloadSlot));
+            services.AddSingleton<IMessageService>(sp => new MessageFacade(
+                sp.GetRequiredService<IPersonStore>(),
+                sp.GetRequiredService<IWhatsAppService>(),
+                sp.GetRequiredService<IChatMessageMapper>(),
+                sp.GetRequiredService<IReactionMapper>(),
+                sp.GetRequiredService<HistoryFacade>(),
+                sp.GetRequiredService<IHistoryMessageStore>(),
+                sp.GetRequiredService<IJidResolver>(),
+                sp.GetRequiredService<INotificationService>(),
+                sp.GetRequiredService<IOutgoingMessageHost>(),
+                sp.GetRequiredService<IMediaCache>(),
+                sp.GetRequiredService<MediaDerivationService>(),
+                sp.GetRequiredService<MediaDownloadGate>(),
+                sp.GetRequiredService<IMediaDownloadHost>(),
+                sp.GetRequiredService<IChatStore>(),
+                sp.GetRequiredService<IChatStateStore>(),
+                sp.GetRequiredService<ISystemInfoProvider>()));
             services.AddSingleton<IChatMessageVmFactory, ChatMessageVmFactory>();
             services.AddSingleton<IChatDetailInfoViewModelFactory, ChatDetailInfoViewModelFactory>();
             services.AddSingleton<INewChatDialogViewModelFactory, NewChatDialogViewModelFactory>();
@@ -421,6 +441,7 @@ namespace Unison.Uwp
             // already built by then.
             whatsAppImpl.AttachUiDispatcher(rootFrame?.Dispatcher);
             whatsAppImpl.AttachSystemInfoProvider(Services.GetRequiredService<ISystemInfoProvider>());
+            whatsAppImpl.AttachMediaDownloadGate(Services.GetRequiredService<MediaDownloadGate>());
             whatsAppImpl.AttachMessageService(Services.GetRequiredService<IMessageService>());
             whatsAppImpl.AttachChatService(Services.GetRequiredService<IChatService>());
             whatsAppImpl.AttachContactService(Services.GetRequiredService<IContactService>());

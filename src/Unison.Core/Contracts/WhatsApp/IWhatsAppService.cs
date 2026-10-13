@@ -330,17 +330,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         Task<bool> RequestFullHistoryOnDemandAsync(string reason = null, bool force = false);
 
-        Task<string> EnsureAudioAvailableAsync(ChatMessage message);
-
-        /// <summary>Downloads + decrypts an image on demand, caching the local URI on the message.</summary>
-        Task<string> EnsureImageAvailableAsync(ChatMessage message);
-
-        /// <summary>Downloads + decrypts a video on demand, caching the local URI (+ poster) on the message.</summary>
-        Task<string> EnsureVideoAvailableAsync(ChatMessage message);
-
-        /// <summary>Downloads + decrypts a document on demand, caching the local URI on the message.</summary>
-        Task<string> EnsureDocumentAvailableAsync(ChatMessage message);
-
         Task SetMessagePinnedAsync(string chatJid, ChatMessage message, bool pin, uint durationSeconds = 604800);
 
         /// <summary>

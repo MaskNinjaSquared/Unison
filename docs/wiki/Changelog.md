@@ -4,6 +4,14 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## On-demand media download — on `MessageFacade`
+
+Opening an image, a sticker, a voice note, a video or a document no longer downloads inside
+`WhatsAppService`. `MessageFacade` does it. The phone still allows one download at a time and the
+desktop three, and a picture that arrives live waits on that same gate.
+
+---
+
 ## Playback repair — PNG sibling and playable voice note
 
 Building the PNG a phone can show, and the M4A or WAV a phone can play, left the download methods.

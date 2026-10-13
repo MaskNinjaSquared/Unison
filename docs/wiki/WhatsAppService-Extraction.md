@@ -285,7 +285,9 @@ thumbnail. Both paths now go through `EnsureVideoPosterAsync`.
 What is still in the client is the call that writes the repaired URI back onto the message and
 persists it. Building the PNG sibling and the playable M4A/WAV now runs in `MediaDerivationService`
 (`RepairWebPForDisplayAsync`, `EnsurePlayableAsync`). `WebPDisplayName` keeps a repair from nesting
-`_display` on a file that is already the sibling.
+`_display` on a file that is already the sibling. The four on-demand downloads themselves now run
+from `MessageFacade`, and they share `MediaDownloadGate` with the live image and sticker hydrate
+so a phone still fetches one file at a time.
 
 **3.7a is done, and it did not fold into `LidMappingStore`.** The plan above said to merge the
 session alias map into `LidMappingStore`, whose own header says it exists to replace exactly that.

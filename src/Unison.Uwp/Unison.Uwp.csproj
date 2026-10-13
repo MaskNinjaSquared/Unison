@@ -142,6 +142,7 @@
     <Compile Include="Services\AvatarCacheService.cs" />
     <Compile Include="Services\MediaCacheService.cs" />
     <Compile Include="Services\MediaDerivationService.cs" />
+    <Compile Include="Services\MediaDownloadGate.cs" />
     <Compile Include="Services\WhatsApp\Messages\ReceiptReader.cs" />
     <Compile Include="Services\UsyncGate.cs" />
     <Compile Include="Services\WhatsApp\Contacts\AvatarFetcher.cs" />
@@ -164,6 +165,7 @@
     <Compile Include="Services\WhatsApp\History\HistoryThumbnailMaterializer.cs" />
     <Compile Include="Services\WhatsApp\Status\StatusFacade.cs" />
     <Compile Include="Services\WhatsApp\Messages\MessageFacade.cs" />
+    <Compile Include="Services\WhatsApp\Messages\MediaAvailability.cs" />
     <Compile Include="Services\WhatsApp\Profiles\ProfileFacade.cs" />
     <Compile Include="Services\Socket\DelegateSocketLog.cs" />
     <Compile Include="Services\Socket\SocketSliceProbe.cs" />

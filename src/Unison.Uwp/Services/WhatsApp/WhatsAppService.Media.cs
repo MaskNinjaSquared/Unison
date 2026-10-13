@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -165,48 +165,6 @@ namespace Unison.Uwp.Services.WhatsApp
             return SaveImageBytesForDisplayAsync(imageBytes, fileBase, mimeType ?? "image/webp");
         }
 
-        private Task<string> SaveAudioBytesToCacheAsync(byte[] audioBytes, string fileBase, string mimeType) =>
-            _mediaCache.SaveAsync(
-                MediaCacheKind.Audio,
-                fileBase,
-                MediaFileExtensions.ForAudio(mimeType),
-                audioBytes,
-                reuseExisting: false);
-
-        /// <summary>
-        /// The URI of a file this media already has on disk, or null when it must be fetched.
-        /// </summary>
-        /// <remarks>
-        /// The per-message check the callers do first asks "has *this row* been downloaded",
-        /// which a forwarded copy answers no to — it is a different message, with an empty URI
-        /// field, describing byte-identical media. This asks the other question: is the file
-        /// itself already here. Named by content hash, the answer is yes for every forward
-        /// after the first, which is the difference between one download and one per copy on a
-        /// metered connection.
-        ///
-        /// Only media the server addresses by content hash can be matched this way. Without one
-        /// the name falls back to the message id and the lookup correctly finds nothing.
-        /// </remarks>
-        private async Task<string> TryReuseDownloadedFileAsync(
-            MediaCacheKind kind,
-            MediaDownloadPlan plan,
-            string extension)
-        {
-            if (plan.ExpectedSha256 == null || plan.ExpectedSha256.Length == 0)
-            {
-                return null;
-            }
-
-            try
-            {
-                return await _mediaCache.TryGetUriAsync(kind, plan.FileBase, extension);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[WhatsAppService] Cache lookup failed (" + kind + "): " + ex.Message);
-                return null;
-            }
-        }
 
         /// <summary>If source is ogg/opus, prefer m4a (MF) then WAV (Concentus) for Mobile playback.</summary>
         private async Task<string> EnsurePlayableAudioUriAsync(ChatMessage message, string sourceUri)
@@ -246,498 +204,6 @@ namespace Unison.Uwp.Services.WhatsApp
             return playable.Uri;
         }
 
-        public async Task<string> EnsureAudioAvailableAsync(ChatMessage message)
-        {
-            if (message == null || !message.IsAudio) return null;
-            if (!string.IsNullOrWhiteSpace(message.AudioUri))
-            {
-                try
-                {
-                    SessionLogger.Instance.WriteAlways(
-                        "[Audio/ensure] cache-hit id=" + (message.Id ?? "?") + " uri=" + message.AudioUri);
-                }
-                catch
-                {
-                }
-
-                // Cached .ogg from older builds — try m4a once so Mobile can play.
-                return await EnsurePlayableAudioUriAsync(message, message.AudioUri);
-            }
-
-            await EnsureConnectedAsync();
-
-            MediaDownloadPlan plan = MediaDownloadPlan.For(message, MediaDownloadKind.Audio);
-            if (!plan.HasKey) throw new InvalidOperationException("A chave do áudio não está disponível.");
-
-            try
-            {
-                SessionLogger.Instance.WriteAlways(string.Format(
-                    "[Audio/ensure] download-start id={0} mime={1} hasUrl={2} hasPath={3} keyLen={4}",
-                    message.Id ?? "?",
-                    plan.MimeType ?? "?",
-                    !string.IsNullOrWhiteSpace(plan.Url),
-                    !string.IsNullOrWhiteSpace(plan.DirectPath),
-                    plan.MediaKey.Length));
-            }
-            catch
-            {
-            }
-
-            await MediaDownloadLock.WaitAsync();
-            try
-            {
-                if (!string.IsNullOrWhiteSpace(message.AudioUri))
-                {
-                    return await EnsurePlayableAudioUriAsync(message, message.AudioUri);
-                }
-
-                string cached = await TryReuseDownloadedFileAsync(
-                    MediaCacheKind.Audio,
-                    plan,
-                    MediaFileExtensions.ForAudio(plan.MimeType));
-                if (!string.IsNullOrWhiteSpace(cached))
-                {
-                    message.AudioUri = cached;
-                    SessionLogger.Instance.WriteAlways(
-                        "[Audio/ensure] disk-hit id=" + (message.Id ?? "?") + " uri=" + cached);
-                    string reusedJid = GetCanonicalJid(message.RemoteJid);
-                    if (!string.IsNullOrWhiteSpace(reusedJid))
-                    {
-                        await SaveMessageAsync(reusedJid, message);
-                        QueueChatMessagesChanged(reusedJid);
-                    }
-
-                    return await EnsurePlayableAudioUriAsync(message, cached);
-                }
-
-                var bytes = await _socket.DownloadAndDecryptMediaAsync(
-                    plan.Url,
-                    plan.DirectPath,
-                    plan.MediaKey,
-                    plan.MediaType,
-                    plan.ExpectedSha256);
-
-                // Named after the content hash, like image, video and document already were.
-                // Using the message id here meant the same audio forwarded to five chats was
-                // five downloads and five copies on disk.
-                string uri = await SaveAudioBytesToCacheAsync(bytes, plan.FileBase, plan.MimeType);
-                message.AudioUri = uri;
-                try
-                {
-                    SessionLogger.Instance.WriteAlways(string.Format(
-                        "[Audio/ensure] download-ok id={0} bytes={1} uri={2}",
-                        message.Id ?? "?",
-                        bytes != null ? bytes.Length : 0,
-                        uri ?? "?"));
-                }
-                catch
-                {
-                }
-
-                uri = await EnsurePlayableAudioUriAsync(message, uri);
-
-                string chatJid = GetCanonicalJid(message.RemoteJid);
-                if (!string.IsNullOrWhiteSpace(chatJid))
-                {
-                    await SaveMessageAsync(chatJid, message);
-                    QueueChatMessagesChanged(chatJid);
-                }
-                return uri;
-            }
-            catch (Exception ex)
-            {
-                try
-                {
-                    SessionLogger.Instance.WriteErrorAlways(
-                        "[Audio/ensure] download-fail id=" + (message.Id ?? "?"),
-                        ex);
-                }
-                catch
-                {
-                }
-
-                throw;
-            }
-            finally
-            {
-                MediaDownloadLock.Release();
-            }
-        }
-
-        public async Task<string> EnsureImageAvailableAsync(ChatMessage message)
-        {
-            if (message == null) return null;
-            bool isSticker = message.Kind == ChatMessageKind.Sticker;
-            if (!message.IsImage && !isSticker) return null;
-            if (!string.IsNullOrWhiteSpace(message.ImageUri))
-            {
-                // Cached .webp from before / failed display path: convert on open when OS has no codec.
-                return await EnsureWebPDisplayUriAsync(message);
-            }
-            await EnsureConnectedAsync();
-
-            MediaDownloadPlan plan = MediaDownloadPlan.For(
-                message,
-                isSticker ? MediaDownloadKind.Sticker : MediaDownloadKind.Image);
-            if (!plan.HasKey)
-            {
-                if (isSticker)
-                {
-                    message.IsStickerFailed = true;
-                    return null;
-                }
-
-                throw new InvalidOperationException("A chave da imagem não está disponível.");
-            }
-
-            await MediaDownloadLock.WaitAsync();
-            try
-            {
-                if (!string.IsNullOrWhiteSpace(message.ImageUri))
-                {
-                    return await EnsureWebPDisplayUriAsync(message);
-                }
-
-                // The extension has to be guessed from the declared mime, because the real one
-                // is read from the payload we have not fetched yet. A server that declares jpeg
-                // and sends WebP simply misses the cache and downloads, which is the safe way
-                // for this guess to be wrong.
-                string cachedImage = await TryReuseDownloadedFileAsync(
-                    MediaCacheKind.Image,
-                    plan,
-                    MediaFileExtensions.ForImage(plan.MimeType));
-                if (!string.IsNullOrWhiteSpace(cachedImage))
-                {
-                    message.ImageUri = cachedImage;
-                    if (isSticker)
-                    {
-                        message.IsStickerFailed = false;
-                    }
-
-                    string reusedJid = GetCanonicalJid(message.RemoteJid);
-                    if (!string.IsNullOrWhiteSpace(reusedJid))
-                    {
-                        await SaveMessageAsync(reusedJid, message);
-                        QueueChatMessagesChanged(reusedJid);
-                    }
-
-                    return await EnsureWebPDisplayUriAsync(message);
-                }
-
-                var bytes = await _socket.DownloadAndDecryptMediaAsync(
-                    plan.Url,
-                    plan.DirectPath,
-                    plan.MediaKey,
-                    plan.MediaType,
-                    plan.ExpectedSha256);
-                string uri = await SaveImageBytesForDisplayAsync(bytes, plan.FileBase, plan.MimeType);
-                if (string.IsNullOrWhiteSpace(uri))
-                {
-                    if (isSticker)
-                    {
-                        message.IsStickerFailed = true;
-                        return null;
-                    }
-
-                    throw new InvalidOperationException("Falha ao guardar a imagem.");
-                }
-
-                message.ImageUri = uri;
-                if (isSticker)
-                {
-                    message.IsStickerFailed = false;
-                }
-
-                string chatJid = GetCanonicalJid(message.RemoteJid);
-                if (!string.IsNullOrWhiteSpace(chatJid))
-                {
-                    await SaveMessageAsync(chatJid, message);
-                    QueueChatMessagesChanged(chatJid);
-                }
-
-                return uri;
-            }
-            catch (Exception)
-            {
-                if (isSticker)
-                {
-                    message.IsStickerFailed = true;
-                    return null;
-                }
-
-                throw;
-            }
-            finally
-            {
-                MediaDownloadLock.Release();
-            }
-        }
-
-        /// <summary>
-        /// Returns the cached video's URI, building the poster first if the row has none.
-        /// </summary>
-        /// <remarks>
-        /// Both ways of finding the file already cached land here — the check before the lock
-        /// and the one after waiting on it. They used to differ: only the first built a poster,
-        /// so of two taps on the same uncached video, the one that waited came back with a row
-        /// that had no thumbnail.
-        /// </remarks>
-        private async Task<string> EnsureVideoPosterAsync(ChatMessage message)
-        {
-            if (!string.IsNullOrWhiteSpace(message.VideoPosterUri))
-            {
-                return message.VideoUri;
-            }
-
-            try
-            {
-                message.VideoPosterUri = await TryCreateVideoPosterAsync(message.VideoUri, message.Id);
-                string chatJid = GetCanonicalJid(message.RemoteJid);
-                if (!string.IsNullOrWhiteSpace(chatJid) &&
-                    !string.IsNullOrWhiteSpace(message.VideoPosterUri))
-                {
-                    await SaveMessageAsync(chatJid, message);
-                    QueueChatMessagesChanged(chatJid);
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[WhatsAppService] Video poster failed: " + ex.Message);
-            }
-
-            return message.VideoUri;
-        }
-
-        public async Task<string> EnsureVideoAvailableAsync(ChatMessage message)
-        {
-            if (message == null || !message.IsVideo) return null;
-            if (!string.IsNullOrWhiteSpace(message.VideoUri))
-            {
-                return await EnsureVideoPosterAsync(message);
-            }
-
-            await EnsureConnectedAsync();
-
-            MediaDownloadPlan plan = MediaDownloadPlan.For(message, MediaDownloadKind.Video);
-            if (!plan.HasKey)
-            {
-                throw new InvalidOperationException("A chave do vídeo não está disponível.");
-            }
-
-            await MediaDownloadLock.WaitAsync();
-            try
-            {
-                // Whoever waited on the lock finds the file already there, and takes the same
-                // path the cache hit above takes - including the poster. Returning the URI bare
-                // here meant the second of two taps on the same video got a thumbnail-less row.
-                if (!string.IsNullOrWhiteSpace(message.VideoUri))
-                {
-                    return await EnsureVideoPosterAsync(message);
-                }
-
-                string cachedVideo = await TryReuseDownloadedFileAsync(
-                    MediaCacheKind.Video,
-                    plan,
-                    MediaFileExtensions.ForVideo(plan.MimeType));
-                if (!string.IsNullOrWhiteSpace(cachedVideo))
-                {
-                    message.VideoUri = cachedVideo;
-                    return await EnsureVideoPosterAsync(message);
-                }
-
-                var bytes = await _socket.DownloadAndDecryptMediaAsync(
-                    plan.Url,
-                    plan.DirectPath,
-                    plan.MediaKey,
-                    plan.MediaType,
-                    plan.ExpectedSha256);
-                string uri = await SaveVideoBytesToCacheAsync(bytes, plan.FileBase, plan.MimeType);
-                if (string.IsNullOrWhiteSpace(uri))
-                {
-                    throw new InvalidOperationException("Falha ao guardar o vídeo.");
-                }
-
-                message.VideoUri = uri;
-                try
-                {
-                    message.VideoPosterUri = await TryCreateVideoPosterAsync(uri, message.Id ?? plan.FileBase);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine("[WhatsAppService] Video poster failed: " + ex.Message);
-                }
-
-                string chatJid = GetCanonicalJid(message.RemoteJid);
-                if (!string.IsNullOrWhiteSpace(chatJid))
-                {
-                    await SaveMessageAsync(chatJid, message);
-                    QueueChatMessagesChanged(chatJid);
-                }
-
-                return uri;
-            }
-            finally
-            {
-                MediaDownloadLock.Release();
-            }
-        }
-
-        public async Task<string> EnsureDocumentAvailableAsync(ChatMessage message)
-        {
-            if (message == null || !message.IsDocument)
-            {
-                return null;
-            }
-
-            if (!string.IsNullOrWhiteSpace(message.DocumentUri))
-            {
-                await TryFillDocumentFileLengthFromLocalAsync(message);
-                return message.DocumentUri;
-            }
-
-            await EnsureConnectedAsync();
-
-            MediaDownloadPlan plan = MediaDownloadPlan.For(message, MediaDownloadKind.Document);
-            if (!plan.HasKey)
-            {
-                throw new InvalidOperationException("A chave do documento não está disponível.");
-            }
-
-            await MediaDownloadLock.WaitAsync();
-            try
-            {
-                if (!string.IsNullOrWhiteSpace(message.DocumentUri))
-                {
-                    return message.DocumentUri;
-                }
-
-                string cachedDocument = await TryReuseDownloadedFileAsync(
-                    MediaCacheKind.Document,
-                    plan,
-                    MediaFileExtensions.ForDocument(plan.FileName, plan.MimeType));
-                if (!string.IsNullOrWhiteSpace(cachedDocument))
-                {
-                    message.DocumentUri = cachedDocument;
-                    await TryFillDocumentFileLengthFromLocalAsync(message);
-                    string reusedJid = GetCanonicalJid(message.RemoteJid);
-                    if (!string.IsNullOrWhiteSpace(reusedJid))
-                    {
-                        await SaveMessageAsync(reusedJid, message);
-                        QueueChatMessagesChanged(reusedJid);
-                    }
-
-                    return cachedDocument;
-                }
-
-                var bytes = await _socket.DownloadAndDecryptMediaAsync(
-                    plan.Url,
-                    plan.DirectPath,
-                    plan.MediaKey,
-                    plan.MediaType,
-                    plan.ExpectedSha256);
-                string uri = await SaveDocumentBytesToCacheAsync(
-                    bytes,
-                    plan.FileBase,
-                    plan.FileName,
-                    plan.MimeType);
-                if (string.IsNullOrWhiteSpace(uri))
-                {
-                    throw new InvalidOperationException("Falha ao guardar o documento.");
-                }
-
-                message.DocumentUri = uri;
-                if (message.DocumentFileLengthBytes <= 0 && bytes != null && bytes.Length > 0)
-                {
-                    message.DocumentFileLengthBytes = bytes.Length;
-                }
-
-                string chatJid = GetCanonicalJid(message.RemoteJid);
-                if (!string.IsNullOrWhiteSpace(chatJid))
-                {
-                    await SaveMessageAsync(chatJid, message);
-                    QueueChatMessagesChanged(chatJid);
-                }
-
-                return uri;
-            }
-            finally
-            {
-                MediaDownloadLock.Release();
-            }
-        }
-
-        private async Task TryFillDocumentFileLengthFromLocalAsync(ChatMessage message)
-        {
-            if (message == null ||
-                message.DocumentFileLengthBytes > 0 ||
-                string.IsNullOrWhiteSpace(message.DocumentUri))
-            {
-                return;
-            }
-
-            try
-            {
-                StorageFile file = null;
-                string uri = message.DocumentUri.Trim();
-                if (uri.StartsWith("ms-appdata:", StringComparison.OrdinalIgnoreCase))
-                {
-                    file = await StorageFile.GetFileFromApplicationUriAsync(new Uri(uri));
-                }
-                else if (uri.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
-                {
-                    file = await StorageFile.GetFileFromPathAsync(new Uri(uri).LocalPath);
-                }
-                else if (System.IO.Path.IsPathRooted(uri))
-                {
-                    file = await StorageFile.GetFileFromPathAsync(uri);
-                }
-
-                if (file == null)
-                {
-                    return;
-                }
-
-                var props = await file.GetBasicPropertiesAsync();
-                if (props != null && props.Size > 0)
-                {
-                    message.DocumentFileLengthBytes = props.Size > long.MaxValue
-                        ? long.MaxValue
-                        : (long)props.Size;
-
-                    string chatJid = GetCanonicalJid(message.RemoteJid);
-                    if (!string.IsNullOrWhiteSpace(chatJid))
-                    {
-                        await SaveMessageAsync(chatJid, message);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[WhatsAppService] Document size fill failed: " + ex.Message);
-            }
-        }
-
-        private Task<string> SaveDocumentBytesToCacheAsync(
-            byte[] documentBytes,
-            string fileBase,
-            string originalFileName,
-            string mimeType) =>
-            _mediaCache.SaveAsync(
-                MediaCacheKind.Document,
-                fileBase,
-                MediaFileExtensions.ForDocument(originalFileName, mimeType),
-                documentBytes,
-                reuseExisting: false);
-
-        private Task<string> SaveVideoBytesToCacheAsync(byte[] videoBytes, string fileBase, string mimeType) =>
-            _mediaCache.SaveAsync(
-                MediaCacheKind.Video,
-                fileBase,
-                MediaFileExtensions.ForVideo(mimeType),
-                videoBytes);
-
-        private Task<string> TryCreateVideoPosterAsync(string videoUri, string fileBase) =>
-            _mediaDerivation.TryCreateVideoPosterAsync(videoUri, fileBase);
 
         private async Task HydrateImageForMessageAsync(ChatMessage chatMessage, Proto.Message.Types.ImageMessage imageMessage, string messageId, string chatJid)
         {
@@ -775,7 +241,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            await MediaDownloadLock.WaitAsync();
+            await _mediaDownloadGate.WaitAsync();
             try
             {
                 byte[] mediaKey = imageMessage.MediaKey?.ToByteArray();
@@ -833,7 +299,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
             finally
             {
-                MediaDownloadLock.Release();
+                _mediaDownloadGate.Release();
             }
         }
 
@@ -888,7 +354,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
             }
 
-            await MediaDownloadLock.WaitAsync();
+            await _mediaDownloadGate.WaitAsync();
             try
             {
                 byte[] mediaKey = stickerMessage.MediaKey?.ToByteArray();
@@ -938,8 +404,28 @@ namespace Unison.Uwp.Services.WhatsApp
             }
             finally
             {
-                MediaDownloadLock.Release();
+                _mediaDownloadGate.Release();
             }
+        }
+
+        Task<byte[]> IMediaDownloadHost.DownloadAndDecryptAsync(
+            string url,
+            string directPath,
+            byte[] mediaKey,
+            string mediaType,
+            byte[] expectedFileEncSha256)
+        {
+            return _socket.DownloadAndDecryptMediaAsync(url, directPath, mediaKey, mediaType, expectedFileEncSha256);
+        }
+
+        Task IMediaDownloadHost.SaveMessageQuietAsync(string chatJid, ChatMessage message)
+        {
+            return SaveMessageAsync(chatJid, message);
+        }
+
+        void IMediaDownloadHost.NotifyMessagesChanged(string chatJid)
+        {
+            QueueChatMessagesChanged(chatJid);
         }
 
     }

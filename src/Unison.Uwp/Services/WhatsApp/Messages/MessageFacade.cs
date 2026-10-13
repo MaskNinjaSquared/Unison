@@ -10,6 +10,7 @@ using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.Uwp.Services.WhatsApp.History;
+using Unison.Uwp.Services;
 
 namespace Unison.Uwp.Services.WhatsApp.Messages
 {
@@ -31,11 +32,12 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
         private readonly IChatStore _chatStore;
         private readonly OutgoingTextSend _textSend;
         private readonly OutgoingMediaSend _mediaSend;
+        private readonly MediaAvailability _availability;
         private readonly int _sqlOpenPageSize;
         private readonly int _sqlLoadMorePageSize;
         private readonly int _thinTimelineThreshold;
 
-        public MessageFacade(
+        internal MessageFacade(
             IPersonStore personStore,
             IWhatsAppService whatsAppService,
             IChatMessageMapper chatMessageMapper,
@@ -46,6 +48,9 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             INotificationService notifications,
             IOutgoingMessageHost outgoingHost,
             IMediaCache mediaCache,
+            MediaDerivationService derivation,
+            MediaDownloadGate downloadGate,
+            IMediaDownloadHost mediaHost,
             IChatStore chatStore = null,
             IChatStateStore chatState = null,
             ISystemInfoProvider systemInfo = null)
@@ -71,6 +76,13 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                 outgoingHost,
                 _jids,
                 mediaCache ?? throw new ArgumentNullException(nameof(mediaCache)));
+            _availability = new MediaAvailability(
+                _whatsAppService,
+                mediaHost ?? throw new ArgumentNullException(nameof(mediaHost)),
+                _jids,
+                mediaCache,
+                derivation ?? throw new ArgumentNullException(nameof(derivation)),
+                downloadGate ?? throw new ArgumentNullException(nameof(downloadGate)));
             // systemInfo kept in the ctor for DI compatibility; page sizes match desktop on all devices.
             _ = systemInfo;
 
@@ -732,22 +744,22 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
 
         public Task<string> EnsureAudioAvailableAsync(ChatMessage message)
         {
-            return _whatsAppService.EnsureAudioAvailableAsync(message);
+            return _availability.EnsureAudioAsync(message);
         }
 
         public Task<string> EnsureImageAvailableAsync(ChatMessage message)
         {
-            return _whatsAppService.EnsureImageAvailableAsync(message);
+            return _availability.EnsureImageAsync(message);
         }
 
         public Task<string> EnsureVideoAvailableAsync(ChatMessage message)
         {
-            return _whatsAppService.EnsureVideoAvailableAsync(message);
+            return _availability.EnsureVideoAsync(message);
         }
 
         public Task<string> EnsureDocumentAvailableAsync(ChatMessage message)
         {
-            return _whatsAppService.EnsureDocumentAvailableAsync(message);
+            return _availability.EnsureDocumentAsync(message);
         }
 
         public Task SetMessagePinnedAsync(string chatJid, ChatMessage message, bool pin, uint durationSeconds = 604800)

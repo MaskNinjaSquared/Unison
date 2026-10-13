@@ -112,7 +112,7 @@ namespace Unison.Core.ViewModels
                 return null;
             }
 
-            // .webp without a system codec: WhatsAppService.EnsureImageAvailableAsync converts to PNG.
+            // .webp without a system codec: the download converts it to PNG.
             // Do not auto-run this from the bubble ctor — that spiked Mobile memory on long timelines.
             bool needsWebPRepair = !string.IsNullOrWhiteSpace(Model.ImageUri)
                 && Model.ImageUri.EndsWith(".webp", StringComparison.OrdinalIgnoreCase);
