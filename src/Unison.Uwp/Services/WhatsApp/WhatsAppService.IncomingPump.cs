@@ -1375,7 +1375,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
                     else if (accept == PushNameAccept.Accept)
                     {
-                        ContactNames[senderJid] = sanitized;
+                        ContactNames.Set(senderJid, sanitized);
                         RememberPersonName(senderJid, sanitized);
                         if (!e.IsOffline)
                         {

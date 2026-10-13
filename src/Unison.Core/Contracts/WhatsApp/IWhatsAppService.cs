@@ -200,7 +200,7 @@ namespace Unison.Core.Contracts.WhatsApp
         bool HasResolvedContactName(string jid);
 
         /// <summary>In-memory JID → device-contact display name overlay.</summary>
-        Dictionary<string, string> PhoneContactNamesByJid { get; }
+        Unison.Core.State.DisplayNameTable PhoneContactNamesByJid { get; }
 
         /// <summary>Re-applies <see cref="ResolveDisplayName"/> to each chat's Name where it changed.</summary>
         Task ApplyResolvedDisplayNamesToChatsAsync();

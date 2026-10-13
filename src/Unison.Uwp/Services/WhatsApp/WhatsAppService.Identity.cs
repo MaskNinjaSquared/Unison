@@ -139,8 +139,8 @@ namespace Unison.Uwp.Services.WhatsApp
                             })
                             .ToList();
 
-                        contactSnapshot = new Dictionary<string, string>(ContactNames, StringComparer.OrdinalIgnoreCase);
-                        phoneSnapshot = new Dictionary<string, string>(PhoneContactNamesByJid, StringComparer.OrdinalIgnoreCase);
+                        contactSnapshot = ContactNames.Snapshot();
+                        phoneSnapshot = PhoneContactNamesByJid.Snapshot();
                         aliasSnapshot = JidAlias.Snapshot();
                     });
 
@@ -357,22 +357,14 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 if (ContactNames.TryGetValue(normalizedTransient, out var transientName))
                 {
-                    if (!ContactNames.ContainsKey(normalizedCanonical))
-                    {
-                        ContactNames[normalizedCanonical] = transientName;
-                    }
-
+                    ContactNames.TryAdd(normalizedCanonical, transientName);
                     ContactNames.Remove(normalizedTransient);
                     merged = true;
                 }
 
                 if (PhoneContactNamesByJid.TryGetValue(normalizedTransient, out var transientPhoneName))
                 {
-                    if (!PhoneContactNamesByJid.ContainsKey(normalizedCanonical))
-                    {
-                        PhoneContactNamesByJid[normalizedCanonical] = transientPhoneName;
-                    }
-
+                    PhoneContactNamesByJid.TryAdd(normalizedCanonical, transientPhoneName);
                     PhoneContactNamesByJid.Remove(normalizedTransient);
                     merged = true;
                 }

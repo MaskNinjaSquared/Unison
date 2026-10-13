@@ -26,11 +26,9 @@ namespace Unison.Core.State
         private readonly Dictionary<string, List<ChatMessage>> _messagesByChat =
             new Dictionary<string, List<ChatMessage>>(StringComparer.OrdinalIgnoreCase);
 
-        private readonly Dictionary<string, string> _pushNames =
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        private readonly DisplayNameTable _pushNames = new DisplayNameTable();
 
-        private readonly Dictionary<string, string> _addressBookNames =
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        private readonly DisplayNameTable _addressBookNames = new DisplayNameTable();
 
         public ChatStateStore(IDispatcher dispatcher)
         {
@@ -61,13 +59,14 @@ namespace Unison.Core.State
         //
         // The point of the exercise is already served: the state lives here, so a
         // view model can be pointed at this store without waiting for the class
-        // that used to own it. These four members disappear with the last direct
-        // access - they are not part of IChatStateStore for that reason.
+        // that used to own it. MessagesByChat and NotifyChangedExternally disappear
+        // with the last direct access - they are not part of IChatStateStore for
+        // that reason. The two name tables lock on their own and are not transitional.
         //
-        // One caveat while they exist. A writer coming through here does not take
-        // the lock, so the snapshot the read methods return is protected by thread
+        // One caveat while MessagesByChat exists. A writer coming through it does not
+        // take the lock, so the snapshot the read methods return is protected by thread
         // affinity rather than by _gate: WhatsAppService mutates on the UI thread,
-        // and so do the view models that read. Reading these collections from a
+        // and so do the view models that read. Reading the message lists from a
         // background thread is only safe once the writes come through this class.
         //
         // Keys are OrdinalIgnoreCase. MessageIdIndex already was, and JidHelper leaves
@@ -82,14 +81,14 @@ namespace Unison.Core.State
             get { return _messagesByChat; }
         }
 
-        /// <summary>Transitional. Names the network told us about.</summary>
-        public Dictionary<string, string> PushNames
+        /// <summary>Names the network told us about. Locks on its own, so any thread may use it.</summary>
+        public DisplayNameTable PushNames
         {
             get { return _pushNames; }
         }
 
-        /// <summary>Transitional. Names from the device address book.</summary>
-        public Dictionary<string, string> AddressBookNames
+        /// <summary>Names from the device address book. Locks on its own, so any thread may use it.</summary>
+        public DisplayNameTable AddressBookNames
         {
             get { return _addressBookNames; }
         }
@@ -307,18 +306,15 @@ namespace Unison.Core.State
                 return null;
             }
 
-            lock (_gate)
+            string name;
+            if (_addressBookNames.TryGetValue(jid, out name) && !string.IsNullOrWhiteSpace(name))
             {
-                string name;
-                if (_addressBookNames.TryGetValue(jid, out name) && !string.IsNullOrWhiteSpace(name))
-                {
-                    return name;
-                }
+                return name;
+            }
 
-                if (_pushNames.TryGetValue(jid, out name) && !string.IsNullOrWhiteSpace(name))
-                {
-                    return name;
-                }
+            if (_pushNames.TryGetValue(jid, out name) && !string.IsNullOrWhiteSpace(name))
+            {
+                return name;
             }
 
             return null;
@@ -358,15 +354,16 @@ namespace Unison.Core.State
             lock (_gate)
             {
                 _messagesByChat.Clear();
-                _pushNames.Clear();
-                _addressBookNames.Clear();
             }
+
+            _pushNames.Clear();
+            _addressBookNames.Clear();
 
             return _dispatcher.RunAsync(() => Chats.Clear());
         }
 
         private Task MergeNamesAsync(
-            Dictionary<string, string> target,
+            DisplayNameTable target,
             IEnumerable<KeyValuePair<string, string>> namesByJid)
         {
             if (namesByJid == null)
@@ -376,23 +373,15 @@ namespace Unison.Core.State
 
             var changed = false;
 
-            lock (_gate)
+            foreach (var pair in namesByJid)
             {
-                foreach (var pair in namesByJid)
+                if (string.IsNullOrEmpty(pair.Key) || string.IsNullOrWhiteSpace(pair.Value))
                 {
-                    if (string.IsNullOrEmpty(pair.Key) || string.IsNullOrWhiteSpace(pair.Value))
-                    {
-                        continue;
-                    }
+                    continue;
+                }
 
-                    string current;
-                    if (target.TryGetValue(pair.Key, out current) &&
-                        string.Equals(current, pair.Value, StringComparison.Ordinal))
-                    {
-                        continue;
-                    }
-
-                    target[pair.Key] = pair.Value;
+                if (target.Set(pair.Key, pair.Value))
+                {
                     changed = true;
                 }
             }

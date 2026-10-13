@@ -393,8 +393,8 @@ namespace Unison.Uwp.Services.WhatsApp
                         .Where(j => !string.IsNullOrWhiteSpace(j))
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .ToList();
-                    contactSnapshot = new Dictionary<string, string>(ContactNames, StringComparer.OrdinalIgnoreCase);
-                    phoneContactSnapshot = new Dictionary<string, string>(PhoneContactNamesByJid, StringComparer.OrdinalIgnoreCase);
+                    contactSnapshot = ContactNames.Snapshot();
+                    phoneContactSnapshot = PhoneContactNamesByJid.Snapshot();
                     aliasSnapshot = JidAlias.Snapshot();
                 });
 

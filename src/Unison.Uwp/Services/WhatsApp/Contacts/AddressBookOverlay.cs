@@ -261,7 +261,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                     continue;
                 }
 
-                _whatsAppService.PhoneContactNamesByJid[pair.Key] = pair.Value.Trim();
+                _whatsAppService.PhoneContactNamesByJid.Set(pair.Key, pair.Value.Trim());
                 updates++;
             }
 

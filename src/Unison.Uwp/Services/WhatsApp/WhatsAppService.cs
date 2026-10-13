@@ -1101,8 +1101,8 @@ namespace Unison.Uwp.Services.WhatsApp
             return list != null ? new List<ChatMessage>(list) : new List<ChatMessage>();
         }
 
-        public Dictionary<string, string> ContactNames => _chatState.PushNames;
-        public Dictionary<string, string> PhoneContactNamesByJid => _chatState.AddressBookNames;
+        public DisplayNameTable ContactNames => _chatState.PushNames;
+        public DisplayNameTable PhoneContactNamesByJid => _chatState.AddressBookNames;
 
         public JidAliasTable JidAlias { get; }
 
@@ -3173,18 +3173,18 @@ namespace Unison.Uwp.Services.WhatsApp
                 foreach (var kvp in storedNames)
                 {
                     string sanitized = SanitizeContactLabel(kvp.Value, kvp.Key);
-                    if (!string.IsNullOrWhiteSpace(sanitized) && !ContactNames.ContainsKey(kvp.Key))
+                    if (!string.IsNullOrWhiteSpace(sanitized))
                     {
-                        ContactNames[kvp.Key] = sanitized;
+                        ContactNames.TryAdd(kvp.Key, sanitized);
                     }
                 }
 
                 var storedPhoneNames = await _messageStore.LoadPhoneContactNamesAsync();
                 foreach (var kvp in storedPhoneNames)
                 {
-                    if (!string.IsNullOrWhiteSpace(kvp.Value) && !PhoneContactNamesByJid.ContainsKey(kvp.Key))
+                    if (!string.IsNullOrWhiteSpace(kvp.Value))
                     {
-                        PhoneContactNamesByJid[kvp.Key] = kvp.Value.Trim();
+                        PhoneContactNamesByJid.TryAdd(kvp.Key, kvp.Value.Trim());
                     }
                 }
 
@@ -5671,7 +5671,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            ContactNames[norm] = sanitized;
+            ContactNames.Set(norm, sanitized);
             if (_personStore == null)
             {
                 return;
@@ -6167,11 +6167,11 @@ namespace Unison.Uwp.Services.WhatsApp
                         }
                     }
 
-                    ContactNames[entry.Canonical] = entry.Name;
+                    ContactNames.Set(entry.Canonical, entry.Name);
                     if (!string.IsNullOrEmpty(entry.Normalized) &&
                         !string.Equals(entry.Normalized, entry.Canonical, StringComparison.OrdinalIgnoreCase))
                     {
-                        ContactNames[entry.Normalized] = entry.Name;
+                        ContactNames.Set(entry.Normalized, entry.Name);
                     }
                 }
 
@@ -6720,9 +6720,9 @@ namespace Unison.Uwp.Services.WhatsApp
                                 _messageIdIndex.RemoveChat(secondaryNorm);
                             }
 
-                            if (ContactNames.TryGetValue(secondaryNorm, out var secondaryName) && !ContactNames.ContainsKey(primaryNorm))
+                            if (ContactNames.TryGetValue(secondaryNorm, out var secondaryName))
                             {
-                                ContactNames[primaryNorm] = secondaryName;
+                                ContactNames.TryAdd(primaryNorm, secondaryName);
                             }
 
                             // The rows merge either way; only the alias is withheld when the pair
@@ -6958,7 +6958,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return false;
             }
 
-            ContactNames[normalizedUser] = pushName;
+            ContactNames.Set(normalizedUser, pushName);
             Debug.WriteLine("[WhatsAppService] usync name resolved: " + jid + " -> " + pushName);
             return true;
         }

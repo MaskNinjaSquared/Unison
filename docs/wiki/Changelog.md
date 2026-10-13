@@ -4,6 +4,15 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Display-name maps lock on their own
+
+The push-name and address-book maps on `ChatStateStore` are `DisplayNameTable` (Core)
+instead of bare dictionaries. The address-book reader wrote its names off the UI thread
+while the chat list read the same map on it; now every read and write takes the table's
+lock and enumeration walks a copy. "Add only if missing" and "move from the old address"
+are single calls (`TryAdd`, `Remove`) instead of a check followed by a write.
+`MessagesByChat` is the last transitional dictionary.
+
 ## Placeholder resend dispatch
 
 The 5-second wait before a resend, the send itself, and the 15-second window for its
