@@ -1939,94 +1939,54 @@ namespace Unison.Uwp.Services.WhatsApp
             string participantJid = null,
             string senderName = null)
         {
-            string canonical = GetCanonicalJid(NormalizeJid(jid));
-            if (string.IsNullOrWhiteSpace(canonical))
+            if (_chatService == null)
             {
+                Debug.WriteLine("[WhatsAppService] Offline replay tip dropped: ChatFacade not attached.");
                 return;
             }
 
-            // Same rule as the live path: decide unread once here. The apply pass must not
-            // re-ask attention, or opening/closing the chat mid-drain drops the badge.
-            bool incrementUnread = countUnread &&
-                IncomingAttention.For(
-                    isFromMe,
-                    IsActiveChatJid(canonical),
-                    Unison.Uwp.App.IsWindowVisible).CountsAsUnread;
-
-            // Throttle instead of debounce: the book arms one timer, so the first recovered
-            // conversation shows within ~180 ms even while a long replay continues.
-            _offlineReplay.Record(
-                canonical,
-                preview,
-                timestamp,
-                isGroup,
-                isFromMe,
-                kind,
-                status,
-                authorPrefix,
-                incrementUnread,
-                DateTime.UtcNow,
-                participantJid,
-                senderName,
-                OfflineReplayUiDebounce,
-                () =>
-                {
-                    ApplyOfflineReplayChatSummariesAsync("replay-progressive").ContinueWith(finished =>
-                    {
-                        if (finished.Exception == null)
-                        {
-                            return;
-                        }
-
-                        RuntimeDiagnosticsService.Instance.RecordException(
-                            "messages",
-                            "offline-summary-apply-failed",
-                            finished.Exception.GetBaseException(),
-                            "reason=replay-progressive");
-                    });
-                });
+            _chatService.RecordOfflineReplayTip(new OfflineReplayTipRequest
+            {
+                Jid = jid,
+                Preview = preview,
+                Timestamp = timestamp,
+                IsGroup = isGroup,
+                IsFromMe = isFromMe,
+                CountUnread = countUnread,
+                Kind = kind,
+                Status = status,
+                AuthorPrefix = authorPrefix,
+                ParticipantJid = participantJid,
+                SenderName = senderName
+            });
         }
 
-        private async Task ApplyOfflineReplayChatSummariesAsync(string reason)
+        private Task ApplyOfflineReplayChatSummariesAsync(string reason)
         {
-            await _offlineReplayUiApplyLock.WaitAsync();
-            Dictionary<string, OfflineReplayChatSummary> snapshot = null;
-            try
+            if (_chatService == null)
             {
-                snapshot = _offlineReplay.Take();
-                if (snapshot == null)
-                {
-                    return;
-                }
-
-                if (_chatService == null)
-                {
-                    Debug.WriteLine("[WhatsAppService] Offline summary apply skipped: ChatFacade not attached.");
-                    return;
-                }
-
-                List<OfflineReplayChatSummary> batch = snapshot.Values.ToList();
-                await _chatService.ApplyOfflineReplayChatSummariesAsync(batch, reason)
-                    .ConfigureAwait(false);
-
-                NoteFullHistoryCatchUpProgress(
-                    "offline-summary:" + reason +
-                    ":chats=" + batch.Count);
-
-                SchedulePersist();
+                Debug.WriteLine("[WhatsAppService] Offline summary apply skipped: ChatFacade not attached.");
+                return Task.CompletedTask;
             }
-            catch
-            {
-                if (snapshot != null)
-                {
-                    _offlineReplay.Restore(snapshot);
-                }
-                throw;
-            }
-            finally
-            {
-                _offlineReplayUiApplyLock.Release();
-            }
+
+            return _chatService.FlushOfflineReplayTipsAsync(reason);
+        }
+
+        bool IOfflineReplayHost.IsActiveChat(string canonicalJid) => IsActiveChatJid(canonicalJid);
+
+        bool IOfflineReplayHost.IsWindowVisible => Unison.Uwp.App.IsWindowVisible;
+
+        void IOfflineReplayHost.NoteCatchUpProgress(string reason) => NoteFullHistoryCatchUpProgress(reason);
+
+        void IOfflineReplayHost.SchedulePersist() => SchedulePersist();
+
+        void IOfflineReplayHost.ReportFlushFailure(string reason, Exception error)
+        {
+            RuntimeDiagnosticsService.Instance.RecordException(
+                "messages",
+                "offline-summary-apply-failed",
+                error,
+                "reason=" + reason);
         }
         private void MarkOfflineReplayChatDirty(string jid) => _pendingMessages.MarkDirty(jid);
 

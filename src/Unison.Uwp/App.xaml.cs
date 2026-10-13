@@ -347,10 +347,13 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IChatStateStore>(),
                 sp.GetRequiredService<IAvatarReport>(),
                 sp.GetRequiredService<IAvatarCache>()));
+            services.AddSingleton<IOfflineReplayHost>(
+                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IChatService>(sp => new ChatFacade(
                 sp.GetRequiredService<IWhatsAppSessionProvider>(),
                 sp.GetRequiredService<IWhatsAppService>(),
                 sp.GetRequiredService<IJidResolver>(),
+                sp.GetRequiredService<IOfflineReplayHost>(),
                 sp.GetRequiredService<IContactService>(),
                 sp.GetRequiredService<INotificationService>()));
             // After IChatService: the projection persists resolved strip rows so cold start keeps names.

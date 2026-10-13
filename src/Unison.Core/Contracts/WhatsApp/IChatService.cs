@@ -82,12 +82,15 @@ namespace Unison.Core.Contracts.WhatsApp
             LiveIncomingChatListApplyRequest request);
 
         /// <summary>
-        /// Offline replay batch: apply tip + UnreadDelta already decided at record time.
-        /// Does not re-evaluate IncomingAttention.
+        /// Folds one replayed message into its chat's tip. Unread is decided here, once; the
+        /// first tip arms a short timer that flushes the tips onto the list.
         /// </summary>
-        Task ApplyOfflineReplayChatSummariesAsync(
-            IReadOnlyList<OfflineReplayChatSummary> summaries,
-            string reason);
+        void RecordOfflineReplayTip(OfflineReplayTipRequest request);
+
+        /// <summary>
+        /// Applies every waiting offline replay tip to the list. A failure puts them back and rethrows.
+        /// </summary>
+        Task FlushOfflineReplayTipsAsync(string reason);
 
         /// <summary>Updates list rows for one chat tip (duplicate/revoke/replay refresh).</summary>
         Task RefreshChatPreviewAsync(

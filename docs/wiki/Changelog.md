@@ -4,6 +4,13 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Offline replay tips on ChatFacade
+
+Recording a replayed message into its chat's tip, deciding its unread, the 180 ms
+throttle and the flush onto the list moved from the incoming pump to `ChatFacade`, through
+`OfflineReplayTips` (Core). The client answers what only it knows (open chat, window,
+catch-up progress, persist) through `IOfflineReplayHost`.
+
 ## Incoming message queue
 
 The two lanes the incoming pump drains (live first, then offline replay), the generation

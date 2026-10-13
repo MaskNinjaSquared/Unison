@@ -28,6 +28,7 @@ using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Mappers;
 using Unison.Core.Models;
+using Unison.Core.State;
 using Unison.Socket.AppState;
 using Unison.Socket.UseCases.Messages;
 using Unison.Uwp.Helpers;
@@ -55,14 +56,24 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
         private readonly IJidResolver _jids;
         private readonly IContactService _contacts;
         private readonly INotificationService _notifications;
+        private readonly OfflineReplayTips _offlineReplayTips;
+
+        /// <summary>Short enough that the first recovered chat shows while a long replay continues.</summary>
+        private static readonly TimeSpan OfflineReplayTipThrottle = TimeSpan.FromMilliseconds(180);
 
         internal ChatFacade(
             IWhatsAppSessionProvider sessions,
             IWhatsAppService appState,
             IJidResolver jids,
+            IOfflineReplayHost offlineReplay,
             IContactService contacts = null,
             INotificationService notifications = null)
         {
+            if (offlineReplay == null)
+            {
+                throw new ArgumentNullException(nameof(offlineReplay));
+            }
+
             if (sessions == null)
             {
                 throw new ArgumentNullException(nameof(sessions));
@@ -78,6 +89,21 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _contacts = contacts;
             _notifications = notifications;
+            _offlineReplayTips = new OfflineReplayTips(
+                _jids,
+                offlineReplay,
+                ApplyOfflineReplayChatSummariesAsync,
+                OfflineReplayTipThrottle);
+        }
+
+        public void RecordOfflineReplayTip(OfflineReplayTipRequest request)
+        {
+            _offlineReplayTips.Record(request);
+        }
+
+        public Task FlushOfflineReplayTipsAsync(string reason)
+        {
+            return _offlineReplayTips.FlushAsync(reason);
         }
 
         public async Task SetPinnedAsync(ChatItem chat, bool pinned)
@@ -407,7 +433,8 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             return result;
         }
 
-        public async Task ApplyOfflineReplayChatSummariesAsync(
+        /// <summary>Applies tips whose unread was already decided at record time.</summary>
+        private async Task ApplyOfflineReplayChatSummariesAsync(
             IReadOnlyList<OfflineReplayChatSummary> summaries,
             string reason)
         {

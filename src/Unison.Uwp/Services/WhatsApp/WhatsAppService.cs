@@ -43,7 +43,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IMediaDownloadHost, IAvatarReport
+    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IMediaDownloadHost, IAvatarReport, IOfflineReplayHost
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -740,10 +740,6 @@ namespace Unison.Uwp.Services.WhatsApp
         // Offline messages are intentionally kept off the UI thread while a large replay
         // is draining. Keep a compact per-chat summary so the chat list can still be
         // updated after the in-memory message cache is released for inactive chats.
-        private readonly SemaphoreSlim _offlineReplayUiApplyLock = new SemaphoreSlim(1, 1);
-        private readonly OfflineReplaySummaryBook _offlineReplay = new OfflineReplaySummaryBook();
-        private static readonly TimeSpan OfflineReplayUiDebounce = TimeSpan.FromMilliseconds(180);
-
         // Somente a conversa aberta deve manter uma janela grande de mensagens em RAM.
         // O historico completo continua no MessageStore.
         private volatile string _activeChatJid;
