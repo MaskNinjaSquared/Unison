@@ -190,35 +190,11 @@ namespace Unison.Uwp.Services.WhatsApp
         private void RegisterMissingMessage(string chatJid, string participant, string messageId, bool isFromMe, DateTime timestamp, string reason)
         {
             string normJid = NormalizeJid(chatJid);
+            _missing.Note(normJid, messageId, participant, isFromMe, timestamp, reason, DateTime.UtcNow);
+
             if (string.IsNullOrWhiteSpace(normJid) || string.IsNullOrWhiteSpace(messageId))
             {
                 return;
-            }
-
-            lock (_missingMessageLock)
-            {
-                if (!_pendingMissingMessagesByChat.TryGetValue(normJid, out var byMessageId))
-                {
-                    byMessageId = new Dictionary<string, MissingMessageCandidate>(StringComparer.Ordinal);
-                    _pendingMissingMessagesByChat[normJid] = byMessageId;
-                }
-
-                if (!byMessageId.TryGetValue(messageId, out var candidate))
-                {
-                    candidate = new MissingMessageCandidate
-                    {
-                        ChatJid = normJid,
-                        MessageId = messageId,
-                        FirstSeenUtc = DateTime.UtcNow
-                    };
-                    byMessageId[messageId] = candidate;
-                }
-
-                candidate.Participant = participant;
-                candidate.IsFromMe = isFromMe;
-                candidate.MessageTimestamp = timestamp;
-                candidate.Reason = reason;
-                candidate.LastSeenUtc = DateTime.UtcNow;
             }
 
             if (!ShouldDeferReconnectReplayWork())
@@ -230,43 +206,18 @@ namespace Unison.Uwp.Services.WhatsApp
         private void ResolveMissingMessage(string chatJid, string messageId, string source)
         {
             string normJid = NormalizeJid(chatJid);
+            MissingMessageRemoval removal = _missing.Resolve(normJid, messageId);
             if (string.IsNullOrWhiteSpace(normJid) || string.IsNullOrWhiteSpace(messageId))
             {
                 return;
             }
 
-            CancellationTokenSource scheduledCts = null;
-            string pendingRequestId = null;
-
-            lock (_missingMessageLock)
-            {
-                if (_pendingMissingMessagesByChat.TryGetValue(normJid, out var byMessageId))
-                {
-                    if (byMessageId.TryGetValue(messageId, out var candidate))
-                    {
-                        scheduledCts = candidate.PlaceholderScheduleCts;
-                        pendingRequestId = candidate.LastPlaceholderRequestId;
-                    }
-
-                    byMessageId.Remove(messageId);
-                    if (byMessageId.Count == 0)
-                    {
-                        _pendingMissingMessagesByChat.Remove(normJid);
-                    }
-                }
-
-                if (!string.IsNullOrWhiteSpace(pendingRequestId))
-                {
-                    _placeholderResendRequestsByStanzaId.Remove(pendingRequestId);
-                }
-            }
-
-            if (scheduledCts != null)
+            if (removal.ScheduledResend != null)
             {
                 try
                 {
-                    scheduledCts.Cancel();
-                    scheduledCts.Dispose();
+                    removal.ScheduledResend.Cancel();
+                    removal.ScheduledResend.Dispose();
                     if (!ShouldDeferReconnectReplayWork())
                     {
                         Debug.WriteLine($"[WhatsAppService] placeholder resend cancelled for {messageId} in {normJid} ({source})");
@@ -288,7 +239,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         /// <remarks>
         /// Two callers used to do this by removing the key inline — on the UI thread, outside
-        /// <c>_missingMessageLock</c>, while the pump reads and writes the same dictionary from a
+        /// <c>_missing.Gate</c>, while the pump reads and writes the same dictionary from a
         /// background thread. That is a plain `Dictionary` being mutated from two threads at once.
         /// They also dropped the candidates without cancelling their scheduled resends, so a timer
         /// stayed alive to ask the server for a message belonging to a deleted conversation.
@@ -301,25 +252,10 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            List<MissingMessageCandidate> dropped = null;
-            lock (_missingMessageLock)
+            List<MissingMessageCandidate> dropped = new List<MissingMessageCandidate>(_missing.ForgetChat(normJid));
+            if (dropped.Count == 0)
             {
-                Dictionary<string, MissingMessageCandidate> byMessageId;
-                if (!_pendingMissingMessagesByChat.TryGetValue(normJid, out byMessageId))
-                {
-                    return;
-                }
-
-                dropped = byMessageId.Values.ToList();
-                _pendingMissingMessagesByChat.Remove(normJid);
-
-                foreach (var candidate in dropped)
-                {
-                    if (candidate != null && !string.IsNullOrWhiteSpace(candidate.LastPlaceholderRequestId))
-                    {
-                        _placeholderResendRequestsByStanzaId.Remove(candidate.LastPlaceholderRequestId);
-                    }
-                }
+                return;
             }
 
             foreach (var candidate in dropped)
@@ -350,10 +286,9 @@ namespace Unison.Uwp.Services.WhatsApp
                 return false;
             }
 
-            lock (_missingMessageLock)
+            lock (_missing.Gate)
             {
-                return _pendingMissingMessagesByChat.TryGetValue(normJid, out var byMessageId) &&
-                       byMessageId.TryGetValue(messageId, out candidate);
+                return _missing.TryGet(normJid, messageId, out candidate);
             }
         }
 
@@ -380,7 +315,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             DateTime utcNow = DateTime.UtcNow;
             CancellationTokenSource scheduleCts = null;
-            lock (_missingMessageLock)
+            lock (_missing.Gate)
             {
                 if (candidate.PlaceholderRequestCount >= 2 ||
                     candidate.PlaceholderRequestInFlight ||
@@ -415,7 +350,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
                 MissingMessageCandidate currentCandidate;
-                lock (_missingMessageLock)
+                lock (_missing.Gate)
                 {
                     if (!TryGetMissingMessage(chatJid, messageId, out currentCandidate) ||
                         currentCandidate.PlaceholderScheduleCts != scheduleCts)
@@ -440,7 +375,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     };
 
                     stanzaId = _socket.GenerateMessageId();
-                    lock (_missingMessageLock)
+                    lock (_missing.Gate)
                     {
                         if (!TryGetMissingMessage(chatJid, messageId, out currentCandidate))
                         {
@@ -450,7 +385,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         currentCandidate.LastPlaceholderRequestUtc = DateTime.UtcNow;
                         currentCandidate.PlaceholderRequestCount++;
                         currentCandidate.LastPlaceholderRequestId = stanzaId;
-                        _placeholderResendRequestsByStanzaId[stanzaId] = new PlaceholderResendRequestState
+                        _missing.Resends[stanzaId] = new PlaceholderResendRequestState
                         {
                             ChatJid = currentCandidate.ChatJid,
                             MessageId = currentCandidate.MessageId,
@@ -472,11 +407,11 @@ namespace Unison.Uwp.Services.WhatsApp
                         await Task.Delay(PlaceholderResendResponseTimeout);
 
                         PlaceholderResendRequestState timedOutState = null;
-                        lock (_missingMessageLock)
+                        lock (_missing.Gate)
                         {
-                            if (_placeholderResendRequestsByStanzaId.TryGetValue(stanzaId, out timedOutState))
+                            if (_missing.Resends.TryGetValue(stanzaId, out timedOutState))
                             {
-                                _placeholderResendRequestsByStanzaId.Remove(stanzaId);
+                                _missing.Resends.Remove(stanzaId);
                                 if (TryGetMissingMessage(timedOutState.ChatJid, timedOutState.MessageId, out var timedOutCandidate) &&
                                     string.Equals(timedOutCandidate.LastPlaceholderRequestId, stanzaId, StringComparison.Ordinal))
                                 {
@@ -494,11 +429,11 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
                 catch (Exception ex)
                 {
-                    lock (_missingMessageLock)
+                    lock (_missing.Gate)
                     {
                         if (!string.IsNullOrWhiteSpace(stanzaId))
                         {
-                            _placeholderResendRequestsByStanzaId.Remove(stanzaId);
+                            _missing.Resends.Remove(stanzaId);
                         }
                         if (TryGetMissingMessage(chatJid, messageId, out currentCandidate))
                         {
@@ -596,9 +531,9 @@ namespace Unison.Uwp.Services.WhatsApp
 
             List<MissingMessageCandidate> pending;
             int totalEligible;
-            lock (_missingMessageLock)
+            lock (_missing.Gate)
             {
-                pending = _pendingMissingMessagesByChat
+                pending = _missing.Pending
                     .Values
                     .SelectMany(byMessageId => byMessageId.Values)
                     .Where(candidate =>
@@ -691,20 +626,20 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             DateTime utcNow = DateTime.UtcNow;
-            lock (_missingMessageLock)
+            lock (_missing.Gate)
             {
-                if (_activeChatReconcileCooldownByChat.TryGetValue(normJid, out var cooldownUntil) &&
+                if (_missing.Cooldowns.TryGetValue(normJid, out var cooldownUntil) &&
                     cooldownUntil > utcNow)
                 {
                     return false;
                 }
-                _activeChatReconcileCooldownByChat[normJid] = utcNow.Add(ActiveChatReconcileCooldown);
+                _missing.Cooldowns[normJid] = utcNow.Add(ActiveChatReconcileCooldown);
             }
 
             List<string> pendingIds;
-            lock (_missingMessageLock)
+            lock (_missing.Gate)
             {
-                pendingIds = _pendingMissingMessagesByChat.TryGetValue(normJid, out var byMessageId)
+                pendingIds = _missing.Pending.TryGetValue(normJid, out var byMessageId)
                     ? byMessageId.Keys.Take(maxRequests).ToList()
                     : new List<string>();
             }
@@ -1027,12 +962,12 @@ namespace Unison.Uwp.Services.WhatsApp
             Debug.WriteLine($"[WhatsAppService] PeerDataOperationResponse received: stanzaId={response.StanzaId}, requestType={response.PeerDataOperationRequestType}, resultCount={response.PeerDataOperationResult?.Count ?? 0}");
 
             PlaceholderResendRequestState requestState = null;
-            lock (_missingMessageLock)
+            lock (_missing.Gate)
             {
                 if (!string.IsNullOrWhiteSpace(response.StanzaId))
                 {
-                    _placeholderResendRequestsByStanzaId.TryGetValue(response.StanzaId, out requestState);
-                    _placeholderResendRequestsByStanzaId.Remove(response.StanzaId);
+                    _missing.Resends.TryGetValue(response.StanzaId, out requestState);
+                    _missing.Resends.Remove(response.StanzaId);
                     if (requestState != null &&
                         TryGetMissingMessage(requestState.ChatJid, requestState.MessageId, out var candidate) &&
                         string.Equals(candidate.LastPlaceholderRequestId, response.StanzaId, StringComparison.Ordinal))
@@ -1111,16 +1046,16 @@ namespace Unison.Uwp.Services.WhatsApp
             PlaceholderResendRequestState requestState = null;
             bool rejected = !string.IsNullOrWhiteSpace(ackError);
 
-            lock (_missingMessageLock)
+            lock (_missing.Gate)
             {
-                if (!_placeholderResendRequestsByStanzaId.TryGetValue(ackId, out requestState))
+                if (!_missing.Resends.TryGetValue(ackId, out requestState))
                 {
                     return;
                 }
 
                 if (rejected)
                 {
-                    _placeholderResendRequestsByStanzaId.Remove(ackId);
+                    _missing.Resends.Remove(ackId);
                     if (TryGetMissingMessage(requestState.ChatJid, requestState.MessageId, out var candidate) &&
                         string.Equals(candidate.LastPlaceholderRequestId, ackId, StringComparison.Ordinal))
                     {

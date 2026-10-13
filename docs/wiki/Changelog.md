@@ -4,6 +4,14 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Missing-message ledger — one lock
+
+Placeholder repairs for messages that never arrived now live in `MissingMessageLedger`.
+Noting a gap, resolving it, and forgetting a deleted chat share one lock with the resend
+they are waiting on. The request to the server still goes out from the incoming pump.
+
+---
+
 ## Broken chat picture — cleared by `ContactFacade`
 
 A picture that fails to draw is dropped by `ContactFacade`: the cached file is deleted, the row

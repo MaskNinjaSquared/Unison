@@ -1166,32 +1166,6 @@ namespace Unison.Uwp.Services.WhatsApp
             public DateTime LastMessageTimestamp { get; set; }
             public string SelectionReason { get; set; }
         }
-        private sealed class MissingMessageCandidate
-        {
-            public string ChatJid { get; set; }
-            public string Participant { get; set; }
-            public string MessageId { get; set; }
-            public bool IsFromMe { get; set; }
-            public DateTime MessageTimestamp { get; set; }
-            public string Reason { get; set; }
-            public DateTime FirstSeenUtc { get; set; }
-            public DateTime LastSeenUtc { get; set; }
-            public DateTime LastPlaceholderRequestUtc { get; set; }
-            public int PlaceholderRequestCount { get; set; }
-            public string LastPlaceholderRequestId { get; set; }
-            public DateTime PlaceholderScheduledForUtc { get; set; }
-            public bool PlaceholderRequestInFlight { get; set; }
-            public CancellationTokenSource PlaceholderScheduleCts { get; set; }
-        }
-        private sealed class PlaceholderResendRequestState
-        {
-            public string ChatJid { get; set; }
-            public string MessageId { get; set; }
-            public DateTime RequestedAtUtc { get; set; }
-            public string Trigger { get; set; }
-            public bool AckAccepted { get; set; }
-            public DateTime AckAcceptedUtc { get; set; }
-        }
         private readonly MessageIdIndex _messageIdIndex = new MessageIdIndex();
         private readonly Dictionary<string, string> _historyOnDemandMarkerByChat = new Dictionary<string, string>();
         private readonly HashSet<string> _historyOnDemandInFlight = new HashSet<string>();
@@ -1210,9 +1184,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private static readonly TimeSpan UserResyncHistoryWaitTimeout = TimeSpan.FromMinutes(3);
         private readonly SemaphoreSlim _historyBackfillLock = new SemaphoreSlim(1, 1);
         private volatile bool _historyBackfillActive = false;
-        private readonly Dictionary<string, Dictionary<string, MissingMessageCandidate>> _pendingMissingMessagesByChat = new Dictionary<string, Dictionary<string, MissingMessageCandidate>>();
-        private readonly Dictionary<string, PlaceholderResendRequestState> _placeholderResendRequestsByStanzaId = new Dictionary<string, PlaceholderResendRequestState>();
-        private readonly Dictionary<string, DateTime> _activeChatReconcileCooldownByChat = new Dictionary<string, DateTime>();
         private sealed class PendingPinState
         {
             public bool IsPinned { get; set; }
@@ -1497,7 +1468,7 @@ namespace Unison.Uwp.Services.WhatsApp
             return count;
         }
 
-        private readonly object _missingMessageLock = new object();
+        private readonly MissingMessageLedger _missing = new MissingMessageLedger();
         private string _lastResolvedSelfDisplayNameForLog;
         private static readonly TimeSpan HistoryBackfillCooldown = TimeSpan.FromHours(2);
         private static readonly TimeSpan HistoryBackfillStaleThreshold = TimeSpan.FromHours(8);

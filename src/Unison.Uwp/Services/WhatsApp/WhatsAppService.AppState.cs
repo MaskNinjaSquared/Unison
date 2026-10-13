@@ -218,7 +218,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 _historyOnDemandLastRequestIdByChat.Remove(canonical);
                 _historyOnDemandAttemptsByChat.Remove(canonical);
                 _historyOnDemandRejectedUntilUtcByChat.Remove(canonical);
-                _activeChatReconcileCooldownByChat.Remove(canonical);
+                _missing.Cooldowns.Remove(canonical);
             });
 
             await ForgetChatInStorageAsync(canonical, keys).ConfigureAwait(false);
