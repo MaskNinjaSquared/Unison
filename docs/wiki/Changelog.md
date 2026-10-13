@@ -4,6 +4,14 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Alias duplicate bubble — one move
+
+When the same message is held under both addresses of one person, moving it onto the
+target chat is `AliasDuplicateMessageMove`. A target that already has the id keeps its
+copy. The incoming pump still decides when the two addresses are the same person.
+
+---
+
 ## Missing-message ledger — one lock
 
 Placeholder repairs for messages that never arrived now live in `MissingMessageLedger`.

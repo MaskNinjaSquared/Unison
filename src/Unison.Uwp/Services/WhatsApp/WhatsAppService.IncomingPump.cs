@@ -146,45 +146,13 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private bool TryConsolidateAliasDuplicateMessage(string targetChatJid, string sourceChatJid, string messageId, out ChatMessage consolidatedMessage)
         {
-            consolidatedMessage = null;
-            string normalizedTarget = NormalizeJid(targetChatJid);
-            string normalizedSource = NormalizeJid(sourceChatJid);
-            if (string.IsNullOrWhiteSpace(normalizedTarget) ||
-                string.IsNullOrWhiteSpace(normalizedSource) ||
-                string.IsNullOrWhiteSpace(messageId) ||
-                string.Equals(normalizedTarget, normalizedSource, StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-
-            if (!MessagesByChat.TryGetValue(normalizedSource, out var sourceMessages) || sourceMessages == null)
-            {
-                return false;
-            }
-
-            var existingMessage = sourceMessages.FirstOrDefault(m => string.Equals(m?.Id, messageId, StringComparison.Ordinal));
-            if (existingMessage == null)
-            {
-                return false;
-            }
-
-            consolidatedMessage = existingMessage;
-            if (!MessagesByChat.TryGetValue(normalizedTarget, out var targetMessages) || targetMessages == null)
-            {
-                targetMessages = new List<ChatMessage>();
-                MessagesByChat[normalizedTarget] = targetMessages;
-            }
-
-            if (!HasMessageId(normalizedTarget, messageId))
-            {
-                ChatMessageOrder.InsertSorted(targetMessages, existingMessage);
-                RegisterMessageId(normalizedTarget, messageId);
-            }
-
-            sourceMessages.Remove(existingMessage);
-            _messageIdIndex.Remove(normalizedSource, messageId);
-
-            return true;
+            return AliasDuplicateMessageMove.TryMove(
+                MessagesByChat,
+                _messageIdIndex,
+                NormalizeJid(targetChatJid),
+                NormalizeJid(sourceChatJid),
+                messageId,
+                out consolidatedMessage);
         }
 
         private void RegisterMissingMessage(string chatJid, string participant, string messageId, bool isFromMe, DateTime timestamp, string reason)
