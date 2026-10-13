@@ -18,6 +18,7 @@ using System.IO;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading.Tasks;
 using Unison.Core.Contracts;
+using Unison.Core.Helpers;
 using Unison.Uwp.Client;
 using Unison.Uwp.Helpers;
 using Windows.Storage;
@@ -66,6 +67,83 @@ namespace Unison.Uwp.Services
             }
 
             return await _cache.SaveAsync(MediaCacheKind.Image, displayFileBase, ".png", png);
+        }
+
+        /// <summary>
+        /// The URI a row should show. The original when this machine can decode WebP, when the
+        /// file is not WebP, or when the PNG sibling cannot be built. Otherwise the sibling.
+        /// </summary>
+        internal async Task<string> RepairWebPForDisplayAsync(string uri)
+        {
+            if (string.IsNullOrWhiteSpace(uri) || WebPHelpers.HasWebPCodec || !WebPCacheUri.Matches(uri))
+            {
+                return uri;
+            }
+
+            string fileBase = WebPDisplayName.FileBaseOrSkip(uri);
+            if (fileBase == null)
+            {
+                return uri;
+            }
+
+            string existingDisplay = await _cache.TryGetUriAsync(
+                MediaCacheKind.Image,
+                fileBase + "_display",
+                MediaFileExtensions.ForImage("image/png"));
+            if (!string.IsNullOrWhiteSpace(existingDisplay))
+            {
+                return existingDisplay;
+            }
+
+            byte[] webpBytes = await _cache.TryReadAsync(uri);
+            if (webpBytes == null || webpBytes.Length == 0)
+            {
+                Debug.WriteLine("[WhatsAppService] WebP repair: could not read " + uri);
+                return uri;
+            }
+
+            string displayUri = await EnsurePngDisplayCopyAsync(webpBytes, fileBase);
+            if (string.IsNullOrWhiteSpace(displayUri))
+            {
+                Debug.WriteLine("[WhatsAppService] WebP repair: convert failed for " + uri);
+                return uri;
+            }
+
+            return displayUri;
+        }
+
+        /// <summary>
+        /// M4A when the platform can transcode Opus, otherwise a WAV. The original comes back
+        /// unchanged when it is already playable or neither rendition could be built.
+        /// </summary>
+        internal async Task<PlayableAudioFile> EnsurePlayableAsync(string mimeType, string sourceUri, string messageId)
+        {
+            if (string.IsNullOrWhiteSpace(sourceUri) ||
+                !MediaFileExtensions.NeedsAudioTranscode(mimeType, sourceUri))
+            {
+                return new PlayableAudioFile { Uri = sourceUri, MimeType = mimeType };
+            }
+
+            string playable = await TryTranscodeOggOpusToM4aAsync(sourceUri, messageId);
+            string playMime = "audio/mp4";
+            if (string.IsNullOrWhiteSpace(playable))
+            {
+                SessionLogger.Instance.WriteAlways(
+                    "[Audio/ogg-wav] trying Concentus decode id=" + (messageId ?? "?"));
+                playable = await OggOpusHandlerService.DecodeUriToWavFileAsync(sourceUri, messageId);
+                playMime = "audio/wav";
+            }
+
+            if (string.IsNullOrWhiteSpace(playable))
+            {
+                SessionLogger.Instance.WriteAlways(
+                    "[Audio/playable] fell back to original ogg id=" + (messageId ?? "?"));
+                return new PlayableAudioFile { Uri = sourceUri, MimeType = mimeType };
+            }
+
+            SessionLogger.Instance.WriteAlways(
+                "[Audio/playable] ok id=" + (messageId ?? "?") + " uri=" + playable + " mime=" + playMime);
+            return new PlayableAudioFile { Uri = playable, MimeType = playMime };
         }
 
         /// <summary>
@@ -249,5 +327,12 @@ namespace Unison.Uwp.Services
 
             return null;
         }
+    }
+
+    internal sealed class PlayableAudioFile
+    {
+        public string Uri { get; set; }
+
+        public string MimeType { get; set; }
     }
 }

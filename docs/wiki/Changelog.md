@@ -4,6 +4,14 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Playback repair — PNG sibling and playable voice note
+
+Building the PNG a phone can show, and the M4A or WAV a phone can play, left the download methods.
+`MediaDerivationService` does that work. The client still writes the new URI onto the message and
+saves it. A file that is already a `_display` sibling is still left alone.
+
+---
+
 ## Member pictures — on `GroupFacade`
 
 A member picture GET and the stamp onto every matching roster row left `WhatsAppService`.

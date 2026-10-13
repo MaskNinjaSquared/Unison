@@ -129,76 +129,19 @@ namespace Unison.Uwp.Services.WhatsApp
                 return null;
             }
 
-            string uri = message.ImageUri;
-            if (string.IsNullOrWhiteSpace(uri))
+            string repaired = await _mediaDerivation.RepairWebPForDisplayAsync(message.ImageUri);
+            if (!string.IsNullOrWhiteSpace(repaired) &&
+                !string.Equals(message.ImageUri, repaired, StringComparison.OrdinalIgnoreCase))
             {
-                return uri;
+                message.ImageUri = repaired;
+                await PersistMessageImageUriAsync(message);
             }
 
-            if (WebPHelpers.HasWebPCodec || !IsWebPCacheUri(uri))
-            {
-                return uri;
-            }
-
-            string fileName = uri;
-            int slash = uri.LastIndexOf('/');
-            if (slash >= 0 && slash < uri.Length - 1)
-            {
-                fileName = uri.Substring(slash + 1);
-            }
-
-            string fileBase = Path.GetFileNameWithoutExtension(fileName);
-            if (string.IsNullOrWhiteSpace(fileBase))
-            {
-                return uri;
-            }
-
-            // Already a display sibling name — nothing to do.
-            if (fileBase.EndsWith("_display", StringComparison.OrdinalIgnoreCase))
-            {
-                return uri;
-            }
-
-            string displayFileBase = fileBase + "_display";
-            var existingDisplay = await TryGetCachedImageUriAsync(displayFileBase, "image/png");
-            if (!string.IsNullOrWhiteSpace(existingDisplay))
-            {
-                if (!string.Equals(message.ImageUri, existingDisplay, StringComparison.OrdinalIgnoreCase))
-                {
-                    message.ImageUri = existingDisplay;
-                    await PersistMessageImageUriAsync(message);
-                }
-
-                return existingDisplay;
-            }
-
-            byte[] webpBytes = await TryReadCachedImageBytesAsync(uri);
-            if (webpBytes == null || webpBytes.Length == 0)
-            {
-                Debug.WriteLine("[WhatsAppService] WebP repair: could not read " + uri);
-                return uri;
-            }
-
-            string displayUri = await ConvertWebPBytesToDisplayPngAsync(webpBytes, fileBase);
-            if (string.IsNullOrWhiteSpace(displayUri))
-            {
-                Debug.WriteLine("[WhatsAppService] WebP repair: convert failed for " + uri);
-                return uri;
-            }
-
-            message.ImageUri = displayUri;
-            await PersistMessageImageUriAsync(message);
-            return displayUri;
+            return repaired;
         }
 
         private Task<string> ConvertWebPBytesToDisplayPngAsync(byte[] imageBytes, string fileBase) =>
             _mediaDerivation.EnsurePngDisplayCopyAsync(imageBytes, fileBase);
-
-        private static bool IsWebPCacheUri(string uri) =>
-            WebPCacheUri.Matches(uri);
-
-        private Task<byte[]> TryReadCachedImageBytesAsync(string msAppDataUri) =>
-            _mediaCache.TryReadAsync(msAppDataUri);
 
         private async Task PersistMessageImageUriAsync(ChatMessage message)
         {
@@ -216,12 +159,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 Debug.WriteLine("[WhatsAppService] Persist ImageUri failed: " + ex.Message);
             }
         }
-
-        private Task<string> TryGetCachedImageUriAsync(string fileBase, string mimeType) =>
-            _mediaCache.TryGetUriAsync(
-                MediaCacheKind.Image,
-                fileBase,
-                MediaFileExtensions.ForImage(mimeType));
 
         private Task<string> SaveStickerBytesToCacheAsync(byte[] imageBytes, string fileBase, string mimeType)
         {
@@ -271,13 +208,6 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        /// <summary>
-        /// WhatsApp voice notes are often Ogg/Opus — fine on desktop MediaPlayer, often fails on W10 Mobile.
-        /// Renaming the extension alone does not change the codec; re-encode to AAC/.m4a when possible.
-        /// </summary>
-        private Task<string> TryTranscodeOggOpusToM4aAsync(string sourceUri, string fileBase) =>
-            _mediaDerivation.TryTranscodeOggOpusToM4aAsync(sourceUri, fileBase);
-
         /// <summary>If source is ogg/opus, prefer m4a (MF) then WAV (Concentus) for Mobile playback.</summary>
         private async Task<string> EnsurePlayableAudioUriAsync(ChatMessage message, string sourceUri)
         {
@@ -286,33 +216,19 @@ namespace Unison.Uwp.Services.WhatsApp
                 return sourceUri;
             }
 
-            if (!MediaFileExtensions.NeedsAudioTranscode(message.AudioMimeType, sourceUri))
+            PlayableAudioFile playable = await _mediaDerivation.EnsurePlayableAsync(
+                message.AudioMimeType,
+                sourceUri,
+                message.Id);
+            if (playable == null ||
+                string.IsNullOrWhiteSpace(playable.Uri) ||
+                string.Equals(playable.Uri, sourceUri, StringComparison.Ordinal))
             {
                 return sourceUri;
             }
 
-            // 1) Platform transcoder (works on desktop when Opus MF codec exists).
-            string playable = await TryTranscodeOggOpusToM4aAsync(sourceUri, message.Id);
-            string playMime = "audio/mp4";
-
-            // 2) Mobile has no Opus MF decoder — Concentus → PCM WAV (MediaPlayer always accepts WAV).
-            if (string.IsNullOrWhiteSpace(playable))
-            {
-                SessionLogger.Instance.WriteAlways(
-                    "[Audio/ogg-wav] trying Concentus decode id=" + (message.Id ?? "?"));
-                playable = await OggOpusHandlerService.DecodeUriToWavFileAsync(sourceUri, message.Id);
-                playMime = "audio/wav";
-            }
-
-            if (string.IsNullOrWhiteSpace(playable))
-            {
-                SessionLogger.Instance.WriteAlways(
-                    "[Audio/playable] fell back to original ogg id=" + (message.Id ?? "?"));
-                return sourceUri;
-            }
-
-            message.AudioUri = playable;
-            message.AudioMimeType = playMime;
+            message.AudioUri = playable.Uri;
+            message.AudioMimeType = playable.MimeType;
             string chatJid = GetCanonicalJid(message.RemoteJid);
             if (!string.IsNullOrWhiteSpace(chatJid))
             {
@@ -327,9 +243,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
             }
 
-            SessionLogger.Instance.WriteAlways(
-                "[Audio/playable] ok id=" + (message.Id ?? "?") + " uri=" + playable + " mime=" + playMime);
-            return playable;
+            return playable.Uri;
         }
 
         public async Task<string> EnsureAudioAvailableAsync(ChatMessage message)
