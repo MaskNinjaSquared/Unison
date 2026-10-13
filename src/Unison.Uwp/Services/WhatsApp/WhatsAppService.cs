@@ -212,7 +212,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private IMessageStore _messageStore = new MessageStore();
         private readonly IHistoryMessageStore _historyMessages;
         private readonly IHistoryChatPreviewStore _chatPreviews;
-        private readonly IAvatarCache _avatarCache;
         private readonly IUsyncGate _usyncGate;
         private readonly AvatarFetcher _avatarFetcher;
         private readonly IMediaCache _mediaCache;
@@ -1678,7 +1677,6 @@ namespace Unison.Uwp.Services.WhatsApp
             ChatStateStore chatState,
             IHistoryMessageStore historyMessages,
             IHistoryChatPreviewStore chatPreviews,
-            IAvatarCache avatarCache,
             IUsyncGate usyncGate,
             AvatarFetcher avatarFetcher,
             IMediaCache mediaCache,
@@ -1693,7 +1691,6 @@ namespace Unison.Uwp.Services.WhatsApp
             _chatState = chatState;
             _historyMessages = historyMessages ?? throw new ArgumentNullException(nameof(historyMessages));
             _chatPreviews = chatPreviews ?? throw new ArgumentNullException(nameof(chatPreviews));
-            _avatarCache = avatarCache ?? throw new ArgumentNullException(nameof(avatarCache));
             _usyncGate = usyncGate ?? throw new ArgumentNullException(nameof(usyncGate));
             _avatarFetcher = avatarFetcher ?? throw new ArgumentNullException(nameof(avatarFetcher));
             _mediaCache = mediaCache ?? throw new ArgumentNullException(nameof(mediaCache));
@@ -1720,7 +1717,6 @@ namespace Unison.Uwp.Services.WhatsApp
             ChatStateStore chatState,
             IHistoryMessageStore historyMessages,
             IHistoryChatPreviewStore chatPreviews,
-            IAvatarCache avatarCache,
             IUsyncGate usyncGate,
             AvatarFetcher avatarFetcher,
             IMediaCache mediaCache,
@@ -1728,7 +1724,7 @@ namespace Unison.Uwp.Services.WhatsApp
             MediaDerivationService mediaDerivation)
         {
             return _instance ?? (_instance = new WhatsAppService(
-                chatState, historyMessages, chatPreviews, avatarCache, usyncGate, avatarFetcher, mediaCache, jidAlias, mediaDerivation));
+                chatState, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, mediaDerivation));
         }
 
         /// <summary>

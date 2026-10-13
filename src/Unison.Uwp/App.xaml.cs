@@ -250,7 +250,6 @@ namespace Unison.Uwp
                     sp.GetRequiredService<ChatStateStore>(),
                     sp.GetRequiredService<IHistoryMessageStore>(),
                     sp.GetRequiredService<IHistoryChatPreviewStore>(),
-                    sp.GetRequiredService<IAvatarCache>(),
                     sp.GetRequiredService<IUsyncGate>(),
                     sp.GetRequiredService<AvatarFetcher>(),
                     sp.GetRequiredService<IMediaCache>(),

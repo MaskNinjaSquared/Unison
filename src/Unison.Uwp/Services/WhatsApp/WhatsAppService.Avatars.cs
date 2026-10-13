@@ -48,27 +48,6 @@ namespace Unison.Uwp.Services.WhatsApp
             return _avatarFetcher.FetchUrlAsync(jid, type);
         }
 
-        public void MarkAvatarImageLoadFailed(ChatItem chat, string reason)
-        {
-            if (chat == null)
-            {
-                return;
-            }
-
-            _avatarCache.DeleteIfCached(chat.AvatarUrl);
-
-            // Nao mantenha uma URI local quebrada nem aplique o backoff de 30 minutos:
-            // isso fazia a foto desaparecer durante toda a sessao. A linha visivel pede
-            // uma nova consulta imediatamente, tentando tambem o JID alternativo PN/LID.
-            chat.AvatarUrl = null;
-            chat.AvatarFetchedAtUtc = null;
-            chat.AvatarFetchFailedAtUtc = null;
-            chat.AvatarFetchFailureReason = string.IsNullOrWhiteSpace(reason) ? "ui-image-failed" : reason;
-            Debug.WriteLine($"[WhatsAppService] UI avatar image load failed for {chat.JID}: {chat.AvatarFetchFailureReason}");
-            RequestAvatarRefresh(chat, force: true);
-            SchedulePersist();
-        }
-
         /// <summary>Delegates to <see cref="IContactService"/> (owns dedup/backoff policy); this class only supplies the fetch primitive.</summary>
         public void RequestAvatarRefresh(ChatItem chat, bool force = false)
         {

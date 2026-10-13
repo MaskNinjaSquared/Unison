@@ -47,6 +47,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly ContactUsyncResolver _usync;
         private readonly ContactNameResolver _names;
         private readonly ChatAvatarPolicy _avatars;
+        private readonly IAvatarCache _avatarCache;
         private readonly GroupRosterPolicy _roster;
         private DateTime _lastWindowsPublishUtc = DateTime.MinValue;
         private int _lastWindowsPublishCount;
@@ -80,6 +81,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
             _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
+            _avatarCache = avatarCache;
             _localContacts = localContacts;
             _localSettings = localSettings ?? throw new ArgumentNullException(nameof(localSettings));
 
@@ -162,7 +164,17 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 return;
             }
 
-            _whatsAppService.MarkAvatarImageLoadFailed(chat, reason);
+            _avatarCache.DeleteIfCached(chat.AvatarUrl);
+
+            // A broken local URI used to stay, and the 30-minute backoff then hid the picture
+            // for the rest of the session. Clear it and ask again at once, including the PN/LID alias.
+            chat.AvatarUrl = null;
+            chat.AvatarFetchedAtUtc = null;
+            chat.AvatarFetchFailedAtUtc = null;
+            chat.AvatarFetchFailureReason = string.IsNullOrWhiteSpace(reason) ? "ui-image-failed" : reason;
+            Debug.WriteLine($"[ContactFacade] UI avatar image load failed for {chat.JID}: {chat.AvatarFetchFailureReason}");
+            RequestAvatarRefresh(chat, force: true);
+            _whatsAppService.SchedulePersistPublic();
         }
 
         public bool IsContactRefreshRunning => _names.IsRunning;

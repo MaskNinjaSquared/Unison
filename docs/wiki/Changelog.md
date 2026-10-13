@@ -4,6 +4,14 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Broken chat picture — cleared by `ContactFacade`
+
+A picture that fails to draw is dropped by `ContactFacade`: the cached file is deleted, the row
+is cleared, and a new fetch is asked for at once. The 30-minute backoff is still not applied to
+that failure.
+
+---
+
 ## Cached chat pictures — filled in by `ContactFacade`
 
 Pictures already on disk are written onto the rows by `ChatAvatarFetch`, on one UI pass
