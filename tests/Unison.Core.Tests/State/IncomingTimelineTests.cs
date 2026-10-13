@@ -13,8 +13,7 @@ namespace Unison.Core.Tests.State
         private const string Lid = "111@lid";
         private const string Group = "999@g.us";
 
-        private readonly Dictionary<string, List<ChatMessage>> _messages =
-            new Dictionary<string, List<ChatMessage>>();
+        private readonly ChatMessageCache _messages = new ChatMessageCache();
         private readonly MessageIdIndex _index = new MessageIdIndex();
         private readonly List<string> _trimmed = new List<string>();
 
@@ -29,12 +28,12 @@ namespace Unison.Core.Tests.State
         [Fact]
         public void A_new_message_is_inserted_in_time_order_registered_and_trimmed()
         {
-            _messages[Pn] = new List<ChatMessage> { Message("late", 5) };
+            _messages.Set(Pn, new List<ChatMessage> { Message("late", 5) });
 
             IncomingTimelineAcceptResult result = Timeline().Accept(Pn, Message("early", 1), isGroup: false);
 
             Assert.Equal(IncomingTimelineAcceptKind.Inserted, result.Kind);
-            Assert.Equal("early", _messages[Pn][0].Id);
+            Assert.Equal("early", At(Pn)[0].Id);
             Assert.Equal(new[] { Pn }, _trimmed);
             Assert.True(_index.Contains(Pn, "early"));
             Assert.True(_index.Contains(Pn, "late"));
@@ -44,7 +43,7 @@ namespace Unison.Core.Tests.State
         public void A_message_already_in_the_chat_only_upgrades_the_existing_bubble()
         {
             var existing = Message("m1", 1);
-            _messages[Pn] = new List<ChatMessage> { existing };
+            _messages.Set(Pn, new List<ChatMessage> { existing });
             var again = Message("m1", 1);
             again.SenderName = "Ana";
 
@@ -54,7 +53,7 @@ namespace Unison.Core.Tests.State
             Assert.Same(existing, result.Message);
             Assert.True(result.ExistingChanged);
             Assert.Equal("Ana", existing.SenderName);
-            Assert.Single(_messages[Pn]);
+            Assert.Single(At(Pn));
             Assert.Empty(_trimmed);
         }
 
@@ -62,38 +61,38 @@ namespace Unison.Core.Tests.State
         public void A_direct_message_shown_under_the_other_address_moves_here()
         {
             var shown = Message("m1", 1);
-            _messages[Lid] = new List<ChatMessage> { shown };
+            _messages.Set(Lid, new List<ChatMessage> { shown });
 
             IncomingTimelineAcceptResult result = Timeline(Pn, Lid).Accept(Pn, Message("m1", 1), isGroup: false);
 
             Assert.Equal(IncomingTimelineAcceptKind.AliasConsolidated, result.Kind);
             Assert.Equal(Lid, result.AliasSourceChatJid);
             Assert.Same(shown, result.Message);
-            Assert.Same(shown, Assert.Single(_messages[Pn]));
-            Assert.Empty(_messages[Lid]);
+            Assert.Same(shown, Assert.Single(At(Pn)));
+            Assert.Empty(At(Lid));
         }
 
         [Fact]
         public void A_group_never_looks_under_an_alias()
         {
-            _messages[Lid] = new List<ChatMessage> { Message("m1", 1) };
+            _messages.Set(Lid, new List<ChatMessage> { Message("m1", 1) });
 
             IncomingTimelineAcceptResult result = Timeline(Group, Lid).Accept(Group, Message("m1", 1), isGroup: true);
 
             Assert.Equal(IncomingTimelineAcceptKind.Inserted, result.Kind);
-            Assert.Single(_messages[Lid]);
-            Assert.Single(_messages[Group]);
+            Assert.Single(At(Lid));
+            Assert.Single(At(Group));
         }
 
         [Fact]
         public void A_message_without_an_id_is_always_inserted()
         {
-            _messages[Pn] = new List<ChatMessage> { Message(null, 1) };
+            _messages.Set(Pn, new List<ChatMessage> { Message(null, 1) });
 
             IncomingTimelineAcceptResult result = Timeline().Accept(Pn, Message(null, 2), isGroup: false);
 
             Assert.Equal(IncomingTimelineAcceptKind.Inserted, result.Kind);
-            Assert.Equal(2, _messages[Pn].Count);
+            Assert.Equal(2, At(Pn).Count);
         }
 
         [Fact]
@@ -104,7 +103,7 @@ namespace Unison.Core.Tests.State
 
             Assert.Equal(IncomingTimelineAcceptKind.Inserted, blank.Kind);
             Assert.Null(none.Message);
-            Assert.Empty(_messages);
+            Assert.Empty(_messages.ChatJids());
         }
 
         [Fact]
@@ -112,7 +111,13 @@ namespace Unison.Core.Tests.State
         {
             Timeline().Accept("111:3@s.whatsapp.net", Message("m1", 1), isGroup: false);
 
-            Assert.True(_messages.ContainsKey(Pn));
+            Assert.True(_messages.Contains(Pn));
+        }
+
+        private List<ChatMessage> At(string chatJid)
+        {
+            Assert.True(_messages.TryGet(chatJid, out var list));
+            return list;
         }
 
         private static ChatMessage Message(string id, int minute) =>

@@ -16,7 +16,7 @@ namespace Unison.Core.State
     public static class AliasDuplicateMessageMove
     {
         public static bool TryMove(
-            IDictionary<string, List<ChatMessage>> messages,
+            ChatMessageCache messages,
             MessageIdIndex index,
             string targetJid,
             string sourceJid,
@@ -35,7 +35,7 @@ namespace Unison.Core.State
             }
 
             List<ChatMessage> sourceMessages;
-            if (!messages.TryGetValue(sourceJid, out sourceMessages) || sourceMessages == null)
+            if (!messages.TryGet(sourceJid, out sourceMessages) || sourceMessages == null)
             {
                 return false;
             }
@@ -48,12 +48,7 @@ namespace Unison.Core.State
             }
 
             moved = existing;
-            List<ChatMessage> targetMessages;
-            if (!messages.TryGetValue(targetJid, out targetMessages) || targetMessages == null)
-            {
-                targetMessages = new List<ChatMessage>();
-                messages[targetJid] = targetMessages;
-            }
+            List<ChatMessage> targetMessages = messages.GetOrAdd(targetJid);
 
             if (!index.GetOrBuild(targetJid, () => targetMessages).Contains(messageId))
             {

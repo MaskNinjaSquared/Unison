@@ -303,7 +303,7 @@ namespace Unison.Uwp.Services.WhatsApp
             bool removed = false;
             await RunOnUiThreadAsync(() =>
             {
-                if (!MessagesByChat.TryGetValue(canonical, out var messages) || messages == null || messages.Count == 0)
+                if (!MessagesByChat.TryGet(canonical, out var messages) || messages == null || messages.Count == 0)
                 {
                     return;
                 }

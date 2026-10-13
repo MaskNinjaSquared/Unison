@@ -12,10 +12,8 @@ namespace Unison.Core.Tests.State
         public void The_message_is_found_in_the_other_address()
         {
             var message = new ChatMessage { Id = "m1" };
-            var messages = new Dictionary<string, List<ChatMessage>>
-            {
-                ["111@lid"] = new List<ChatMessage> { message }
-            };
+            var messages = new ChatMessageCache();
+            messages.Set("111@lid", new List<ChatMessage> { message });
 
             string chatJid;
             ChatMessage found;
@@ -34,10 +32,8 @@ namespace Unison.Core.Tests.State
         [Fact]
         public void A_missing_id_or_an_empty_chat_is_not_a_hit()
         {
-            var messages = new Dictionary<string, List<ChatMessage>>
-            {
-                ["111@s.whatsapp.net"] = new List<ChatMessage>()
-            };
+            var messages = new ChatMessageCache();
+            messages.Set("111@s.whatsapp.net", new List<ChatMessage>());
 
             string chatJid;
             ChatMessage found;

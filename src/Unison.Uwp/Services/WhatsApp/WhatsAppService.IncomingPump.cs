@@ -49,7 +49,7 @@ namespace Unison.Uwp.Services.WhatsApp
             return _messageIdIndex.GetOrBuild(normJid, () =>
             {
                 List<ChatMessage> list;
-                return MessagesByChat.TryGetValue(normJid, out list) ? list : null;
+                return MessagesByChat.TryGet(normJid, out list) ? list : null;
             });
         }
 
@@ -601,7 +601,7 @@ namespace Unison.Uwp.Services.WhatsApp
             if (!string.IsNullOrWhiteSpace(envelopeMessageId) &&
                 !string.Equals(envelopeMessageId, targetId, StringComparison.Ordinal))
             {
-                foreach (var pair in MessagesByChat.ToList())
+                foreach (var pair in MessagesByChat.Snapshot())
                 {
                     if (!string.Equals(GetCanonicalJid(pair.Key), canonical, StringComparison.OrdinalIgnoreCase)) continue;
                     var synthetic = pair.Value?.FirstOrDefault(m => string.Equals(m?.Id, envelopeMessageId, StringComparison.Ordinal));
@@ -614,7 +614,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             ChatMessage target = null;
-            foreach (var pair in MessagesByChat.ToList())
+            foreach (var pair in MessagesByChat.Snapshot())
             {
                 if (!string.Equals(GetCanonicalJid(pair.Key), canonical, StringComparison.OrdinalIgnoreCase)) continue;
                 target = pair.Value?.FirstOrDefault(m => string.Equals(m?.Id, targetId, StringComparison.Ordinal));
@@ -644,7 +644,7 @@ namespace Unison.Uwp.Services.WhatsApp
             await SaveMessageAsync(canonical, target);
 
             if (IsActiveChatJid(canonical)) QueueChatMessagesChanged(canonical);
-            var latest = MessagesByChat.TryGetValue(canonical, out var canonicalMessages)
+            var latest = MessagesByChat.TryGet(canonical, out var canonicalMessages)
                 ? ChatPreviewTip.PickLatest(canonicalMessages)
                 : null;
             if (latest != null && string.Equals(latest.Id, target.Id, StringComparison.Ordinal))
@@ -1260,10 +1260,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             ? GetResolvedName(!string.IsNullOrEmpty(reactionParticipant) ? reactionParticipant : jid)
                             : GetResolvedName(jid));
 
-                    if (!MessagesByChat.ContainsKey(jid))
-                    {
-                        MessagesByChat[jid] = new List<ChatMessage>();
-                    }
+                    var reactionTimeline = MessagesByChat.GetOrAdd(jid);
 
                     var reactionContext = new ChatMessageMapContext
                     {
@@ -1277,7 +1274,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     };
 
                     ChatMessage reactionParent;
-                    if (_messageService.TryHandleReaction(e.Message, reactionContext, MessagesByChat[jid], out reactionParent))
+                    if (_messageService.TryHandleReaction(e.Message, reactionContext, reactionTimeline, out reactionParent))
                     {
                         SetIncomingMessagePumpStage("reaction", e);
                         if (reactionParent != null)
@@ -1591,7 +1588,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 ResolveMissingMessage(jid, chatMessage.Id, "live-arrival");
                 if (!e.IsOffline)
                 {
-                    Log($"[WhatsAppService] Added message to chat {jid}. Total messages in memory: {MessagesByChat[jid].Count}");
+                    Log($"[WhatsAppService] Added message to chat {jid}. Total messages in memory: {MessagesByChat.CountFor(jid)}");
                 }
                 if (e.IsOffline)
                 {
@@ -1749,7 +1746,7 @@ namespace Unison.Uwp.Services.WhatsApp
             ChatMessage existing = null;
             string persistJid = chatJid;
 
-            if (MessagesByChat.TryGetValue(chatJid, out var list) && list != null)
+            if (MessagesByChat.TryGet(chatJid, out var list) && list != null)
             {
                 existing = list.FirstOrDefault(
                     m => m != null && string.Equals(m.Id, e.MessageId, StringComparison.Ordinal));
@@ -1952,7 +1949,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 foreach (var chat in Chats)
                 {
                     string canonicalJid = GetCanonicalJid(chat.JID);
-                    if (!MessagesByChat.TryGetValue(canonicalJid, out var messages) || messages == null || messages.Count == 0)
+                    if (!MessagesByChat.TryGet(canonicalJid, out var messages) || messages == null || messages.Count == 0)
                     {
                         continue;
                     }
@@ -2009,7 +2006,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 int refreshed = 0;
                 int created = 0;
 
-                foreach (var kvp in MessagesByChat)
+                foreach (var kvp in MessagesByChat.Snapshot())
                 {
                     string canonicalJid = GetCanonicalJid(kvp.Key);
                     if (string.IsNullOrWhiteSpace(canonicalJid) || kvp.Value == null || kvp.Value.Count == 0)

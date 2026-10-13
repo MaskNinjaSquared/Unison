@@ -14,7 +14,7 @@ namespace Unison.Core.State
     public static class AliasLinkedMessageFind
     {
         public static bool TryFind(
-            IDictionary<string, List<ChatMessage>> messages,
+            ChatMessageCache messages,
             IEnumerable<string> chatJids,
             string messageId,
             out string existingChatJid,
@@ -30,7 +30,7 @@ namespace Unison.Core.State
             foreach (string chatJid in chatJids ?? Enumerable.Empty<string>())
             {
                 List<ChatMessage> rows;
-                if (!messages.TryGetValue(chatJid, out rows) || rows == null)
+                if (!messages.TryGet(chatJid, out rows) || rows == null)
                 {
                     continue;
                 }

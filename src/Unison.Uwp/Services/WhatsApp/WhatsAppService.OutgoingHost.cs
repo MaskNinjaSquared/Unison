@@ -43,12 +43,7 @@ namespace Unison.Uwp.Services.WhatsApp
         void IOutgoingMessageHost.AcceptOutgoing(string chatJid, ChatMessage message)
         {
             ApplyPendingStateToMessage(chatJid, message);
-            if (!MessagesByChat.ContainsKey(chatJid))
-            {
-                MessagesByChat[chatJid] = new List<ChatMessage>();
-            }
-
-            ChatMessageOrder.InsertSorted(MessagesByChat[chatJid], message);
+            ChatMessageOrder.InsertSorted(MessagesByChat.GetOrAdd(chatJid), message);
             TrimInMemoryMessageWindow(chatJid);
             RegisterMessageId(chatJid, message.Id);
         }

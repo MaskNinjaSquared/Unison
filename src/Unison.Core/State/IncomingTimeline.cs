@@ -17,14 +17,14 @@ namespace Unison.Core.State
 {
     public sealed class IncomingTimeline
     {
-        private readonly IDictionary<string, List<ChatMessage>> _messages;
+        private readonly ChatMessageCache _messages;
         private readonly MessageIdIndex _index;
         private readonly Func<string, IReadOnlyList<string>> _aliasChatsOf;
         private readonly Func<string, string> _normalize;
         private readonly Action<string> _trimWindow;
 
         public IncomingTimeline(
-            IDictionary<string, List<ChatMessage>> messages,
+            ChatMessageCache messages,
             MessageIdIndex index,
             Func<string, IReadOnlyList<string>> aliasChatsOf,
             Func<string, string> normalize,
@@ -51,10 +51,7 @@ namespace Unison.Core.State
             }
 
             string jid = _normalize(chatJid) ?? chatJid;
-            if (!_messages.ContainsKey(jid))
-            {
-                _messages[jid] = new List<ChatMessage>();
-            }
+            _messages.GetOrAdd(jid);
 
             bool hasId = !string.IsNullOrEmpty(message.Id);
             string duplicateChatJid = null;
@@ -86,7 +83,7 @@ namespace Unison.Core.State
                 return result;
             }
 
-            List<ChatMessage> timeline = _messages[jid];
+            List<ChatMessage> timeline = _messages.GetOrAdd(jid);
             if ((hasId && IdsOf(jid).Contains(message.Id)) ||
                 (hasId && timeline.Any(m => string.Equals(m?.Id, message.Id, StringComparison.Ordinal))) ||
                 hasAliasLinkedDuplicate)
@@ -134,7 +131,7 @@ namespace Unison.Core.State
             return _index.GetOrBuild(key, () =>
             {
                 List<ChatMessage> list;
-                return key != null && _messages.TryGetValue(key, out list) ? list : null;
+                return _messages.TryGet(key, out list) ? list : null;
             });
         }
     }

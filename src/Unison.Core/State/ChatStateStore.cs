@@ -23,8 +23,7 @@ namespace Unison.Core.State
         private readonly IDispatcher _dispatcher;
         private readonly object _gate = new object();
 
-        private readonly Dictionary<string, List<ChatMessage>> _messagesByChat =
-            new Dictionary<string, List<ChatMessage>>(StringComparer.OrdinalIgnoreCase);
+        private readonly ChatMessageCache _messagesByChat = new ChatMessageCache();
 
         private readonly DisplayNameTable _pushNames = new DisplayNameTable();
 
@@ -63,11 +62,11 @@ namespace Unison.Core.State
         // with the last direct access - they are not part of IChatStateStore for
         // that reason. The two name tables lock on their own and are not transitional.
         //
-        // One caveat while MessagesByChat exists. A writer coming through it does not
-        // take the lock, so the snapshot the read methods return is protected by thread
-        // affinity rather than by _gate: WhatsAppService mutates on the UI thread,
-        // and so do the view models that read. Reading the message lists from a
-        // background thread is only safe once the writes come through this class.
+        // One caveat while MessagesByChat exists. It locks which conversations exist,
+        // but the lists inside are edited in place without _gate, so the snapshot the
+        // read methods return is protected by thread affinity: WhatsAppService mutates
+        // on the UI thread, and so do the view models that read. Reading a message list
+        // from a background thread is only safe once the writes come through this class.
         //
         // Keys are OrdinalIgnoreCase. MessageIdIndex already was, and JidHelper leaves
         // mixed-case @g.us alone — with Ordinal those two disagreed, so a group whose
@@ -75,8 +74,11 @@ namespace Unison.Core.State
         // from the message list.
         // ---------------------------------------------------------------------
 
-        /// <summary>Transitional. Prefer <see cref="GetMessages"/> and <see cref="UpsertMessagesAsync"/>.</summary>
-        public Dictionary<string, List<ChatMessage>> MessagesByChat
+        /// <summary>
+        /// Transitional. Prefer <see cref="GetMessages"/> and <see cref="UpsertMessagesAsync"/>. Which
+        /// conversations exist is locked; the lists inside are still edited in place on the UI thread.
+        /// </summary>
+        public ChatMessageCache MessagesByChat
         {
             get { return _messagesByChat; }
         }
@@ -137,7 +139,7 @@ namespace Unison.Core.State
             lock (_gate)
             {
                 List<ChatMessage> messages;
-                return _messagesByChat.TryGetValue(chatJid, out messages)
+                return _messagesByChat.TryGet(chatJid, out messages) && messages != null
                     ? messages.ToArray()
                     : new ChatMessage[0];
             }
@@ -152,8 +154,7 @@ namespace Unison.Core.State
 
             lock (_gate)
             {
-                List<ChatMessage> messages;
-                return _messagesByChat.TryGetValue(chatJid, out messages) ? messages.Count : 0;
+                return _messagesByChat.CountFor(chatJid);
             }
         }
 
@@ -227,12 +228,7 @@ namespace Unison.Core.State
 
             lock (_gate)
             {
-                List<ChatMessage> list;
-                if (!_messagesByChat.TryGetValue(chatJid, out list))
-                {
-                    list = new List<ChatMessage>();
-                    _messagesByChat[chatJid] = list;
-                }
+                List<ChatMessage> list = _messagesByChat.GetOrAdd(chatJid);
 
                 foreach (var message in messages)
                 {
@@ -280,7 +276,7 @@ namespace Unison.Core.State
             lock (_gate)
             {
                 List<ChatMessage> list;
-                if (_messagesByChat.TryGetValue(chatJid, out list))
+                if (_messagesByChat.TryGet(chatJid, out list) && list != null)
                 {
                     var index = IndexOfMessage(list, messageId);
                     if (index >= 0)

@@ -310,13 +310,9 @@ namespace Unison.Uwp.Services.WhatsApp
 
             await RunOnUiThreadAsync(() =>
             {
-                if (MessagesByChat.TryGetValue(normalizedTransient, out var transientMessages) && transientMessages != null)
+                if (MessagesByChat.TryGet(normalizedTransient, out var transientMessages) && transientMessages != null)
                 {
-                    if (!MessagesByChat.TryGetValue(normalizedCanonical, out var canonicalMessages) || canonicalMessages == null)
-                    {
-                        canonicalMessages = new List<ChatMessage>();
-                        MessagesByChat[normalizedCanonical] = canonicalMessages;
-                    }
+                    var canonicalMessages = MessagesByChat.GetOrAdd(normalizedCanonical);
 
                     TransientChatMerge.AppendMissingMessages(
                         canonicalMessages,

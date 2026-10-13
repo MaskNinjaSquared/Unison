@@ -417,7 +417,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 await RunOnUiThreadAsync(() =>
                 {
                     var active = _activeChatJid;
-                    var keys = MessagesByChat.Keys.ToList();
+                    var keys = MessagesByChat.ChatJids();
                     foreach (var key in keys)
                     {
                         if (!string.IsNullOrWhiteSpace(active) &&
@@ -572,7 +572,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             string normalized = NormalizeJid(jid);
-            if (!MessagesByChat.TryGetValue(normalized, out var messages) || messages == null)
+            if (!MessagesByChat.TryGet(normalized, out var messages) || messages == null)
             {
                 return;
             }
@@ -1028,7 +1028,7 @@ namespace Unison.Uwp.Services.WhatsApp
             try
             {
                 snapshot.LoadedChatCount = Chats.Count;
-                snapshot.LoadedMessageCount = MessagesByChat.Values.Where(list => list != null).Sum(list => list.Count);
+                snapshot.LoadedMessageCount = MessagesByChat.TotalMessageCount();
             }
             catch
             {
@@ -1066,7 +1066,7 @@ namespace Unison.Uwp.Services.WhatsApp
         // hand out the very same instances, so existing code keeps working unchanged while new
         // consumers can read the store directly instead of coming through this class.
         public ObservableCollection<ChatItem> Chats => _chatState.Chats;
-        public Dictionary<string, List<ChatMessage>> MessagesByChat => _chatState.MessagesByChat;
+        public ChatMessageCache MessagesByChat => _chatState.MessagesByChat;
 
         /// <summary>
         /// Canonical address to the rows that carry it. Null means "not built"; see
@@ -1086,9 +1086,9 @@ namespace Unison.Uwp.Services.WhatsApp
 
             string key = NormalizeJid(jid);
             List<ChatMessage> list;
-            if (!MessagesByChat.TryGetValue(key, out list) || list == null)
+            if (!MessagesByChat.TryGet(key, out list) || list == null)
             {
-                foreach (var kvp in MessagesByChat)
+                foreach (var kvp in MessagesByChat.Snapshot())
                 {
                     if (string.Equals(GetCanonicalJid(kvp.Key), GetCanonicalJid(key), StringComparison.OrdinalIgnoreCase))
                     {
@@ -1351,7 +1351,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private DateTime GetNewestStoredMessageUtc(Func<string, bool> includeChat)
         {
             DateTime newest = DateTime.MinValue;
-            foreach (var kvp in MessagesByChat)
+            foreach (var kvp in MessagesByChat.Snapshot())
             {
                 string chatJid = NormalizeJid(kvp.Key);
                 if (includeChat != null && !includeChat(chatJid))
@@ -1437,18 +1437,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 out reason);
         }
 
-        private int GetStoredMessageCount()
-        {
-            int count = 0;
-            foreach (var chatMessages in MessagesByChat.Values)
-            {
-                if (chatMessages != null)
-                {
-                    count += chatMessages.Count;
-                }
-            }
-            return count;
-        }
+        private int GetStoredMessageCount() => MessagesByChat.TotalMessageCount();
 
         private readonly MissingMessageLedger _missing = new MissingMessageLedger();
         private PlaceholderResendDispatch _placeholderResends;
@@ -2538,11 +2527,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             return RunOnUiThreadAsync(() =>
             {
-                if (!MessagesByChat.TryGetValue(normJid, out var list) || list == null)
-                {
-                    list = new List<ChatMessage>();
-                    MessagesByChat[normJid] = list;
-                }
+                var list = MessagesByChat.GetOrAdd(normJid);
 
                 var byId = new Dictionary<string, ChatMessage>(StringComparer.Ordinal);
                 foreach (var existing in list)
@@ -3052,30 +3037,14 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
 
                     List<ChatMessage> list;
-                    if (MessagesByChat.TryGetValue(key, out list))
+                    if (MessagesByChat.TryGet(key, out list))
                     {
                         Consider(list);
                     }
                 }
             }
 
-            // Dictionary enumeration throws if another thread Adds/Removes mid-loop.
-            KeyValuePair<string, List<ChatMessage>>[] pairs;
-            try
-            {
-                pairs = MessagesByChat.ToArray();
-            }
-            catch (InvalidOperationException)
-            {
-                try
-                {
-                    pairs = MessagesByChat.ToArray();
-                }
-                catch (InvalidOperationException)
-                {
-                    return best;
-                }
-            }
+            KeyValuePair<string, List<ChatMessage>>[] pairs = MessagesByChat.Snapshot();
 
             for (int i = 0; i < pairs.Length; i++)
             {
@@ -3277,7 +3246,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 };
 
                 addMessages(GetPendingPersistMessagesSnapshot(normJid));
-                if (MessagesByChat.TryGetValue(normJid, out var liveMessages))
+                if (MessagesByChat.TryGet(normJid, out var liveMessages))
                 {
                     addMessages(liveMessages);
                 }
@@ -3310,7 +3279,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     if (ApplyPendingStateToMessage(normJid, message)) stateAdjustedMessages.Add(message);
                 }
 
-                MessagesByChat[normJid] = cache;
+                MessagesByChat.Set(normJid, cache);
                 _messageIdIndex.Rebuild(normJid, cache);
 
                 if (stateAdjustedMessages.Count > 0)
@@ -3338,7 +3307,7 @@ namespace Unison.Uwp.Services.WhatsApp
         public async Task<List<ChatMessage>> LoadMoreMessagesAsync(string chatJid)
         {
             string normJid = NormalizeJid(chatJid);
-            if (!MessagesByChat.ContainsKey(normJid)) return new List<ChatMessage>();
+            if (!MessagesByChat.Contains(normJid)) return new List<ChatMessage>();
 
             try
             {
@@ -3906,7 +3875,7 @@ namespace Unison.Uwp.Services.WhatsApp
                                 _historyOnDemandMarkerByChat.Remove(state.ChatJid);
                             }
 
-                            if (MessagesByChat.TryGetValue(state.ChatJid, out var currentMessages) && currentMessages != null)
+                            if (MessagesByChat.TryGet(state.ChatJid, out var currentMessages) && currentMessages != null)
                             {
                                 currentMessageCount = currentMessages.Count;
                             }
@@ -4543,7 +4512,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return false;
             }
 
-            if (!MessagesByChat.TryGetValue(normJid, out var cached) || cached == null || cached.Count == 0)
+            if (!MessagesByChat.TryGet(normJid, out var cached) || cached == null || cached.Count == 0)
             {
                 return false;
             }
@@ -4586,7 +4555,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 lock (_historyOnDemandLock)
                 {
                     _historyOnDemandMarkerByChat[normJid] = marker;
-                    baselineCount = (MessagesByChat.TryGetValue(normJid, out var msgList) && msgList != null) ? msgList.Count : 0;
+                    baselineCount = (MessagesByChat.TryGet(normJid, out var msgList) && msgList != null) ? msgList.Count : 0;
                     _historyOnDemandRequestById[requestId] = new HistoryOnDemandRequestState
                     {
                         RequestId = requestId,
@@ -5249,7 +5218,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             await RunOnUiThreadAsync(() =>
             {
-                foreach (var pair in MessagesByChat)
+                foreach (var pair in MessagesByChat.Snapshot())
                 {
                     var message = pair.Value?.FirstOrDefault(m => string.Equals(m?.Id, messageId, StringComparison.Ordinal));
                     if (message == null || !message.IsFromMe) continue;
@@ -5344,7 +5313,7 @@ namespace Unison.Uwp.Services.WhatsApp
             ChatMessage target = null;
             await RunOnUiThreadAsync(() =>
             {
-                if (MessagesByChat.TryGetValue(canonical, out var messages))
+                if (MessagesByChat.TryGet(canonical, out var messages))
                 {
                     target = messages?.FirstOrDefault(m => string.Equals(m?.Id, messageId, StringComparison.Ordinal));
                 }
@@ -5372,11 +5341,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     {
                         await RunOnUiThreadAsync(() =>
                         {
-                            if (!MessagesByChat.TryGetValue(canonical, out var messages))
-                            {
-                                messages = new List<ChatMessage>();
-                                MessagesByChat[canonical] = messages;
-                            }
+                            var messages = MessagesByChat.GetOrAdd(canonical);
                             if (!messages.Any(m => string.Equals(m?.Id, target.Id, StringComparison.Ordinal)))
                             {
                                 ChatMessageOrder.InsertSorted(messages, target);
@@ -6347,14 +6312,9 @@ namespace Unison.Uwp.Services.WhatsApp
                     Log($"[WhatsAppService] Merging duplicate chats: {normLidJid} -> {normPnJid}");
                     
                     // 1. Move messages
-                    if (MessagesByChat.ContainsKey(normLidJid))
+                    if (MessagesByChat.Contains(normLidJid))
                     {
-                        if (!MessagesByChat.ContainsKey(normPnJid))
-                        {
-                            MessagesByChat[normPnJid] = new List<ChatMessage>();
-                        }
-                        
-                        var pnMsgs = MessagesByChat[normPnJid];
+                        var pnMsgs = MessagesByChat.GetOrAdd(normPnJid);
                         var pnIdSet = GetOrBuildMessageIdIndex(normPnJid);
                         foreach (var msg in MessagesByChat[normLidJid].ToList())
                         {
@@ -6638,7 +6598,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         var ordered = group
                             .OrderByDescending(c => !IsLidLikeJid(NormalizeJid(c.JID)))
                             .ThenByDescending(c => !string.IsNullOrWhiteSpace(c.AvatarUrl))
-                            .ThenByDescending(c => MessagesByChat.TryGetValue(NormalizeJid(c.JID), out var msgs) ? msgs.Count : 0)
+                            .ThenByDescending(c => MessagesByChat.TryGet(NormalizeJid(c.JID), out var msgs) ? msgs.Count : 0)
                             .ToList();
 
                         var primary = ordered[0];
@@ -6692,13 +6652,9 @@ namespace Unison.Uwp.Services.WhatsApp
                                 continue;
                             }
 
-                            if (MessagesByChat.TryGetValue(secondaryNorm, out var secondaryMsgs))
+                            if (MessagesByChat.TryGet(secondaryNorm, out var secondaryMsgs))
                             {
-                                if (!MessagesByChat.TryGetValue(primaryNorm, out var primaryMsgs))
-                                {
-                                    primaryMsgs = new List<ChatMessage>();
-                                    MessagesByChat[primaryNorm] = primaryMsgs;
-                                }
+                                var primaryMsgs = MessagesByChat.GetOrAdd(primaryNorm);
 
                                 var idSet = GetOrBuildMessageIdIndex(primaryNorm);
                                 foreach (var msg in secondaryMsgs)
@@ -6769,11 +6725,11 @@ namespace Unison.Uwp.Services.WhatsApp
                             // Both sides go through ToComparableUtc, like the LastMessageTimestampUtc
                             // branch below: these lists mix live messages with rows read back from
                             // SQLite, so the raw timestamps are not comparable to each other.
-                            MessagesByChat.TryGetValue(primaryNorm, out var primaryPreviewMessages);
+                            MessagesByChat.TryGet(primaryNorm, out var primaryPreviewMessages);
                             DateTime primaryLatestMessageTimestamp =
                                 ChatMessageOrder.NewestComparableUtc(primaryPreviewMessages);
 
-                            MessagesByChat.TryGetValue(secondaryNorm, out var secondaryPreviewMessages);
+                            MessagesByChat.TryGet(secondaryNorm, out var secondaryPreviewMessages);
                             DateTime secondaryLatestMessageTimestamp =
                                 ChatMessageOrder.NewestComparableUtc(secondaryPreviewMessages);
 
@@ -6805,7 +6761,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
 
                     // Ensure message-cache keys are canonicalized even when a secondary chat row no longer exists.
-                    var cacheKeys = MessagesByChat.Keys.ToList();
+                    var cacheKeys = MessagesByChat.ChatJids();
                     foreach (var key in cacheKeys)
                     {
                         string canonicalKey = GetCanonicalJid(key);
@@ -6815,16 +6771,12 @@ namespace Unison.Uwp.Services.WhatsApp
                             continue;
                         }
 
-                        if (!MessagesByChat.TryGetValue(key, out var secondaryMsgs) || secondaryMsgs == null)
+                        if (!MessagesByChat.TryGet(key, out var secondaryMsgs) || secondaryMsgs == null)
                         {
                             continue;
                         }
 
-                        if (!MessagesByChat.TryGetValue(canonicalKey, out var primaryMsgs) || primaryMsgs == null)
-                        {
-                            primaryMsgs = new List<ChatMessage>();
-                            MessagesByChat[canonicalKey] = primaryMsgs;
-                        }
+                        var primaryMsgs = MessagesByChat.GetOrAdd(canonicalKey);
 
                         var idSet = GetOrBuildMessageIdIndex(canonicalKey);
                         foreach (var msg in secondaryMsgs)

@@ -4,6 +4,16 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Message cache behind ChatMessageCache
+
+`MessagesByChat` is a `ChatMessageCache` (Core) instead of a bare dictionary. Which
+conversations exist is locked; walking all of them goes through a snapshot, so a loop
+may remove the one it is looking at. "Create the list if missing" is `GetOrAdd`, which
+also replaces a null entry that used to crash the next insert. The in-memory catch-up
+scan no longer needs its retry around a dictionary that changed mid-copy. The lists
+inside are unchanged: still edited in place on the UI thread. `IncomingTimeline`,
+`AliasLinkedMessageFind` and `AliasDuplicateMessageMove` take the cache.
+
 ## Display-name maps lock on their own
 
 The push-name and address-book maps on `ChatStateStore` are `DisplayNameTable` (Core)
