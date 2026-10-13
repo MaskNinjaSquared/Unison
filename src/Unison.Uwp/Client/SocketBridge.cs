@@ -10,12 +10,14 @@
 // the service is dismantled afterwards, rather than both at once.
 //
 // The translation is mostly downhill - the new stack publishes richer events
-// than the old one had, so most of the work here is throwing detail away. Three
-// things do not translate and are stated rather than faked:
+// than the old one had, so most of the work here is throwing detail away.
 //
-//   * Broker transfer. Handing the raw socket to a background task needs the
-//     transport itself, which the session owns and does not lend out. Both
-//     methods answer false, which the caller already handles as "keep it".
+// Broker transfer goes through ConnectionHandler, which lends its transport while
+// the broker holds the socket. Adopting a broker socket left by a terminated
+// process is not done: the transport closes it on the next connect.
+//
+// What does not translate is stated rather than faked:
+//
 //   * The two app-state events. In this mode app state is decoded by
 //     AppStateModule rather than by the legacy service, so the notifications
 //     that used to drive it are consumed inside the session and the changes
@@ -27,6 +29,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Unison.Background;
 using Unison.Baileys.Client;
 using Unison.Baileys.Crypto;
 using Unison.Baileys.Protocol;
@@ -283,10 +286,13 @@ namespace Unison.Uwp.Client
             get { return _awaitingInitialSync; }
         }
 
-        /// <summary>Always false: the session owns its transport and never lends it out.</summary>
         public bool IsSocketOwnedByBroker
         {
-            get { return false; }
+            get
+            {
+                var session = Current;
+                return session != null && session.Connection.IsOwnedByBroker;
+            }
         }
 
         public bool HasFreshConnection(TimeSpan maximumSilence)
@@ -647,15 +653,76 @@ namespace Unison.Uwp.Client
             }
         }
 
-        public Task<bool> TransferSocketToBrokerAsync(string reason)
+        public async Task<bool> TransferSocketToBrokerAsync(string reason)
         {
-            Diag.W("[Bridge] Broker transfer is not available on this stack (" + reason + ")");
-            return Task.FromResult(false);
+            var session = Current;
+            if (session == null || !_handshakeComplete)
+            {
+                return false;
+            }
+
+            bool transferred = await session.Connection.TransferToBrokerAsync(
+                reason,
+                (noise, socketId) => SaveBrokerCheckpointAsync(noise, socketId, reason)).ConfigureAwait(false);
+            RuntimeDiagnosticsService.Instance.Write(
+                "socket-broker",
+                transferred ? "socket-client-transferred" : "socket-client-transfer-declined",
+                "transport=" + TransportName + "; reason=" + reason);
+            return transferred;
         }
 
-        public Task<bool> ReclaimSocketFromBrokerAsync()
+        public async Task<bool> ReclaimSocketFromBrokerAsync()
         {
-            return Task.FromResult(false);
+            var session = Current;
+            if (session == null || !session.Connection.IsOwnedByBroker)
+            {
+                return false;
+            }
+
+            bool reclaimed = await session.Connection.ReclaimFromBrokerAsync().ConfigureAwait(false);
+            if (reclaimed)
+            {
+                await NoiseSessionStore.ClearAsync().ConfigureAwait(false);
+                RuntimeDiagnosticsService.Instance.Write(
+                    "socket-broker",
+                    "socket-client-reclaimed",
+                    "transport=" + TransportName);
+            }
+
+            return reclaimed;
+        }
+
+        /// <summary>
+        /// What the broker needs to read the socket while it holds it. Only the Noise state is
+        /// required; the Signal snapshot lets toasts show message text, so its failure is
+        /// recorded and the handoff goes ahead without it.
+        /// </summary>
+        private async Task SaveBrokerCheckpointAsync(NoiseSessionState noise, string socketId, string reason)
+        {
+            try
+            {
+                var senderKeys = await _keyStore.GetAllSenderKeysAsync().ConfigureAwait(false);
+                await BackgroundSignalSnapshotStore.SaveAsync(_authState, senderKeys).ConfigureAwait(false);
+                RuntimeDiagnosticsService.Instance.Write(
+                    "socket-broker",
+                    "signal-preview-snapshot-persisted",
+                    "sessions=" + _authState.Sessions.Count +
+                    "; prekeys=" + _authState.PreKeys.Count +
+                    "; senderKeys=" + senderKeys.Count);
+            }
+            catch (Exception ex)
+            {
+                RuntimeDiagnosticsService.Instance.RecordException(
+                    "socket-broker",
+                    "signal-preview-snapshot-failed",
+                    ex);
+            }
+
+            await NoiseSessionStore.SaveAsync(noise, socketId).ConfigureAwait(false);
+            RuntimeDiagnosticsService.Instance.Write(
+                "socket-broker",
+                "noise-state-persisted",
+                "transport=" + TransportName + "; reason=" + reason + "; phase=pre-transfer; id=" + socketId);
         }
 
         // -- Operations ------------------------------------------------------

@@ -36,7 +36,7 @@ Still the in-memory client: chat list, message caches, outbox/send **transport**
 
 ### Broker handoff
 
-The background task still hosts the **existing** raw-socket infrastructure (framing, Noise checkpoint, journal, toasts). `SocketBridge` does **not** transfer or reclaim the socket and does **not** cold-restore a broker session. Details: [Background broker](Background-Broker).
+The background task still hosts the **existing** raw-socket infrastructure (framing, Noise checkpoint, journal, toasts). `SocketBridge` transfers and reclaims through `ConnectionHandler.TransferToBrokerAsync` / `ReclaimFromBrokerAsync`: the keep-alive stops while the broker holds the socket, the Noise state is checkpointed under the send gate, and on reclaim the journal is replayed (UBD3 batches unpacked by `WaTransportAdapter`, post-state imported after the batch). It does **not** cold-restore a broker session after the process was terminated; the transport closes that socket on the next connect and the server redelivers what the broker read, since the broker never acknowledges. Details: [Background broker](Background-Broker).
 
 ### ChatsModule
 
@@ -99,7 +99,7 @@ Still deferred: posting Status / receipts / reply; retiring leftover `MessageSto
 
 These match comments in `SocketBridge`, `WhatsAppSession`, and the v6.9 notes, updated for the socket stack:
 
-1. **Lend or recreate the transport** so `TransferToBrokerAsync` / reclaim / cold restore work on `WhatsAppSession`.
+1. **Cold restore** of a broker socket after process termination (warm transfer and reclaim are wired). It needs `ConnectionHandler` to resume from a saved Noise state without a handshake.
 2. **Drop leftover `MessageStore` JSON sidecars** (contact names, JID aliases) once `PersonStore` / `LidMappingStore` are the only readers.
 3. **Stop `TriggerBackgroundResolution` from living on the client** — Contact/Message façades only.
 4. **Prefer `IPersonStore` for identity** — `PersonSource` (Unknown → Observed → DirectChat → AddressBook) never downgrades; address book overwrites **name only**. Index `Person.Phone` for agenda match. `PersonGroup` (Person↔Group, with LID/PN aliases) feeds member “groups in common”. Group bubble avatars resolve via `ChatDetailViewModel` (roster / 1:1 / Person), not the bubble.

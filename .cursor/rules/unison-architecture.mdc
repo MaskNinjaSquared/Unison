@@ -12,6 +12,6 @@ Read `docs/wiki/Home.md` + `docs/wiki/Architecture.md` before editing. Coding sp
 - Live connection: `SocketBridge` → `WhatsAppSession`. `SocketClient.cs` is not in the csproj — do not revive it.
 - `Unison.Core`: no XAML/WinRT. `Unison.Background`: no Core/Socket.
 - `ConnectionHandler` never calls use cases and never holds chats. Reconnect stays in the host.
-- Broker transfer on `SocketBridge` returns false. Do not fake a successful handoff.
+- Broker transfer on `SocketBridge` goes through `ConnectionHandler` and answers true only when ownership moved. No cold restore. Never fake a handoff.
 
 DI: register in `App.ConfigureServices`. New services are interface (Core) + implementation (UWP) + constructor injection. No new `Foo.Instance`.

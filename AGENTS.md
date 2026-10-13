@@ -21,7 +21,7 @@ Cursor project rules in `.cursor/rules/` repeat the must-not-break bits. The wik
 - Subscribe ViewModels to raw `IWhatsAppService` events (façades only).
 - Add `Foo.Instance` services; use constructor DI in `App.ConfigureServices`.
 - Revive `SocketClient.cs` (not in the csproj). Live path: `SocketBridge` → `WhatsAppSession`.
-- Pretend broker socket handoff works; `TransferSocketToBrokerAsync` returns false.
+- Report a broker handoff that did not happen. `TransferSocketToBrokerAsync` answers true only when ownership moved; cold restore after process termination is not wired.
 
 ## Layout
 

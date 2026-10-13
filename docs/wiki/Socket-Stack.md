@@ -259,4 +259,4 @@ unit test will show it. Each needs a real account on a device to land safely.
 
 `IWaTransport` is bytes only: connect, send, close, plus `TransferToBrokerAsync` / `ReclaimFromBrokerAsync`. It is **not** the Core `IWhatsAppTransport`. `WaTransportAdapter` wraps the existing UWP `StreamSocketWebSocketTransport` so transports did not have to be rewritten in the same PR.
 
-See [Background broker](Background-Broker) for why transfer still returns false.
+Broker replay arrives on the same event: `DecodedFrames` plus `PostNoiseState` for frames the broker already decrypted, or `IsBrokerReplay` raw bytes. See [Background broker](Background-Broker).

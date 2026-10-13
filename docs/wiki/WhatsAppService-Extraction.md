@@ -875,7 +875,7 @@ Drop `RunOnUiThreadAsync` (`IDispatcher`) and `SchedulePersistPublic` (the write
 1. **UI-thread mutations of `Chats`.** Off-thread `ObservableCollection` writes crash the list. Use `IChatStateStore` APIs that marshal.
 2. **`GetCanonicalJid` everywhere.** Wrapper first (phase 1), table move later (3.7).
 3. **Do not register** resurrected `MessageService` / `ContactService` / `ConnectionService` / `ProfileService` under `Services/WhatsApp/` — deleted on purpose; live types are `*Facade`.
-4. **Broker transfer** still returns false on `SocketBridge`. Unrelated to this extraction; see [Background broker](Background-Broker).
+4. **Broker transfer** is wired on `SocketBridge` (warm transfer and reclaim; no cold restore). Unrelated to this extraction; see [Background broker](Background-Broker).
 
 ---
 

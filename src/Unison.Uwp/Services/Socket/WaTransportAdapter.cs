@@ -10,7 +10,9 @@
 // =============================================================================
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading.Tasks;
+using Unison.Background;
 using Unison.Core.Contracts;
 using Unison.Socket.Abstractions;
 
@@ -103,13 +105,28 @@ namespace Unison.Uwp.Services.Socket
                 return Task.FromResult(true);
             }
 
-            return handler(
-                this,
-                new WaTransportMessageEventArgs
+            var translated = new WaTransportMessageEventArgs
+            {
+                Data = args != null ? args.Data : null,
+                IsBrokerReplay = args != null && args.IsBrokerReplay
+            };
+
+            // UBD3 carries the Noise checkpoint. A replay that has the magic but does not
+            // unpack must fail the drain so the journal keeps it, never fall through to a
+            // Noise decode that would corrupt the read counter.
+            if (translated.IsBrokerReplay && BrokerDecodedFrameEnvelope.HasMagic(translated.Data))
+            {
+                BrokerDecodedFrameBatch batch;
+                if (!BrokerDecodedFrameEnvelope.TryUnpack(translated.Data, out batch))
                 {
-                    Data = args != null ? args.Data : null,
-                    IsBrokerReplay = args != null && args.IsBrokerReplay
-                });
+                    throw new InvalidDataException("Invalid decoded broker frame checkpoint");
+                }
+
+                translated.DecodedFrames = batch.Frames ?? new List<byte[]>();
+                translated.PostNoiseState = batch.PostNoiseState;
+            }
+
+            return handler(this, translated);
         }
 
         private void OnInnerClosed(object sender, TransportClosedEventArgs args)

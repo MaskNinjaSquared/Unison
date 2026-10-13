@@ -4,6 +4,16 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Broker handoff on the socket stack
+
+Suspending hands the live socket to the background task again, now through the new
+session: `ConnectionHandler` stops its keep-alive, checkpoints Noise under the send gate
+and lets the transport transfer ownership. Resuming reclaims it and replays what the
+broker journaled before the session continues. A failed transfer keeps the socket in
+the app, and a failed reclaim connects fresh, as before. Not wired: picking up a broker
+socket after the app process was terminated; that socket is closed on the next connect
+and the server redelivers what the broker read.
+
 ## Media fetch off the client
 
 On-demand media downloads fetch the blob through `IEncryptedMediaDownloader` directly

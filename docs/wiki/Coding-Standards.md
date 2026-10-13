@@ -210,7 +210,7 @@ Text normalization: `ChatPreviewNormalizer.Normalize` is the **chat-list preview
 - Features register on `NodeDispatcher`. Do not add a giant switch on `ConnectionHandler`.
 - Host seams go in `Unison.Socket/Abstractions/` (`IWaTransport`, `ISocketLog`, stores). UWP implements them.
 - Do not compile or “revive” `SocketClient.cs` / `PairingHandler.cs` (on disk, out of the csproj). Live path is `SocketBridge` → `WhatsAppSession`.
-- Do not implement `TransferSocketToBrokerAsync` as a fake success. Until the session can lend the transport, it returns `false`.
+- `TransferSocketToBrokerAsync` returns `true` only when the transport actually moved ownership; every failure answers `false` and the caller keeps the socket. Never report a handoff that did not happen.
 
 ---
 
@@ -249,7 +249,7 @@ These are hybrid **on purpose** until [Migration](Migration) says otherwise:
 - `WhatsAppService` still owns in-memory chats, history body, send transport, persist.
 - `ChatDetailView` code-behind still owns the message list host, scroll, and `MediaElement` chrome. Group run layout / date chips / author-avatar **resolve** lives on `ChatDetailViewModel.ApplyMessageRunLayout` (bubble only binds `ContactUri`). Midnight date-chip refresh is a view `DispatcherTimer`.
 - `ChatListView` may still mirror `VisibleChats` during initial-sync safe mode.
-- `SocketBridge` broker transfer / reclaim / cold restore return false / unused.
+- `SocketBridge` does not cold-restore a broker socket left by a terminated process; the next connect closes it and starts fresh.
 - `ChatsModule` in Socket is not instantiated by the bridge yet.
 - A few platform helpers still use `.Instance`; new code uses the interface.
 
