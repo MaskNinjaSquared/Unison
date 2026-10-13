@@ -233,5 +233,239 @@ namespace Unison.Core.State
                 return pending.Take(maxRequests).ToList();
             }
         }
+
+        /// <summary>
+        /// Arms the timer on this row when a resend is allowed. The caller waits, then claims it.
+        /// </summary>
+        public CancellationTokenSource TryBeginSchedule(
+            MissingMessageCandidate candidate,
+            DateTime nowUtc,
+            TimeSpan responseTimeout,
+            TimeSpan dispatchDelay)
+        {
+            lock (_gate)
+            {
+                if (!PlaceholderResendPermit.MaySchedule(candidate, nowUtc, responseTimeout))
+                {
+                    return null;
+                }
+
+                var schedule = new CancellationTokenSource();
+                candidate.PlaceholderScheduleCts = schedule;
+                candidate.PlaceholderScheduledForUtc = nowUtc.Add(dispatchDelay);
+                return schedule;
+            }
+        }
+
+        /// <summary>
+        /// The wait finished and this timer is still the one on the row. Marks the ask in flight.
+        /// </summary>
+        public bool TryClaimScheduled(
+            string chatJid,
+            string messageId,
+            CancellationTokenSource schedule,
+            out MissingMessageCandidate candidate)
+        {
+            candidate = null;
+            lock (_gate)
+            {
+                if (!TryGet(chatJid, messageId, out candidate) ||
+                    candidate.PlaceholderScheduleCts != schedule)
+                {
+                    candidate = null;
+                    return false;
+                }
+
+                candidate.PlaceholderScheduleCts = null;
+                candidate.PlaceholderScheduledForUtc = DateTime.MinValue;
+                candidate.PlaceholderRequestInFlight = true;
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Records that the stanza was handed to the socket. False when the row is already gone.
+        /// </summary>
+        public bool RecordSend(
+            string chatJid,
+            string messageId,
+            string stanzaId,
+            string trigger,
+            DateTime nowUtc,
+            out MissingMessageCandidate candidate)
+        {
+            candidate = null;
+            lock (_gate)
+            {
+                if (!TryGet(chatJid, messageId, out candidate))
+                {
+                    candidate = null;
+                    return false;
+                }
+
+                candidate.LastPlaceholderRequestUtc = nowUtc;
+                candidate.PlaceholderRequestCount++;
+                candidate.LastPlaceholderRequestId = stanzaId;
+                _resends[stanzaId] = new PlaceholderResendRequestState
+                {
+                    ChatJid = candidate.ChatJid,
+                    MessageId = candidate.MessageId,
+                    RequestedAtUtc = nowUtc,
+                    Trigger = trigger
+                };
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// The answer window closed. Drops the stanza and clears in-flight when it still owns the row.
+        /// </summary>
+        public PlaceholderResendRequestState Expire(string stanzaId)
+        {
+            lock (_gate)
+            {
+                PlaceholderResendRequestState timedOut;
+                if (!_resends.TryGetValue(stanzaId, out timedOut))
+                {
+                    return null;
+                }
+
+                _resends.Remove(stanzaId);
+                MissingMessageCandidate candidate;
+                if (TryGet(timedOut.ChatJid, timedOut.MessageId, out candidate) &&
+                    string.Equals(candidate.LastPlaceholderRequestId, stanzaId, StringComparison.Ordinal))
+                {
+                    candidate.PlaceholderRequestInFlight = false;
+                }
+
+                return timedOut;
+            }
+        }
+
+        /// <summary>
+        /// The send threw. Drops the stanza, clears in-flight, and gives back the try when this stanza owned it.
+        /// </summary>
+        public void FailSend(string chatJid, string messageId, string stanzaId)
+        {
+            lock (_gate)
+            {
+                if (!string.IsNullOrWhiteSpace(stanzaId))
+                {
+                    _resends.Remove(stanzaId);
+                }
+
+                MissingMessageCandidate candidate;
+                if (!TryGet(chatJid, messageId, out candidate))
+                {
+                    return;
+                }
+
+                candidate.PlaceholderRequestInFlight = false;
+                if (string.Equals(candidate.LastPlaceholderRequestId, stanzaId, StringComparison.Ordinal))
+                {
+                    candidate.LastPlaceholderRequestId = null;
+                    candidate.PlaceholderRequestCount = Math.Max(0, candidate.PlaceholderRequestCount - 1);
+                }
+            }
+        }
+
+        /// <summary>
+        /// A peer-data answer arrived for this stanza. The row stops being in flight when the ids match.
+        /// </summary>
+        public PlaceholderResendRequestState TakePeerResponse(string stanzaId)
+        {
+            if (string.IsNullOrWhiteSpace(stanzaId))
+            {
+                return null;
+            }
+
+            lock (_gate)
+            {
+                PlaceholderResendRequestState request;
+                _resends.TryGetValue(stanzaId, out request);
+                _resends.Remove(stanzaId);
+                MissingMessageCandidate candidate;
+                if (request != null &&
+                    TryGet(request.ChatJid, request.MessageId, out candidate) &&
+                    string.Equals(candidate.LastPlaceholderRequestId, stanzaId, StringComparison.Ordinal))
+                {
+                    candidate.PlaceholderRequestInFlight = false;
+                }
+
+                return request;
+            }
+        }
+
+        /// <summary>
+        /// An ack for a stanza we are waiting on. A rejection clears the row; an acceptance only marks the ack.
+        /// </summary>
+        public bool TryApplyAck(
+            string stanzaId,
+            bool rejected,
+            DateTime nowUtc,
+            out PlaceholderResendRequestState request)
+        {
+            request = null;
+            lock (_gate)
+            {
+                if (!_resends.TryGetValue(stanzaId, out request))
+                {
+                    request = null;
+                    return false;
+                }
+
+                if (rejected)
+                {
+                    _resends.Remove(stanzaId);
+                    MissingMessageCandidate candidate;
+                    if (TryGet(request.ChatJid, request.MessageId, out candidate) &&
+                        string.Equals(candidate.LastPlaceholderRequestId, stanzaId, StringComparison.Ordinal))
+                    {
+                        candidate.PlaceholderRequestInFlight = false;
+                    }
+                }
+                else
+                {
+                    request.AckAccepted = true;
+                    request.AckAcceptedUtc = nowUtc;
+                }
+
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Starts the per-chat quiet period. False when a previous one is still running.
+        /// Equality at the exact end does not skip.
+        /// </summary>
+        public bool TryBeginReconcile(string chatJid, DateTime nowUtc, TimeSpan cooldown)
+        {
+            lock (_gate)
+            {
+                DateTime until;
+                if (_cooldowns.TryGetValue(chatJid, out until) && until > nowUtc)
+                {
+                    return false;
+                }
+
+                _cooldowns[chatJid] = nowUtc.Add(cooldown);
+                return true;
+            }
+        }
+
+        /// <summary>The ids owed for one chat, in dictionary order, capped at the budget.</summary>
+        public List<string> CopyPendingIds(string chatJid, int maxRequests)
+        {
+            lock (_gate)
+            {
+                Dictionary<string, MissingMessageCandidate> byMessageId;
+                if (!_pending.TryGetValue(chatJid, out byMessageId))
+                {
+                    return new List<string>();
+                }
+
+                return byMessageId.Keys.Take(maxRequests).ToList();
+            }
+        }
     }
 }
