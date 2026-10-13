@@ -1318,6 +1318,11 @@ namespace Unison.Uwp.Shell.Unison.Views
                 return;
             }
 
+            if (await vm.NotifyIfMediaDeletedAsync())
+            {
+                return;
+            }
+
             // W10M: cached .webp ImageUri → PNG display before the viewer opens.
             await vm.EnsureImageReadyAsync(showErrorDialog: false);
             if (vm.HasImage)
@@ -1329,6 +1334,11 @@ namespace Unison.Uwp.Shell.Unison.Views
         public async void OpenInfoImage(ChatMessageViewModel vm)
         {
             if (vm == null)
+            {
+                return;
+            }
+
+            if (await vm.NotifyIfMediaDeletedAsync())
             {
                 return;
             }
@@ -1424,11 +1434,16 @@ namespace Unison.Uwp.Shell.Unison.Views
         }
 
         /// <summary>Opens Imgur-style fullscreen video; stops bubble audio first.</summary>
-        public void OnVideoOpenButtonClick(object sender, RoutedEventArgs e)
+        public async void OnVideoOpenButtonClick(object sender, RoutedEventArgs e)
         {
             var element = sender as FrameworkElement;
             var vm = element?.DataContext as ChatMessageViewModel;
             if (vm == null || !vm.HasLocalVideo)
+            {
+                return;
+            }
+
+            if (await vm.NotifyIfMediaDeletedAsync())
             {
                 return;
             }
@@ -2943,6 +2958,11 @@ namespace Unison.Uwp.Shell.Unison.Views
 
         private async System.Threading.Tasks.Task PlayOrPauseAudioAsync(ChatMessageViewModel vm)
         {
+            if (vm != null && await vm.NotifyIfMediaDeletedAsync())
+            {
+                return;
+            }
+
             var message = vm?.Model;
             if (message == null || !message.IsAudio || ViewModel == null)
             {

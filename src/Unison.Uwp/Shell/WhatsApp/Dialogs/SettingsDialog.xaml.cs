@@ -70,6 +70,7 @@ namespace Unison.Uwp.Shell.WhatsApp.Dialogs
             Activate();
             HookLeaveRequested();
             ShowSection("general");
+            _ = _viewModel?.LoadDiskUsageAsync();
         }
 
         private void SettingsDialog_Closed(ContentDialog sender, ContentDialogClosedEventArgs args)
@@ -578,6 +579,11 @@ namespace Unison.Uwp.Shell.WhatsApp.Dialogs
                 AdvancedPanel.Visibility = tag == "advanced" ? Visibility.Visible : Visibility.Collapsed;
             }
 
+            if (DiskUsagePanel != null)
+            {
+                DiskUsagePanel.Visibility = tag == "disk" ? Visibility.Visible : Visibility.Collapsed;
+            }
+
             if (AboutPanel != null)
             {
                 AboutPanel.Visibility = tag == "about" ? Visibility.Visible : Visibility.Collapsed;
@@ -630,6 +636,8 @@ namespace Unison.Uwp.Shell.WhatsApp.Dialogs
                     return Loc(strings, "Settings_Customization.Text", "Customization");
                 case "advanced":
                     return Loc(strings, "Settings_Advanced.Text", "Advanced");
+                case "disk":
+                    return Loc(strings, "Settings_DiskUsage.Text", "Disk Usage");
                 case "about":
                     return Loc(strings, "Settings_About.Text", "About");
                 default:

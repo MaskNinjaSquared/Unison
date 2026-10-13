@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Unison.Core.Contracts;
+using Unison.Core.Models;
 using Unison.Core.ViewModels;
 using Unison.Uwp.Helpers;
 using Unison.Uwp.UI.Dialogs;
@@ -262,6 +263,34 @@ namespace Unison.Uwp.Services
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine("[DialogService] ShowRuntimeDiagnosticsAsync: " + ex.Message);
+            }
+        }
+
+        public async Task<StartTileMark?> ShowStartTileMarkAsync(StartTileMark current)
+        {
+            try
+            {
+                var dialog = new StartTileMarkDialog();
+                dialog.Bind(current);
+                ContentDialogResult result = await dialog.ShowAsync();
+                if (result != ContentDialogResult.Primary)
+                {
+                    return null;
+                }
+
+                return dialog.Result;
+            }
+            catch (System.Runtime.InteropServices.COMException ex)
+                when (ex.Message.Contains("single ContentDialog") ||
+                      ex.HResult == unchecked((int)0x80070057))
+            {
+                System.Diagnostics.Debug.WriteLine("[DialogService] Another dialog is already open (start tile).");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[DialogService] ShowStartTileMarkAsync: " + ex.Message);
+                return null;
             }
         }
 

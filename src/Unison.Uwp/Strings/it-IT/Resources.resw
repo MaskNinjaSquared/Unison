@@ -734,6 +734,24 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
   <data name="Settings_DisconnectCancel" xml:space="preserve">
     <value>Annulla</value>
   </data>
+  <data name="Settings_DiskUsage.Text" xml:space="preserve"><value>Utilizzo disco</value></data>
+  <data name="Settings_MediaCache.Header" xml:space="preserve"><value>Media nelle chat</value></data>
+  <data name="Settings_MediaCacheClean.Content" xml:space="preserve"><value>Cancella dati</value></data>
+  <data name="Settings_StartTile.Header" xml:space="preserve"><value>Riquadro Start</value></data>
+  <data name="Settings_StartTile.Text" xml:space="preserve"><value>Scegli l'icona e aggiungi un riquadro che riceve le stesse notifiche dell'app.</value></data>
+  <data name="Settings_StartTileChoose.Content" xml:space="preserve"><value>Scegli</value></data>
+  <data name="StartTileDialog.Title" xml:space="preserve"><value>Riquadro Start</value></data>
+  <data name="StartTileDialog.PrimaryButtonText" xml:space="preserve"><value>Aggiungi</value></data>
+  <data name="StartTileDialog.CloseButtonText" xml:space="preserve"><value>Annulla</value></data>
+  <data name="StartTileDialog_Unison.Content" xml:space="preserve"><value>Unison</value></data>
+  <data name="StartTileDialog_WhatsAppWeb.Content" xml:space="preserve"><value>WhatsApp Web</value></data>
+  <data name="StartTileDialog_WhatsAppLegacy.Content" xml:space="preserve"><value>WhatsApp Legacy</value></data>
+  <data name="Settings_DiskUsageCalculating" xml:space="preserve"><value>Calcolo...</value></data>
+  <data name="Settings_DiskUsageFailed" xml:space="preserve"><value>Impossibile calcolare</value></data>
+  <data name="Settings_DiskUsageSummary" xml:space="preserve"><value>{0} in {1} file</value></data>
+  <data name="MediaDeleted.Title" xml:space="preserve"><value>Errore</value></data>
+  <data name="MediaDeleted.Message" xml:space="preserve"><value>File eliminato dal dispositivo</value></data>
+  <data name="MediaDeleted.Close" xml:space="preserve"><value>OK</value></data>
   <data name="Settings_KeepAlive.Header" xml:space="preserve">
     <value>Modalità in background</value>
   </data>

@@ -639,6 +639,24 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   <data name="Settings_LiveTiles.Text" xml:space="preserve">
     <value>Actualizar el tile principal con el último mensaje.</value>
   </data>
+  <data name="Settings_DiskUsage.Text" xml:space="preserve"><value>Uso de disco</value></data>
+  <data name="Settings_MediaCache.Header" xml:space="preserve"><value>Medios en los chats</value></data>
+  <data name="Settings_MediaCacheClean.Content" xml:space="preserve"><value>Borrar datos</value></data>
+  <data name="Settings_StartTile.Header" xml:space="preserve"><value>Tile de Inicio</value></data>
+  <data name="Settings_StartTile.Text" xml:space="preserve"><value>Elige el icono y ancla un tile que reciba las mismas notificaciones de la app.</value></data>
+  <data name="Settings_StartTileChoose.Content" xml:space="preserve"><value>Elegir</value></data>
+  <data name="StartTileDialog.Title" xml:space="preserve"><value>Tile de Inicio</value></data>
+  <data name="StartTileDialog.PrimaryButtonText" xml:space="preserve"><value>Anclar</value></data>
+  <data name="StartTileDialog.CloseButtonText" xml:space="preserve"><value>Cancelar</value></data>
+  <data name="StartTileDialog_Unison.Content" xml:space="preserve"><value>Unison</value></data>
+  <data name="StartTileDialog_WhatsAppWeb.Content" xml:space="preserve"><value>WhatsApp Web</value></data>
+  <data name="StartTileDialog_WhatsAppLegacy.Content" xml:space="preserve"><value>WhatsApp Legacy</value></data>
+  <data name="Settings_DiskUsageCalculating" xml:space="preserve"><value>Calculando...</value></data>
+  <data name="Settings_DiskUsageFailed" xml:space="preserve"><value>No se pudo calcular</value></data>
+  <data name="Settings_DiskUsageSummary" xml:space="preserve"><value>{0} en {1} archivos</value></data>
+  <data name="MediaDeleted.Title" xml:space="preserve"><value>Error</value></data>
+  <data name="MediaDeleted.Message" xml:space="preserve"><value>Archivo eliminado del dispositivo</value></data>
+  <data name="MediaDeleted.Close" xml:space="preserve"><value>OK</value></data>
   <data name="Settings_KeepAlive.Header" xml:space="preserve">
     <value>Modo en segundo plano</value>
   </data>

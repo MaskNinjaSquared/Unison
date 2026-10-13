@@ -734,6 +734,24 @@ Wyłącz po zakończeniu diagnozy: pozostawienie włączonego spowalnia aplikacj
   <data name="Settings_DisconnectCancel" xml:space="preserve">
     <value>Anuluj</value>
   </data>
+  <data name="Settings_DiskUsage.Text" xml:space="preserve"><value>Użycie dysku</value></data>
+  <data name="Settings_MediaCache.Header" xml:space="preserve"><value>Multimedia w czatach</value></data>
+  <data name="Settings_MediaCacheClean.Content" xml:space="preserve"><value>Wyczyść dane</value></data>
+  <data name="Settings_StartTile.Header" xml:space="preserve"><value>Kafelek startowy</value></data>
+  <data name="Settings_StartTile.Text" xml:space="preserve"><value>Wybierz ikonę i przypnij kafelek, który dostaje te same powiadomienia co aplikacja.</value></data>
+  <data name="Settings_StartTileChoose.Content" xml:space="preserve"><value>Wybierz</value></data>
+  <data name="StartTileDialog.Title" xml:space="preserve"><value>Kafelek startowy</value></data>
+  <data name="StartTileDialog.PrimaryButtonText" xml:space="preserve"><value>Przypnij</value></data>
+  <data name="StartTileDialog.CloseButtonText" xml:space="preserve"><value>Anuluj</value></data>
+  <data name="StartTileDialog_Unison.Content" xml:space="preserve"><value>Unison</value></data>
+  <data name="StartTileDialog_WhatsAppWeb.Content" xml:space="preserve"><value>WhatsApp Web</value></data>
+  <data name="StartTileDialog_WhatsAppLegacy.Content" xml:space="preserve"><value>WhatsApp Legacy</value></data>
+  <data name="Settings_DiskUsageCalculating" xml:space="preserve"><value>Obliczanie...</value></data>
+  <data name="Settings_DiskUsageFailed" xml:space="preserve"><value>Nie udało się obliczyć</value></data>
+  <data name="Settings_DiskUsageSummary" xml:space="preserve"><value>{0} w {1} plikach</value></data>
+  <data name="MediaDeleted.Title" xml:space="preserve"><value>Błąd</value></data>
+  <data name="MediaDeleted.Message" xml:space="preserve"><value>Plik usunięty z urządzenia</value></data>
+  <data name="MediaDeleted.Close" xml:space="preserve"><value>OK</value></data>
   <data name="Settings_KeepAlive.Header" xml:space="preserve">
     <value>Tryb w tle</value>
   </data>

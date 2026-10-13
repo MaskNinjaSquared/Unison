@@ -203,6 +203,8 @@ namespace Unison.Uwp
             services.AddSingleton<ChatStateStore>(_ => new ChatStateStore(new UiThreadDispatcherService()));
             services.AddSingleton<IChatStateStore>(sp => sp.GetRequiredService<ChatStateStore>());
             services.AddSingleton<IDialogService, DialogService>();
+            services.AddSingleton<IStartTilePinService, StartTilePinService>();
+            services.AddSingleton<IMediaDiskUsageService, MediaDiskUsageService>();
             services.AddSingleton<ILocalSettings, LocalSettingsService>();
             services.AddSingleton<ShellThemeService>();
             services.AddSingleton<IShellThemeService>(sp => sp.GetRequiredService<ShellThemeService>());

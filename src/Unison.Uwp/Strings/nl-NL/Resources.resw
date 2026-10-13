@@ -698,6 +698,24 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   <data name="Settings_LiveTiles.Text" xml:space="preserve">
     <value>Werk de primaire tegel bij met het laatst ontvangen bericht.</value>
   </data>
+  <data name="Settings_DiskUsage.Text" xml:space="preserve"><value>Schijfgebruik</value></data>
+  <data name="Settings_MediaCache.Header" xml:space="preserve"><value>Media in chats</value></data>
+  <data name="Settings_MediaCacheClean.Content" xml:space="preserve"><value>Gegevens wissen</value></data>
+  <data name="Settings_StartTile.Header" xml:space="preserve"><value>Starttegel</value></data>
+  <data name="Settings_StartTile.Text" xml:space="preserve"><value>Kies het pictogram en maak een tegel vast die dezelfde meldingen krijgt als de app.</value></data>
+  <data name="Settings_StartTileChoose.Content" xml:space="preserve"><value>Kiezen</value></data>
+  <data name="StartTileDialog.Title" xml:space="preserve"><value>Starttegel</value></data>
+  <data name="StartTileDialog.PrimaryButtonText" xml:space="preserve"><value>Vastmaken</value></data>
+  <data name="StartTileDialog.CloseButtonText" xml:space="preserve"><value>Annuleren</value></data>
+  <data name="StartTileDialog_Unison.Content" xml:space="preserve"><value>Unison</value></data>
+  <data name="StartTileDialog_WhatsAppWeb.Content" xml:space="preserve"><value>WhatsApp Web</value></data>
+  <data name="StartTileDialog_WhatsAppLegacy.Content" xml:space="preserve"><value>WhatsApp Legacy</value></data>
+  <data name="Settings_DiskUsageCalculating" xml:space="preserve"><value>Berekenen...</value></data>
+  <data name="Settings_DiskUsageFailed" xml:space="preserve"><value>Kan niet berekenen</value></data>
+  <data name="Settings_DiskUsageSummary" xml:space="preserve"><value>{0} in {1} bestanden</value></data>
+  <data name="MediaDeleted.Title" xml:space="preserve"><value>Fout</value></data>
+  <data name="MediaDeleted.Message" xml:space="preserve"><value>Bestand verwijderd van het apparaat</value></data>
+  <data name="MediaDeleted.Close" xml:space="preserve"><value>OK</value></data>
   <data name="Settings_KeepAlive.Header" xml:space="preserve">
     <value>Achtergrond modus</value>
   </data>

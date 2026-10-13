@@ -698,6 +698,24 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="Settings_LiveTiles.Text" xml:space="preserve">
     <value>Atualizar o tile principal com a última mensagem.</value>
   </data>
+  <data name="Settings_DiskUsage.Text" xml:space="preserve"><value>Uso de disco</value></data>
+  <data name="Settings_MediaCache.Header" xml:space="preserve"><value>Mídia nos chats</value></data>
+  <data name="Settings_MediaCacheClean.Content" xml:space="preserve"><value>Limpar dados</value></data>
+  <data name="Settings_StartTile.Header" xml:space="preserve"><value>Tile do Início</value></data>
+  <data name="Settings_StartTile.Text" xml:space="preserve"><value>Escolher o ícone e fixar um tile que recebe as mesmas notificações do app.</value></data>
+  <data name="Settings_StartTileChoose.Content" xml:space="preserve"><value>Escolher</value></data>
+  <data name="StartTileDialog.Title" xml:space="preserve"><value>Tile do Início</value></data>
+  <data name="StartTileDialog.PrimaryButtonText" xml:space="preserve"><value>Fixar</value></data>
+  <data name="StartTileDialog.CloseButtonText" xml:space="preserve"><value>Cancelar</value></data>
+  <data name="StartTileDialog_Unison.Content" xml:space="preserve"><value>Unison</value></data>
+  <data name="StartTileDialog_WhatsAppWeb.Content" xml:space="preserve"><value>WhatsApp Web</value></data>
+  <data name="StartTileDialog_WhatsAppLegacy.Content" xml:space="preserve"><value>WhatsApp Legacy</value></data>
+  <data name="Settings_DiskUsageCalculating" xml:space="preserve"><value>Calculando...</value></data>
+  <data name="Settings_DiskUsageFailed" xml:space="preserve"><value>Não foi possível calcular</value></data>
+  <data name="Settings_DiskUsageSummary" xml:space="preserve"><value>{0} em {1} arquivos</value></data>
+  <data name="MediaDeleted.Title" xml:space="preserve"><value>Erro</value></data>
+  <data name="MediaDeleted.Message" xml:space="preserve"><value>Arquivo Apagado no Dispositivo</value></data>
+  <data name="MediaDeleted.Close" xml:space="preserve"><value>OK</value></data>
   <data name="Settings_KeepAlive.Header" xml:space="preserve">
     <value>Modo em segundo plano</value>
   </data>

@@ -108,6 +108,7 @@ namespace Unison.Uwp.Services
                 };
 
                 TileUpdateManager.CreateTileUpdaterForApplication().Update(notification);
+                StartTileMirror.UpdateTile(document, notification.ExpirationTime);
             }
             catch
             {
@@ -119,6 +120,7 @@ namespace Unison.Uwp.Services
             try
             {
                 TileUpdateManager.CreateTileUpdaterForApplication().Clear();
+                StartTileMirror.ClearTile();
             }
             catch
             {

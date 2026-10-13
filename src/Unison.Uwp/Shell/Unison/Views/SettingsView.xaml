@@ -325,6 +325,18 @@
                             </controls:SettingBox.Control>
                         </controls:SettingBox>
 
+                        <controls:SettingBox LocalizationUid="Settings_StartTile"
+                                             Margin="5"
+                                             Header="Tile do Início"
+                                             Text="Escolher o ícone e fixar um tile que recebe as mesmas notificações do app.">
+                            <controls:SettingBox.Control>
+                                <Button x:Uid="Settings_StartTileChoose"
+                                        Content="Escolher"
+                                        MinWidth="96"
+                                        Command="{Binding ChooseStartTileCommand}"/>
+                            </controls:SettingBox.Control>
+                        </controls:SettingBox>
+
                         <controls:SettingsSectionHeader x:Uid="Settings_Advanced"
                                                         Text="Advanced Settings"
                                                         Glyph="&#xE7BA;"/>
@@ -336,6 +348,24 @@
                             <controls:SettingBox.Control>
                                 <ToggleSwitch OnContent="" OffContent="" MinWidth="0" Margin="0"
                                               IsOn="{Binding LocationKeepAliveEnabled, Mode=TwoWay}"/>
+                            </controls:SettingBox.Control>
+                        </controls:SettingBox>
+
+                        <controls:SettingsSectionHeader x:Uid="Settings_DiskUsage"
+                                                        Text="Disk Usage"
+                                                        Glyph="&#xEDA2;"
+                                                        Margin="5,12,0,5"/>
+
+                        <controls:SettingBox LocalizationUid="Settings_MediaCache"
+                                             Margin="5"
+                                             Header="Mídia nos chats"
+                                             Text="{Binding DiskUsageText, Mode=OneWay}">
+                            <controls:SettingBox.Control>
+                                <Button x:Uid="Settings_MediaCacheClean"
+                                        Content="Limpar dados"
+                                        MinWidth="120"
+                                        IsEnabled="{Binding CanCleanMediaCache, Mode=OneWay}"
+                                        Command="{Binding CleanMediaCacheCommand}"/>
                             </controls:SettingBox.Control>
                         </controls:SettingBox>
 

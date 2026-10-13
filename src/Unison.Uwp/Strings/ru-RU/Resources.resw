@@ -639,6 +639,24 @@
   <data name="Settings_LiveTiles.Text" xml:space="preserve">
     <value>Показывать последнее сообщение на плитке приложения.</value>
   </data>
+  <data name="Settings_DiskUsage.Text" xml:space="preserve"><value>Использование диска</value></data>
+  <data name="Settings_MediaCache.Header" xml:space="preserve"><value>Медиа в чатах</value></data>
+  <data name="Settings_MediaCacheClean.Content" xml:space="preserve"><value>Очистить данные</value></data>
+  <data name="Settings_StartTile.Header" xml:space="preserve"><value>Плитка Пуска</value></data>
+  <data name="Settings_StartTile.Text" xml:space="preserve"><value>Выберите значок и закрепите плитку, которая получает те же уведомления, что и приложение.</value></data>
+  <data name="Settings_StartTileChoose.Content" xml:space="preserve"><value>Выбрать</value></data>
+  <data name="StartTileDialog.Title" xml:space="preserve"><value>Плитка Пуска</value></data>
+  <data name="StartTileDialog.PrimaryButtonText" xml:space="preserve"><value>Закрепить</value></data>
+  <data name="StartTileDialog.CloseButtonText" xml:space="preserve"><value>Отмена</value></data>
+  <data name="StartTileDialog_Unison.Content" xml:space="preserve"><value>Unison</value></data>
+  <data name="StartTileDialog_WhatsAppWeb.Content" xml:space="preserve"><value>WhatsApp Web</value></data>
+  <data name="StartTileDialog_WhatsAppLegacy.Content" xml:space="preserve"><value>WhatsApp Legacy</value></data>
+  <data name="Settings_DiskUsageCalculating" xml:space="preserve"><value>Вычисление...</value></data>
+  <data name="Settings_DiskUsageFailed" xml:space="preserve"><value>Не удалось посчитать</value></data>
+  <data name="Settings_DiskUsageSummary" xml:space="preserve"><value>{0} в {1} файлах</value></data>
+  <data name="MediaDeleted.Title" xml:space="preserve"><value>Ошибка</value></data>
+  <data name="MediaDeleted.Message" xml:space="preserve"><value>Файл удалён с устройства</value></data>
+  <data name="MediaDeleted.Close" xml:space="preserve"><value>OK</value></data>
   <data name="Settings_KeepAlive.Header" xml:space="preserve">
     <value>Фоновый режим</value>
   </data>

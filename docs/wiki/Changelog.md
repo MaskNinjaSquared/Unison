@@ -4,6 +4,12 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## App logo
+
+The start tile, splash and boot screen use the isometric mark. Live tiles are
+the mark alone, on a transparent background. The previous artwork is kept under
+`Assets/LegacyLogo` for a later feature.
+
 ## Broker handoff on the socket stack
 
 Suspending hands the live socket to the background task again, now through the new

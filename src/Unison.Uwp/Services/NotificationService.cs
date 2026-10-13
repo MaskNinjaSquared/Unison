@@ -209,6 +209,7 @@ namespace Unison.Uwp.Services
                 if (totalUnread <= 0 || !IsNotificationsSettingEnabled())
                 {
                     updater.Clear();
+                    StartTileMirror.ClearBadge();
                     return;
                 }
 
@@ -222,6 +223,7 @@ namespace Unison.Uwp.Services
 
                 badgeElement.SetAttribute("value", badgeValue.ToString());
                 updater.Update(new BadgeNotification(badgeXml));
+                StartTileMirror.UpdateBadge(totalUnread, true);
             }
             catch
             {
@@ -231,6 +233,7 @@ namespace Unison.Uwp.Services
         public void ClearAll()
         {
             try { BadgeUpdateManager.CreateBadgeUpdaterForApplication().Clear(); } catch { }
+            StartTileMirror.ClearBadge();
             LiveTiles.Clear();
             try { ToastNotificationManager.History.Clear(); } catch { }
         }
@@ -240,6 +243,7 @@ namespace Unison.Uwp.Services
             if (!IsNotificationsSettingEnabled())
             {
                 try { BadgeUpdateManager.CreateBadgeUpdaterForApplication().Clear(); } catch { }
+                StartTileMirror.ClearBadge();
                 try { ToastNotificationManager.History.Clear(); } catch { }
             }
         }

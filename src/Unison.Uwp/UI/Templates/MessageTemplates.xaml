@@ -197,7 +197,7 @@
                                    VerticalAlignment="Stretch"
                                    Visibility="{x:Bind HasVideoPoster, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                             <Button Click="VideoOpenButton_Click"
-                                    Style="{StaticResource TransparentMediaButtonStyle}"
+                                    Style="{StaticResource MediaHitTargetButtonStyle}"
                                     HorizontalAlignment="Stretch"
                                     VerticalAlignment="Stretch"
                                     Padding="0">
@@ -699,7 +699,7 @@
                                    VerticalAlignment="Stretch"
                                    Visibility="{x:Bind HasVideoPoster, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                             <Button Click="VideoOpenButton_Click"
-                                    Style="{StaticResource TransparentMediaButtonStyle}"
+                                    Style="{StaticResource MediaHitTargetButtonStyle}"
                                     HorizontalAlignment="Stretch"
                                     VerticalAlignment="Stretch"
                                     Padding="0">

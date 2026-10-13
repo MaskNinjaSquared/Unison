@@ -71,8 +71,8 @@
                                 Click="HamburgerButton_Click">
                             <TextBlock Text="&#xE700;" FontFamily="{StaticResource IconFont}" FontSize="18"/>
                         </Button>
-                        <Image Source="ms-appx:///Assets/WhatsAppLogo.png"
-                               Width="24" Height="24"
+                        <Image Source="ms-appx:///Assets/Square44x44Logo.targetsize-20_altform-unplated.png"
+                               Width="20" Height="20"
                                VerticalAlignment="Center"
                                Margin="4,0,0,0"/>
                         <TextBlock Text="WhatsApp"

@@ -139,6 +139,10 @@
     <Compile Include="Services\DispatcherService.cs" />
     <Compile Include="Services\UiThreadDispatcherService.cs" />
     <Compile Include="Services\DialogService.cs" />
+    <Compile Include="Services\MediaDiskUsageService.cs" />
+    <Compile Include="Services\StartTileMarkAssets.cs" />
+    <Compile Include="Services\StartTileMirror.cs" />
+    <Compile Include="Services\StartTilePinService.cs" />
     <Compile Include="Services\AvatarCacheService.cs" />
     <Compile Include="Services\MediaCacheService.cs" />
     <Compile Include="Services\MediaDerivationService.cs" />
@@ -436,6 +440,9 @@
     <Compile Include="UI\Dialogs\ReactionsDialog.xaml.cs">
       <DependentUpon>ReactionsDialog.xaml</DependentUpon>
     </Compile>
+    <Compile Include="UI\Dialogs\StartTileMarkDialog.xaml.cs">
+      <DependentUpon>StartTileMarkDialog.xaml</DependentUpon>
+    </Compile>
     <Compile Include="UI\Dialogs\RuntimeDiagnosticsDialog.xaml.cs">
       <DependentUpon>RuntimeDiagnosticsDialog.xaml</DependentUpon>
     </Compile>
@@ -545,6 +552,10 @@
     <Content Include="Assets\Wide310x150Logo.scale-150.png" />
     <Content Include="Assets\Wide310x150Logo.scale-200.png" />
     <Content Include="Assets\Wide310x150Logo.scale-400.png" />
+    <Content Include="Assets\SplashScreen.scale-100.png" />
+    <Content Include="Assets\WhatsAppLogo.png" />
+    <Content Include="Assets\Square44x44Logo.targetsize-20_altform-unplated.png" />
+    <Content Include="Assets\LegacyLogo\*.png" />
   </ItemGroup>
   <ItemGroup>
     <ApplicationDefinition Include="App.xaml">
@@ -760,6 +771,10 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="UI\Dialogs\ImageSendPreviewDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Dialogs\StartTileMarkDialog.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

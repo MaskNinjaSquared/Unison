@@ -131,6 +131,13 @@
                             </StackPanel>
                         </ListViewItem>
 
+                        <ListViewItem Tag="disk">
+                            <StackPanel Orientation="Horizontal" Padding="12,0">
+                                <TextBlock Text="&#xEDA2;" FontFamily="{StaticResource IconFont}" FontSize="20" Width="24" VerticalAlignment="Center"/>
+                                <TextBlock x:Uid="Settings_DiskUsage" Text="Disk Usage" Margin="16,0,0,0" FontSize="14" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </ListViewItem>
+
                         <ListViewItem Tag="about">
                             <StackPanel Orientation="Horizontal" Padding="12,0">
                                 <TextBlock Text="&#xE946;" FontFamily="{StaticResource IconFont}" FontSize="20" Width="24" VerticalAlignment="Center"/>
@@ -364,6 +371,18 @@
                                         </ComboBox>
                                     </controls:SettingBox.Control>
                                 </controls:SettingBox>
+
+                                <controls:SettingBox LocalizationUid="Settings_StartTile"
+                                                     Margin="0,0,0,8"
+                                                     Header="Tile do Início"
+                                                     Text="Escolher o ícone e fixar um tile que recebe as mesmas notificações do app.">
+                                    <controls:SettingBox.Control>
+                                        <Button x:Uid="Settings_StartTileChoose"
+                                                Content="Escolher"
+                                                MinWidth="96"
+                                                Command="{Binding ChooseStartTileCommand}"/>
+                                    </controls:SettingBox.Control>
+                                </controls:SettingBox>
                             </StackPanel>
 
                             <!-- Advanced -->
@@ -398,6 +417,22 @@
                                                    FontFamily="{StaticResource MainFontSemibold}"/>
                                     </StackPanel>
                                 </Button>
+                            </StackPanel>
+
+                            <!-- Disk Usage -->
+                            <StackPanel x:Name="DiskUsagePanel" Visibility="Collapsed">
+                                <controls:SettingBox LocalizationUid="Settings_MediaCache"
+                                                     Margin="0,0,0,8"
+                                                     Header="Mídia nos chats"
+                                                     Text="{Binding DiskUsageText, Mode=OneWay}">
+                                    <controls:SettingBox.Control>
+                                        <Button x:Uid="Settings_MediaCacheClean"
+                                                Content="Limpar dados"
+                                                MinWidth="120"
+                                                IsEnabled="{Binding CanCleanMediaCache, Mode=OneWay}"
+                                                Command="{Binding CleanMediaCacheCommand}"/>
+                                    </controls:SettingBox.Control>
+                                </controls:SettingBox>
                             </StackPanel>
 
                             <!-- About -->

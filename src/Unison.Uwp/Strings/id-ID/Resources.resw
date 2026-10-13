@@ -698,6 +698,24 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="Settings_LiveTiles.Text" xml:space="preserve">
     <value>Perbarui ubin utama dengan pesan terbaru.</value>
   </data>
+  <data name="Settings_DiskUsage.Text" xml:space="preserve"><value>Penggunaan disk</value></data>
+  <data name="Settings_MediaCache.Header" xml:space="preserve"><value>Media di chat</value></data>
+  <data name="Settings_MediaCacheClean.Content" xml:space="preserve"><value>Hapus data</value></data>
+  <data name="Settings_StartTile.Header" xml:space="preserve"><value>Tile Mulai</value></data>
+  <data name="Settings_StartTile.Text" xml:space="preserve"><value>Pilih ikon dan sematkan tile yang menerima notifikasi yang sama dengan aplikasi.</value></data>
+  <data name="Settings_StartTileChoose.Content" xml:space="preserve"><value>Pilih</value></data>
+  <data name="StartTileDialog.Title" xml:space="preserve"><value>Tile Mulai</value></data>
+  <data name="StartTileDialog.PrimaryButtonText" xml:space="preserve"><value>Sematkan</value></data>
+  <data name="StartTileDialog.CloseButtonText" xml:space="preserve"><value>Batal</value></data>
+  <data name="StartTileDialog_Unison.Content" xml:space="preserve"><value>Unison</value></data>
+  <data name="StartTileDialog_WhatsAppWeb.Content" xml:space="preserve"><value>WhatsApp Web</value></data>
+  <data name="StartTileDialog_WhatsAppLegacy.Content" xml:space="preserve"><value>WhatsApp Legacy</value></data>
+  <data name="Settings_DiskUsageCalculating" xml:space="preserve"><value>Menghitung...</value></data>
+  <data name="Settings_DiskUsageFailed" xml:space="preserve"><value>Tidak dapat menghitung</value></data>
+  <data name="Settings_DiskUsageSummary" xml:space="preserve"><value>{0} dalam {1} file</value></data>
+  <data name="MediaDeleted.Title" xml:space="preserve"><value>Kesalahan</value></data>
+  <data name="MediaDeleted.Message" xml:space="preserve"><value>File dihapus dari perangkat</value></data>
+  <data name="MediaDeleted.Close" xml:space="preserve"><value>OK</value></data>
   <data name="Settings_KeepAlive.Header" xml:space="preserve">
     <value>Mode latar belakang</value>
   </data>

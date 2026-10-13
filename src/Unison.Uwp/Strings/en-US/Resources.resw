@@ -698,6 +698,24 @@ Disable after diagnosing: keeping it on slows the app.</value>
   <data name="Settings_LiveTiles.Text" xml:space="preserve">
     <value>Update the primary tile with the latest message.</value>
   </data>
+  <data name="Settings_DiskUsage.Text" xml:space="preserve"><value>Disk Usage</value></data>
+  <data name="Settings_MediaCache.Header" xml:space="preserve"><value>Media in chats</value></data>
+  <data name="Settings_MediaCacheClean.Content" xml:space="preserve"><value>Clear data</value></data>
+  <data name="Settings_StartTile.Header" xml:space="preserve"><value>Start tile</value></data>
+  <data name="Settings_StartTile.Text" xml:space="preserve"><value>Choose the icon and pin a tile that receives the same notifications as the app.</value></data>
+  <data name="Settings_StartTileChoose.Content" xml:space="preserve"><value>Choose</value></data>
+  <data name="StartTileDialog.Title" xml:space="preserve"><value>Start tile</value></data>
+  <data name="StartTileDialog.PrimaryButtonText" xml:space="preserve"><value>Pin</value></data>
+  <data name="StartTileDialog.CloseButtonText" xml:space="preserve"><value>Cancel</value></data>
+  <data name="StartTileDialog_Unison.Content" xml:space="preserve"><value>Unison</value></data>
+  <data name="StartTileDialog_WhatsAppWeb.Content" xml:space="preserve"><value>WhatsApp Web</value></data>
+  <data name="StartTileDialog_WhatsAppLegacy.Content" xml:space="preserve"><value>WhatsApp Legacy</value></data>
+  <data name="Settings_DiskUsageCalculating" xml:space="preserve"><value>Calculating...</value></data>
+  <data name="Settings_DiskUsageFailed" xml:space="preserve"><value>Could not calculate</value></data>
+  <data name="Settings_DiskUsageSummary" xml:space="preserve"><value>{0} in {1} files</value></data>
+  <data name="MediaDeleted.Title" xml:space="preserve"><value>Error</value></data>
+  <data name="MediaDeleted.Message" xml:space="preserve"><value>File deleted on this device</value></data>
+  <data name="MediaDeleted.Close" xml:space="preserve"><value>OK</value></data>
   <data name="Settings_KeepAlive.Header" xml:space="preserve">
     <value>Background mode</value>
   </data>

@@ -95,23 +95,11 @@
                     </Grid.ColumnDefinitions>
 
                     <Button Command="{x:Bind ViewModel.CloseCommand, Mode=OneWay}"
+                            Style="{StaticResource CircleIconButtonStyle}"
                             Width="34" Height="34"
                             Margin="4,0,8,0"
                             VerticalAlignment="Top"
-                            Background="Transparent"
-                            BorderThickness="0"
-                            Padding="0">
-                        <Grid Width="34" Height="34">
-                            <Ellipse Fill="#E6232424"/>
-                            <TextBlock Text="&#xE72B;"
-                                       FontFamily="{StaticResource IconFont}"
-                                       FontSize="14"
-                                       FontWeight="SemiBold"
-                                       Foreground="WhiteSmoke"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"/>
-                        </Grid>
-                    </Button>
+                            Content="&#xE72B;"/>
 
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                         <TextBlock Text="{x:Bind ViewModel.AuthorName, Mode=OneWay}"

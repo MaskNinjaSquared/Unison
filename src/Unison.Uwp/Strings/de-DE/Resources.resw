@@ -698,6 +698,24 @@ Nach der Diagnose deaktivieren: Wenn es aktiviert bleibt, wird die App langsamer
   <data name="Settings_LiveTiles.Text" xml:space="preserve">
     <value>Die primäre Kachel mit der neuesten Nachricht aktualisieren.</value>
   </data>
+  <data name="Settings_DiskUsage.Text" xml:space="preserve"><value>Speichernutzung</value></data>
+  <data name="Settings_MediaCache.Header" xml:space="preserve"><value>Medien in Chats</value></data>
+  <data name="Settings_MediaCacheClean.Content" xml:space="preserve"><value>Daten löschen</value></data>
+  <data name="Settings_StartTile.Header" xml:space="preserve"><value>Startkachel</value></data>
+  <data name="Settings_StartTile.Text" xml:space="preserve"><value>Symbol wählen und eine Kachel anheften, die dieselben Benachrichtigungen wie die App erhält.</value></data>
+  <data name="Settings_StartTileChoose.Content" xml:space="preserve"><value>Auswählen</value></data>
+  <data name="StartTileDialog.Title" xml:space="preserve"><value>Startkachel</value></data>
+  <data name="StartTileDialog.PrimaryButtonText" xml:space="preserve"><value>Anheften</value></data>
+  <data name="StartTileDialog.CloseButtonText" xml:space="preserve"><value>Abbrechen</value></data>
+  <data name="StartTileDialog_Unison.Content" xml:space="preserve"><value>Unison</value></data>
+  <data name="StartTileDialog_WhatsAppWeb.Content" xml:space="preserve"><value>WhatsApp Web</value></data>
+  <data name="StartTileDialog_WhatsAppLegacy.Content" xml:space="preserve"><value>WhatsApp Legacy</value></data>
+  <data name="Settings_DiskUsageCalculating" xml:space="preserve"><value>Wird berechnet...</value></data>
+  <data name="Settings_DiskUsageFailed" xml:space="preserve"><value>Berechnung nicht möglich</value></data>
+  <data name="Settings_DiskUsageSummary" xml:space="preserve"><value>{0} in {1} Dateien</value></data>
+  <data name="MediaDeleted.Title" xml:space="preserve"><value>Fehler</value></data>
+  <data name="MediaDeleted.Message" xml:space="preserve"><value>Datei wurde vom Gerät gelöscht</value></data>
+  <data name="MediaDeleted.Close" xml:space="preserve"><value>OK</value></data>
   <data name="Settings_KeepAlive.Header" xml:space="preserve">
     <value>Hintergrundmodus</value>
   </data>
