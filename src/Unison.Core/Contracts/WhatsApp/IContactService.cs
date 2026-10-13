@@ -53,6 +53,12 @@ namespace Unison.Core.Contracts.WhatsApp
         Task RetrieveContactPicturesAsync(CancellationToken cancellationToken = default(CancellationToken));
 
         /// <summary>
+        /// Puts picture files already on disk onto the chat rows. One UI pass to see which rows
+        /// need it, the disk probe off that thread, then one UI pass to write the URIs.
+        /// </summary>
+        Task HydrateCachedAvatarUrisAsync(string reason);
+
+        /// <summary>
         /// One idle pass of group-member pictures (16, then schedules the next). Confirmed
         /// no-photo misses are stamped so the same people are not asked again soon.
         /// Used by the Members pivot — not on chat open.

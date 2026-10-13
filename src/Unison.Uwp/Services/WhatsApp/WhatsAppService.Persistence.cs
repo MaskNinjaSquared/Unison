@@ -144,7 +144,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 // or enrichment so the list shows faces while tips/names settle.
                 try
                 {
-                    await HydrateCachedAvatarUrisAsync("persisted-ui-loaded")
+                    await HydrateCachedAvatarsFromContactAsync("persisted-ui-loaded")
                         .ConfigureAwait(false);
                 }
                 catch (Exception exHydrate)

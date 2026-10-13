@@ -948,7 +948,16 @@ namespace Unison.Uwp.Services.WhatsApp
 
         void IWhatsAppService.CancelDeferredAvatarResolution() => CancelDeferredProfilePictureResolution();
 
-        Task IWhatsAppService.HydrateCachedAvatarUrisAsync(string reason) => HydrateCachedAvatarUrisAsync(reason);
+        private Task HydrateCachedAvatarsFromContactAsync(string reason)
+        {
+            if (_contactService == null)
+            {
+                Debug.WriteLine("[WhatsAppService] Avatar hydrate skipped (" + reason + "): contact facade missing");
+                return Task.CompletedTask;
+            }
+
+            return _contactService.HydrateCachedAvatarUrisAsync(reason);
+        }
 
         public RuntimeDiagnosticsSnapshot GetRuntimeDiagnosticsSnapshot()
         {
@@ -3171,7 +3180,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 // should show faces before we wait for sync or ask the server for history.
                 try
                 {
-                    await HydrateCachedAvatarUrisAsync("deferred-startup-early")
+                    await HydrateCachedAvatarsFromContactAsync("deferred-startup-early")
                         .ConfigureAwait(false);
                 }
                 catch (Exception exHydrate)
@@ -3243,7 +3252,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 await NormalizePersistedChatNamesAsync();
                 // Second pass for chats that arrived after the early hydrate (sync/catalog race).
-                await HydrateCachedAvatarUrisAsync("deferred-startup");
+                await HydrateCachedAvatarsFromContactAsync("deferred-startup");
 
                 if (_contactService != null)
                 {

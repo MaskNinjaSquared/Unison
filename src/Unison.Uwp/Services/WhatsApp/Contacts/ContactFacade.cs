@@ -64,7 +64,8 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             IGroupService groups,
             AvatarFetcher avatars,
             IChatStateStore chats,
-            IAvatarReport avatarReport)
+            IAvatarReport avatarReport,
+            IAvatarCache avatarCache)
         {
             if (sessions == null) throw new ArgumentNullException(nameof(sessions));
             if (localContacts == null) throw new ArgumentNullException(nameof(localContacts));
@@ -74,6 +75,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             if (avatars == null) throw new ArgumentNullException(nameof(avatars));
             if (chats == null) throw new ArgumentNullException(nameof(chats));
             if (avatarReport == null) throw new ArgumentNullException(nameof(avatarReport));
+            if (avatarCache == null) throw new ArgumentNullException(nameof(avatarCache));
 
             _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
             _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
@@ -88,7 +90,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             _avatars = new ChatAvatarPolicy(
                 whatsAppService,
                 jids,
-                new ChatAvatarFetch(whatsAppService, sessions, groups, jids, chats, avatarReport, avatars));
+                new ChatAvatarFetch(whatsAppService, sessions, groups, jids, chats, avatarReport, avatars, avatarCache));
             _roster = new GroupRosterPolicy(whatsAppService, groups, this, jids);
 
             // Both live as long as the app does, so there is nothing to unhook from.
@@ -147,6 +149,11 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
         private static readonly IReadOnlyDictionary<string, string> EmptyPhoneNames =
             new Dictionary<string, string>(0);
+
+        public Task HydrateCachedAvatarUrisAsync(string reason)
+        {
+            return _avatars.HydrateCachedAsync(reason);
+        }
 
         public void MarkAvatarImageLoadFailed(ChatItem chat, string reason)
         {

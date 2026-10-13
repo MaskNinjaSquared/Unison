@@ -55,6 +55,11 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             _fetch = fetch ?? throw new ArgumentNullException(nameof(fetch));
         }
 
+        public Task HydrateCachedAsync(string reason)
+        {
+            return _fetch.HydrateCachedAsync(reason);
+        }
+
         /// <summary>
         /// Fetches one batch of missing pictures and schedules the next when chats remain. Kept
         /// small on purpose: avatars matter less than the chats and messages they decorate.
@@ -69,7 +74,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
             // Progress only after the first completed fetch — "0 of N" is noise on Mobile StatusBar.
             // Bare phase:avatars is also skipped; hydrate/disk work stays silent.
-            await _whatsAppService.HydrateCachedAvatarUrisAsync("pre-avatar-fetch");
+            await _fetch.HydrateCachedAsync("pre-avatar-fetch");
             if (token.IsCancellationRequested) return;
 
             DateTime nowUtc = DateTime.UtcNow;

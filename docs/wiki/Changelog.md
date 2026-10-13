@@ -4,6 +4,13 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Cached chat pictures — filled in by `ContactFacade`
+
+Pictures already on disk are written onto the rows by `ChatAvatarFetch`, on one UI pass
+around a disk probe. Startup and the avatar batch both ask `IContactService` for that.
+
+---
+
 ## Chat picture fetch — on `ContactFacade`
 
 Fetching a chat picture and writing it on the row, including a group's parent or a sibling with

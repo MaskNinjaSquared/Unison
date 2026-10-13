@@ -220,9 +220,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>Cancels a pending deferred background resolution retry.</summary>
         void CancelDeferredAvatarResolution();
 
-        /// <summary>Promotes avatar files already cached on disk into each chat's AvatarUrl before a fetch pass.</summary>
-        Task HydrateCachedAvatarUrisAsync(string reason);
-
         void MarkAvatarImageLoadFailed(ChatItem chat, string reason);
         void RequestAvatarRefresh(ChatItem chat, bool force = false);
         void SetActiveChatJid(string jid);

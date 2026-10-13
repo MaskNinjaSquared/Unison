@@ -346,7 +346,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IGroupService>(),
                 sp.GetRequiredService<AvatarFetcher>(),
                 sp.GetRequiredService<IChatStateStore>(),
-                sp.GetRequiredService<IAvatarReport>()));
+                sp.GetRequiredService<IAvatarReport>(),
+                sp.GetRequiredService<IAvatarCache>()));
             services.AddSingleton<IChatService>(sp => new ChatFacade(
                 sp.GetRequiredService<IWhatsAppSessionProvider>(),
                 sp.GetRequiredService<IWhatsAppService>(),

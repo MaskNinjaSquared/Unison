@@ -29,6 +29,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly IChatStateStore _chats;
         private readonly IAvatarReport _report;
         private readonly AvatarFetcher _avatars;
+        private readonly IAvatarCache _cache;
         private readonly GroupMetadataReader _reader;
 
         public ChatAvatarFetch(
@@ -38,7 +39,8 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             IJidResolver jids,
             IChatStateStore chats,
             IAvatarReport report,
-            AvatarFetcher avatars)
+            AvatarFetcher avatars,
+            IAvatarCache cache)
         {
             _client = client ?? throw new ArgumentNullException(nameof(client));
             _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
@@ -47,6 +49,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             _chats = chats ?? throw new ArgumentNullException(nameof(chats));
             _report = report ?? throw new ArgumentNullException(nameof(report));
             _avatars = avatars ?? throw new ArgumentNullException(nameof(avatars));
+            _cache = cache ?? throw new ArgumentNullException(nameof(cache));
             _reader = new GroupMetadataReader(jids);
         }
 
@@ -67,6 +70,112 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             {
                 _ = _groups.EnsureHighQualityGroupAvatarAsync(chat);
             }
+        }
+
+        public async Task HydrateCachedAsync(string reason)
+        {
+            List<AvatarHydrateCandidate> candidates = null;
+            await _client.RunOnUiThreadAsync(() =>
+            {
+                candidates = new List<AvatarHydrateCandidate>();
+                foreach (ChatItem chat in _chats.Chats)
+                {
+                    if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
+                    {
+                        continue;
+                    }
+
+                    bool needsPreview = string.IsNullOrWhiteSpace(chat.AvatarUrl) ||
+                                        chat.AvatarUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                                        chat.AvatarUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+
+                    bool needsHigh = chat.IsGroup &&
+                                     (string.IsNullOrWhiteSpace(chat.AvatarHighUrl) ||
+                                      chat.AvatarHighUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                                      chat.AvatarHighUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase));
+
+                    if (!needsPreview && !needsHigh)
+                    {
+                        continue;
+                    }
+
+                    candidates.Add(new AvatarHydrateCandidate
+                    {
+                        Jid = chat.JID,
+                        NeedsPreview = needsPreview,
+                        NeedsHigh = needsHigh
+                    });
+                }
+            });
+
+            if (candidates == null || candidates.Count == 0)
+            {
+                return;
+            }
+
+            var previewHits = new Dictionary<string, Tuple<string, DateTime>>(StringComparer.OrdinalIgnoreCase);
+            var highHits = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            await Task.Run(() =>
+            {
+                foreach (AvatarHydrateCandidate candidate in candidates)
+                {
+                    string localUri;
+                    DateTime fetchedAtUtc;
+                    if (candidate.NeedsPreview &&
+                        _cache.TryGet(candidate.Jid, AvatarVariant.Preview, out localUri, out fetchedAtUtc))
+                    {
+                        previewHits[candidate.Jid] = Tuple.Create(localUri, fetchedAtUtc);
+                    }
+
+                    string highUri;
+                    DateTime highFetchedAtUtc;
+                    if (candidate.NeedsHigh &&
+                        _cache.TryGet(candidate.Jid, AvatarVariant.HighResolution, out highUri, out highFetchedAtUtc))
+                    {
+                        highHits[candidate.Jid] = highUri;
+                    }
+                }
+            }).ConfigureAwait(false);
+
+            if (previewHits.Count == 0 && highHits.Count == 0)
+            {
+                return;
+            }
+
+            int hydrated = 0;
+            await _client.RunOnUiThreadAsync(() =>
+            {
+                foreach (ChatItem chat in _chats.Chats)
+                {
+                    if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
+                    {
+                        continue;
+                    }
+
+                    Tuple<string, DateTime> preview;
+                    if (previewHits.TryGetValue(chat.JID, out preview))
+                    {
+                        chat.AvatarUrl = preview.Item1;
+                        chat.AvatarFetchedAtUtc = preview.Item2;
+                        chat.AvatarFetchFailedAtUtc = null;
+                        chat.AvatarFetchFailureReason = null;
+                        hydrated++;
+                    }
+
+                    string highUri;
+                    if (highHits.TryGetValue(chat.JID, out highUri))
+                    {
+                        chat.AvatarHighUrl = highUri;
+                    }
+                }
+
+                if (hydrated > 0)
+                {
+                    Debug.WriteLine($"[WhatsAppService] Hydrated {hydrated} avatar URLs from local cache ({reason})");
+                    _client.SchedulePersistPublic();
+                }
+            });
         }
 
         private async Task ApplyAsync(ChatItem chat, ProfilePictureResult result, CancellationToken token)
@@ -248,6 +357,13 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             }
 
             return GroupAvatarFallbackDecision.ShouldTry(result.Url, result.IsNotFound, result.FailureReason);
+        }
+
+        private sealed class AvatarHydrateCandidate
+        {
+            public string Jid;
+            public bool NeedsPreview;
+            public bool NeedsHigh;
         }
     }
 }
