@@ -113,17 +113,6 @@ namespace Unison.Uwp.Services.WhatsApp
             return false;
         }
 
-        private bool TryConsolidateAliasDuplicateMessage(string targetChatJid, string sourceChatJid, string messageId, out ChatMessage consolidatedMessage)
-        {
-            return AliasDuplicateMessageMove.TryMove(
-                MessagesByChat,
-                _messageIdIndex,
-                NormalizeJid(targetChatJid),
-                NormalizeJid(sourceChatJid),
-                messageId,
-                out consolidatedMessage);
-        }
-
         private void RegisterMissingMessage(string chatJid, string participant, string messageId, bool isFromMe, DateTime timestamp, string reason)
         {
             string normJid = NormalizeJid(chatJid);
@@ -1799,78 +1788,13 @@ namespace Unison.Uwp.Services.WhatsApp
             ChatMessage message,
             bool isGroup)
         {
-            var result = new IncomingTimelineAcceptResult
-            {
-                Kind = IncomingTimelineAcceptKind.Inserted,
-                Message = message
-            };
-
-            if (string.IsNullOrWhiteSpace(chatJid) || message == null)
-            {
-                return result;
-            }
-
-            string jid = NormalizeJid(chatJid) ?? chatJid;
-            if (!MessagesByChat.ContainsKey(jid))
-            {
-                MessagesByChat[jid] = new List<ChatMessage>();
-            }
-
-            string duplicateChatJid = null;
-            ChatMessage duplicateMessage = null;
-            bool hasAliasLinkedDuplicate = !isGroup &&
-                !string.IsNullOrEmpty(message.Id) &&
-                TryFindAliasLinkedMessage(jid, message.Id, out duplicateChatJid, out duplicateMessage);
-
-            ChatMessage consolidatedMessage;
-            if (!string.IsNullOrEmpty(message.Id) &&
-                hasAliasLinkedDuplicate &&
-                !string.Equals(NormalizeJid(duplicateChatJid), jid, StringComparison.OrdinalIgnoreCase) &&
-                TryConsolidateAliasDuplicateMessage(jid, duplicateChatJid, message.Id, out consolidatedMessage))
-            {
-                result.Kind = IncomingTimelineAcceptKind.AliasConsolidated;
-                result.AliasSourceChatJid = NormalizeJid(duplicateChatJid);
-                result.ConsolidatedMessage = consolidatedMessage;
-                result.Message = consolidatedMessage ?? message;
-                return result;
-            }
-
-            if ((!string.IsNullOrEmpty(message.Id) && HasMessageId(jid, message.Id)) ||
-                (!string.IsNullOrEmpty(message.Id) &&
-                 MessagesByChat[jid].Any(m => string.Equals(m?.Id, message.Id, StringComparison.Ordinal))) ||
-                hasAliasLinkedDuplicate)
-            {
-                var existingMessage = MessagesByChat[jid].FirstOrDefault(
-                    m => string.Equals(m?.Id, message.Id, StringComparison.Ordinal));
-                bool existingChanged = false;
-                if (existingMessage != null)
-                {
-                    DuplicateArrivalPatch patch = DuplicateArrivalEnrichment.Compute(
-                        existingMessage.Status,
-                        message.Status,
-                        message.IsFromMe,
-                        existingMessage.ParticipantJid,
-                        message.ParticipantJid,
-                        existingMessage.SenderName,
-                        message.SenderName);
-                    existingChanged = DuplicateArrivalEnrichment.Apply(existingMessage, patch);
-                }
-
-                result.Kind = hasAliasLinkedDuplicate && existingMessage == null
-                    ? IncomingTimelineAcceptKind.AliasLinkedDuplicate
-                    : IncomingTimelineAcceptKind.DuplicateSameChat;
-                result.Message = existingMessage ?? message;
-                result.ExistingChanged = existingChanged;
-                result.AliasSourceChatJid = duplicateChatJid;
-                return result;
-            }
-
-            ChatMessageOrder.InsertSorted(MessagesByChat[jid], message);
-            TrimInMemoryMessageWindow(jid);
-            RegisterMessageId(jid, message.Id);
-            result.Kind = IncomingTimelineAcceptKind.Inserted;
-            result.Message = message;
-            return result;
+            return new IncomingTimeline(
+                    MessagesByChat,
+                    _messageIdIndex,
+                    GetAliasLinkedDirectChatJids,
+                    NormalizeJid,
+                    TrimInMemoryMessageWindow)
+                .Accept(chatJid, message, isGroup);
         }
 
         public void QueueIncomingMessagePersist(string chatJid, ChatMessage message)

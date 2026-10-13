@@ -4,6 +4,13 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Incoming timeline accept
+
+Whether an arriving message is moved from the contact's other address, only upgrades a
+bubble that is already there, or is inserted is `IncomingTimeline` (Core). Groups never
+look under an alias. The client hands it the message cache, the id index, the alias
+chats and the trim.
+
 ## Offline replay tips on ChatFacade
 
 Recording a replayed message into its chat's tip, deciding its unread, the 180 ms
