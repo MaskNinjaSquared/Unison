@@ -5870,34 +5870,19 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private IEnumerable<string> ExpandNameLookupCandidates(params string[] jids)
         {
-            var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            void add(string jid)
-            {
-                if (string.IsNullOrWhiteSpace(jid)) return;
-                string normalized = NormalizeJid(jid);
-                if (string.IsNullOrWhiteSpace(normalized)) return;
-                candidates.Add(normalized);
-
-                if (JidAlias.TryGetValue(normalized, out var alias) && !string.IsNullOrWhiteSpace(alias))
+            return NameLookupCandidates.Expand(
+                jids,
+                NormalizeJid,
+                normalized =>
                 {
-                    candidates.Add(NormalizeJid(alias));
-                }
+                    string alias;
+                    if (JidAlias.TryGetValue(normalized, out alias) && !string.IsNullOrWhiteSpace(alias))
+                    {
+                        return alias;
+                    }
 
-                string user = normalized.Split('@')[0];
-                if (!string.IsNullOrEmpty(user))
-                {
-                    candidates.Add($"{user}@s.whatsapp.net");
-                    candidates.Add($"{user}@lid");
-                }
-            }
-
-            foreach (var jid in jids)
-            {
-                add(jid);
-            }
-
-            return candidates;
+                    return null;
+                });
         }
 
         private string ResolveLiveDirectChatJid(Client.DecryptedMessageEventArgs e, out string routingReason)

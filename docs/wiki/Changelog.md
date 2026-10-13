@@ -4,6 +4,18 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Name lookup addresses
+
+The phone, the LID and the stored alias of either are one set, `NameLookupCandidates`.
+Name lookup and the alias-message search both walk it.
+
+## Where an alias message already sits
+
+Finding a message id under one of those addresses is `AliasLinkedMessageFind`. The first
+chat in the list that holds it is the one the duplicate move uses.
+
+---
+
 ## Offline replay tips — one book
 
 The compact per-chat tips gathered during an offline replay now live in

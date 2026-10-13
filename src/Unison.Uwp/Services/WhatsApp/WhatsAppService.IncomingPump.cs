@@ -73,30 +73,12 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private bool TryFindAliasLinkedMessage(string chatJid, string messageId, out string existingChatJid, out ChatMessage existingMessage)
         {
-            existingChatJid = null;
-            existingMessage = null;
-            if (string.IsNullOrWhiteSpace(chatJid) || string.IsNullOrWhiteSpace(messageId))
-            {
-                return false;
-            }
-
-            foreach (var candidate in GetAliasLinkedDirectChatJids(chatJid))
-            {
-                if (!MessagesByChat.TryGetValue(candidate, out var messages) || messages == null)
-                {
-                    continue;
-                }
-
-                var match = messages.FirstOrDefault(m => string.Equals(m?.Id, messageId, StringComparison.Ordinal));
-                if (match != null)
-                {
-                    existingChatJid = candidate;
-                    existingMessage = match;
-                    return true;
-                }
-            }
-
-            return false;
+            return AliasLinkedMessageFind.TryFind(
+                MessagesByChat,
+                GetAliasLinkedDirectChatJids(chatJid),
+                messageId,
+                out existingChatJid,
+                out existingMessage);
         }
 
         private void RegisterMessageId(string chatJid, string messageId)
