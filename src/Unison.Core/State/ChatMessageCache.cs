@@ -155,6 +155,39 @@ namespace Unison.Core.State
             return true;
         }
 
+        /// <summary>
+        /// Puts a message in time order, trims the window to <paramref name="capacity"/> and
+        /// registers the id — in that order, so an old message trimmed straight away still counts
+        /// as seen. UI thread, like every in-place edit.
+        /// </summary>
+        public void Insert(string chatJid, ChatMessage message, int capacity, DateTime nowUtc)
+        {
+            ChatMessageOrder.InsertSorted(GetOrAdd(chatJid), message);
+            Trim(chatJid, capacity, nowUtc);
+            if (!string.IsNullOrEmpty(message?.Id))
+            {
+                KnownIds(chatJid).Add(message.Id);
+            }
+        }
+
+        /// <summary>
+        /// Cuts the timeline to <paramref name="capacity"/> through
+        /// <see cref="ActiveChatMessageWindow"/> and rebuilds its ids.
+        /// </summary>
+        /// <returns>False when the conversation holds no list.</returns>
+        public bool Trim(string chatJid, int capacity, DateTime nowUtc)
+        {
+            string key = JidHelper.Normalize(chatJid);
+            if (string.IsNullOrWhiteSpace(key) || !TryGet(key, out List<ChatMessage> messages) || messages == null)
+            {
+                return false;
+            }
+
+            ActiveChatMessageWindow.TrimInPlace(messages, capacity, nowUtc);
+            Ids.Rebuild(key, messages);
+            return true;
+        }
+
         public void Clear()
         {
             lock (_gate)

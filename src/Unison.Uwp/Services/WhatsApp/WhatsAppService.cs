@@ -560,22 +560,8 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        private void TrimInMemoryMessageWindow(string jid)
-        {
-            if (string.IsNullOrWhiteSpace(jid))
-            {
-                return;
-            }
-
-            string normalized = NormalizeJid(jid);
-            if (!MessagesByChat.TryGet(normalized, out var messages) || messages == null)
-            {
-                return;
-            }
-
-            ActiveChatMessageWindow.TrimInPlace(messages, MaxActiveChatMessagesInMemory, DateTime.UtcNow);
-            MessagesByChat.Ids.Rebuild(normalized, messages);
-        }
+        private void TrimInMemoryMessageWindow(string jid) =>
+            MessagesByChat.Trim(jid, MaxActiveChatMessagesInMemory, DateTime.UtcNow);
         private AuthState _authState;
 
         /// <summary>
@@ -4635,9 +4621,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             var messages = MessagesByChat.GetOrAdd(canonical);
                             if (!messages.Any(m => string.Equals(m?.Id, target.Id, StringComparison.Ordinal)))
                             {
-                                ChatMessageOrder.InsertSorted(messages, target);
-                                TrimInMemoryMessageWindow(canonical);
-                                RegisterMessageId(canonical, target.Id);
+                                MessagesByChat.Insert(canonical, target, MaxActiveChatMessagesInMemory, DateTime.UtcNow);
                             }
                         });
                     }

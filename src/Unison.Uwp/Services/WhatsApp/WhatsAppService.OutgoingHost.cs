@@ -41,9 +41,7 @@ namespace Unison.Uwp.Services.WhatsApp
         void IOutgoingMessageHost.AcceptOutgoing(string chatJid, ChatMessage message)
         {
             ApplyPendingStateToMessage(chatJid, message);
-            ChatMessageOrder.InsertSorted(MessagesByChat.GetOrAdd(chatJid), message);
-            TrimInMemoryMessageWindow(chatJid);
-            RegisterMessageId(chatJid, message.Id);
+            MessagesByChat.Insert(chatJid, message, MaxActiveChatMessagesInMemory, DateTime.UtcNow);
         }
 
         Task IOutgoingMessageHost.ShowLocalSendPreviewAsync(string chatJid, ChatMessage message, ChatPreviewKind kind)

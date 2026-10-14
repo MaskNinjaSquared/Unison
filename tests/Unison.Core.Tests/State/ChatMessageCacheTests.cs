@@ -212,6 +212,58 @@ public class ChatMessageCacheTests
     }
 
     [Fact]
+    public void Inserting_keeps_time_order_and_registers_the_id()
+    {
+        var cache = new ChatMessageCache();
+        cache.GetOrAdd(Ana).AddRange(new[] { At("A", 1), At("C", 3) });
+
+        cache.Insert(Ana, At("B", 2), capacity: 10, nowUtc: T0);
+
+        Assert.Equal(new[] { "A", "B", "C" }, cache[Ana].Select(m => m.Id));
+        Assert.True(cache.Ids.Contains(Ana, "B"));
+        Assert.True(cache.Ids.Contains(Ana, "A"));
+    }
+
+    [Fact]
+    public void Inserting_past_capacity_trims_the_oldest_and_their_ids()
+    {
+        var cache = new ChatMessageCache();
+        cache.GetOrAdd(Ana).AddRange(new[] { At("A", 1), At("B", 2) });
+
+        cache.Insert(Ana, At("C", 3), capacity: 2, nowUtc: T0);
+
+        Assert.Equal(new[] { "B", "C" }, cache[Ana].Select(m => m.Id));
+        Assert.False(cache.Ids.Contains(Ana, "A"));
+        Assert.True(cache.Ids.Contains(Ana, "C"));
+    }
+
+    [Fact]
+    public void Inserting_into_a_conversation_not_yet_held_creates_it()
+    {
+        var cache = new ChatMessageCache();
+
+        cache.Insert(Ana, At("A", 1), capacity: 10, nowUtc: T0);
+
+        Assert.Single(cache[Ana]);
+    }
+
+    [Fact]
+    public void Trimming_keeps_live_pins_and_rebuilds_ids()
+    {
+        var cache = new ChatMessageCache();
+        ChatMessage pin = At("P", 0);
+        pin.IsPinned = true;
+        cache.GetOrAdd(Ana).AddRange(new[] { pin, At("A", 1), At("B", 2), At("C", 3) });
+        cache.KnownIds(Ana);
+
+        Assert.True(cache.Trim(Ana, capacity: 2, nowUtc: T0));
+
+        Assert.Equal(new[] { "P", "C" }, cache[Ana].Select(m => m.Id));
+        Assert.False(cache.Ids.Contains(Ana, "A"));
+        Assert.False(cache.Trim("missing@s.whatsapp.net", 2, T0));
+    }
+
+    [Fact]
     public void Replacing_a_timeline_replaces_its_ids()
     {
         var cache = new ChatMessageCache();

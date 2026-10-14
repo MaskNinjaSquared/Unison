@@ -521,6 +521,11 @@ ordering (live `Utc` rows against SQLite `Unspecified` ones, off by the local of
 messages grouped on a fresh `Guid`. It sorts through `ChatMessageOrder` and trims through
 `ActiveChatMessageWindow.TrimInPlace` now.
 
+*Insert and trim:* `ChatMessageCache.Insert` (sorted insert, trim, register — the order the client
+used, so an old message trimmed at once still counts as seen) and `.Trim` (window plus id rebuild).
+The outgoing accept and the pinned-target insert call `Insert`; `TrimInMemoryMessageWindow` forwards
+to `Trim`, which `IncomingTimeline` still reaches through its callback.
+
 ### 3.4 — send moved to `MessageFacade`
 
 The flow left the client whole, and it lives in Core, so the suite reaches it now. `OutgoingTextSend`
