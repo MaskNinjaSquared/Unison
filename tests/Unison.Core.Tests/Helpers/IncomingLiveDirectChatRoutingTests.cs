@@ -30,35 +30,6 @@ namespace Unison.Core.Tests.Helpers
                 isSelfLinked: jid =>
                     string.Equals(jid, SelfPn, StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(jid, SelfLid, StringComparison.OrdinalIgnoreCase),
-                tryCanonicalNonSelf: (string jid, out string canonical) =>
-                {
-                    canonical = null;
-                    if (string.IsNullOrWhiteSpace(jid))
-                    {
-                        return false;
-                    }
-
-                    string n = jid.Trim();
-                    if (string.Equals(n, SelfPn, StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(n, SelfLid, StringComparison.OrdinalIgnoreCase))
-                    {
-                        return false;
-                    }
-
-                    if (string.Equals(n, PeerLid, StringComparison.OrdinalIgnoreCase))
-                    {
-                        canonical = PeerPn;
-                        return true;
-                    }
-
-                    if (string.Equals(n, PeerPn, StringComparison.OrdinalIgnoreCase))
-                    {
-                        canonical = PeerPn;
-                        return true;
-                    }
-
-                    return false;
-                },
                 getCanonicalSelfPn: () => SelfPn,
                 getCanonical: jid =>
                 {
@@ -164,15 +135,44 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
-        public void Canonical_from_fallback_keeps_fallback_from_reason()
+        public void Inbound_from_self_with_no_sender_lid_falls_back_to_from()
+        {
+            IncomingLiveDirectChatRoute route = Resolve(false, SelfPn, PeerPn);
+
+            Assert.Equal(SelfPn, route.ChatJid);
+            Assert.Equal("fallback-from", route.Reason);
+        }
+
+        [Fact]
+        public void A_group_address_is_never_a_direct_chat()
         {
             IncomingLiveDirectChatRoute route = Resolve(
                 false,
-                "5511777777777@s.whatsapp.net",
-                null);
+                "120363000000000000@g.us",
+                null,
+                senderLid: PeerLid);
 
-            Assert.Equal("5511777777777@s.whatsapp.net", route.ChatJid);
-            Assert.Equal("fallback-from", route.Reason);
+            Assert.Equal(PeerPn, route.ChatJid);
+            Assert.Equal("sender-lid", route.Reason);
+        }
+
+        [Fact]
+        public void A_lid_that_resolves_to_self_is_not_a_peer()
+        {
+            IncomingLiveDirectChatRoute route = IncomingLiveDirectChatRouting.Resolve(
+                isFromMe: false,
+                fromJid: "333333333333333@lid",
+                recipientJid: null,
+                peerRecipientPn: null,
+                peerRecipientLid: null,
+                senderLid: PeerLid,
+                normalize: jid => jid,
+                isSelfLinked: jid => string.Equals(jid, SelfPn, StringComparison.OrdinalIgnoreCase),
+                getCanonicalSelfPn: () => SelfPn,
+                getCanonical: jid => jid == "333333333333333@lid" ? SelfPn : jid == PeerLid ? PeerPn : jid);
+
+            Assert.Equal(PeerPn, route.ChatJid);
+            Assert.Equal("sender-lid", route.Reason);
         }
 
         [Fact]
@@ -187,11 +187,6 @@ namespace Unison.Core.Tests.Helpers
                 senderLid: null,
                 normalize: _ => null,
                 isSelfLinked: _ => false,
-                tryCanonicalNonSelf: (string jid, out string canonical) =>
-                {
-                    canonical = null;
-                    return false;
-                },
                 getCanonicalSelfPn: () => SelfPn,
                 getCanonical: _ => null);
 

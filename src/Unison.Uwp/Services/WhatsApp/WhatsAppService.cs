@@ -5076,7 +5076,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 e.SenderLid,
                 NormalizeJid,
                 IsSelfLinkedJid,
-                TryGetCanonicalNonSelfDirectJid,
                 GetCanonicalSelfPnJid,
                 GetCanonicalJid);
             routingReason = route.Reason;

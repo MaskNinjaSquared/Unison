@@ -275,25 +275,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private string GetCanonicalSelfPnJid() => JidAlias.GetCanonicalSelfPnJid();
 
-        private bool TryGetCanonicalNonSelfDirectJid(string jid, out string canonical)
-        {
-            canonical = null;
-            string normalized = NormalizeJid(jid);
-            if (string.IsNullOrWhiteSpace(normalized) || normalized.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-
-            string resolved = GetCanonicalJid(normalized);
-            if (string.IsNullOrWhiteSpace(resolved) || IsSelfLinkedJid(resolved) || IsSelfLinkedJid(normalized))
-            {
-                return false;
-            }
-
-            canonical = resolved;
-            return true;
-        }
-
         private async Task MergeTransientDirectChatIntoCanonicalAsync(string transientJid, string canonicalJid, string reason)
         {
             string normalizedTransient = NormalizeJid(transientJid);

@@ -3,7 +3,8 @@
 //
 // Which conversation bucket a live DM envelope belongs to. Self-chat is its
 // own lane; from-me prefers recipient / peer hints; otherwise from / sender LID.
-// Canonicalization and self-link checks stay with the host via callbacks.
+// Normalizing, canonicalization and self-link checks stay with the host via
+// callbacks; which address counts as a peer is decided here.
 // =============================================================================
 using System;
 using System.Collections.Generic;
@@ -25,8 +26,6 @@ namespace Unison.Core.Helpers
 
     public static class IncomingLiveDirectChatRouting
     {
-        public delegate bool TryCanonicalNonSelf(string jid, out string canonical);
-
         public static IncomingLiveDirectChatRoute Resolve(
             bool isFromMe,
             string fromJid,
@@ -36,7 +35,6 @@ namespace Unison.Core.Helpers
             string senderLid,
             Func<string, string> normalize,
             Func<string, bool> isSelfLinked,
-            TryCanonicalNonSelf tryCanonicalNonSelf,
             Func<string> getCanonicalSelfPn,
             Func<string, string> getCanonical)
         {
@@ -48,11 +46,6 @@ namespace Unison.Core.Helpers
             if (isSelfLinked == null)
             {
                 throw new ArgumentNullException(nameof(isSelfLinked));
-            }
-
-            if (tryCanonicalNonSelf == null)
-            {
-                throw new ArgumentNullException(nameof(tryCanonicalNonSelf));
             }
 
             if (getCanonicalSelfPn == null)
@@ -79,17 +72,17 @@ namespace Unison.Core.Helpers
             if (isFromMe)
             {
                 string canonical;
-                if (tryCanonicalNonSelf(recipientJid, out canonical))
+                if (TryCanonicalNonSelf(recipientJid, normalize, isSelfLinked, getCanonical, out canonical))
                 {
                     return new IncomingLiveDirectChatRoute(canonical, "recipient-jid");
                 }
 
-                if (tryCanonicalNonSelf(peerRecipientPn, out canonical))
+                if (TryCanonicalNonSelf(peerRecipientPn, normalize, isSelfLinked, getCanonical, out canonical))
                 {
                     return new IncomingLiveDirectChatRoute(canonical, "peer-recipient-pn");
                 }
 
-                if (tryCanonicalNonSelf(peerRecipientLid, out canonical))
+                if (TryCanonicalNonSelf(peerRecipientLid, normalize, isSelfLinked, getCanonical, out canonical))
                 {
                     return new IncomingLiveDirectChatRoute(canonical, "peer-recipient-lid");
                 }
@@ -97,12 +90,12 @@ namespace Unison.Core.Helpers
 
             {
                 string canonical;
-                if (tryCanonicalNonSelf(fromJid, out canonical))
+                if (TryCanonicalNonSelf(fromJid, normalize, isSelfLinked, getCanonical, out canonical))
                 {
                     return new IncomingLiveDirectChatRoute(canonical, "from-nonself");
                 }
 
-                if (tryCanonicalNonSelf(senderLid, out canonical))
+                if (TryCanonicalNonSelf(senderLid, normalize, isSelfLinked, getCanonical, out canonical))
                 {
                     return new IncomingLiveDirectChatRoute(canonical, "sender-lid");
                 }
@@ -132,6 +125,35 @@ namespace Unison.Core.Helpers
             }
 
             return new IncomingLiveDirectChatRoute(getCanonicalSelfPn(), "self-chat-fallback");
+        }
+
+        /// <summary>
+        /// A peer's direct chat: not a group, and neither the address nor what it resolves to
+        /// is one of the account's own (a LID can resolve to the self PN).
+        /// </summary>
+        private static bool TryCanonicalNonSelf(
+            string jid,
+            Func<string, string> normalize,
+            Func<string, bool> isSelfLinked,
+            Func<string, string> getCanonical,
+            out string canonical)
+        {
+            canonical = null;
+            string normalized = normalize(jid);
+            if (string.IsNullOrWhiteSpace(normalized) ||
+                normalized.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            string resolved = getCanonical(normalized);
+            if (string.IsNullOrWhiteSpace(resolved) || isSelfLinked(resolved) || isSelfLinked(normalized))
+            {
+                return false;
+            }
+
+            canonical = resolved;
+            return true;
         }
     }
 }
