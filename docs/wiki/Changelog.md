@@ -4,6 +4,37 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Legacy command bar centred on the whole bar
+
+The primary buttons on the chat list, Status and section bars are now centred on the full width of
+the bar, not on the width left of the … button. Buttons sit 2px closer on each side, and the label
+under each icon keeps 2px off the bottom of the bar.
+
+## Message cache keys canonicalized in the cache
+
+Folding conversations stored under an alias key into their canonical one is
+`ChatMessageCache.CanonicalizeKeys`. Same behaviour, now with tests.
+
+## Contact update reading moved out of the client
+
+How a synced contact is read (which LID/phone pair it names, which name it carries, and under which
+addresses that name is filed) is `ContactUpdateFiling` in Core, with tests. Two fixes on the way: a
+contact whose name is only spaces now falls back to its push name, and a LID address with stray
+whitespace is no longer filed as a phone number.
+
+## Alias filing moved out of the client
+
+Writing an accepted LID/phone pair into the alias table is `AliasPairFiling` in Core. The live
+alias path and the usync answer file both ways; the duplicate-row merge keeps a phone address
+that already points at a LID. Same behaviour, now one place with tests instead of three hand copies.
+
+## WhatsApp Legacy icon font rebuilt
+
+`WhatsAppLegacyIcons.ttf` is regenerated from new sources in `scripts/icons/whatsapp-legacy/`.
+The generator reads ink from alpha only (the red mic was partly dropped), fixes contour winding,
+and fits every glyph centred into the same box, so app-bar, composer and search icons share one
+size per surface.
+
 ## History catch-up progress moved out of the client
 
 Where the paginated history catch-up stands between lots (round, lots without progress, newest
