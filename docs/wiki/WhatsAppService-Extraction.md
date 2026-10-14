@@ -869,6 +869,12 @@ Edge kept, not endorsed: the scan skips only field 4, so a direct envelope with 
 answers its own `remoteJid` (the history gate drops it; the resend path passes it on).
 `ResolveHistorySenderName` left with it: it had no caller.
 
+Filtering a candidate for the account's own name is `SelfNameCandidate` (marker through
+`ISelfMarkerNaming`, as `ContactLabelSanitizer` does). Fixed on the way: the self path compared the
+candidate with the JID user part as an exact string, so `+55 11 99999-0001` passed as a name — and
+`ResolveEstablishedSelfName` trusted it — while contacts already rejected it by digits with
+`ContactLabelSanitizer.IsPhoneEcho`. Both paths now use that test.
+
 The newest message time history freshness reads is `NewestStoredMessage.FindUtc` over the timeline
 snapshot and the list strip (cold start has tips but no timelines), each value through
 `ChatMessageOrder.ToComparableUtc`. The client passes `MessagesByChat` and `Chats` and its filters.

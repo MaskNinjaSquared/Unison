@@ -5081,63 +5081,13 @@ namespace Unison.Uwp.Services.WhatsApp
             return resolved ?? string.Empty;
         }
 
-        private string NormalizeSelfNameCandidate(string candidate, string canonical, string normalized)
-        {
-            if (string.IsNullOrWhiteSpace(candidate))
-            {
-                return null;
-            }
+        private string NormalizeSelfNameCandidate(string candidate, string canonical, string normalized) =>
+            SelfNameCandidate.Normalize(candidate, canonical, normalized, _selfMarkers);
 
-            string trimmed = SelfChatDisplayHelper.StripSelfMarker(candidate);
-            if (string.IsNullOrWhiteSpace(trimmed) || SelfChatDisplayHelper.IsSelfMarkerLabel(trimmed))
-            {
-                return null;
-            }
-
-            if (IsMaskedPhoneLabel(trimmed))
-            {
-                Debug.WriteLine($"[WhatsAppService] Ignoring masked self phone label for {canonical}: '{trimmed}'");
-                return null;
-            }
-
-            string canonicalUser = canonical?.Split('@')[0];
-            string normalizedUser = normalized?.Split('@')[0];
-
-            if (!string.IsNullOrEmpty(canonicalUser) && string.Equals(trimmed, canonicalUser, StringComparison.OrdinalIgnoreCase))
-            {
-                return null;
-            }
-
-            if (!string.IsNullOrEmpty(normalizedUser) && string.Equals(trimmed, normalizedUser, StringComparison.OrdinalIgnoreCase))
-            {
-                return null;
-            }
-
-            if (trimmed.Contains("@") && string.Equals(NormalizeJid(trimmed), canonical, StringComparison.OrdinalIgnoreCase))
-            {
-                return null;
-            }
-
-            return trimmed;
-        }
-
-        /// <summary>
-        /// True when the sidebar/profile string is just our own JID digits — the fallback
-        /// that used to run before any push name arrived, and that then blocked a real name
-        /// from replacing it.
-        /// </summary>
         private bool IsOwnPhoneEchoLabel(string label)
         {
-            if (string.IsNullOrWhiteSpace(label) || _authState?.Me == null)
-            {
-                return false;
-            }
-
-            return NormalizeSelfNameCandidate(
-                       label,
-                       NormalizeJid(_authState.Me.Id),
-                       NormalizeJid(_authState.Me.Lid)) == null &&
-                   !SelfChatDisplayHelper.IsSelfMarkerLabel(label.Trim());
+            var me = _authState?.Me;
+            return me != null && SelfNameCandidate.IsOwnPhoneEcho(label, me.Id, me.Lid, _selfMarkers);
         }
 
         private string GetResolvedName(string jid)
@@ -5760,9 +5710,6 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             return SelfChatDisplayHelper.IsSelfMarkerLabel(label);
         }
-
-        private static bool IsMaskedPhoneLabel(string label) =>
-            ContactLabelSanitizer.IsMaskedPhoneLabel(label);
 
         private string SanitizeContactLabel(string label, string contextJid)
         {
