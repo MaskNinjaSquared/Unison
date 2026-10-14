@@ -130,10 +130,14 @@ def main() -> int:
         if not png.is_file():
             print(f"Missing icon: {png}", file=sys.stderr)
             return 1
-        glyphs[name] = glyph_from_png(png, scale_factor)
+        glyph = glyph_from_png(png, scale_factor)
+        glyph.recalcBounds(None)
+        glyphs[name] = glyph
         glyph_order.append(name)
         cmap[code] = name
-        advance[name] = (UPM, 0)
+        # lsb must equal xMin: TrueType rasterizers place the outline from the hmtx lsb,
+        # so lsb=0 shifts every glyph left by its own xMin.
+        advance[name] = (UPM, glyph.xMin)
         print(f"  {code:04X} {name} <- {filename}")
 
     fb = FontBuilder(UPM, isTTF=True)
