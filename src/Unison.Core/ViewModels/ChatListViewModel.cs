@@ -248,6 +248,15 @@ namespace Unison.Core.ViewModels
         /// <summary>The rows, already filtered, deduped and ordered. Bind and forget.</summary>
         public ObservableCollection<ChatItem> VisibleChats { get; }
 
+        private NotificationCounterWatch _notificationCounter;
+
+        /// <summary>How many chats have a notification. Same count the shell brand shows.</summary>
+        public int NotificationCounterBadge => _notificationCounter?.Count ?? 0;
+
+        /// <summary>Parenthetical next to the header, empty when nothing is unread.</summary>
+        public string NotificationCounterBadgeText =>
+            NotificationCounter.FormatBadge(NotificationCounterBadge);
+
         public ChatListScope Scope => _scope;
 
         /// <summary>Sets list membership before event subscriptions and first render.</summary>
@@ -459,6 +468,10 @@ namespace Unison.Core.ViewModels
                 chat.PropertyChanged += ChatItem_PropertyChanged;
             }
 
+            _notificationCounter = new NotificationCounterWatch(_chatState.Chats);
+            _notificationCounter.Changed += NotificationCounter_Changed;
+            RaiseProperties(nameof(NotificationCounterBadge), nameof(NotificationCounterBadgeText));
+
             IsLoadingOverlayVisible = _chatState.Chats.Count == 0;
 
             if (_history.IsInitialSyncSafeMode)
@@ -554,6 +567,13 @@ namespace Unison.Core.ViewModels
             foreach (var chat in _chatState.Chats)
             {
                 if (chat != null) chat.PropertyChanged -= ChatItem_PropertyChanged;
+            }
+
+            if (_notificationCounter != null)
+            {
+                _notificationCounter.Changed -= NotificationCounter_Changed;
+                _notificationCounter.Dispose();
+                _notificationCounter = null;
             }
 
             _refreshCts?.Cancel();
@@ -1807,6 +1827,11 @@ namespace Unison.Core.ViewModels
                 // After a move or a remove the selected row may be a different instance; rebind.
                 RestoreSelection();
             });
+        }
+
+        private void NotificationCounter_Changed(object sender, EventArgs e)
+        {
+            RaiseProperties(nameof(NotificationCounterBadge), nameof(NotificationCounterBadgeText));
         }
 
         private void TrackItems(NotifyCollectionChangedEventArgs args)

@@ -35,30 +35,47 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         public ChatsView()
         {
             InitializeComponent();
-            ChatListPart.ConfigureScope(ChatListScope.Active);
             NavigationCacheMode = NavigationCacheMode.Disabled;
             Loaded += ChatsView_Loaded;
+            Unloaded += ChatsView_Unloaded;
+        }
+
+        public Task InitAsync(ShellViewModel shell)
+        {
+            _shell = shell ?? App.Services?.GetService<ShellViewModel>();
+            if (!_hooked)
+            {
+                ChatListPart.ConfigureScope(ChatListScope.Active);
+                if (_shell != null)
+                {
+                    _shell.PropertyChanged += Shell_PropertyChanged;
+                }
+
+                _hooked = true;
+            }
+
+            return Task.CompletedTask;
         }
 
         protected override void OnNavigatedTo(NavigationEventArgs e)
         {
             base.OnNavigatedTo(e);
-            _shell = App.Services?.GetService<ShellViewModel>();
-            if (_shell != null && !_hooked)
-            {
-                _shell.PropertyChanged += Shell_PropertyChanged;
-                _hooked = true;
-            }
-
-            if (_shell != null)
-            {
-                _shell.ActiveSection = "chats";
-            }
+            _ = InitAsync(App.Services?.GetService<ShellViewModel>());
         }
 
         protected override void OnNavigatedFrom(NavigationEventArgs e)
         {
             base.OnNavigatedFrom(e);
+            UnhookShell();
+        }
+
+        private void ChatsView_Unloaded(object sender, RoutedEventArgs e)
+        {
+            UnhookShell();
+        }
+
+        private void UnhookShell()
+        {
             if (_shell != null && _hooked)
             {
                 _shell.PropertyChanged -= Shell_PropertyChanged;

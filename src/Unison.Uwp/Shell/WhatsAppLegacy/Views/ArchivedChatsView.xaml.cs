@@ -27,23 +27,25 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         public ArchivedChatsView()
         {
             InitializeComponent();
-            ChatListPart.ConfigureScope(ChatListScope.Archived);
             NavigationCacheMode = NavigationCacheMode.Disabled;
+        }
+
+        public Task InitAsync(ShellViewModel shell)
+        {
+            _shell = shell ?? App.Services?.GetService<ShellViewModel>();
+            if (!_hooked)
+            {
+                ChatListPart.ConfigureScope(ChatListScope.Archived);
+                _hooked = true;
+            }
+
+            return Task.CompletedTask;
         }
 
         protected override void OnNavigatedTo(NavigationEventArgs e)
         {
             base.OnNavigatedTo(e);
-            _shell = App.Services?.GetService<ShellViewModel>();
-            if (_shell != null && !_hooked)
-            {
-                _hooked = true;
-            }
-
-            if (_shell != null)
-            {
-                _shell.ActiveSection = "archived";
-            }
+            _ = InitAsync(App.Services?.GetService<ShellViewModel>());
         }
 
         protected override void OnNavigatedFrom(NavigationEventArgs e)

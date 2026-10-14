@@ -15,7 +15,12 @@
             <ColumnDefinition Width="Auto"/>
         </Grid.ColumnDefinitions>
 
-        <Grid VerticalAlignment="Center" Margin="0,0,6,0">
+        <Grid VerticalAlignment="Center" Margin="0,0,6,0" Width="36" Height="36">
+            <Ellipse x:Name="PlayRing"
+                     Stroke="{Binding GlyphForeground, ElementName=Root}"
+                     StrokeThickness="2"
+                     Fill="Transparent"
+                     Visibility="Collapsed"/>
             <Button x:Name="PlayButton"
                     Click="PlayPause_Click"
                     Style="{StaticResource WhatsAppIconButtonStyle}"

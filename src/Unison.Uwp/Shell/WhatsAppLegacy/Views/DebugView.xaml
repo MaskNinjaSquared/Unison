@@ -41,13 +41,8 @@
 
         <StackPanel Orientation="Horizontal" Grid.ColumnSpan="2" Margin="0,5,0,0" Opacity="0.8">
             <Button x:Name="BackButton" Command="{Binding BackCommand}"
-                    Style="{StaticResource WhatsAppIconButtonStyle}"
-                    Width="34" Height="34" Margin="5,0,0,0"
-                    Background="Transparent" Opacity="0.9"
-                    Foreground="{ThemeResource WhatsAppTextHighBrush}">
-                <FontIcon FontSize="16" FontFamily="{StaticResource IconFont}"
-                          Glyph="&#xE72B;"/>
-            </Button>
+                    Style="{StaticResource LegacyBackButtonStyle}"
+                    Margin="5,0,0,0"/>
         </StackPanel>
 
         <ScrollViewer x:Name="LeftContent" Grid.Row="1" Padding="5,0"

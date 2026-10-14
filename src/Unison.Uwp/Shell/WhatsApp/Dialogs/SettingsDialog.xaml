@@ -110,49 +110,49 @@
                         </ListView.ItemContainerStyle>
 
                         <ListViewItem x:Name="ProfileNavItem" Tag="profile">
-                            <StackPanel Orientation="Horizontal" Padding="12,0">
+                            <StackPanel Orientation="Horizontal" Padding="22,0">
                                 <TextBlock Text="&#xE77B;" FontFamily="{StaticResource IconFont}" FontSize="20" Width="24" VerticalAlignment="Center"/>
                                 <TextBlock x:Uid="Settings_Profile" Text="Profile" Margin="16,0,0,0" FontSize="14" VerticalAlignment="Center"/>
                             </StackPanel>
                         </ListViewItem>
 
                         <ListViewItem x:Name="GeneralNavItem" Tag="general" IsSelected="True">
-                            <StackPanel Orientation="Horizontal" Padding="12,0">
+                            <StackPanel Orientation="Horizontal" Padding="22,0">
                                 <TextBlock Text="&#xE713;" FontFamily="{StaticResource IconFont}" FontSize="20" Width="24" VerticalAlignment="Center"/>
                                 <TextBlock x:Uid="Settings_General" Text="General" Margin="16,0,0,0" FontSize="14" VerticalAlignment="Center"/>
                             </StackPanel>
                         </ListViewItem>
 
                         <ListViewItem Tag="notifications">
-                            <StackPanel Orientation="Horizontal" Padding="12,0">
+                            <StackPanel Orientation="Horizontal" Padding="22,0">
                                 <TextBlock Text="&#xE91C;" FontFamily="{StaticResource IconFont}" FontSize="20" Width="24" VerticalAlignment="Center"/>
                                 <TextBlock x:Uid="Settings_NotificationsSection" Text="Notifications" Margin="16,0,0,0" FontSize="14" VerticalAlignment="Center"/>
                             </StackPanel>
                         </ListViewItem>
 
                         <ListViewItem Tag="customization">
-                            <StackPanel Orientation="Horizontal" Padding="12,0">
+                            <StackPanel Orientation="Horizontal" Padding="22,0">
                                 <TextBlock Text="&#xE790;" FontFamily="{StaticResource IconFont}" FontSize="20" Width="24" VerticalAlignment="Center"/>
                                 <TextBlock x:Uid="Settings_Customization" Text="Customization" Margin="16,0,0,0" FontSize="14" VerticalAlignment="Center"/>
                             </StackPanel>
                         </ListViewItem>
 
                         <ListViewItem Tag="advanced">
-                            <StackPanel Orientation="Horizontal" Padding="12,0">
+                            <StackPanel Orientation="Horizontal" Padding="22,0">
                                 <TextBlock Text="&#xE7BA;" FontFamily="{StaticResource IconFont}" FontSize="20" Width="24" VerticalAlignment="Center"/>
                                 <TextBlock x:Uid="Settings_Advanced" Text="Advanced Settings" Margin="16,0,0,0" FontSize="14" VerticalAlignment="Center"/>
                             </StackPanel>
                         </ListViewItem>
 
                         <ListViewItem Tag="disk">
-                            <StackPanel Orientation="Horizontal" Padding="12,0">
+                            <StackPanel Orientation="Horizontal" Padding="22,0">
                                 <TextBlock Text="&#xEDA2;" FontFamily="{StaticResource IconFont}" FontSize="20" Width="24" VerticalAlignment="Center"/>
                                 <TextBlock x:Uid="Settings_DiskUsage" Text="Disk Usage" Margin="16,0,0,0" FontSize="14" VerticalAlignment="Center"/>
                             </StackPanel>
                         </ListViewItem>
 
                         <ListViewItem Tag="about">
-                            <StackPanel Orientation="Horizontal" Padding="12,0">
+                            <StackPanel Orientation="Horizontal" Padding="22,0">
                                 <TextBlock Text="&#xE946;" FontFamily="{StaticResource IconFont}" FontSize="20" Width="24" VerticalAlignment="Center"/>
                                 <TextBlock x:Uid="Settings_About" Text="About" Margin="16,0,0,0" FontSize="14" VerticalAlignment="Center"/>
                             </StackPanel>

@@ -19,6 +19,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
     {
         private ShellViewModel _shell;
         private bool _hooked;
+        private bool _surfaceActive;
         private bool _splitterDragging;
         private bool _splitterHover;
         private double _dragStartX;
@@ -27,9 +28,18 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         public event EventHandler MenuClicked;
 
+        public event EventHandler SearchRequested;
+
+        public event EventHandler ProfileRequested;
+
+        public event EventHandler DebugRequested;
+
         public StatusView()
         {
             InitializeComponent();
+            StatusListPart.SearchRequested += (s, e) => SearchRequested?.Invoke(this, e);
+            StatusListPart.ProfileRequested += (s, e) => ProfileRequested?.Invoke(this, e);
+            StatusListPart.DebugRequested += (s, e) => DebugRequested?.Invoke(this, e);
             NavigationCacheMode = NavigationCacheMode.Disabled;
             PaneSplitter.Width = ChatPaneLayoutConstants.SplitterWidth;
             Column0.MinWidth = ChatPaneLayoutConstants.MinListWidth;
@@ -41,10 +51,9 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         /// <summary>True while Minimal/narrow shows the status viewer full-screen.</summary>
         public bool HasOpenStatusDetail => _shell != null && _shell.HasOpenStatusDetail;
 
-        protected override void OnNavigatedTo(NavigationEventArgs e)
+        public Task InitAsync(ShellViewModel shell)
         {
-            base.OnNavigatedTo(e);
-            _shell = App.Services?.GetService<ShellViewModel>();
+            _shell = shell ?? App.Services?.GetService<ShellViewModel>();
             if (_shell != null && !_hooked)
             {
                 _shell.PropertyChanged += Shell_PropertyChanged;
@@ -53,13 +62,18 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 _hooked = true;
             }
 
-            _shell?.EnterStatusSurface();
+            if (!_surfaceActive)
+            {
+                _shell?.EnterStatusSurface();
+                _surfaceActive = true;
+            }
+
             ApplyChatPaneState();
+            return Task.CompletedTask;
         }
 
-        protected override void OnNavigatedFrom(NavigationEventArgs e)
+        public Task LeaveAsync()
         {
-            base.OnNavigatedFrom(e);
             if (_shell != null && _hooked)
             {
                 _shell.PropertyChanged -= Shell_PropertyChanged;
@@ -68,8 +82,26 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 _hooked = false;
             }
 
-            _ = StatusDetailPart.ClearAsync();
-            _shell?.LeaveStatusSurface();
+            if (_surfaceActive)
+            {
+                _ = StatusDetailPart.ClearAsync();
+                _shell?.LeaveStatusSurface();
+                _surfaceActive = false;
+            }
+
+            return Task.CompletedTask;
+        }
+
+        protected override void OnNavigatedTo(NavigationEventArgs e)
+        {
+            base.OnNavigatedTo(e);
+            _ = InitAsync(App.Services?.GetService<ShellViewModel>());
+        }
+
+        protected override void OnNavigatedFrom(NavigationEventArgs e)
+        {
+            base.OnNavigatedFrom(e);
+            _ = LeaveAsync();
         }
 
         private void StatusView_Loaded(object sender, RoutedEventArgs e)

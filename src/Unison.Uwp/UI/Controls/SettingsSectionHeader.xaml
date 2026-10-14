@@ -5,7 +5,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
-    Margin="5,20,0,5">
+    Margin="15,20,0,5">
 
     <!-- Icon + title row; parent sets x:Uid + English Text fallback (MRT → {uid}.Text). -->
     <StackPanel Orientation="Horizontal">

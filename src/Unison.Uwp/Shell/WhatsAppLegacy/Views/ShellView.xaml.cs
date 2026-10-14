@@ -3,8 +3,12 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using Windows.UI.Core;
+using Windows.System;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Controls.Primitives;
+using Windows.UI.Xaml.Input;
+using Windows.UI.Xaml.Media;
 using Windows.UI.Xaml.Navigation;
 using Microsoft.Extensions.DependencyInjection;
 using Unison.Core.Contracts;
@@ -18,7 +22,7 @@ using Unison.Uwp.UI.Views;
 namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 {
     /// <summary>
-    /// Legacy shell: list column (pivot + frame) + detail host appended only while a chat is open.
+    /// Legacy shell: pivot hosts each section after its index is opened. The frame is only settings and debug.
     /// </summary>
     public sealed partial class ShellView : Page
     {
@@ -35,12 +39,15 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         private bool _pivotReady;
         private string _loadedSection;
         private bool _searchState;
-        private bool _suppressSearchBoxCallback;
         private ChatListView _hookedList;
         private ChatsView _hookedChats;
         private ArchivedChatsView _hookedArchived;
+        private LegacyPivotPlaceholderView _hookedPlaceholder;
+        private StatusView _hookedStatusBar;
         private bool _detailOpen;
         private bool _detailHooked;
+        private bool _overlayOpen;
+        private StatusView _statusSection;
 
         public ShellView()
         {
@@ -159,22 +166,29 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 {
                     vm.LeaveCommand.Execute(null);
                 }
-                else
+                else if (_shell != null)
                 {
-                    _navigator?.NavigateInShell(NavigationDestination.Chats);
+                    _shell.ActiveSection = "chats";
                 }
 
                 return;
             }
 
-            if (ContentFrame?.Content is IConversationShellPage conversation &&
+            if (_overlayOpen && ContentFrame?.Content is DebugView)
+            {
+                e.Handled = true;
+                DismissOverlay();
+                return;
+            }
+
+            if (ActivePivotContent() is IConversationShellPage conversation &&
                 conversation.TryHandleBack())
             {
                 e.Handled = true;
                 return;
             }
 
-            if (ContentFrame?.Content is StatusView status && status.TryHandleBack())
+            if (ActivePivotContent() is StatusView status && status.TryHandleBack())
             {
                 e.Handled = true;
             }
@@ -182,6 +196,18 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private void Shell_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
+            if (e.PropertyName == nameof(ShellViewModel.ActiveSection))
+            {
+                string section = _shell.ActiveSection;
+                if (IsPivotSection(section))
+                {
+                    DismissOverlay();
+                    LoadSection(section, force: false);
+                }
+
+                return;
+            }
+
             if (e.PropertyName == nameof(ShellViewModel.HidesLegacyShellChrome) ||
                 e.PropertyName == nameof(ShellViewModel.ChatPane) ||
                 e.PropertyName == nameof(ShellViewModel.IsNarrowWindow) ||
@@ -195,30 +221,46 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private void ApplyShellChrome()
         {
-            bool settingsPage = ContentFrame?.Content is SettingsView;
-            bool hideChrome = settingsPage || (_shell != null && _shell.HidesLegacyShellChrome);
+            bool settingsPage = _overlayOpen && ContentFrame?.Content is SettingsView;
+            bool hideChrome = _overlayOpen || (_shell != null && _shell.HidesLegacyShellChrome);
             if (hideChrome && _searchState)
             {
                 ExitSearchState();
             }
 
-            if (hideChrome)
+            if (ContentFrame != null)
+            {
+                ContentFrame.Visibility = _overlayOpen ? Visibility.Visible : Visibility.Collapsed;
+            }
+
+            if (_shell != null && _shell.HidesLegacyShellChrome)
             {
                 BrandHeader.Visibility = Visibility.Collapsed;
                 SearchHeader.Visibility = Visibility.Collapsed;
                 SectionPivot.Visibility = Visibility.Collapsed;
+                SetPivotHeadersVisible(true);
+            }
+            else if (_overlayOpen)
+            {
+                // Keep the pivot laid out under the opaque overlay so GoBack does not relayout the list.
+                BrandHeader.Visibility = Visibility.Collapsed;
+                SearchHeader.Visibility = Visibility.Collapsed;
+                SectionPivot.Visibility = Visibility.Visible;
+                SetPivotHeadersVisible(true);
             }
             else if (_searchState)
             {
                 BrandHeader.Visibility = Visibility.Collapsed;
                 SearchHeader.Visibility = Visibility.Visible;
-                SectionPivot.Visibility = Visibility.Collapsed;
+                SectionPivot.Visibility = Visibility.Visible;
+                SetPivotHeadersVisible(false);
             }
             else
             {
                 BrandHeader.Visibility = Visibility.Visible;
                 SearchHeader.Visibility = Visibility.Collapsed;
                 SectionPivot.Visibility = Visibility.Visible;
+                SetPivotHeadersVisible(true);
             }
 
             try
@@ -310,11 +352,11 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 Debug.WriteLine("[WhatsAppLegacy] CloseDetail: " + ex.Message);
             }
 
-            if (ContentFrame?.Content is ChatsView chats)
+            if (ActivePivotContent() is ChatsView chats)
             {
                 chats.ListChrome?.ClearSelection();
             }
-            else if (ContentFrame?.Content is ArchivedChatsView archived)
+            else if (ActivePivotContent() is ArchivedChatsView archived)
             {
                 archived.ListChrome?.ClearSelection();
             }
@@ -327,25 +369,63 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private void ContentFrame_Navigated(object sender, NavigationEventArgs e)
         {
-            HookListChromeFromContent();
+            SyncOverlayFromFrame();
+        }
+
+        private void SyncOverlayFromFrame()
+        {
+            object content = ContentFrame?.Content;
+            if (IsPivotOverlayContent(content))
+            {
+                // NavigateToSection(Chats) used to remount the list inside this overlay frame.
+                _overlayOpen = false;
+                ApplyShellChrome();
+                ScheduleOverlayTeardown();
+                return;
+            }
+
+            _overlayOpen = content is SettingsView || content is DebugView;
             ApplyShellChrome();
+        }
+
+        private static bool IsPivotOverlayContent(object content)
+        {
+            return content is ChatsView
+                || content is ArchivedChatsView
+                || content is StatusView
+                || content is LegacyPivotPlaceholderView;
         }
 
         private void HookListChromeFromContent()
         {
             UnhookListChrome();
+            object content = ActivePivotContent();
 
-            if (ContentFrame?.Content is ChatsView chats)
+            if (content is ChatsView chats)
             {
                 _hookedChats = chats;
                 _hookedList = chats.ListChrome;
                 chats.ChatOpenRequested += Chats_ChatOpenRequested;
             }
-            else if (ContentFrame?.Content is ArchivedChatsView archived)
+            else if (content is ArchivedChatsView archived)
             {
                 _hookedArchived = archived;
                 _hookedList = archived.ListChrome;
                 archived.ChatOpenRequested += Archived_ChatOpenRequested;
+            }
+            else if (content is LegacyPivotPlaceholderView placeholder)
+            {
+                _hookedPlaceholder = placeholder;
+                placeholder.SearchRequested += List_SearchRequested;
+                placeholder.ProfileRequested += List_ProfileRequested;
+                placeholder.DebugRequested += List_DebugRequested;
+            }
+            else if (content is StatusView status)
+            {
+                _hookedStatusBar = status;
+                status.SearchRequested += List_SearchRequested;
+                status.ProfileRequested += List_ProfileRequested;
+                status.DebugRequested += List_DebugRequested;
             }
 
             if (_hookedList != null)
@@ -370,6 +450,22 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             {
                 _hookedArchived.ChatOpenRequested -= Archived_ChatOpenRequested;
                 _hookedArchived = null;
+            }
+
+            if (_hookedPlaceholder != null)
+            {
+                _hookedPlaceholder.SearchRequested -= List_SearchRequested;
+                _hookedPlaceholder.ProfileRequested -= List_ProfileRequested;
+                _hookedPlaceholder.DebugRequested -= List_DebugRequested;
+                _hookedPlaceholder = null;
+            }
+
+            if (_hookedStatusBar != null)
+            {
+                _hookedStatusBar.SearchRequested -= List_SearchRequested;
+                _hookedStatusBar.ProfileRequested -= List_ProfileRequested;
+                _hookedStatusBar.DebugRequested -= List_DebugRequested;
+                _hookedStatusBar = null;
             }
 
             if (_hookedList != null)
@@ -439,6 +535,17 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             SetPivotHeader(4, "Shell_Archived.Text", "archived");
         }
 
+        private static string CapitalizeFirst(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return text;
+            }
+
+            string lower = text.ToLowerInvariant();
+            return char.ToUpperInvariant(lower[0]) + lower.Substring(1);
+        }
+
         private void SetPivotHeader(int index, string resourceKey, string fallback)
         {
             if (index < 0 || index >= SectionPivot.Items.Count)
@@ -459,7 +566,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 text = fallback;
             }
 
-            item.Header = text.ToLowerInvariant();
+            item.Header = CapitalizeFirst(text);
         }
 
         private void SectionPivot_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -477,17 +584,62 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             LoadSection(ReadSelectedTag(), force: false);
         }
 
+        private static bool IsPivotSection(string tag)
+        {
+            return string.Equals(tag, "chats", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(tag, "calls", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(tag, "status", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(tag, "favorites", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(tag, "archived", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private object ActivePivotContent()
+        {
+            ContentPresenter presenter = PresenterFor(ReadSelectedTag());
+            return presenter == null ? null : presenter.Content;
+        }
+
+        private ContentPresenter PresenterFor(string tag)
+        {
+            if (string.Equals(tag, "calls", StringComparison.OrdinalIgnoreCase))
+            {
+                return CallsPresenter;
+            }
+
+            if (string.Equals(tag, "status", StringComparison.OrdinalIgnoreCase))
+            {
+                return StatusPresenter;
+            }
+
+            if (string.Equals(tag, "favorites", StringComparison.OrdinalIgnoreCase))
+            {
+                return FavoritesPresenter;
+            }
+
+            if (string.Equals(tag, "archived", StringComparison.OrdinalIgnoreCase))
+            {
+                return ArchivedPresenter;
+            }
+
+            return ChatsPresenter;
+        }
+
         private string ReadSelectedTag()
         {
             var item = SectionPivot?.SelectedItem as PivotItem;
             return item?.Tag as string ?? "chats";
         }
 
-        private void LoadSection(string tag, bool force)
+        private async void LoadSection(string tag, bool force)
         {
             if (string.IsNullOrWhiteSpace(tag))
             {
                 tag = "chats";
+            }
+
+            if (!IsPivotSection(tag))
+            {
+                return;
             }
 
             if (!force && string.Equals(_loadedSection, tag, StringComparison.OrdinalIgnoreCase))
@@ -495,46 +647,220 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return;
             }
 
+            string previous = _loadedSection;
             _loadedSection = tag;
-            if (_shell != null)
+            SelectPivotIndex(tag);
+
+            if (string.Equals(previous, "status", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(tag, "status", StringComparison.OrdinalIgnoreCase) &&
+                _statusSection != null)
             {
-                _shell.ActiveSection = tag;
+                await _statusSection.LeaveAsync();
             }
 
             if (!string.Equals(tag, "chats", StringComparison.OrdinalIgnoreCase) &&
                 !string.Equals(tag, "archived", StringComparison.OrdinalIgnoreCase) &&
                 _detailOpen)
             {
-                _ = CloseDetailAsync();
+                await CloseDetailAsync();
             }
 
-            Type pageType;
-            object parameter = null;
-            switch (tag)
+            OpenSection(tag);
+
+            if (_shell != null &&
+                !string.Equals(_shell.ActiveSection, tag, StringComparison.OrdinalIgnoreCase))
             {
-                case "status":
-                    pageType = typeof(StatusView);
-                    break;
-                case "archived":
-                    pageType = typeof(ArchivedChatsView);
-                    break;
-                case "calls":
-                case "favorites":
-                    pageType = typeof(LegacyPivotPlaceholderView);
-                    parameter = tag;
-                    break;
-                default:
-                    pageType = typeof(ChatsView);
-                    break;
+                _shell.ActiveSection = tag;
             }
 
-            if (ContentFrame.Content != null && ContentFrame.Content.GetType() == pageType && parameter == null)
+            HookListChromeFromContent();
+            ApplyShellChrome();
+        }
+
+        /// <summary>Creates the theme view into the presenter the first time that index is selected.</summary>
+        private void OpenSection(string tag)
+        {
+            ContentPresenter presenter = PresenterFor(tag);
+            if (presenter == null)
             {
-                HookListChromeFromContent();
                 return;
             }
 
-            ContentFrame.Navigate(pageType, parameter);
+            if (presenter.Content == null)
+            {
+                presenter.Content = CreateSection(tag);
+            }
+            else if (presenter.Content is StatusView openStatus)
+            {
+                _ = openStatus.InitAsync(_shell);
+            }
+
+            var status = presenter.Content as StatusView;
+            if (status != null)
+            {
+                _statusSection = status;
+            }
+        }
+
+        private FrameworkElement CreateSection(string tag)
+        {
+            if (string.Equals(tag, "status", StringComparison.OrdinalIgnoreCase))
+            {
+                var status = new StatusView();
+                status.InitAsync(_shell);
+                return status;
+            }
+
+            if (string.Equals(tag, "archived", StringComparison.OrdinalIgnoreCase))
+            {
+                var archived = new ArchivedChatsView();
+                archived.InitAsync(_shell);
+                return archived;
+            }
+
+            if (string.Equals(tag, "calls", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(tag, "favorites", StringComparison.OrdinalIgnoreCase))
+            {
+                var placeholder = new LegacyPivotPlaceholderView();
+                placeholder.InitAsync(tag);
+                return placeholder;
+            }
+
+            var chats = new ChatsView();
+            chats.InitAsync(_shell);
+            return chats;
+        }
+
+        private void SelectPivotIndex(string tag)
+        {
+            if (SectionPivot?.Items == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < SectionPivot.Items.Count; i++)
+            {
+                var item = SectionPivot.Items[i] as PivotItem;
+                if (item != null &&
+                    string.Equals(item.Tag as string, tag, StringComparison.OrdinalIgnoreCase) &&
+                    SectionPivot.SelectedIndex != i)
+                {
+                    SectionPivot.SelectedIndex = i;
+                    return;
+                }
+            }
+        }
+
+        /// <summary>Hides Settings/Debug immediately; the pivot list underneath is already live.</summary>
+        internal static void CloseOverlayFrom(DependencyObject source)
+        {
+            ShellView shell = FindAncestor<ShellView>(source);
+            if (shell == null)
+            {
+                shell = (Window.Current?.Content as Frame)?.Content as ShellView
+                    ?? Window.Current?.Content as ShellView;
+            }
+
+            if (shell != null)
+            {
+                shell.DismissOverlay();
+                return;
+            }
+
+            Debug.WriteLine("[WhatsAppLegacy] Close overlay: shell not found");
+        }
+
+        private void DismissOverlay()
+        {
+            if (!_overlayOpen && (ContentFrame == null || ContentFrame.Content == null))
+            {
+                return;
+            }
+
+            _overlayOpen = false;
+            if (ContentFrame != null)
+            {
+                ContentFrame.Visibility = Visibility.Collapsed;
+            }
+
+            ApplyShellChrome();
+            ScheduleOverlayTeardown();
+        }
+
+        private void ScheduleOverlayTeardown()
+        {
+            _ = Dispatcher.RunAsync(CoreDispatcherPriority.Low, TearDownOverlayContent);
+        }
+
+        private void TearDownOverlayContent()
+        {
+            if (_overlayOpen || ContentFrame == null || ContentFrame.Content == null)
+            {
+                return;
+            }
+
+            try
+            {
+                ContentFrame.BackStack.Clear();
+                ContentFrame.ForwardStack.Clear();
+                ContentFrame.Content = null;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[WhatsAppLegacy] Dismiss overlay: " + ex.Message);
+            }
+        }
+
+        private static T FindAncestor<T>(DependencyObject start) where T : class
+        {
+            DependencyObject current = start;
+            while (current != null)
+            {
+                if (current is T match)
+                {
+                    return match;
+                }
+
+                current = VisualTreeHelper.GetParent(current);
+            }
+
+            return null;
+        }
+
+        private void SetPivotHeadersVisible(bool visible)
+        {
+            var header = FindChild<PivotHeaderPanel>(SectionPivot);
+            if (header != null)
+            {
+                header.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+            }
+        }
+
+        private static T FindChild<T>(DependencyObject root) where T : DependencyObject
+        {
+            if (root == null)
+            {
+                return null;
+            }
+
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                DependencyObject child = VisualTreeHelper.GetChild(root, i);
+                var match = child as T;
+                if (match != null)
+                {
+                    return match;
+                }
+
+                T nested = FindChild<T>(child);
+                if (nested != null)
+                {
+                    return nested;
+                }
+            }
+
+            return null;
         }
 
         private void ContentFrame_NavigationFailed(object sender, NavigationFailedEventArgs e)
@@ -542,8 +868,6 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             Debug.WriteLine("[WhatsAppLegacy] Navigate failed: " + e.Exception?.Message);
             e.Handled = true;
         }
-
-        private void CancelSearchButton_Click(object sender, RoutedEventArgs e) => ExitSearchState();
 
         private void SearchBackButton_Click(object sender, RoutedEventArgs e) => ExitSearchState();
 
@@ -554,47 +878,15 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return;
             }
 
-            if (!string.Equals(_loadedSection, "chats", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(_loadedSection, "archived", StringComparison.OrdinalIgnoreCase))
-            {
-                SectionPivot.SelectedIndex = 0;
-            }
-
             ApplySearchState(true);
-
-            ChatListViewModel listVm = TryGetActiveChatListViewModel();
-            _suppressSearchBoxCallback = true;
-            try
-            {
-                ShellSearchBox.Text = listVm?.SearchQuery ?? string.Empty;
-            }
-            finally
-            {
-                _suppressSearchBoxCallback = false;
-            }
-
             ShellSearchBox.Focus(FocusState.Programmatic);
             ApplyShellChrome();
         }
 
         private void ExitSearchState()
         {
-            ChatListViewModel listVm = TryGetActiveChatListViewModel();
-            if (listVm != null)
-            {
-                listVm.SearchQuery = string.Empty;
-            }
-
-            _suppressSearchBoxCallback = true;
-            try
-            {
-                ShellSearchBox.Text = string.Empty;
-            }
-            finally
-            {
-                _suppressSearchBoxCallback = false;
-            }
-
+            _shell?.InvokeFromPivotCommand(ReadSelectedTag(), string.Empty, TryGetActiveChatListViewModel());
+            ShellSearchBox.Text = string.Empty;
             ApplySearchState(false);
             ApplyShellChrome();
         }
@@ -604,28 +896,28 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             _searchState = search;
         }
 
-        private void ShellSearchBox_TextChanged(object sender, TextChangedEventArgs e)
+        private void ShellSearchBox_KeyDown(object sender, KeyRoutedEventArgs e)
         {
-            if (_suppressSearchBoxCallback || !_searchState)
+            if (e.Key != VirtualKey.Enter || !_searchState)
             {
                 return;
             }
 
-            ChatListViewModel listVm = TryGetActiveChatListViewModel();
-            if (listVm != null)
-            {
-                listVm.SearchQuery = ShellSearchBox.Text ?? string.Empty;
-            }
+            e.Handled = true;
+            _shell?.InvokeFromPivotCommand(
+                ReadSelectedTag(),
+                ShellSearchBox.Text,
+                TryGetActiveChatListViewModel());
         }
 
         private ChatListViewModel TryGetActiveChatListViewModel()
         {
-            if (ContentFrame?.Content is ChatsView chats)
+            if (ActivePivotContent() is ChatsView chats)
             {
                 return chats.ChatListViewModel;
             }
 
-            if (ContentFrame?.Content is ArchivedChatsView archived)
+            if (ActivePivotContent() is ArchivedChatsView archived)
             {
                 return archived.ChatListViewModel;
             }
@@ -686,12 +978,13 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
             _ = CloseDetailAsync();
             _navigator?.NavigateInShell(NavigationDestination.Debug);
-            _loadedSection = "debug";
+            SyncOverlayFromFrame();
         }
 
         private void SettingsMenu_Click(object sender, RoutedEventArgs e)
         {
             _navigator?.OpenSettings();
+            SyncOverlayFromFrame();
         }
 
         private void ProfileMenu_Click(object sender, RoutedEventArgs e)
@@ -700,10 +993,12 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 _shell.OpenProfileSettingsCommand.CanExecute(null))
             {
                 _shell.OpenProfileSettingsCommand.Execute(null);
+                SyncOverlayFromFrame();
                 return;
             }
 
             _navigator?.OpenSettings(true);
+            SyncOverlayFromFrame();
         }
     }
 }

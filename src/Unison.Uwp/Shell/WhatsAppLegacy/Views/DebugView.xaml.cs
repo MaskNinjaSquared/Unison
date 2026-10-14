@@ -1,6 +1,5 @@
 using System;
 using Microsoft.Extensions.DependencyInjection;
-using Unison.Core.Constants;
 using Unison.Core.ViewModels;
 using Windows.ApplicationModel;
 using Windows.UI.Xaml;
@@ -135,7 +134,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private void ViewModel_BackRequested(object sender, EventArgs e)
         {
-            App.Services?.GetService<ShellViewModel>()?.NavigateToSectionCommand.Execute(NavigationRoutes.Chats);
+            ShellView.CloseOverlayFrom(this);
         }
 
         private void ViewModel_LogTextChanged(object sender, EventArgs e)

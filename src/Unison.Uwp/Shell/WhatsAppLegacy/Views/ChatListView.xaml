@@ -27,11 +27,14 @@
         </Grid.RowDefinitions>
 
         <!-- Top actions moved to list CommandBar; keep sync strip only. -->
+        <!-- Fixed row: the spinner line stays reserved so the list does not jump. -->
         <Grid Grid.Row="0"
-              Padding="16,8,16,4"
-              Background="Transparent"
-              Visibility="{x:Bind ViewModel.ShowSyncStatusInUi, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+              Height="32"
+              Padding="0,4"
+              Background="Transparent">
             <Grid x:Name="SyncStatusPanel"
+                  Margin="10,0,0,0"
+                  Visibility="{x:Bind ViewModel.ShowSyncStatusInUi, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
                   VerticalAlignment="Center" HorizontalAlignment="Left"
                   MaxWidth="220"
                   SizeChanged="SyncStatusPanel_SizeChanged">
@@ -40,7 +43,7 @@
                     <ColumnDefinition Width="*" MinWidth="0"/>
                 </Grid.ColumnDefinitions>
                 <controls:ModernProgressRing IsActive="{x:Bind ViewModel.ShowSyncStatusInUi, Mode=OneWay}"
-                                             Width="14" Height="14"
+                                             Width="18" Height="18"
                                              VerticalAlignment="Center"
                                              Foreground="{ThemeResource ChatListSyncStatusBrush}"/>
                 <TextBlock x:Name="SyncStatusText" Grid.Column="1"
@@ -102,17 +105,23 @@
                           Style="{StaticResource LegacyAppBarButtonStyle}"
                           Label="search"
                           Click="SearchAppBar_Click">
-                <AppBarButton.Icon>
-                    <FontIcon FontFamily="{StaticResource LegacyIconFont}" Glyph="&#xEB01;"/>
-                </AppBarButton.Icon>
+                <TextBlock Text="&#xEB01;"
+                           FontFamily="{StaticResource LegacyIconFont}"
+                           FontSize="{StaticResource LegacyAppBarGlyphSize}"
+                           TextLineBounds="Tight"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"/>
             </AppBarButton>
             <AppBarButton x:Uid="Shell_LegacyAppBar_NewChat"
                           Style="{StaticResource LegacyAppBarButtonStyle}"
                           Label="new chat"
                           Click="NewChatAppBar_Click">
-                <AppBarButton.Icon>
-                    <FontIcon FontSize="20" FontFamily="{StaticResource LegacyIconFont}" Glyph="&#xEB02;"/>
-                </AppBarButton.Icon>
+                <TextBlock Text="&#xEB02;"
+                           FontFamily="{StaticResource LegacyIconFont}"
+                           FontSize="{StaticResource LegacyAppBarGlyphSize}"
+                           TextLineBounds="Tight"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"/>
             </AppBarButton>
             <CommandBar.SecondaryCommands>
                 <AppBarButton x:Name="ProfileSecondaryButton"

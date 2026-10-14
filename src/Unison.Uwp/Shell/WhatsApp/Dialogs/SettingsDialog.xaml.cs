@@ -2,7 +2,6 @@ using System;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
-using Unison.Core.Constants;
 using Unison.Core.Contracts;
 using Unison.Core.ViewModels;
 using Unison.Uwp.Services;
@@ -85,15 +84,6 @@ namespace Unison.Uwp.Shell.WhatsApp.Dialogs
             UnhookLeaveRequested();
             _viewModel?.Detach();
             _dialogChrome = null;
-            try
-            {
-                App.Services?.GetService<ShellViewModel>()
-                    ?.NavigateToSectionCommand.Execute(NavigationRoutes.Chats);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[WhatsAppSettingsDialog] reset section failed: " + ex.Message);
-            }
         }
 
         private void LayoutStates_CurrentStateChanged(object sender, VisualStateChangedEventArgs e)

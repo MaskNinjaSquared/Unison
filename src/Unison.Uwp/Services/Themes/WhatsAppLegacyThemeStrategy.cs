@@ -16,7 +16,7 @@ namespace Unison.Uwp.Services.Themes
     {
         private static readonly Color WpBlack = Color.FromArgb(0xFF, 0x00, 0x00, 0x00);
         private static readonly Color WpWhite = Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF);
-        private static readonly Color WpAccent = Color.FromArgb(0xFF, 0x23, 0x41, 0x41);
+        private static readonly Color WpAccent = Color.FromArgb(0xFF, 0x00, 0x65, 0x6A);
 
         public override bool DisplaySyncInChatList => true;
 
@@ -42,11 +42,10 @@ namespace Unison.Uwp.Services.Themes
             switch (destination)
             {
                 case NavigationDestination.Chats:
-                    return typeof(Shell.WhatsAppLegacy.Views.ChatsView);
                 case NavigationDestination.Archived:
-                    return typeof(Shell.WhatsAppLegacy.Views.ArchivedChatsView);
                 case NavigationDestination.Status:
-                    return typeof(Shell.WhatsAppLegacy.Views.StatusView);
+                    throw new InvalidOperationException(
+                        "WhatsApp Legacy hosts chats/status/archived in the shell pivot, not the overlay frame.");
                 case NavigationDestination.Debug:
                     return typeof(Shell.WhatsAppLegacy.Views.DebugView);
                 default:
@@ -88,7 +87,7 @@ namespace Unison.Uwp.Services.Themes
             try
             {
                 var titleBar = ApplicationView.GetForCurrentView().TitleBar;
-                // Desktop: accent strip (#234141); caption glyphs stay white.
+                // Desktop: accent strip (#00656A); caption glyphs stay white.
                 titleBar.BackgroundColor = WpAccent;
                 titleBar.InactiveBackgroundColor = WpAccent;
                 titleBar.ForegroundColor = WpWhite;
@@ -97,9 +96,9 @@ namespace Unison.Uwp.Services.Themes
                 titleBar.ButtonInactiveBackgroundColor = WpAccent;
                 titleBar.ButtonForegroundColor = WpWhite;
                 titleBar.ButtonInactiveForegroundColor = WpWhite;
-                titleBar.ButtonHoverBackgroundColor = Color.FromArgb(0xFF, 0x2E, 0x52, 0x52);
+                titleBar.ButtonHoverBackgroundColor = Color.FromArgb(0xFF, 0x00, 0x7A, 0x80);
                 titleBar.ButtonHoverForegroundColor = WpWhite;
-                titleBar.ButtonPressedBackgroundColor = Color.FromArgb(0xFF, 0x1A, 0x30, 0x30);
+                titleBar.ButtonPressedBackgroundColor = Color.FromArgb(0xFF, 0x00, 0x52, 0x56);
                 titleBar.ButtonPressedForegroundColor = WpWhite;
             }
             catch (Exception ex)

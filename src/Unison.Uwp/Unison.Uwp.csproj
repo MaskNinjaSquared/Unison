@@ -193,6 +193,19 @@
     <Compile Include="Shell\WhatsAppLegacy\Views\ShellView.xaml.cs">
       <DependentUpon>ShellView.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Shell\WhatsAppLegacy\Views\LegacyChatDetailInfoControl.xaml.cs">
+      <DependentUpon>LegacyChatDetailInfoControl.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Shell\WhatsAppLegacy\Views\LegacyImageViewerView.xaml.cs">
+      <DependentUpon>LegacyImageViewerView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Shell\WhatsAppLegacy\Views\LegacyCommandBarLayout.cs" />
+    <Compile Include="Shell\WhatsAppLegacy\Views\LegacySectionAppBar.xaml.cs">
+      <DependentUpon>LegacySectionAppBar.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Shell\WhatsAppLegacy\Views\ChatDetailView.xaml.cs">
+      <DependentUpon>ChatDetailView.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Shell\WhatsAppLegacy\Views\LegacyPivotPlaceholderView.xaml.cs">
       <DependentUpon>LegacyPivotPlaceholderView.xaml</DependentUpon>
     </Compile>
@@ -299,6 +312,9 @@
     </Compile>
     <Compile Include="UI\Controls\MessageBubbleChrome.xaml.cs">
       <DependentUpon>MessageBubbleChrome.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Controls\LegacyMessageBubbleChrome.xaml.cs">
+      <DependentUpon>LegacyMessageBubbleChrome.xaml</DependentUpon>
     </Compile>
     <Compile Include="UI\Controls\UnisonMessageBubbleChrome.xaml.cs">
       <DependentUpon>UnisonMessageBubbleChrome.xaml</DependentUpon>
@@ -437,6 +453,7 @@
     <Compile Include="UI\Controls\ChatAudioTransportPresenter.cs" />
     <Compile Include="UI\Controls\ChatMediaPlaceholderHost.cs" />
     <Compile Include="UI\Controls\ShellUi.cs" />
+    <Compile Include="UI\Controls\LegacyInfoText.cs" />
     <Compile Include="UI\Controls\ChatDetailInfoControl.xaml.cs">
       <DependentUpon>ChatDetailInfoControl.xaml</DependentUpon>
     </Compile>
@@ -643,6 +660,10 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
+    <Page Include="UI\Controls\LegacyMessageBubbleChrome.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
     <Page Include="UI\Controls\UnisonMessageBubbleChrome.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -796,6 +817,22 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="Shell\WhatsAppLegacy\Views\ShellView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Shell\WhatsAppLegacy\Views\LegacyChatDetailInfoControl.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Shell\WhatsAppLegacy\Views\ChatDetailView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Shell\WhatsAppLegacy\Views\LegacyImageViewerView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Shell\WhatsAppLegacy\Views\LegacySectionAppBar.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

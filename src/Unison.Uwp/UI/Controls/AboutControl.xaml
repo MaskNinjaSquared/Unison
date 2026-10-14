@@ -47,10 +47,11 @@
                 <Image
                     Grid.Row="0"
                     Grid.Column="0"
-                    
-                    Margin="-10,-5,0,0"
+                    Width="44"
+                    Height="44"
+                    Margin="0,2,10,0"
                     VerticalAlignment="Top"
-                    Source="ms-appx:///Assets/SmallTile.scale-100.png"
+                    Source="ms-appx:///Assets/StoreLogo.png"
                     Stretch="Uniform" />
 
                 <StackPanel

@@ -63,6 +63,7 @@ namespace Unison.Core.ViewModels
         private bool _startInProgress;
         private bool _startPairingOnLoginSurface = true;
         private double _chatListPaneWidth;
+        private readonly NotificationCounterWatch _notificationCounter;
 
         /// <summary>
         /// When true, Enter* / NavigateToAppShell update state but skip root Frame navigation
@@ -108,7 +109,17 @@ namespace Unison.Core.ViewModels
             OpenProfileSettingsCommand = new RelayCommand(OpenProfileSettings);
 
             _navigator.ShellNavigated += Navigator_ShellNavigated;
+            _notificationCounter = new NotificationCounterWatch(_chatState.Chats);
+            _notificationCounter.Changed += (s, e) =>
+                RaiseProperties(nameof(NotificationCounterBadge), nameof(NotificationCounterBadgeText));
         }
+
+        /// <summary>How many chats have a notification. Same count the chat-list header shows.</summary>
+        public int NotificationCounterBadge => _notificationCounter?.Count ?? 0;
+
+        /// <summary>Parenthetical next to the Legacy brand, empty when nothing is unread.</summary>
+        public string NotificationCounterBadgeText =>
+            NotificationCounter.FormatBadge(NotificationCounterBadge);
 
         private void PairingTrace(string message)
         {
@@ -228,6 +239,20 @@ namespace Unison.Core.ViewModels
         {
             get => _activeSection;
             set => Set(ref _activeSection, value);
+        }
+
+        /// <summary>
+        /// Legacy search box, Enter. The open pivot decides the target: chats and archived
+        /// write that list's query; the other pivots have nothing to search yet.
+        /// </summary>
+        public void InvokeFromPivotCommand(string pivotTag, string query, ChatListViewModel target)
+        {
+            if (!LegacyPivotSearch.AppliesToChatList(pivotTag) || target == null)
+            {
+                return;
+            }
+
+            target.SearchQuery = query?.Trim() ?? string.Empty;
         }
 
         /// <summary>Startup | Login | Connected — maps to AppSurfaceStates.</summary>

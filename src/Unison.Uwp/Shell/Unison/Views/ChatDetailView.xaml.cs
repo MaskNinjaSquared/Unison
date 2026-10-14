@@ -545,7 +545,7 @@ namespace Unison.Uwp.Shell.Unison.Views
         }
 
         /// <summary>
-        /// Minimal: info covers the chat. Extended+: fixed 400px column on the right.
+        /// Minimal: info covers the chat, which stays laid out underneath. Extended+: fixed 400px column.
         /// Opening slides the pane in from the right; SizeChanged only reflows columns.
         /// </summary>
         private void ApplyChatDetailInfoPane()
@@ -589,30 +589,14 @@ namespace Unison.Uwp.Shell.Unison.Views
             if (_chatDetailInfoPaneShown)
             {
                 _chatDetailInfoPaneShown = false;
-                AnimateChatDetailInfoSlideOut(() =>
+                if (ShouldUseFullScreenChatInfo())
                 {
-                    if (ViewModel?.IsChatDetailInfoOpen == true)
-                    {
-                        return;
-                    }
+                    StopChatDetailInfoSlide();
+                    CompleteChatDetailInfoClose();
+                    return;
+                }
 
-                    ChatDetailInfoPaneHost.Visibility = Visibility.Collapsed;
-                    if (ChatDetailInfoPanel != null)
-                    {
-                        ChatDetailInfoPanel.Visibility = Visibility.Collapsed;
-                    }
-
-                    if (ChatDetailMemberInfoPanel != null)
-                    {
-                        ChatDetailMemberInfoPanel.Visibility = Visibility.Collapsed;
-                    }
-
-                    ApplyChatDetailInfoColumns(open: false);
-                    if (ChatDetailInfoSlideTransform != null)
-                    {
-                        ChatDetailInfoSlideTransform.X = 0;
-                    }
-                });
+                AnimateChatDetailInfoSlideOut(CompleteChatDetailInfoClose);
                 return;
             }
 
@@ -620,30 +604,64 @@ namespace Unison.Uwp.Shell.Unison.Views
             ApplyChatDetailInfoColumns(open: false);
         }
 
+        private void CompleteChatDetailInfoClose()
+        {
+            if (ViewModel?.IsChatDetailInfoOpen == true)
+            {
+                return;
+            }
+
+            ChatDetailInfoPaneHost.Visibility = Visibility.Collapsed;
+            if (ChatDetailInfoPanel != null)
+            {
+                ChatDetailInfoPanel.Visibility = Visibility.Collapsed;
+            }
+
+            if (ChatDetailMemberInfoPanel != null)
+            {
+                ChatDetailMemberInfoPanel.Visibility = Visibility.Collapsed;
+            }
+
+            ApplyChatDetailInfoColumns(open: false);
+            if (ChatDetailInfoSlideTransform != null)
+            {
+                ChatDetailInfoSlideTransform.X = 0;
+            }
+        }
+
         private void ApplyChatDetailInfoColumns(bool open)
         {
+            bool cover = open && ShouldUseFullScreenChatInfo();
             string state = !open
                 ? "InfoClosed"
-                : (ShouldUseFullScreenChatInfo() ? "InfoFullScreen" : "InfoDocked");
+                : (cover ? "InfoFullScreen" : "InfoDocked");
             VisualStateManager.GoToState(this, state, false);
+            PlaceChatDetailInfoHost(cover);
 
-            if (!open)
+            if (!open || cover)
             {
                 ChatColumn.Width = new GridLength(1, GridUnitType.Star);
                 InfoColumn.Width = new GridLength(0);
                 return;
             }
 
-            if (ShouldUseFullScreenChatInfo())
+            ChatColumn.Width = new GridLength(1, GridUnitType.Star);
+            InfoColumn.Width = new GridLength(ChatPaneLayoutConstants.ChatDetailInfoPaneWidth);
+        }
+
+        /// <summary>
+        /// Fullscreen info is a cover over the chat, which stays laid out at full width.
+        /// Docked info is the column beside it.
+        /// </summary>
+        private void PlaceChatDetailInfoHost(bool coverChat)
+        {
+            if (ChatDetailInfoPaneHost == null)
             {
-                ChatColumn.Width = new GridLength(0);
-                InfoColumn.Width = new GridLength(1, GridUnitType.Star);
+                return;
             }
-            else
-            {
-                ChatColumn.Width = new GridLength(1, GridUnitType.Star);
-                InfoColumn.Width = new GridLength(ChatPaneLayoutConstants.ChatDetailInfoPaneWidth);
-            }
+
+            Grid.SetColumn(ChatDetailInfoPaneHost, coverChat ? 0 : 1);
+            Grid.SetColumnSpan(ChatDetailInfoPaneHost, coverChat ? 2 : 1);
         }
 
         private void StopChatDetailInfoSlide()
@@ -1729,6 +1747,7 @@ namespace Unison.Uwp.Shell.Unison.Views
                 return;
             }
 
+            ViewModel.BeginLoadingMessages();
             await YieldForChatSurfacePaintAsync();
             if (token.IsCancellationRequested || _activeChat == null ||
                 !ReferenceEquals(_activeChat, chat))
@@ -1737,6 +1756,7 @@ namespace Unison.Uwp.Shell.Unison.Views
                     "aborted",
                     chat.JID,
                     "stage=after-yield; reason=" + DescribeChatLoadAbort(token, chat));
+                ViewModel.EndLoadingMessages();
                 return;
             }
 
@@ -1744,7 +1764,6 @@ namespace Unison.Uwp.Shell.Unison.Views
             string requestedJid = Jids.GetCanonicalJid(chat.JID);
             Debug.WriteLine($"[ChatDetailView] Loading messages for {requestedJid}");
 
-            ViewModel.BeginLoadingMessages();
             List<ChatMessage> messages;
             try
             {
@@ -1954,7 +1973,7 @@ namespace Unison.Uwp.Shell.Unison.Views
         /// </summary>
         private async Task YieldForChatSurfacePaintAsync()
         {
-            await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () => { });
+            await Dispatcher.RunAsync(CoreDispatcherPriority.Low, () => { });
             if (_isWindowsMobile)
             {
                 await Task.Delay(48);

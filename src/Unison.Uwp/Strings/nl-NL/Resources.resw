@@ -1179,6 +1179,9 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   <data name="Shell_LegacyAppBar_NewChat.Label" xml:space="preserve">
     <value>nieuwe chat</value>
   </data>
+  <data name="Shell_LegacyAppBar_NewStatus.Label" xml:space="preserve">
+    <value>nieuwe status</value>
+  </data>
   <data name="Shell_LegacyAppBar_More.Label" xml:space="preserve">
     <value>meer</value>
   </data>

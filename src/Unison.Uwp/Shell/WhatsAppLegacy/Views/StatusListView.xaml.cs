@@ -31,6 +31,12 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         public event EventHandler SelectionCleared;
 
+        public event EventHandler SearchRequested;
+
+        public event EventHandler ProfileRequested;
+
+        public event EventHandler DebugRequested;
+
         public StatusListView()
         {
             if (App.Services != null)
@@ -43,6 +49,20 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             Loaded += StatusListView_Loaded;
             Unloaded += StatusListView_Unloaded;
         }
+
+        private void StatusCommandBar_Loaded(object sender, RoutedEventArgs e)
+        {
+            LegacyCommandBarLayout.CenterPrimaryCommands(StatusCommandBar);
+        }
+
+        private void SearchAppBar_Click(object sender, RoutedEventArgs e) =>
+            SearchRequested?.Invoke(this, EventArgs.Empty);
+
+        private void ProfileAppBar_Click(object sender, RoutedEventArgs e) =>
+            ProfileRequested?.Invoke(this, EventArgs.Empty);
+
+        private void DebugAppBar_Click(object sender, RoutedEventArgs e) =>
+            DebugRequested?.Invoke(this, EventArgs.Empty);
 
         private void StatusListView_Loaded(object sender, RoutedEventArgs e)
         {

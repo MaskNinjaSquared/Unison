@@ -274,7 +274,7 @@
                         <controls:SettingsSectionHeader x:Uid="Settings_General"
                                                         Text="General"
                                                         Glyph="&#xE713;"
-                                                        Margin="5,12,0,5"/>
+                                                        Margin="15,12,0,5"/>
 
                         <controls:SettingBox LocalizationUid="Settings_LiveTiles"
                                              Margin="5"
@@ -309,7 +309,7 @@
                         <controls:SettingsSectionHeader x:Uid="Settings_NotificationsSection"
                                                         Text="Notifications"
                                                         Glyph="&#xE91C;"
-                                                        Margin="5,12,0,5"/>
+                                                        Margin="15,12,0,5"/>
 
                         <controls:SettingBox LocalizationUid="Settings_Notifications"
                                              Margin="5"
@@ -455,7 +455,7 @@
                         <controls:SettingsSectionHeader x:Uid="Settings_DiskUsage"
                                                         Text="Disk Usage"
                                                         Glyph="&#xEDA2;"
-                                                        Margin="5,12,0,5"/>
+                                                        Margin="15,12,0,5"/>
 
                         <controls:SettingBox LocalizationUid="Settings_MediaCache"
                                              Margin="5"

@@ -6,14 +6,50 @@
     <Style x:Key="LegacyAppBarButtonStyle" TargetType="AppBarButton">
         <Setter Property="Foreground" Value="{ThemeResource LegacyCommandBarForegroundBrush}"/>
         <Setter Property="Background" Value="Transparent"/>
-        <Setter Property="Width" Value="72"/>
-        <Setter Property="Height" Value="64"/>
-        <Setter Property="IsCompact" Value="True"/>
+        <Setter Property="Width" Value="50"/>
+        <Setter Property="MinHeight" Value="48"/>
+        <Setter Property="Margin" Value="7,0"/>
+        <Setter Property="VerticalAlignment" Value="Top"/>
+        <Setter Property="IsCompact" Value="False"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="AppBarButton">
-                    <Grid x:Name="Root" Background="Transparent" Width="{TemplateBinding Width}" Height="{TemplateBinding Height}">
+                    <Grid x:Name="Root" Background="Transparent" Width="{TemplateBinding Width}" MinHeight="48">
                         <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="ApplicationViewStates">
+                                <VisualState x:Name="FullSize">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="TextLabel" Storyboard.TargetProperty="Visibility">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="Visible"/>
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Compact">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="TextLabel" Storyboard.TargetProperty="Visibility">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="Collapsed"/>
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="LabelOnRight">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="TextLabel" Storyboard.TargetProperty="Visibility">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="Collapsed"/>
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="LabelCollapsed">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="TextLabel" Storyboard.TargetProperty="Visibility">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="Collapsed"/>
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Overflow"/>
+                                <VisualState x:Name="OverflowWithToggleButtons"/>
+                                <VisualState x:Name="OverflowWithMenuIcons"/>
+                                <VisualState x:Name="OverflowWithToggleButtonsAndMenuIcons"/>
+                            </VisualStateGroup>
                             <VisualStateGroup x:Name="CommonStates">
                                 <VisualState x:Name="Normal"/>
                                 <VisualState x:Name="PointerOver">
@@ -40,30 +76,177 @@
                             </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
 
-                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <!-- 4px top keeps the 40px ring optically centered in the 48px compact strip. -->
+                        <StackPanel VerticalAlignment="Top" HorizontalAlignment="Center" Margin="0,4,0,0">
                             <Grid Width="40" Height="40" HorizontalAlignment="Center">
                                 <Ellipse x:Name="Ring"
                                          Stroke="{ThemeResource LegacyAppBarRingBrush}"
                                          StrokeThickness="2"
                                          Fill="Transparent"/>
                                 <ContentPresenter x:Name="Content"
-                                                  Content="{TemplateBinding Icon}"
+                                                  Content="{TemplateBinding Content}"
                                                   HorizontalAlignment="Center"
                                                   VerticalAlignment="Center"
+                                                  HorizontalContentAlignment="Center"
+                                                  VerticalContentAlignment="Center"
                                                   Foreground="{TemplateBinding Foreground}"/>
                             </Grid>
-                            <TextBlock Text="{TemplateBinding Label}"
+                            <TextBlock x:Name="TextLabel"
+                                       Text="{TemplateBinding Label}"
+                                       Width="50"
                                        FontSize="10"
-                                       Margin="0,4,0,0"
+                                       Margin="0,4,0,2"
                                        HorizontalAlignment="Center"
+                                       TextAlignment="Center"
+                                       TextWrapping="Wrap"
                                        Foreground="{TemplateBinding Foreground}"
-                                       TextTrimming="CharacterEllipsis"
-                                       MaxLines="1"/>
+                                       MaxLines="2"
+                                       Visibility="Collapsed"/>
                         </StackPanel>
                     </Grid>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+    </Style>
+
+    <!-- WP8 back: round white/black ring, transparent fill, the Windows 8 back arrow. -->
+    <Style x:Key="LegacyBackButtonStyle" TargetType="Button">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="Width" Value="34"/>
+        <Setter Property="Height" Value="34"/>
+        <Setter Property="MinWidth" Value="34"/>
+        <Setter Property="MinHeight" Value="34"/>
+        <Setter Property="HorizontalAlignment" Value="Center"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Grid Width="34" Height="34" Background="Transparent">
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal"/>
+                                <VisualState x:Name="PointerOver">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Ring" Storyboard.TargetProperty="Fill">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource LegacyCommandBarForegroundBrush}"/>
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Glyph" Storyboard.TargetProperty="Foreground">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource ApplicationPageBackgroundThemeBrush}"/>
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Ring" Storyboard.TargetProperty="Fill">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource LegacyCommandBarForegroundBrush}"/>
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Glyph" Storyboard.TargetProperty="Foreground">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource ApplicationPageBackgroundThemeBrush}"/>
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                        <Ellipse x:Name="Ring"
+                                 Stroke="{ThemeResource LegacyAppBarRingBrush}"
+                                 StrokeThickness="2"
+                                 Fill="Transparent"/>
+                        <FontIcon x:Name="Glyph"
+                                  FontFamily="Segoe UI Symbol"
+                                  Glyph="&#xE112;"
+                                  FontSize="14"
+                                  Foreground="{ThemeResource LegacyCommandBarForegroundBrush}"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"
+                                  IsHitTestVisible="False"/>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="LegacySettingsCategoryStyle" TargetType="Button">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="HorizontalAlignment" Value="Stretch"/>
+        <Setter Property="HorizontalContentAlignment" Value="Left"/>
+        <Setter Property="Padding" Value="20,14,10,14"/>
+        <Setter Property="Margin" Value="0,0,0,4"/>
+    </Style>
+
+    <!-- WP8 settings action: square 2px white/black ring, invert on press. -->
+    <Style x:Key="LegacySettingsButtonStyle" TargetType="Button">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{ThemeResource WhatsAppTextHighBrush}"/>
+        <Setter Property="BorderBrush" Value="{ThemeResource LegacySearchBorderBrush}"/>
+        <Setter Property="BorderThickness" Value="2"/>
+        <Setter Property="Padding" Value="12,6"/>
+        <Setter Property="MinHeight" Value="32"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="FontFamily" Value="{StaticResource MainFont}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Root"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            Padding="{TemplateBinding Padding}">
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal"/>
+                                <VisualState x:Name="PointerOver">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Root" Storyboard.TargetProperty="Opacity">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="0.85"/>
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Root" Storyboard.TargetProperty="Background">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource LegacySearchBorderBrush}"/>
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Content" Storyboard.TargetProperty="Foreground">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource ApplicationPageBackgroundThemeBrush}"/>
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Disabled">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Root" Storyboard.TargetProperty="Opacity">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="0.4"/>
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                        <ContentPresenter x:Name="Content"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          Content="{TemplateBinding Content}"
+                                          Foreground="{TemplateBinding Foreground}"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- WP8 settings selector: square 2px white/black ring (default dropdown parts stay intact). -->
+    <Style x:Key="LegacySettingsComboBoxStyle" TargetType="ComboBox">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{ThemeResource WhatsAppTextHighBrush}"/>
+        <Setter Property="BorderBrush" Value="{ThemeResource LegacySearchBorderBrush}"/>
+        <Setter Property="BorderThickness" Value="2"/>
+        <Setter Property="Padding" Value="10,6,8,6"/>
+        <Setter Property="MinHeight" Value="32"/>
+        <Setter Property="HorizontalAlignment" Value="Left"/>
+        <Setter Property="HorizontalContentAlignment" Value="Left"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="FontFamily" Value="{StaticResource MainFont}"/>
     </Style>
 
     <!-- Overflow / more uses stock look (no ring). -->
@@ -72,13 +255,17 @@
         <Setter Property="Foreground" Value="{ThemeResource LegacyCommandBarForegroundBrush}"/>
         <Setter Property="ClosedDisplayMode" Value="Compact"/>
         <Setter Property="IsOpen" Value="False"/>
+        <Setter Property="MinHeight" Value="48"/>
+        <Setter Property="VerticalAlignment" Value="Bottom"/>
+        <Setter Property="VerticalContentAlignment" Value="Top"/>
         <Setter Property="HorizontalContentAlignment" Value="Center"/>
     </Style>
 
     <!-- WP8 search field: transparent fill, square white border, search glyph on the left. -->
     <Style x:Key="LegacySearchBoxStyle" TargetType="TextBox">
-        <Setter Property="MinHeight" Value="40"/>
-        <Setter Property="Padding" Value="36,8,10,8"/>
+        <Setter Property="MinHeight" Value="32"/>
+        <Setter Property="Height" Value="32"/>
+        <Setter Property="Padding" Value="36,2,10,2"/>
         <Setter Property="Foreground" Value="{ThemeResource WhatsAppTextHighBrush}"/>
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="BorderBrush" Value="{ThemeResource LegacySearchBorderBrush}"/>
@@ -93,14 +280,15 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"/>
-                        <FontIcon Glyph="&#xEB01;"
-                                  FontFamily="{StaticResource LegacyIconFont}"
-                                  FontSize="16"
-                                  Foreground="{TemplateBinding Foreground}"
-                                  HorizontalAlignment="Left"
-                                  VerticalAlignment="Center"
-                                  Margin="10,0,0,0"
-                                  IsHitTestVisible="False"/>
+                        <TextBlock Text="&#xEB01;"
+                                   FontFamily="{StaticResource LegacyIconFont}"
+                                   FontSize="18"
+                                   TextLineBounds="Tight"
+                                   Foreground="{TemplateBinding Foreground}"
+                                   HorizontalAlignment="Left"
+                                   VerticalAlignment="Center"
+                                   Margin="10,0,0,0"
+                                   IsHitTestVisible="False"/>
                         <ScrollViewer x:Name="ContentElement"
                                       Margin="{TemplateBinding Padding}"
                                       VerticalAlignment="Center"

@@ -74,14 +74,15 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         private bool _suppressSelectionChanged;
 
         public ChatListView()
+            : this(null, null)
         {
-            if (App.Services != null)
-            {
-                ViewModel = App.Services.GetRequiredService<ChatListViewModel>();
-                _shell = App.Services.GetService<ShellViewModel>();
-                DataContext = ViewModel;
-            }
+        }
 
+        public ChatListView(ChatListViewModel viewModel, ShellViewModel shell)
+        {
+            ViewModel = viewModel ?? App.Services?.GetRequiredService<ChatListViewModel>();
+            _shell = shell ?? App.Services?.GetService<ShellViewModel>();
+            DataContext = ViewModel;
             this.InitializeComponent();
             this.Loaded += ChatListView_Loaded;
             this.Unloaded += ChatListView_Unloaded;
@@ -133,43 +134,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private static void CenterPrimaryCommands(CommandBar bar)
         {
-            if (bar == null)
-            {
-                return;
-            }
-
-            var primary = FindDescendantByName(bar, "PrimaryItemsControl") as FrameworkElement;
-            if (primary != null)
-            {
-                primary.HorizontalAlignment = HorizontalAlignment.Center;
-            }
-        }
-
-        private static DependencyObject FindDescendantByName(DependencyObject root, string name)
-        {
-            if (root == null || string.IsNullOrEmpty(name))
-            {
-                return null;
-            }
-
-            int count = VisualTreeHelper.GetChildrenCount(root);
-            for (int i = 0; i < count; i++)
-            {
-                DependencyObject child = VisualTreeHelper.GetChild(root, i);
-                var fe = child as FrameworkElement;
-                if (fe != null && string.Equals(fe.Name, name, StringComparison.Ordinal))
-                {
-                    return child;
-                }
-
-                DependencyObject nested = FindDescendantByName(child, name);
-                if (nested != null)
-                {
-                    return nested;
-                }
-            }
-
-            return null;
+            LegacyCommandBarLayout.CenterPrimaryCommands(bar);
         }
 
         private void SearchAppBar_Click(object sender, RoutedEventArgs e) =>

@@ -24,6 +24,7 @@ namespace Unison.Core.ViewModels
             _status = status ?? throw new ArgumentNullException(nameof(status));
             _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
             MenuCommand = new RelayCommand(() => MenuRequested?.Invoke(this, EventArgs.Empty));
+            NewStatusCommand = new RelayCommand(BeginNewStatus);
         }
 
         public ObservableCollection<StatusAuthorItem> Authors { get; } =
@@ -42,6 +43,13 @@ namespace Unison.Core.ViewModels
         }
 
         public ICommand MenuCommand { get; }
+
+        /// <summary>App-bar "new status". Compose is not wired yet.</summary>
+        public ICommand NewStatusCommand { get; }
+
+        private static void BeginNewStatus()
+        {
+        }
 
         public event EventHandler MenuRequested;
 

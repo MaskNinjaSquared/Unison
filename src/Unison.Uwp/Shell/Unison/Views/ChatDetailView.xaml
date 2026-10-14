@@ -145,8 +145,10 @@
                 </VisualState>
                 <VisualState x:Name="InfoFullScreen">
                     <VisualState.Setters>
-                        <Setter Target="ChatColumn.Width" Value="0"/>
-                        <Setter Target="InfoColumn.Width" Value="*"/>
+                        <!-- Chat stays at full width under the info cover. Collapsing it to 0
+                             unrealizes the message list, and close then pays to build it again. -->
+                        <Setter Target="ChatColumn.Width" Value="*"/>
+                        <Setter Target="InfoColumn.Width" Value="0"/>
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>

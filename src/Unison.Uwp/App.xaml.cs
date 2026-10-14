@@ -456,6 +456,7 @@ namespace Unison.Uwp
             services.AddTransient<NewChatDialogViewModel>();
             services.AddTransient<MessageReactionsViewModel>();
             services.AddTransient<SettingsViewModel>();
+            services.AddTransient<LegacySettingsViewModel>();
 
             Services = services.BuildServiceProvider(validateScopes: true);
             var whatsApp = Services.GetRequiredService<IWhatsAppService>();

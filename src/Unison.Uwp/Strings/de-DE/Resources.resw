@@ -1179,6 +1179,9 @@ Nach der Diagnose deaktivieren: Wenn es aktiviert bleibt, wird die App langsamer
   <data name="Shell_LegacyAppBar_NewChat.Label" xml:space="preserve">
     <value>neuer chat</value>
   </data>
+  <data name="Shell_LegacyAppBar_NewStatus.Label" xml:space="preserve">
+    <value>neuer status</value>
+  </data>
   <data name="Shell_LegacyAppBar_More.Label" xml:space="preserve">
     <value>mehr</value>
   </data>

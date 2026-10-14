@@ -34,5 +34,10 @@ namespace Unison.Uwp.UI.Controls
         }
 
         public static bool IsUnison => CurrentShell == AppShell.Unison;
+
+        public static bool IsWhatsAppLegacy => CurrentShell == AppShell.WhatsAppLegacy;
+
+        /// <summary>Unison bubble shape. Legacy reuses it; WhatsApp keeps its own masks.</summary>
+        public static bool UsesUnisonBalloons => IsUnison || IsWhatsAppLegacy;
     }
 }

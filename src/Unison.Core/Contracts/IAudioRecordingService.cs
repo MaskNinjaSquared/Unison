@@ -16,6 +16,12 @@ namespace Unison.Core.Contracts
         IAudioRecordingSession Current { get; }
 
         /// <summary>
+        /// Prompts for microphone access when needed. Does not start a recording.
+        /// False when the user or system denied the mic.
+        /// </summary>
+        Task<bool> EnsureMicrophoneAccessAsync();
+
+        /// <summary>
         /// Starts a new recording (cancels any previous session first).
         /// Returns a live handle with <see cref="IAudioRecordingSession.Elapsed"/>.
         /// </summary>

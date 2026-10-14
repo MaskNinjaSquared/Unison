@@ -1813,7 +1813,7 @@ namespace Unison.Core.ViewModels
 
         /// <summary>
         /// Subscribe + wait for presence (or group hint). Raises <see cref="PresenceAnimationRequested"/>.
-        /// View skips calling this on Windows Mobile (cosmetic cost).
+        /// The WhatsApp Web and Unison shells skip this on Windows Mobile. The legacy shell does not.
         /// </summary>
         public void StartPresenceWatch(string jid)
         {
@@ -2209,6 +2209,8 @@ namespace Unison.Core.ViewModels
             }
         }
 
+        private int _recordingCueGeneration;
+
         private async Task StartRecordingAsync()
         {
             if (_activeChat == null || _isSending || _isRecording) return;
@@ -2220,14 +2222,48 @@ namespace Unison.Core.ViewModels
                 MessageText = string.Empty;
             }
 
+            string chatJid = _activeChat.JID;
+            try
+            {
+                if (_audioRecording == null ||
+                    !await _audioRecording.EnsureMicrophoneAccessAsync())
+                {
+                    _uiSounds?.PlayVoiceNoteError();
+                    await ShowSimpleErrorAsync(
+                        "ChatDetail_RecordFailed",
+                        "Could not record audio. Check microphone permission.");
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogSendError("record-permission-fail", ex);
+                _uiSounds?.PlayVoiceNoteError();
+                await ShowSimpleErrorAsync(
+                    "ChatDetail_RecordFailed",
+                    "Could not record audio. Check microphone permission.");
+                return;
+            }
+
+            int generation = ++_recordingCueGeneration;
+            _uiSounds?.PlayVoiceNoteStart();
+            await Task.Delay(VoiceNoteCueTiming.StartRecordingDelayMs);
+            if (generation != _recordingCueGeneration ||
+                _isSending ||
+                _isRecording ||
+                _activeChat == null ||
+                !string.Equals(_activeChat.JID, chatJid, StringComparison.Ordinal))
+            {
+                return;
+            }
+
             try
             {
                 LogSend("record-start");
                 _recordingSession = await _audioRecording.StartAsync();
-                _recordingChatJid = _activeChat.JID;
+                _recordingChatJid = chatJid;
                 RecordingElapsedText = "0:00";
                 IsRecording = true;
-                _uiSounds?.PlayVoiceNoteStart();
                 StartElapsedLoop();
             }
             catch (Exception ex)
@@ -2243,6 +2279,7 @@ namespace Unison.Core.ViewModels
 
         private async Task StopAndSendRecordingAsync()
         {
+            _recordingCueGeneration++;
             var session = _recordingSession ?? _audioRecording.Current;
             string targetJid = _recordingChatJid ?? _activeChat?.JID;
 
@@ -2258,7 +2295,7 @@ namespace Unison.Core.ViewModels
             try
             {
                 recording = await session.StopAsync();
-                _uiSounds?.PlayVoiceNoteStop();
+                _ = PlayStopCueAfterDelayAsync();
             }
             catch (Exception ex)
             {
@@ -2416,8 +2453,21 @@ namespace Unison.Core.ViewModels
             }
         }
 
+        private async Task PlayStopCueAfterDelayAsync()
+        {
+            int generation = _recordingCueGeneration;
+            await Task.Delay(VoiceNoteCueTiming.StopSoundDelayMs);
+            if (generation != _recordingCueGeneration)
+            {
+                return;
+            }
+
+            _uiSounds?.PlayVoiceNoteStop();
+        }
+
         private async Task CancelRecordingCoreAsync()
         {
+            _recordingCueGeneration++;
             StopElapsedLoop();
 
             var session = _recordingSession ?? _audioRecording?.Current;

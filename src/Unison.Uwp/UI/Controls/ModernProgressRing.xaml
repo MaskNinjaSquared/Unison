@@ -14,7 +14,9 @@
         Visibility colapsa o host quando inativo.
     -->
     <Grid Visibility="{x:Bind IsActive, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
-        <ProgressRing HorizontalAlignment="Stretch"
+        <!-- Inset so the ring stroke is not clipped by the control bounds. -->
+        <ProgressRing Margin="2"
+                      HorizontalAlignment="Stretch"
                       VerticalAlignment="Stretch"
                       IsActive="{x:Bind IsActive, Mode=OneWay}"
                       Foreground="{x:Bind Foreground, Mode=OneWay}"/>

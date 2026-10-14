@@ -1,10 +1,8 @@
 using System;
 using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
-using Unison.Core.Constants;
 using Unison.Core.ViewModels;
 using Windows.ApplicationModel;
-using Windows.ApplicationModel.Resources;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Navigation;
@@ -16,7 +14,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
     /// </summary>
     public sealed partial class SettingsView : Page
     {
-        private SettingsViewModel _viewModel;
+        private LegacySettingsViewModel _viewModel;
         private bool _syncingLanguageCombo;
         private bool _leaveHooked;
         private bool _openProfileOnLoad;
@@ -29,13 +27,13 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             Unloaded += SettingsView_Unloaded;
         }
 
-        private SettingsViewModel ViewModel
+        private LegacySettingsViewModel ViewModel
         {
             get
             {
                 if (_viewModel == null && App.Services != null)
                 {
-                    _viewModel = App.Services.GetRequiredService<SettingsViewModel>();
+                    _viewModel = App.Services.GetRequiredService<LegacySettingsViewModel>();
                     DataContext = _viewModel;
                 }
 
@@ -60,7 +58,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         /// <summary>Opens the profile pane when settings is already on screen.</summary>
         public void OpenProfile()
         {
-            ShowProfile(true);
+            ViewModel?.OpenCategory(LegacySettingsViewModel.Profile);
+            ApplyCategoryVisibility();
         }
 
         private void HookLeaveRequested()
@@ -72,6 +71,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             }
 
             vm.LeaveRequested += ViewModel_LeaveRequested;
+            vm.PropertyChanged += ViewModel_PropertyChanged;
             _leaveHooked = true;
         }
 
@@ -83,29 +83,67 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             }
 
             _viewModel.LeaveRequested -= ViewModel_LeaveRequested;
+            _viewModel.PropertyChanged -= ViewModel_PropertyChanged;
             _leaveHooked = false;
+        }
+
+        private void ViewModel_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(LegacySettingsViewModel.OpenCategoryId))
+            {
+                ApplyCategoryVisibility();
+            }
         }
 
         private void ViewModel_LeaveRequested(object sender, EventArgs e)
         {
-            if (ProfilePane != null && ProfilePane.Visibility == Visibility.Visible)
+            if (ViewModel != null && ViewModel.TryCloseCategory())
             {
-                ShowProfile(false);
                 return;
             }
 
-            App.Services?.GetService<ShellViewModel>()?.NavigateToSectionCommand.Execute(NavigationRoutes.Chats);
+            // Do not NavigateToSection(Chats): that remounts the chat list inside the overlay frame.
+            ShellView.CloseOverlayFrom(this);
+        }
+
+        private void BackButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (ViewModel != null && ViewModel.LeaveCommand != null && ViewModel.LeaveCommand.CanExecute(null))
+            {
+                ViewModel.LeaveCommand.Execute(null);
+            }
+        }
+
+        private void Category_Click(object sender, RoutedEventArgs e)
+        {
+            var button = sender as Button;
+            ViewModel?.OpenCategory(button?.Tag as string);
+        }
+
+        private void ApplyCategoryVisibility()
+        {
+            string id = ViewModel?.OpenCategoryId;
+            SetCategoryVisible(RootCategories, id == null);
+            SetCategoryVisible(ProfileCategory, id == LegacySettingsViewModel.Profile);
+            SetCategoryVisible(GeneralCategory, id == LegacySettingsViewModel.General);
+            SetCategoryVisible(NotificationsCategory, id == LegacySettingsViewModel.Notifications);
+            SetCategoryVisible(CustomizationCategory, id == LegacySettingsViewModel.Customization);
+            SetCategoryVisible(AccountCategory, id == LegacySettingsViewModel.Account);
+        }
+
+        private static void SetCategoryVisible(UIElement element, bool show)
+        {
+            if (element != null)
+            {
+                element.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+            }
         }
 
         private void SettingsView_Loaded(object sender, RoutedEventArgs e)
         {
             Activate();
             ViewModel?.Attach();
-            ApplyYourProfileTitle();
-            if (PageTitle != null && !string.IsNullOrEmpty(PageTitle.Text))
-            {
-                PageTitle.Text = PageTitle.Text.ToUpperInvariant();
-            }
+            ApplyCategoryVisibility();
 
             if (_openProfileOnLoad)
             {
@@ -140,30 +178,6 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             finally
             {
                 _syncingLanguageCombo = false;
-            }
-        }
-
-        private void ApplyYourProfileTitle()
-        {
-            if (YourProfileBox == null)
-            {
-                return;
-            }
-
-            try
-            {
-                ResourceLoader loader;
-                try { loader = ResourceLoader.GetForCurrentView(); }
-                catch { loader = ResourceLoader.GetForViewIndependentUse(); }
-
-                string title = loader.GetString("Settings_YourProfile/Text");
-                if (!string.IsNullOrEmpty(title))
-                {
-                    YourProfileBox.Title = title;
-                }
-            }
-            catch
-            {
             }
         }
 
@@ -213,20 +227,5 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             }
         }
 
-        private void YourProfileBox_Click(object sender, EventArgs e) => ShowProfile(true);
-
-        private void CloseProfile_Click(object sender, RoutedEventArgs e) => ShowProfile(false);
-
-        private void ShowProfile(bool show)
-        {
-            if (ProfilePane == null || SettingsScroll == null || PageHeader == null)
-            {
-                return;
-            }
-
-            ProfilePane.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
-            SettingsScroll.Visibility = show ? Visibility.Collapsed : Visibility.Visible;
-            PageHeader.Visibility = show ? Visibility.Collapsed : Visibility.Visible;
-        }
     }
 }

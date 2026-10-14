@@ -12,22 +12,12 @@
 
     <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Legacy: no page title (pivot owns section name). -->
-        <Grid Grid.Row="0" Padding="16,8,16,8">
-            <Button x:Name="MenuButton"
-                    HorizontalAlignment="Right"
-                    Click="MenuButton_Click"
-                    Style="{StaticResource ModernIconButtonStyle}">
-                <FontIcon Glyph="&#xE712;" FontFamily="{StaticResource IconFont}" FontSize="18"/>
-            </Button>
-        </Grid>
-
         <ListView x:Name="AuthorList"
-                  Grid.Row="1"
+                  Grid.Row="0"
                   ItemsSource="{x:Bind ViewModel.Authors, Mode=OneWay}"
                   ItemContainerStyle="{StaticResource WhatsAppChatListItemStyle}"
                   SelectionMode="Single"
@@ -69,7 +59,7 @@
             </ListView.ItemTemplate>
         </ListView>
 
-        <TextBlock Grid.Row="1"
+        <TextBlock Grid.Row="0"
                    x:Uid="StatusList_Empty"
                    Text="No recent status updates"
                    HorizontalAlignment="Center"
@@ -78,5 +68,50 @@
                    Foreground="{ThemeResource WhatsAppTextMediumBrush}"
                    FontFamily="{StaticResource MainFont}"
                    Visibility="{x:Bind ViewModel.IsEmpty, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+
+        <CommandBar x:Name="StatusCommandBar"
+                    Grid.Row="1"
+                    Style="{StaticResource LegacyCommandBarStyle}"
+                    Loaded="StatusCommandBar_Loaded">
+            <AppBarButton x:Uid="Shell_LegacyAppBar_Search"
+                          Style="{StaticResource LegacyAppBarButtonStyle}"
+                          Label="search"
+                          Click="SearchAppBar_Click">
+                <TextBlock Text="&#xEB01;"
+                           FontFamily="{StaticResource LegacyIconFont}"
+                           FontSize="{StaticResource LegacyAppBarGlyphSize}"
+                           TextLineBounds="Tight"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"/>
+            </AppBarButton>
+            <AppBarButton x:Uid="Shell_LegacyAppBar_NewStatus"
+                          Style="{StaticResource LegacyAppBarButtonStyle}"
+                          Label="new status"
+                          Command="{x:Bind ViewModel.NewStatusCommand}">
+                <TextBlock Text="&#xEB02;"
+                           FontFamily="{StaticResource LegacyIconFont}"
+                           FontSize="{StaticResource LegacyAppBarGlyphSize}"
+                           TextLineBounds="Tight"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"/>
+            </AppBarButton>
+            <CommandBar.SecondaryCommands>
+                <AppBarButton x:Uid="Shell_LegacyMenu_Profile"
+                              Label="profile"
+                              Click="ProfileAppBar_Click">
+                    <AppBarButton.Icon>
+                        <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE77B;"/>
+                    </AppBarButton.Icon>
+                </AppBarButton>
+                <AppBarSeparator/>
+                <AppBarButton x:Uid="Shell_LegacyMenu_Debug"
+                              Label="debug"
+                              Click="DebugAppBar_Click">
+                    <AppBarButton.Icon>
+                        <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xEBE8;"/>
+                    </AppBarButton.Icon>
+                </AppBarButton>
+            </CommandBar.SecondaryCommands>
+        </CommandBar>
     </Grid>
 </UserControl>

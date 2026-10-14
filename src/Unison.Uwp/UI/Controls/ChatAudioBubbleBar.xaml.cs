@@ -44,6 +44,19 @@ namespace Unison.Uwp.UI.Controls
             set => SetValue(GlyphForegroundProperty, value);
         }
 
+        /// <summary>Legacy: 2px ring, transparent fill, icon. WhatsApp keeps the bare glyph.</summary>
+        public bool UseRing
+        {
+            get => PlayRing != null && PlayRing.Visibility == Visibility.Visible;
+            set
+            {
+                if (PlayRing != null)
+                {
+                    PlayRing.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
+                }
+            }
+        }
+
         private void ChatAudioBubbleBar_Loaded(object sender, RoutedEventArgs e)
         {
             _presenter.Attach(DataContext as ChatMessageViewModel);
