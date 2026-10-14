@@ -4,6 +4,13 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## History catch-up progress moved out of the client
+
+Where the paginated history catch-up stands between lots (round, lots without progress, newest
+tip seen) and the two "ask again or stop" decisions are `HistoryCatchUpContinuation` in Core.
+Same behaviour; the state is now read and updated under one lock instead of from three threads
+without one.
+
 ## Message history store opens again on Mobile
 
 On release (.NET Native) builds the message history database failed to open on every

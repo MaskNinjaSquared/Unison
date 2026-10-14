@@ -880,10 +880,19 @@ check-then-set on a volatile flag); a failure before an id is registered no long
 progress stamping does (full id, then repair id); the per-chat attempt counter is gone (written,
 never read); and the banner is ended outside the lock instead of inside it.
 
-**Next slices:** the catch-up continuation state (`_catchUpWatermarkUtc`, round, stagnant cycles,
-the post-offline-drain decision) as a Core type; then the request / watchdog / timeout orchestration
-onto `HistoryFacade` behind a host port. The two soft-reconnect fallbacks stay in the client — they
-are connection lifecycle (phase 4).
+**Slice 2 is done:** `HistoryCatchUpContinuation` (`Unison.Core/State`, 10 tests) owns where the
+paginated catch-up stands between lots — round, stagnant count, tip watermark — and answers both
+"what next" questions: after a quiet lot (wrapping `HistoryCatchUpContinueDecision`) and after an
+offline drain with a fresh tip (continue, retry once more, or finish). The "catch-up is active" rule
+(banner up *or* a round in progress) was written out five times across two partials; it is
+`IsHistoryCatchUpActive()` over the type now. Quiet lots and empty drains still share one stagnant
+count, as before. Deliberate difference: the three fields were plain, unlocked fields read and
+written from the watchdog, the SQLite finalizer and the offline-drain callback; each decision now
+reads and updates them under one lock, and `catch-up-finish` logs the values it reset rather than
+re-reading them.
+
+**Next slice:** the request / watchdog / timeout orchestration onto `HistoryFacade` behind a host
+port. The two soft-reconnect fallbacks stay in the client — they are connection lifecycle (phase 4).
 
 ### Phase 4 — What remains is connection
 

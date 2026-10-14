@@ -1694,9 +1694,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 // Soft-reconnect catch-up pages must re-evaluate / re-request FULL_HISTORY even
                 // when this is not the first offline release of the process.
-                bool catchUpActive =
-                    Volatile.Read(ref _historyCatchUpBannerActive) == 1 ||
-                    _catchUpContinueRound > 0;
+                bool catchUpActive = IsHistoryCatchUpActive();
                 if (firstRelease || catchUpActive)
                 {
                     LogHistoryFreshnessAfterOfflineDrain(offlineCount);

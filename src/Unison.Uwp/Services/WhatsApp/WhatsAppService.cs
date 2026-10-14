@@ -671,10 +671,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private CancellationTokenSource _deferredProfilePictureResolutionCts;
         private DateTime _lastFreshnessReconnectFallbackUtc = DateTime.MinValue;
         private volatile bool _freshnessReconnectFallbackInProgress = false;
-        /// <summary>Newest tip watermark when the last catch-up continue was decided.</summary>
-        private DateTime _catchUpWatermarkUtc = DateTime.MinValue;
-        private int _catchUpContinueRound;
-        private int _catchUpStagnantCycles;
+        private readonly HistoryCatchUpContinuation _catchUp = new HistoryCatchUpContinuation();
         private DateTime _lastCatchUpContinueUtc = DateTime.MinValue;
         // Default retry delay for the deferred background-resolution pass (names+avatars+groups).
         private static readonly TimeSpan AvatarFetchNextBatchDelay = TimeSpan.FromSeconds(20);
@@ -2310,8 +2307,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 // request-cleared before DecideCatchUpAfterIdleBatch could solicit the next
                 // page, so only one bounce ever ran. Hand the lot to the continue decision
                 // instead (same path as idle/hard-timeout).
-                bool catchUpBanner = Volatile.Read(ref _historyCatchUpBannerActive) == 1 ||
-                                     _catchUpContinueRound > 0;
+                bool catchUpBanner = IsHistoryCatchUpActive();
                 bool handOffCatchUp = _historyRequests.TryHandOffQuietLot(
                     catchUpBanner,
                     out string lotRequestId,
@@ -3695,20 +3691,17 @@ namespace Unison.Uwp.Services.WhatsApp
             int idleMs)
         {
             DateTime newestUtc = GetNewestStoredMessageUtc();
-            DateTime watermarkUtc = _catchUpWatermarkUtc;
             string staleReason;
             bool stillStale = TryGetHistoryFreshnessStaleReason(DateTime.UtcNow, out staleReason);
             int stagnantStop = CatchUpStagnantCyclesBeforeStop;
 
-            HistoryCatchUpContinueResult decision = HistoryCatchUpContinueDecision.Decide(
+            HistoryCatchUpContinueResult decision = _catchUp.DecideAfterQuietLot(
                 newestUtc,
-                watermarkUtc,
                 progressSignals,
                 stillStale,
-                _catchUpStagnantCycles,
                 stagnantStop,
-                _catchUpContinueRound,
-                CatchUpContinueMaxRounds);
+                CatchUpContinueMaxRounds,
+                out HistoryCatchUpProgress before);
 
             RuntimeDiagnosticsService.Instance.Write(
                 "history",
@@ -3721,9 +3714,9 @@ namespace Unison.Uwp.Services.WhatsApp
                 "; tipAdvanced=" + decision.TipAdvanced +
                 "; madeProgress=" + decision.MadeProgress +
                 "; newest=" + FormatFreshnessTimestamp(newestUtc) +
-                "; watermark=" + FormatFreshnessTimestamp(watermarkUtc) +
-                "; round=" + _catchUpContinueRound +
-                "; stagnant=" + _catchUpStagnantCycles +
+                "; watermark=" + FormatFreshnessTimestamp(before.WatermarkUtc) +
+                "; round=" + before.Round +
+                "; stagnant=" + before.StagnantCycles +
                 "; stagnantStop=" + stagnantStop +
                 "; frugal=" + UseFrugalSyncBudget +
                 "; action=" + decision.Action +
@@ -3736,14 +3729,11 @@ namespace Unison.Uwp.Services.WhatsApp
                 ", madeProgress=" + decision.MadeProgress +
                 ", signals=" + progressSignals +
                 ", newest=" + FormatFreshnessTimestamp(newestUtc) +
-                ", watermark=" + FormatFreshnessTimestamp(watermarkUtc) +
-                ", round=" + _catchUpContinueRound +
-                ", stagnant=" + _catchUpStagnantCycles +
+                ", watermark=" + FormatFreshnessTimestamp(before.WatermarkUtc) +
+                ", round=" + before.Round +
+                ", stagnant=" + before.StagnantCycles +
                 "/" + stagnantStop +
                 ", action=" + decision.Action);
-
-            _catchUpStagnantCycles = decision.NextStagnantCycles;
-            _catchUpWatermarkUtc = decision.NextWatermarkUtc;
 
             switch (decision.Action)
             {
@@ -3760,15 +3750,14 @@ namespace Unison.Uwp.Services.WhatsApp
                     return;
             }
 
-            _catchUpContinueRound = decision.NextContinueRound;
             // Insist on the next FULL_HISTORY page on the live socket. Soft-reconnect alone does
             // not solicit history — and a reconnect with an empty offline buffer never re-enters
             // LogHistoryFreshnessAfterOfflineDrain in a way that asks again.
             _ = RequestAdjacentFullHistoryCatchUpAsync(
                 "idle-continue:requestId=" + (requestId ?? string.Empty) +
                 ":ackAccepted=" + ackAccepted +
-                ":round=" + _catchUpContinueRound +
-                ":stagnant=" + _catchUpStagnantCycles +
+                ":round=" + decision.NextContinueRound +
+                ":stagnant=" + decision.NextStagnantCycles +
                 ":signals=" + progressSignals +
                 ":newest=" + FormatFreshnessTimestamp(newestUtc));
         }
@@ -3783,8 +3772,7 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 await Task.Delay(CatchUpContinueReconnectDelay).ConfigureAwait(false);
 
-                if (Volatile.Read(ref _historyCatchUpBannerActive) == 0 &&
-                    _catchUpContinueRound <= 0)
+                if (!IsHistoryCatchUpActive())
                 {
                     Debug.WriteLine(
                         "[WhatsAppService] Adjacent FULL_HISTORY skipped; catch-up already finished (" +
@@ -3808,7 +3796,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         "history",
                         "catch-up-adjacent-live",
                         "reason=" + (reason ?? string.Empty) +
-                        "; round=" + _catchUpContinueRound);
+                        "; round=" + _catchUp.Snapshot().Round);
 
                     bool ok = await RequestFullHistoryOnDemandTrackedAsync(
                         reason,
@@ -3837,19 +3825,21 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
+        private bool IsHistoryCatchUpActive()
+        {
+            return _catchUp.IsActive(Volatile.Read(ref _historyCatchUpBannerActive) == 1);
+        }
+
         private void FinishHistoryCatchUpContinue(string reason, bool releaseEnrichment)
         {
+            HistoryCatchUpProgress last = _catchUp.Finish();
             RuntimeDiagnosticsService.Instance.Write(
                 "history",
                 "catch-up-finish",
                 "reason=" + (reason ?? string.Empty) +
-                "; rounds=" + _catchUpContinueRound +
-                "; stagnant=" + _catchUpStagnantCycles +
-                "; watermark=" + FormatFreshnessTimestamp(_catchUpWatermarkUtc));
-
-            _catchUpContinueRound = 0;
-            _catchUpStagnantCycles = 0;
-            _catchUpWatermarkUtc = DateTime.MinValue;
+                "; rounds=" + last.Round +
+                "; stagnant=" + last.StagnantCycles +
+                "; watermark=" + FormatFreshnessTimestamp(last.WatermarkUtc));
 
             EndHistoryCatchUpBanner(reason ?? "catch-up-finish");
             if (!releaseEnrichment)
@@ -3917,7 +3907,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 "history",
                 "catch-up-continue-reconnect",
                 "trigger=" + (triggerReason ?? string.Empty) +
-                "; round=" + _catchUpContinueRound +
+                "; round=" + _catchUp.Snapshot().Round +
                 "; delayMs=" + (int)CatchUpContinueReconnectDelay.TotalMilliseconds);
 
             Debug.WriteLine(
@@ -3942,8 +3932,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
                     // Mid catch-up: tip freshness must not cancel soft-reconnect. Older history
                     // lots do not move the newest tip; aborting here stops pagination.
-                    bool catchUpActive = Volatile.Read(ref _historyCatchUpBannerActive) == 1 ||
-                                         _catchUpContinueRound > 0;
+                    bool catchUpActive = IsHistoryCatchUpActive();
                     if (tipLooksFresh && !catchUpActive)
                     {
                         FinishHistoryCatchUpContinue("fresh-before-continue", releaseEnrichment: true);
@@ -4341,8 +4330,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 Debug.WriteLine($"[WhatsAppService] Post-offline freshness note: history sync observed this session at {_lastHistorySyncReceivedUtc:O} (type={(_lastHistorySyncTypeReceived?.ToString() ?? "<unknown>")}); freshness is evaluated by newest stored message age.");
             }
 
-            bool catchUpActive = Volatile.Read(ref _historyCatchUpBannerActive) == 1 ||
-                                 _catchUpContinueRound > 0;
+            bool catchUpActive = IsHistoryCatchUpActive();
 
             if (catchUpActive && offlineCount > 0)
             {
@@ -4364,28 +4352,29 @@ namespace Unison.Uwp.Services.WhatsApp
                 {
                     Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 1);
 
-                    if (offlineCount > 0)
+                    int stagnantStop = CatchUpStagnantCyclesBeforeStop;
+                    HistoryCatchUpDrainAction drain = _catchUp.DecideAfterFreshDrain(
+                        offlineCount,
+                        stagnantStop,
+                        out int stagnantCycles);
+                    if (drain == HistoryCatchUpDrainAction.Continue)
                     {
-                        _catchUpStagnantCycles = 0;
                         _ = RequestReconnectHistoryCatchUpAsync(
                             "catch-up-continue-offline:" + offlineCount);
                         return;
                     }
 
-                    _catchUpStagnantCycles++;
-                    int stagnantStop = CatchUpStagnantCyclesBeforeStop;
                     Debug.WriteLine(
                         "[WhatsAppService] Catch-up offline drain empty while tip fresh; stagnant=" +
-                        _catchUpStagnantCycles + "/" + stagnantStop);
-                    if (_catchUpStagnantCycles >= stagnantStop)
+                        stagnantCycles + "/" + stagnantStop);
+                    if (drain == HistoryCatchUpDrainAction.Finish)
                     {
                         FinishHistoryCatchUpContinue("offline-fresh-empty", releaseEnrichment: true);
                         return;
                     }
 
-                    // One more FULL_HISTORY try — empty offline buffer ≠ phone finished history.
                     _ = RequestReconnectHistoryCatchUpAsync(
-                        "catch-up-retry-empty:" + _catchUpStagnantCycles);
+                        "catch-up-retry-empty:" + stagnantCycles);
                     return;
                 }
 
@@ -4409,8 +4398,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 // Short settle for both budgets — disk avatars/list paint first, then ask the
                 // server. Manual wipe / user resync still goes through
                 // RequestFullHistoryOnDemandTrackedAsync directly and skips this floor.
-                bool catchUpActive = Volatile.Read(ref _historyCatchUpBannerActive) == 1 ||
-                                     _catchUpContinueRound > 0;
+                bool catchUpActive = IsHistoryCatchUpActive();
                 bool quiet = await WaitForStartupQuietAsync(
                     TimeSpan.FromSeconds(1.5),
                     "full-history-catchup-floor",
