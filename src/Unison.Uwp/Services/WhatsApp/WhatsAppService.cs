@@ -43,7 +43,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IMediaDownloadHost, IAvatarReport, IOfflineReplayHost, IPlaceholderResendSocket
+    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IMediaDownloadHost, IAvatarReport, IOfflineReplayHost, IPlaceholderResendSocket, IHistoryOnDemandSocket
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -1065,6 +1065,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly MessageIdIndex _messageIdIndex = new MessageIdIndex();
         /// <summary>Per-chat and full-history requests sent and still owed.</summary>
         private readonly HistoryOnDemandRegistry _historyRequests = new HistoryOnDemandRegistry();
+        private HistoryOnDemandDispatch _historyDispatch;
         private DateTime _lastHistorySyncReceivedUtc = DateTime.MinValue;
         private Proto.HistorySync.Types.HistorySyncType? _lastHistorySyncTypeReceived = null;
         private DateTime _lastFullHistoryRepairCompletedUtc = DateTime.MinValue;
@@ -3467,16 +3468,6 @@ namespace Unison.Uwp.Services.WhatsApp
             return null;
         }
 
-        private static long ToUnixMilliseconds(DateTime timestamp)
-        {
-            if (timestamp.Kind == DateTimeKind.Unspecified)
-            {
-                timestamp = DateTime.SpecifyKind(timestamp, DateTimeKind.Local);
-            }
-
-            return new DateTimeOffset(timestamp).ToUnixTimeMilliseconds();
-        }
-
         /// <summary>
         /// Watches an accepted FULL_HISTORY request and aborts only after a stretch with
         /// no catch-up progress (tips / SQLite chunks / offline apply). Progress resets
@@ -4129,65 +4120,40 @@ namespace Unison.Uwp.Services.WhatsApp
             return RequestHistoryOnDemandIfNeededAsync(normJid, count);
         }
 
-        private async Task<bool> RequestHistoryOnDemandIfNeededAsync(string normJid, int count, string triggerReason = null)
+        private HistoryOnDemandDispatch HistoryDispatch =>
+            _historyDispatch ??= new HistoryOnDemandDispatch(
+                _historyRequests,
+                this,
+                line => Debug.WriteLine("[WhatsAppService] " + line));
+
+        bool IHistoryOnDemandSocket.IsReady => _socket != null && _socket.IsHandshakeComplete;
+
+        string IHistoryOnDemandSocket.GenerateMessageId() => _socket.GenerateMessageId();
+
+        Task<string> IHistoryOnDemandSocket.RequestChatHistoryAsync(
+            string chatJid,
+            string oldestMessageId,
+            bool oldestFromMe,
+            long oldestTimestampMs,
+            int count,
+            string stanzaId) =>
+            _socket.RequestHistorySyncOnDemandAsync(
+                chatJid,
+                oldestMessageId,
+                oldestFromMe,
+                oldestTimestampMs,
+                count,
+                stanzaId);
+
+        private Task<bool> RequestHistoryOnDemandIfNeededAsync(string normJid, int count, string triggerReason = null)
         {
-            if (string.IsNullOrWhiteSpace(normJid) || _socket == null || !_socket.IsHandshakeComplete)
+            if (string.IsNullOrWhiteSpace(normJid) ||
+                !MessagesByChat.TryGet(normJid, out var cached))
             {
-                return false;
+                return Task.FromResult(false);
             }
 
-            if (!MessagesByChat.TryGet(normJid, out var cached) || cached == null || cached.Count == 0)
-            {
-                return false;
-            }
-
-            var oldest = cached[0];
-            if (oldest == null || string.IsNullOrWhiteSpace(oldest.Id))
-            {
-                return false;
-            }
-
-            string marker = $"{oldest.Id}|{oldest.IsFromMe}|{ToUnixMilliseconds(oldest.Timestamp)}";
-            HistoryOnDemandChatGate gate = _historyRequests.TryBeginChat(normJid, marker, DateTime.UtcNow, out DateTime rejectedUntilUtc);
-            if (gate == HistoryOnDemandChatGate.BackedOff)
-            {
-                Debug.WriteLine($"[WhatsAppService] HISTORY_SYNC_ON_DEMAND skipped for {normJid}: backoff active until {rejectedUntilUtc:O}");
-            }
-
-            if (gate != HistoryOnDemandChatGate.Started)
-            {
-                return false;
-            }
-
-            string requestId = null;
-            try
-            {
-                requestId = _socket.GenerateMessageId();
-                int baselineCount = (MessagesByChat.TryGet(normJid, out var msgList) && msgList != null) ? msgList.Count : 0;
-                _historyRequests.RegisterChat(normJid, requestId, marker, baselineCount, triggerReason, DateTime.UtcNow);
-
-                string sentRequestId = await _socket.RequestHistorySyncOnDemandAsync(
-                    normJid,
-                    oldest.Id,
-                    oldest.IsFromMe,
-                    ToUnixMilliseconds(oldest.Timestamp),
-                    count,
-                    requestId);
-                if (!string.Equals(sentRequestId, requestId, StringComparison.Ordinal))
-                {
-                    Debug.WriteLine($"[WhatsAppService] HISTORY_SYNC_ON_DEMAND stanza id changed unexpectedly: tracked={requestId}, sent={sentRequestId}");
-                }
-
-                Debug.WriteLine($"[WhatsAppService] Requested HISTORY_SYNC_ON_DEMAND for {normJid} (requestId={requestId}, oldestId={oldest.Id}, baseline={baselineCount}, trigger={triggerReason ?? "unspecified"})");
-
-                return true;
-            }
-            catch (Exception ex)
-            {
-                _historyRequests.FailChat(normJid, requestId);
-                Debug.WriteLine($"[WhatsAppService] HISTORY_SYNC_ON_DEMAND request failed for {normJid}: {ex.Message}");
-                return false;
-            }
+            return HistoryDispatch.RequestChatPageAsync(normJid, cached, count, triggerReason, DateTime.UtcNow);
         }
 
         private async Task<bool> RequestFullHistoryOnDemandTrackedAsync(string reason, bool isFreshnessRepair)

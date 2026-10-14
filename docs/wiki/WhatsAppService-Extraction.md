@@ -891,8 +891,14 @@ written from the watchdog, the SQLite finalizer and the offline-drain callback; 
 reads and updates them under one lock, and `catch-up-finish` logs the values it reset rather than
 re-reading them.
 
-**Next slice:** the request / watchdog / timeout orchestration onto `HistoryFacade` behind a host
-port. The two soft-reconnect fallbacks stay in the client — they are connection lifecycle (phase 4).
+**Slice 3 is in steps.** *Chat page request:* `HistoryOnDemandDispatch` (`Unison.Core/State`)
+sends the per-chat `HISTORY_SYNC_ON_DEMAND` over `IHistoryOnDemandSocket`, which the client
+implements explicitly (the `PlaceholderResendDispatch` pattern). Anchor, gate, register, send and
+give-the-slot-back-on-throw are one tested method; the client only hands it the timeline.
+`UnixTime.ToMilliseconds` replaced the client's private copy.
+
+**Next in slice 3:** the full-history request, then the watchdog / timeout onto `HistoryFacade`
+behind a host port. The two soft-reconnect fallbacks stay in the client — they are connection lifecycle (phase 4).
 
 ### Phase 4 — What remains is connection
 
