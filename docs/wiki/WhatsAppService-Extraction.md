@@ -515,6 +515,12 @@ client removed or cleared a timeline already dropped its ids by hand, and replac
 them; `Remove`, `Clear`, `Set` and `MergeInto` do that themselves now, and `KnownIds` builds the set
 lazily from the timeline. Direct list edits (insert, trim, page load) still register or rebuild.
 
+*Initial load window — fifth sighting, fixed:* `LoadInitialMessagesAsync` still carried its own copy of
+the window rule, with both defects `ActiveChatMessageWindow` had already had fixed: raw `DateTime`
+ordering (live `Utc` rows against SQLite `Unspecified` ones, off by the local offset) and id-less
+messages grouped on a fresh `Guid`. It sorts through `ChatMessageOrder` and trims through
+`ActiveChatMessageWindow.TrimInPlace` now.
+
 ### 3.4 — send moved to `MessageFacade`
 
 The flow left the client whole, and it lives in Core, so the suite reaches it now. `OutgoingTextSend`

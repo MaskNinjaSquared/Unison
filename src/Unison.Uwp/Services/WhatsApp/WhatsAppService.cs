@@ -3011,26 +3011,9 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
                 merged.AddRange(byId.Values);
-                var cache = merged
-                    .OrderBy(m => m.Timestamp)
-                    .ThenBy(m => m.Id ?? string.Empty, StringComparer.Ordinal)
-                    .ToList();
-
-                if (cache.Count > MaxActiveChatMessagesInMemory)
-                {
-                    DateTime nowUtc = DateTime.UtcNow;
-                    var activePinned = cache.Where(m => m.IsPinned &&
-                        (!m.PinExpiresAtUtc.HasValue || m.PinExpiresAtUtc.Value > nowUtc)).ToList();
-                    var pinnedIds = new HashSet<string>(activePinned.Where(m => !string.IsNullOrWhiteSpace(m.Id)).Select(m => m.Id), StringComparer.Ordinal);
-                    cache = activePinned
-                        .Concat(cache.Where(m => string.IsNullOrWhiteSpace(m.Id) || !pinnedIds.Contains(m.Id))
-                            .OrderByDescending(m => m.Timestamp)
-                            .Take(Math.Max(0, MaxActiveChatMessagesInMemory - activePinned.Count)))
-                        .GroupBy(m => m.Id ?? Guid.NewGuid().ToString(), StringComparer.Ordinal)
-                        .Select(g => g.First())
-                        .OrderBy(m => m.Timestamp)
-                        .ToList();
-                }
+                var cache = merged;
+                ChatMessageOrder.SortInPlace(cache);
+                ActiveChatMessageWindow.TrimInPlace(cache, MaxActiveChatMessagesInMemory, DateTime.UtcNow);
 
                 var stateAdjustedMessages = new List<ChatMessage>();
                 foreach (var message in cache)
