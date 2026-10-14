@@ -1067,6 +1067,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly HistoryOnDemandRegistry _historyRequests;
         private HistoryOnDemandDispatch _historyDispatch;
         private HistoryCatchUpWatchdog _catchUpWatchdog;
+        private HistoryOnDemandTimeout _historyRequestTimeout;
         private DateTime _lastHistorySyncReceivedUtc = DateTime.MinValue;
         private Proto.HistorySync.Types.HistorySyncType? _lastHistorySyncTypeReceived = null;
         private DateTime _lastFullHistoryRepairCompletedUtc = DateTime.MinValue;
@@ -3549,20 +3550,13 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private void ScheduleAcceptedHistoryRequestTimeout(HistoryOnDemandRequest state)
         {
-            if (state == null || string.IsNullOrWhiteSpace(state.RequestId))
-            {
-                return;
-            }
-
-            if (!_historyRequests.TryArmTimeout(state))
+            if (!HistoryRequestTimeout.TryArm(state, out Task<HistoryOnDemandRequest> expiry))
             {
                 return;
             }
 
             bool isFullHistory = state.Kind == HistoryOnDemandKind.FullHistory;
-            TimeSpan timeout = isFullHistory
-                ? FullHistoryOnDemandResponseTimeout
-                : HistoryOnDemandResponseTimeout;
+            TimeSpan timeout = HistoryRequestTimeout.WindowFor(state);
 
             if (isFullHistory)
             {
@@ -3571,9 +3565,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             _ = Task.Run(async () =>
             {
-                await Task.Delay(timeout);
-
-                HistoryOnDemandRequest expired = _historyRequests.TryExpire(state);
+                HistoryOnDemandRequest expired = await expiry;
                 if (expired == null)
                 {
                     return;
@@ -4084,6 +4076,12 @@ namespace Unison.Uwp.Services.WhatsApp
                 _historyRequests,
                 FullHistoryCatchUpProgressPoll,
                 FullHistoryCatchUpIdleAbort);
+
+        private HistoryOnDemandTimeout HistoryRequestTimeout =>
+            _historyRequestTimeout ??= new HistoryOnDemandTimeout(
+                _historyRequests,
+                HistoryOnDemandResponseTimeout,
+                FullHistoryOnDemandResponseTimeout);
 
         private HistoryOnDemandDispatch HistoryDispatch =>
             _historyDispatch ??= new HistoryOnDemandDispatch(

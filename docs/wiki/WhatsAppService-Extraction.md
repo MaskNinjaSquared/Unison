@@ -914,8 +914,15 @@ the client (acks, timeouts, load-more) and the façade. `EnsureChatPageAsync` /
 `IWhatsAppService`. Load-more still asks from the client, because it carries the trigger reason
 the façade does not.
 
-**Next in slice 3:** the accepted-request timeout. The two soft-reconnect fallbacks stay in the
-client — they are connection lifecycle (phase 4).
+*Accepted-request timeout:* `HistoryOnDemandTimeout` (`Unison.Core/State`) arms once per request,
+picks the chat or full-history window, waits (delay injectable) and expires the request only if it
+is still current, handing back the expired copy — null when the phone answered in time. The client
+keeps the `Task.Run`, the timeout log, the `catch-up-hard-timeout` journal line and the hand-off
+to `DecideCatchUpAfterIdleBatch`.
+
+**Next in slice 3:** the side effects around `DecideCatchUpAfterIdleBatch` /
+`RequestAdjacentFullHistoryCatchUpAsync`. The two soft-reconnect fallbacks stay in the client —
+they are connection lifecycle (phase 4).
 
 ### Phase 4 — What remains is connection
 
