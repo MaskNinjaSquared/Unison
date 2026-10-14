@@ -868,6 +868,10 @@ which does not scan alt JIDs — a group message carrying its sender only there 
 in SQLite. Unifying them is a behaviour change and waits for a device check. `ResolveHistorySenderName`
 left with it: it had no caller.
 
+The newest message time history freshness reads is `NewestStoredMessage.FindUtc` over the timeline
+snapshot and the list strip (cold start has tips but no timelines), each value through
+`ChatMessageOrder.ToComparableUtc`. The client passes `MessagesByChat` and `Chats` and its filters.
+
 ### History on demand — the bookkeeping left first
 
 The on-demand history cluster (per-chat `HISTORY_SYNC_ON_DEMAND`, the paginated

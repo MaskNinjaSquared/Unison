@@ -1257,68 +1257,8 @@ namespace Unison.Uwp.Services.WhatsApp
             return GetNewestStoredMessageUtc(null);
         }
 
-        private DateTime GetNewestStoredMessageUtc(Func<string, bool> includeChat)
-        {
-            DateTime newest = DateTime.MinValue;
-            foreach (var kvp in MessagesByChat.Snapshot())
-            {
-                string chatJid = NormalizeJid(kvp.Key);
-                if (includeChat != null && !includeChat(chatJid))
-                {
-                    continue;
-                }
-
-                var chatMessages = kvp.Value;
-                if (chatMessages == null)
-                {
-                    continue;
-                }
-
-                foreach (var message in chatMessages)
-                {
-                    if (message == null)
-                    {
-                        continue;
-                    }
-
-                    DateTime candidate = ToComparableUtc(message.Timestamp);
-                    if (candidate > newest)
-                    {
-                        newest = candidate;
-                    }
-                }
-            }
-
-            // Cold start: MessagesByChat is often empty until a chat is opened. The list strip
-            // already carries Last Message times from SQLite — use them so reconnect freshness
-            // is not permanently "no-stored-messages".
-            var chats = Chats;
-            if (chats != null)
-            {
-                for (int i = 0; i < chats.Count; i++)
-                {
-                    ChatItem chat = chats[i];
-                    if (chat == null || !chat.LastMessageTimestampUtc.HasValue)
-                    {
-                        continue;
-                    }
-
-                    string chatJid = NormalizeJid(chat.JID);
-                    if (includeChat != null && !includeChat(chatJid))
-                    {
-                        continue;
-                    }
-
-                    DateTime candidate = ToComparableUtc(chat.LastMessageTimestampUtc.Value);
-                    if (candidate > newest)
-                    {
-                        newest = candidate;
-                    }
-                }
-            }
-
-            return newest;
-        }
+        private DateTime GetNewestStoredMessageUtc(Func<string, bool> includeChat) =>
+            NewestStoredMessage.FindUtc(MessagesByChat.Snapshot(), Chats, includeChat);
 
         private static string FormatFreshnessTimestamp(DateTime timestamp)
         {
