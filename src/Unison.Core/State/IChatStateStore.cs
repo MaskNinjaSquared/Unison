@@ -58,6 +58,12 @@ namespace Unison.Core.State
 
         Task RemoveMessageAsync(string chatJid, string messageId);
 
+        /// <summary>
+        /// Announces that a conversation's messages changed through a path other than this
+        /// contract, so subscribers see it the same way. Blank addresses are ignored.
+        /// </summary>
+        void NotifyMessagesChanged(string chatJid);
+
         /// <summary>Best known display name for a JID, or null when nothing is known yet.</summary>
         string ResolveDisplayName(string jid);
 

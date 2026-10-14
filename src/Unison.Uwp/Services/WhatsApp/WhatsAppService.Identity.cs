@@ -53,7 +53,7 @@ namespace Unison.Uwp.Services.WhatsApp
         public void RaiseDisplayNamesUpdated()
         {
             OnDisplayNamesUpdated?.Invoke(this, EventArgs.Empty);
-            _chatState.NotifyChangedExternally(null);
+            _chatState.NotifyDisplayNamesChanged();
         }
 
         private void RegisterSocketAlias(string jidA, string jidB, string source)

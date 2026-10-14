@@ -185,7 +185,7 @@ Self-contained first. List/persist last.
 | 3.7b | Converge onto `LidMappingStore` | Blocked: that store is async, canonicalization is not. See below |
 | 3.8 | `.AppState.cs` | **Rewritten — the premise was stale.** See below |
 | 3.9a | List display order (done) | `ChatDisplayOrder` (Core) |
-| 3.9b | `.Persistence.cs` + preview reconcile + the appliers from 3.8 | `ChatFacade` + `ChatStateStore` + `IChatStore` / `IMessageStore`. Close the transitional public dictionaries on `ChatStateStore`. **Persistence rules out; appliers remain — see below.** **Name maps closed (`DisplayNameTable`). `MessagesByChat` is `ChatMessageCache` (conversation set locked) and owns every edit to the per-chat lists — merge, key canonicalization, insert, trim, add-missing, id index; the client only reads them.** **Repeated list-strip assembly is `ChatListStrip`. Phone-digit lookup is `KnownJidByPhoneDigits`. Delete/persist I/O stays** |
+| 3.9b | `.Persistence.cs` + preview reconcile + the appliers from 3.8 | `ChatFacade` + `ChatStateStore` + `IChatStore` / `IMessageStore`. Close the transitional public dictionaries on `ChatStateStore`. **Persistence rules out; appliers remain — see below.** **Name maps closed (`DisplayNameTable`). `MessagesByChat` is `ChatMessageCache` (conversation set locked) and owns every edit to the per-chat lists — merge, key canonicalization, insert, trim, add-missing, upsert, remove, id index; the client only reads them. `NotifyChangedExternally` closed; `MessagesByChat` has one reader left (the client).** **Repeated list-strip assembly is `ChatListStrip`. Phone-digit lookup is `KnownJidByPhoneDigits`. Delete/persist I/O stays** |
 | 3.10 | `.IncomingPump.cs` | Decode/dispatch stays with connection. **Rules closed.** **Notify + timeline accept + persist enqueue + revoke + pin-in-chat on MessageFacade.** **Live + offline list apply + tip refresh/reconcile on ChatFacade.** **Resend row transitions on `MissingMessageLedger`.** **Queue lanes, generation and stage on `IncomingMessageQueue<T>`.** **Offline replay tips on ChatFacade.** **Timeline accept (alias move / duplicate / insert) on `IncomingTimeline`.** **Resend wait / send / answer window on `PlaceholderResendDispatch`.** Pump keeps the drain loop and the go/no-go before a resend |
 
 **3.1a is done.** The avatar half of `MediaCache` is `IAvatarCache` / `AvatarCacheService`: `TryGet`,
@@ -926,6 +926,18 @@ Folding every non-canonical message-cache key into its conversation is
 `ChatMessageCache.CanonicalizeKeys` (5 tests). `DeduplicateChatsAsync` walked `ChatJids()` and called
 `MergeInto` per key by hand; it now passes `GetCanonicalJid` and takes the count back. A blank
 canonical form leaves the key alone, and an alias holding no list is not counted, as before.
+
+*The store's own message writes:* `ChatStateStore.UpsertMessagesAsync` and `RemoveMessageAsync` edited
+the lists by hand, bypassing the cache — no id index, and a raw `DateTime` sort (the sixth sighting).
+They go through `ChatMessageCache.Upsert` / `.RemoveMessage` now, which sort through `ChatMessageOrder`
+and keep `Ids` in step. Neither has a caller yet; they are what a façade will write through.
+
+*Transitional seams closed:* `NotifyChangedExternally` is gone. Its two callers wanted two different
+things behind one null check — the client's message-change relay now calls the new
+`IChatStateStore.NotifyMessagesChanged`, and `RaiseDisplayNamesUpdated` calls the existing
+`NotifyDisplayNamesChanged`. `HistoryFacade` reads the timeline through `GetMessages` (a snapshot
+rather than the live list it used to hand to an async request) and takes `IChatStateStore`.
+`MessagesByChat` is the last transitional member, and the client is its only reader.
 
 Filtering a candidate for the account's own name is `SelfNameCandidate` (marker through
 `ISelfMarkerNaming`, as `ContactLabelSanitizer` does). Fixed on the way: the self path compared the

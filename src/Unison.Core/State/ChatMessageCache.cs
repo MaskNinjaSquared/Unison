@@ -156,6 +156,74 @@ namespace Unison.Core.State
         }
 
         /// <summary>
+        /// Replaces messages already held under the same id and appends the rest, then sorts and
+        /// rebuilds the id index. Id-less messages are always appended.
+        /// </summary>
+        /// <returns>False when nothing was written.</returns>
+        public bool Upsert(string chatJid, IEnumerable<ChatMessage> messages)
+        {
+            if (string.IsNullOrEmpty(chatJid) || messages == null)
+            {
+                return false;
+            }
+
+            List<ChatMessage> list = null;
+            foreach (ChatMessage message in messages)
+            {
+                if (message == null)
+                {
+                    continue;
+                }
+
+                if (list == null)
+                {
+                    list = GetOrAdd(chatJid);
+                }
+
+                int index = IndexOfMessage(list, message.Id);
+                if (index >= 0)
+                {
+                    list[index] = message;
+                }
+                else
+                {
+                    list.Add(message);
+                }
+            }
+
+            if (list == null)
+            {
+                return false;
+            }
+
+            ChatMessageOrder.SortInPlace(list);
+            Ids.Rebuild(chatJid, list);
+            return true;
+        }
+
+        /// <summary>Drops the message with this id and forgets the id.</summary>
+        /// <returns>False when the conversation does not hold it.</returns>
+        public bool RemoveMessage(string chatJid, string messageId)
+        {
+            if (string.IsNullOrEmpty(messageId) ||
+                !TryGet(chatJid, out List<ChatMessage> list) ||
+                list == null)
+            {
+                return false;
+            }
+
+            int index = IndexOfMessage(list, messageId);
+            if (index < 0)
+            {
+                return false;
+            }
+
+            list.RemoveAt(index);
+            Ids.Remove(chatJid, messageId);
+            return true;
+        }
+
+        /// <summary>
         /// Folds every conversation held under a non-canonical key into the one
         /// <paramref name="canonicalOf"/> names, through <see cref="MergeInto"/>. A key whose
         /// canonical form is blank is left where it is.
@@ -317,6 +385,24 @@ namespace Unison.Core.State
 
                 return pairs;
             }
+        }
+
+        private static int IndexOfMessage(List<ChatMessage> list, string id)
+        {
+            if (string.IsNullOrEmpty(id))
+            {
+                return -1;
+            }
+
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (string.Equals(list[i]?.Id, id, StringComparison.Ordinal))
+                {
+                    return i;
+                }
+            }
+
+            return -1;
         }
     }
 }

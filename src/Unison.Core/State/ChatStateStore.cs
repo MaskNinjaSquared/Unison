@@ -58,9 +58,9 @@ namespace Unison.Core.State
         //
         // The point of the exercise is already served: the state lives here, so a
         // view model can be pointed at this store without waiting for the class
-        // that used to own it. MessagesByChat and NotifyChangedExternally disappear
-        // with the last direct access - they are not part of IChatStateStore for
-        // that reason. The two name tables lock on their own and are not transitional.
+        // that used to own it. MessagesByChat disappears with the last direct access
+        // - it is not part of IChatStateStore for that reason, and WhatsAppService is
+        // its only reader. The two name tables lock on their own and are not transitional.
         //
         // One caveat while MessagesByChat exists. It locks which conversations exist,
         // but the lists inside are edited in place without _gate, so the snapshot the
@@ -95,20 +95,14 @@ namespace Unison.Core.State
             get { return _addressBookNames; }
         }
 
-        /// <summary>
-        /// Transitional: lets a direct writer announce what it changed, so subscribers see the
-        /// same events they will see once every write goes through this class.
-        /// </summary>
-        public void NotifyChangedExternally(string chatJid)
+        public void NotifyMessagesChanged(string chatJid)
         {
-            if (string.IsNullOrEmpty(chatJid))
+            if (string.IsNullOrWhiteSpace(chatJid))
             {
-                RaiseDisplayNamesChanged();
+                return;
             }
-            else
-            {
-                RaiseMessagesChanged(chatJid);
-            }
+
+            RaiseMessagesChanged(chatJid);
         }
 
         public ChatItem FindChat(string jid)
@@ -224,36 +218,10 @@ namespace Unison.Core.State
                 return Task.FromResult(true);
             }
 
-            var changed = false;
-
+            bool changed;
             lock (_gate)
             {
-                List<ChatMessage> list = _messagesByChat.GetOrAdd(chatJid);
-
-                foreach (var message in messages)
-                {
-                    if (message == null)
-                    {
-                        continue;
-                    }
-
-                    var index = IndexOfMessage(list, message.Id);
-                    if (index >= 0)
-                    {
-                        list[index] = message;
-                    }
-                    else
-                    {
-                        list.Add(message);
-                    }
-
-                    changed = true;
-                }
-
-                if (changed)
-                {
-                    list.Sort(CompareByTimestamp);
-                }
+                changed = _messagesByChat.Upsert(chatJid, messages);
             }
 
             if (changed)
@@ -271,20 +239,10 @@ namespace Unison.Core.State
                 return Task.FromResult(true);
             }
 
-            var changed = false;
-
+            bool changed;
             lock (_gate)
             {
-                List<ChatMessage> list;
-                if (_messagesByChat.TryGet(chatJid, out list) && list != null)
-                {
-                    var index = IndexOfMessage(list, messageId);
-                    if (index >= 0)
-                    {
-                        list.RemoveAt(index);
-                        changed = true;
-                    }
-                }
+                changed = _messagesByChat.RemoveMessage(chatJid, messageId);
             }
 
             if (changed)
@@ -406,29 +364,6 @@ namespace Unison.Core.State
             {
                 handler(this, chatJid);
             }
-        }
-
-        private static int IndexOfMessage(List<ChatMessage> list, string id)
-        {
-            if (string.IsNullOrEmpty(id))
-            {
-                return -1;
-            }
-
-            for (var i = 0; i < list.Count; i++)
-            {
-                if (string.Equals(list[i].Id, id, StringComparison.Ordinal))
-                {
-                    return i;
-                }
-            }
-
-            return -1;
-        }
-
-        private static int CompareByTimestamp(ChatMessage left, ChatMessage right)
-        {
-            return left.Timestamp.CompareTo(right.Timestamp);
         }
 
         /// <summary>

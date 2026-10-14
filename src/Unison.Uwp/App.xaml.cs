@@ -296,7 +296,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ILocalSettings>(),
                 sp.GetRequiredService<HistoryOnDemandRegistry>(),
                 sp.GetRequiredService<IHistoryOnDemandSocket>(),
-                sp.GetRequiredService<ChatStateStore>(),
+                sp.GetRequiredService<IChatStateStore>(),
                 sp.GetRequiredService<IHistoryChatPreviewStore>(),
                 sp.GetRequiredService<IHistoryMigrationStore>(),
                 sp.GetRequiredService<IHistoryMessageStore>(),

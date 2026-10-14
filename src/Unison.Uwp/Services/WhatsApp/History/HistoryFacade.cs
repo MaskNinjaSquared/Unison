@@ -64,7 +64,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
         private readonly IStringResources _strings;
         private readonly HistoryOnDemandRegistry _onDemandRequests;
         private readonly HistoryOnDemandDispatch _onDemand;
-        private readonly ChatStateStore _chatState;
+        private readonly IChatStateStore _chatState;
 
         /// <summary>
         /// Session-scoped: one toast after repeated background history lots. Not reset until
@@ -81,7 +81,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
             ILocalSettings settings,
             HistoryOnDemandRegistry onDemandRequests,
             IHistoryOnDemandSocket onDemandSocket,
-            ChatStateStore chatState,
+            IChatStateStore chatState,
             IHistoryChatPreviewStore chatPreviewStore = null,
             IHistoryMigrationStore migrationStore = null,
             IHistoryMessageStore messageHistoryStore = null,
@@ -794,13 +794,12 @@ namespace Unison.Uwp.Services.WhatsApp.History
         public Task<bool> EnsureChatPageAsync(string jid, int count)
         {
             string normJid = JidHelper.Normalize(jid);
-            if (string.IsNullOrWhiteSpace(normJid) ||
-                !_chatState.MessagesByChat.TryGet(normJid, out List<ChatMessage> timeline))
+            if (string.IsNullOrWhiteSpace(normJid))
             {
                 return Task.FromResult(false);
             }
 
-            return _onDemand.RequestChatPageAsync(normJid, timeline, count, null, DateTime.UtcNow);
+            return _onDemand.RequestChatPageAsync(normJid, _chatState.GetMessages(normJid), count, null, DateTime.UtcNow);
         }
 
         /// <summary>A page was asked for <paramref name="jid"/> and has not landed yet.</summary>

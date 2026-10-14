@@ -5108,7 +5108,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private void RaiseChatMessagesChanged(string chatJid)
         {
             OnChatMessagesChanged?.Invoke(this, chatJid);
-            _chatState.NotifyChangedExternally(chatJid);
+            _chatState.NotifyMessagesChanged(chatJid);
         }
 
         /// <summary>

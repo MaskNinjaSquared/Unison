@@ -376,6 +376,84 @@ public class ChatMessageCacheTests
     }
 
     [Fact]
+    public void Upserting_replaces_by_id_adds_the_rest_and_keeps_time_order()
+    {
+        var cache = new ChatMessageCache();
+        cache.GetOrAdd(Ana).AddRange(new[] { At("A", 1), At("C", 3) });
+        var corrected = At("C", 3);
+
+        Assert.True(cache.Upsert(Ana, new[] { corrected, At("B", 2) }));
+
+        Assert.Equal(new[] { "A", "B", "C" }, cache[Ana].Select(m => m.Id));
+        Assert.Same(corrected, cache[Ana][2]);
+    }
+
+    [Fact]
+    public void Upserting_orders_by_comparable_utc_not_raw_ticks()
+    {
+        // Live rows are Utc, rows read back from SQLite are Unspecified. A raw DateTime
+        // comparison puts them off by the local offset.
+        var cache = new ChatMessageCache();
+        var live = new ChatMessage { Id = "live", Timestamp = T0.AddMinutes(10) };
+        var stored = new ChatMessage
+        {
+            Id = "stored",
+            Timestamp = System.DateTime.SpecifyKind(T0.AddMinutes(5), System.DateTimeKind.Unspecified)
+        };
+
+        cache.Upsert(Ana, new[] { live, stored });
+
+        var expected = new List<ChatMessage> { live, stored };
+        Unison.Core.Helpers.ChatMessageOrder.SortInPlace(expected);
+        Assert.Equal(expected.Select(m => m.Id), cache[Ana].Select(m => m.Id));
+    }
+
+    [Fact]
+    public void Upserting_registers_the_ids()
+    {
+        var cache = new ChatMessageCache();
+
+        cache.Upsert(Ana, new[] { At("A", 1) });
+
+        Assert.True(cache.Ids.Contains(Ana, "A"));
+    }
+
+    [Fact]
+    public void Upserting_nothing_reports_no_change()
+    {
+        var cache = new ChatMessageCache();
+
+        Assert.False(cache.Upsert(Ana, new ChatMessage[] { null }));
+        Assert.False(cache.Upsert(Ana, null));
+        Assert.False(cache.Upsert(null, new[] { At("A", 1) }));
+    }
+
+    [Fact]
+    public void Removing_a_message_drops_it_and_its_id()
+    {
+        var cache = new ChatMessageCache();
+        cache.Upsert(Ana, new[] { At("A", 1), At("B", 2) });
+
+        Assert.True(cache.RemoveMessage(Ana, "A"));
+
+        Assert.Equal(new[] { "B" }, cache[Ana].Select(m => m.Id));
+        Assert.False(cache.Ids.Contains(Ana, "A"));
+        Assert.True(cache.Ids.Contains(Ana, "B"));
+    }
+
+    [Fact]
+    public void Removing_an_unknown_message_reports_no_change()
+    {
+        var cache = new ChatMessageCache();
+        cache.Upsert(Ana, new[] { At("A", 1) });
+
+        Assert.False(cache.RemoveMessage(Ana, "Z"));
+        Assert.False(cache.RemoveMessage(AnaLid, "A"));
+        Assert.False(cache.RemoveMessage(Ana, null));
+        Assert.Single(cache[Ana]);
+    }
+
+    [Fact]
     public void Canonicalizing_does_not_count_an_alias_holding_no_list()
     {
         var cache = new ChatMessageCache();
