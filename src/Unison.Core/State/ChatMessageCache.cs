@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Unison.Core.Helpers;
 using Unison.Core.Models;
 
 namespace Unison.Core.State
@@ -9,8 +10,9 @@ namespace Unison.Core.State
     /// </summary>
     /// <remarks>
     /// Which conversations exist is guarded by a lock, so asking for one never meets a resize. The
-    /// list handed back is not copied: the client inserts, sorts, trims and merges it in place on the
-    /// UI thread, and every one of those edits relies on seeing the same instance next time.
+    /// list handed back is not copied: the client inserts, sorts and trims it in place on the UI
+    /// thread, and every one of those edits relies on seeing the same instance next time. Folding an
+    /// alias into its conversation is <see cref="MergeInto"/>.
     /// Walking all conversations goes through <see cref="Snapshot"/> or <see cref="ChatJids"/>, so a
     /// loop may remove the conversation it is looking at.
     /// </remarks>
@@ -108,6 +110,30 @@ namespace Unison.Core.State
             {
                 return _byChat.Remove(chatJid);
             }
+        }
+
+        /// <summary>
+        /// Moves an alias conversation's messages into the one it resolves to: only those the
+        /// target lacks (by id, or by reference when there is none), kept in time order, and the
+        /// alias is dropped. Edits the lists in place, so callers stay on the UI thread.
+        /// </summary>
+        /// <param name="targetKnownIds">The target's id index, updated with what moved.</param>
+        /// <returns>False when the alias holds no list or is the target itself.</returns>
+        public bool MergeInto(string aliasJid, string targetJid, HashSet<string> targetKnownIds)
+        {
+            if (string.IsNullOrEmpty(aliasJid) ||
+                string.Equals(aliasJid, targetJid, StringComparison.OrdinalIgnoreCase) ||
+                !TryGet(aliasJid, out List<ChatMessage> alias) ||
+                alias == null)
+            {
+                return false;
+            }
+
+            List<ChatMessage> target = GetOrAdd(targetJid);
+            TransientChatMerge.AppendMissingMessages(target, alias.ToArray(), targetKnownIds);
+            ChatMessageOrder.SortInPlace(target);
+            Remove(aliasJid);
+            return true;
         }
 
         public void Clear()

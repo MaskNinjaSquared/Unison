@@ -53,6 +53,24 @@ namespace Unison.Uwp.Services.WhatsApp
             });
         }
 
+        /// <summary>Moves an alias timeline under its target and drops the alias's id index.</summary>
+        private bool MergeTimelineInto(string aliasJid, string targetJid)
+        {
+            // Checked first so a missing alias does not build (and cache) an index for the target.
+            if (!MessagesByChat.TryGet(aliasJid, out var alias) || alias == null)
+            {
+                return false;
+            }
+
+            if (!MessagesByChat.MergeInto(aliasJid, targetJid, GetOrBuildMessageIdIndex(targetJid)))
+            {
+                return false;
+            }
+
+            _messageIdIndex.RemoveChat(aliasJid);
+            return true;
+        }
+
         private bool HasMessageId(string chatJid, string messageId)
         {
             if (string.IsNullOrEmpty(chatJid) || string.IsNullOrEmpty(messageId))

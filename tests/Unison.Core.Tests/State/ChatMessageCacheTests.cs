@@ -146,4 +146,62 @@ public class ChatMessageCacheTests
         writer.Wait();
         Assert.Equal(3000, cache.ChatJids().Count);
     }
+
+    private static readonly System.DateTime T0 = new System.DateTime(2026, 3, 10, 12, 0, 0, System.DateTimeKind.Utc);
+
+    private static ChatMessage At(string id, int minute) =>
+        new ChatMessage { Id = id, Timestamp = T0.AddMinutes(minute) };
+
+    [Fact]
+    public void Merging_an_alias_moves_its_messages_in_time_order_and_drops_the_alias()
+    {
+        // Three of the four merges this replaced appended the alias at the end, out of order,
+        // and later inserts binary-search a list they assume is sorted.
+        var cache = new ChatMessageCache();
+        cache.GetOrAdd(Ana).AddRange(new[] { At("A", 1), At("C", 3) });
+        cache.GetOrAdd(AnaLid).AddRange(new[] { At("B", 2), At("D", 4) });
+
+        Assert.True(cache.MergeInto(AnaLid, Ana, new HashSet<string> { "A", "C" }));
+
+        Assert.Equal(new[] { "A", "B", "C", "D" }, cache[Ana].Select(m => m.Id));
+        Assert.False(cache.Contains(AnaLid));
+    }
+
+    [Fact]
+    public void Merging_skips_messages_the_target_already_has()
+    {
+        var cache = new ChatMessageCache();
+        ChatMessage idless = new ChatMessage { Timestamp = T0 };
+        cache.GetOrAdd(Ana).AddRange(new[] { At("A", 1), idless });
+        cache.GetOrAdd(AnaLid).AddRange(new[] { At("A", 1), idless, At("B", 2) });
+        var knownIds = new HashSet<string> { "A" };
+
+        cache.MergeInto(AnaLid, Ana, knownIds);
+
+        Assert.Equal(3, cache[Ana].Count);
+        Assert.Contains("B", knownIds);
+    }
+
+    [Fact]
+    public void Merging_into_a_conversation_not_yet_held_creates_it()
+    {
+        var cache = new ChatMessageCache();
+        cache.GetOrAdd(AnaLid).Add(At("A", 1));
+
+        Assert.True(cache.MergeInto(AnaLid, Ana, new HashSet<string>()));
+
+        Assert.Single(cache[Ana]);
+    }
+
+    [Fact]
+    public void Nothing_to_merge_leaves_both_alone()
+    {
+        var cache = new ChatMessageCache();
+        cache.GetOrAdd(Ana).Add(At("A", 1));
+
+        Assert.False(cache.MergeInto(AnaLid, Ana, new HashSet<string>()));
+        Assert.False(cache.MergeInto(Ana, Ana, new HashSet<string>()));
+
+        Assert.Single(cache[Ana]);
+    }
 }

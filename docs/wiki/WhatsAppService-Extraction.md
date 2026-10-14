@@ -496,6 +496,20 @@ façade move too. The test suite does not reach any of them, because they are al
 and test-covered and has not been on a device. That debt keeps growing and is the next thing to spend
 time on, ahead of any further extraction.
 
+### 3.9b continued — the timeline leaves the client in steps
+
+What still keeps phase 4 waiting is that the client edits each conversation's message list in place.
+`ChatMessageCache` takes those edits over one kind at a time; the client keeps the id index, the
+missing-message ledger and the UI thread until the timeline has a single owner.
+
+*Alias merge:* folding an alias timeline into its conversation was written four times (transient
+DM merge, LID→PN duplicate merge, duplicate-row dedupe, cache-key normalisation). It is
+`ChatMessageCache.MergeInto` now, behind the client's `MergeTimelineInto`. The copies had drifted;
+two differences were fixed rather than kept. Only the cache-key pass sorted after merging, so the
+other three left alias messages at the end out of time order while later inserts binary-search a list
+they assume is sorted. And two copies appended id-less messages unconditionally, duplicating any the
+target already held. Only the transient merge forgets the alias's missing-message rows, as before.
+
 ### 3.4 — send moved to `MessageFacade`
 
 The flow left the client whole, and it lives in Core, so the suite reaches it now. `OutgoingTextSend`

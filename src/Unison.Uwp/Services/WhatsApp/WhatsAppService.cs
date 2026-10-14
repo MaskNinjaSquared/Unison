@@ -5533,30 +5533,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 {
                     Log($"[WhatsAppService] Merging duplicate chats: {normLidJid} -> {normPnJid}");
                     
-                    // 1. Move messages
-                    if (MessagesByChat.Contains(normLidJid))
-                    {
-                        var pnMsgs = MessagesByChat.GetOrAdd(normPnJid);
-                        var pnIdSet = GetOrBuildMessageIdIndex(normPnJid);
-                        foreach (var msg in MessagesByChat[normLidJid].ToList())
-                        {
-                            if (msg == null) continue;
-
-                            if (string.IsNullOrEmpty(msg.Id))
-                            {
-                                if (!pnMsgs.Contains(msg))
-                                {
-                                    pnMsgs.Add(msg);
-                                }
-                            }
-                            else if (pnIdSet.Add(msg.Id))
-                            {
-                                pnMsgs.Add(msg);
-                            }
-                        }
-                        MessagesByChat.Remove(normLidJid);
-                        _messageIdIndex.RemoveChat(normLidJid);
-                    }
+                    MergeTimelineInto(normLidJid, normPnJid);
 
                     // 2. Remove LID chat from UI
                     Chats.Remove(lidChat);
@@ -5731,29 +5708,7 @@ namespace Unison.Uwp.Services.WhatsApp
                                 continue;
                             }
 
-                            if (MessagesByChat.TryGet(secondaryNorm, out var secondaryMsgs))
-                            {
-                                var primaryMsgs = MessagesByChat.GetOrAdd(primaryNorm);
-
-                                var idSet = GetOrBuildMessageIdIndex(primaryNorm);
-                                foreach (var msg in secondaryMsgs)
-                                {
-                                    if (msg == null) continue;
-                                    if (string.IsNullOrEmpty(msg.Id))
-                                    {
-                                        primaryMsgs.Add(msg);
-                                        continue;
-                                    }
-
-                                    if (idSet.Add(msg.Id))
-                                    {
-                                        primaryMsgs.Add(msg);
-                                    }
-                                }
-
-                                MessagesByChat.Remove(secondaryNorm);
-                                _messageIdIndex.RemoveChat(secondaryNorm);
-                            }
+                            MergeTimelineInto(secondaryNorm, primaryNorm);
 
                             if (ContactNames.TryGetValue(secondaryNorm, out var secondaryName))
                             {
@@ -5802,33 +5757,10 @@ namespace Unison.Uwp.Services.WhatsApp
                             continue;
                         }
 
-                        if (!MessagesByChat.TryGet(key, out var secondaryMsgs) || secondaryMsgs == null)
+                        if (MergeTimelineInto(key, canonicalKey))
                         {
-                            continue;
+                            normalizedMessageKeyCount++;
                         }
-
-                        var primaryMsgs = MessagesByChat.GetOrAdd(canonicalKey);
-
-                        var idSet = GetOrBuildMessageIdIndex(canonicalKey);
-                        foreach (var msg in secondaryMsgs)
-                        {
-                            if (msg == null) continue;
-                            if (string.IsNullOrWhiteSpace(msg.Id))
-                            {
-                                primaryMsgs.Add(msg);
-                                continue;
-                            }
-
-                            if (idSet.Add(msg.Id))
-                            {
-                                primaryMsgs.Add(msg);
-                            }
-                        }
-
-                        ChatMessageOrder.SortInPlace(primaryMsgs);
-                        MessagesByChat.Remove(key);
-                        _messageIdIndex.RemoveChat(key);
-                        normalizedMessageKeyCount++;
                     }
 
                     if (mergedCount > 0 || normalizedMessageKeyCount > 0)

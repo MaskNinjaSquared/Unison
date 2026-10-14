@@ -291,20 +291,11 @@ namespace Unison.Uwp.Services.WhatsApp
 
             await RunOnUiThreadAsync(() =>
             {
-                if (MessagesByChat.TryGet(normalizedTransient, out var transientMessages) && transientMessages != null)
+                if (MergeTimelineInto(normalizedTransient, normalizedCanonical))
                 {
-                    var canonicalMessages = MessagesByChat.GetOrAdd(normalizedCanonical);
-
-                    TransientChatMerge.AppendMissingMessages(
-                        canonicalMessages,
-                        transientMessages.ToList(),
-                        GetOrBuildMessageIdIndex(normalizedCanonical));
-
-                    MessagesByChat.Remove(normalizedTransient);
-                    _messageIdIndex.RemoveChat(normalizedTransient);
                     ForgetMissingMessagesForChat(normalizedTransient);
                     merged = true;
-                    canonicalSnapshot = canonicalMessages.ToList();
+                    canonicalSnapshot = MessagesByChat[normalizedCanonical].ToList();
                 }
 
                 var transientChat = Chats.FirstOrDefault(c => NormalizeJid(c.JID) == normalizedTransient);
