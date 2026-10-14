@@ -1,5 +1,5 @@
 // =============================================================================
-// Tests for RecoveredMessageParticipant.
+// Tests for WebMessageParticipant.
 //
 // A message the phone resends (placeholder recovery) arrives as a WebMessageInfo
 // and goes back through the live pump, so the sender has to be read off the
@@ -14,7 +14,7 @@ using Xunit;
 
 namespace Unison.Core.Tests.Helpers
 {
-    public sealed class RecoveredMessageParticipantTests
+    public sealed class WebMessageParticipantTests
     {
         private const string Group = "120363000000000000@g.us";
         private const string Alice = "5511999990001@s.whatsapp.net";
@@ -29,7 +29,7 @@ namespace Unison.Core.Tests.Helpers
                 Participant = Bob
             };
 
-            Assert.Equal(Alice, RecoveredMessageParticipant.Resolve(info));
+            Assert.Equal(Alice, WebMessageParticipant.Resolve(info));
         }
 
         [Fact]
@@ -41,7 +41,7 @@ namespace Unison.Core.Tests.Helpers
                 Participant = Bob
             };
 
-            Assert.Equal(Bob, RecoveredMessageParticipant.Resolve(info));
+            Assert.Equal(Bob, WebMessageParticipant.Resolve(info));
         }
 
         [Fact]
@@ -49,7 +49,7 @@ namespace Unison.Core.Tests.Helpers
         {
             var info = new WebMessageInfo { Key = KeyWithAltField(Group, "222@lid") };
 
-            Assert.Equal("222@lid", RecoveredMessageParticipant.Resolve(info));
+            Assert.Equal("222@lid", WebMessageParticipant.Resolve(info));
         }
 
         [Fact]
@@ -62,7 +62,7 @@ namespace Unison.Core.Tests.Helpers
 
             Assert.Equal(
                 JidHelper.Normalize("5511999990001:7@s.whatsapp.net"),
-                RecoveredMessageParticipant.Resolve(info));
+                WebMessageParticipant.Resolve(info));
         }
 
         [Theory]
@@ -75,15 +75,15 @@ namespace Unison.Core.Tests.Helpers
                 Key = new MessageKey { RemoteJid = Group, Participant = chatAddress }
             };
 
-            Assert.Null(RecoveredMessageParticipant.Resolve(info));
+            Assert.Null(WebMessageParticipant.Resolve(info));
         }
 
         [Fact]
         public void Nothing_to_read_is_nothing()
         {
-            Assert.Null(RecoveredMessageParticipant.Resolve(null));
-            Assert.Null(RecoveredMessageParticipant.Resolve(new WebMessageInfo()));
-            Assert.Null(RecoveredMessageParticipant.Resolve(
+            Assert.Null(WebMessageParticipant.Resolve(null));
+            Assert.Null(WebMessageParticipant.Resolve(new WebMessageInfo()));
+            Assert.Null(WebMessageParticipant.Resolve(
                 new WebMessageInfo { Key = new MessageKey { RemoteJid = Group } }));
         }
 
@@ -93,7 +93,7 @@ namespace Unison.Core.Tests.Helpers
             // The alt scan skips only field 4, so remoteJid (field 1) is read when it is a user.
             var info = new WebMessageInfo { Key = new MessageKey { RemoteJid = Alice } };
 
-            Assert.Equal(Alice, RecoveredMessageParticipant.Resolve(info));
+            Assert.Equal(Alice, WebMessageParticipant.Resolve(info));
         }
 
         private static MessageKey KeyWithAltField(string remoteJid, string alt)

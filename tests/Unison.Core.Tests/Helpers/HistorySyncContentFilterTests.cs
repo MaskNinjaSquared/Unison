@@ -248,4 +248,48 @@ public class HistorySyncContentFilterTests
 
         Assert.Equal("Ana", name);
     }
+
+    private const string Group = "120363000000000000@g.us";
+
+    [Fact]
+    public void A_group_sender_carried_only_as_an_alt_jid_is_kept()
+    {
+        // Live recovery read it through the alt-JID scan; the history store did not, so the same
+        // message had a sender live and none once persisted.
+        var info = new WebMessageInfo { Key = KeyWithAltField(Group, "222@lid") };
+
+        Assert.Equal("222@lid", HistorySyncContentFilter.ResolveParticipant(info, Group, isGroup: true, fromMe: false));
+    }
+
+    [Fact]
+    public void The_typed_participant_still_wins_over_the_alt_jid()
+    {
+        MessageKey key = KeyWithAltField(Group, "222@lid");
+        key.Participant = "5511999990001@s.whatsapp.net";
+
+        Assert.Equal(
+            "5511999990001@s.whatsapp.net",
+            HistorySyncContentFilter.ResolveParticipant(new WebMessageInfo { Key = key }, Group, isGroup: true, fromMe: false));
+    }
+
+    [Fact]
+    public void Direct_and_own_messages_have_no_participant_even_with_an_alt_jid()
+    {
+        var info = new WebMessageInfo { Key = KeyWithAltField("5511999990001@s.whatsapp.net", "222@lid") };
+
+        Assert.Null(HistorySyncContentFilter.ResolveParticipant(info, "5511999990001@s.whatsapp.net", isGroup: false, fromMe: false));
+        Assert.Null(HistorySyncContentFilter.ResolveParticipant(info, Group, isGroup: true, fromMe: true));
+    }
+
+    private static MessageKey KeyWithAltField(string remoteJid, string alt)
+    {
+        byte[] declared = Google.Protobuf.MessageExtensions.ToByteArray(new MessageKey { RemoteJid = remoteJid });
+        byte[] payload = System.Text.Encoding.UTF8.GetBytes(alt);
+        var bytes = new byte[declared.Length + 2 + payload.Length];
+        declared.CopyTo(bytes, 0);
+        bytes[declared.Length] = (5 << 3) | 2;
+        bytes[declared.Length + 1] = (byte)payload.Length;
+        payload.CopyTo(bytes, declared.Length + 2);
+        return MessageKey.Parser.ParseFrom(bytes);
+    }
 }

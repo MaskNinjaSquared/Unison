@@ -100,19 +100,9 @@ namespace Unison.Core.Helpers
                 return null;
             }
 
-            string participant = info.Key?.Participant;
-            if (string.IsNullOrWhiteSpace(participant))
-            {
-                participant = info.Participant;
-            }
-
-            if (string.IsNullOrWhiteSpace(participant))
-            {
-                return null;
-            }
-
-            string normalized = JidHelper.Normalize(participant);
-            if (string.Equals(normalized, chatJid, StringComparison.OrdinalIgnoreCase))
+            string normalized = WebMessageParticipant.Resolve(info);
+            if (normalized == null ||
+                string.Equals(normalized, chatJid, StringComparison.OrdinalIgnoreCase))
             {
                 return null;
             }

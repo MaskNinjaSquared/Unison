@@ -1,15 +1,15 @@
 // =============================================================================
-// RecoveredMessageParticipant
+// WebMessageParticipant
 //
-// The sender of a message the phone resent as a WebMessageInfo. History envelopes
-// often leave MessageKey.participant unset and fill WebMessageInfo.participant
-// (field 5); newer builds stash an alt JID in a MessageKey field the generated
-// schema does not declare. Protobuf getters answer "" when unset, so the first
-// non-blank one wins rather than the first non-null.
+// The sender written on a WebMessageInfo, for a message the phone resent and for
+// the history store alike. Envelopes often leave MessageKey.participant unset and
+// fill WebMessageInfo.participant (field 5); newer builds stash an alt JID in a
+// MessageKey field the generated schema does not declare. Protobuf getters answer
+// "" when unset, so the first non-blank one wins rather than the first non-null.
 //
-// Not HistorySyncContentFilter.ResolveParticipant: that one serves the history
-// store, answers only for other people's group messages and does not scan alt
-// JIDs. The two are kept apart on purpose until the history path is checked.
+// The alt scan skips only field 4, so a direct envelope with no participant
+// answers its own remoteJid. HistorySyncContentFilter.ResolveParticipant adds the
+// history store's gates on top: group only, never own, never the chat itself.
 // =============================================================================
 using System;
 using Google.Protobuf;
@@ -17,7 +17,7 @@ using Proto;
 
 namespace Unison.Core.Helpers
 {
-    public static class RecoveredMessageParticipant
+    public static class WebMessageParticipant
     {
         /// <returns>The normalized participant, or null when none is set or it names a chat.</returns>
         public static string Resolve(WebMessageInfo info)

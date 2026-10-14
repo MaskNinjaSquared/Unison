@@ -860,13 +860,14 @@ already documents. Both branches now go through one `Absorb`. What the dedupe pa
 client — moving messages between keys, filing the alias, removing rows — is chat-state surgery and
 stays until the timeline leaves the client.
 
-The sender of a message the phone resends is `RecoveredMessageParticipant` (key participant, then
-envelope participant, then the alt-JID scan; never a group or broadcast address). Two edges kept,
-not endorsed: the scan skips only field 4, so a direct envelope with no participant answers its own
-`remoteJid`; and the history store resolves participants with `HistorySyncContentFilter.ResolveParticipant`,
-which does not scan alt JIDs — a group message carrying its sender only there gets one live and none
-in SQLite. Unifying them is a behaviour change and waits for a device check. `ResolveHistorySenderName`
-left with it: it had no caller.
+The sender written on a `WebMessageInfo` is `WebMessageParticipant` (key participant, then
+envelope participant, then the alt-JID scan; never a group or broadcast address). The resend path
+and the history store both read it now; `HistorySyncContentFilter.ResolveParticipant` keeps its
+own gates (group only, never own, never the chat). Fixed on the way: the history store did not
+scan alt JIDs, so a group message carrying its sender only there had one live and none in SQLite.
+Edge kept, not endorsed: the scan skips only field 4, so a direct envelope with no participant
+answers its own `remoteJid` (the history gate drops it; the resend path passes it on).
+`ResolveHistorySenderName` left with it: it had no caller.
 
 The newest message time history freshness reads is `NewestStoredMessage.FindUtc` over the timeline
 snapshot and the list strip (cold start has tips but no timelines), each value through
