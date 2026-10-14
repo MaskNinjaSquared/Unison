@@ -4,7 +4,8 @@
 // Asks the phone for history it still owes us. A chat page is anchored on the
 // oldest message the timeline holds; the registry decides whether that anchor
 // may be asked now, and a send that throws gives the chat's slot back (the
-// anchor stays, so the same page waits for the next connect).
+// anchor stays, so the same page waits for the next connect). The full
+// catch-up is claimed once per connection; a send that throws releases it.
 //
 // The registry's lock guards every transition. Timers, banners and the answer
 // itself stay with the caller.
@@ -18,6 +19,25 @@ using Unison.Core.Models;
 
 namespace Unison.Core.State
 {
+    public enum HistoryFullRequestOutcome
+    {
+        Sent,
+        AlreadyClaimed,
+        SocketNotReady,
+        ClaimedConcurrently,
+        Failed
+    }
+
+    public struct HistoryFullRequestResult
+    {
+        public HistoryFullRequestOutcome Outcome;
+
+        /// <summary>Set when <see cref="Outcome"/> is <see cref="HistoryFullRequestOutcome.Sent"/>.</summary>
+        public string RequestId;
+
+        public int BaselineMessageCount;
+    }
+
     public sealed class HistoryOnDemandDispatch
     {
         private readonly HistoryOnDemandRegistry _registry;
@@ -101,6 +121,64 @@ namespace Unison.Core.State
                 _log($"HISTORY_SYNC_ON_DEMAND request failed for {chatJid}: {ex.Message}");
                 return false;
             }
+        }
+
+        /// <param name="isFreshnessRepair">A catch-up rather than the first bootstrap.</param>
+        /// <param name="baselineMessageCount">Read only once the claim is taken.</param>
+        public async Task<HistoryFullRequestResult> RequestFullAsync(
+            string reason,
+            bool isFreshnessRepair,
+            Func<int> baselineMessageCount,
+            DateTime nowUtc)
+        {
+            if (_registry.IsFullClaimed)
+            {
+                _log($"FULL_HISTORY_SYNC_ON_DEMAND skipped ({reason}): request already pending this session, requestId={_registry.FullRequestId ?? "<none>"}");
+                return Outcome(HistoryFullRequestOutcome.AlreadyClaimed);
+            }
+
+            if (!_socket.IsReady)
+            {
+                _log($"FULL_HISTORY_SYNC_ON_DEMAND skipped ({reason}): socket not ready");
+                return Outcome(HistoryFullRequestOutcome.SocketNotReady);
+            }
+
+            if (!_registry.TryClaimFull())
+            {
+                _log($"FULL_HISTORY_SYNC_ON_DEMAND skipped ({reason}): claimed concurrently");
+                return Outcome(HistoryFullRequestOutcome.ClaimedConcurrently);
+            }
+
+            try
+            {
+                int baselineCount = baselineMessageCount != null ? baselineMessageCount() : 0;
+                string stanzaId = _socket.GenerateMessageId();
+                _registry.RegisterFull(stanzaId, isFreshnessRepair, baselineCount, reason, nowUtc);
+
+                string sentStanzaId = await _socket.RequestFullHistoryAsync(stanzaId).ConfigureAwait(false);
+                if (!string.Equals(sentStanzaId, stanzaId, StringComparison.Ordinal))
+                {
+                    _log($"FULL_HISTORY_SYNC_ON_DEMAND stanza id changed unexpectedly: tracked={stanzaId}, sent={sentStanzaId}");
+                }
+
+                return new HistoryFullRequestResult
+                {
+                    Outcome = HistoryFullRequestOutcome.Sent,
+                    RequestId = stanzaId,
+                    BaselineMessageCount = baselineCount
+                };
+            }
+            catch (Exception ex)
+            {
+                _registry.FailFull(isFreshnessRepair);
+                _log($"FULL_HISTORY_SYNC_ON_DEMAND request failed ({reason}): {ex.Message}");
+                return Outcome(HistoryFullRequestOutcome.Failed);
+            }
+        }
+
+        private static HistoryFullRequestResult Outcome(HistoryFullRequestOutcome outcome)
+        {
+            return new HistoryFullRequestResult { Outcome = outcome };
         }
     }
 }

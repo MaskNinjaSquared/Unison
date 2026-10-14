@@ -21,5 +21,8 @@ namespace Unison.Core.Contracts.WhatsApp
             long oldestTimestampMs,
             int count,
             string stanzaId);
+
+        /// <summary>Asks for the account-wide catch-up under <paramref name="stanzaId"/>; returns the id it went out with.</summary>
+        Task<string> RequestFullHistoryAsync(string stanzaId);
     }
 }

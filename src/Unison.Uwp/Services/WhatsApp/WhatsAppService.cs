@@ -4145,6 +4145,9 @@ namespace Unison.Uwp.Services.WhatsApp
                 count,
                 stanzaId);
 
+        Task<string> IHistoryOnDemandSocket.RequestFullHistoryAsync(string stanzaId) =>
+            _socket.RequestFullHistorySyncOnDemandAsync(stanzaId);
+
         private Task<bool> RequestHistoryOnDemandIfNeededAsync(string normJid, int count, string triggerReason = null)
         {
             if (string.IsNullOrWhiteSpace(normJid) ||
@@ -4158,64 +4161,39 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private async Task<bool> RequestFullHistoryOnDemandTrackedAsync(string reason, bool isFreshnessRepair)
         {
-            if (_historyRequests.IsFullClaimed)
+            HistoryFullRequestResult result = await HistoryDispatch.RequestFullAsync(
+                reason,
+                isFreshnessRepair,
+                GetStoredMessageCount,
+                DateTime.UtcNow);
+            if (result.Outcome != HistoryFullRequestOutcome.Sent)
             {
-                Debug.WriteLine($"[WhatsAppService] FULL_HISTORY_SYNC_ON_DEMAND skipped ({reason}): request already pending this session, requestId={_historyRequests.FullRequestId ?? "<none>"}");
                 return false;
             }
 
-            if (_socket == null || !_socket.IsHandshakeComplete)
+            string stanzaId = result.RequestId;
+            int baselineCount = result.BaselineMessageCount;
+            Debug.WriteLine(
+                $"[WhatsAppService] Requested FULL_HISTORY_SYNC_ON_DEMAND (reason={reason}, stanzaId={stanzaId}, baseline={baselineCount}, freshnessRepair={isFreshnessRepair}, idleAbortMs={(int)FullHistoryCatchUpIdleAbort.TotalMilliseconds}, hardTimeoutMs={(int)FullHistoryOnDemandResponseTimeout.TotalMilliseconds})");
+            RuntimeDiagnosticsService.Instance.Write(
+                "history",
+                "full-history-requested",
+                "reason=" + (reason ?? string.Empty) +
+                "; requestId=" + stanzaId +
+                "; baselineMsgs=" + baselineCount +
+                "; freshnessRepair=" + isFreshnessRepair +
+                "; idleAbortMs=" + (int)FullHistoryCatchUpIdleAbort.TotalMilliseconds +
+                "; hardTimeoutMs=" + (int)FullHistoryOnDemandResponseTimeout.TotalMilliseconds);
+            if (isFreshnessRepair)
             {
-                Debug.WriteLine($"[WhatsAppService] FULL_HISTORY_SYNC_ON_DEMAND skipped ({reason}): socket not ready");
-                return false;
+                BeginHistoryCatchUpBanner(reason);
             }
 
-            if (!_historyRequests.TryClaimFull())
-            {
-                Debug.WriteLine($"[WhatsAppService] FULL_HISTORY_SYNC_ON_DEMAND skipped ({reason}): claimed concurrently");
-                return false;
-            }
+            RaiseReport(
+                () => OnBackgroundHistorySyncBounced?.Invoke(this, EventArgs.Empty),
+                nameof(OnBackgroundHistorySyncBounced));
 
-            try
-            {
-                int baselineCount = GetStoredMessageCount();
-                string stanzaId = _socket.GenerateMessageId();
-                _historyRequests.RegisterFull(stanzaId, isFreshnessRepair, baselineCount, reason, DateTime.UtcNow);
-
-                string sentStanzaId = await _socket.RequestFullHistorySyncOnDemandAsync(stanzaId);
-                if (!string.Equals(sentStanzaId, stanzaId, StringComparison.Ordinal))
-                {
-                    Debug.WriteLine($"[WhatsAppService] FULL_HISTORY_SYNC_ON_DEMAND stanza id changed unexpectedly: tracked={stanzaId}, sent={sentStanzaId}");
-                }
-
-                Debug.WriteLine(
-                    $"[WhatsAppService] Requested FULL_HISTORY_SYNC_ON_DEMAND (reason={reason}, stanzaId={stanzaId}, baseline={baselineCount}, freshnessRepair={isFreshnessRepair}, idleAbortMs={(int)FullHistoryCatchUpIdleAbort.TotalMilliseconds}, hardTimeoutMs={(int)FullHistoryOnDemandResponseTimeout.TotalMilliseconds})");
-                RuntimeDiagnosticsService.Instance.Write(
-                    "history",
-                    "full-history-requested",
-                    "reason=" + (reason ?? string.Empty) +
-                    "; requestId=" + stanzaId +
-                    "; baselineMsgs=" + baselineCount +
-                    "; freshnessRepair=" + isFreshnessRepair +
-                    "; idleAbortMs=" + (int)FullHistoryCatchUpIdleAbort.TotalMilliseconds +
-                    "; hardTimeoutMs=" + (int)FullHistoryOnDemandResponseTimeout.TotalMilliseconds);
-                if (isFreshnessRepair)
-                {
-                    BeginHistoryCatchUpBanner(reason);
-                }
-
-                RaiseReport(
-                    () => OnBackgroundHistorySyncBounced?.Invoke(this, EventArgs.Empty),
-                    nameof(OnBackgroundHistorySyncBounced));
-
-                return true;
-            }
-            catch (Exception ex)
-            {
-                _historyRequests.FailFull(isFreshnessRepair);
-                Debug.WriteLine($"[WhatsAppService] FULL_HISTORY_SYNC_ON_DEMAND request failed ({reason}): {ex.Message}");
-                return false;
-            }
+            return true;
         }
 
         private Task<bool> RequestFullHistoryBootstrapIfNeededAsync(string reason)

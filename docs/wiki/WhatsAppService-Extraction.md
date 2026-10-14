@@ -895,10 +895,13 @@ re-reading them.
 sends the per-chat `HISTORY_SYNC_ON_DEMAND` over `IHistoryOnDemandSocket`, which the client
 implements explicitly (the `PlaceholderResendDispatch` pattern). Anchor, gate, register, send and
 give-the-slot-back-on-throw are one tested method; the client only hands it the timeline.
-`UnixTime.ToMilliseconds` replaced the client's private copy.
+`UnixTime.ToMilliseconds` replaced the client's private copy. *Full-history request:* the same
+type claims, registers and sends `FULL_HISTORY_SYNC_ON_DEMAND` and answers with a
+`HistoryFullRequestOutcome`; on `Sent` the client still logs, raises the banner and the bounce
+event. Deliberate difference: an exception in that post-send work used to release the claim of a
+request that had already gone out; it now propagates instead of pretending the send failed.
 
-**Next in slice 3:** the full-history request, then the watchdog / timeout onto `HistoryFacade`
-behind a host port. The two soft-reconnect fallbacks stay in the client — they are connection lifecycle (phase 4).
+**Next in slice 3:** the watchdog / timeout onto `HistoryFacade` behind a host port. The two soft-reconnect fallbacks stay in the client — they are connection lifecycle (phase 4).
 
 ### Phase 4 — What remains is connection
 

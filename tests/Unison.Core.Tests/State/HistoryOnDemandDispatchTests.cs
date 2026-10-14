@@ -137,12 +137,73 @@ namespace Unison.Core.Tests.State
             Assert.Contains(_log, line => line.Contains("backoff active"));
         }
 
+        // --- Full history ------------------------------------------------------
+
+        [Fact]
+        public async Task A_full_request_is_claimed_registered_and_sent()
+        {
+            HistoryFullRequestResult result =
+                await NewDispatch().RequestFullAsync("offline-stale", true, () => 120, T0);
+
+            Assert.Equal(HistoryFullRequestOutcome.Sent, result.Outcome);
+            Assert.Equal("stanza-1", result.RequestId);
+            Assert.Equal(120, result.BaselineMessageCount);
+            Assert.Equal(1, _socket.FullSends);
+            Assert.True(_registry.IsFullInFlight);
+            HistoryOnDemandRequest request = _registry.Find("stanza-1");
+            Assert.Equal(HistoryOnDemandKind.FullHistory, request.Kind);
+            Assert.Equal(120, request.BaselineMessageCount);
+            Assert.Equal("offline-stale", request.TriggerReason);
+        }
+
+        [Fact]
+        public async Task A_second_full_request_on_the_same_connection_is_skipped()
+        {
+            HistoryOnDemandDispatch dispatch = NewDispatch();
+            await dispatch.RequestFullAsync("first", true, () => 0, T0);
+
+            HistoryFullRequestResult second = await dispatch.RequestFullAsync("second", true, () => 0, T0);
+
+            Assert.Equal(HistoryFullRequestOutcome.AlreadyClaimed, second.Outcome);
+            Assert.Equal(1, _socket.FullSends);
+            Assert.Contains(_log, line => line.Contains("already pending") && line.Contains("stanza-1"));
+        }
+
+        [Fact]
+        public async Task A_full_request_waits_for_a_ready_socket_without_claiming()
+        {
+            _socket.IsReady = false;
+            bool counted = false;
+
+            HistoryFullRequestResult result =
+                await NewDispatch().RequestFullAsync("offline-stale", true, () => { counted = true; return 0; }, T0);
+
+            Assert.Equal(HistoryFullRequestOutcome.SocketNotReady, result.Outcome);
+            Assert.False(_registry.IsFullClaimed);
+            Assert.False(counted);
+        }
+
+        [Fact]
+        public async Task A_full_send_that_throws_releases_the_claim()
+        {
+            _socket.ThrowOnSend = true;
+
+            HistoryFullRequestResult result =
+                await NewDispatch().RequestFullAsync("offline-stale", true, () => 0, T0);
+
+            Assert.Equal(HistoryFullRequestOutcome.Failed, result.Outcome);
+            Assert.False(_registry.IsFullClaimed);
+            Assert.Null(_registry.Find("stanza-1"));
+            Assert.Contains(_log, line => line.Contains("request failed") && line.Contains("socket gone"));
+        }
+
         private sealed class FakeSocket : IHistoryOnDemandSocket
         {
             private int _ids;
 
             public bool IsReady { get; set; } = true;
             public bool ThrowOnSend { get; set; }
+            public int FullSends { get; private set; }
             public int ChatSends { get; private set; }
             public string LastChat { get; private set; }
             public string LastOldestId { get; private set; }
@@ -173,6 +234,17 @@ namespace Unison.Core.Tests.State
                 LastOldestTimestampMs = oldestTimestampMs;
                 LastCount = count;
                 LastStanzaId = stanzaId;
+                return Task.FromResult(stanzaId);
+            }
+
+            public Task<string> RequestFullHistoryAsync(string stanzaId)
+            {
+                if (ThrowOnSend)
+                {
+                    throw new InvalidOperationException("socket gone");
+                }
+
+                FullSends++;
                 return Task.FromResult(stanzaId);
             }
         }
