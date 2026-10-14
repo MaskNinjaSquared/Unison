@@ -907,9 +907,15 @@ tested without waiting. It answers how the watch ended — cleared between polls
 else at the abort tick, or idle and cleared by the watch — and only the last one hands the lot to
 `DecideCatchUpAfterIdleBatch`. The client keeps the `Task.Run`, the journal lines and the decision.
 
-**Next in slice 3:** the accepted-request timeout, then moving the dispatch / watchdog ownership
-onto `HistoryFacade` (registry shared through DI) so the ViewModel-facing on-demand calls stop
-going through the client. The two soft-reconnect fallbacks stay in the client — they are connection lifecycle (phase 4).
+*Per-chat ask moved to `HistoryFacade`.* `HistoryOnDemandRegistry` is one DI singleton, shared by
+the client (acks, timeouts, load-more) and the façade. `EnsureChatPageAsync` /
+`IsChatPagePending` read the timeline from `ChatStateStore` and send through the same dispatch;
+`MessageFacade` forwards there. `EnsureHistoryOnDemandAsync` and `IsHistoryOnDemandPending` left
+`IWhatsAppService`. Load-more still asks from the client, because it carries the trigger reason
+the façade does not.
+
+**Next in slice 3:** the accepted-request timeout. The two soft-reconnect fallbacks stay in the
+client — they are connection lifecycle (phase 4).
 
 ### Phase 4 — What remains is connection
 
