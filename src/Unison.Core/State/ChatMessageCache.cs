@@ -270,6 +270,74 @@ namespace Unison.Core.State
         }
 
         /// <summary>
+        /// Inserts like <see cref="Insert"/> unless the conversation already holds a message with
+        /// this id. An id-less message is always inserted.
+        /// </summary>
+        /// <returns>False when the id was already held.</returns>
+        public bool InsertIfAbsent(string chatJid, ChatMessage message, int capacity, DateTime nowUtc)
+        {
+            if (message == null)
+            {
+                return false;
+            }
+
+            if (TryGet(chatJid, out List<ChatMessage> held) && held != null && IndexOfMessage(held, message.Id) >= 0)
+            {
+                return false;
+            }
+
+            Insert(chatJid, message, capacity, nowUtc);
+            return true;
+        }
+
+        /// <summary>
+        /// Replaces the conversation's list with a fresh window: <paramref name="pending"/> (messages
+        /// not yet on disk) overlaid by what is held now, the held copy winning by id, id-less
+        /// messages from both kept. Sorted, trimmed to <paramref name="capacity"/>, ids rebuilt.
+        /// </summary>
+        /// <returns>The new list, which is the instance the cache now holds.</returns>
+        public List<ChatMessage> RebuildWindow(string chatJid, IEnumerable<ChatMessage> pending, int capacity, DateTime nowUtc)
+        {
+            var window = new List<ChatMessage>();
+            var byId = new Dictionary<string, ChatMessage>(StringComparer.Ordinal);
+            TryGet(chatJid, out List<ChatMessage> held);
+
+            Overlay(pending, window, byId);
+            Overlay(held, window, byId);
+
+            window.AddRange(byId.Values);
+            ChatMessageOrder.SortInPlace(window);
+            ActiveChatMessageWindow.TrimInPlace(window, capacity, nowUtc);
+            Set(chatJid, window);
+            return window;
+        }
+
+        private static void Overlay(IEnumerable<ChatMessage> source, List<ChatMessage> idLess, Dictionary<string, ChatMessage> byId)
+        {
+            if (source == null)
+            {
+                return;
+            }
+
+            foreach (ChatMessage message in source)
+            {
+                if (message == null)
+                {
+                    continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(message.Id))
+                {
+                    idLess.Add(message);
+                }
+                else
+                {
+                    byId[message.Id] = message;
+                }
+            }
+        }
+
+        /// <summary>
         /// Adds the messages the timeline lacks (by id, or by reference when there is none) and
         /// keeps it in time order. Dedupes against the list itself rather than the index, which
         /// direct edits elsewhere can leave behind, and rebuilds the index afterwards.
@@ -277,9 +345,18 @@ namespace Unison.Core.State
         /// <returns>The messages that were added, in the order given.</returns>
         public List<ChatMessage> AddMissing(string chatJid, IEnumerable<ChatMessage> messages)
         {
+            return AddMissing(chatJid, messages, int.MaxValue);
+        }
+
+        /// <summary>
+        /// The same, stopping once <paramref name="maxToAdd"/> new messages have entered. Messages
+        /// already held do not count against the limit.
+        /// </summary>
+        public List<ChatMessage> AddMissing(string chatJid, IEnumerable<ChatMessage> messages, int maxToAdd)
+        {
             var added = new List<ChatMessage>();
             List<ChatMessage> timeline = GetOrAdd(chatJid);
-            if (messages == null)
+            if (messages == null || maxToAdd <= 0)
             {
                 return added;
             }
@@ -307,6 +384,10 @@ namespace Unison.Core.State
                 {
                     timeline.Add(message);
                     added.Add(message);
+                    if (added.Count >= maxToAdd)
+                    {
+                        break;
+                    }
                 }
             }
 

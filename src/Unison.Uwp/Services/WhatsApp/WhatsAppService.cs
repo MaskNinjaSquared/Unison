@@ -2941,43 +2941,17 @@ namespace Unison.Uwp.Services.WhatsApp
             try
             {
                 // RAM overlay only — SQLite history is loaded by MessageFacade.
-                var merged = new List<ChatMessage>();
-                var byId = new Dictionary<string, ChatMessage>(StringComparer.Ordinal);
-
-                Action<IEnumerable<ChatMessage>> addMessages = source =>
-                {
-                    foreach (var message in source ?? Enumerable.Empty<ChatMessage>())
-                    {
-                        if (message == null) continue;
-                        if (string.IsNullOrWhiteSpace(message.Id))
-                        {
-                            merged.Add(message);
-                        }
-                        else
-                        {
-                            byId[message.Id] = message;
-                        }
-                    }
-                };
-
-                addMessages(GetPendingPersistMessagesSnapshot(normJid));
-                if (MessagesByChat.TryGet(normJid, out var liveMessages))
-                {
-                    addMessages(liveMessages);
-                }
-
-                merged.AddRange(byId.Values);
-                var cache = merged;
-                ChatMessageOrder.SortInPlace(cache);
-                ActiveChatMessageWindow.TrimInPlace(cache, MaxActiveChatMessagesInMemory, DateTime.UtcNow);
+                List<ChatMessage> cache = MessagesByChat.RebuildWindow(
+                    normJid,
+                    GetPendingPersistMessagesSnapshot(normJid),
+                    MaxActiveChatMessagesInMemory,
+                    DateTime.UtcNow);
 
                 var stateAdjustedMessages = new List<ChatMessage>();
                 foreach (var message in cache)
                 {
                     if (ApplyPendingStateToMessage(normJid, message)) stateAdjustedMessages.Add(message);
                 }
-
-                MessagesByChat.Set(normJid, cache);
 
                 if (stateAdjustedMessages.Count > 0)
                 {
@@ -3031,18 +3005,14 @@ namespace Unison.Uwp.Services.WhatsApp
                 var previousMessages = await _messageStore.LoadMessagesPagedAsync(normJid, skip, actualTake);
                 if (previousMessages.Count > 0)
                 {
-                    var knownIds = new HashSet<string>(MessagesByChat[normJid]
-                        .Where(m => m != null && !string.IsNullOrWhiteSpace(m.Id))
-                        .Select(m => m.Id));
-                    var uniquePrevious = previousMessages
-                        .Where(m => m != null && (string.IsNullOrWhiteSpace(m.Id) || !knownIds.Contains(m.Id)))
-                        .Take(Math.Max(0, MaxActiveChatMessagesInMemory - currentCount))
-                        .ToList();
+                    List<ChatMessage> uniquePrevious = MessagesByChat.AddMissing(
+                        normJid,
+                        previousMessages,
+                        MaxActiveChatMessagesInMemory - currentCount);
                     foreach (var message in uniquePrevious) ApplyPendingStateToMessage(normJid, message);
 
                     if (uniquePrevious.Count > 0)
                     {
-                        MessagesByChat.AddMissing(normJid, uniquePrevious);
                         Debug.WriteLine($"[WhatsAppService] Added {uniquePrevious.Count} older messages for {normJid}. total_in_cache={MessagesByChat.CountFor(normJid)}, total_on_disk={totalCount}");
                     }
                     previousMessages = uniquePrevious;
@@ -4582,13 +4552,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     if (IsActiveChatJid(canonical))
                     {
                         await RunOnUiThreadAsync(() =>
-                        {
-                            var messages = MessagesByChat.GetOrAdd(canonical);
-                            if (!messages.Any(m => string.Equals(m?.Id, target.Id, StringComparison.Ordinal)))
-                            {
-                                MessagesByChat.Insert(canonical, target, MaxActiveChatMessagesInMemory, DateTime.UtcNow);
-                            }
-                        });
+                            MessagesByChat.InsertIfAbsent(canonical, target, MaxActiveChatMessagesInMemory, DateTime.UtcNow));
                     }
                 }
             }

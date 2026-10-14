@@ -10,6 +10,13 @@ The primary buttons on the chat list, Status and section bars are now centred on
 the bar, not on the width left of the … button. Buttons sit 2px closer on each side, and the label
 under each icon keeps 2px off the bottom of the bar.
 
+## Message timelines have one owner
+
+Every edit to an open chat's in-memory messages now goes through `ChatMessageCache`: the initial
+window, load-more, the pinned-message insert, and the chat store's own upsert and remove. The store's
+writes used to skip the seen-id index and sort on raw timestamps. Load-more no longer loses room to
+duplicates inside one page.
+
 ## Message cache keys canonicalized in the cache
 
 Folding conversations stored under an alias key into their canonical one is

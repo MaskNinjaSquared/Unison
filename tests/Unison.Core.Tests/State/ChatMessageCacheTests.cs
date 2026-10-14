@@ -454,6 +454,94 @@ public class ChatMessageCacheTests
     }
 
     [Fact]
+    public void Rebuilding_the_window_overlays_pending_under_live_by_id()
+    {
+        var cache = new ChatMessageCache();
+        var live = At("B", 2);
+        cache.GetOrAdd(Ana).Add(live);
+        var pendingCopyOfLive = At("B", 2);
+
+        List<ChatMessage> window = cache.RebuildWindow(
+            Ana, new[] { At("A", 1), pendingCopyOfLive, At("C", 3) }, capacity: 30, nowUtc: T0);
+
+        Assert.Equal(new[] { "A", "B", "C" }, window.Select(m => m.Id));
+        Assert.Same(live, window[1]);
+        Assert.Same(window, cache[Ana]);
+        Assert.True(cache.Ids.Contains(Ana, "C"));
+    }
+
+    [Fact]
+    public void Rebuilding_the_window_keeps_id_less_messages_from_both_sides()
+    {
+        var cache = new ChatMessageCache();
+        cache.GetOrAdd(Ana).Add(new ChatMessage { Timestamp = T0.AddMinutes(2) });
+
+        List<ChatMessage> window = cache.RebuildWindow(
+            Ana, new[] { new ChatMessage { Timestamp = T0.AddMinutes(1) } }, capacity: 30, nowUtc: T0);
+
+        Assert.Equal(2, window.Count);
+    }
+
+    [Fact]
+    public void Rebuilding_the_window_trims_to_capacity_keeping_the_newest()
+    {
+        var cache = new ChatMessageCache();
+        var pending = Enumerable.Range(0, 5).Select(i => At("m" + i, i)).ToArray();
+
+        List<ChatMessage> window = cache.RebuildWindow(Ana, pending, capacity: 3, nowUtc: T0.AddHours(1));
+
+        Assert.Equal(new[] { "m2", "m3", "m4" }, window.Select(m => m.Id));
+        Assert.False(cache.Ids.Contains(Ana, "m0"));
+    }
+
+    [Fact]
+    public void Rebuilding_an_empty_window_still_holds_the_conversation()
+    {
+        var cache = new ChatMessageCache();
+
+        List<ChatMessage> window = cache.RebuildWindow(Ana, null, capacity: 30, nowUtc: T0);
+
+        Assert.Empty(window);
+        Assert.True(cache.Contains(Ana));
+    }
+
+    [Fact]
+    public void Adding_missing_up_to_a_limit_counts_only_new_messages()
+    {
+        var cache = new ChatMessageCache();
+        cache.GetOrAdd(Ana).Add(At("C", 3));
+
+        List<ChatMessage> added = cache.AddMissing(
+            Ana, new[] { At("C", 3), At("A", 1), At("B", 2), At("D", 0) }, maxToAdd: 2);
+
+        Assert.Equal(new[] { "A", "B" }, added.Select(m => m.Id));
+        Assert.Equal(new[] { "A", "B", "C" }, cache[Ana].Select(m => m.Id));
+    }
+
+    [Fact]
+    public void Adding_missing_with_no_room_adds_nothing()
+    {
+        var cache = new ChatMessageCache();
+
+        Assert.Empty(cache.AddMissing(Ana, new[] { At("A", 1) }, maxToAdd: 0));
+    }
+
+    [Fact]
+    public void Inserting_if_absent_skips_an_id_already_held()
+    {
+        var cache = new ChatMessageCache();
+        var held = At("A", 1);
+        cache.GetOrAdd(Ana).Add(held);
+
+        Assert.False(cache.InsertIfAbsent(Ana, At("A", 1), capacity: 30, nowUtc: T0));
+        Assert.True(cache.InsertIfAbsent(Ana, At("B", 2), capacity: 30, nowUtc: T0));
+
+        Assert.Equal(new[] { "A", "B" }, cache[Ana].Select(m => m.Id));
+        Assert.Same(held, cache[Ana][0]);
+        Assert.True(cache.Ids.Contains(Ana, "B"));
+    }
+
+    [Fact]
     public void Canonicalizing_does_not_count_an_alias_holding_no_list()
     {
         var cache = new ChatMessageCache();
