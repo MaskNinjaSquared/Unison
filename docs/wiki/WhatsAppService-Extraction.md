@@ -901,7 +901,15 @@ type claims, registers and sends `FULL_HISTORY_SYNC_ON_DEMAND` and answers with 
 event. Deliberate difference: an exception in that post-send work used to release the claim of a
 request that had already gone out; it now propagates instead of pretending the send failed.
 
-**Next in slice 3:** the watchdog / timeout onto `HistoryFacade` behind a host port. The two soft-reconnect fallbacks stay in the client — they are connection lifecycle (phase 4).
+*Catch-up watchdog:* `HistoryCatchUpWatchdog` (`Unison.Core/State`) owns the poll loop, the idle and
+age clocks and the clear at the abort window, with the clock and delay injectable so the loop is
+tested without waiting. It answers how the watch ended — cleared between polls, cleared by someone
+else at the abort tick, or idle and cleared by the watch — and only the last one hands the lot to
+`DecideCatchUpAfterIdleBatch`. The client keeps the `Task.Run`, the journal lines and the decision.
+
+**Next in slice 3:** the accepted-request timeout, then moving the dispatch / watchdog ownership
+onto `HistoryFacade` (registry shared through DI) so the ViewModel-facing on-demand calls stop
+going through the client. The two soft-reconnect fallbacks stay in the client — they are connection lifecycle (phase 4).
 
 ### Phase 4 — What remains is connection
 

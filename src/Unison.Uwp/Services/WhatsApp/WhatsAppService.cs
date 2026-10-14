@@ -1066,6 +1066,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// <summary>Per-chat and full-history requests sent and still owed.</summary>
         private readonly HistoryOnDemandRegistry _historyRequests = new HistoryOnDemandRegistry();
         private HistoryOnDemandDispatch _historyDispatch;
+        private HistoryCatchUpWatchdog _catchUpWatchdog;
         private DateTime _lastHistorySyncReceivedUtc = DateTime.MinValue;
         private Proto.HistorySync.Types.HistorySyncType? _lastHistorySyncTypeReceived = null;
         private DateTime _lastFullHistoryRepairCompletedUtc = DateTime.MinValue;
@@ -3493,71 +3494,43 @@ namespace Unison.Uwp.Services.WhatsApp
                         "; hardTimeoutMs=" + (int)FullHistoryOnDemandResponseTimeout.TotalMilliseconds +
                         "; trigger=" + (state.TriggerReason ?? string.Empty));
 
-                    while (true)
-                    {
-                        await Task.Delay(FullHistoryCatchUpProgressPoll).ConfigureAwait(false);
-
-                        HistoryOnDemandRequest pending = _historyRequests.TrySnapshot(state);
-                        if (pending == null)
-                        {
-                            RuntimeDiagnosticsService.Instance.Write(
-                                "history",
-                                "catch-up-watchdog-exit",
-                                "requestId=" + state.RequestId + "; reason=request-cleared");
-                            return;
-                        }
-
-                        bool ackAccepted = pending.AckAccepted;
-                        DateTime lastProgressUtc = pending.LastProgressUtc;
-                        string lastProgressReason = pending.LastProgressReason;
-                        int progressSignals = pending.ProgressSignalCount;
-                        int baselineCount = pending.BaselineMessageCount;
-                        string triggerReason = pending.TriggerReason ?? "unspecified";
-                        DateTime requestedAtUtc = pending.RequestedAtUtc;
-
-                        DateTime nowUtc = DateTime.UtcNow;
-                        if (lastProgressUtc == DateTime.MinValue)
-                        {
-                            lastProgressUtc = requestedAtUtc != DateTime.MinValue
-                                ? requestedAtUtc
-                                : nowUtc;
-                        }
-
-                        TimeSpan idle = nowUtc - lastProgressUtc;
-                        TimeSpan age = nowUtc - (requestedAtUtc != DateTime.MinValue ? requestedAtUtc : nowUtc);
-                        int currentCount = GetStoredMessageCount();
-
-                        RuntimeDiagnosticsService.Instance.Write(
+                    HistoryCatchUpWatchdogExit exit = await CatchUpWatchdog.WatchAsync(
+                        state,
+                        tick => RuntimeDiagnosticsService.Instance.Write(
                             "history",
                             "catch-up-watchdog-tick",
                             "requestId=" + state.RequestId +
-                            "; idleMs=" + (int)idle.TotalMilliseconds +
-                            "; ageMs=" + (int)age.TotalMilliseconds +
-                            "; signals=" + progressSignals +
-                            "; lastProgress=" + (lastProgressReason ?? "<none>") +
-                            "; ackAccepted=" + ackAccepted +
-                            "; baselineMsgs=" + baselineCount +
-                            "; ramMsgs=" + currentCount +
-                            "; banner=" + (Volatile.Read(ref _historyCatchUpBannerActive) == 1));
+                            "; idleMs=" + (int)tick.Idle.TotalMilliseconds +
+                            "; ageMs=" + (int)tick.Age.TotalMilliseconds +
+                            "; signals=" + tick.Request.ProgressSignalCount +
+                            "; lastProgress=" + (tick.Request.LastProgressReason ?? "<none>") +
+                            "; ackAccepted=" + tick.Request.AckAccepted +
+                            "; baselineMsgs=" + tick.Request.BaselineMessageCount +
+                            "; ramMsgs=" + GetStoredMessageCount() +
+                            "; banner=" + (Volatile.Read(ref _historyCatchUpBannerActive) == 1)))
+                        .ConfigureAwait(false);
 
-                        if (idle < FullHistoryCatchUpIdleAbort)
-                        {
-                            continue;
-                        }
-
-                        if (!_historyRequests.TryClear(state))
-                        {
-                            return;
-                        }
-
-                        DecideCatchUpAfterIdleBatch(
-                            state.RequestId,
-                            ackAccepted,
-                            progressSignals,
-                            triggerReason,
-                            (int)idle.TotalMilliseconds);
+                    if (exit.Outcome == HistoryCatchUpWatchdogOutcome.RequestCleared)
+                    {
+                        RuntimeDiagnosticsService.Instance.Write(
+                            "history",
+                            "catch-up-watchdog-exit",
+                            "requestId=" + state.RequestId + "; reason=request-cleared");
                         return;
                     }
+
+                    if (exit.Outcome != HistoryCatchUpWatchdogOutcome.Idle)
+                    {
+                        return;
+                    }
+
+                    HistoryOnDemandRequest last = exit.LastTick.Request;
+                    DecideCatchUpAfterIdleBatch(
+                        state.RequestId,
+                        last.AckAccepted,
+                        last.ProgressSignalCount,
+                        last.TriggerReason ?? "unspecified",
+                        (int)exit.LastTick.Idle.TotalMilliseconds);
                 }
                 catch (Exception ex)
                 {
@@ -4119,6 +4092,12 @@ namespace Unison.Uwp.Services.WhatsApp
             string normJid = NormalizeJid(chatJid);
             return RequestHistoryOnDemandIfNeededAsync(normJid, count);
         }
+
+        private HistoryCatchUpWatchdog CatchUpWatchdog =>
+            _catchUpWatchdog ??= new HistoryCatchUpWatchdog(
+                _historyRequests,
+                FullHistoryCatchUpProgressPoll,
+                FullHistoryCatchUpIdleAbort);
 
         private HistoryOnDemandDispatch HistoryDispatch =>
             _historyDispatch ??= new HistoryOnDemandDispatch(
