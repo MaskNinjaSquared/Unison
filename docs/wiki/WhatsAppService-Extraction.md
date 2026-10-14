@@ -860,6 +860,14 @@ already documents. Both branches now go through one `Absorb`. What the dedupe pa
 client — moving messages between keys, filing the alias, removing rows — is chat-state surgery and
 stays until the timeline leaves the client.
 
+The sender of a message the phone resends is `RecoveredMessageParticipant` (key participant, then
+envelope participant, then the alt-JID scan; never a group or broadcast address). Two edges kept,
+not endorsed: the scan skips only field 4, so a direct envelope with no participant answers its own
+`remoteJid`; and the history store resolves participants with `HistorySyncContentFilter.ResolveParticipant`,
+which does not scan alt JIDs — a group message carrying its sender only there gets one live and none
+in SQLite. Unifying them is a behaviour change and waits for a device check. `ResolveHistorySenderName`
+left with it: it had no caller.
+
 ### History on demand — the bookkeeping left first
 
 The on-demand history cluster (per-chat `HISTORY_SYNC_ON_DEMAND`, the paginated

@@ -796,7 +796,7 @@ namespace Unison.Uwp.Services.WhatsApp
             EnqueueDecryptedMessage(new DecryptedMessageEventArgs
             {
                 FromJid = remoteJid,
-                Participant = ResolveHistoryParticipantJid(webMessage),
+                Participant = RecoveredMessageParticipant.Resolve(webMessage),
                 MessageId = webMessage.Key?.Id,
                 Message = webMessage.Message,
                 Timestamp = webMessage.MessageTimestamp > 0
