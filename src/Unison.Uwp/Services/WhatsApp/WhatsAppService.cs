@@ -1075,18 +1075,8 @@ namespace Unison.Uwp.Services.WhatsApp
         private static readonly TimeSpan UserResyncHistoryWaitTimeout = TimeSpan.FromMinutes(3);
         private readonly SemaphoreSlim _historyBackfillLock = new SemaphoreSlim(1, 1);
         private volatile bool _historyBackfillActive = false;
-        private sealed class PendingPinState
-        {
-            public bool IsPinned { get; set; }
-            public DateTime? PinnedAtUtc { get; set; }
-            public DateTime? ExpiresAtUtc { get; set; }
-        }
-
+        private readonly PendingMessageState _pendingMessageState = new PendingMessageState();
         private readonly object _messageStateLock = new object();
-        private readonly Dictionary<string, string> _pendingOutgoingStatusByMessageId =
-            new Dictionary<string, string>(StringComparer.Ordinal);
-        private readonly Dictionary<string, Dictionary<string, PendingPinState>> _pendingPinStateByChat =
-            new Dictionary<string, Dictionary<string, PendingPinState>>(StringComparer.OrdinalIgnoreCase);
 
         private sealed class GroupRecipientCountCacheEntry
         {
@@ -4527,56 +4517,13 @@ namespace Unison.Uwp.Services.WhatsApp
             return UnixTime.FromMilliseconds(milliseconds);
         }
 
-        private void StorePendingOutgoingStatus(string messageId, string status)
-        {
-            if (string.IsNullOrWhiteSpace(messageId) || string.IsNullOrWhiteSpace(status)) return;
-            lock (_messageStateLock)
-            {
-                if (!_pendingOutgoingStatusByMessageId.TryGetValue(messageId, out var current) ||
-                    ShouldApplyMessageStatus(current, status))
-                {
-                    _pendingOutgoingStatusByMessageId[messageId] = status;
-                }
-            }
-        }
-
         private bool ApplyPendingStateToMessage(string chatJid, ChatMessage message)
         {
             if (message == null || string.IsNullOrWhiteSpace(message.Id)) return false;
-            string canonical = GetCanonicalJid(chatJid);
-            bool changed = false;
-            lock (_messageStateLock)
-            {
-                if (message.IsFromMe &&
-                    _pendingOutgoingStatusByMessageId.TryGetValue(message.Id, out var pendingStatus))
-                {
-                    pendingStatus = ApplyChatStatusPolicy(chatJid, pendingStatus);
-                    if (ShouldApplyMessageStatus(message.Status, pendingStatus))
-                    {
-                        message.Status = pendingStatus;
-                        changed = true;
-                    }
-                    _pendingOutgoingStatusByMessageId.Remove(message.Id);
-                }
-
-                if (!string.IsNullOrWhiteSpace(canonical) &&
-                    _pendingPinStateByChat.TryGetValue(canonical, out var byMessageId) &&
-                    byMessageId.TryGetValue(message.Id, out var pinState))
-                {
-                    if (message.IsPinned != pinState.IsPinned ||
-                        message.PinnedAtUtc != (pinState.IsPinned ? pinState.PinnedAtUtc : null) ||
-                        message.PinExpiresAtUtc != (pinState.IsPinned ? pinState.ExpiresAtUtc : null))
-                    {
-                        message.IsPinned = pinState.IsPinned;
-                        message.PinnedAtUtc = pinState.IsPinned ? pinState.PinnedAtUtc : null;
-                        message.PinExpiresAtUtc = pinState.IsPinned ? pinState.ExpiresAtUtc : null;
-                        changed = true;
-                    }
-                    byMessageId.Remove(message.Id);
-                    if (byMessageId.Count == 0) _pendingPinStateByChat.Remove(canonical);
-                }
-            }
-            return changed;
+            return _pendingMessageState.ApplyTo(
+                message,
+                GetCanonicalJid(chatJid),
+                status => ApplyChatStatusPolicy(chatJid, status));
         }
 
         private async Task UpdateOutgoingMessageStatusSafelyAsync(string messageId, string status, string error = null)
@@ -4619,14 +4566,11 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 // Receipt bursts must not force disk I/O on a 512 MB phone. Keep the
                 // compact state in memory and merge/persist it when that chat is opened.
-                StorePendingOutgoingStatus(messageId, status);
+                _pendingMessageState.HoldStatus(messageId, status);
             }
             else
             {
-                lock (_messageStateLock)
-                {
-                    _pendingOutgoingStatusByMessageId.Remove(messageId);
-                }
+                _pendingMessageState.ForgetStatus(messageId);
             }
 
             foreach (var item in changedMessages)
@@ -4676,21 +4620,8 @@ namespace Unison.Uwp.Services.WhatsApp
             string canonical = GetCanonicalJid(chatJid);
             if (string.IsNullOrWhiteSpace(canonical) || string.IsNullOrWhiteSpace(messageId)) return false;
 
-            var state = new PendingPinState
-            {
-                IsPinned = isPinned,
-                PinnedAtUtc = isPinned ? (DateTime?)(pinnedAtUtc ?? DateTime.UtcNow) : (DateTime?)null,
-                ExpiresAtUtc = isPinned ? expiresAtUtc : null
-            };
-            lock (_messageStateLock)
-            {
-                if (!_pendingPinStateByChat.TryGetValue(canonical, out var byMessageId))
-                {
-                    byMessageId = new Dictionary<string, PendingPinState>(StringComparer.Ordinal);
-                    _pendingPinStateByChat[canonical] = byMessageId;
-                }
-                byMessageId[messageId] = state;
-            }
+            PendingPin state = _pendingMessageState.HoldPin(
+                canonical, messageId, isPinned, pinnedAtUtc, expiresAtUtc, DateTime.UtcNow);
 
             ChatMessage target = null;
             await RunOnUiThreadAsync(() =>
@@ -4737,14 +4668,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             if (target != null)
             {
-                lock (_messageStateLock)
-                {
-                    if (_pendingPinStateByChat.TryGetValue(canonical, out var byMessageId))
-                    {
-                        byMessageId.Remove(messageId);
-                        if (byMessageId.Count == 0) _pendingPinStateByChat.Remove(canonical);
-                    }
-                }
+                _pendingMessageState.ForgetPin(canonical, messageId);
 
                 // Pin must hit history_message immediately. Offline-replay flush is debounced and
                 // a later history/live body upsert used to InsertOrReplace with IsPinned=false.
@@ -4771,13 +4695,12 @@ namespace Unison.Uwp.Services.WhatsApp
         private async Task PersistPinnedMessageToSqliteAsync(
             string canonical,
             string messageId,
-            PendingPinState state,
+            PendingPin state,
             ChatMessage target)
         {
             if (_historyMessages == null ||
                 string.IsNullOrWhiteSpace(canonical) ||
-                string.IsNullOrWhiteSpace(messageId) ||
-                state == null)
+                string.IsNullOrWhiteSpace(messageId))
             {
                 return;
             }

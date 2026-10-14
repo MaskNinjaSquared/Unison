@@ -875,6 +875,11 @@ candidate with the JID user part as an exact string, so `+55 11 99999-0001` pass
 `ResolveEstablishedSelfName` trusted it — while contacts already rejected it by digits with
 `ContactLabelSanitizer.IsPhoneEcho`. Both paths now use that test.
 
+Receipts and pins for a message not in memory are held by `PendingMessageState` (`Unison.Core/State`)
+and applied once when the message next loads; the chat's status policy comes in as a function. The
+client lost two dictionaries, the pin state class and the store method; `_messageStateLock` now only
+guards the group recipient-count cache.
+
 The newest message time history freshness reads is `NewestStoredMessage.FindUtc` over the timeline
 snapshot and the list strip (cold start has tips but no timelines), each value through
 `ChatMessageOrder.ToComparableUtc`. The client passes `MessagesByChat` and `Chats` and its filters.
