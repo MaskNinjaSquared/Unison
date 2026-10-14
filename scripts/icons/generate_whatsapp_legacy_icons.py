@@ -143,12 +143,18 @@ def main() -> int:
     fb.setupHorizontalMetrics(advance)
     # Line box == em box (glyphs are centred inside 0..UPM), so FontIcon centres them.
     fb.setupHorizontalHeader(ascent=UPM, descent=0, lineGap=0)
+    # Cap height == em too: TextLineBounds="Tight" sizes the TextBlock baseline..capHeight,
+    # and a 0 cap height collapses that box and pushes the ink above it.
     fb.setupOS2(
+        version=4,
         sTypoAscender=UPM,
         sTypoDescender=0,
         sTypoLineGap=0,
         usWinAscent=UPM,
         usWinDescent=0,
+        sCapHeight=UPM,
+        sxHeight=UPM,
+        fsSelection=0x00C0,  # REGULAR | USE_TYPO_METRICS
     )
     fb.setupPost()
     fb.setupNameTable(
