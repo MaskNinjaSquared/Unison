@@ -920,9 +920,10 @@ is still current, handing back the expired copy — null when the phone answered
 keeps the `Task.Run`, the timeout log, the `catch-up-hard-timeout` journal line and the hand-off
 to `DecideCatchUpAfterIdleBatch`.
 
-**Next in slice 3:** the side effects around `DecideCatchUpAfterIdleBatch` /
-`RequestAdjacentFullHistoryCatchUpAsync`. The two soft-reconnect fallbacks stay in the client —
-they are connection lifecycle (phase 4).
+**Slice 3 is closed.** What stays in the client — `DecideCatchUpAfterIdleBatch`,
+`RequestAdjacentFullHistoryCatchUpAsync` and the two soft-reconnect fallbacks — has no rule left in
+it; it reads `_suppressReconnect`, the auth state, the live transport and the enrichment gate, and
+falls back to a reconnect. That is connection lifecycle and moves with phase 4.
 
 ### Phase 4 — What remains is connection
 
