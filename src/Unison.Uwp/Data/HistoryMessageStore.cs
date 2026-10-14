@@ -1230,7 +1230,7 @@ namespace Unison.Uwp.Data
         public async Task<IReadOnlyList<CachedMediaEntry>> ListCachedMediaAsync()
         {
             await InitializeAsync().ConfigureAwait(false);
-            List<CachedMediaSqlRow> rows = await _connection.QueryAsync<CachedMediaSqlRow>(
+            List<HistoryMessageRow> rows = await _connection.QueryAsync<HistoryMessageRow>(
                 "SELECT ChatJid, MessageId, MediaLocalUri, MediaPosterUri FROM history_message " +
                 "WHERE IFNULL(flag_deleted, 0) = 0 AND (" +
                 "(MediaLocalUri IS NOT NULL AND MediaLocalUri != '') OR " +
@@ -1294,48 +1294,27 @@ namespace Unison.Uwp.Data
             }
 
             await InitializeAsync().ConfigureAwait(false);
-            List<FlagSqlRow> rows = await _connection.QueryAsync<FlagSqlRow>(
-                "SELECT flag_deleted FROM history_message WHERE ChatJid = ? AND MessageId = ? LIMIT 1",
+            int flag = await _connection.ExecuteScalarAsync<int>(
+                "SELECT IFNULL(flag_deleted, 0) FROM history_message WHERE ChatJid = ? AND MessageId = ? LIMIT 1",
                 chatJid,
                 messageId).ConfigureAwait(false);
-            return rows.Count > 0 && rows[0].flag_deleted != 0;
+            return flag != 0;
         }
 
+        // .NET Native strips metadata from private row types ("Required Public" in Default.rd.xml),
+        // so column detection must not map PRAGMA rows; an existing column is the expected outcome.
         private async Task EnsureFlagDeletedColumnAsync()
         {
-            List<TableInfoRow> columns = await _connection.QueryAsync<TableInfoRow>(
-                "PRAGMA table_info(history_message)").ConfigureAwait(false);
-            for (int i = 0; i < columns.Count; i++)
+            try
             {
-                if (string.Equals(columns[i].name, "flag_deleted", StringComparison.OrdinalIgnoreCase))
-                {
-                    return;
-                }
+                await _connection.ExecuteAsync(
+                    "ALTER TABLE history_message ADD COLUMN flag_deleted INTEGER NOT NULL DEFAULT 0").ConfigureAwait(false);
             }
-
-            await _connection.ExecuteAsync(
-                "ALTER TABLE history_message ADD COLUMN flag_deleted INTEGER NOT NULL DEFAULT 0").ConfigureAwait(false);
-        }
-
-        private sealed class CachedMediaSqlRow
-        {
-            public string ChatJid { get; set; }
-
-            public string MessageId { get; set; }
-
-            public string MediaLocalUri { get; set; }
-
-            public string MediaPosterUri { get; set; }
-        }
-
-        private sealed class FlagSqlRow
-        {
-            public int flag_deleted { get; set; }
-        }
-
-        private sealed class TableInfoRow
-        {
-            public string name { get; set; }
+            catch (SQLiteException ex) when (
+                ex.Message != null &&
+                ex.Message.IndexOf("duplicate column name", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+            }
         }
 
         private static HistoryMessageRow ToRow(HistoryMessage model)

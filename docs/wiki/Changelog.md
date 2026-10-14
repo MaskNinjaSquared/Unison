@@ -4,6 +4,15 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Message history store opens again on Mobile
+
+On release (.NET Native) builds the message history database failed to open on every
+start with "duplicate column name: flag_deleted", so no messages were saved or read:
+chats showed only their last message and the first sync never finished. The column check
+read `PRAGMA table_info` into a private row type whose properties .NET Native strips;
+it now adds the column and treats "already exists" as done. The deleted-media flag and
+the cached-media list no longer map private row types either.
+
 ## No broker handoff during the first sync; chat-open journal
 
 While the first sync after login is still arriving, entered-background and suspending
