@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build WhatsAppLegacyIcons.ttf from Assets/WhatsAppLegacy/Icons PNGs.
+"""Build WhatsAppLegacyIcons.ttf from scripts/icons/whatsapp-legacy PNGs.
 
 Codepoints (Private Use Area):
   EB01  search   (appbar-search.png)
@@ -7,6 +7,10 @@ Codepoints (Private Use Area):
   EB03  attach   (composer-attach.png)
   EB04  send     (composer-send.png)
   EB05  mic      (composer-mic.png)
+
+Ink is read from alpha only (source colour is ignored; XAML sets Foreground).
+Each glyph is cropped to its own ink and fitted into the same square box,
+centred, so every icon renders at the same optical size for a given FontSize.
 
 Requires: pip install fonttools pillow numpy scikit-image
 """
@@ -23,69 +27,93 @@ from fontTools.pens.ttGlyphPen import TTGlyphPen
 from skimage import measure
 
 REPO = Path(__file__).resolve().parents[2]
-ICONS = REPO / "src" / "Unison.Uwp" / "Assets" / "WhatsAppLegacy" / "Icons"
+ICONS = Path(__file__).resolve().parent / "whatsapp-legacy"
 FONT_PATH = REPO / "src" / "Unison.Uwp" / "Assets" / "Fonts" / "WhatsAppLegacyIcons.ttf"
 UPM = 1000
-PAD = 0.10
+# Ink box edge as a fraction of the em; the rest is equal padding on every side.
+INK_BOX = 0.84
+# Max deviation (source px) when simplifying traced outlines.
+SIMPLIFY_TOLERANCE = 0.35
 
-# name → (codepoint, png filename)
+# name → (codepoint, png filename, ink box scale relative to INK_BOX)
 GLYPHS = [
-    ("search", 0xEB01, "appbar-search.png"),
-    ("add", 0xEB02, "appbar-add.png"),
-    ("attach", 0xEB03, "composer-attach.png"),
-    ("send", 0xEB04, "composer-send.png"),
-    ("mic", 0xEB05, "composer-mic.png"),
+    ("search", 0xEB01, "appbar-search.png", 0.86),
+    ("add", 0xEB02, "appbar-add.png", 0.80),
+    ("attach", 0xEB03, "composer-attach.png", 1.0),
+    ("send", 0xEB04, "composer-send.png", 1.0),
+    ("mic", 0xEB05, "composer-mic.png", 1.0),
 ]
 
 
-def _white_mask(path: Path) -> np.ndarray:
+def _alpha(path: Path) -> np.ndarray:
     im = Image.open(path).convert("RGBA")
-    arr = np.asarray(im, dtype=np.float32)
-    rgb = arr[:, :, :3].mean(axis=2)
-    alpha = arr[:, :, 3]
-    # White ink on black (or transparent) — keep bright opaque pixels.
-    return (rgb > 140.0) & (alpha > 40.0)
+    return np.asarray(im, dtype=np.float32)[:, :, 3] / 255.0
 
 
-def _contour_area(contour: np.ndarray) -> float:
-    # Shoelace; contour is (row, col) = (y, x).
-    y = contour[:, 0]
-    x = contour[:, 1]
-    return 0.5 * abs(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1)))
+def _signed_area(points: list[tuple[float, float]]) -> float:
+    total = 0.0
+    for i, (x0, y0) in enumerate(points):
+        x1, y1 = points[(i + 1) % len(points)]
+        total += x0 * y1 - x1 * y0
+    return total / 2.0
 
 
-def glyph_from_png(path: Path):
-    mask = _white_mask(path)
-    h, w = mask.shape
-    # find_contours wants float image; level 0.5 on boolean works.
-    contours = measure.find_contours(mask.astype(float), 0.5)
-    if not contours:
+def _contains(polygon: list[tuple[float, float]], point: tuple[float, float]) -> bool:
+    x, y = point
+    inside = False
+    j = len(polygon) - 1
+    for i in range(len(polygon)):
+        xi, yi = polygon[i]
+        xj, yj = polygon[j]
+        if (yi > y) != (yj > y) and x < (xj - xi) * (y - yi) / (yj - yi) + xi:
+            inside = not inside
+        j = i
+    return inside
+
+
+def glyph_from_png(path: Path, scale_factor: float):
+    alpha = _alpha(path)
+    # Pad so contours touching the image edge still close.
+    alpha = np.pad(alpha, 1)
+    ys, xs = np.nonzero(alpha > 0.5)
+    if xs.size == 0:
         raise RuntimeError(f"No ink found in {path.name}")
 
-    # Drop dust; keep largest shapes (outer + holes of the icon).
-    contours = sorted(contours, key=_contour_area, reverse=True)
-    min_area = max(8.0, _contour_area(contours[0]) * 0.01)
-    contours = [c for c in contours if _contour_area(c) >= min_area]
-    if not contours:
-        raise RuntimeError(f"Contours too small in {path.name}")
+    raw = measure.find_contours(alpha, 0.5)
+    raw = [measure.approximate_polygon(c, SIMPLIFY_TOLERANCE) for c in raw]
+    raw = [c for c in raw if len(c) >= 4]
 
-    scale = (UPM * (1.0 - 2.0 * PAD)) / float(max(w, h))
-    ox = (UPM - w * scale) / 2.0
-    oy = (UPM - h * scale) / 2.0
+    # Ink bounds from the traced outlines (sub-pixel), then fit into the box.
+    all_pts = np.vstack(raw)
+    min_y, min_x = all_pts.min(axis=0)
+    max_y, max_x = all_pts.max(axis=0)
+    ink_w = max_x - min_x
+    ink_h = max_y - min_y
+    box = UPM * INK_BOX * scale_factor
+    scale = box / max(ink_w, ink_h)
+    ox = (UPM - ink_w * scale) / 2.0 - min_x * scale
+    oy = (UPM - ink_h * scale) / 2.0 - min_y * scale
+
+    polygons = []
+    for contour in raw:
+        pts = [(ox + x * scale, UPM - (oy + y * scale)) for y, x in contour[:-1]]
+        if abs(_signed_area(pts)) < (scale * scale) * 2.0:
+            continue
+        polygons.append(pts)
 
     pen = TTGlyphPen(None)
-    for contour in contours:
-        # contour rows = y (down), cols = x
-        pts = []
-        for y, x in contour:
-            fx = ox + x * scale
-            fy = UPM - (oy + y * scale)
-            pts.append((fx, fy))
-        if len(pts) < 3:
-            continue
-        pen.moveTo(pts[0])
-        for p in pts[1:]:
-            pen.lineTo(p)
+    for index, pts in enumerate(polygons):
+        depth = sum(
+            1 for other_index, other in enumerate(polygons)
+            if other_index != index and _contains(other, pts[0])
+        )
+        # TrueType: outer contours clockwise, holes counter-clockwise (y up).
+        clockwise = _signed_area(pts) < 0
+        if (depth % 2 == 0) != clockwise:
+            pts = list(reversed(pts))
+        pen.moveTo((round(pts[0][0]), round(pts[0][1])))
+        for x, y in pts[1:]:
+            pen.lineTo((round(x), round(y)))
         pen.closePath()
 
     return pen.glyph()
@@ -95,14 +123,14 @@ def main() -> int:
     glyph_order = [".notdef"]
     glyphs = {".notdef": TTGlyphPen(None).glyph()}
     cmap = {}
-    advance = {".notdef": (0, 0)}
+    advance = {".notdef": (UPM, 0)}
 
-    for name, code, filename in GLYPHS:
+    for name, code, filename, scale_factor in GLYPHS:
         png = ICONS / filename
         if not png.is_file():
             print(f"Missing icon: {png}", file=sys.stderr)
             return 1
-        glyphs[name] = glyph_from_png(png)
+        glyphs[name] = glyph_from_png(png, scale_factor)
         glyph_order.append(name)
         cmap[code] = name
         advance[name] = (UPM, 0)
@@ -113,10 +141,12 @@ def main() -> int:
     fb.setupCharacterMap(cmap)
     fb.setupGlyf(glyphs)
     fb.setupHorizontalMetrics(advance)
-    fb.setupHorizontalHeader(ascent=UPM, descent=0)
+    # Line box == em box (glyphs are centred inside 0..UPM), so FontIcon centres them.
+    fb.setupHorizontalHeader(ascent=UPM, descent=0, lineGap=0)
     fb.setupOS2(
         sTypoAscender=UPM,
         sTypoDescender=0,
+        sTypoLineGap=0,
         usWinAscent=UPM,
         usWinDescent=0,
     )
@@ -127,7 +157,7 @@ def main() -> int:
             "styleName": "Regular",
             "uniqueFontIdentifier": "WhatsAppLegacyIcons",
             "fullName": "WhatsAppLegacyIcons",
-            "version": "Version 1.0",
+            "version": "Version 2.0",
             "psName": "WhatsAppLegacyIcons",
             "description": "WhatsApp Legacy (WP8) UI icons. Regenerate via scripts/icons/generate-whatsapp-legacy-icons.ps1",
         }
