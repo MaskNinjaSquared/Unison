@@ -156,6 +156,37 @@ namespace Unison.Core.State
         }
 
         /// <summary>
+        /// Folds every conversation held under a non-canonical key into the one
+        /// <paramref name="canonicalOf"/> names, through <see cref="MergeInto"/>. A key whose
+        /// canonical form is blank is left where it is.
+        /// </summary>
+        /// <returns>How many conversations were folded.</returns>
+        public int CanonicalizeKeys(Func<string, string> canonicalOf)
+        {
+            if (canonicalOf == null)
+            {
+                throw new ArgumentNullException(nameof(canonicalOf));
+            }
+
+            int folded = 0;
+            foreach (string key in ChatJids())
+            {
+                string canonical = canonicalOf(key);
+                if (string.IsNullOrWhiteSpace(canonical))
+                {
+                    continue;
+                }
+
+                if (MergeInto(key, canonical))
+                {
+                    folded++;
+                }
+            }
+
+            return folded;
+        }
+
+        /// <summary>
         /// Puts a message in time order, trims the window to <paramref name="capacity"/> and
         /// registers the id — in that order, so an old message trimmed straight away still counts
         /// as seen. UI thread, like every in-place edit.

@@ -185,7 +185,7 @@ Self-contained first. List/persist last.
 | 3.7b | Converge onto `LidMappingStore` | Blocked: that store is async, canonicalization is not. See below |
 | 3.8 | `.AppState.cs` | **Rewritten — the premise was stale.** See below |
 | 3.9a | List display order (done) | `ChatDisplayOrder` (Core) |
-| 3.9b | `.Persistence.cs` + preview reconcile + the appliers from 3.8 | `ChatFacade` + `ChatStateStore` + `IChatStore` / `IMessageStore`. Close the transitional public dictionaries on `ChatStateStore`. **Persistence rules out; appliers remain — see below.** **Name maps closed (`DisplayNameTable`). `MessagesByChat` is `ChatMessageCache` (conversation set locked) and owns every edit to the per-chat lists — merge, insert, trim, add-missing, id index; the client only reads them.** **Repeated list-strip assembly is `ChatListStrip`. Phone-digit lookup is `KnownJidByPhoneDigits`. Delete/persist I/O stays** |
+| 3.9b | `.Persistence.cs` + preview reconcile + the appliers from 3.8 | `ChatFacade` + `ChatStateStore` + `IChatStore` / `IMessageStore`. Close the transitional public dictionaries on `ChatStateStore`. **Persistence rules out; appliers remain — see below.** **Name maps closed (`DisplayNameTable`). `MessagesByChat` is `ChatMessageCache` (conversation set locked) and owns every edit to the per-chat lists — merge, key canonicalization, insert, trim, add-missing, id index; the client only reads them.** **Repeated list-strip assembly is `ChatListStrip`. Phone-digit lookup is `KnownJidByPhoneDigits`. Delete/persist I/O stays** |
 | 3.10 | `.IncomingPump.cs` | Decode/dispatch stays with connection. **Rules closed.** **Notify + timeline accept + persist enqueue + revoke + pin-in-chat on MessageFacade.** **Live + offline list apply + tip refresh/reconcile on ChatFacade.** **Resend row transitions on `MissingMessageLedger`.** **Queue lanes, generation and stage on `IncomingMessageQueue<T>`.** **Offline replay tips on ChatFacade.** **Timeline accept (alias move / duplicate / insert) on `IncomingTimeline`.** **Resend wait / send / answer window on `PlaceholderResendDispatch`.** Pump keeps the drain loop and the go/no-go before a resend |
 
 **3.1a is done.** The avatar half of `MediaCache` is `IAvatarCache` / `AvatarCacheService`: `TryGet`,
@@ -906,6 +906,26 @@ scan alt JIDs, so a group message carrying its sender only there had one live an
 Edge kept, not endorsed: the scan skips only field 4, so a direct envelope with no participant
 answers its own `remoteJid` (the history gate drops it; the resend path passes it on).
 `ResolveHistorySenderName` left with it: it had no caller.
+
+Writing an accepted pair is `AliasPairFiling` (19 tests). It was three hand copies: the live path
+(`TryRecordAliasMapping`) and the usync answer (`TryFileUsyncAlias`) file both ways and report news
+from the LID side only; the duplicate-row merge in `DeduplicateChatsAsync` files the LID side and
+leaves the phone side alone when it already points at an `@lid`, because two rows looking alike is
+our inference and the server's pairing outranks it. The two self-pair writes in `.Connection.cs`
+stay as they are (phase 4).
+
+Reading one contact out of an app-state snapshot, history chunk or participant list is
+`ContactUpdateFiling` (15 tests). `ApplyContactUpdatesAsync` now just loops: the `Id` fills whichever
+half (LID or phone) the update left out, a pair is reported whenever both halves are known (named or
+not), the name is `Name` else `Notify`, and a named contact is filed under its `Id` plus each other half
+that differs. The client's private `IsLidJid` went with it. Fixed right after the move: the LID test
+read the raw text, so a padded `"x@lid "` was taken for a phone (now `JidHelper.IsLidJid`, which trims),
+and a whitespace-only `Name` blocked the `Notify` fallback and left the contact unnamed.
+
+Folding every non-canonical message-cache key into its conversation is
+`ChatMessageCache.CanonicalizeKeys` (5 tests). `DeduplicateChatsAsync` walked `ChatJids()` and called
+`MergeInto` per key by hand; it now passes `GetCanonicalJid` and takes the count back. A blank
+canonical form leaves the key alone, and an alias holding no list is not counted, as before.
 
 Filtering a candidate for the account's own name is `SelfNameCandidate` (marker through
 `ISelfMarkerNaming`, as `ContactLabelSanitizer` does). Fixed on the way: the self path compared the

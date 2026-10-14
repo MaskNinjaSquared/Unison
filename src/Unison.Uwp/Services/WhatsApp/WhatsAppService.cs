@@ -5155,44 +5155,17 @@ namespace Unison.Uwp.Services.WhatsApp
                     continue;
                 }
 
-                string lid = contact.Lid;
-                string phone = contact.PhoneNumber;
+                ContactUpdateReading reading = ContactUpdateFiling.Read(
+                    contact.Id, contact.Lid, contact.PhoneNumber, contact.Name, contact.Notify);
 
-                // The index carries whichever address the action was filed under, so it fills in
-                // whichever half the action itself left out.
-                if (string.IsNullOrEmpty(phone) && !IsLidJid(contact.Id))
+                if (reading.HasAliasPair)
                 {
-                    phone = contact.Id;
+                    aliasPairs.Add(new KeyValuePair<string, string>(reading.Lid, reading.Phone));
                 }
 
-                if (string.IsNullOrEmpty(lid) && IsLidJid(contact.Id))
+                foreach (string address in reading.NameAddresses)
                 {
-                    lid = contact.Id;
-                }
-
-                if (!string.IsNullOrEmpty(lid) && !string.IsNullOrEmpty(phone))
-                {
-                    aliasPairs.Add(new KeyValuePair<string, string>(lid, phone));
-                }
-
-                string name = string.IsNullOrEmpty(contact.Name) ? contact.Notify : contact.Name;
-                if (string.IsNullOrWhiteSpace(name))
-                {
-                    continue;
-                }
-
-                // Filed under both addresses rather than trusting the alias to be resolvable in
-                // every direction: whichever one a chat happens to be keyed by, the lookup lands.
-                AddResolvedName(entries, contact.Id, name, isSubject: false);
-
-                if (!string.IsNullOrEmpty(lid) && !string.Equals(lid, contact.Id, StringComparison.OrdinalIgnoreCase))
-                {
-                    AddResolvedName(entries, lid, name, isSubject: false);
-                }
-
-                if (!string.IsNullOrEmpty(phone) && !string.Equals(phone, contact.Id, StringComparison.OrdinalIgnoreCase))
-                {
-                    AddResolvedName(entries, phone, name, isSubject: false);
+                    AddResolvedName(entries, address, reading.Name, isSubject: false);
                 }
             }
 
@@ -5206,12 +5179,6 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             await ApplyResolvedNameBatchAsync(entries);
-        }
-
-        private static bool IsLidJid(string jid)
-        {
-            return !string.IsNullOrEmpty(jid) &&
-                   jid.EndsWith("@lid", StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>
@@ -5646,16 +5613,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             // is not one we are allowed to file.
                             if (AliasPairPolicy.TryAcceptPair(secondaryNorm, primaryNorm, JidAlias, out string mergedLid, out string mergedPn))
                             {
-                                JidAlias[mergedLid] = mergedPn;
-
-                                // An existing @lid alias on this side is more specific than what
-                                // the merge knows, so it is left in place.
-                                if (!JidAlias.TryGetValue(mergedPn, out var existingPrimaryAlias) ||
-                                    string.IsNullOrWhiteSpace(existingPrimaryAlias) ||
-                                    !NormalizeJid(existingPrimaryAlias).EndsWith("@lid", StringComparison.OrdinalIgnoreCase))
-                                {
-                                    JidAlias[mergedPn] = mergedLid;
-                                }
+                                AliasPairFiling.FileFromRowMerge(JidAlias, mergedLid, mergedPn);
                             }
 
                             // The secondary messages have already moved under the primary key, so a
@@ -5674,21 +5632,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
 
                     // Ensure message-cache keys are canonicalized even when a secondary chat row no longer exists.
-                    var cacheKeys = MessagesByChat.ChatJids();
-                    foreach (var key in cacheKeys)
-                    {
-                        string canonicalKey = GetCanonicalJid(key);
-                        if (string.IsNullOrWhiteSpace(canonicalKey) ||
-                            string.Equals(canonicalKey, key, StringComparison.OrdinalIgnoreCase))
-                        {
-                            continue;
-                        }
-
-                        if (MessagesByChat.MergeInto(key, canonicalKey))
-                        {
-                            normalizedMessageKeyCount++;
-                        }
-                    }
+                    normalizedMessageKeyCount = MessagesByChat.CanonicalizeKeys(GetCanonicalJid);
 
                     if (mergedCount > 0 || normalizedMessageKeyCount > 0)
                     {
@@ -5784,8 +5728,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return false;
             }
 
-            JidAlias[acceptedLid] = acceptedPn;
-            JidAlias[acceptedPn] = acceptedLid;
+            AliasPairFiling.FileBothWays(JidAlias, acceptedLid, acceptedPn);
             RegisterSocketAlias(normalizedUser, normalizedLid, "contact-usync");
             HealOwnIdentity(normalizedUser, normalizedLid);
             return true;

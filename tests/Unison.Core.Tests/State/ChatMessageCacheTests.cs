@@ -326,4 +326,61 @@ public class ChatMessageCacheTests
 
         Assert.Single(cache[Ana]);
     }
+
+    [Fact]
+    public void Canonicalizing_folds_every_alias_key_into_its_canonical_conversation()
+    {
+        var cache = new ChatMessageCache();
+        cache.GetOrAdd(Ana).Add(At("A", 1));
+        cache.GetOrAdd(AnaLid).Add(At("B", 2));
+
+        int folded = cache.CanonicalizeKeys(key => key == AnaLid ? Ana : key);
+
+        Assert.Equal(1, folded);
+        Assert.False(cache.Contains(AnaLid));
+        Assert.Equal(new[] { "A", "B" }, cache[Ana].Select(m => m.Id));
+    }
+
+    [Fact]
+    public void Canonicalizing_creates_the_canonical_conversation_when_only_the_alias_is_held()
+    {
+        var cache = new ChatMessageCache();
+        cache.GetOrAdd(AnaLid).Add(At("A", 1));
+
+        Assert.Equal(1, cache.CanonicalizeKeys(key => Ana));
+
+        Assert.Single(cache[Ana]);
+        Assert.False(cache.Contains(AnaLid));
+    }
+
+    [Fact]
+    public void Canonicalizing_leaves_keys_that_already_are_canonical_ignoring_case()
+    {
+        var cache = new ChatMessageCache();
+        cache.GetOrAdd(Ana).Add(At("A", 1));
+
+        Assert.Equal(0, cache.CanonicalizeKeys(key => key.ToUpperInvariant()));
+
+        Assert.Single(cache[Ana]);
+    }
+
+    [Fact]
+    public void Canonicalizing_keeps_a_key_whose_canonical_form_is_blank()
+    {
+        var cache = new ChatMessageCache();
+        cache.GetOrAdd(AnaLid).Add(At("A", 1));
+
+        Assert.Equal(0, cache.CanonicalizeKeys(key => " "));
+
+        Assert.True(cache.Contains(AnaLid));
+    }
+
+    [Fact]
+    public void Canonicalizing_does_not_count_an_alias_holding_no_list()
+    {
+        var cache = new ChatMessageCache();
+        cache.Set(AnaLid, null);
+
+        Assert.Equal(0, cache.CanonicalizeKeys(key => Ana));
+    }
 }

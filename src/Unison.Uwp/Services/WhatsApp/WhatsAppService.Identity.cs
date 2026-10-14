@@ -454,9 +454,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return false;
             }
 
-            bool changed = !JidAlias.TryGetValue(lid, out var existingPn) || NormalizeJid(existingPn) != pn;
-            JidAlias[lid] = pn;
-            JidAlias[pn] = lid;
+            bool changed = AliasPairFiling.FileBothWays(JidAlias, lid, pn);
             RegisterSocketAlias(lid, pn, source);
 
             if (!changed)
