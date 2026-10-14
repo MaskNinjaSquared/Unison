@@ -425,7 +425,6 @@ namespace Unison.Uwp.Services.WhatsApp
                         }
 
                         MessagesByChat.Remove(key);
-                        _messageIdIndex.RemoveChat(key);
                     }
                 });
 
@@ -559,7 +558,6 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 MessagesByChat.Remove(jid);
             }
-            _messageIdIndex.RemoveChat(normalized);
         }
 
         private void TrimInMemoryMessageWindow(string jid)
@@ -576,7 +574,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             ActiveChatMessageWindow.TrimInPlace(messages, MaxActiveChatMessagesInMemory, DateTime.UtcNow);
-            _messageIdIndex.Rebuild(normalized, messages);
+            MessagesByChat.Ids.Rebuild(normalized, messages);
         }
         private AuthState _authState;
 
@@ -1062,7 +1060,6 @@ namespace Unison.Uwp.Services.WhatsApp
             public DateTime LastMessageTimestamp { get; set; }
             public string SelectionReason { get; set; }
         }
-        private readonly MessageIdIndex _messageIdIndex = new MessageIdIndex();
         /// <summary>Per-chat and full-history requests sent and still owed. Shared with <c>HistoryFacade</c>.</summary>
         private readonly HistoryOnDemandRegistry _historyRequests;
         private HistoryOnDemandDispatch _historyDispatch;
@@ -1722,7 +1719,6 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 Chats.Clear();
                 MessagesByChat.Clear();
-                _messageIdIndex.Clear();
                 _historyRequests.ClearRequests();
                 _historyRequests.ReleaseFull();
             });
@@ -2343,7 +2339,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
                 ChatMessageOrder.SortInPlace(list);
-                _messageIdIndex.Rebuild(normJid, list);
+                MessagesByChat.Ids.Rebuild(normJid, list);
             });
         }
 
@@ -3043,7 +3039,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
                 MessagesByChat.Set(normJid, cache);
-                _messageIdIndex.Rebuild(normJid, cache);
 
                 if (stateAdjustedMessages.Count > 0)
                 {
@@ -5533,7 +5528,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 {
                     Log($"[WhatsAppService] Merging duplicate chats: {normLidJid} -> {normPnJid}");
                     
-                    MergeTimelineInto(normLidJid, normPnJid);
+                    MessagesByChat.MergeInto(normLidJid, normPnJid);
 
                     // 2. Remove LID chat from UI
                     Chats.Remove(lidChat);
@@ -5708,7 +5703,7 @@ namespace Unison.Uwp.Services.WhatsApp
                                 continue;
                             }
 
-                            MergeTimelineInto(secondaryNorm, primaryNorm);
+                            MessagesByChat.MergeInto(secondaryNorm, primaryNorm);
 
                             if (ContactNames.TryGetValue(secondaryNorm, out var secondaryName))
                             {
@@ -5757,7 +5752,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             continue;
                         }
 
-                        if (MergeTimelineInto(key, canonicalKey))
+                        if (MessagesByChat.MergeInto(key, canonicalKey))
                         {
                             normalizedMessageKeyCount++;
                         }

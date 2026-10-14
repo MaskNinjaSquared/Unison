@@ -291,7 +291,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             await RunOnUiThreadAsync(() =>
             {
-                if (MergeTimelineInto(normalizedTransient, normalizedCanonical))
+                if (MessagesByChat.MergeInto(normalizedTransient, normalizedCanonical))
                 {
                     ForgetMissingMessagesForChat(normalizedTransient);
                     merged = true;

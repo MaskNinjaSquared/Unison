@@ -212,7 +212,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
                 MessagesByChat.Remove(canonical);
-                _messageIdIndex.RemoveChat(canonical);
                 ForgetMissingMessagesForChat(canonical);
                 _historyRequests.ForgetChat(canonical);
                 _missing.Cooldowns.Remove(canonical);
@@ -312,7 +311,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
                 messages.Remove(message);
-                _messageIdIndex.Remove(canonical, messageId);
+                MessagesByChat.Ids.Remove(canonical, messageId);
 
                 // Every row sharing this identity, not just the first: a conversation is
                 // listed under both PN and LID, and correcting one left the other showing a

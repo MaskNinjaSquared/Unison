@@ -43,33 +43,8 @@ namespace Unison.Uwp.Services.WhatsApp
     public partial class WhatsAppService
     {
 
-        private HashSet<string> GetOrBuildMessageIdIndex(string chatJid)
-        {
-            string normJid = NormalizeJid(chatJid);
-            return _messageIdIndex.GetOrBuild(normJid, () =>
-            {
-                List<ChatMessage> list;
-                return MessagesByChat.TryGet(normJid, out list) ? list : null;
-            });
-        }
-
-        /// <summary>Moves an alias timeline under its target and drops the alias's id index.</summary>
-        private bool MergeTimelineInto(string aliasJid, string targetJid)
-        {
-            // Checked first so a missing alias does not build (and cache) an index for the target.
-            if (!MessagesByChat.TryGet(aliasJid, out var alias) || alias == null)
-            {
-                return false;
-            }
-
-            if (!MessagesByChat.MergeInto(aliasJid, targetJid, GetOrBuildMessageIdIndex(targetJid)))
-            {
-                return false;
-            }
-
-            _messageIdIndex.RemoveChat(aliasJid);
-            return true;
-        }
+        private HashSet<string> GetOrBuildMessageIdIndex(string chatJid) =>
+            MessagesByChat.KnownIds(chatJid);
 
         private bool HasMessageId(string chatJid, string messageId)
         {
@@ -1727,7 +1702,7 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             return new IncomingTimeline(
                     MessagesByChat,
-                    _messageIdIndex,
+                    MessagesByChat.Ids,
                     GetAliasLinkedDirectChatJids,
                     NormalizeJid,
                     TrimInMemoryMessageWindow)

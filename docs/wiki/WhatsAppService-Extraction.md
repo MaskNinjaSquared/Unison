@@ -510,6 +510,11 @@ other three left alias messages at the end out of time order while later inserts
 they assume is sorted. And two copies appended id-less messages unconditionally, duplicating any the
 target already held. Only the transient merge forgets the alias's missing-message rows, as before.
 
+*Id index:* `MessageIdIndex` moved from a client field onto `ChatMessageCache.Ids`. Every place the
+client removed or cleared a timeline already dropped its ids by hand, and replacing one rebuilt
+them; `Remove`, `Clear`, `Set` and `MergeInto` do that themselves now, and `KnownIds` builds the set
+lazily from the timeline. Direct list edits (insert, trim, page load) still register or rebuild.
+
 ### 3.4 — send moved to `MessageFacade`
 
 The flow left the client whole, and it lives in Core, so the suite reaches it now. `OutgoingTextSend`

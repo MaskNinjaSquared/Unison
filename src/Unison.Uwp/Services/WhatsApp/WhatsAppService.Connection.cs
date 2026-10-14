@@ -663,7 +663,6 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 Chats.Clear();
                 MessagesByChat.Clear();
-                _messageIdIndex.Clear();
                 _historyRequests.ClearRequests();
                 ContactNames.Clear();
                 PhoneContactNamesByJid.Clear();

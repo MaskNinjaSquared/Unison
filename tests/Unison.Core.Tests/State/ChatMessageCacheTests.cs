@@ -161,7 +161,7 @@ public class ChatMessageCacheTests
         cache.GetOrAdd(Ana).AddRange(new[] { At("A", 1), At("C", 3) });
         cache.GetOrAdd(AnaLid).AddRange(new[] { At("B", 2), At("D", 4) });
 
-        Assert.True(cache.MergeInto(AnaLid, Ana, new HashSet<string> { "A", "C" }));
+        Assert.True(cache.MergeInto(AnaLid, Ana));
 
         Assert.Equal(new[] { "A", "B", "C", "D" }, cache[Ana].Select(m => m.Id));
         Assert.False(cache.Contains(AnaLid));
@@ -174,12 +174,54 @@ public class ChatMessageCacheTests
         ChatMessage idless = new ChatMessage { Timestamp = T0 };
         cache.GetOrAdd(Ana).AddRange(new[] { At("A", 1), idless });
         cache.GetOrAdd(AnaLid).AddRange(new[] { At("A", 1), idless, At("B", 2) });
-        var knownIds = new HashSet<string> { "A" };
 
-        cache.MergeInto(AnaLid, Ana, knownIds);
+        cache.MergeInto(AnaLid, Ana);
 
         Assert.Equal(3, cache[Ana].Count);
-        Assert.Contains("B", knownIds);
+        Assert.True(cache.Ids.Contains(Ana, "B"));
+        Assert.False(cache.Ids.Contains(AnaLid, "A"));
+    }
+
+    [Fact]
+    public void Known_ids_are_built_from_the_timeline_the_first_time()
+    {
+        var cache = new ChatMessageCache();
+        cache.GetOrAdd(Ana).AddRange(new[] { Message("A"), Message("B") });
+
+        HashSet<string> ids = cache.KnownIds("5511988887777:4@s.whatsapp.net");
+
+        Assert.Equal(new[] { "A", "B" }, ids.OrderBy(id => id));
+        Assert.Same(ids, cache.KnownIds(Ana));
+    }
+
+    [Fact]
+    public void Removing_or_clearing_a_timeline_drops_its_ids()
+    {
+        var cache = new ChatMessageCache();
+        cache.GetOrAdd(Ana).Add(Message("A"));
+        cache.GetOrAdd(AnaLid).Add(Message("B"));
+        cache.KnownIds(Ana);
+        cache.KnownIds(AnaLid);
+
+        cache.Remove(Ana);
+        Assert.False(cache.Ids.Contains(Ana, "A"));
+        Assert.True(cache.Ids.Contains(AnaLid, "B"));
+
+        cache.Clear();
+        Assert.False(cache.Ids.Contains(AnaLid, "B"));
+    }
+
+    [Fact]
+    public void Replacing_a_timeline_replaces_its_ids()
+    {
+        var cache = new ChatMessageCache();
+        cache.GetOrAdd(Ana).Add(Message("A"));
+        cache.KnownIds(Ana);
+
+        cache.Set(Ana, new List<ChatMessage> { Message("B") });
+
+        Assert.False(cache.Ids.Contains(Ana, "A"));
+        Assert.True(cache.Ids.Contains(Ana, "B"));
     }
 
     [Fact]
@@ -188,7 +230,7 @@ public class ChatMessageCacheTests
         var cache = new ChatMessageCache();
         cache.GetOrAdd(AnaLid).Add(At("A", 1));
 
-        Assert.True(cache.MergeInto(AnaLid, Ana, new HashSet<string>()));
+        Assert.True(cache.MergeInto(AnaLid, Ana));
 
         Assert.Single(cache[Ana]);
     }
@@ -199,8 +241,8 @@ public class ChatMessageCacheTests
         var cache = new ChatMessageCache();
         cache.GetOrAdd(Ana).Add(At("A", 1));
 
-        Assert.False(cache.MergeInto(AnaLid, Ana, new HashSet<string>()));
-        Assert.False(cache.MergeInto(Ana, Ana, new HashSet<string>()));
+        Assert.False(cache.MergeInto(AnaLid, Ana));
+        Assert.False(cache.MergeInto(Ana, Ana));
 
         Assert.Single(cache[Ana]);
     }

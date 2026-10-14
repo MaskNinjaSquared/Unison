@@ -23,6 +23,20 @@ namespace Unison.Core.State
         private readonly Dictionary<string, List<ChatMessage>> _byChat =
             new Dictionary<string, List<ChatMessage>>(StringComparer.OrdinalIgnoreCase);
 
+        /// <summary>
+        /// Which ids each timeline holds. Dropped with its timeline on <see cref="Remove"/>,
+        /// <see cref="Clear"/> and <see cref="MergeInto"/>, rebuilt on <see cref="Set"/>; edits made
+        /// to a list directly still have to register or rebuild here.
+        /// </summary>
+        public MessageIdIndex Ids { get; } = new MessageIdIndex();
+
+        /// <summary>The live id set of a conversation, built from its timeline the first time.</summary>
+        public HashSet<string> KnownIds(string chatJid)
+        {
+            string key = JidHelper.Normalize(chatJid);
+            return Ids.GetOrBuild(key, () => TryGet(key, out List<ChatMessage> list) ? list : null);
+        }
+
         /// <summary>The conversation's list; throws <see cref="KeyNotFoundException"/> when there is none.</summary>
         public List<ChatMessage> this[string chatJid]
         {
@@ -97,6 +111,8 @@ namespace Unison.Core.State
             {
                 _byChat[chatJid] = messages;
             }
+
+            Ids.Rebuild(chatJid, messages);
         }
 
         public bool Remove(string chatJid)
@@ -106,10 +122,14 @@ namespace Unison.Core.State
                 return false;
             }
 
+            bool removed;
             lock (_gate)
             {
-                return _byChat.Remove(chatJid);
+                removed = _byChat.Remove(chatJid);
             }
+
+            Ids.RemoveChat(chatJid);
+            return removed;
         }
 
         /// <summary>
@@ -117,9 +137,8 @@ namespace Unison.Core.State
         /// target lacks (by id, or by reference when there is none), kept in time order, and the
         /// alias is dropped. Edits the lists in place, so callers stay on the UI thread.
         /// </summary>
-        /// <param name="targetKnownIds">The target's id index, updated with what moved.</param>
         /// <returns>False when the alias holds no list or is the target itself.</returns>
-        public bool MergeInto(string aliasJid, string targetJid, HashSet<string> targetKnownIds)
+        public bool MergeInto(string aliasJid, string targetJid)
         {
             if (string.IsNullOrEmpty(aliasJid) ||
                 string.Equals(aliasJid, targetJid, StringComparison.OrdinalIgnoreCase) ||
@@ -130,7 +149,7 @@ namespace Unison.Core.State
             }
 
             List<ChatMessage> target = GetOrAdd(targetJid);
-            TransientChatMerge.AppendMissingMessages(target, alias.ToArray(), targetKnownIds);
+            TransientChatMerge.AppendMissingMessages(target, alias.ToArray(), KnownIds(targetJid));
             ChatMessageOrder.SortInPlace(target);
             Remove(aliasJid);
             return true;
@@ -142,6 +161,8 @@ namespace Unison.Core.State
             {
                 _byChat.Clear();
             }
+
+            Ids.Clear();
         }
 
         public int CountFor(string chatJid)
