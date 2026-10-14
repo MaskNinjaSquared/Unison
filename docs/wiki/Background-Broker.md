@@ -61,6 +61,8 @@ On suspend, `App` asks the socket to transfer; on resume it reclaims. Any failur
 
 Exception: with `LocationKeepAliveEnabled` on, `App` never asks for the transfer (entered-background or suspending), as in 1.8. The broker sends no `w:p` keep-alive, so the server drops a brokered session and the user sees “Unison desconectado”; ExtendedExecution keeps the process and its keep-alive running instead. If the app is suspended anyway, the socket is shut down and reconnects on resume.
 
+The same hold applies while the first sync after login is still arriving (`IHistoryService.IsInitialSyncSafeMode`, from the first SQLite history chunk until the quiet finalize). Handing the socket to the broker mid-sync risks the same keep-alive drop with half the history persisted. The rule is `BrokerHandoffHold` (Core); the journal records `reason=initial-sync` on `entered-background-result` and `suspending-transfer-skipped`. Without background mode, a suspend during the first sync therefore shuts the socket down and the sync resumes after reconnect.
+
 ## Handoff on the new stack
 
 | API | Behavior |

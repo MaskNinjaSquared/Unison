@@ -4,6 +4,15 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## No broker handoff during the first sync; chat-open journal
+
+While the first sync after login is still arriving, entered-background and suspending
+keep the socket in the app instead of handing it to the broker (`BrokerHandoffHold`).
+Opening a chat now writes `chat-open` lines to the diagnostics journal: rows from memory
+and SQLite, the total SQLite row count when the chat got none, whether the thin-timeline
+history request went out, loads abandoned before rendering, and whether the list preview
+had to stand in for an empty timeline.
+
 ## On-demand history bookkeeping
 
 What history has been requested from the phone and is still owed — per-chat pages and

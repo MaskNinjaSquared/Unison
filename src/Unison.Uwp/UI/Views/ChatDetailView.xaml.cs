@@ -1750,6 +1750,7 @@ namespace Unison.Uwp.UI.Views
                 {
                     if (!ReferenceEquals(_activeChat, chat))
                     {
+                        WriteChatOpenDiagnostics("rebind", chat.JID, "sameChat=true; newInstance=true");
                         _activeChat.PropertyChanged -= ActiveChat_PropertyChanged;
                         _activeChat = chat;
                         _activeChat.PropertyChanged += ActiveChat_PropertyChanged;
@@ -1866,6 +1867,7 @@ namespace Unison.Uwp.UI.Views
             CancellationToken token = _chatLoadCts?.Token ?? CancellationToken.None;
             if (token.IsCancellationRequested)
             {
+                WriteChatOpenDiagnostics("aborted", chat.JID, "stage=before-yield; reason=cancelled");
                 return;
             }
 
@@ -1873,6 +1875,10 @@ namespace Unison.Uwp.UI.Views
             if (token.IsCancellationRequested || _activeChat == null ||
                 !ReferenceEquals(_activeChat, chat))
             {
+                WriteChatOpenDiagnostics(
+                    "aborted",
+                    chat.JID,
+                    "stage=after-yield; reason=" + DescribeChatLoadAbort(token, chat));
                 return;
             }
 
@@ -1889,6 +1895,7 @@ namespace Unison.Uwp.UI.Views
             catch (Exception ex)
             {
                 Debug.WriteLine($"[ChatDetailView] LoadMessagesForChatAsync failed: {ex.Message}");
+                App.Services?.GetService<IRuntimeDiagnostics>()?.RecordException("chat-open", "load-failed", ex);
                 ViewModel.EndLoadingMessages();
                 return;
             }
@@ -1896,6 +1903,11 @@ namespace Unison.Uwp.UI.Views
             if (token.IsCancellationRequested || _activeChat == null ||
                 !string.Equals(Jids.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
             {
+                WriteChatOpenDiagnostics(
+                    "aborted",
+                    requestedJid,
+                    "stage=after-load; loaded=" + (messages?.Count ?? 0) +
+                    "; reason=" + (token.IsCancellationRequested ? "cancelled" : "chat-switched"));
                 ViewModel.EndLoadingMessages();
                 return;
             }
@@ -1905,6 +1917,12 @@ namespace Unison.Uwp.UI.Views
             var visibleMessages = ChatDetailViewModel.TakeLastWindow(
                 messages,
                 ViewModel.InitialUiMessageWindow);
+            WriteChatOpenDiagnostics(
+                "rendered",
+                requestedJid,
+                "loaded=" + (messages?.Count ?? 0) +
+                "; visible=" + visibleMessages.Count +
+                "; previewFallback=" + (visibleMessages.Count == 0));
 
             bool activeIsGroup = chat.IsGroup ||
                 requestedJid.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
@@ -2082,6 +2100,42 @@ namespace Unison.Uwp.UI.Views
             if (_isWindowsMobile)
             {
                 await Task.Delay(48);
+            }
+        }
+
+        private string DescribeChatLoadAbort(CancellationToken token, ChatItem chat)
+        {
+            if (token.IsCancellationRequested)
+            {
+                return "cancelled";
+            }
+
+            if (_activeChat == null)
+            {
+                return "closed";
+            }
+
+            bool sameChat = string.Equals(
+                Jids.GetCanonicalJid(_activeChat.JID),
+                Jids.GetCanonicalJid(chat?.JID),
+                StringComparison.OrdinalIgnoreCase);
+            return sameChat ? "same-chat-new-instance" : "chat-switched";
+        }
+
+        private void WriteChatOpenDiagnostics(string eventName, string jid, string details)
+        {
+            try
+            {
+                App.Services?.GetService<IRuntimeDiagnostics>()?.Write(
+                    "chat-open",
+                    eventName,
+                    "chat=" + DiagnosticJidMask.Apply(jid) +
+                    "; mobile=" + _isWindowsMobile +
+                    "; " + details);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatDetailView] chat-open diagnostics failed: " + ex.Message);
             }
         }
 

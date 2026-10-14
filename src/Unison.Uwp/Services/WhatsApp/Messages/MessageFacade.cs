@@ -34,6 +34,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
         private readonly OutgoingTextSend _textSend;
         private readonly OutgoingMediaSend _mediaSend;
         private readonly MediaAvailability _availability;
+        private readonly IRuntimeDiagnostics _diagnostics;
         private readonly int _sqlOpenPageSize;
         private readonly int _sqlLoadMorePageSize;
         private readonly int _thinTimelineThreshold;
@@ -55,8 +56,10 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             IEncryptedMediaDownloader mediaDownloader,
             IChatStore chatStore = null,
             IChatStateStore chatState = null,
-            ISystemInfoProvider systemInfo = null)
+            ISystemInfoProvider systemInfo = null,
+            IRuntimeDiagnostics diagnostics = null)
         {
+            _diagnostics = diagnostics;
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
             _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
@@ -179,22 +182,26 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             }
 
             List<ChatMessage> fromClient = null;
+            string clientError = null;
             try
             {
                 fromClient = await _whatsAppService.LoadMessagesForChatAsync(jid).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
+                clientError = ex.GetType().Name;
                 Debug.WriteLine("[MessageFacade] Client LoadMessagesForChat failed: " + ex.Message);
             }
 
             IReadOnlyList<HistoryMessage> fromSql = null;
+            string sqlError = null;
             try
             {
                 fromSql = await LoadSqlHistoryRowsAsync(jid).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
+                sqlError = ex.GetType().Name + ": " + ex.Message;
                 Debug.WriteLine("[MessageFacade] SQLite history message load failed: " + ex.Message);
             }
 
@@ -300,14 +307,72 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             }
 
             // RECENT history often leaves a single listable message — pull older on open.
-            if (merged.Count > 0 &&
-                merged.Count < _thinTimelineThreshold &&
-                !IsHistoryOnDemandPending(jid))
+            bool onDemandPending = IsHistoryOnDemandPending(jid);
+            bool isThin = merged.Count > 0 && merged.Count < _thinTimelineThreshold;
+            if (isThin && !onDemandPending)
             {
                 _ = RequestOlderHistorySafeAsync(jid, merged.Count);
             }
 
+            await WriteChatOpenLoadAsync(
+                jid,
+                fromClient?.Count ?? 0,
+                fromSql?.Count ?? 0,
+                merged.Count,
+                isThin,
+                onDemandPending,
+                clientError,
+                sqlError).ConfigureAwait(false);
+
             return merged;
+        }
+
+        /// <summary>
+        /// One journal line per open. sql=0 with dbRows&gt;0 means the rows are filed under keys
+        /// this chat does not resolve to; dbRows=0 means history never reached SQLite.
+        /// </summary>
+        private async Task WriteChatOpenLoadAsync(
+            string jid,
+            int ramCount,
+            int sqlCount,
+            int mergedCount,
+            bool isThin,
+            bool onDemandPending,
+            string clientError,
+            string sqlError)
+        {
+            if (_diagnostics == null)
+            {
+                return;
+            }
+
+            try
+            {
+                List<string> keys = ResolveChatKeys(jid);
+                string dbRows = "-";
+                if (sqlCount == 0 && sqlError == null)
+                {
+                    dbRows = (await _historyMessageStore.CountAsync().ConfigureAwait(false)).ToString();
+                }
+
+                _diagnostics.Write(
+                    "chat-open",
+                    "load",
+                    "chat=" + DiagnosticJidMask.Apply(jid) +
+                    "; keys=" + string.Join(",", keys.Select(DiagnosticJidMask.Apply)) +
+                    "; ram=" + ramCount +
+                    "; sql=" + sqlCount +
+                    "; merged=" + mergedCount +
+                    "; dbRows=" + dbRows +
+                    "; thin=" + isThin +
+                    "; onDemandPending=" + onDemandPending +
+                    "; clientError=" + (clientError ?? "-") +
+                    "; sqlError=" + (sqlError ?? "-"));
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] chat-open diagnostics failed: " + ex.Message);
+            }
         }
 
         private async Task RequestOlderHistorySafeAsync(string jid, int localCount)
@@ -318,10 +383,17 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                 Debug.WriteLine(
                     "[MessageFacade] Thin timeline on-demand for " + jid +
                     " local=" + localCount + " requested=" + requested);
+                _diagnostics?.Write(
+                    "chat-open",
+                    "thin-on-demand",
+                    "chat=" + DiagnosticJidMask.Apply(jid) +
+                    "; local=" + localCount +
+                    "; requested=" + requested);
             }
             catch (Exception ex)
             {
                 Debug.WriteLine("[MessageFacade] Thin timeline on-demand failed: " + ex.Message);
+                _diagnostics?.RecordException("chat-open", "thin-on-demand-failed", ex);
             }
         }
 

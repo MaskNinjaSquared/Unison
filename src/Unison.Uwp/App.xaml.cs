@@ -326,7 +326,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IEncryptedMediaDownloader>(),
                 sp.GetRequiredService<IChatStore>(),
                 sp.GetRequiredService<IChatStateStore>(),
-                sp.GetRequiredService<ISystemInfoProvider>()));
+                sp.GetRequiredService<ISystemInfoProvider>(),
+                sp.GetRequiredService<IRuntimeDiagnostics>()));
             services.AddSingleton<IChatMessageVmFactory, ChatMessageVmFactory>();
             services.AddSingleton<IChatDetailInfoViewModelFactory, ChatDetailInfoViewModelFactory>();
             services.AddSingleton<INewChatDialogViewModelFactory, NewChatDialogViewModelFactory>();
@@ -879,12 +880,13 @@ namespace Unison.Uwp
             RuntimeDiagnosticsService.Instance.Write("lifecycle", "entered-background");
             try
             {
-                if (KeepsSocketInProcess())
+                string holdReason = ReasonToKeepSocketInProcess();
+                if (holdReason != null)
                 {
                     RuntimeDiagnosticsService.Instance.Write(
                         "socket-broker",
                         "entered-background-result",
-                        "transferred=false; reason=location-keepalive");
+                        "transferred=false; reason=" + holdReason);
                     return;
                 }
 
@@ -927,6 +929,25 @@ namespace Unison.Uwp
             }
         }
 
+        private static bool IsInitialSyncActive()
+        {
+            try
+            {
+                return Services?.GetService<IHistoryService>()?.IsInitialSyncSafeMode == true;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[App] IsInitialSyncActive: " + ex.Message);
+                return false;
+            }
+        }
+
+        /// <summary>Null when the socket may go to the broker; otherwise the journal reason.</summary>
+        private static string ReasonToKeepSocketInProcess()
+        {
+            return BrokerHandoffHold.ReasonToKeepSocket(KeepsSocketInProcess(), IsInitialSyncActive());
+        }
+
         private void OnLeavingBackground(object sender, LeavingBackgroundEventArgs e)
         {
             RuntimeDiagnosticsService.Instance.Write("lifecycle", "leaving-background");
@@ -944,7 +965,16 @@ namespace Unison.Uwp
             try
             {
                 var whatsApp = App.GetWhatsAppService();
-                bool brokered = !KeepsSocketInProcess() &&
+                string holdReason = ReasonToKeepSocketInProcess();
+                if (holdReason != null)
+                {
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "socket-broker",
+                        "suspending-transfer-skipped",
+                        "reason=" + holdReason);
+                }
+
+                bool brokered = holdReason == null &&
                                 await whatsApp.TransferActiveSocketToBrokerAsync("suspending");
                 if (brokered)
                 {
