@@ -2296,37 +2296,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return Task.CompletedTask;
             }
 
-            return RunOnUiThreadAsync(() =>
-            {
-                var list = MessagesByChat.GetOrAdd(normJid);
-
-                var byId = new Dictionary<string, ChatMessage>(StringComparer.Ordinal);
-                foreach (var existing in list)
-                {
-                    if (existing != null && !string.IsNullOrWhiteSpace(existing.Id))
-                    {
-                        byId[existing.Id] = existing;
-                    }
-                }
-
-                foreach (var message in incoming)
-                {
-                    if (string.IsNullOrWhiteSpace(message.Id))
-                    {
-                        list.Add(message);
-                        continue;
-                    }
-
-                    if (!byId.ContainsKey(message.Id))
-                    {
-                        byId[message.Id] = message;
-                        list.Add(message);
-                    }
-                }
-
-                ChatMessageOrder.SortInPlace(list);
-                MessagesByChat.Ids.Rebuild(normJid, list);
-            });
+            return RunOnUiThreadAsync(() => MessagesByChat.AddMissing(normJid, incoming));
         }
 
         /// <inheritdoc />
@@ -3072,13 +3042,8 @@ namespace Unison.Uwp.Services.WhatsApp
 
                     if (uniquePrevious.Count > 0)
                     {
-                        var cache = MessagesByChat[normJid];
-                        foreach (var older in uniquePrevious)
-                        {
-                            ChatMessageOrder.InsertSorted(cache, older);
-                            RegisterMessageId(normJid, older?.Id);
-                        }
-                        Debug.WriteLine($"[WhatsAppService] Added {uniquePrevious.Count} older messages for {normJid}. total_in_cache={cache.Count}, total_on_disk={totalCount}");
+                        MessagesByChat.AddMissing(normJid, uniquePrevious);
+                        Debug.WriteLine($"[WhatsAppService] Added {uniquePrevious.Count} older messages for {normJid}. total_in_cache={MessagesByChat.CountFor(normJid)}, total_on_disk={totalCount}");
                     }
                     previousMessages = uniquePrevious;
                 }

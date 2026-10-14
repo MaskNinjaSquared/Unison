@@ -264,6 +264,34 @@ public class ChatMessageCacheTests
     }
 
     [Fact]
+    public void Adding_a_batch_keeps_only_new_messages_in_time_order()
+    {
+        var cache = new ChatMessageCache();
+        ChatMessage idless = new ChatMessage { Timestamp = T0.AddMinutes(5) };
+        cache.GetOrAdd(Ana).AddRange(new[] { At("B", 2), idless });
+
+        List<ChatMessage> added = cache.AddMissing(Ana, new[] { At("C", 3), At("B", 2), idless, At("A", 1), null });
+
+        Assert.Equal(new[] { "C", "A" }, added.Select(m => m.Id));
+        Assert.Equal(new[] { "A", "B", "C", null }, cache[Ana].Select(m => m.Id));
+        Assert.True(cache.Ids.Contains(Ana, "A"));
+    }
+
+    [Fact]
+    public void Adding_dedupes_against_the_timeline_not_a_stale_index()
+    {
+        var cache = new ChatMessageCache();
+        cache.GetOrAdd(Ana).Add(At("A", 1));
+        cache.KnownIds(Ana);
+        cache[Ana].Clear();
+
+        List<ChatMessage> added = cache.AddMissing(Ana, new[] { At("A", 1) });
+
+        Assert.Single(added);
+        Assert.Single(cache[Ana]);
+    }
+
+    [Fact]
     public void Replacing_a_timeline_replaces_its_ids()
     {
         var cache = new ChatMessageCache();

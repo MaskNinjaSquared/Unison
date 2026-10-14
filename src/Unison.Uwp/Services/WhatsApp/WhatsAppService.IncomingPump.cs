@@ -74,16 +74,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 out existingMessage);
         }
 
-        private void RegisterMessageId(string chatJid, string messageId)
-        {
-            if (string.IsNullOrEmpty(chatJid) || string.IsNullOrEmpty(messageId))
-            {
-                return;
-            }
-
-            GetOrBuildMessageIdIndex(chatJid).Add(messageId);
-        }
-
         /// <summary>
         /// Checks whether a message ID exists in any alias-linked chat bucket.
         /// Used by the offline fast-path to avoid the heavier TryFindAliasLinkedMessage.

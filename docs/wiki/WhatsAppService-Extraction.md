@@ -526,6 +526,14 @@ used, so an old message trimmed at once still counts as seen) and `.Trim` (windo
 The outgoing accept and the pinned-target insert call `Insert`; `TrimInMemoryMessageWindow` forwards
 to `Trim`, which `IncomingTimeline` still reaches through its callback.
 
+*Add missing:* `ChatMessageCache.AddMissing` appends what the timeline lacks (by id, by reference when
+id-less), sorts, rebuilds the index and returns what entered. It dedupes against the list, not the
+index, as both copies did. `SeedChatMessagesInMemoryAsync` and the insert loop of
+`LoadMoreMessagesAsync` call it (the load-more filter and capacity `Take` stay in the client). The
+seed copy appended id-less rows every time — now the same reference rule as `MergeInto`.
+`RegisterMessageId` is gone. The client no longer edits a timeline list directly; the reaction and
+pin paths only read it.
+
 ### 3.4 — send moved to `MessageFacade`
 
 The flow left the client whole, and it lives in Core, so the suite reaches it now. `OutgoingTextSend`

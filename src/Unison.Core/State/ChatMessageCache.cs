@@ -171,6 +171,52 @@ namespace Unison.Core.State
         }
 
         /// <summary>
+        /// Adds the messages the timeline lacks (by id, or by reference when there is none) and
+        /// keeps it in time order. Dedupes against the list itself rather than the index, which
+        /// direct edits elsewhere can leave behind, and rebuilds the index afterwards.
+        /// </summary>
+        /// <returns>The messages that were added, in the order given.</returns>
+        public List<ChatMessage> AddMissing(string chatJid, IEnumerable<ChatMessage> messages)
+        {
+            var added = new List<ChatMessage>();
+            List<ChatMessage> timeline = GetOrAdd(chatJid);
+            if (messages == null)
+            {
+                return added;
+            }
+
+            var seenIds = new HashSet<string>(StringComparer.Ordinal);
+            foreach (ChatMessage existing in timeline)
+            {
+                if (!string.IsNullOrWhiteSpace(existing?.Id))
+                {
+                    seenIds.Add(existing.Id);
+                }
+            }
+
+            foreach (ChatMessage message in messages)
+            {
+                if (message == null)
+                {
+                    continue;
+                }
+
+                bool isNew = string.IsNullOrWhiteSpace(message.Id)
+                    ? !timeline.Contains(message)
+                    : seenIds.Add(message.Id);
+                if (isNew)
+                {
+                    timeline.Add(message);
+                    added.Add(message);
+                }
+            }
+
+            ChatMessageOrder.SortInPlace(timeline);
+            Ids.Rebuild(chatJid, timeline);
+            return added;
+        }
+
+        /// <summary>
         /// Cuts the timeline to <paramref name="capacity"/> through
         /// <see cref="ActiveChatMessageWindow"/> and rebuilds its ids.
         /// </summary>
