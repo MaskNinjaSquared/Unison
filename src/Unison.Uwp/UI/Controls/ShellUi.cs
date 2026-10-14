@@ -33,6 +33,6 @@ namespace Unison.Uwp.UI.Controls
             }
         }
 
-        public static bool IsUnison => CurrentShell != AppShell.WhatsApp;
+        public static bool IsUnison => CurrentShell == AppShell.Unison;
     }
 }

@@ -16,8 +16,14 @@
         Minimal (default): stacked hero + BottomAbout in list.
         Extended (≥700): side-by-side hero only; About stays below the options.
         ExtendedWide (≥1000): Extended hero + options / RightAbout side by side.
+        ProfileStates: CollapsedProfile | ExpandedProfileState.
+        ViewProfileState (page DP) hides the settings back, the Settings title,
+        the name, and Your Profile, and shows the photo button on the hero avatar.
+        The same avatar translates to the center; profile rows sit along the bottom.
     -->
-    <Grid x:Name="RootGrid" Background="{ThemeResource SettingsPageBackgroundBrush}">
+    <Grid x:Name="RootGrid"
+          Background="{ThemeResource SettingsPageBackgroundBrush}"
+          SizeChanged="RootGrid_SizeChanged">
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup x:Name="LayoutStates">
                 <VisualState x:Name="Minimal"/>
@@ -45,6 +51,16 @@
                         <Setter Target="HeroExtendedPanel.Visibility" Value="Visible"/>
                         <Setter Target="BottomAbout.Visibility" Value="Collapsed"/>
                         <Setter Target="RightAbout.Visibility" Value="Visible"/>
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+
+            <VisualStateGroup x:Name="ProfileStates">
+                <VisualState x:Name="CollapsedProfile"/>
+                <VisualState x:Name="ExpandedProfileState">
+                    <VisualState.Setters>
+                        <Setter Target="SettingsBody.Visibility" Value="Collapsed"/>
+                        <Setter Target="StickyHeaderBar.Visibility" Value="Collapsed"/>
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
@@ -82,15 +98,28 @@
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*" MinWidth="0"/>
                             </Grid.ColumnDefinitions>
-                            <Button Command="{Binding LeaveCommand}"
+                            <Button x:Name="HeroLeaveButton"
+                                    Command="{Binding LeaveCommand}"
                                     Style="{StaticResource WhatsAppIconButtonStyle}"
                                     Width="34" Height="34"
                                     Background="Transparent"
-                                    Foreground="{ThemeResource SettingsHeroForegroundBrush}">
+                                    Foreground="{ThemeResource SettingsHeroForegroundBrush}"
+                                    Visibility="{x:Bind ViewProfileState, Mode=OneWay, Converter={StaticResource InvertedBooleanToVisibilityConverter}}">
                                 <FontIcon FontSize="16" FontFamily="{StaticResource IconFont}"
                                           Glyph="&#xE72B;"/>
                             </Button>
-                            <TextBlock Grid.Column="1"
+                            <Button x:Name="ProfileBackButton"
+                                    Click="ProfileSettings_BackRequested"
+                                    Style="{StaticResource WhatsAppIconButtonStyle}"
+                                    Width="34" Height="34"
+                                    Background="Transparent"
+                                    Foreground="{ThemeResource SettingsHeroForegroundBrush}"
+                                    Visibility="{x:Bind ViewProfileState, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <FontIcon FontSize="16" FontFamily="{StaticResource IconFont}"
+                                          Glyph="&#xE72B;"/>
+                            </Button>
+                            <TextBlock x:Name="HeroSettingsTitle"
+                                       Grid.Column="1"
                                        x:Uid="Settings_Title" Text="Settings"
                                        FontWeight="SemiBold" Margin="5,0,0,0" FontSize="20"
                                        VerticalAlignment="Center"
@@ -98,7 +127,18 @@
                                        TextTrimming="CharacterEllipsis"
                                        MaxLines="1"
                                        Foreground="{ThemeResource SettingsHeroForegroundBrush}"
-                                       FontFamily="{StaticResource MainFontSemibold}"/>
+                                       FontFamily="{StaticResource MainFontSemibold}"
+                                       Visibility="{x:Bind ViewProfileState, Mode=OneWay, Converter={StaticResource InvertedBooleanToVisibilityConverter}}"/>
+                            <TextBlock Grid.Column="1"
+                                       x:Uid="Settings_Profile" Text="Profile"
+                                       FontWeight="SemiBold" Margin="5,0,0,0" FontSize="20"
+                                       VerticalAlignment="Center"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"
+                                       MaxLines="1"
+                                       Foreground="{ThemeResource SettingsHeroForegroundBrush}"
+                                       FontFamily="{StaticResource MainFontSemibold}"
+                                       Visibility="{x:Bind ViewProfileState, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                         </Grid>
 
                         <!-- Minimal: avatar centered, name below -->
@@ -107,16 +147,29 @@
                                     HorizontalAlignment="Center"
                                     VerticalAlignment="Center"
                                     Margin="20,52,20,28">
-                            <toolkit:DropShadowPanel BlurRadius="50"
-                                                     OffsetX="0"
-                                                     OffsetY="2"
-                                                     ShadowOpacity="0.55"
-                                                     Color="Black"
-                                                     HorizontalAlignment="Center">
-                                <controls:ChatAvatarControl Size="120"
-                                                            HorizontalAlignment="Center"
-                                                            AvatarUrl="{Binding CurrentUserAvatar}"/>
-                            </toolkit:DropShadowPanel>
+                            <Grid x:Name="MinimalAvatarHost"
+                                  Width="120"
+                                  Height="120"
+                                  HorizontalAlignment="Center">
+                                <Grid.RenderTransform>
+                                    <TranslateTransform x:Name="MinimalAvatarTranslate"/>
+                                </Grid.RenderTransform>
+                                <toolkit:DropShadowPanel BlurRadius="50"
+                                                         OffsetX="0"
+                                                         OffsetY="2"
+                                                         ShadowOpacity="0.55"
+                                                         Color="Black"
+                                                         HorizontalAlignment="Stretch"
+                                                         VerticalAlignment="Stretch">
+                                    <controls:ChatAvatarControl Size="120"
+                                                                HorizontalAlignment="Center"
+                                                                AvatarUrl="{Binding CurrentUserAvatar}"/>
+                                </toolkit:DropShadowPanel>
+                                <controls:ProfilePhotoButton HorizontalAlignment="Right"
+                                                             VerticalAlignment="Bottom"
+                                                             Canvas.ZIndex="1"
+                                                             Visibility="{x:Bind ViewProfileState, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                            </Grid>
                             <TextBlock Text="{Binding ProfileDisplayName}"
                                        Margin="0,14,0,0"
                                        FontSize="18"
@@ -126,7 +179,21 @@
                                        TextWrapping="Wrap"
                                        MaxWidth="420"
                                        Foreground="{ThemeResource SettingsHeroForegroundBrush}"
-                                       FontFamily="{StaticResource MainFontSemibold}"/>
+                                       FontFamily="{StaticResource MainFontSemibold}"
+                                       Visibility="{x:Bind ViewProfileState, Mode=OneWay, Converter={StaticResource InvertedBooleanToVisibilityConverter}}"/>
+                            <Button Click="YourProfileButton_Click"
+                                    Style="{StaticResource WhatsAppIconButtonStyle}"
+                                    HorizontalAlignment="Center"
+                                    Margin="0,6,0,0"
+                                    Padding="8,2"
+                                    Background="Transparent"
+                                    Foreground="{ThemeResource SettingsHeroForegroundBrush}"
+                                    Visibility="{x:Bind ViewProfileState, Mode=OneWay, Converter={StaticResource InvertedBooleanToVisibilityConverter}}">
+                                <TextBlock x:Uid="Settings_YourProfile"
+                                           Text="Your Profile"
+                                           FontSize="14"
+                                           Foreground="{ThemeResource SettingsHeroForegroundBrush}"/>
+                            </Button>
                         </StackPanel>
 
                         <!-- Extended: avatar + name side by side -->
@@ -136,31 +203,64 @@
                                     VerticalAlignment="Center"
                                     Margin="40,60,20,20"
                                     Visibility="Collapsed">
-                            <toolkit:DropShadowPanel BlurRadius="50"
-                                                     OffsetX="0"
-                                                     OffsetY="2"
-                                                     ShadowOpacity="0.55"
-                                                     Color="Black"
-                                                     VerticalAlignment="Center">
-                                <controls:ChatAvatarControl Size="125"
-                                                            VerticalAlignment="Center"
-                                                            AvatarUrl="{Binding CurrentUserAvatar}"/>
-                            </toolkit:DropShadowPanel>
-                            <TextBlock Text="{Binding ProfileDisplayName}"
-                                       Margin="30,20,0,0"
-                                       FontSize="30"
-                                       FontWeight="SemiBold"
-                                       VerticalAlignment="Top"
-                                       TextWrapping="Wrap"
-                                       MaxWidth="420"
-                                       Foreground="{ThemeResource SettingsHeroForegroundBrush}"
-                                       FontFamily="{StaticResource MainFontSemibold}"/>
+                            <Grid x:Name="ExtendedAvatarHost"
+                                  Width="125"
+                                  Height="125"
+                                  VerticalAlignment="Center">
+                                <Grid.RenderTransform>
+                                    <TranslateTransform x:Name="ExtendedAvatarTranslate"/>
+                                </Grid.RenderTransform>
+                                <toolkit:DropShadowPanel BlurRadius="50"
+                                                         OffsetX="0"
+                                                         OffsetY="2"
+                                                         ShadowOpacity="0.55"
+                                                         Color="Black"
+                                                         HorizontalAlignment="Stretch"
+                                                         VerticalAlignment="Stretch">
+                                    <controls:ChatAvatarControl Size="125"
+                                                                HorizontalAlignment="Center"
+                                                                VerticalAlignment="Center"
+                                                                AvatarUrl="{Binding CurrentUserAvatar}"/>
+                                </toolkit:DropShadowPanel>
+                                <controls:ProfilePhotoButton HorizontalAlignment="Right"
+                                                             VerticalAlignment="Bottom"
+                                                             Canvas.ZIndex="1"
+                                                             Visibility="{x:Bind ViewProfileState, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                            </Grid>
+                            <StackPanel Margin="30,12,0,0"
+                                        VerticalAlignment="Center"
+                                        Visibility="{x:Bind ViewProfileState, Mode=OneWay, Converter={StaticResource InvertedBooleanToVisibilityConverter}}">
+                                <TextBlock Text="{Binding ProfileDisplayName}"
+                                           FontSize="30"
+                                           FontWeight="SemiBold"
+                                           TextWrapping="Wrap"
+                                           MaxWidth="420"
+                                           Foreground="{ThemeResource SettingsHeroForegroundBrush}"
+                                           FontFamily="{StaticResource MainFontSemibold}"/>
+                                <Button Click="YourProfileButton_Click"
+                                        Style="{StaticResource WhatsAppIconButtonStyle}"
+                                        HorizontalAlignment="Left"
+                                        Margin="0,6,0,0"
+                                        Padding="8,2"
+                                        Background="Transparent"
+                                        Foreground="{ThemeResource SettingsHeroForegroundBrush}">
+                                    <TextBlock x:Uid="Settings_YourProfile"
+                                               Text="Your Profile"
+                                               FontSize="16"
+                                               Foreground="{ThemeResource SettingsHeroForegroundBrush}"/>
+                                </Button>
+                            </StackPanel>
                         </StackPanel>
                     </Grid>
                 </toolkit:DropShadowPanel>
 
                 <!-- Below hero: options + About (BottomAbout until ExtendedWide; RightAbout ≥1000) -->
-                <Grid Background="{ThemeResource SettingsPageBackgroundBrush}">
+                <Grid x:Name="SettingsBody"
+                      Background="{ThemeResource SettingsPageBackgroundBrush}"
+                      RenderTransformOrigin="0.5,0">
+                    <Grid.RenderTransform>
+                        <ScaleTransform x:Name="SettingsBodyScale" ScaleX="1" ScaleY="1"/>
+                    </Grid.RenderTransform>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
@@ -321,6 +421,7 @@
                                     </Interactivity:Interaction.Behaviors>
                                     <ComboBoxItem Content="Unison"/>
                                     <ComboBoxItem Content="WhatsApp"/>
+                                    <ComboBoxItem Content="WhatsApp Legacy"/>
                                 </ComboBox>
                             </controls:SettingBox.Control>
                         </controls:SettingBox>
@@ -406,13 +507,20 @@
             </StackPanel>
         </ScrollViewer>
 
+        <controls:ProfileSettingsControl x:Name="ProfileSettingsHost"
+                                         Canvas.ZIndex="12"
+                                         HorizontalAlignment="Stretch"
+                                         VerticalAlignment="Bottom"
+                                         Visibility="Collapsed"/>
+
         <Border x:Name="StickyHeaderBar"
                 Canvas.ZIndex="10"
                 Height="48"
                 VerticalAlignment="Top"
                 Background="{ThemeResource SettingsPageBackgroundBrush}"
                 Opacity="0"
-                IsHitTestVisible="False">
+                IsHitTestVisible="False"
+                Visibility="{x:Bind ViewProfileState, Mode=OneWay, Converter={StaticResource InvertedBooleanToVisibilityConverter}}">
             <Grid VerticalAlignment="Center" Margin="10,0,10,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>

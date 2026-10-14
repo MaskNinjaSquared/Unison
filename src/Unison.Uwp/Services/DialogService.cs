@@ -194,7 +194,7 @@ namespace Unison.Uwp.Services
             }
         }
 
-        public async Task ShowWhatsAppSettingsAsync(SettingsViewModel settingsVm)
+        public async Task ShowWhatsAppSettingsAsync(SettingsViewModel settingsVm, bool openProfile = false)
         {
             if (settingsVm == null)
             {
@@ -205,6 +205,7 @@ namespace Unison.Uwp.Services
             {
                 var dialog = new Unison.Uwp.Shell.WhatsApp.Dialogs.SettingsDialog();
                 dialog.Bind(settingsVm);
+                dialog.OpenOnProfile = openProfile;
                 await dialog.ShowAsync();
             }
             catch (System.Runtime.InteropServices.COMException ex)
@@ -266,19 +267,23 @@ namespace Unison.Uwp.Services
             }
         }
 
-        public async Task<StartTileMark?> ShowStartTileMarkAsync(StartTileMark current)
+        public async Task<StartTileSelection> ShowStartTileMarkAsync(StartTileMark current, bool transparent)
         {
             try
             {
                 var dialog = new StartTileMarkDialog();
-                dialog.Bind(current);
+                dialog.Bind(current, transparent);
                 ContentDialogResult result = await dialog.ShowAsync();
                 if (result != ContentDialogResult.Primary)
                 {
                     return null;
                 }
 
-                return dialog.Result;
+                return new StartTileSelection
+                {
+                    Mark = dialog.Result,
+                    Transparent = dialog.UseTransparentPlate
+                };
             }
             catch (System.Runtime.InteropServices.COMException ex)
                 when (ex.Message.Contains("single ContentDialog") ||

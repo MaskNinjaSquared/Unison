@@ -29,10 +29,10 @@ namespace Unison.Uwp.UI.Views
         private const int WordmarkBeginMs = 1200;
 
         /// <summary>Approx. splash mark vs short window edge (UWP splash scales with available space).</summary>
-        private const double SplashIconShortSideFraction = 0.15;
-        private const double SplashIconMinDip = 56;
-        private const double SplashIconMaxDip = 108;
-        private const double IconEndScale = 0.58;
+        private const double SplashIconShortSideFraction = 0.32;
+        private const double SplashIconMinDip = 96;
+        private const double SplashIconMaxDip = 240;
+        private const double IconEndScale = 0.48;
         private const double IconWordmarkGapDip = 12;
 
         private bool _introStarted;
@@ -99,7 +99,7 @@ namespace Unison.Uwp.UI.Views
 
             // Wordmark ~height of the icon after shrink (animation Scale To=IconEndScale).
             double endIconW = size * IconEndScale;
-            BootWordmark.FontSize = Math.Max(24, Math.Min(endIconW * 0.92, 80));
+            BootWordmark.FontSize = Math.Max(22, Math.Min(endIconW * 0.78, 64));
             BootWordmark.Margin = new Thickness(0);
             BootWordmark.UpdateLayout();
 

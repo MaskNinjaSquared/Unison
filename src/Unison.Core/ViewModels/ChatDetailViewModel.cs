@@ -53,6 +53,7 @@ namespace Unison.Core.ViewModels
 
         /// <summary>Unitary microphone capture (returns session handles).</summary>
         private readonly IAudioRecordingService _audioRecording;
+        private readonly IUiSoundService _uiSounds;
 
         /// <summary>File pickers — chat attach uses PickChatAttachmentAsync.</summary>
         private readonly IFilePicker _filePicker;
@@ -158,7 +159,8 @@ namespace Unison.Core.ViewModels
             IUriLauncher uriLauncher = null,
             IConnectionService connectionService = null,
             IGroupService groupService = null,
-            IChatAuthorProjection authorProjection = null)
+            IChatAuthorProjection authorProjection = null,
+            IUiSoundService uiSounds = null)
         {
             _chatService = chatService;
             _connectionService = connectionService;
@@ -168,6 +170,7 @@ namespace Unison.Core.ViewModels
             _shortcutService = shortcutService;
             _chatStore = chatStore;
             _audioRecording = audioRecording;
+            _uiSounds = uiSounds;
             _filePicker = filePicker;
             _dialogs = dialogs;
             _uriLauncher = uriLauncher;
@@ -2224,11 +2227,13 @@ namespace Unison.Core.ViewModels
                 _recordingChatJid = _activeChat.JID;
                 RecordingElapsedText = "0:00";
                 IsRecording = true;
+                _uiSounds?.PlayVoiceNoteStart();
                 StartElapsedLoop();
             }
             catch (Exception ex)
             {
                 LogSendError("record-start-fail", ex);
+                _uiSounds?.PlayVoiceNoteError();
                 await CancelRecordingCoreAsync();
                 await ShowSimpleErrorAsync(
                     "ChatDetail_RecordFailed",
@@ -2253,10 +2258,12 @@ namespace Unison.Core.ViewModels
             try
             {
                 recording = await session.StopAsync();
+                _uiSounds?.PlayVoiceNoteStop();
             }
             catch (Exception ex)
             {
                 LogSendError("record-stop-fail", ex);
+                _uiSounds?.PlayVoiceNoteError();
                 await CancelRecordingCoreAsync();
                 await ShowSimpleErrorAsync(
                     "ChatDetail_RecordFailed",
@@ -2422,11 +2429,13 @@ namespace Unison.Core.ViewModels
                 if (session != null && session.IsActive)
                 {
                     await session.CancelAsync();
+                    _uiSounds?.PlayVoiceNoteStop();
                 }
             }
             catch (Exception ex)
             {
                 LogSendError("record-cancel", ex);
+                _uiSounds?.PlayVoiceNoteError();
             }
             finally
             {

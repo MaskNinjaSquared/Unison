@@ -15,10 +15,13 @@ namespace Unison.Uwp.Services
     /// </summary>
     public sealed class StartTilePinService : IStartTilePinService
     {
-        public async Task<bool> PinAsync(StartTileMark mark)
+        public async Task<bool> PinAsync(StartTileMark mark, bool transparent = false)
         {
-            Uri logo = StartTileMarkAssets.Logo(mark);
-            Color accent = new UISettings().GetColorValue(UIColorType.Accent);
+            Uri mediumLogo = StartTileMarkAssets.Logo(mark);
+            Uri smallLogo = StartTileMarkAssets.SmallLogo(mark);
+            Color plate = transparent
+                ? Colors.Transparent
+                : new UISettings().GetColorValue(UIColorType.Accent);
 
             try
             {
@@ -29,7 +32,7 @@ namespace Unison.Uwp.Services
                         DisplayName = "Unison",
                         Arguments = "app"
                     };
-                    ApplyChrome(existing, logo, accent);
+                    ApplyChrome(existing, mediumLogo, smallLogo, plate, transparent);
                     return await existing.UpdateAsync();
                 }
 
@@ -37,12 +40,12 @@ namespace Unison.Uwp.Services
                     StartTileMirror.TileId,
                     "Unison",
                     "app",
-                    logo,
+                    mediumLogo,
                     TileSize.Square150x150)
                 {
                     DisplayName = "Unison"
                 };
-                ApplyChrome(tile, logo, accent);
+                ApplyChrome(tile, mediumLogo, smallLogo, plate, transparent);
                 return await tile.RequestCreateAsync();
             }
             catch (Exception ex)
@@ -52,12 +55,18 @@ namespace Unison.Uwp.Services
             }
         }
 
-        private static void ApplyChrome(SecondaryTile tile, Uri logo, Color accent)
+        private static void ApplyChrome(
+            SecondaryTile tile,
+            Uri mediumLogo,
+            Uri smallLogo,
+            Color plate,
+            bool transparent)
         {
-            tile.VisualElements.Square150x150Logo = logo;
-            tile.VisualElements.BackgroundColor = accent;
-            tile.VisualElements.ShowNameOnSquare150x150Logo = true;
-            tile.VisualElements.ForegroundText = Luminance(accent) > 160
+            tile.VisualElements.Square150x150Logo = mediumLogo;
+            tile.VisualElements.Square71x71Logo = smallLogo;
+            tile.VisualElements.BackgroundColor = plate;
+            tile.VisualElements.ShowNameOnSquare150x150Logo = !transparent;
+            tile.VisualElements.ForegroundText = transparent || Luminance(plate) > 160
                 ? ForegroundText.Dark
                 : ForegroundText.Light;
         }

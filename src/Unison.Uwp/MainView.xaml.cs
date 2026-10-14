@@ -5,6 +5,7 @@ using Windows.Graphics.Display;
 using Windows.UI.Core;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Media.Imaging;
 using Windows.UI.Xaml.Navigation;
 using Microsoft.Extensions.DependencyInjection;
 using Unison.Core.Constants;
@@ -201,6 +202,7 @@ namespace Unison.Uwp
             EnsureShellContent();
 
             _shellViewModel.ReportWindowNarrow(IsNarrowWindow());
+            ApplyShellBrand();
             EnsureOrientationHook();
             ApplySystemBackButton();
             ViewModel.RefreshUserInfo();
@@ -695,6 +697,33 @@ namespace Unison.Uwp
             if (ViewModel != null && ViewModel.IsPaneOpen != open)
             {
                 ViewModel.IsPaneOpen = open;
+            }
+        }
+
+        private void ApplyShellBrand()
+        {
+            IShellThemeService theme = null;
+            try
+            {
+                theme = App.Services?.GetService<IShellThemeService>();
+            }
+            catch
+            {
+            }
+
+            if (theme == null)
+            {
+                return;
+            }
+
+            if (SidebarBrandText != null && !string.IsNullOrWhiteSpace(theme.ShellBrandName))
+            {
+                SidebarBrandText.Text = theme.ShellBrandName;
+            }
+
+            if (SidebarBrandIcon != null && !string.IsNullOrWhiteSpace(theme.ShellBrandIcon))
+            {
+                SidebarBrandIcon.Source = new BitmapImage(new Uri(theme.ShellBrandIcon));
             }
         }
 

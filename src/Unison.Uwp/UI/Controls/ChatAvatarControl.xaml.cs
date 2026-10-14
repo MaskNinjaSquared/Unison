@@ -5,6 +5,7 @@ using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.State;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Media;
 using Windows.UI.Xaml.Media.Imaging;
 
 namespace Unison.Uwp.UI.Controls
@@ -110,8 +111,7 @@ namespace Unison.Uwp.UI.Controls
             GroupFallbackHost.Height = size * 0.5;
 
             bool group = IsGroup;
-            ContactFallbackIcon.Visibility = group ? Visibility.Collapsed : Visibility.Visible;
-            GroupFallbackHost.Visibility = group ? Visibility.Visible : Visibility.Collapsed;
+            ApplyFallbackVisual(group);
 
             string url = AvatarUrl;
             if (string.IsNullOrWhiteSpace(url))
@@ -160,6 +160,86 @@ namespace Unison.Uwp.UI.Controls
                 PhotoBrush.ImageSource = null;
                 PhotoEllipse.Visibility = Visibility.Collapsed;
             }
+        }
+
+        /// <summary>
+        /// WhatsApp Legacy registers full-bleed placeholder bitmaps; other shells keep glyph fallbacks.
+        /// </summary>
+        private void ApplyFallbackVisual(bool group)
+        {
+            string imageKey = group ? "AvatarGroupFallbackImage" : "AvatarContactFallbackImage";
+            ImageSource image = TryGetAppResource(imageKey) as ImageSource;
+            if (image != null)
+            {
+                FallbackEllipse.Fill = new ImageBrush
+                {
+                    ImageSource = image,
+                    Stretch = Stretch.UniformToFill
+                };
+                ContactFallbackIcon.Visibility = Visibility.Collapsed;
+                GroupFallbackHost.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            object brush = TryGetAppResource("AvatarFallbackBackgroundBrush");
+            FallbackEllipse.Fill = brush as Brush
+                ?? new SolidColorBrush(Windows.UI.Color.FromArgb(0xFF, 0x45, 0x45, 0x45));
+            ContactFallbackIcon.Visibility = group ? Visibility.Collapsed : Visibility.Visible;
+            GroupFallbackHost.Visibility = group ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private static object TryGetAppResource(string key)
+        {
+            if (string.IsNullOrEmpty(key))
+            {
+                return null;
+            }
+
+            try
+            {
+                if (Application.Current.Resources.ContainsKey(key))
+                {
+                    return Application.Current.Resources[key];
+                }
+
+                foreach (ResourceDictionary merged in Application.Current.Resources.MergedDictionaries)
+                {
+                    object found = TryGetFromDictionaryTree(merged, key);
+                    if (found != null)
+                    {
+                        return found;
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return null;
+        }
+
+        private static object TryGetFromDictionaryTree(ResourceDictionary dict, string key)
+        {
+            if (dict == null)
+            {
+                return null;
+            }
+
+            if (dict.ContainsKey(key))
+            {
+                return dict[key];
+            }
+
+            foreach (ResourceDictionary nested in dict.MergedDictionaries)
+            {
+                object found = TryGetFromDictionaryTree(nested, key);
+                if (found != null)
+                {
+                    return found;
+                }
+            }
+
+            return null;
         }
 
         private void PhotoBrush_ImageFailed(object sender, ExceptionRoutedEventArgs e)

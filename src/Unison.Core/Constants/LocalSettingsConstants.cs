@@ -47,6 +47,9 @@ namespace Unison.Core.Constants
         /// </summary>
         public const string StartTileMark = "StartTileMark";
 
+        /// <summary>When true, the pinned Start tile uses a transparent plate instead of the accent color.</summary>
+        public const string StartTileTransparent = "StartTileTransparent";
+
         /// <summary>
         /// LocationTracking extended execution keep-alive (Unogram pattern).
         /// Off by default — needs location capability / user consent.
@@ -124,11 +127,13 @@ namespace Unison.Core.Constants
                 { LastFreshnessReconnectFallbackUtc, "" },
                 { SocketBrokerTaskRegistrationMarker, "" },
                 { ReconnectToastActive, false },
+                { SuppressReconnectToast, false },
                 { NotificationsEnabled, true },
                 { MessageNotificationSound, (int)NotificationSound.SystemDefault },
                 { GroupNotificationSound, (int)NotificationSound.SystemDefault },
                 { LiveTilesEnabled, true },
                 { StartTileMark, (int)Models.StartTileMark.Unison },
+                { StartTileTransparent, false },
                 { LocationKeepAliveEnabled, false },
                 { AutoUnlinkOnLogoutEnabled, false },
                 { SelectedShell, (int)AppShell.Unison },

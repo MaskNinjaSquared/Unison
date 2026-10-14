@@ -1076,4 +1076,67 @@
   <data name="Debug_FullHistoryFailed" xml:space="preserve">
     <value>Full history request failed: </value>
   </data>
-</root>
+  <data name="Settings_YourProfile.Text" xml:space="preserve">
+    <value>Ваш профиль</value>
+  </data>
+  <data name="Settings_Profile.Text" xml:space="preserve">
+    <value>Профиль</value>
+  </data>
+  <data name="Settings_ProfileName.Title" xml:space="preserve">
+    <value>Имя</value>
+  </data>
+  <data name="Settings_ProfilePhone.Title" xml:space="preserve">
+    <value>Телефон</value>
+  </data>
+  <data name="Settings_ProfileStatus.Title" xml:space="preserve">
+    <value>О себе</value>
+  </data>
+  <data name="Settings_ProfilePhotoButton.AutomationProperties.Name" xml:space="preserve">
+    <value>Фото профиля</value>
+  </data>
+  <data name="Settings_ProfilePhotoCamera.Text" xml:space="preserve">
+    <value>Камера</value>
+  </data>
+  <data name="Settings_ProfilePhotoGallery.Text" xml:space="preserve">
+    <value>Галерея</value>
+  </data>
+  <data name="Settings_ProfilePhotoDelete.Text" xml:space="preserve">
+    <value>Удалить</value>
+  </data>
+  <data name="StartTileDialog_Transparent.Content" xml:space="preserve">
+    <value>Прозрачная плитка</value>
+  </data>  <data name="Shell_LegacyPivot_Calls.Header" xml:space="preserve">
+    <value>звонки</value>
+  </data>
+  <data name="Shell_LegacyPivot_Favorites.Header" xml:space="preserve">
+    <value>избранное</value>
+  </data>
+  <data name="Shell_LegacyBrand.Text" xml:space="preserve">
+    <value>WHATSAPP LEGACY</value>
+  </data>
+  <data name="Shell_LegacyAppBar_Search.Label" xml:space="preserve">
+    <value>поиск</value>
+  </data>
+  <data name="Shell_LegacyAppBar_NewChat.Label" xml:space="preserve">
+    <value>новый чат</value>
+  </data>
+  <data name="Shell_LegacyAppBar_More.Label" xml:space="preserve">
+    <value>ещё</value>
+  </data>
+  <data name="Shell_LegacyMenu_Debug.Label" xml:space="preserve">
+    <value>debug</value>
+  </data>
+  <data name="Shell_LegacyMenu_Settings.Label" xml:space="preserve">
+    <value>настройки</value>
+  </data>
+  <data name="Shell_LegacyMenu_Profile.Label" xml:space="preserve">
+    <value>профиль</value>
+  </data>
+  <data name="Shell_LegacySearch_Cancel.Content" xml:space="preserve">
+    <value>cancel</value>
+  </data>
+  <data name="Shell_LegacySearchBox.PlaceholderText" xml:space="preserve">
+    <value>search</value>
+  </data>  <data name="Shell_LegacyPlaceholder.Text" xml:space="preserve">
+    <value>Скоро</value>
+  </data></root>

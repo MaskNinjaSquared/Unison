@@ -29,7 +29,11 @@ namespace Unison.Core.Contracts
         /// Open settings for the active shell strategy (Unison: shell page; WhatsApp may use a
         /// dialog later — today still a shell page under <c>Shell/WhatsApp</c>).
         /// </summary>
-        void OpenSettings();
+        /// <param name="openProfile">
+        /// When true, Unison opens settings already in the expanded profile,
+        /// and WhatsApp selects the profile section.
+        /// </param>
+        void OpenSettings(bool openProfile = false);
 
         void GoBackInShell();
         bool CanGoBackInShell { get; }

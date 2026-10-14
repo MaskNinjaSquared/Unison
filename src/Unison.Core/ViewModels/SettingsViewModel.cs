@@ -149,6 +149,17 @@ namespace Unison.Core.ViewModels
         /// <summary>Signed-in avatar URL (from shell profile).</summary>
         public string CurrentUserAvatar => _shell.CurrentUserAvatar;
 
+        /// <summary>Push name. Empty when the account has no name yet.</summary>
+        public string CurrentUserName => _shell.CurrentUserName;
+
+        /// <summary>Account phone digits.</summary>
+        public string CurrentUserPhone => _shell.CurrentUserPhone;
+
+        /// <summary>
+        /// About text ("recado"). <see cref="Profile"/> does not store it yet, so this stays empty.
+        /// </summary>
+        public string ProfileStatus => string.Empty;
+
         public bool NotificationsEnabled
         {
             get => _localSettings.Get<bool>(LocalSettingsConstants.NotificationsEnabled);
@@ -353,14 +364,16 @@ namespace Unison.Core.ViewModels
         {
             StartTileMark current = StartTileMarkPolicy.Resolve(
                 _localSettings.Get<int>(LocalSettingsConstants.StartTileMark));
-            StartTileMark? chosen = await _dialogService.ShowStartTileMarkAsync(current);
-            if (!chosen.HasValue)
+            bool transparent = _localSettings.Get<bool>(LocalSettingsConstants.StartTileTransparent);
+            StartTileSelection chosen = await _dialogService.ShowStartTileMarkAsync(current, transparent);
+            if (chosen == null)
             {
                 return;
             }
 
-            _localSettings.Set(LocalSettingsConstants.StartTileMark, (int)chosen.Value);
-            await _startTiles.PinAsync(chosen.Value);
+            _localSettings.Set(LocalSettingsConstants.StartTileMark, (int)chosen.Mark);
+            _localSettings.Set(LocalSettingsConstants.StartTileTransparent, chosen.Transparent);
+            await _startTiles.PinAsync(chosen.Mark, chosen.Transparent);
         }
 
         public async Task LoadDiskUsageAsync()
@@ -549,7 +562,11 @@ namespace Unison.Core.ViewModels
 
         private void RaiseProfileHeaderChanged()
         {
-            RaiseProperties(nameof(ProfileDisplayName), nameof(CurrentUserAvatar));
+            RaiseProperties(
+                nameof(ProfileDisplayName),
+                nameof(CurrentUserName),
+                nameof(CurrentUserPhone),
+                nameof(CurrentUserAvatar));
         }
 
         private void RaiseTimeFormatSelectionChanged()

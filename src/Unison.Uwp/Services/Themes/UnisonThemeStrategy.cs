@@ -35,6 +35,11 @@ namespace Unison.Uwp.Services.Themes
         public override bool UsesMobileStatusBarProgress =>
             _systemInfo != null && _systemInfo.IsMobile();
 
+        public override string ShellBrandName => "Unison";
+
+        public override string ShellBrandIcon =>
+            "ms-appx:///Assets/Square44x44Logo.altform-unplated_targetsize-48.png";
+
         public override void SetTitleBar()
         {
             try
@@ -130,9 +135,15 @@ namespace Unison.Uwp.Services.Themes
             return base.TryResolveShellDestination(content, out destination);
         }
 
-        public override void OpenSettings(Frame shellFrame)
+        public override void OpenSettings(Frame shellFrame, bool openProfile = false)
         {
-            NavigateShellFrame(shellFrame, typeof(UnisonChats.SettingsView));
+            if (openProfile && shellFrame?.Content is UnisonChats.SettingsView settings)
+            {
+                settings.OpenProfile();
+                return;
+            }
+
+            NavigateShellFrame(shellFrame, typeof(UnisonChats.SettingsView), openProfile);
         }
 
         public override bool IsSettingsPage(object content)

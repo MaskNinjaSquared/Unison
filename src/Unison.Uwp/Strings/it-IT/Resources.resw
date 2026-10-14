@@ -1135,4 +1135,67 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
   <data name="Debug_FullHistoryFailed" xml:space="preserve">
     <value>Full history request failed: </value>
   </data>
-</root>
+  <data name="Settings_YourProfile.Text" xml:space="preserve">
+    <value>Il tuo profilo</value>
+  </data>
+  <data name="Settings_Profile.Text" xml:space="preserve">
+    <value>Profilo</value>
+  </data>
+  <data name="Settings_ProfileName.Title" xml:space="preserve">
+    <value>Nome</value>
+  </data>
+  <data name="Settings_ProfilePhone.Title" xml:space="preserve">
+    <value>Telefono</value>
+  </data>
+  <data name="Settings_ProfileStatus.Title" xml:space="preserve">
+    <value>Info</value>
+  </data>
+  <data name="Settings_ProfilePhotoButton.AutomationProperties.Name" xml:space="preserve">
+    <value>Foto del profilo</value>
+  </data>
+  <data name="Settings_ProfilePhotoCamera.Text" xml:space="preserve">
+    <value>Fotocamera</value>
+  </data>
+  <data name="Settings_ProfilePhotoGallery.Text" xml:space="preserve">
+    <value>Galleria</value>
+  </data>
+  <data name="Settings_ProfilePhotoDelete.Text" xml:space="preserve">
+    <value>Elimina</value>
+  </data>
+  <data name="StartTileDialog_Transparent.Content" xml:space="preserve">
+    <value>Riquadro trasparente</value>
+  </data>  <data name="Shell_LegacyPivot_Calls.Header" xml:space="preserve">
+    <value>chiamate</value>
+  </data>
+  <data name="Shell_LegacyPivot_Favorites.Header" xml:space="preserve">
+    <value>preferiti</value>
+  </data>
+  <data name="Shell_LegacyBrand.Text" xml:space="preserve">
+    <value>WHATSAPP LEGACY</value>
+  </data>
+  <data name="Shell_LegacyAppBar_Search.Label" xml:space="preserve">
+    <value>cerca</value>
+  </data>
+  <data name="Shell_LegacyAppBar_NewChat.Label" xml:space="preserve">
+    <value>nuova chat</value>
+  </data>
+  <data name="Shell_LegacyAppBar_More.Label" xml:space="preserve">
+    <value>altro</value>
+  </data>
+  <data name="Shell_LegacyMenu_Debug.Label" xml:space="preserve">
+    <value>debug</value>
+  </data>
+  <data name="Shell_LegacyMenu_Settings.Label" xml:space="preserve">
+    <value>impostazioni</value>
+  </data>
+  <data name="Shell_LegacyMenu_Profile.Label" xml:space="preserve">
+    <value>profilo</value>
+  </data>
+  <data name="Shell_LegacySearch_Cancel.Content" xml:space="preserve">
+    <value>cancel</value>
+  </data>
+  <data name="Shell_LegacySearchBox.PlaceholderText" xml:space="preserve">
+    <value>search</value>
+  </data>  <data name="Shell_LegacyPlaceholder.Text" xml:space="preserve">
+    <value>Prossimamente</value>
+  </data></root>

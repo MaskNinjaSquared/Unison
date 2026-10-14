@@ -69,7 +69,7 @@ namespace Unison.Core.Contracts
         /// <summary>
         /// WhatsApp-shell settings overlay (SplitView sections). Unison keeps the full-page SettingsView.
         /// </summary>
-        Task ShowWhatsAppSettingsAsync(SettingsViewModel settingsVm);
+        Task ShowWhatsAppSettingsAsync(SettingsViewModel settingsVm, bool openProfile = false);
 
         /// <summary>
         /// Read-only list of who reacted to <paramref name="messageVm"/>. No-op when the bubble has
@@ -86,6 +86,6 @@ namespace Unison.Core.Contracts
         /// Picks the Start tile glyph. Returns null when the user cancels.
         /// The caller pins the tile only after a choice.
         /// </summary>
-        Task<StartTileMark?> ShowStartTileMarkAsync(StartTileMark current);
+        Task<StartTileSelection> ShowStartTileMarkAsync(StartTileMark current, bool transparent);
     }
 }

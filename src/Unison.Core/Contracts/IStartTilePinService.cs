@@ -9,6 +9,6 @@ namespace Unison.Core.Contracts
     /// </summary>
     public interface IStartTilePinService
     {
-        Task<bool> PinAsync(StartTileMark mark);
+        Task<bool> PinAsync(StartTileMark mark, bool transparent = false);
     }
 }

@@ -89,14 +89,14 @@ namespace Unison.Uwp.Services
             NavigateCore(_shellFrame, _shellNav.ResolveShellPage(destination), parameter, clearStack: true);
         }
 
-        public void OpenSettings()
+        public void OpenSettings(bool openProfile = false)
         {
             if (_shellFrame == null)
             {
                 throw new InvalidOperationException("Shell frame is not ready for OpenSettings.");
             }
 
-            _shellNav.OpenSettings(_shellFrame);
+            _shellNav.OpenSettings(_shellFrame, openProfile);
             RaiseShellNavigated();
         }
 

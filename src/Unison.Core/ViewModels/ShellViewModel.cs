@@ -105,6 +105,7 @@ namespace Unison.Core.ViewModels
 
             TogglePaneCommand = new RelayCommand(() => IsPaneOpen = !IsPaneOpen);
             NavigateToSectionCommand = new RelayCommand<string>(NavigateToSection);
+            OpenProfileSettingsCommand = new RelayCommand(OpenProfileSettings);
 
             _navigator.ShellNavigated += Navigator_ShellNavigated;
         }
@@ -252,7 +253,13 @@ namespace Unison.Core.ViewModels
         public string ChatPane
         {
             get => _chatPane;
-            private set => Set(ref _chatPane, value);
+            private set
+            {
+                if (Set(ref _chatPane, value))
+                {
+                    OnPropertyChanged(nameof(HidesLegacyShellChrome));
+                }
+            }
         }
 
         public bool IsNarrowWindow
@@ -263,9 +270,18 @@ namespace Unison.Core.ViewModels
                 if (Set(ref _isNarrowWindow, value))
                 {
                     SyncChatPane();
+                    OnPropertyChanged(nameof(HidesLegacyShellChrome));
                 }
             }
         }
+
+        /// <summary>
+        /// WhatsApp Legacy: narrow window showing conversation/status detail fullscreen —
+        /// shell pivot / brand chrome should hide until the user leaves the detail.
+        /// </summary>
+        public bool HidesLegacyShellChrome =>
+            IsNarrowWindow &&
+            string.Equals(ChatPane, PaneNarrowDetail, StringComparison.Ordinal);
 
         public bool HasActiveChat
         {
@@ -395,6 +411,9 @@ namespace Unison.Core.ViewModels
 
         /// <summary>Navigates the shell content frame. Parameter: a <see cref="Constants.NavigationRoutes"/> value.</summary>
         public ICommand NavigateToSectionCommand { get; }
+
+        /// <summary>Opens settings directly on the profile (expanded on Unison, profile section on WhatsApp).</summary>
+        public ICommand OpenProfileSettingsCommand { get; }
 
         /// <summary>
         /// Imgur-style: wire service events once. Safe to call repeatedly.
@@ -784,6 +803,23 @@ namespace Unison.Core.ViewModels
             catch (Exception ex)
             {
                 Debug.WriteLine("[ShellViewModel] PurgeShellNavigation failed: " + ex.Message);
+            }
+        }
+
+        private void OpenProfileSettings()
+        {
+            if (IsPhoneHandset() && _isPaneOpen)
+            {
+                IsPaneOpen = false;
+            }
+
+            try
+            {
+                _navigator.OpenSettings(true);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ShellViewModel] OpenProfileSettings failed: " + ex.Message);
             }
         }
 

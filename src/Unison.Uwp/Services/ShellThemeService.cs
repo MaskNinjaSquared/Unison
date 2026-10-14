@@ -44,14 +44,18 @@ namespace Unison.Uwp.Services
 
         public bool UsesMobileStatusBarProgress => Current.UsesMobileStatusBarProgress;
 
+        public string ShellBrandName => Current.ShellBrandName;
+
+        public string ShellBrandIcon => Current.ShellBrandIcon;
+
         public Type ResolveRootPage(NavigationDestination destination) =>
             Current.ResolveRootPage(destination);
 
         public Type ResolveShellPage(NavigationDestination destination) =>
             Current.ResolveShellPage(destination);
 
-        public void OpenSettings(Frame shellFrame) =>
-            Current.OpenSettings(shellFrame);
+        public void OpenSettings(Frame shellFrame, bool openProfile = false) =>
+            Current.OpenSettings(shellFrame, openProfile);
 
         public bool IsSettingsPage(object content) =>
             Current.IsSettingsPage(content);
@@ -211,19 +215,24 @@ namespace Unison.Uwp.Services
 
         private ShellThemeStrategy CreateStrategy(AppShell shell)
         {
+            Func<SettingsViewModel> settingsFactory = () =>
+            {
+                if (App.Services == null)
+                {
+                    throw new InvalidOperationException("DI is not ready for SettingsViewModel.");
+                }
+
+                return App.Services.GetRequiredService<SettingsViewModel>();
+            };
+
             if (shell == AppShell.WhatsApp)
             {
-                return new WhatsAppThemeStrategy(
-                    _dialogs,
-                    () =>
-                    {
-                        if (App.Services == null)
-                        {
-                            throw new InvalidOperationException("DI is not ready for SettingsViewModel.");
-                        }
+                return new WhatsAppThemeStrategy(_dialogs, settingsFactory);
+            }
 
-                        return App.Services.GetRequiredService<SettingsViewModel>();
-                    });
+            if (shell == AppShell.WhatsAppLegacy)
+            {
+                return new WhatsAppLegacyThemeStrategy();
             }
 
             return new UnisonThemeStrategy(_systemInfo);
@@ -246,7 +255,11 @@ namespace Unison.Uwp.Services
         {
             try
             {
-                string folder = shell == AppShell.WhatsApp ? "WhatsApp" : "Unison";
+                string folder = shell == AppShell.WhatsApp
+                    ? "WhatsApp"
+                    : shell == AppShell.WhatsAppLegacy
+                        ? "WhatsAppLegacy"
+                        : "Unison";
                 var uri = new Uri("ms-appx:///Themes/" + folder + "/Theme.xaml");
 
                 var merges = Application.Current.Resources.MergedDictionaries;

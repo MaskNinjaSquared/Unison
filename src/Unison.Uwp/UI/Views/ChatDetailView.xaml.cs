@@ -17,6 +17,7 @@ using Unison.Uwp.Client;
 using Unison.Uwp.Helpers;
 using Unison.Uwp.Services;
 using Unison.Uwp.Services.WhatsApp;
+using Unison.Uwp.UI.Controls;
 using Windows.Foundation;
 using Windows.Media;
 using Windows.Media.Core;
@@ -168,6 +169,145 @@ namespace Unison.Uwp.UI.Views
             ApplyChatDetailInfoPane();
             HookLayoutStateChanges();
             StartDateSeparatorTimer();
+            ApplyLegacyComposerChrome();
+        }
+
+        /// <summary>
+        /// WhatsApp Legacy: solid page-colored 48px composer + themed mic/send bitmaps.
+        /// </summary>
+        private void ApplyLegacyComposerChrome()
+        {
+            if (ShellUi.CurrentShell != AppShell.WhatsAppLegacy)
+            {
+                return;
+            }
+
+            try
+            {
+                var bar = ComposerHost?.Parent as FrameworkElement;
+                if (bar != null)
+                {
+                    bar.Height = 48;
+                    bar.MinHeight = 48;
+                    bar.MaxHeight = 48;
+                }
+
+                if (ComposerHost?.Children != null)
+                {
+                    foreach (var child in ComposerHost.Children)
+                    {
+                        var grid = child as Grid;
+                        if (grid != null)
+                        {
+                            grid.Padding = new Thickness(8, 0, 8, 0);
+                            grid.Height = 48;
+                        }
+                    }
+                }
+
+                // Anexo | Texto | Enviar | Áudio — glyphs from LegacyIconFont (EB03/EB04/EB05).
+                if (AttachBarButton != null)
+                {
+                    Grid.SetColumn(AttachBarButton, 0);
+                    AttachBarButton.Visibility = Visibility.Visible;
+                    AttachBarButton.VerticalAlignment = VerticalAlignment.Center;
+                    ApplyLegacyFontIconButton(AttachBarButton, "\uEB03", ResolveLegacyBrush("WhatsAppTextHighBrush", Colors.White));
+                }
+
+                if (AttachFlyoutButton != null)
+                {
+                    AttachFlyoutButton.Visibility = Visibility.Collapsed;
+                }
+
+                if (SendButton != null)
+                {
+                    Grid.SetColumn(SendButton, 2);
+                    SendButton.VerticalAlignment = VerticalAlignment.Center;
+                    ApplyLegacyFontIconButton(SendButton, "\uEB04", ResolveLegacyBrush("ChatDetailAccentBrush", Color.FromArgb(0xFF, 0x23, 0x41, 0x41)));
+                }
+
+                if (MicButton != null)
+                {
+                    Grid.SetColumn(MicButton, 3);
+                    MicButton.VerticalAlignment = VerticalAlignment.Center;
+                    ApplyLegacyFontIconButton(MicButton, "\uEB05", ResolveLegacyBrush("ChatDetailAccentBrush", Color.FromArgb(0xFF, 0x23, 0x41, 0x41)));
+                }
+
+                if (MessageInput != null)
+                {
+                    Grid.SetColumn(MessageInput, 1);
+                    MessageInput.MinHeight = 32;
+                    MessageInput.MaxHeight = 40;
+                    MessageInput.TextWrapping = TextWrapping.NoWrap;
+                    MessageInput.Padding = new Thickness(8, 6, 8, 6);
+                    MessageInput.VerticalAlignment = VerticalAlignment.Center;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatDetailView] Legacy composer chrome: " + ex.Message);
+            }
+        }
+
+        private static Brush ResolveLegacyBrush(string key, Color fallback)
+        {
+            try
+            {
+                if (Application.Current.Resources.ContainsKey(key))
+                {
+                    var brush = Application.Current.Resources[key] as Brush;
+                    if (brush != null)
+                    {
+                        return brush;
+                    }
+                }
+
+                foreach (ResourceDictionary merged in Application.Current.Resources.MergedDictionaries)
+                {
+                    if (merged != null && merged.ContainsKey(key) && merged[key] is Brush b)
+                    {
+                        return b;
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return new SolidColorBrush(fallback);
+        }
+
+        private static void ApplyLegacyFontIconButton(Button button, string glyph, Brush foreground)
+        {
+            if (button == null || string.IsNullOrEmpty(glyph))
+            {
+                return;
+            }
+
+            FontFamily family = null;
+            try
+            {
+                if (Application.Current.Resources.ContainsKey("LegacyIconFont"))
+                {
+                    family = Application.Current.Resources["LegacyIconFont"] as FontFamily;
+                }
+            }
+            catch
+            {
+            }
+
+            if (family == null)
+            {
+                family = new FontFamily("ms-appx:///Assets/Fonts/WhatsAppLegacyIcons.ttf#WhatsAppLegacyIcons");
+            }
+
+            button.Content = new FontIcon
+            {
+                Glyph = glyph,
+                FontFamily = family,
+                FontSize = 20,
+                Foreground = foreground ?? new SolidColorBrush(Colors.White)
+            };
         }
 
         /// <summary>
@@ -268,6 +408,9 @@ namespace Unison.Uwp.UI.Views
             {
                 SetAttachMenuOpen(false);
             }
+
+            // Extended VSM setters flip attach to the flyout button; Legacy always keeps the bar icon.
+            ApplyLegacyComposerChrome();
         }
 
         private void AttachBarButton_Click(object sender, RoutedEventArgs e) =>

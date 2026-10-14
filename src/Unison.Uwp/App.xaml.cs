@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Windows.ApplicationModel;
 using Windows.ApplicationModel.Activation;
+using Windows.Foundation;
 using Windows.Foundation.Metadata;
 using Windows.Graphics.Display;
 using Windows.Storage;
@@ -410,6 +411,7 @@ namespace Unison.Uwp
             services.AddSingleton<IFilePicker, FilePickerService>();
             services.AddSingleton<IShareService, ShareService>();
             services.AddSingleton<IAudioRecordingService, AudioRecordingService>();
+            services.AddSingleton<IUiSoundService, UiSoundService>();
             services.AddSingleton<IVoicePlaybackRoutingService, VoicePlaybackRoutingService>();
             services.AddSingleton<IReactionMapper, ReactionMapper>();
             services.AddSingleton<IChatMessageMapper, ChatMessageMapper>();
@@ -535,6 +537,13 @@ namespace Unison.Uwp
                 "kind=" + (args == null ? "<null>" : args.Kind.ToString()) +
                 "; previousState=" + (args == null ? "<null>" : args.PreviousExecutionState.ToString()));
             RuntimeDiagnosticsService.Instance.StartHealthSampling();
+            if (args is ProtocolActivatedEventArgs protocolArgs &&
+                string.Equals(protocolArgs.Uri?.Scheme, PeopleMessageScheme, StringComparison.OrdinalIgnoreCase))
+            {
+                HandlePeopleMessageActivation(protocolArgs.Uri);
+                return;
+            }
+
             if (args != null && args.Kind == ActivationKind.ToastNotification)
             {
                 NotificationService.Instance.Initialize();
@@ -571,6 +580,61 @@ namespace Unison.Uwp
             }
 
             base.OnActivated(args);
+        }
+
+        private const string PeopleMessageScheme = "ms-ipmessaging";
+
+        /// <summary>
+        /// People "Message" (contact card annotation with <c>ContactAnnotationOperations.Message</c>)
+        /// activates <c>ms-ipmessaging:?ContactRemoteIds=...</c>. Contact-action activation
+        /// (<c>windows.contact</c>) types are absent from the 22621 SDK contracts.
+        /// </summary>
+        private void HandlePeopleMessageActivation(Uri uri)
+        {
+            Frame rootFrame = EnsureRootFrame();
+            ApplyShellThemeFromSettings();
+            ConfigureAppChrome();
+            EnsureTitleBarHook();
+            EnsureStatusBarOrientationHook();
+
+            string jid = WindowsContactListPublisher.FromRemoteId(ReadPeopleRemoteId(uri));
+            string arguments = string.IsNullOrWhiteSpace(jid)
+                ? string.Empty
+                : "chat=" + Uri.EscapeDataString(jid);
+
+            RuntimeDiagnosticsService.Instance.Write(
+                "lifecycle",
+                "people-activated",
+                "hasChat=" + (arguments.Length > 0));
+
+            if (rootFrame.Content == null || !IsKnownRootContent(rootFrame.Content))
+            {
+                NavigateRootToBoot(arguments);
+            }
+
+            HandleActivationArguments(arguments);
+
+            Window.Current.Activate();
+            ApplyWindowChromeBootstrap();
+        }
+
+        private static string ReadPeopleRemoteId(Uri uri)
+        {
+            if (uri == null || string.IsNullOrEmpty(uri.Query))
+            {
+                return null;
+            }
+
+            foreach (IWwwFormUrlDecoderEntry entry in new WwwFormUrlDecoder(uri.Query))
+            {
+                if (string.Equals(entry.Name, "ContactRemoteIds", StringComparison.OrdinalIgnoreCase) &&
+                    !string.IsNullOrWhiteSpace(entry.Value))
+                {
+                    return entry.Value.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)[0].Trim();
+                }
+            }
+
+            return null;
         }
 
         /// <summary>Secondary tile / toast <c>chat=</c> deep link into an existing session.</summary>
@@ -774,7 +838,7 @@ namespace Unison.Uwp
                     Width = 96,
                     Height = 96,
                     HorizontalAlignment = HorizontalAlignment.Center,
-                    Source = new BitmapImage(new Uri("ms-appx:///Assets/WhatsAppLogo.png"))
+                    Source = new BitmapImage(new Uri("ms-appx:///Assets/Square44x44Logo.altform-unplated_targetsize-256.png"))
                 };
 
                 var title = new TextBlock
@@ -815,6 +879,15 @@ namespace Unison.Uwp
             RuntimeDiagnosticsService.Instance.Write("lifecycle", "entered-background");
             try
             {
+                if (KeepsSocketInProcess())
+                {
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "socket-broker",
+                        "entered-background-result",
+                        "transferred=false; reason=location-keepalive");
+                    return;
+                }
+
                 bool transferred = await App.GetWhatsAppService().TransferActiveSocketToBrokerAsync("entered-background");
                 RuntimeDiagnosticsService.Instance.Write(
                     "socket-broker",
@@ -831,6 +904,26 @@ namespace Unison.Uwp
             finally
             {
                 deferral.Complete();
+            }
+        }
+
+        /// <summary>
+        /// "Modo em segundo plano" on: the socket never goes to the broker (1.8 behavior).
+        /// The broker only reads and sends WebSocket pings, never the WhatsApp <c>w:p</c>
+        /// keep-alive, so the server closes a brokered session and the user sees
+        /// "Unison desconectado". ExtendedExecution keeps this process, and its ping, alive.
+        /// </summary>
+        private static bool KeepsSocketInProcess()
+        {
+            try
+            {
+                return Services?.GetService<ILocalSettings>()?
+                    .Get<bool>(LocalSettingsConstants.LocationKeepAliveEnabled) == true;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[App] KeepsSocketInProcess: " + ex.Message);
+                return false;
             }
         }
 
@@ -851,7 +944,8 @@ namespace Unison.Uwp
             try
             {
                 var whatsApp = App.GetWhatsAppService();
-                bool brokered = await whatsApp.TransferActiveSocketToBrokerAsync("suspending");
+                bool brokered = !KeepsSocketInProcess() &&
+                                await whatsApp.TransferActiveSocketToBrokerAsync("suspending");
                 if (brokered)
                 {
                     await whatsApp.PrepareForSuspendAsync();

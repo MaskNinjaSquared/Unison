@@ -15,9 +15,13 @@ namespace Unison.Uwp.UI.Dialogs
             InitializeComponent();
         }
 
-        public void Bind(StartTileMark current)
+        public bool UseTransparentPlate { get; private set; }
+
+        public void Bind(StartTileMark current, bool transparent)
         {
             Result = current;
+            UseTransparentPlate = transparent;
+            TransparentTileCheck.IsChecked = transparent;
             RadioButton option = OptionFor(current);
             option.IsChecked = true;
             ShowPreview(current);
@@ -26,6 +30,12 @@ namespace Unison.Uwp.UI.Dialogs
         private void OnMarkChecked(object sender, RoutedEventArgs e)
         {
             ShowPreview(ReadSelected());
+        }
+
+        private void OnTransparentChanged(object sender, RoutedEventArgs e)
+        {
+            UseTransparentPlate = TransparentTileCheck.IsChecked == true;
+            ApplyPreviewPlate();
         }
 
         private void OnPinClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
@@ -66,6 +76,23 @@ namespace Unison.Uwp.UI.Dialogs
         private void ShowPreview(StartTileMark mark)
         {
             PreviewIcon.Source = new BitmapImage(StartTileMarkAssets.Logo(mark));
+            ApplyPreviewPlate();
+        }
+
+        private void ApplyPreviewPlate()
+        {
+            if (PreviewPlate == null)
+            {
+                return;
+            }
+
+            if (TransparentTileCheck != null && TransparentTileCheck.IsChecked == true)
+            {
+                PreviewPlate.Background = new Windows.UI.Xaml.Media.SolidColorBrush(Windows.UI.Colors.Transparent);
+                return;
+            }
+
+            PreviewPlate.Background = (Windows.UI.Xaml.Media.Brush)Application.Current.Resources["SystemControlBackgroundAccentBrush"];
         }
     }
 }

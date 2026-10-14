@@ -80,28 +80,41 @@
         </VisualStateManager.VisualStateGroups>
 
         <SplitView x:Name="RootSplitView"
+                   VerticalAlignment="Stretch"
+                   HorizontalAlignment="Stretch"
                    DisplayMode="Overlay"
                    IsPaneOpen="False"
                    OpenPaneLength="240"
                    PaneBackground="{ThemeResource AcrylicInAppFillColorDefaultBrush}">
             <SplitView.Pane>
-                <Grid>
+                <Grid x:Name="PaneLayout"
+                      VerticalAlignment="Stretch"
+                      HorizontalAlignment="Stretch">
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="*" MinHeight="0"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
                     <ListView x:Name="SectionList"
                               Grid.Row="0"
+                              VerticalAlignment="Stretch"
                               SelectionMode="Single"
                               SelectionChanged="SectionList_SelectionChanged"
                               Margin="0,8,0,0"
-                              ScrollViewer.VerticalScrollBarVisibility="Auto">
+                              ScrollViewer.VerticalScrollBarVisibility="Auto"
+                              ScrollViewer.VerticalScrollMode="Auto">
                         <ListView.ItemContainerStyle>
                             <Style TargetType="ListViewItem" BasedOn="{StaticResource WhatsAppSidebarItemStyle}">
                                 <Setter Property="Padding" Value="0"/>
                             </Style>
                         </ListView.ItemContainerStyle>
+
+                        <ListViewItem x:Name="ProfileNavItem" Tag="profile">
+                            <StackPanel Orientation="Horizontal" Padding="12,0">
+                                <TextBlock Text="&#xE77B;" FontFamily="{StaticResource IconFont}" FontSize="20" Width="24" VerticalAlignment="Center"/>
+                                <TextBlock x:Uid="Settings_Profile" Text="Profile" Margin="16,0,0,0" FontSize="14" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </ListViewItem>
 
                         <ListViewItem x:Name="GeneralNavItem" Tag="general" IsSelected="True">
                             <StackPanel Orientation="Horizontal" Padding="12,0">
@@ -146,11 +159,12 @@
                         </ListViewItem>
                     </ListView>
 
-                    <!-- Footer: same idea as MainView ProfileNavRow -->
+                    <!-- Read-only account line. Profile opens from the sidebar item. -->
                     <Grid Grid.Row="1"
+                          VerticalAlignment="Bottom"
                           Padding="8,8,12,12"
                           Margin="4,2"
-                          MinHeight="44">
+                          MinHeight="52">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
@@ -174,26 +188,37 @@
                             </Ellipse>
                         </Grid>
 
-                        <TextBlock Grid.Column="1"
-                                   Text="{Binding ProfileDisplayName}"
-                                   Foreground="{ThemeResource WhatsAppTextHighBrush}"
-                                   Margin="12,0,0,0"
-                                   FontSize="14"
-                                   VerticalAlignment="Center"
-                                   TextTrimming="CharacterEllipsis"
-                                   MaxLines="1"/>
+                        <StackPanel Grid.Column="1"
+                                    Margin="12,0,0,0"
+                                    VerticalAlignment="Center">
+                            <TextBlock Text="{Binding ProfileDisplayName}"
+                                       Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                                       FontSize="14"
+                                       TextTrimming="CharacterEllipsis"
+                                       MaxLines="1"/>
+                            <TextBlock Text="{Binding CurrentUserPhone}"
+                                       Margin="0,2,0,0"
+                                       Foreground="{ThemeResource WhatsAppTextMediumBrush}"
+                                       FontSize="12"
+                                       TextTrimming="CharacterEllipsis"
+                                       MaxLines="1"/>
+                        </StackPanel>
                     </Grid>
                 </Grid>
             </SplitView.Pane>
 
             <SplitView.Content>
-                <Grid Background="{ThemeResource SettingsPageBackgroundBrush}">
+                <Grid x:Name="SectionHost"
+                      Background="{ThemeResource SettingsPageBackgroundBrush}"
+                      VerticalAlignment="Stretch"
+                      HorizontalAlignment="Stretch"
+                      SizeChanged="SectionHost_SizeChanged">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="*" MinHeight="0"/>
                     </Grid.RowDefinitions>
 
-                    <Grid Grid.Row="0" Margin="8,8,12,0" MinHeight="40">
+                    <Grid x:Name="SectionTitleRow" Grid.Row="0" Margin="8,8,12,0" MinHeight="40">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
@@ -218,12 +243,17 @@
                                    FontFamily="{StaticResource MainFontSemibold}"/>
                     </Grid>
 
-                    <ScrollViewer Grid.Row="1"
+                    <ScrollViewer x:Name="SectionScroll"
+                                  Grid.Row="1"
+                                  HorizontalAlignment="Stretch"
+                                  VerticalScrollMode="Enabled"
                                   VerticalScrollBarVisibility="Auto"
-                                  HorizontalScrollBarVisibility="Disabled"
                                   HorizontalScrollMode="Disabled"
-                                  Padding="12,8,12,24">
-                        <Grid HorizontalAlignment="Stretch">
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  ZoomMode="Disabled"
+
+                                  Padding="12,8,12,0">
+                        <Grid HorizontalAlignment="Stretch" Padding="0,0,0,80" VerticalAlignment="Stretch">
                             <!-- General -->
                             <StackPanel x:Name="GeneralPanel">
                                 <controls:SettingBox LocalizationUid="Settings_LiveTiles"
@@ -368,6 +398,7 @@
                                             </Interactivity:Interaction.Behaviors>
                                             <ComboBoxItem Content="Unison"/>
                                             <ComboBoxItem Content="WhatsApp"/>
+                                            <ComboBoxItem Content="WhatsApp Legacy"/>
                                         </ComboBox>
                                     </controls:SettingBox.Control>
                                 </controls:SettingBox>
@@ -439,6 +470,9 @@
                             <StackPanel x:Name="AboutPanel" Visibility="Collapsed">
                                 <controls:AboutControl HorizontalAlignment="Left" Margin="0,8,0,0"/>
                             </StackPanel>
+
+                            <controls:WhatsAppProfileControl x:Name="ProfilePanel"
+                                                             Visibility="Collapsed"/>
                         </Grid>
                     </ScrollViewer>
                 </Grid>

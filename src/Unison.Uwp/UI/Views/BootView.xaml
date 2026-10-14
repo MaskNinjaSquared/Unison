@@ -31,7 +31,7 @@
                 </DoubleAnimation>
                 <DoubleAnimation Storyboard.TargetName="BootIconScale"
                                  Storyboard.TargetProperty="ScaleX"
-                                 From="1" To="0.58"
+                                 From="1" To="0.48"
                                  BeginTime="0:0:0.40"
                                  Duration="0:0:0.80">
                     <DoubleAnimation.EasingFunction>
@@ -40,7 +40,7 @@
                 </DoubleAnimation>
                 <DoubleAnimation Storyboard.TargetName="BootIconScale"
                                  Storyboard.TargetProperty="ScaleY"
-                                 From="1" To="0.58"
+                                 From="1" To="0.48"
                                  BeginTime="0:0:0.40"
                                  Duration="0:0:0.80">
                     <DoubleAnimation.EasingFunction>
@@ -93,7 +93,7 @@
                     <TranslateTransform x:Name="BootIconTranslate" X="0" Y="0"/>
                 </TransformGroup>
             </Viewbox.RenderTransform>
-            <Image Source="ms-appx:///Assets/WhatsAppLogo.png"
+            <Image Source="ms-appx:///Assets/Square44x44Logo.altform-unplated_targetsize-256.png"
                    Width="200"
                    Height="200"
                    Stretch="Uniform"/>
@@ -102,7 +102,7 @@
         <TextBlock x:Name="BootWordmark"
                    Text="Unison"
                    Foreground="White"
-                   FontSize="40"
+                   FontSize="32"
                    FontFamily="{StaticResource MainFontSemibold}"
                    FontWeight="SemiBold"
                    HorizontalAlignment="Center"

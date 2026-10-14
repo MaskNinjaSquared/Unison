@@ -59,6 +59,8 @@ It does **not** run a handshake, does **not** send application IQs, and does **n
 
 On suspend, `App` asks the socket to transfer; on resume it reclaims. Any failure answers `false`, which the caller treats as “keep the socket in-process” (or, on resume, “connect fresh”).
 
+Exception: with `LocationKeepAliveEnabled` on, `App` never asks for the transfer (entered-background or suspending), as in 1.8. The broker sends no `w:p` keep-alive, so the server drops a brokered session and the user sees “Unison desconectado”; ExtendedExecution keeps the process and its keep-alive running instead. If the app is suspended anyway, the socket is shut down and reconnects on resume.
+
 ## Handoff on the new stack
 
 | API | Behavior |
