@@ -784,12 +784,12 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
 
         public Task<bool> EnsureHistoryOnDemandAsync(string jid, int count)
         {
-            return _whatsAppService.EnsureHistoryOnDemandAsync(jid, count);
+            return _history.EnsureChatPageAsync(jid, count);
         }
 
         public bool IsHistoryOnDemandPending(string jid)
         {
-            return _whatsAppService.IsHistoryOnDemandPending(jid);
+            return _history.IsChatPagePending(jid);
         }
 
         /// <summary>

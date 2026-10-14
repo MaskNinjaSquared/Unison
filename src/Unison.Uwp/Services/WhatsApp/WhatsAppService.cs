@@ -1063,8 +1063,8 @@ namespace Unison.Uwp.Services.WhatsApp
             public string SelectionReason { get; set; }
         }
         private readonly MessageIdIndex _messageIdIndex = new MessageIdIndex();
-        /// <summary>Per-chat and full-history requests sent and still owed.</summary>
-        private readonly HistoryOnDemandRegistry _historyRequests = new HistoryOnDemandRegistry();
+        /// <summary>Per-chat and full-history requests sent and still owed. Shared with <c>HistoryFacade</c>.</summary>
+        private readonly HistoryOnDemandRegistry _historyRequests;
         private HistoryOnDemandDispatch _historyDispatch;
         private HistoryCatchUpWatchdog _catchUpWatchdog;
         private DateTime _lastHistorySyncReceivedUtc = DateTime.MinValue;
@@ -1531,7 +1531,8 @@ namespace Unison.Uwp.Services.WhatsApp
             IUsyncGate usyncGate,
             AvatarFetcher avatarFetcher,
             IMediaCache mediaCache,
-            JidAliasTable jidAlias)
+            JidAliasTable jidAlias,
+            HistoryOnDemandRegistry historyRequests)
         {
             if (chatState == null)
             {
@@ -1539,6 +1540,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             _chatState = chatState;
+            _historyRequests = historyRequests ?? throw new ArgumentNullException(nameof(historyRequests));
             _historyMessages = historyMessages ?? throw new ArgumentNullException(nameof(historyMessages));
             _chatPreviews = chatPreviews ?? throw new ArgumentNullException(nameof(chatPreviews));
             _usyncGate = usyncGate ?? throw new ArgumentNullException(nameof(usyncGate));
@@ -1569,10 +1571,11 @@ namespace Unison.Uwp.Services.WhatsApp
             IUsyncGate usyncGate,
             AvatarFetcher avatarFetcher,
             IMediaCache mediaCache,
-            JidAliasTable jidAlias)
+            JidAliasTable jidAlias,
+            HistoryOnDemandRegistry historyRequests)
         {
             return _instance ?? (_instance = new WhatsAppService(
-                chatState, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias));
+                chatState, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, historyRequests));
         }
 
         /// <summary>
@@ -4074,23 +4077,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 ScheduleAcceptedHistoryRequestTimeout(state);
             }
-        }
-
-        public bool IsHistoryOnDemandPending(string chatJid)
-        {
-            string normJid = NormalizeJid(chatJid);
-            if (string.IsNullOrWhiteSpace(normJid))
-            {
-                return false;
-            }
-
-            return _historyRequests.IsChatPending(normJid);
-        }
-
-        public Task<bool> EnsureHistoryOnDemandAsync(string chatJid, int count = 30)
-        {
-            string normJid = NormalizeJid(chatJid);
-            return RequestHistoryOnDemandIfNeededAsync(normJid, count);
         }
 
         private HistoryCatchUpWatchdog CatchUpWatchdog =>

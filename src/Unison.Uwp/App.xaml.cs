@@ -240,6 +240,9 @@ namespace Unison.Uwp
             services.AddSingleton(sp => new MediaDerivationService(
                 sp.GetRequiredService<MediaCacheService>()));
             services.AddSingleton<JidAliasTable>();
+            // What history was asked of the phone and is still owed. The client answers acks and
+            // timeouts against it; HistoryFacade asks for chat pages through it.
+            services.AddSingleton<HistoryOnDemandRegistry>();
             // Contacts and avatars query the same rate-limited directory surface, so they queue
             // behind one gate even after they stop sharing an owner.
             services.AddSingleton<IUsyncGate, UsyncGate>();
@@ -257,10 +260,13 @@ namespace Unison.Uwp
                     sp.GetRequiredService<IUsyncGate>(),
                     sp.GetRequiredService<AvatarFetcher>(),
                     sp.GetRequiredService<IMediaCache>(),
-                    sp.GetRequiredService<JidAliasTable>()));
+                    sp.GetRequiredService<JidAliasTable>(),
+                    sp.GetRequiredService<HistoryOnDemandRegistry>()));
             // The send flow lives on MessageFacade; the timeline caches and the socket it writes
             // through are still the client's, reached only through this narrow port.
             services.AddSingleton<IOutgoingMessageHost>(
+                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+            services.AddSingleton<IHistoryOnDemandSocket>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             // Asking "is this the same person?" no longer means naming the client. The table is
             // still built there; only the question moved.
@@ -288,6 +294,9 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IWhatsAppService>(),
                 sp.GetRequiredService<IMessageStore>(),
                 sp.GetRequiredService<ILocalSettings>(),
+                sp.GetRequiredService<HistoryOnDemandRegistry>(),
+                sp.GetRequiredService<IHistoryOnDemandSocket>(),
+                sp.GetRequiredService<ChatStateStore>(),
                 sp.GetRequiredService<IHistoryChatPreviewStore>(),
                 sp.GetRequiredService<IHistoryMigrationStore>(),
                 sp.GetRequiredService<IHistoryMessageStore>(),

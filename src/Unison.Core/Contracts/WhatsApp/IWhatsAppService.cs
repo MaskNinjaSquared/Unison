@@ -309,9 +309,6 @@ namespace Unison.Core.Contracts.WhatsApp
         Task<List<ChatMessage>> LoadMoreMessagesAsync(string jid);
         List<ChatMessage> GetLiveMessages(string jid);
 
-        Task<bool> EnsureHistoryOnDemandAsync(string jid, int count);
-        bool IsHistoryOnDemandPending(string jid);
-
         /// <summary>
         /// Asks the phone for a FULL_HISTORY_SYNC_ON_DEMAND lot (no local wipe).
         /// Prefer <see cref="IHistoryService.RequestFullHistoryOnDemandAsync"/> from UI.

@@ -27,11 +27,13 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
+using Unison.Core.State;
 using Unison.Socket.Events;
 using Unison.Socket.Session;
 using Unison.Socket.Sync;
 using Unison.Uwp.Client;
 using Unison.Uwp.Services.Socket;
+
 namespace Unison.Uwp.Services.WhatsApp.History
 {
     public sealed class HistoryFacade : IHistoryService
@@ -60,6 +62,9 @@ namespace Unison.Uwp.Services.WhatsApp.History
         private readonly IHistoryStatusStore _statusStore;
         private readonly INotificationService _notifications;
         private readonly IStringResources _strings;
+        private readonly HistoryOnDemandRegistry _onDemandRequests;
+        private readonly HistoryOnDemandDispatch _onDemand;
+        private readonly ChatStateStore _chatState;
 
         /// <summary>
         /// Session-scoped: one toast after repeated background history lots. Not reset until
@@ -74,6 +79,9 @@ namespace Unison.Uwp.Services.WhatsApp.History
             IWhatsAppService appState,
             IMessageStore store,
             ILocalSettings settings,
+            HistoryOnDemandRegistry onDemandRequests,
+            IHistoryOnDemandSocket onDemandSocket,
+            ChatStateStore chatState,
             IHistoryChatPreviewStore chatPreviewStore = null,
             IHistoryMigrationStore migrationStore = null,
             IHistoryMessageStore messageHistoryStore = null,
@@ -105,6 +113,12 @@ namespace Unison.Uwp.Services.WhatsApp.History
             _appState = appState;
             _store = store;
             _settings = settings;
+            _onDemandRequests = onDemandRequests ?? throw new ArgumentNullException(nameof(onDemandRequests));
+            _onDemand = new HistoryOnDemandDispatch(
+                onDemandRequests,
+                onDemandSocket ?? throw new ArgumentNullException(nameof(onDemandSocket)),
+                line => Debug.WriteLine("[HistoryFacade] " + line));
+            _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _chatPreviewStore = chatPreviewStore;
             _migrationStore = migrationStore;
             _messageHistoryStore = messageHistoryStore;
@@ -771,6 +785,29 @@ namespace Unison.Uwp.Services.WhatsApp.History
             return _appState.RequestFullHistoryOnDemandAsync(
                 string.IsNullOrWhiteSpace(reason) ? "ui-full-history-on-demand" : reason,
                 force);
+        }
+
+        /// <summary>
+        /// Asks the phone for the page of <paramref name="jid"/> older than the oldest message
+        /// in memory. True when a request went out.
+        /// </summary>
+        public Task<bool> EnsureChatPageAsync(string jid, int count)
+        {
+            string normJid = JidHelper.Normalize(jid);
+            if (string.IsNullOrWhiteSpace(normJid) ||
+                !_chatState.MessagesByChat.TryGet(normJid, out List<ChatMessage> timeline))
+            {
+                return Task.FromResult(false);
+            }
+
+            return _onDemand.RequestChatPageAsync(normJid, timeline, count, null, DateTime.UtcNow);
+        }
+
+        /// <summary>A page was asked for <paramref name="jid"/> and has not landed yet.</summary>
+        public bool IsChatPagePending(string jid)
+        {
+            string normJid = JidHelper.Normalize(jid);
+            return !string.IsNullOrWhiteSpace(normJid) && _onDemandRequests.IsChatPending(normJid);
         }
 
         /// <summary>
