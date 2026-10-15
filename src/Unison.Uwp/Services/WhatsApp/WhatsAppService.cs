@@ -1030,12 +1030,9 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         private static readonly TimeSpan AliasFollowUpDebounce = TimeSpan.FromMilliseconds(750);
 
-        private readonly object _aliasFollowUpGate = new object();
-        private readonly HashSet<string> _pendingAliasAvatarJids =
-            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        private string _pendingAliasFollowUpSource;
+        private readonly AliasFollowUpQueue _aliasFollowUps = new AliasFollowUpQueue();
+        private readonly object _aliasFollowUpTimerGate = new object();
         private CancellationTokenSource _aliasFollowUpCts;
-        private int _aliasFollowUpRunning;
         private sealed class HistoryBackfillCandidate
         {
             public string Jid { get; set; }

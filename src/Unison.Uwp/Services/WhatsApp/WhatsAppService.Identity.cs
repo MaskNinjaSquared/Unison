@@ -432,11 +432,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 () => OnJidAliasResolved?.Invoke(this, new JidAliasResolvedEventArgs(pn, lid)),
                 nameof(OnJidAliasResolved));
 
-            lock (_aliasFollowUpGate)
-            {
-                _pendingAliasAvatarJids.Add(pn);
-            }
-
+            _aliasFollowUps.NoteAvatarTarget(pn);
             return true;
         }
 
@@ -445,11 +441,11 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         private void ScheduleAliasFollowUp(string source)
         {
-            CancellationToken token;
-            lock (_aliasFollowUpGate)
-            {
-                _pendingAliasFollowUpSource = source;
+            _aliasFollowUps.Request(source);
 
+            CancellationToken token;
+            lock (_aliasFollowUpTimerGate)
+            {
                 if (_aliasFollowUpCts != null)
                 {
                     _aliasFollowUpCts.Cancel();
@@ -482,32 +478,24 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         private async Task RunAliasFollowUpAsync()
         {
-            if (Interlocked.Exchange(ref _aliasFollowUpRunning, 1) == 1)
+            if (!_aliasFollowUps.TryBegin(out var batch))
             {
                 // A pass is already writing the file and walking the list. Whatever arrived in the
                 // meantime is still pending and will be picked up by the next timer.
-                ScheduleAliasFollowUp(_pendingAliasFollowUpSource);
+                ScheduleAliasFollowUp(_aliasFollowUps.PendingSource);
                 return;
             }
 
-            string source;
-            List<string> avatarTargets;
-            lock (_aliasFollowUpGate)
-            {
-                source = _pendingAliasFollowUpSource ?? "alias";
-                avatarTargets = _pendingAliasAvatarJids.ToList();
-                _pendingAliasAvatarJids.Clear();
-            }
-
+            string source = batch.Source;
             try
             {
                 await PersistJidAliasesAsync("alias:" + source);
 
-                if (avatarTargets.Count > 0)
+                if (batch.AvatarTargets.Count > 0)
                 {
                     await RunOnUiThreadAsync(() =>
                     {
-                        foreach (var pn in avatarTargets)
+                        foreach (var pn in batch.AvatarTargets)
                         {
                             foreach (var chat in GetChatRowsForCanonicalJid(pn)
                                          .Where(c => string.IsNullOrWhiteSpace(c.AvatarUrl)))
@@ -531,10 +519,11 @@ namespace Unison.Uwp.Services.WhatsApp
             catch (Exception ex)
             {
                 Debug.WriteLine("[WhatsAppService] Alias follow-up failed: " + ex.Message);
+                _aliasFollowUps.Restore(batch);
             }
             finally
             {
-                Interlocked.Exchange(ref _aliasFollowUpRunning, 0);
+                _aliasFollowUps.End();
             }
         }
 

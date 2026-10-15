@@ -618,7 +618,7 @@ canonical row during a merge even though the sanitizer blocks that everywhere el
 stays; only the decision left.
 
 What remains in `.Identity.cs` is the larger half and is not this shape: the alias follow-up
-scheduling and what `ResolveContactsViaSocketAsync` does with an answer (alias, identity heal,
+pass itself (its bookkeeping is `AliasFollowUpQueue`, see the pure-rule nibble below) and what `ResolveContactsViaSocketAsync` does with an answer (alias, identity heal,
 duplicate-chat merge, avatar fetch). Those are 3.6's move onto `ContactFacade`, not a rule to lift
 out of a method.
 
@@ -970,6 +970,14 @@ save, which runs after every dedupe and transient merge, hand-built a `ChatItem`
 `LastMessageId`, the mentions, the group sender and every status but archived. The store keeps those
 fields when the tip has not moved, but a row the identity save inserted, or whose newer tip it wrote
 first, went to disk without them. It also copied every group roster for a mapping that never reads it.
+
+What a burst of new alias pairs leaves owed is `AliasFollowUpQueue` (`Unison.Core/State`, 9 tests),
+the same seam as `PersistScheduler`: it holds the avatar targets (each once, in order) and the latest
+source, takes them all when a pass begins and refuses a second pass while one runs. The host keeps
+the 750 ms debounce. The client lost three fields: the running flag, which sat outside the lock that
+guarded the rest, and the source, which the re-arm path read without that lock. Fixed on the way: a
+pass that threw had already cleared its targets, so those rows kept a missing picture until the next
+pair for the same contact. They are restored now, without an automatic retry, as with the catalog save.
 
 ### History on demand — the bookkeeping left first
 

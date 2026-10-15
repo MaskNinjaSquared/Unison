@@ -4,6 +4,12 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Alias follow-up keeps its avatar retries on failure
+
+The follow-up that runs after new LID/phone pairs arrive (rewrite the alias file, merge duplicate
+rows, retry missing avatars) keeps what it owes in `AliasFollowUpQueue`. A pass that failed used to
+drop its avatar retries; they now wait for the next pass.
+
 ## One snapshot for every chat-list save
 
 The periodic, suspend and identity saves of the chat list now take the same snapshot
