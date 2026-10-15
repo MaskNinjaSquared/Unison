@@ -41,6 +41,8 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly IJidResolver _jids;
         private readonly ILocalContactsService _localContacts;
         private readonly ILocalSettings _localSettings;
+        private readonly JidAliasTable _aliases;
+        private readonly DisplayNameTable _pushNames;
 
         private readonly ContactDirectory _directory;
         private readonly AddressBookOverlay _addressBook;
@@ -66,8 +68,12 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             AvatarFetcher avatars,
             IChatStateStore chats,
             IAvatarReport avatarReport,
-            IAvatarCache avatarCache)
+            IAvatarCache avatarCache,
+            JidAliasTable aliases,
+            DisplayNameTable pushNames,
+            ISelfMarkerNaming selfMarkers)
         {
+            if (selfMarkers == null) throw new ArgumentNullException(nameof(selfMarkers));
             if (sessions == null) throw new ArgumentNullException(nameof(sessions));
             if (localContacts == null) throw new ArgumentNullException(nameof(localContacts));
             if (lidMappings == null) throw new ArgumentNullException(nameof(lidMappings));
@@ -84,10 +90,19 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             _avatarCache = avatarCache;
             _localContacts = localContacts;
             _localSettings = localSettings ?? throw new ArgumentNullException(nameof(localSettings));
+            _aliases = aliases ?? throw new ArgumentNullException(nameof(aliases));
+            _pushNames = pushNames ?? throw new ArgumentNullException(nameof(pushNames));
 
             _directory = new ContactDirectory(sessions, lidMappings);
             _addressBook = new AddressBookOverlay(localContacts, personStore, whatsAppService, jids);
-            _usync = new ContactUsyncResolver(whatsAppService, _directory, usyncGate, jids);
+            _usync = new ContactUsyncResolver(
+                whatsAppService,
+                _directory,
+                usyncGate,
+                jids,
+                pushNames,
+                new ContactLabelSanitizer(selfMarkers),
+                chats);
             _names = new ContactNameResolver(whatsAppService, _addressBook, _directory, _usync, jids, groups);
             _avatars = new ChatAvatarPolicy(
                 whatsAppService,
@@ -208,8 +223,9 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         }
 
         /// <summary>
-        /// The older path: a usync pass, then a prefix match over what it filed. Whatever the user
-        /// typed is reduced to digits first; anything else in the string can only make the match miss.
+        /// The older path: a usync pass, then a prefix match over what it filed (an alias pair or a
+        /// push name, so the match walks those two tables). Whatever the user typed is reduced to
+        /// digits first; anything else in the string can only make the match miss.
         /// </summary>
         private async Task<string> SearchKnownContactsAsync(string phoneNumber)
         {
@@ -220,7 +236,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             }
 
             await _usync.ResolveAsync(new[] { digits }).ConfigureAwait(false);
-            string jid = _whatsAppService.FindKnownJidByPhoneDigits(digits);
+            string jid = KnownJidByPhoneDigits.Find(digits, _aliases, _pushNames.Keys);
             Debug.WriteLine("[ContactFacade] Known-contact search for " + digits + ": " + (jid ?? "none"));
             return jid;
         }

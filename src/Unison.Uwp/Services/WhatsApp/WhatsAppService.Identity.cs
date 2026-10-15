@@ -532,11 +532,5 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             return _contactService?.RefreshContactNamesAsync(includeGroups, force) ?? Task.CompletedTask;
         }
-
-        /// <summary>Usync files what it learns as an alias pair or a name, so a hit lands in one of those two.</summary>
-        public string FindKnownJidByPhoneDigits(string digits)
-        {
-            return KnownJidByPhoneDigits.Find(digits, JidAlias, ContactNames.Keys);
-        }
     }
 }

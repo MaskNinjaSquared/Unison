@@ -152,8 +152,9 @@ namespace Unison.Core.Contracts.WhatsApp
         Task RefreshContactNamesAsync(bool includeGroups, bool force);
         string ResolveDisplayName(string jid, string context);
 
-        // Usync contact apply (3.6). The contact façade decides; these write the caches the client
-        // still owns. Not for ViewModels.
+        // Usync contact apply (3.6). The contact façade decides and writes the push name itself;
+        // these reach the socket, the auth state and the chat rows the client still owns.
+        // Not for ViewModels.
 
         /// <summary>
         /// Files a usync LID/phone pair when <see cref="Unison.Core.Helpers.AliasPairPolicy"/> accepts it, and
@@ -162,23 +163,11 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         bool TryFileUsyncAlias(string userJid, string lidJid, out bool wasAlreadyAliased);
 
-        /// <summary>Sanitizes and stores a usync push name. False when nothing usable was offered.</summary>
-        bool StoreUsyncPushName(string jid, string rawName);
-
-        /// <summary>True when a listed chat for this JID is showing no avatar.</summary>
-        bool HasListedChatWithoutAvatar(string jid);
-
         /// <summary>Fetches the picture URL and applies it to the listed chat if it still has none.</summary>
         Task FetchAvatarForResolvedContactAsync(string jid);
 
         /// <summary>Collapses the LID and phone rows of one person into one chat.</summary>
         Task MergeDuplicateChatsAsync(string lidJid, string pnJid);
-
-        /// <summary>
-        /// A JID already known (alias table or name cache) whose user part starts with these digits.
-        /// Null when none is.
-        /// </summary>
-        string FindKnownJidByPhoneDigits(string digits);
 
         /// <summary>True while a reconnect/history replay drain is in progress; background refreshes should back off.</summary>
         bool IsReplayDrainActive { get; }

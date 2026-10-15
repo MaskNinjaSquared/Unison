@@ -240,6 +240,7 @@ namespace Unison.Uwp
             services.AddSingleton(sp => new MediaDerivationService(
                 sp.GetRequiredService<MediaCacheService>()));
             services.AddSingleton<JidAliasTable>();
+            services.AddSingleton<ISelfMarkerNaming, Unison.Uwp.Helpers.SelfMarkerNaming>();
             // What history was asked of the phone and is still owed. The client answers acks and
             // timeouts against it; HistoryFacade asks for chat pages through it.
             services.AddSingleton<HistoryOnDemandRegistry>();
@@ -362,7 +363,10 @@ namespace Unison.Uwp
                 sp.GetRequiredService<AvatarFetcher>(),
                 sp.GetRequiredService<IChatStateStore>(),
                 sp.GetRequiredService<IAvatarReport>(),
-                sp.GetRequiredService<IAvatarCache>()));
+                sp.GetRequiredService<IAvatarCache>(),
+                sp.GetRequiredService<JidAliasTable>(),
+                sp.GetRequiredService<ChatStateStore>().PushNames,
+                sp.GetRequiredService<ISelfMarkerNaming>()));
             services.AddSingleton<IOfflineReplayHost>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IChatService>(sp => new ChatFacade(

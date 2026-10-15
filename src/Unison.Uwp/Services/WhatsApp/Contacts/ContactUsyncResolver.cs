@@ -5,10 +5,12 @@
 // change: the LID/phone pair, a one-time merge of the two chats, the push name,
 // a missing avatar.
 //
-// The writes still land in caches the client owns (alias table, name cache,
-// auth state, chat rows), so they go through narrow primitives on it. What
-// this class owns is everything that decides: which numbers to ask about,
-// the gate that keeps usync from competing with itself, and the apply plan.
+// The push name and the "listed without a picture" check go straight to the
+// Core tables. Filing the pair (socket registration, identity heal), merging
+// the two chats and fetching the picture still go through narrow primitives
+// on the client, which owns the socket, the auth state and the row surgery.
+// What this class owns is everything that decides: which numbers to ask
+// about, the gate that keeps usync from competing with itself, and the plan.
 // =============================================================================
 using System;
 using System.Collections.Generic;
@@ -17,6 +19,7 @@ using System.Threading.Tasks;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
+using Unison.Core.State;
 using Unison.Socket.UseCases.Contacts;
 
 namespace Unison.Uwp.Services.WhatsApp.Contacts
@@ -30,17 +33,26 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly ContactDirectory _directory;
         private readonly IUsyncGate _gate;
         private readonly IJidResolver _jids;
+        private readonly DisplayNameTable _pushNames;
+        private readonly ContactLabelSanitizer _labels;
+        private readonly IChatStateStore _chats;
 
         internal ContactUsyncResolver(
             IWhatsAppService client,
             ContactDirectory directory,
             IUsyncGate gate,
-            IJidResolver jids)
+            IJidResolver jids,
+            DisplayNameTable pushNames,
+            ContactLabelSanitizer labels,
+            IChatStateStore chats)
         {
             _client = client ?? throw new ArgumentNullException(nameof(client));
             _directory = directory ?? throw new ArgumentNullException(nameof(directory));
             _gate = gate ?? throw new ArgumentNullException(nameof(gate));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
+            _pushNames = pushNames ?? throw new ArgumentNullException(nameof(pushNames));
+            _labels = labels ?? throw new ArgumentNullException(nameof(labels));
+            _chats = chats ?? throw new ArgumentNullException(nameof(chats));
         }
 
         public async Task ResolveAsync(IEnumerable<string> jids)
@@ -142,9 +154,9 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             bool lidAlreadyAliased = false;
             bool pairAccepted = !string.IsNullOrEmpty(lid) &&
                 _client.TryFileUsyncAlias(user, lid, out lidAlreadyAliased);
-            bool pushNameStored = _client.StoreUsyncPushName(user, contact.Name);
+            bool pushNameStored = StorePushName(user, contact.Name);
             bool listedWithoutAvatar = !string.IsNullOrEmpty(contact.PictureId) &&
-                _client.HasListedChatWithoutAvatar(user);
+                UsyncContactCaches.HasListedChatWithoutAvatar(_chats.Chats, user);
 
             ResolvedContactApplyPlan plan = ResolvedContactApplyPlan.Decide(
                 hasLid: !string.IsNullOrEmpty(lid),
@@ -165,6 +177,21 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             }
 
             return plan.CachesChanged;
+        }
+
+        private bool StorePushName(string user, string rawName)
+        {
+            bool stored = UsyncContactCaches.StorePushName(_pushNames, _labels, user, rawName, out ContactLabelResult label);
+            if (stored)
+            {
+                Debug.WriteLine("[ContactUsyncResolver] usync name resolved: " + user + " -> " + label.Label);
+            }
+            else if (label.Rejection != ContactLabelRejection.Empty)
+            {
+                Debug.WriteLine($"[ContactUsyncResolver] Ignoring usync name for {user}: {label.Rejection} '{label.Original}'");
+            }
+
+            return stored;
         }
     }
 }

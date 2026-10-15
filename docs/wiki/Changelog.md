@@ -4,6 +4,13 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Usync names filed by the contact façade
+
+What a contact lookup learns about a name is now stored by `ContactFacade` directly in the shared
+name table (`UsyncContactCaches`), and the "already a known number?" search reads the alias and name
+tables itself. Three members left `IWhatsAppService`. Filing the LID/phone pair, fetching the picture
+and merging duplicate chats still go through the client.
+
 ## Resolved names written in one pass
 
 Applying a freshly resolved name to a chat title, and to a group member, is `ResolvedNameApply`.

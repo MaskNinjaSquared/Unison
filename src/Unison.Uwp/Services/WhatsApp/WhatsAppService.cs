@@ -5612,29 +5612,6 @@ namespace Unison.Uwp.Services.WhatsApp
             return true;
         }
 
-        public bool StoreUsyncPushName(string jid, string rawName)
-        {
-            string normalizedUser = NormalizeJid(jid);
-            string pushName = SanitizeContactLabel(rawName, normalizedUser);
-            if (string.IsNullOrEmpty(normalizedUser) || string.IsNullOrEmpty(pushName))
-            {
-                return false;
-            }
-
-            ContactNames.Set(normalizedUser, pushName);
-            Debug.WriteLine("[WhatsAppService] usync name resolved: " + jid + " -> " + pushName);
-            return true;
-        }
-
-        public bool HasListedChatWithoutAvatar(string jid)
-        {
-            string normalizedUser = NormalizeJid(jid);
-            return !string.IsNullOrEmpty(normalizedUser) &&
-                Chats.Any(c => c != null &&
-                    NormalizeJid(c.JID) == normalizedUser &&
-                    string.IsNullOrEmpty(c.AvatarUrl));
-        }
-
         public Task MergeDuplicateChatsAsync(string lidJid, string pnJid) =>
             CheckAndMergeDuplicateChatsAsync(NormalizeJid(lidJid), NormalizeJid(pnJid));
 

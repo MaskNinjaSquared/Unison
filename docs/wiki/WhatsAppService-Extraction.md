@@ -180,7 +180,7 @@ Self-contained first. List/persist last.
 | 3.4 | Send (main file) | **Text, image and audio orchestration on `MessageFacade` (done)** via `OutgoingTextSend` / `OutgoingMediaSend` (Core) over `IOutgoingMessageHost`. Client keeps the timeline caches, outbox and socket behind that port — see below |
 | 3.5a | Receipt reading (done) | `ReceiptReader` |
 | 3.5b | Receipt aggregation state (done) | `GroupReceiptTally` (Core) |
-| 3.6 | Names / usync (`.Identity.cs`) | `ContactFacade` / `ContactUsyncResolver`. **Rules and usync orchestration out — see below.** Cache-write primitives remain on the client |
+| 3.6 | Names / usync (`.Identity.cs`) | `ContactFacade` / `ContactUsyncResolver`. **Rules and usync orchestration out — see below.** Push name, avatar check and number match on the façade; alias filing, avatar fetch and chat merge remain on the client |
 | 3.7a | Alias LID/PN + canonical (done) | `JidAliasTable` (Core), read through `IJidResolver` |
 | 3.7b | Converge onto `LidMappingStore` | Blocked: that store is async, canonicalization is not. See below |
 | 3.8 | `.AppState.cs` | **Rewritten — the premise was stale.** See below |
@@ -635,11 +635,22 @@ against `IJidResolver`), `IUsyncGate`, the session (`ContactDirectory.GetReadySe
 calls it instead of the client, and the number-search fallback (`SearchContactAsync`) now lives on
 the façade. `ResolveContactsAsync` and `SearchContactAsync` are gone from `IWhatsAppService`.
 
-What the client keeps is six narrow, façade-only primitives over caches it still owns:
-`TryFileUsyncAlias` (accept, write both directions, register, heal identity), `StoreUsyncPushName`,
-`HasListedChatWithoutAvatar`, `FetchAvatarForResolvedContactAsync`, `MergeDuplicateChatsAsync` and
-`FindKnownJidByPhoneDigits` (the match itself is `KnownJidByPhoneDigits`; the client still supplies the two maps). They go when the alias table, name cache and chat rows move — that is
-3.7b / 3.10, not more of 3.6.
+What the client keeps is three narrow, façade-only primitives over what it still owns:
+`TryFileUsyncAlias` (accept, write both directions, register with the socket, heal our identity
+in the auth state), `FetchAvatarForResolvedContactAsync` (a socket round trip, then the row) and
+`MergeDuplicateChatsAsync` (chat-row surgery). They go with the socket and the auth state — phase 4 —
+and with the row surgery.
+
+**Three primitives left once their tables were Core types.** The alias table (`JidAliasTable`) and
+the push names (`DisplayNameTable`) are DI singletons shared with the client, so `ContactFacade`
+takes them directly, plus `ISelfMarkerNaming` (now registered). `StoreUsyncPushName` and
+`HasListedChatWithoutAvatar` are `UsyncContactCaches` (Core, 9 tests), called by
+`ContactUsyncResolver` against the push-name table and `IChatStateStore.Chats`; the number-search
+fallback calls `KnownJidByPhoneDigits` over the two tables itself. All three are gone from
+`IWhatsAppService`. The push name is still written with `Set` and raises no names-changed event of its
+own; the pass raises it once through `ApplyResolvedDisplayNamesToChatsAsync`, as before. One
+difference: a rejected usync name is now logged as one line with its rejection reason, instead of the
+client's per-reason wording, which stays on the client's other sanitize calls.
 
 **The hand-built usync query is gone.** `ResolveContactsAsync` had two bodies: the live one over
 `ResolveContactNamesUseCase`, and ~300 lines that built the `<usync>` node by hand. The second ran only
