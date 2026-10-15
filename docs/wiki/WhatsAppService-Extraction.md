@@ -961,6 +961,16 @@ The newest message time history freshness reads is `NewestStoredMessage.FindUtc`
 snapshot and the list strip (cold start has tips but no timelines), each value through
 `ChatMessageOrder.ToComparableUtc`. The client passes `MessagesByChat` and `Chats` and its filters.
 
+What a catalog save takes on the UI thread is `ChatCatalogSnapshot` (7 tests): the
+`history_chat_preview` rows, mapped there through `HistoryChatPreviewApplier.FromChatItem`, and each
+listed address once for the contact, phone-name and alias tables. `PersistDataAsync`,
+`PersistCriticalSuspendStateAsync` and `PersistChatIdentityStateAsync` all take it. The first two
+used to copy the live `ChatItem` references and map them after leaving the UI thread. The identity
+save, which runs after every dedupe and transient merge, hand-built a `ChatItem` per row and left out
+`LastMessageId`, the mentions, the group sender and every status but archived. The store keeps those
+fields when the tip has not moved, but a row the identity save inserted, or whose newer tip it wrote
+first, went to disk without them. It also copied every group roster for a mapping that never reads it.
+
 ### History on demand — the bookkeeping left first
 
 The on-demand history cluster (per-chat `HISTORY_SYNC_ON_DEMAND`, the paginated

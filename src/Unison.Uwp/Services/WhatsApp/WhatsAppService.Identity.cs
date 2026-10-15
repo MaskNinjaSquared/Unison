@@ -101,64 +101,28 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             try
             {
-                List<ChatItem> chatSnapshot = null;
+                ChatCatalogSnapshot catalog = null;
                 Dictionary<string, string> contactSnapshot = null;
                 Dictionary<string, string> phoneSnapshot = null;
                 Dictionary<string, string> aliasSnapshot = null;
 
                 await RunOnUiThreadAsync(() =>
                     {
-                        chatSnapshot = Chats
-                            .Where(c => c != null && !string.IsNullOrWhiteSpace(c.JID))
-                            .Select(c => new ChatItem
-                            {
-                                Id = c.Id,
-                                JID = NormalizeJid(c.JID),
-                                Name = c.Name,
-                                LastMessage = c.LastMessage,
-                                LastMessageAuthor = c.LastMessageAuthor,
-                                LastMessageKind = c.LastMessageKind,
-                                LastMessageIsFromMe = c.LastMessageIsFromMe,
-                                LastMessageSendState = c.LastMessageSendState,
-                                Timestamp = c.Timestamp,
-                                LastMessageTimestampUtc = c.LastMessageTimestampUtc,
-                                UnreadCount = c.UnreadCount,
-                                AvatarUrl = c.AvatarUrl,
-                                AvatarHighUrl = c.AvatarHighUrl,
-                                AvatarFetchedAtUtc = c.AvatarFetchedAtUtc,
-                                AvatarFetchFailedAtUtc = c.AvatarFetchFailedAtUtc,
-                                AvatarFetchFailureReason = c.AvatarFetchFailureReason,
-                                Kind = c.Kind,
-                                IsArchived = c.IsArchived,
-                                IsChatPinned = c.IsChatPinned,
-                                MutedUntil = c.MutedUntil,
-                                GroupMemberCount = c.GroupMemberCount,
-                                MyGroupRole = c.MyGroupRole,
-                                IsAnnounceOnly = c.IsAnnounceOnly,
-                                GroupMembers = GroupRosterRules.CopyForStore(c.GroupMembers)
-                            })
-                            .ToList();
-
+                        catalog = ChatCatalogSnapshot.Take(Chats);
                         contactSnapshot = ContactNames.Snapshot();
                         phoneSnapshot = PhoneContactNamesByJid.Snapshot();
                         aliasSnapshot = JidAlias.Snapshot();
                     });
 
-                if (chatSnapshot == null || chatSnapshot.Count == 0)
+                if (catalog == null || catalog.ChatJids.Count == 0)
                 {
                     return;
                 }
 
-                var chatJids = chatSnapshot
-                    .Select(c => NormalizeJid(c.JID))
-                    .Where(j => !string.IsNullOrWhiteSpace(j))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToList();
-
-                await PersistChatCatalogAsync(chatSnapshot);
-                await _messageStore.SaveContactNamesAsync(contactSnapshot ?? new Dictionary<string, string>(), chatJids);
-                await _messageStore.SavePhoneContactNamesAsync(phoneSnapshot ?? new Dictionary<string, string>(), chatJids);
-                await _messageStore.SaveJidAliasesAsync(aliasSnapshot ?? new Dictionary<string, string>(), chatJids);
+                await PersistChatCatalogAsync(catalog);
+                await _messageStore.SaveContactNamesAsync(contactSnapshot ?? new Dictionary<string, string>(), catalog.ChatJids);
+                await _messageStore.SavePhoneContactNamesAsync(phoneSnapshot ?? new Dictionary<string, string>(), catalog.ChatJids);
+                await _messageStore.SaveJidAliasesAsync(aliasSnapshot ?? new Dictionary<string, string>(), catalog.ChatJids);
                 Debug.WriteLine($"[WhatsAppService] Persisted chat identity state immediately ({reason})");
             }
             catch (Exception ex)

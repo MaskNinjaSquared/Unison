@@ -380,30 +380,25 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 // Messages are persisted by the batched message queue. Rewriting every
                 // loaded chat file here caused long UI stalls and large allocation spikes.
-                List<ChatItem> chatSnapshot = null;
-                List<string> chatJids = null;
+                ChatCatalogSnapshot catalog = null;
                 Dictionary<string, string> contactSnapshot = null;
                 Dictionary<string, string> phoneContactSnapshot = null;
                 Dictionary<string, string> aliasSnapshot = null;
                 await RunOnUiThreadAsync(() =>
                 {
-                    chatSnapshot = Chats.Where(c => c != null).ToList();
-                    chatJids = chatSnapshot
-                        .Select(c => NormalizeJid(c.JID))
-                        .Where(j => !string.IsNullOrWhiteSpace(j))
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .ToList();
+                    catalog = ChatCatalogSnapshot.Take(Chats);
                     contactSnapshot = ContactNames.Snapshot();
                     phoneContactSnapshot = PhoneContactNamesByJid.Snapshot();
                     aliasSnapshot = JidAlias.Snapshot();
                 });
 
-                await PersistChatCatalogAsync(chatSnapshot).ConfigureAwait(false);
-                await _messageStore.SaveContactNamesAsync(contactSnapshot ?? new Dictionary<string, string>(), chatJids ?? new List<string>());
-                await _messageStore.SavePhoneContactNamesAsync(phoneContactSnapshot ?? new Dictionary<string, string>(), chatJids ?? new List<string>());
-                await _messageStore.SaveJidAliasesAsync(aliasSnapshot ?? new Dictionary<string, string>(), chatJids ?? new List<string>());
+                IEnumerable<string> chatJids = catalog?.ChatJids ?? (IEnumerable<string>)new string[0];
+                await PersistChatCatalogAsync(catalog).ConfigureAwait(false);
+                await _messageStore.SaveContactNamesAsync(contactSnapshot ?? new Dictionary<string, string>(), chatJids);
+                await _messageStore.SavePhoneContactNamesAsync(phoneContactSnapshot ?? new Dictionary<string, string>(), chatJids);
+                await _messageStore.SaveJidAliasesAsync(aliasSnapshot ?? new Dictionary<string, string>(), chatJids);
 
-                Debug.WriteLine($"[WhatsAppService] Persisted {(chatSnapshot?.Count ?? 0)} chat rows and contact metadata");
+                Debug.WriteLine($"[WhatsAppService] Persisted {(catalog?.Rows.Count ?? 0)} chat rows and contact metadata");
                 return true;
             }
             catch (Exception ex)
@@ -508,29 +503,19 @@ namespace Unison.Uwp.Services.WhatsApp
             _ = PersistChatCatalogSliceAsync(slice);
         }
 
-        private async Task PersistChatCatalogAsync(IList<ChatItem> chats)
+        private Task PersistChatCatalogAsync(IList<ChatItem> chats)
         {
-            if (_chatPreviews == null || chats == null)
+            return PersistChatCatalogAsync(ChatCatalogSnapshot.Take(chats));
+        }
+
+        private async Task PersistChatCatalogAsync(ChatCatalogSnapshot snapshot)
+        {
+            if (_chatPreviews == null || snapshot == null || snapshot.Rows.Count == 0)
             {
                 return;
             }
 
-            var rows = new List<HistoryChatPreview>(chats.Count);
-            for (int i = 0; i < chats.Count; i++)
-            {
-                HistoryChatPreview row = HistoryChatPreviewApplier.FromChatItem(chats[i]);
-                if (row != null)
-                {
-                    rows.Add(row);
-                }
-            }
-
-            if (rows.Count == 0)
-            {
-                return;
-            }
-
-            await _chatPreviews.UpsertManyAsync(rows, notifyChunk: false).ConfigureAwait(false);
+            await _chatPreviews.UpsertManyAsync(snapshot.Rows, notifyChunk: false).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -629,29 +614,23 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private async Task PersistCriticalSuspendStateAsync()
         {
-            List<ChatItem> chatSnapshot = null;
-            List<string> chatJids = null;
+            ChatCatalogSnapshot catalog = null;
             Dictionary<string, string> aliasSnapshot = null;
             await RunOnUiThreadAsync(() =>
             {
-                chatSnapshot = Chats.Where(c => c != null).ToList();
-                chatJids = chatSnapshot
-                    .Select(c => NormalizeJid(c.JID))
-                    .Where(j => !string.IsNullOrWhiteSpace(j))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToList();
+                catalog = ChatCatalogSnapshot.Take(Chats);
                 aliasSnapshot = JidAlias.Snapshot();
             });
 
-            await PersistChatCatalogAsync(chatSnapshot ?? new List<ChatItem>()).ConfigureAwait(false);
+            await PersistChatCatalogAsync(catalog).ConfigureAwait(false);
             await _messageStore.SaveJidAliasesAsync(
                 aliasSnapshot ?? new Dictionary<string, string>(),
-                chatJids ?? new List<string>());
+                catalog?.ChatJids ?? (IEnumerable<string>)new string[0]);
 
             RuntimeDiagnosticsService.Instance.Write(
                 "lifecycle",
                 "fast-suspend-persisted",
-                "chatRows=" + (chatSnapshot?.Count ?? 0));
+                "chatRows=" + (catalog?.Rows.Count ?? 0));
         }
 
         private async Task PersistSuspendTailAsync()

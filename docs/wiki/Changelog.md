@@ -4,6 +4,13 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## One snapshot for every chat-list save
+
+The periodic, suspend and identity saves of the chat list now take the same snapshot
+(`ChatCatalogSnapshot`), mapped while still on the UI thread. The identity save, which runs after
+duplicate conversations are merged, used to drop the newest message's id, its mentions and the group
+sender when it was the first to write a row.
+
 ## Legacy command bar centred on the whole bar
 
 The primary buttons on the chat list, Status and section bars are now centred on the full width of
