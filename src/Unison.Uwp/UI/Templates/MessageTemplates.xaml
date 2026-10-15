@@ -209,7 +209,8 @@
                                                Foreground="White"
                                                HorizontalAlignment="Center"
                                                VerticalAlignment="Center"
-                                               Margin="4,0,0,0"/>
+                                               Margin="4,0,0,0"
+                                               Loaded="VideoPlayGlyph_Loaded"/>
                                 </Grid>
                             </Button>
                         </Grid>
@@ -711,7 +712,8 @@
                                                Foreground="White"
                                                HorizontalAlignment="Center"
                                                VerticalAlignment="Center"
-                                               Margin="4,0,0,0"/>
+                                               Margin="4,0,0,0"
+                                               Loaded="VideoPlayGlyph_Loaded"/>
                                 </Grid>
                             </Button>
                         </Grid>

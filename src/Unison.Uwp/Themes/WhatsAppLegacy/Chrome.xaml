@@ -3,7 +3,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!--
       Merged AFTER Themes/WhatsApp/Theme.xaml so ThemeDictionaries win over WhatsApp greys.
-      Icon glyphs live in LegacyIconFont (WhatsAppLegacyIcons.ttf): EB01–EB05.
+      Icon glyphs live in LegacyIconFont (WhatsAppLegacyIcons.ttf): EB01–EB0C.
     -->
     <BitmapImage x:Key="AvatarContactFallbackImage"
                  UriSource="ms-appx:///Assets/WhatsAppLegacy/default-contact-icon.png"/>
@@ -14,8 +14,17 @@
     <x:String x:Key="LegacyGlyphAttach">&#xEB03;</x:String>
     <x:String x:Key="LegacyGlyphSend">&#xEB04;</x:String>
     <x:String x:Key="LegacyGlyphMic">&#xEB05;</x:String>
+    <x:String x:Key="LegacyGlyphNewChat">&#xEB06;</x:String>
+    <x:String x:Key="LegacyGlyphPin">&#xEB07;</x:String>
+    <x:String x:Key="LegacyGlyphPinStart">&#xEB08;</x:String>
+    <x:String x:Key="LegacyGlyphPlay">&#xEB09;</x:String>
+    <x:String x:Key="LegacyGlyphPause">&#xEB0A;</x:String>
+    <x:String x:Key="LegacyGlyphDownload">&#xEB0B;</x:String>
+    <x:String x:Key="LegacyGlyphStop">&#xEB0C;</x:String>
     <!-- Every LegacyIconFont glyph is centred in its em, so one size per surface keeps them uniform. -->
     <x:Double x:Key="LegacyAppBarGlyphSize">24</x:Double>
+    <!-- Compact strip +6 for a 3px air gap above and below the 40px ring (was 48). -->
+    <x:Double x:Key="LegacyCommandBarCompactHeight">54</x:Double>
 
     <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Default">

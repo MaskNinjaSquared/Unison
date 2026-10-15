@@ -192,12 +192,14 @@ namespace Unison.Uwp.UI.Controls
         {
             _legacyRing = true;
             double diameter = UseOverlayChrome ? 56 : 36;
-            FontFamily iconFont = (FontFamily)Application.Current.Resources["IconFont"];
+            FontFamily iconFont = LegacyMediaGlyphs.IconFont
+                ?? (FontFamily)Application.Current.Resources["IconFont"];
             Brush ink = LegacyInkBrush();
             _whatsAppGlyph = new TextBlock
             {
                 FontFamily = iconFont,
                 FontSize = UseOverlayChrome ? 22 : 16,
+                TextLineBounds = TextLineBounds.Tight,
                 Foreground = ink,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center
@@ -253,7 +255,8 @@ namespace Unison.Uwp.UI.Controls
 
             if (_whatsAppButton != null)
             {
-                _whatsAppGlyph.Text = Glyph ?? "\uE896";
+                string glyph = Glyph ?? "\uE896";
+                _whatsAppGlyph.Text = _legacyRing ? LegacyMediaGlyphs.Resolve(glyph) : glyph;
                 if (_legacyRing)
                 {
                     Brush ink = LegacyInkBrush();

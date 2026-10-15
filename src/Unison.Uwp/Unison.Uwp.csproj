@@ -453,6 +453,7 @@
     <Compile Include="UI\Controls\ChatAudioTransportPresenter.cs" />
     <Compile Include="UI\Controls\ChatMediaPlaceholderHost.cs" />
     <Compile Include="UI\Controls\ShellUi.cs" />
+    <Compile Include="UI\Controls\LegacyMediaGlyphs.cs" />
     <Compile Include="UI\Controls\LegacyInfoText.cs" />
     <Compile Include="UI\Controls\ChatDetailInfoControl.xaml.cs">
       <DependentUpon>ChatDetailInfoControl.xaml</DependentUpon>

@@ -1179,6 +1179,9 @@
   <data name="Shell_LegacyAppBar_NewChat.Label" xml:space="preserve">
     <value>новий чат</value>
   </data>
+  <data name="Shell_LegacyAppBar_AddContact.Label" xml:space="preserve">
+    <value>додати контакт</value>
+  </data>
   <data name="Shell_LegacyAppBar_NewStatus.Label" xml:space="preserve">
     <value>новий статус</value>
   </data>

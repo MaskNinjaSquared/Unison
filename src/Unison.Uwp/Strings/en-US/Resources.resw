@@ -1179,6 +1179,9 @@ Disable after diagnosing: keeping it on slows the app.</value>
   <data name="Shell_LegacyAppBar_NewChat.Label" xml:space="preserve">
     <value>new chat</value>
   </data>
+  <data name="Shell_LegacyAppBar_AddContact.Label" xml:space="preserve">
+    <value>add contact</value>
+  </data>
   <data name="Shell_LegacyAppBar_NewStatus.Label" xml:space="preserve">
     <value>new status</value>
   </data>

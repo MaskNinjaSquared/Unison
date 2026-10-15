@@ -2,11 +2,18 @@
 """Build WhatsAppLegacyIcons.ttf from scripts/icons/whatsapp-legacy PNGs.
 
 Codepoints (Private Use Area):
-  EB01  search   (appbar-search.png)
-  EB02  add      (appbar-add.png)
-  EB03  attach   (composer-attach.png)
-  EB04  send     (composer-send.png)
-  EB05  mic      (composer-mic.png)
+  EB01  search     (appbar-search.png)
+  EB02  add        (appbar-add.png)
+  EB03  attach     (composer-attach.png)
+  EB04  send       (composer-send.png)
+  EB05  mic        (composer-mic.png)
+  EB06  newchat    (appbar-newchat.png)     speech bubble
+  EB07  pin        (appbar-pin.png)         pin conversation
+  EB08  pinstart   (appbar-pin-start.png)   pin to Start menu
+  EB09  play       (media-play.png)
+  EB0A  pause      (media-pause.png)
+  EB0B  download   (media-download.png)
+  EB0C  stop       (media-stop.png)
 
 Ink is read from alpha only (source colour is ignored; XAML sets Foreground).
 Each glyph is cropped to its own ink and fitted into the same square box,
@@ -42,6 +49,13 @@ GLYPHS = [
     ("attach", 0xEB03, "composer-attach.png", 1.0),
     ("send", 0xEB04, "composer-send.png", 1.0),
     ("mic", 0xEB05, "composer-mic.png", 1.0),
+    ("newchat", 0xEB06, "appbar-newchat.png", 0.90),
+    ("pin", 0xEB07, "appbar-pin.png", 0.90),
+    ("pinstart", 0xEB08, "appbar-pin-start.png", 0.92),
+    ("play", 0xEB09, "media-play.png", 0.88),
+    ("pause", 0xEB0A, "media-pause.png", 0.88),
+    ("download", 0xEB0B, "media-download.png", 0.90),
+    ("stop", 0xEB0C, "media-stop.png", 0.80),
 ]
 
 

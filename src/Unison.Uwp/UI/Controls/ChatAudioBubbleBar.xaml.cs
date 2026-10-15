@@ -59,8 +59,40 @@ namespace Unison.Uwp.UI.Controls
 
         private void ChatAudioBubbleBar_Loaded(object sender, RoutedEventArgs e)
         {
+            ApplyLegacyMediaGlyphs();
             _presenter.Attach(DataContext as ChatMessageViewModel);
             _presenter.ApplyState(animate: false);
+        }
+
+        /// <summary>When the Legacy ring is on, swap Segoe play/pause for the Legacy icon font.</summary>
+        private void ApplyLegacyMediaGlyphs()
+        {
+            if (!UseRing)
+            {
+                return;
+            }
+
+            FontFamily family = LegacyMediaGlyphs.IconFont;
+            if (family == null)
+            {
+                return;
+            }
+
+            ApplyGlyph(PlayButton, LegacyMediaGlyphs.Play, family);
+            ApplyGlyph(PauseButton, LegacyMediaGlyphs.Pause, family);
+        }
+
+        private static void ApplyGlyph(Button button, string glyph, FontFamily family)
+        {
+            var label = button?.Content as TextBlock;
+            if (label == null)
+            {
+                return;
+            }
+
+            label.FontFamily = family;
+            label.Text = glyph;
+            label.TextLineBounds = TextLineBounds.Tight;
         }
 
         private void ChatAudioBubbleBar_Unloaded(object sender, RoutedEventArgs e)

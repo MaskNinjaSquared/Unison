@@ -238,6 +238,7 @@ namespace Unison.Core.ViewModels
                            _chatStore != null);
             OpenMenuCommand = new RelayCommand(() => MenuRequested?.Invoke(this, EventArgs.Empty));
             NewChatCommand = new RelayCommand(() => _ = StartNewChatAsync());
+            AddContactCommand = new RelayCommand(BeginAddContact);
             FilterChatsCommand = new RelayCommand<int>(ApplyChatListFilter);
         }
 
@@ -404,12 +405,19 @@ namespace Unison.Core.ViewModels
         /// <summary>Opens the new-chat dialog, creates the chat if needed, then raises <see cref="OpenChatRequested"/>.</summary>
         public ICommand NewChatCommand { get; }
 
+        /// <summary>Legacy app-bar placeholder until add-contact is wired.</summary>
+        public ICommand AddContactCommand { get; }
+
         /// <summary>
         /// Narrows <see cref="VisibleChats"/> by a <see cref="ChatListFilter"/> id from the
         /// flyout. Parameter is an <see cref="int"/> because UWP <c>CommandParameter</c> is not
         /// reliably typed as an enum.
         /// </summary>
         public ICommand FilterChatsCommand { get; }
+
+        private static void BeginAddContact()
+        {
+        }
 
         // ---------------------------------------------------------------------
         // What the view has to be told

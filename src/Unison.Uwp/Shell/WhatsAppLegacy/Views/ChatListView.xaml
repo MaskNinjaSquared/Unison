@@ -116,6 +116,17 @@
                           Style="{StaticResource LegacyAppBarButtonStyle}"
                           Label="new chat"
                           Click="NewChatAppBar_Click">
+                <TextBlock Text="&#xEB06;"
+                           FontFamily="{StaticResource LegacyIconFont}"
+                           FontSize="{StaticResource LegacyAppBarGlyphSize}"
+                           TextLineBounds="Tight"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"/>
+            </AppBarButton>
+            <AppBarButton x:Uid="Shell_LegacyAppBar_AddContact"
+                          Style="{StaticResource LegacyAppBarButtonStyle}"
+                          Label="add contact"
+                          Command="{x:Bind ViewModel.AddContactCommand}">
                 <TextBlock Text="&#xEB02;"
                            FontFamily="{StaticResource LegacyIconFont}"
                            FontSize="{StaticResource LegacyAppBarGlyphSize}"

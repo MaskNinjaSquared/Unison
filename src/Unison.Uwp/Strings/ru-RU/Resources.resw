@@ -1120,6 +1120,9 @@
   <data name="Shell_LegacyAppBar_NewChat.Label" xml:space="preserve">
     <value>новый чат</value>
   </data>
+  <data name="Shell_LegacyAppBar_AddContact.Label" xml:space="preserve">
+    <value>добавить контакт</value>
+  </data>
   <data name="Shell_LegacyAppBar_NewStatus.Label" xml:space="preserve">
     <value>новый статус</value>
   </data>

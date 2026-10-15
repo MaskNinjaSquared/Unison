@@ -21,7 +21,7 @@
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="0"/>
             <Setter Property="Width" Value="50"/>
-            <Setter Property="Height" Value="48"/>
+            <Setter Property="Height" Value="54"/>
             <Setter Property="Margin" Value="9,0"/>
             <Setter Property="HorizontalAlignment" Value="Center"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
@@ -200,7 +200,7 @@
               VerticalAlignment="Bottom"
               Background="{StaticResource ChatDetailInfoCommandBarBrush}">
             <StackPanel>
-                <Grid Height="56">
+                <Grid Height="62">
                     <StackPanel Orientation="Horizontal"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center">
@@ -208,17 +208,35 @@
                                 Style="{StaticResource LegacyInfoBarButtonStyle}"
                                 Visibility="Collapsed"
                                 Click="AddContactButton_Click">
-                            <FontIcon Glyph="&#xE8FA;" FontFamily="{StaticResource IconFont}" FontSize="18" Foreground="White"/>
+                            <TextBlock Text="&#xEB02;"
+                                       FontFamily="{StaticResource LegacyIconFont}"
+                                       FontSize="18"
+                                       TextLineBounds="Tight"
+                                       Foreground="White"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
                         </Button>
                         <Button x:Name="ChatPinButton"
                                 Style="{StaticResource LegacyInfoBarButtonStyle}"
                                 Click="ChatPinButton_Click">
-                            <FontIcon Glyph="&#xE840;" FontFamily="{StaticResource IconFont}" FontSize="18" Foreground="White"/>
+                            <TextBlock Text="&#xEB07;"
+                                       FontFamily="{StaticResource LegacyIconFont}"
+                                       FontSize="18"
+                                       TextLineBounds="Tight"
+                                       Foreground="White"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
                         </Button>
                         <Button x:Name="PinButton"
                                 Style="{StaticResource LegacyInfoBarButtonStyle}"
                                 Click="PinButton_Click">
-                            <FontIcon Glyph="&#xE718;" FontFamily="{StaticResource IconFont}" FontSize="18" Foreground="White"/>
+                            <TextBlock Text="&#xEB08;"
+                                       FontFamily="{StaticResource LegacyIconFont}"
+                                       FontSize="18"
+                                       TextLineBounds="Tight"
+                                       Foreground="White"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
                         </Button>
                         <Button x:Name="DeleteChatButton"
                                 Style="{StaticResource LegacyInfoBarButtonStyle}"

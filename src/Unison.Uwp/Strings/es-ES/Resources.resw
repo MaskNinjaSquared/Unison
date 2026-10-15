@@ -1120,6 +1120,9 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   <data name="Shell_LegacyAppBar_NewChat.Label" xml:space="preserve">
     <value>chat nuevo</value>
   </data>
+  <data name="Shell_LegacyAppBar_AddContact.Label" xml:space="preserve">
+    <value>añadir contacto</value>
+  </data>
   <data name="Shell_LegacyAppBar_NewStatus.Label" xml:space="preserve">
     <value>estado nuevo</value>
   </data>

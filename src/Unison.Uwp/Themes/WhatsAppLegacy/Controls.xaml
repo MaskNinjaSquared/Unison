@@ -7,14 +7,14 @@
         <Setter Property="Foreground" Value="{ThemeResource LegacyCommandBarForegroundBrush}"/>
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="Width" Value="50"/>
-        <Setter Property="MinHeight" Value="48"/>
+        <Setter Property="MinHeight" Value="54"/>
         <Setter Property="Margin" Value="7,0"/>
         <Setter Property="VerticalAlignment" Value="Top"/>
         <Setter Property="IsCompact" Value="False"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="AppBarButton">
-                    <Grid x:Name="Root" Background="Transparent" Width="{TemplateBinding Width}" MinHeight="48">
+                    <Grid x:Name="Root" Background="Transparent" Width="{TemplateBinding Width}" MinHeight="54">
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="ApplicationViewStates">
                                 <VisualState x:Name="FullSize">
@@ -76,8 +76,8 @@
                             </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
 
-                        <!-- 4px top keeps the 40px ring optically centered in the 48px compact strip. -->
-                        <StackPanel VerticalAlignment="Top" HorizontalAlignment="Center" Margin="0,4,0,0">
+                        <!-- 7/3 = previous 4px top + 3px test air above/below the 40px ring in the 54px strip. -->
+                        <StackPanel VerticalAlignment="Top" HorizontalAlignment="Center" Margin="0,7,0,3">
                             <Grid Width="40" Height="40" HorizontalAlignment="Center">
                                 <Ellipse x:Name="Ring"
                                          Stroke="{ThemeResource LegacyAppBarRingBrush}"
@@ -255,7 +255,7 @@
         <Setter Property="Foreground" Value="{ThemeResource LegacyCommandBarForegroundBrush}"/>
         <Setter Property="ClosedDisplayMode" Value="Compact"/>
         <Setter Property="IsOpen" Value="False"/>
-        <Setter Property="MinHeight" Value="48"/>
+        <Setter Property="MinHeight" Value="54"/>
         <Setter Property="VerticalAlignment" Value="Bottom"/>
         <Setter Property="VerticalContentAlignment" Value="Top"/>
         <Setter Property="HorizontalContentAlignment" Value="Center"/>

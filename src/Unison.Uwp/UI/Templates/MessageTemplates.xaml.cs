@@ -1,5 +1,7 @@
+using Unison.Uwp.UI.Controls;
 using Unison.Uwp.UI.Views;
 using Windows.UI.Xaml;
+using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Media;
 
@@ -10,6 +12,27 @@ namespace Unison.Uwp.UI.Templates
         public MessageTemplates()
         {
             InitializeComponent();
+        }
+
+        /// <summary>Legacy shell: swap Segoe play for the Legacy icon font on video overlays.</summary>
+        private void VideoPlayGlyph_Loaded(object sender, RoutedEventArgs e)
+        {
+            var label = sender as TextBlock;
+            if (label == null || !ShellUi.IsWhatsAppLegacy)
+            {
+                return;
+            }
+
+            FontFamily family = LegacyMediaGlyphs.IconFont;
+            if (family == null)
+            {
+                return;
+            }
+
+            label.FontFamily = family;
+            label.Text = LegacyMediaGlyphs.Play;
+            label.TextLineBounds = TextLineBounds.Tight;
+            label.Margin = new Thickness(0);
         }
 
         private void MessageBubble_RightTapped(object sender, RightTappedRoutedEventArgs e)
