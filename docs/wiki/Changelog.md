@@ -4,6 +4,12 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Merged duplicate chats keep the newer preview
+
+When two rows for the same contact merge (phone and LID), the newest message is now compared on each
+row's own messages before they are combined. The row that was folded away used to read as empty, so
+its newer last-message line could be replaced by an older one.
+
 ## Alias follow-up keeps its avatar retries on failure
 
 The follow-up that runs after new LID/phone pairs arrive (rewrite the alias file, merge duplicate

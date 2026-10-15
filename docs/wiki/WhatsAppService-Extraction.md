@@ -894,9 +894,10 @@ messages with `OrderByDescending` on the raw `DateTime` — the fourth sighting 
 comparison — and its `GroupBy` keyed id-less messages on a fresh `Guid`, so a pinned message with no
 id was kept twice. The dedupe merge was written twice, once per branch, and the PN/LID branch copied
 the text and the clock but not `LastPreview` or `LastMessageId`: the half-preview `TransientChatMerge`
-already documents. Both branches now go through one `Absorb`. What the dedupe pass still does in the
-client — moving messages between keys, filing the alias, removing rows — is chat-state surgery and
-stays until the timeline leaves the client.
+already documents. Both branches now go through one `Absorb`. The rest of the per-group work — moving
+messages between keys, carrying the push name, filing the alias — moved to `DuplicateChatFold` once
+the timeline had a Core owner (see below). The client keeps the UI thread, the list removals and the
+events.
 
 The sender written on a `WebMessageInfo` is `WebMessageParticipant` (key participant, then
 envelope participant, then the alt-JID scan; never a group or broadcast address). The resend path
@@ -978,6 +979,16 @@ the 750 ms debounce. The client lost three fields: the running flag, which sat o
 guarded the rest, and the source, which the re-arm path read without that lock. Fixed on the way: a
 pass that threw had already cleared its targets, so those rows kept a missing picture until the next
 pair for the same contact. They are restored now, without an automatic retry, as with the catalog save.
+
+The dedupe pass's per-group loop is `DuplicateChatFold` (`Unison.Core/State`, 12 tests). Every
+collaborator was already a Core table — `ChatMessageCache`, `DisplayNameTable`, `JidAliasTable` —
+so the loop moved whole; it edits rows in place and reports the ones to remove, and
+`DeduplicateChatsAsync` removes them, invalidates the row index and canonicalizes cache keys as
+before. Fixed in the move: each row's newest message was measured *after* the secondary's messages
+had moved under the survivor, so the secondary always read as empty (the old comment admitted it)
+and an unstamped preview that was newer could never win. Both sides are measured first now. Left
+as it was, not endorsed: with fewer than two rows the client rewrites the lone row's address to its
+canonical form, which a list of two or more never does for its non-duplicate rows.
 
 ### History on demand — the bookkeeping left first
 

@@ -5530,70 +5530,21 @@ namespace Unison.Uwp.Services.WhatsApp
                         InvalidateChatRowIndex();
                     }
 
-                    int mergedCount = 0;
-                    int normalizedMessageKeyCount = 0;
-                    var groups = snapshots
-                        .GroupBy(c => GetCanonicalJid(NormalizeJid(c.JID)), StringComparer.OrdinalIgnoreCase)
-                        .Where(g => g.Count() > 1)
-                        .ToList();
-
-                    foreach (var group in groups)
+                    DuplicateChatFoldResult folded =
+                        new DuplicateChatFold(MessagesByChat, ContactNames, JidAlias).Run(snapshots);
+                    foreach (var secondary in folded.Removed)
                     {
-                        var ordered = DuplicateChatRowMerge.OrderForMerge(
-                            group,
-                            c => IsLidLikeJid(NormalizeJid(c.JID)),
-                            c => MessagesByChat.TryGet(NormalizeJid(c.JID), out var msgs) ? msgs.Count : 0);
+                        Chats.Remove(secondary);
+                    }
 
-                        var primary = ordered[0];
-                        string primaryNorm = NormalizeJid(primary.JID);
-                        primary.JID = primaryNorm;
+                    int mergedCount = folded.Removed.Count;
+                    if (mergedCount > 0)
+                    {
                         InvalidateChatRowIndex();
-
-                        for (int i = 1; i < ordered.Count; i++)
-                        {
-                            var secondary = ordered[i];
-                            string secondaryNorm = NormalizeJid(secondary.JID);
-                            if (string.Equals(primaryNorm, secondaryNorm, StringComparison.OrdinalIgnoreCase))
-                            {
-                                MessagesByChat.TryGet(primaryNorm, out var sharedMessages);
-                                DateTime sharedNewestUtc = ChatMessageOrder.NewestComparableUtc(sharedMessages);
-                                DuplicateChatRowMerge.Absorb(primary, secondary, sharedNewestUtc, sharedNewestUtc);
-                                Chats.Remove(secondary);
-                                mergedCount++;
-                                continue;
-                            }
-
-                            MessagesByChat.MergeInto(secondaryNorm, primaryNorm);
-
-                            if (ContactNames.TryGetValue(secondaryNorm, out var secondaryName))
-                            {
-                                ContactNames.TryAdd(primaryNorm, secondaryName);
-                            }
-
-                            // The rows merge either way; only the alias is withheld when the pair
-                            // is not one we are allowed to file.
-                            if (AliasPairPolicy.TryAcceptPair(secondaryNorm, primaryNorm, JidAlias, out string mergedLid, out string mergedPn))
-                            {
-                                AliasPairFiling.FileFromRowMerge(JidAlias, mergedLid, mergedPn);
-                            }
-
-                            // The secondary messages have already moved under the primary key, so a
-                            // secondary row without a stamp is dated MinValue here.
-                            MessagesByChat.TryGet(primaryNorm, out var primaryPreviewMessages);
-                            MessagesByChat.TryGet(secondaryNorm, out var secondaryPreviewMessages);
-                            DuplicateChatRowMerge.Absorb(
-                                primary,
-                                secondary,
-                                ChatMessageOrder.NewestComparableUtc(primaryPreviewMessages),
-                                ChatMessageOrder.NewestComparableUtc(secondaryPreviewMessages));
-
-                            Chats.Remove(secondary);
-                            mergedCount++;
-                        }
                     }
 
                     // Ensure message-cache keys are canonicalized even when a secondary chat row no longer exists.
-                    normalizedMessageKeyCount = MessagesByChat.CanonicalizeKeys(GetCanonicalJid);
+                    int normalizedMessageKeyCount = MessagesByChat.CanonicalizeKeys(GetCanonicalJid);
 
                     if (mergedCount > 0 || normalizedMessageKeyCount > 0)
                     {
