@@ -583,24 +583,16 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             await RunOnUiThreadAsync(() =>
                 {
-                    int updated = 0;
-                    foreach (var chat in Chats)
+                    var titles = new List<ResolvedNameChange>();
+                    int updated = ResolvedNameApply.Apply(
+                        Chats,
+                        ResolveDisplayName,
+                        IsMeaningfulChatLabel,
+                        membersToo: false,
+                        titles);
+                    foreach (ResolvedNameChange title in titles)
                     {
-                        if (chat == null) continue;
-
-                        string resolved = ResolveDisplayName(chat.JID, "chat");
-                        if (ChatNameReplacement.ShouldReplace(
-                                chat.Name,
-                                resolved,
-                                resolvedMeaningful: IsMeaningfulChatLabel(resolved, chat.JID, chat.IsGroup),
-                                existingMeaningful: IsMeaningfulChatLabel(chat.Name, chat.JID, chat.IsGroup),
-                                isGroup: chat.IsGroup))
-                        {
-                            string oldName = chat.Name;
-                            chat.Name = resolved;
-                            updated++;
-                            Debug.WriteLine($"[WhatsAppService] Normalized persisted chat title '{oldName}' -> '{resolved}' for {chat.JID}");
-                        }
+                        Debug.WriteLine($"[WhatsAppService] Normalized persisted chat title '{title.Previous}' -> '{title.Name}' for {title.Jid}");
                     }
 
                     if (updated > 0)

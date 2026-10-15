@@ -4,11 +4,17 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Resolved names written in one pass
+
+Applying a freshly resolved name to a chat title, and to a group member, is `ResolvedNameApply`.
+The two copies in the client now call it. A group member is still renamed on any non-blank name
+that differs, which is the rule that copy already had.
+
 ## Merged duplicate chats keep the newer preview
 
 When two rows for the same contact merge (phone and LID), the newest message is now compared on each
 row's own messages before they are combined. The row that was folded away used to read as empty, so
-its newer last-message line could be replaced by an older one.
+the surviving row could keep an older last-message line than the one it absorbed.
 
 ## Alias follow-up keeps its avatar retries on failure
 

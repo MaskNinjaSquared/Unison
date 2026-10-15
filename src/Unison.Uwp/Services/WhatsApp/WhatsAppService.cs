@@ -5575,45 +5575,11 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             await RunOnUiThreadAsync(() =>
                 {
-                    int updated = 0;
-                    foreach (var chat in Chats)
-                    {
-                        if (chat == null) continue;
-                        string resolved = ResolveDisplayName(chat.JID, "chat");
-                        if (ChatNameReplacement.ShouldReplace(
-                                chat.Name,
-                                resolved,
-                                resolvedMeaningful: IsMeaningfulChatLabel(resolved, chat.JID, chat.IsGroup),
-                                existingMeaningful: IsMeaningfulChatLabel(chat.Name, chat.JID, chat.IsGroup),
-                                isGroup: chat.IsGroup))
-                        {
-                            chat.Name = resolved;
-                            updated++;
-                        }
-
-                        if (chat.GroupMembers == null || chat.GroupMembers.Count == 0)
-                        {
-                            continue;
-                        }
-
-                        foreach (var member in chat.GroupMembers)
-                        {
-                            if (member == null || string.IsNullOrWhiteSpace(member.Jid))
-                            {
-                                continue;
-                            }
-
-                            string memberName = ResolveDisplayName(member.Jid, "sender");
-                            if (string.IsNullOrWhiteSpace(memberName) ||
-                                string.Equals(member.DisplayName, memberName, StringComparison.Ordinal))
-                            {
-                                continue;
-                            }
-
-                            member.DisplayName = memberName;
-                            updated++;
-                        }
-                    }
+                    int updated = ResolvedNameApply.Apply(
+                        Chats,
+                        ResolveDisplayName,
+                        IsMeaningfulChatLabel,
+                        membersToo: true);
 
                     if (updated > 0)
                     {

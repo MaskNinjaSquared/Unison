@@ -990,6 +990,14 @@ and an unstamped preview that was newer could never win. Both sides are measured
 as it was, not endorsed: with fewer than two rows the client rewrites the lone row's address to its
 canonical form, which a list of two or more never does for its non-duplicate rows.
 
+Writing resolved names onto the list is `ResolvedNameApply` (10 tests). `ChatNameReplacement` had
+already taken the "should this title change" question; the loop that asked it was still written out
+in `ApplyResolvedNamesToChatsAsync` and `NormalizePersistedChatNamesAsync`. The pass takes the name
+lookup and the meaningful-label check as functions, renames members only when asked, and returns how
+many labels changed. The startup pass still logs each title and saves; the live pass still raises
+the names-changed event. A member keeps the weaker rule it had: any non-blank name that differs is
+written, with no check that it is recognisable.
+
 ### History on demand — the bookkeeping left first
 
 The on-demand history cluster (per-chat `HISTORY_SYNC_ON_DEMAND`, the paginated
