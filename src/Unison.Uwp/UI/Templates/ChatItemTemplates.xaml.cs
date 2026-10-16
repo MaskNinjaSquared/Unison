@@ -276,7 +276,7 @@ namespace Unison.Uwp.UI.Templates
         /// <summary>
         /// ContextFlyout content lives in a popup; walk <see cref="FlyoutBase.Target"/> (Imgur-style), then UI root.
         /// </summary>
-        private static ChatListView FindChatList(object sender)
+        private static IChatRowActions FindChatList(object sender)
         {
             var flyoutItem = sender as MenuFlyoutItem;
             if (flyoutItem != null)
@@ -287,7 +287,7 @@ namespace Unison.Uwp.UI.Templates
                     var flyout = current as MenuFlyout;
                     if (flyout?.Target != null)
                     {
-                        var fromTarget = FindAncestor<ChatListView>(flyout.Target);
+                        var fromTarget = FindAncestor<IChatRowActions>(flyout.Target);
                         if (fromTarget != null)
                         {
                             return fromTarget;
@@ -311,13 +311,13 @@ namespace Unison.Uwp.UI.Templates
                 }
             }
 
-            var fromSender = FindAncestor<ChatListView>(sender as DependencyObject);
+            var fromSender = FindAncestor<IChatRowActions>(sender as DependencyObject);
             if (fromSender != null)
             {
                 return fromSender;
             }
 
-            return FindInSubtree<ChatListView>(Window.Current?.Content as DependencyObject);
+            return FindInSubtree<IChatRowActions>(Window.Current?.Content as DependencyObject);
         }
 
         private static T FindAncestor<T>(DependencyObject start) where T : class

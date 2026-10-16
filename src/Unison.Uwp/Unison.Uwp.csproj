@@ -412,6 +412,7 @@
     <Compile Include="UI\Templates\ChatItemTemplates.xaml.cs">
       <DependentUpon>ChatItemTemplates.xaml</DependentUpon>
     </Compile>
+    <Compile Include="UI\Templates\IChatRowActions.cs" />
     <Compile Include="UI\Templates\MessageTemplates.xaml.cs">
       <DependentUpon>MessageTemplates.xaml</DependentUpon>
     </Compile>

@@ -10,6 +10,7 @@ using Windows.Foundation;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Media;
+using Unison.Uwp.UI.Templates;
 
 namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 {
@@ -34,7 +35,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
     /// <item>reaching the surrounding <see cref="ChatsView"/>, which lives in the visual tree.</item>
     /// </list>
     /// </remarks>
-    public sealed partial class ChatListView : UserControl
+    public sealed partial class ChatListView : UserControl, IChatRowActions
     {
         public ChatListViewModel ViewModel { get; private set; }
 
@@ -128,7 +129,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             }
 
             var strings = App.Services?.GetService<IStringResources>();
-            FilterLabel.Text = strings?.Get("Shell_LegacyAppBar_Filter.Text", "filtrar") ?? "filtrar";
+            FilterLabel.Text = strings?.Get("Shell_LegacyAppBar_Filter.Text", "Filter Messages")
+                ?? "Filter Messages";
         }
 
         /// <summary>
@@ -338,7 +340,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         }
 
         /// <summary>Context flyout on a row: pin the conversation as a Start tile.</summary>
-        internal void PinChatToStart(ChatItem chat)
+        public void PinChatToStart(ChatItem chat)
         {
             if (chat == null || ViewModel?.PinChatToStartCommand == null)
             {
@@ -352,7 +354,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         }
 
         /// <summary>Context flyout on a row: pin the conversation for the whole account.</summary>
-        internal void SetChatPinned(ChatItem chat, bool pinned)
+        public void SetChatPinned(ChatItem chat, bool pinned)
         {
             if (chat == null || ViewModel?.SetChatPinnedCommand == null)
             {
@@ -367,7 +369,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         }
 
         /// <summary>Context flyout on a row: delete the conversation (asks first).</summary>
-        internal void DeleteChat(ChatItem chat)
+        public void DeleteChat(ChatItem chat)
         {
             if (chat == null || ViewModel?.DeleteChatCommand == null)
             {
@@ -380,7 +382,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             }
         }
 
-        internal void ArchiveChat(ChatItem chat)
+        public void ArchiveChat(ChatItem chat)
         {
             if (chat == null || ViewModel?.ArchiveChatCommand == null)
             {
@@ -393,7 +395,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             }
         }
 
-        internal void UnarchiveChat(ChatItem chat)
+        public void UnarchiveChat(ChatItem chat)
         {
             if (chat == null || ViewModel?.UnarchiveChatCommand == null)
             {
@@ -407,7 +409,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         }
 
         /// <summary>Context flyout on a row: mute until a moment, or unmute with null.</summary>
-        internal void SetLocalMute(ChatItem chat, long? mutedUntilUnixSeconds)
+        public void SetLocalMute(ChatItem chat, long? mutedUntilUnixSeconds)
         {
             if (chat == null || ViewModel?.SetLocalMuteCommand == null)
             {
