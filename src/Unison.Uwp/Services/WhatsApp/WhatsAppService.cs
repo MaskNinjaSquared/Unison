@@ -227,7 +227,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly GroupMetadataApply _groupApply;
         private IMessageService _messageService;
         private IChatService _chatService;
-        private IGroupService _groupService;
         private IContactService _contactService;
         private readonly IPersonStore _personStore;
         private readonly IGroupRosterStore _groupRosterStore;
@@ -245,11 +244,6 @@ namespace Unison.Uwp.Services.WhatsApp
         public void AttachChatService(IChatService chatService)
         {
             _chatService = chatService;
-        }
-
-        public void AttachGroupService(IGroupService groupService)
-        {
-            _groupService = groupService;
         }
 
         /// <summary>
@@ -1235,6 +1229,7 @@ namespace Unison.Uwp.Services.WhatsApp
         public event EventHandler<HistoryStatus> OnLiveStatusReceived;
         public event EventHandler OnBackgroundHistorySyncBounced;
         public event EventHandler<AvatarCachedEventArgs> OnAvatarCached;
+        public event EventHandler OnGroupListingDue;
         public event EventHandler<JidAliasResolvedEventArgs> OnJidAliasResolved;
 
         /// <summary>
@@ -2939,24 +2934,11 @@ namespace Unison.Uwp.Services.WhatsApp
                         }
                     }
 
-                    RaiseSyncStatus(SyncPhaseStatus.Format(SyncPhaseStatus.Groups));
-                    try
-                    {
-                        using (TraceStartupPhase("background-groups"))
-                        {
-                            if (_groupService != null)
-                            {
-                                await _groupService.QueryAllGroupsAsync();
-                            }
-                        }
-                    }
-                    catch (Exception exGroup)
-                    {
-                        Debug.WriteLine($"[WhatsAppService] Background group query failed: {exGroup.Message}");
-                    }
-
-                    // Clear status when done
+                    // Last step: the group façade shows the status, runs the listing and clears it.
                     RaiseSyncStatus(null);
+                    RaiseReport(
+                        () => OnGroupListingDue?.Invoke(this, EventArgs.Empty),
+                        nameof(OnGroupListingDue));
                 }
                 catch (TaskCanceledException) { }
                 catch (Exception ex)

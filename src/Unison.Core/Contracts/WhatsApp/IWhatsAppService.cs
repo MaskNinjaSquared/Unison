@@ -81,6 +81,8 @@ namespace Unison.Core.Contracts.WhatsApp
         event EventHandler OnBackgroundHistorySyncBounced;
         /// <summary>An avatar file was written to the local cache for a JID.</summary>
         event EventHandler<AvatarCachedEventArgs> OnAvatarCached;
+        /// <summary>The background resolution pass reached its group step; the group façade runs the listing.</summary>
+        event EventHandler OnGroupListingDue;
         /// <summary>A phone JID and a LID were newly paired.</summary>
         event EventHandler<JidAliasResolvedEventArgs> OnJidAliasResolved;
 

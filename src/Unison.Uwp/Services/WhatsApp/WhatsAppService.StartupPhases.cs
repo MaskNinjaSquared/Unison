@@ -161,44 +161,5 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             return new StartupPhaseTrace(phase);
         }
-
-        private sealed class StartupPhaseTrace : IDisposable
-        {
-            private readonly string _phase;
-            private readonly Stopwatch _elapsed;
-            private readonly AppMemoryUsageLevel _entryLevel;
-            private bool _closed;
-
-            internal StartupPhaseTrace(string phase)
-            {
-                _phase = phase ?? string.Empty;
-                _entryLevel = MemoryManager.AppMemoryUsageLevel;
-                _elapsed = Stopwatch.StartNew();
-
-                RuntimeDiagnosticsService.Instance.Write(
-                    "startup-phase",
-                    _phase + ":begin",
-                    "memory=" + _entryLevel +
-                    "; bytes=" + MemoryManager.AppMemoryUsage);
-            }
-
-            public void Dispose()
-            {
-                if (_closed)
-                {
-                    return;
-                }
-
-                _closed = true;
-                _elapsed.Stop();
-                RuntimeDiagnosticsService.Instance.Write(
-                    "startup-phase",
-                    _phase + ":end",
-                    "elapsedMs=" + _elapsed.ElapsedMilliseconds +
-                    "; memory=" + MemoryManager.AppMemoryUsageLevel +
-                    "; entryMemory=" + _entryLevel +
-                    "; bytes=" + MemoryManager.AppMemoryUsage);
-            }
-        }
     }
 }

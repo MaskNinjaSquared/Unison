@@ -151,8 +151,14 @@ Two primitives already left the contract:
 
 The stores (`IPersonStore`, `IChatStore`, `IGroupRosterStore`) are constructor parameters of the client now. After `BuildServiceProvider`, `App.ConfigureServices` still does:
 
-- `AttachMessageService` / `AttachChatService` / `AttachContactService` / `AttachGroupService`
+- `AttachMessageService` / `AttachChatService` / `AttachContactService`
 - `AttachDebugSendService` (Debug only)
+
+`AttachGroupService` is gone: its only use was the last step of the background resolution pass.
+The client now raises `OnGroupListingDue` there, and `GroupFacade` shows the Groups status, runs the
+listing and clears the status itself. The rest of that pass (`TriggerBackgroundResolution`, the
+post-message enrichment, the deferred picture retry) stays in the client: `ShutdownAsync` cancels it
+(phase 4) and its defer checks read the client's history and replay state.
 
 That is the wrong direction: live ingest (status, names) **starts** in `WhatsAppService` and calls up. Phase 2 inverted the reportable half of it (client publishes; façade subscribes); the rest is blocked on phase 3 and is described below.
 

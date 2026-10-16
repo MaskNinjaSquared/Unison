@@ -68,6 +68,29 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
             _avatars = avatars ?? throw new ArgumentNullException(nameof(avatars));
             _usyncGate = usyncGate ?? throw new ArgumentNullException(nameof(usyncGate));
             _reader = new GroupMetadataReader(jids);
+
+            // Lives as long as the client, so there is nothing to unhook from.
+            _client.OnGroupListingDue += (s, e) => { _ = RunBackgroundListingAsync(); };
+        }
+
+        private async Task RunBackgroundListingAsync()
+        {
+            _client.RaiseSyncStatus(SyncPhaseStatus.Format(SyncPhaseStatus.Groups));
+            try
+            {
+                using (new StartupPhaseTrace("background-groups"))
+                {
+                    await QueryAllGroupsAsync(force: false);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[GroupFacade] Background group listing failed: {ex.Message}");
+            }
+            finally
+            {
+                _client.RaiseSyncStatus(null);
+            }
         }
 
         public async Task RefreshGroupSendPermissionsAsync(string groupJid)

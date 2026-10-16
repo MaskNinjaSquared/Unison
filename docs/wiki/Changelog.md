@@ -17,6 +17,10 @@ The picture a contact lookup finds is fetched by the contact façade too
 picture yet" check found; before, when a person had two rows, it could look at the one that already
 had a picture and fill nothing.
 
+The group listing at the end of the background pass is started by an event the group façade
+listens to (`OnGroupListingDue`), so the client no longer holds the group service. The pass clears
+its own status before handing over, and the façade shows "Loading group info" until the listing ends.
+
 ## A deleted message is a state, shown in your language
 
 Deleting a message for everyone used to overwrite its text with the English "[Message Deleted]", and
