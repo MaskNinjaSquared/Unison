@@ -254,6 +254,12 @@ Nach der Diagnose deaktivieren: Wenn es aktiviert bleibt, wird die App langsamer
   <data name="ChatList_PreviewReaction" xml:space="preserve">
     <value>Reaktion</value>
   </data>
+  <data name="ChatList_PreviewDeleted" xml:space="preserve">
+    <value>Diese Nachricht wurde gelöscht</value>
+  </data>
+  <data name="ChatDetail_MessageDeleted.Text" xml:space="preserve">
+    <value>Diese Nachricht wurde gelöscht</value>
+  </data>
   <data name="ChatList_Loading.Text" xml:space="preserve">
     <value>Unterhaltungen werden vorbereitet…</value>
   </data>

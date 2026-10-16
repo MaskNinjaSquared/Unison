@@ -698,6 +698,12 @@ Wyłącz po zakończeniu diagnozy: pozostawienie włączonego spowalnia aplikacj
   <data name="ChatList_PreviewReaction" xml:space="preserve">
     <value>Reakcja</value>
   </data>
+  <data name="ChatList_PreviewDeleted" xml:space="preserve">
+    <value>Ta wiadomość została usunięta</value>
+  </data>
+  <data name="ChatDetail_MessageDeleted.Text" xml:space="preserve">
+    <value>Ta wiadomość została usunięta</value>
+  </data>
   <data name="Settings_AppBranch.Text" xml:space="preserve">
     <value>Release</value>
   </data>

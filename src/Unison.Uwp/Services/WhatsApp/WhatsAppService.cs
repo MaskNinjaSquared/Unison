@@ -2480,7 +2480,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     List<string> keys = newestByCanonical[i].Item2;
                     List<HistoryMessage> page = newestByCanonical[i].Item3;
 
-                    // A revoked or bogus-timestamp row at the top must not hide the real tip:
+                    // A legacy marker or bogus-timestamp row at the top must not hide the real tip:
                     // walk the page down instead of giving up on the first candidate.
                     ChatMessage mapped = null;
                     if (page != null)
@@ -2607,11 +2607,11 @@ namespace Unison.Uwp.Services.WhatsApp
 
         /// <summary>
         /// history_message row to a list-strip candidate, or null when it must never own the strip
-        /// (revoked, tombstone body, or a timestamp we do not trust).
+        /// (old unflagged tombstone body, or a timestamp we do not trust).
         /// </summary>
         private ChatMessage MapPreviewTipCandidate(HistoryMessage row)
         {
-            if (row == null || row.IsRevoked || !row.TimestampUtc.HasValue)
+            if (row == null || !row.TimestampUtc.HasValue)
             {
                 return null;
             }

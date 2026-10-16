@@ -385,6 +385,24 @@
                                        MaxLines="{x:Bind ContentMaxLines, Mode=OneWay}"
                                        FontSize="15"
                                        LineHeight="20"/>
+                        <StackPanel x:Name="SentDeletedLine"
+                                    Orientation="Horizontal"
+                                    x:Load="{x:Bind IsRevoked, Mode=OneWay}">
+                            <FontIcon Glyph="&#xE733;"
+                                      FontFamily="{StaticResource IconFont}"
+                                      FontSize="14"
+                                      Margin="0,0,6,0"
+                                      VerticalAlignment="Center"
+                                      Foreground="{ThemeResource ChatDetailSentTextBrush}"
+                                      Opacity="0.7"/>
+                            <TextBlock x:Uid="ChatDetail_MessageDeleted"
+                                       Text="This message was deleted"
+                                       Foreground="{ThemeResource ChatDetailSentTextBrush}"
+                                       Opacity="0.7"
+                                       FontStyle="Italic"
+                                       FontSize="15"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
                         <HyperlinkButton x:Name="SentExpandLink"
                                          Content="{x:Bind ExpandLinkText, Mode=OneWay}"
                                          Command="{x:Bind ToggleExpandCommand, Mode=OneWay}"
@@ -888,6 +906,25 @@
                                        FontSize="15"
                                        LineHeight="20"
                                        FontFamily="{StaticResource MainFont}"/>
+                        <StackPanel x:Name="ReceivedDeletedLine"
+                                    Orientation="Horizontal"
+                                    x:Load="{x:Bind IsRevoked, Mode=OneWay}">
+                            <FontIcon Glyph="&#xE733;"
+                                      FontFamily="{StaticResource IconFont}"
+                                      FontSize="14"
+                                      Margin="0,0,6,0"
+                                      VerticalAlignment="Center"
+                                      Foreground="{ThemeResource ChatDetailReceivedTextBrush}"
+                                      Opacity="0.7"/>
+                            <TextBlock x:Uid="ChatDetail_MessageDeleted"
+                                       Text="This message was deleted"
+                                       Foreground="{ThemeResource ChatDetailReceivedTextBrush}"
+                                       Opacity="0.7"
+                                       FontStyle="Italic"
+                                       FontSize="15"
+                                       FontFamily="{StaticResource MainFont}"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
                         <HyperlinkButton x:Name="ReceivedExpandLink"
                                          Content="{x:Bind ExpandLinkText, Mode=OneWay}"
                                          Command="{x:Bind ToggleExpandCommand, Mode=OneWay}"

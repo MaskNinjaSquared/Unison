@@ -434,7 +434,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             var message = item.Value;
                             ChatPreviewKind kind = ChatPreviewNormalizer.InferKindFromMessage(message);
                             string preview = message?.Content;
-                            if (string.IsNullOrWhiteSpace(preview))
+                            if (string.IsNullOrWhiteSpace(preview) && kind != ChatPreviewKind.Revoked)
                             {
                                 // The kind already knows what arrived. Deciding it again from
                                 // IsImage alone labelled every video, sticker and voice note

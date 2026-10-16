@@ -698,6 +698,12 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
   <data name="ChatList_PreviewReaction" xml:space="preserve">
     <value>Reazione</value>
   </data>
+  <data name="ChatList_PreviewDeleted" xml:space="preserve">
+    <value>Questo messaggio è stato eliminato</value>
+  </data>
+  <data name="ChatDetail_MessageDeleted.Text" xml:space="preserve">
+    <value>Questo messaggio è stato eliminato</value>
+  </data>
   <data name="Settings_AppBranch.Text" xml:space="preserve">
     <value>Release</value>
   </data>

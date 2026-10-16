@@ -254,6 +254,12 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="ChatList_PreviewReaction" xml:space="preserve">
     <value>Reação</value>
   </data>
+  <data name="ChatList_PreviewDeleted" xml:space="preserve">
+    <value>Mensagem apagada</value>
+  </data>
+  <data name="ChatDetail_MessageDeleted.Text" xml:space="preserve">
+    <value>Mensagem apagada</value>
+  </data>
   <data name="ChatList_Loading.Text" xml:space="preserve">
     <value>Preparando conversas…</value>
   </data>

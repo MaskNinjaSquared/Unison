@@ -195,6 +195,12 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   <data name="ChatList_PreviewReaction" xml:space="preserve">
     <value>Reacción</value>
   </data>
+  <data name="ChatList_PreviewDeleted" xml:space="preserve">
+    <value>Se eliminó este mensaje</value>
+  </data>
+  <data name="ChatDetail_MessageDeleted.Text" xml:space="preserve">
+    <value>Se eliminó este mensaje</value>
+  </data>
   <data name="ChatList_Loading.Text" xml:space="preserve">
     <value>Preparando conversaciones…</value>
   </data>
