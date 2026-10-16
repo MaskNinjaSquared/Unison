@@ -98,6 +98,8 @@ namespace Unison.Uwp.UI.Controls
             double size = Size > 0 ? Size : 48d;
             RootGrid.Width = size;
             RootGrid.Height = size;
+            FallbackPlate.Width = size;
+            FallbackPlate.Height = size;
             FallbackEllipse.Width = size;
             FallbackEllipse.Height = size;
             PhotoEllipse.Width = size;
@@ -171,6 +173,8 @@ namespace Unison.Uwp.UI.Controls
             ImageSource image = TryGetAppResource(imageKey) as ImageSource;
             if (image != null)
             {
+                // The bitmap sits on the solid plate. Its own pixels are mostly
+                // transparent, so using it as the only fill made the circle see-through.
                 FallbackEllipse.Fill = new ImageBrush
                 {
                     ImageSource = image,
