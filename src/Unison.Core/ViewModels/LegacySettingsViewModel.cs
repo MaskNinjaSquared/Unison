@@ -32,7 +32,8 @@ namespace Unison.Core.ViewModels
             IMediaDiskUsageService diskUsage,
             IConnectionService connectionService,
             ShellViewModel shell,
-            IContactService contacts = null)
+            IContactService contacts = null,
+            IWhatsAppService whatsApp = null)
             : base(
                 localSettings,
                 liveTilesService,
@@ -46,7 +47,8 @@ namespace Unison.Core.ViewModels
                 diskUsage,
                 connectionService,
                 shell,
-                contacts)
+                contacts,
+                whatsApp)
         {
             OpenCategoryCommand = new RelayCommand<string>(OpenCategory);
         }

@@ -26,6 +26,9 @@ namespace Unison.Core.Constants
         /// <summary>Toast notifications for incoming messages (foreground).</summary>
         public const string NotificationsEnabled = "NotificationsEnabled";
 
+        /// <summary>Chat-list line that reports synchronization. On by default.</summary>
+        public const string ShowSyncStatus = "ShowSyncStatus";
+
         /// <summary>
         /// Toast sound for 1:1 messages (<see cref="NotificationSound"/> as int).
         /// Same key string is read by Unison.Background.
@@ -129,6 +132,7 @@ namespace Unison.Core.Constants
                 { ReconnectToastActive, false },
                 { SuppressReconnectToast, false },
                 { NotificationsEnabled, true },
+                { ShowSyncStatus, true },
                 { MessageNotificationSound, (int)NotificationSound.SystemDefault },
                 { GroupNotificationSound, (int)NotificationSound.SystemDefault },
                 { LiveTilesEnabled, true },

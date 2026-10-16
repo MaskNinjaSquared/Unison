@@ -33,6 +33,7 @@ namespace Unison.Core.ViewModels
         /// <summary>Owns leaving the account: unlink on the server, then wipe locally.</summary>
         private readonly IConnectionService _connectionService;
         private readonly IContactService _contacts;
+        private readonly IWhatsAppService _whatsApp;
 
         private readonly ShellViewModel _shell;
 
@@ -62,7 +63,8 @@ namespace Unison.Core.ViewModels
             IMediaDiskUsageService diskUsage,
             IConnectionService connectionService,
             ShellViewModel shell,
-            IContactService contacts = null)
+            IContactService contacts = null,
+            IWhatsAppService whatsApp = null)
         {
             _localSettings = localSettings;
             _liveTilesService = liveTilesService;
@@ -77,6 +79,7 @@ namespace Unison.Core.ViewModels
             _connectionService = connectionService ?? throw new ArgumentNullException(nameof(connectionService));
             _shell = shell;
             _contacts = contacts;
+            _whatsApp = whatsApp;
 
             _shell.PropertyChanged += OnShellPropertyChanged;
 
@@ -167,6 +170,22 @@ namespace Unison.Core.ViewModels
             {
                 _localSettings.Set(LocalSettingsConstants.NotificationsEnabled, value);
                 _notificationService.OnNotificationsConfigChanged();
+                OnPropertyChanged();
+            }
+        }
+
+        /// <summary>Chat-list synchronization line. Off drops the text before it reaches the list.</summary>
+        public bool ShowSyncStatus
+        {
+            get => _localSettings.Get<bool>(LocalSettingsConstants.ShowSyncStatus);
+            set
+            {
+                _localSettings.Set(LocalSettingsConstants.ShowSyncStatus, value);
+                if (!value)
+                {
+                    _whatsApp?.RaiseSyncStatus(null);
+                }
+
                 OnPropertyChanged();
             }
         }
@@ -531,6 +550,7 @@ namespace Unison.Core.ViewModels
         {
             RaiseProperties(
                 nameof(NotificationsEnabled),
+                nameof(ShowSyncStatus),
                 nameof(LiveTilesEnabled),
                 nameof(LocationKeepAliveEnabled),
                 nameof(AutoUnlinkOnLogoutEnabled),

@@ -442,6 +442,16 @@
                                                         Text="Advanced Settings"
                                                         Glyph="&#xE7BA;"/>
 
+                        <controls:SettingBox LocalizationUid="Settings_ShowSyncStatus"
+                                             Margin="5"
+                                             Header="Show sync status"
+                                             Text="Show the synchronization status in the chat list.">
+                            <controls:SettingBox.Control>
+                                <ToggleSwitch OnContent="" OffContent="" MinWidth="0" Margin="0"
+                                              IsOn="{Binding ShowSyncStatus, Mode=TwoWay}"/>
+                            </controls:SettingBox.Control>
+                        </controls:SettingBox>
+
                         <controls:SettingBox LocalizationUid="Settings_KeepAlive"
                                              Margin="5"
                                              Header="Modo em segundo plano"

@@ -418,6 +418,16 @@
 
                             <!-- Advanced -->
                             <StackPanel x:Name="AdvancedPanel" Visibility="Collapsed">
+                                <controls:SettingBox LocalizationUid="Settings_ShowSyncStatus"
+                                                     Margin="0,0,0,8"
+                                                     Header="Show sync status"
+                                                     Text="Show the synchronization status in the chat list.">
+                                    <controls:SettingBox.Control>
+                                        <ToggleSwitch OnContent="" OffContent="" MinWidth="0" Margin="0"
+                                                      IsOn="{Binding ShowSyncStatus, Mode=TwoWay}"/>
+                                    </controls:SettingBox.Control>
+                                </controls:SettingBox>
+
                                 <controls:SettingBox LocalizationUid="Settings_KeepAlive"
                                                      Margin="0,0,0,8"
                                                      Header="Modo em segundo plano"

@@ -8,6 +8,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using Unison.Core.Constants;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Factories;
@@ -66,6 +67,7 @@ namespace Unison.Core.ViewModels
         private readonly IDialogService _dialogService;
         private readonly ISessionLogger _sessionLogger;
         private readonly IRuntimeDiagnostics _diagnostics;
+        private readonly ILocalSettings _localSettings;
 
         private CancellationTokenSource _refreshCts;
         private CancellationTokenSource _refreshContinueCts;
@@ -168,12 +170,14 @@ namespace Unison.Core.ViewModels
             IJidResolver jids,
             IChatService chatService = null,
             ISessionLogger sessionLogger = null,
-            IRuntimeDiagnostics diagnostics = null)
+            IRuntimeDiagnostics diagnostics = null,
+            ILocalSettings localSettings = null)
         {
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _chatService = chatService;
             _sessionLogger = sessionLogger;
             _diagnostics = diagnostics;
+            _localSettings = localSettings;
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _messageService = messageService ?? throw new ArgumentNullException(nameof(messageService));
             _contactService = contactService ?? throw new ArgumentNullException(nameof(contactService));
@@ -938,6 +942,15 @@ namespace Unison.Core.ViewModels
             if (!string.IsNullOrEmpty(source))
             {
                 LogSyncBanner(source, message, visible);
+            }
+
+            // The service already drops the text when the setting is off. This covers the
+            // list's own status lines, so a hidden setting never becomes a visible row.
+            if (_localSettings != null &&
+                !_localSettings.Get<bool>(LocalSettingsConstants.ShowSyncStatus))
+            {
+                message = null;
+                visible = false;
             }
 
             SyncStatusText = message ?? string.Empty;

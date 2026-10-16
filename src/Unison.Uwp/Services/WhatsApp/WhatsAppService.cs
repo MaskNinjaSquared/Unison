@@ -778,11 +778,11 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 if (Volatile.Read(ref _historyCatchUpBannerActive) == 1)
                 {
-                    OnSyncStatus?.Invoke(this, SyncPhaseStatus.Format(SyncPhaseStatus.HistoryCatchUp));
+                    PublishSyncStatus(SyncPhaseStatus.Format(SyncPhaseStatus.HistoryCatchUp));
                     return;
                 }
 
-                OnSyncStatus?.Invoke(this, null);
+                PublishSyncStatus(null);
                 return;
             }
 
@@ -792,7 +792,34 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
+            PublishSyncStatus(status);
+        }
+
+        /// <summary>
+        /// The list reads whatever this event carries. When the setting is off, the text is
+        /// dropped here so the view never sees a status to show.
+        /// </summary>
+        private void PublishSyncStatus(string status)
+        {
+            if (!IsSyncStatusShown())
+            {
+                status = null;
+            }
+
             OnSyncStatus?.Invoke(this, status);
+        }
+
+        private static bool IsSyncStatusShown()
+        {
+            try
+            {
+                return LocalSettingsAccess.Current.Get<bool>(LocalSettingsConstants.ShowSyncStatus);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[WhatsAppService] ShowSyncStatus read failed: " + ex.Message);
+                return true;
+            }
         }
 
         private void BeginHistoryCatchUpBanner(string reason)
@@ -803,7 +830,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 "history",
                 "catch-up-banner-begin",
                 "reason=" + (reason ?? string.Empty));
-            OnSyncStatus?.Invoke(this, SyncPhaseStatus.Format(SyncPhaseStatus.HistoryCatchUp));
+            PublishSyncStatus(SyncPhaseStatus.Format(SyncPhaseStatus.HistoryCatchUp));
         }
 
         private void EndHistoryCatchUpBanner(string reason)
@@ -817,7 +844,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 "history",
                 "catch-up-banner-end",
                 "reason=" + (reason ?? string.Empty));
-            OnSyncStatus?.Invoke(this, null);
+            PublishSyncStatus(null);
         }
 
         /// <summary>
@@ -3178,7 +3205,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 catch (Exception ex)
                 {
                     Debug.WriteLine($"[WhatsAppService] Background resolution error: {ex.Message}");
-                    OnSyncStatus?.Invoke(this, null);
+                    PublishSyncStatus(null);
                 }
             }, token);
         }
@@ -3685,7 +3712,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
             else
             {
-                OnSyncStatus?.Invoke(this, SyncPhaseStatus.Format(SyncPhaseStatus.HistoryCatchUp));
+                PublishSyncStatus(SyncPhaseStatus.Format(SyncPhaseStatus.HistoryCatchUp));
             }
 
             RuntimeDiagnosticsService.Instance.Write(
