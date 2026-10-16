@@ -534,13 +534,11 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             try
             {
-                return Chats
-                    .Where(c => c != null)
-                    .GroupBy(c => GetCanonicalJid(c.JID), StringComparer.OrdinalIgnoreCase)
-                    .Sum(group => group.Max(c => Math.Max(0, c.UnreadCount)));
+                return ChatUnreadTally.TotalAcrossConversations(Chats, GetCanonicalJid);
             }
-            catch
+            catch (Exception ex)
             {
+                Debug.WriteLine("[WhatsAppService] Unread total failed: " + ex.Message);
                 return 0;
             }
         }
@@ -2619,21 +2617,12 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             ChatMessage mapped = HistoryMessageMapper.ToChatMessage(row);
-            if (mapped == null ||
-                mapped.IsRevoked ||
-                !IsValidMessageTimestamp(mapped.Timestamp) ||
-                string.Equals(mapped.Content, "[Message Deleted]", StringComparison.OrdinalIgnoreCase))
-            {
-                return null;
-            }
-
-            return mapped;
+            return ChatPreviewTip.IsReconcileCandidate(mapped, DateTime.UtcNow) ? mapped : null;
         }
 
         private ChatMessage FindNewestInMemoryForChat(string canonical, List<string> keys)
         {
-            ChatMessage best = null;
-            DateTime bestUtc = DateTime.MinValue;
+            var candidates = new List<ChatMessage>();
 
             void Consider(IList<ChatMessage> list)
             {
@@ -2643,40 +2632,15 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
                 // Snapshot: open-chat / unload can mutate the list while reconcile runs.
-                ChatMessage[] snapshot;
                 try
                 {
-                    snapshot = list.ToArray();
+                    candidates.AddRange(list.ToArray());
                 }
                 catch (ArgumentException)
                 {
-                    return;
                 }
                 catch (InvalidOperationException)
                 {
-                    return;
-                }
-
-                for (int i = 0; i < snapshot.Length; i++)
-                {
-                    ChatMessage message = snapshot[i];
-                    if (message == null ||
-                        message.IsRevoked ||
-                        !IsValidMessageTimestamp(message.Timestamp) ||
-                        string.Equals(message.Content, "[Message Deleted]", StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
-
-                    DateTime utc = ToComparableUtc(message.Timestamp);
-                    if (best == null ||
-                        utc > bestUtc ||
-                        (utc == bestUtc &&
-                         string.CompareOrdinal(message.Id ?? string.Empty, best.Id ?? string.Empty) > 0))
-                    {
-                        best = message;
-                        bestUtc = utc;
-                    }
                 }
             }
 
@@ -2713,7 +2677,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 Consider(pair.Value);
             }
 
-            return best;
+            return ChatPreviewTip.PickNewestReconcileCandidate(candidates, DateTime.UtcNow);
         }
 
         private static ChatMessage PickNewerPreviewSource(ChatMessage sql, ChatMessage memory) =>
@@ -5255,14 +5219,24 @@ namespace Unison.Uwp.Services.WhatsApp
 
         /// <summary>
         /// Proactively merges duplicate chats when a new identity mapping is found.
-        /// Moves messages from LID chat to PN chat and removes the LID chat.
         /// </summary>
+        /// <remarks>
+        /// With the pair filed, the dedupe pass folds the two rows field by field (pin, mute,
+        /// unread, preview, avatar). Without it the fold cannot tell they are one person, so
+        /// only the messages move and the LID row goes.
+        /// </remarks>
         private async Task CheckAndMergeDuplicateChatsAsync(string lidJid, string pnJid)
         {
             if (string.IsNullOrEmpty(lidJid) || string.IsNullOrEmpty(pnJid)) return;
             string normLidJid = NormalizeJid(lidJid);
             string normPnJid = NormalizeJid(pnJid);
-            
+
+            if (string.Equals(GetCanonicalJid(normLidJid), GetCanonicalJid(normPnJid), StringComparison.OrdinalIgnoreCase))
+            {
+                await DeduplicateChatsAsync("alias-merge");
+                return;
+            }
+
             await RunOnUiThreadAsync(() =>
             {
                 var lidChat = Chats.FirstOrDefault(c => NormalizeJid(c.JID) == normLidJid);
