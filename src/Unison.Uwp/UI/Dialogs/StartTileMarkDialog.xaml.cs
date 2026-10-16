@@ -86,13 +86,20 @@ namespace Unison.Uwp.UI.Dialogs
                 return;
             }
 
+            // Keep the accent plate visible for all three marks. Transparent only softens it
+            // (matches the real secondary tile background alpha) instead of erasing the preview.
+            var accentBrush = Application.Current.Resources["SystemControlBackgroundAccentBrush"]
+                as Windows.UI.Xaml.Media.SolidColorBrush;
+            Windows.UI.Color color = accentBrush != null
+                ? accentBrush.Color
+                : Windows.UI.Color.FromArgb(0xFF, 0x00, 0x7A, 0x5E);
             if (TransparentTileCheck != null && TransparentTileCheck.IsChecked == true)
             {
-                PreviewPlate.Background = new Windows.UI.Xaml.Media.SolidColorBrush(Windows.UI.Colors.Transparent);
-                return;
+                color.A = 0x73; // ~45% opacity plate; glyph stays full strength
             }
 
-            PreviewPlate.Background = (Windows.UI.Xaml.Media.Brush)Application.Current.Resources["SystemControlBackgroundAccentBrush"];
+            PreviewPlate.Background = new Windows.UI.Xaml.Media.SolidColorBrush(color);
+            PreviewPlate.Opacity = 1;
         }
     }
 }
