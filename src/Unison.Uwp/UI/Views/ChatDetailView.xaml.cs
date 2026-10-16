@@ -1031,8 +1031,15 @@ namespace Unison.Uwp.UI.Views
                 object anchor = CaptureTopVisibleMessage(out double anchorTopInViewport);
                 double oldExtent = _scrollViewer?.ExtentHeight ?? 0;
                 double oldOffset = _scrollViewer?.VerticalOffset ?? 0;
+                WriteTimelineDiagnostics("load-more-start", "anchor=" + (anchor != null));
 
                 ChatTimelineLoadMoreResult result = await ViewModel.LoadMoreMessagesAsync();
+                WriteTimelineDiagnostics(
+                    "load-more-result",
+                    "prepended=" + (result?.PrependedCount ?? 0) +
+                    "; onDemand=" + (result?.WaitingForOnDemand ?? false) +
+                    "; reachedStart=" + (result?.ReachedStart ?? false) +
+                    "; detached=" + ViewModel.IsDetachedFromEnd);
                 if (_activeChat == null ||
                     !string.Equals(Jids.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase))
                 {
@@ -1047,6 +1054,7 @@ namespace Unison.Uwp.UI.Views
                     RecomputeMessageRuns(_messages, isGroup);
 
                     await RestoreScrollAfterPrependAsync(anchor, anchorTopInViewport, oldExtent, oldOffset);
+                    WriteTimelineDiagnostics("load-more-restored", "oldOffset=" + oldOffset.ToString("0"));
                     _suppressLoadMoreUntilUtc = DateTime.UtcNow.AddMilliseconds(800);
                 }
                 else if (result != null && result.WaitingForOnDemand)
@@ -2039,6 +2047,46 @@ namespace Unison.Uwp.UI.Views
             catch (Exception ex)
             {
                 Debug.WriteLine("[ChatDetailView] chat-open diagnostics failed: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Flushed on every write: the scroll-up crash on Mobile kills the process before the
+        /// journal's 2 s timer, and the next launch only keeps what reached runtime-previous.log.
+        /// </summary>
+        private void WriteTimelineDiagnostics(string eventName, string details, Exception exception = null)
+        {
+            try
+            {
+                IRuntimeDiagnostics diagnostics = App.Services?.GetService<IRuntimeDiagnostics>();
+                if (diagnostics == null)
+                {
+                    return;
+                }
+
+                string line =
+                    "rows=" + (_messages?.Count ?? 0) +
+                    "; offset=" + (_scrollViewer?.VerticalOffset ?? -1).ToString("0") +
+                    "; extent=" + (_scrollViewer?.ExtentHeight ?? -1).ToString("0") +
+                    "; viewport=" + (_scrollViewer?.ViewportHeight ?? -1).ToString("0") +
+                    "; memMB=" + (Windows.System.MemoryManager.AppMemoryUsage / (1024UL * 1024UL)) +
+                    "/" + (Windows.System.MemoryManager.AppMemoryUsageLimit / (1024UL * 1024UL)) +
+                    "; " + details;
+
+                if (exception != null)
+                {
+                    diagnostics.RecordException("timeline", eventName, exception, line);
+                }
+                else
+                {
+                    diagnostics.Write("timeline", eventName, line);
+                }
+
+                _ = diagnostics.FlushAsync("timeline");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatDetailView] timeline diagnostics failed: " + ex.Message);
             }
         }
 
