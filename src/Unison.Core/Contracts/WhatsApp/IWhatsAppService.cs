@@ -15,8 +15,6 @@ namespace Unison.Core.Contracts.WhatsApp
         ObservableCollection<ChatItem> Chats { get; }
         string CurrentConnectionStatus { get; }
         string CurrentUserName { get; set; }
-        /// <summary>Account phone digits from the PN JID — placeholder when the push name is unknown.</summary>
-        string CurrentUserPhone { get; }
         string CurrentUserAvatar { get; set; }
         /// <summary>Logged-in user snapshot (Id/Lid/Name/Phone/AvatarUrl).</summary>
         Profile CurrentProfile { get; }
@@ -147,9 +145,6 @@ namespace Unison.Core.Contracts.WhatsApp
         Task ShutdownAsync(bool persist = true);
 
         int GetTotalUnreadCount();
-
-        /// <summary>Prefer <see cref="IContactService.RefreshContactNamesAsync"/> from ViewModels.</summary>
-        Task RefreshContactNamesAsync(bool includeGroups, bool force);
         string ResolveDisplayName(string jid, string context);
 
         // Usync contact apply (3.6). The contact façade decides and writes the push name itself;
@@ -197,19 +192,11 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>Publishes a transient status string through <see cref="OnSyncStatus"/>.</summary>
         void RaiseSyncStatus(string status);
 
-        /// <summary>Raises <see cref="OnDisplayNamesUpdated"/>.</summary>
-        void RaiseDisplayNamesUpdated();
-
         /// <summary>True when sync traffic (history-on-demand/backfill/replay) means avatar work should be postponed.</summary>
         bool ShouldDeferAvatarFetch(out string reason);
 
         /// <summary>Schedules another background resolution pass (names+avatars+groups) after a delay.</summary>
         void ScheduleDeferredAvatarResolution(string reason, TimeSpan? delay = null);
-
-        /// <summary>Cancels a pending deferred background resolution retry.</summary>
-        void CancelDeferredAvatarResolution();
-
-        void RequestAvatarRefresh(ChatItem chat, bool force = false);
         void SetActiveChatJid(string jid);
 
         /// <summary>
@@ -295,7 +282,6 @@ namespace Unison.Core.Contracts.WhatsApp
         void StartNewChat(string jid);
 
         Task<List<ChatMessage>> LoadMessagesForChatAsync(string jid);
-        Task<List<ChatMessage>> LoadMoreMessagesAsync(string jid);
         List<ChatMessage> GetLiveMessages(string jid);
 
         /// <summary>
@@ -306,12 +292,6 @@ namespace Unison.Core.Contracts.WhatsApp
         Task<bool> RequestFullHistoryOnDemandAsync(string reason = null, bool force = false);
 
         Task SetMessagePinnedAsync(string chatJid, ChatMessage message, bool pin, uint durationSeconds = 604800);
-
-        /// <summary>
-        /// Completes resync/progress after a history chunk. Prefer
-        /// <see cref="IHistoryService.NotifySqliteHistoryChunkApplied"/> from façades.
-        /// </summary>
-        Task ProcessHistorySyncCoreAsync(HistorySync sync);
 
         /// <summary>
         /// Completes resync wait / initial-sync progress after the SQLite history path applied a chunk.
@@ -341,14 +321,8 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         void CompleteHistoryOnDemandForChats(IEnumerable<string> chatJids);
 
-        /// <summary>Delegates to <see cref="IContactService"/> (owns batch/backoff policy); kept for legacy callers.</summary>
-        Task RetrieveContactPicturesCoreAsync(CancellationToken cancellationToken = default(CancellationToken));
-
         /// <summary>True when the noise handshake completed and IQ calls are safe.</summary>
         bool IsTransportReady { get; }
-
-        /// <summary>Fetches a remote profile picture URL (null when unavailable).</summary>
-        Task<string> GetProfilePictureUrlAsync(string jid, string type = "preview");
 
         /// <summary>
         /// Aligns list <c>LastMessage</c> with the newest SQLite row when the list is behind

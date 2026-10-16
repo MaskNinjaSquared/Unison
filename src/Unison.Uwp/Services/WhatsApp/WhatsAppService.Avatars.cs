@@ -42,20 +42,14 @@ namespace Unison.Uwp.Services.WhatsApp
 {
     public partial class WhatsAppService
     {
-
-        public Task<string> GetProfilePictureUrlAsync(string jid, string type = "preview")
-        {
-            return _avatarFetcher.FetchUrlAsync(jid, type);
-        }
-
         /// <summary>Delegates to <see cref="IContactService"/> (owns dedup/backoff policy); this class only supplies the fetch primitive.</summary>
-        public void RequestAvatarRefresh(ChatItem chat, bool force = false)
+        private void RequestAvatarRefresh(ChatItem chat, bool force = false)
         {
             _contactService?.RequestAvatarRefresh(chat, force);
         }
 
         /// <summary>Delegates to <see cref="IContactService"/> (owns batch/backoff policy); this class only supplies the fetch primitives.</summary>
-        public Task RetrieveContactPicturesCoreAsync(CancellationToken token)
+        private Task RetrieveContactPicturesCoreAsync(CancellationToken token)
         {
             if (_socket == null)
             {

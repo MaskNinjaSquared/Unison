@@ -49,13 +49,6 @@ namespace Unison.Uwp.Services.WhatsApp
         /// <summary>Re-applies <see cref="ResolveDisplayName"/> to each chat's Name where it changed.</summary>
         public Task ApplyResolvedDisplayNamesToChatsAsync() => ApplyResolvedNamesToChatsAsync();
 
-        /// <summary>Raises <see cref="OnDisplayNamesUpdated"/>, and the store's equivalent.</summary>
-        public void RaiseDisplayNamesUpdated()
-        {
-            OnDisplayNamesUpdated?.Invoke(this, EventArgs.Empty);
-            _chatState.NotifyDisplayNamesChanged();
-        }
-
         private void RegisterSocketAlias(string jidA, string jidB, string source)
         {
             _socket?.RegisterJidAlias(jidA, jidB, source);
@@ -525,7 +518,7 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         /// <summary>Delegates to <see cref="IContactService"/> (owns cooldown/dedup policy); this class only supplies the client primitives.</summary>
-        public Task RefreshContactNamesAsync(bool includeGroups = false, bool force = false)
+        private Task RefreshContactNamesAsync(bool includeGroups = false, bool force = false)
         {
             return _contactService?.RefreshContactNamesAsync(includeGroups, force) ?? Task.CompletedTask;
         }

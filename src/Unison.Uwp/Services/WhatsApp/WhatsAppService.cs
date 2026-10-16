@@ -818,8 +818,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
         void IWhatsAppService.ScheduleDeferredAvatarResolution(string reason, TimeSpan? delay) => ScheduleDeferredProfilePictureResolution(reason, delay);
 
-        void IWhatsAppService.CancelDeferredAvatarResolution() => CancelDeferredProfilePictureResolution();
-
         private Task HydrateCachedAvatarsFromContactAsync(string reason)
         {
             if (_contactService == null)
@@ -2017,7 +2015,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// Completes resync/progress after a history chunk. SQLite apply lives on HistoryFacade;
         /// this leftover notify is the live-message fallback if MessageFacade is unset.
         /// </summary>
-        public Task ProcessHistorySyncCoreAsync(HistorySync sync)
+        private Task ProcessHistorySyncCoreAsync(HistorySync sync)
         {
             if (sync != null)
             {
@@ -2834,65 +2832,6 @@ namespace Unison.Uwp.Services.WhatsApp
             catch (Exception ex)
             {
                 Debug.WriteLine($"[WhatsAppService] Failed to load initial messages for {normJid}: {ex.Message}");
-                return new List<ChatMessage>();
-            }
-        }
-
-        /// <summary>
-        /// Loads the next segment of messages (previous 30) before the current set.
-        /// </summary>
-        public async Task<List<ChatMessage>> LoadMoreMessagesAsync(string chatJid)
-        {
-            string normJid = NormalizeJid(chatJid);
-            if (!MessagesByChat.Contains(normJid)) return new List<ChatMessage>();
-
-            try
-            {
-                int currentCount = MessagesByChat[normJid].Count;
-                if (currentCount >= MaxActiveChatMessagesInMemory)
-                {
-                    Debug.WriteLine($"[WhatsAppService] In-memory message cap reached for {normJid}: {currentCount}");
-                    return new List<ChatMessage>();
-                }
-
-                int totalCount = await _messageStore.GetMessageCountAsync(normJid);
-                
-                if (currentCount >= totalCount) 
-                {
-                    Debug.WriteLine($"[WhatsAppService] No more messages to load for {normJid} (Already have {currentCount}/{totalCount})");
-                    _ = RequestHistoryOnDemandIfNeededAsync(normJid, 30, "load-more:no-more-disk-messages");
-                    return new List<ChatMessage>(); // No more to load
-                }
-
-                int take = 30;
-                int skip = Math.Max(0, totalCount - currentCount - take);
-                int actualTake = Math.Min(take, totalCount - currentCount);
-
-                var previousMessages = await _messageStore.LoadMessagesPagedAsync(normJid, skip, actualTake);
-                if (previousMessages.Count > 0)
-                {
-                    List<ChatMessage> uniquePrevious = MessagesByChat.AddMissing(
-                        normJid,
-                        previousMessages,
-                        MaxActiveChatMessagesInMemory - currentCount);
-                    foreach (var message in uniquePrevious) ApplyPendingStateToMessage(normJid, message);
-
-                    if (uniquePrevious.Count > 0)
-                    {
-                        Debug.WriteLine($"[WhatsAppService] Added {uniquePrevious.Count} older messages for {normJid}. total_in_cache={MessagesByChat.CountFor(normJid)}, total_on_disk={totalCount}");
-                    }
-                    previousMessages = uniquePrevious;
-                }
-                else
-                {
-                    Debug.WriteLine($"[WhatsAppService] LoadMoreMessagesAsync: MessageStore returned 0 messages for {normJid} (skipping skip={skip}, take={actualTake})");
-                    _ = RequestHistoryOnDemandIfNeededAsync(normJid, 30, "load-more:store-returned-empty");
-                }
-                return previousMessages;
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WhatsAppService] Failed to load more messages for {normJid}: {ex.Message}");
                 return new List<ChatMessage>();
             }
         }
