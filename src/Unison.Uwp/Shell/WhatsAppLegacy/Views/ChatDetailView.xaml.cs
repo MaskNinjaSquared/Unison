@@ -1145,7 +1145,14 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return;
             }
 
-            RequestVisibleParticipantAvatarsFromViewport();
+            try
+            {
+                RequestVisibleParticipantAvatarsFromViewport();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatDetailView] Visible avatar request failed: " + ex.Message);
+            }
         }
 
         /// <summary>
@@ -1346,7 +1353,16 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                         return;
                     }
 
-                    var container = MessageListView.ContainerFromItem(anchor) as FrameworkElement;
+                    FrameworkElement container = null;
+                    try
+                    {
+                        container = MessageListView.ContainerFromItem(anchor) as FrameworkElement;
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine("[ChatDetailView] Anchor container lookup failed: " + ex.Message);
+                    }
+
                     if (container != null)
                     {
                         try
@@ -1393,7 +1409,15 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             }
 
             double target = Math.Max(0, oldOffset + deltaExtent);
-            _scrollViewer.ChangeView(null, target, null, true);
+            try
+            {
+                _scrollViewer.ChangeView(null, target, null, true);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatDetailView] Extent delta scroll failed: " + ex.Message);
+                return;
+            }
             Debug.WriteLine(
                 $"[ChatDetailView] Restored scroll via extent delta={deltaExtent:0.#} -> {target:0.#}");
         }
@@ -2816,19 +2840,26 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                         return;
                     }
 
-                    bool followingEnd = stickToBottom || IsFollowingTimelineEnd();
-                    bool changed = ViewModel.MergeTimelineFromService(serviceMessages, requestedJid, followingEnd);
-                    UpdatePinnedBanner();
-
-                    if (changed)
+                    try
                     {
-                        bool isGroup = _activeChat.IsGroup ||
-                            requestedJid.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
-                        RecomputeMessageRuns(_messages, isGroup);
-                        if (followingEnd)
+                        bool followingEnd = stickToBottom || IsFollowingTimelineEnd();
+                        bool changed = ViewModel.MergeTimelineFromService(serviceMessages, requestedJid, followingEnd);
+                        UpdatePinnedBanner();
+
+                        if (changed)
                         {
-                            ScrollToBottom();
+                            bool isGroup = _activeChat.IsGroup ||
+                                requestedJid.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
+                            RecomputeMessageRuns(_messages, isGroup);
+                            if (followingEnd)
+                            {
+                                ScrollToBottom();
+                            }
                         }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine("[ChatDetailView] Timeline merge failed: " + ex.Message);
                     }
                 });
             }
