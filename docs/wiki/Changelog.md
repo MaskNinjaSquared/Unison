@@ -4,6 +4,15 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## A deleted message is a state, shown in your language
+
+Deleting a message for everyone used to overwrite its text with the English "[Message Deleted]", and
+that string was what the bubble, the chat list and the store all read. Now the message is only flagged
+(`IsRevoked`) and emptied; the bubble shows an icon and "This message was deleted" in the app language,
+and the chat list shows the same through a new `Revoked` preview kind. A deleted last message stays on
+the list line, as on the phone, instead of the reconcile pass bringing back the message before it. A
+list line saved by an older build with the English text is repaired once at startup.
+
 ## A contact found by number keeps its pin, mute and unread count
 
 When a contact lookup or a new chat pairs a LID row with the phone row of the same person, the two

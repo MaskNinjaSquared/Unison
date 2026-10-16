@@ -1022,8 +1022,12 @@ The self base-name precedence (phone contact, WhatsApp cache, credentials, curre
 the "established self name" gate are `SelfDisplayNameResolution`.
 
 The reconcile pass's tip choice is `ChatPreviewTip.IsReconcileCandidate` / `PickNewestReconcileCandidate`.
-**Recorded, not endorsed:** it skips revoked messages, while the live paths (`PickLatest`, the revoke
-apply) keep a revoked message as the tip and show its tombstone. Which one is right is a product call.
+A revoked message stays the tip on every path, as on the phone. A revoke is the `IsRevoked` flag
+(`ChatMessage` and `history_message`) with an empty body; nothing below the UI writes or matches
+"[Message Deleted]" any more. The list strip reads it as `ChatPreviewKind.Revoked` and the bubble as
+`IsRevoked`, and both show the localized label. The marker string survives only to read data from older
+builds: an unflagged marker body is never a tip, and `RepairLegacyDeletedPreviewsAsync` fixes a strip
+still holding it once, because nothing writes it again.
 
 Two edits that bypassed the cache are gone: the revoke apply removed the old synthetic envelope row with
 `List.Remove` (the id stayed in the index), and the app-state delete wrote the remove-plus-forget pair by
