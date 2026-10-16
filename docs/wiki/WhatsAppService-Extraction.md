@@ -103,6 +103,7 @@ raises and the façade subscribes to in its own constructor.
 | `OnBackgroundHistorySyncBounced` | `HistoryFacade` | `AttachHistoryService` (gone) |
 | `OnAvatarCached` | `ContactFacade` | part of `AttachContactService` |
 | `OnJidAliasResolved` | `ContactFacade` | part of `AttachContactService` |
+| `OnAvatarRetryDue` | `ContactFacade` | the alias follow-up's `RequestAvatarRefresh` forward |
 
 That let the push-in doors close on the contracts too. `NotifyStreamError`,
 `NotifySuspectedInvalidSession`, `TryIngestLiveAsync`, `NoteBackgroundHistorySyncBounce` and
@@ -127,10 +128,35 @@ here. They do not invert, because those calls are not reports:
   with client state; roster replace and group membership persist both sit inside the group-metadata
   apply. Moving them *is* 3.2 / 3.8 / 3.9.
 
-`AttachContactService` survives too, reduced from nine call sites to the two deferred-startup
-maintenance ones (`RefreshPhoneContactOverlayAsync`, `RetrieveContactPicturesAsync`) plus the
-`IWhatsAppService` pass-throughs. Those are orchestration: the client sequences them and depends on
-the order.
+`AttachContactService` survives too. A second pass took out what was still a report:
+
+- The alias follow-up used to call `RequestAvatarRefresh(chat, force: true)` per row through a
+  client forward. It now collects the rows still without an avatar on the UI thread and raises
+  `OnAvatarRetryDue` once, on that same thread; `ContactFacade` forces the refresh. Nothing after it
+  in the follow-up waits on the fetch (dedup and `NotifyDisplayNamesChanged` only read rows). A
+  subscriber that throws no longer aborts the follow-up and restores the batch: `RaiseReport` logs it
+  and dedup still runs.
+- `FetchProfilePicturesAsync` / `RetrieveContactPicturesCoreAsync` are gone. They were the
+  "no façade attached" fallback of the background pass, and they only forwarded back to
+  `_contactService?.RetrieveContactPicturesAsync`, so with no façade they did nothing.
+
+What is left on `_contactService` is awaited and ordered by the client, so it is orchestration:
+
+- `HydrateCachedAvatarUrisAsync` — awaited three times (deferred startup early and late, persisted
+  UI load); the faces must be bound before the dedup / preview reconcile that follows.
+- `RefreshPhoneContactOverlayAsync(force: true)` in deferred startup — awaited, then
+  `ApplyResolvedNamesToChatsAsync` and `SchedulePersist` read what it filled.
+- `ResolveMissingNamesAsync` — awaited in the post-message enrichment and the background pass
+  before the next step. The third caller (deferred startup) is fire-and-forget, but an event for it
+  alone would leave the same forward in place for the other two.
+- `RefreshContactNamesAsync` — awaited in the post-message enrichment before
+  `TriggerBackgroundResolution`.
+- `RetrieveContactPicturesAsync(token)` in `TriggerBackgroundResolution` — awaited between the
+  names step and `OnGroupListingDue` so the listing does not compete with the picture batch for the
+  socket, and `token` is `_resolutionCts`, which `ShutdownAsync` cancels (phase 4). Raising it as an
+  event would make the pass finish early and let the group listing overlap it; the pass and its defer
+  checks (`ShouldDeferProfilePictureFetch`, `CancelDeferredProfilePictureResolution`) read private
+  client state. It moves with the pass, not before it.
 
 ---
 
@@ -153,6 +179,10 @@ The stores (`IPersonStore`, `IChatStore`, `IGroupRosterStore`) are constructor p
 
 - `AttachMessageService` / `AttachChatService` / `AttachContactService`
 - `AttachDebugSendService` (Debug only)
+
+`AttachContactService` is down to the awaited steps listed under
+[What phase 2 could not do](#what-phase-2-could-not-do): avatar hydrate, the address-book overlay,
+the two name passes and the picture batch. The alias avatar retry is an event (`OnAvatarRetryDue`).
 
 `AttachGroupService` is gone: its only use was the last step of the background resolution pass.
 The client now raises `OnGroupListingDue` there, and `GroupFacade` shows the Groups status, runs the
