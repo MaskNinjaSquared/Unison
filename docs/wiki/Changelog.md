@@ -28,6 +28,12 @@ The group listing at the end of the background pass is started by an event the g
 listens to (`OnGroupListingDue`), so the client no longer holds the group service. The pass clears
 its own status before handing over, and the façade shows "Loading group info" until the listing ends.
 
+When a phone number and a LID are newly paired, the rows still without a picture are handed to the
+contact façade by an event (`OnAvatarRetryDue`) instead of a client forward, and the façade forces
+the retry. A failing retry no longer aborts the alias follow-up; the duplicate merge still runs. The
+"no contact façade" picture fallback of the background pass is gone — it only forwarded back to the
+façade.
+
 ## A deleted message is a state, shown in your language
 
 Deleting a message for everyone used to overwrite its text with the English "[Message Deleted]", and
