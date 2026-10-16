@@ -17,6 +17,7 @@ namespace Unison.Core.ViewModels
         private readonly IDispatcher _dispatcher;
         private bool _attached;
         private bool _isEmpty = true;
+        private bool _isLoading = true;
         private StatusAuthorItem _selectedAuthor;
 
         public StatusListViewModel(IStatusService status, IDispatcher dispatcher)
@@ -40,6 +41,13 @@ namespace Unison.Core.ViewModels
         {
             get => _isEmpty;
             private set => Set(ref _isEmpty, value);
+        }
+
+        /// <summary>True until the first author list arrives — Legacy (and others) show a spinner.</summary>
+        public bool IsLoading
+        {
+            get => _isLoading;
+            private set => Set(ref _isLoading, value);
         }
 
         public ICommand MenuCommand { get; }
@@ -115,6 +123,7 @@ namespace Unison.Core.ViewModels
             }
 
             IsEmpty = Authors.Count == 0;
+            IsLoading = false;
 
             StatusAuthorItem match = null;
             if (!string.IsNullOrWhiteSpace(selectedJid))

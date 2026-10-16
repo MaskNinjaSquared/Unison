@@ -93,5 +93,20 @@
                    Foreground="{ThemeResource WhatsAppTextMediumBrush}"
                    FontFamily="{StaticResource MainFont}"
                    Visibility="{x:Bind ViewModel.IsEmpty, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+
+        <Grid Grid.Row="1"
+              Background="{ThemeResource ChatListBackgroundBrush}"
+              Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                <controls:ModernProgressRing IsActive="True" Width="36" Height="36"/>
+                <TextBlock x:Uid="ChatList_Loading"
+                           Text="Preparing conversations…"
+                           FontSize="14"
+                           Margin="0,16,0,0"
+                           HorizontalAlignment="Center"
+                           Foreground="{ThemeResource WhatsAppTextMediumBrush}"
+                           FontFamily="{StaticResource MainFont}"/>
+            </StackPanel>
+        </Grid>
     </Grid>
 </UserControl>
