@@ -36,11 +36,10 @@ namespace Unison.Core.Helpers
             Func<string, bool> quoteFromMe = quotedIdIsFromMe ?? (_ => false);
             DateTime? previousLocalDate = null;
 
-            // Names first, for every message, before any run is measured. Whether two messages
-            // belong to the same run is decided by sender name when the participant ids differ,
-            // which is the ordinary PN/LID case. Resolving names inside the layout loop left the
-            // next message still unnamed when the current one asked whether the run continued,
-            // so a message could close a run that its neighbour then went on to continue.
+            // Names first, so a row whose address was not stored can still be compared with
+            // its neighbour by the name it shows. Resolving names inside the layout loop left
+            // the next message still unnamed when the current one asked whether the run
+            // continued.
             if (lookup != null)
             {
                 for (int i = 0; i < messages.Count; i++)
@@ -185,25 +184,29 @@ namespace Unison.Core.Helpers
 
             string leftParticipant = JidHelper.Normalize(left.ParticipantJid) ?? string.Empty;
             string rightParticipant = JidHelper.Normalize(right.ParticipantJid) ?? string.Empty;
-            if (!string.IsNullOrEmpty(leftParticipant) && !string.IsNullOrEmpty(rightParticipant))
-            {
-                if (string.Equals(leftParticipant, rightParticipant, StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
+            bool leftHasAddress = !string.IsNullOrEmpty(leftParticipant);
+            bool rightHasAddress = !string.IsNullOrEmpty(rightParticipant);
 
-                // LID vs PN (or device alias) for the same person: merge only when both names match.
-                string leftName = left.SenderName ?? string.Empty;
-                string rightName = right.SenderName ?? string.Empty;
-                return !string.IsNullOrWhiteSpace(leftName) &&
-                       string.Equals(leftName, rightName, StringComparison.OrdinalIgnoreCase);
+            // Any two different addresses are two people, including a LID beside a phone
+            // number that happens to carry the same display name. Matching on the name
+            // joined the next person into this run, so their bubble grew no tail. A message
+            // of ours in between already broke the run, which is why that order looked fine.
+            if (leftHasAddress && rightHasAddress)
+            {
+                return string.Equals(leftParticipant, rightParticipant, StringComparison.OrdinalIgnoreCase);
             }
 
-            // One side missing participant (common on history rows): keep the run when names match.
-            return string.Equals(
-                left.SenderName ?? string.Empty,
-                right.SenderName ?? string.Empty,
-                StringComparison.OrdinalIgnoreCase);
+            if (leftHasAddress || rightHasAddress)
+            {
+                return false;
+            }
+
+            // Neither side stored an address (some history rows). Keep the run only when
+            // both names are present and agree. Two blanks are not the same person.
+            string leftKnown = left.SenderName ?? string.Empty;
+            string rightKnown = right.SenderName ?? string.Empty;
+            return !string.IsNullOrWhiteSpace(leftKnown) &&
+                   string.Equals(leftKnown, rightKnown, StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>Backward-compatible overload (treats as group identity rules).</summary>

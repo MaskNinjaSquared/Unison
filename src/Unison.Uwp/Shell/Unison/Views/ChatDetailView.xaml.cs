@@ -2443,7 +2443,14 @@ namespace Unison.Uwp.Shell.Unison.Views
                 return;
             }
 
-            ViewModel.ApplyMessageRunLayout(messages, isGroup, _activeChat ?? ViewModel.ActiveChat);
+            ChatItem chat = _activeChat ?? ViewModel.ActiveChat;
+            if (!isGroup && chat != null)
+            {
+                isGroup = chat.IsGroup ||
+                    (chat.JID != null && chat.JID.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase));
+            }
+
+            ViewModel.ApplyMessageRunLayout(messages, isGroup, chat);
         }
 
         /// <summary>
