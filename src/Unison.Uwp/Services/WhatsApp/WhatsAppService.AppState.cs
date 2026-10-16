@@ -299,19 +299,12 @@ namespace Unison.Uwp.Services.WhatsApp
             bool removed = false;
             await RunOnUiThreadAsync(() =>
             {
-                if (!MessagesByChat.TryGet(canonical, out var messages) || messages == null || messages.Count == 0)
+                if (!MessagesByChat.TryGet(canonical, out var messages) ||
+                    messages == null ||
+                    !MessagesByChat.RemoveMessage(canonical, messageId))
                 {
                     return;
                 }
-
-                var message = messages.FirstOrDefault(m => string.Equals(m?.Id, messageId, StringComparison.Ordinal));
-                if (message == null)
-                {
-                    return;
-                }
-
-                messages.Remove(message);
-                MessagesByChat.Ids.Remove(canonical, messageId);
 
                 // Every row sharing this identity, not just the first: a conversation is
                 // listed under both PN and LID, and correcting one left the other showing a

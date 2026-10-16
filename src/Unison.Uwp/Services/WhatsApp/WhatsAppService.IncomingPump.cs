@@ -573,6 +573,9 @@ namespace Unison.Uwp.Services.WhatsApp
             if (string.IsNullOrWhiteSpace(chatJid) || string.IsNullOrWhiteSpace(targetId)) return;
 
             string canonical = GetCanonicalJid(chatJid);
+            List<string> aliasKeys = MessagesByChat.ChatJids()
+                .Where(key => string.Equals(GetCanonicalJid(key), canonical, StringComparison.OrdinalIgnoreCase))
+                .ToList();
 
             // Older builds stored the revoke envelope itself as a fresh
             // "[Message Deleted]" item. Remove that synthetic row when the same
@@ -580,11 +583,9 @@ namespace Unison.Uwp.Services.WhatsApp
             if (!string.IsNullOrWhiteSpace(envelopeMessageId) &&
                 !string.Equals(envelopeMessageId, targetId, StringComparison.Ordinal))
             {
-                foreach (var pair in MessagesByChat.Snapshot())
+                foreach (string key in aliasKeys)
                 {
-                    if (!string.Equals(GetCanonicalJid(pair.Key), canonical, StringComparison.OrdinalIgnoreCase)) continue;
-                    var synthetic = pair.Value?.FirstOrDefault(m => string.Equals(m?.Id, envelopeMessageId, StringComparison.Ordinal));
-                    if (synthetic != null) pair.Value.Remove(synthetic);
+                    MessagesByChat.RemoveMessage(key, envelopeMessageId);
                 }
                 if (_messageStore != null)
                 {
@@ -592,13 +593,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
             }
 
-            ChatMessage target = null;
-            foreach (var pair in MessagesByChat.Snapshot())
-            {
-                if (!string.Equals(GetCanonicalJid(pair.Key), canonical, StringComparison.OrdinalIgnoreCase)) continue;
-                target = pair.Value?.FirstOrDefault(m => string.Equals(m?.Id, targetId, StringComparison.Ordinal));
-                if (target != null) break;
-            }
+            AliasLinkedMessageFind.TryFind(MessagesByChat, aliasKeys, targetId, out _, out ChatMessage target);
 
             // If the chat is not resident, read the retained local window once. A revoke is
             // an update to an existing message; it must never be inserted as a new "current" item.
