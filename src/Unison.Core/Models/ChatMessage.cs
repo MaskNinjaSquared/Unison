@@ -288,6 +288,7 @@ namespace Unison.Core.Models
             get => _audioUri;
             set
             {
+                if (string.Equals(_audioUri, value, StringComparison.Ordinal)) return;
                 _audioUri = value;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(HasLocalAudio));
@@ -409,6 +410,7 @@ namespace Unison.Core.Models
             get => _imageUri;
             set
             {
+                if (string.Equals(_imageUri, value, StringComparison.Ordinal)) return;
                 _imageUri = value;
                 OnPropertyChanged();
                 Raise(
@@ -624,7 +626,12 @@ namespace Unison.Core.Models
         public string ParticipantJid
         {
             get => _participantJid;
-            set { _participantJid = value; OnPropertyChanged(); }
+            set
+            {
+                if (string.Equals(_participantJid, value, StringComparison.Ordinal)) return;
+                _participantJid = value;
+                OnPropertyChanged();
+            }
         }
 
         private bool _isRevoked;
