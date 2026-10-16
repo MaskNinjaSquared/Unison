@@ -224,6 +224,51 @@ namespace Unison.Core.State
         }
 
         /// <summary>
+        /// Moves our message with this id forward to <paramref name="status"/> in every
+        /// conversation holding it (an alias timeline can hold the same send). Each chat's
+        /// <paramref name="policyForChat"/> decides the status actually written, and a status
+        /// never moves backwards.
+        /// </summary>
+        /// <returns>The conversation and message of every change.</returns>
+        public List<KeyValuePair<string, ChatMessage>> ApplyOutgoingStatus(
+            string messageId,
+            string status,
+            Func<string, string, string> policyForChat)
+        {
+            var changed = new List<KeyValuePair<string, ChatMessage>>();
+            if (string.IsNullOrWhiteSpace(messageId) || policyForChat == null)
+            {
+                return changed;
+            }
+
+            foreach (KeyValuePair<string, List<ChatMessage>> pair in Snapshot())
+            {
+                if (pair.Value == null)
+                {
+                    continue;
+                }
+
+                int index = IndexOfMessage(pair.Value, messageId);
+                ChatMessage message = index < 0 ? null : pair.Value[index];
+                if (message == null || !message.IsFromMe)
+                {
+                    continue;
+                }
+
+                string effective = policyForChat(pair.Key, status);
+                if (!MessageStatusProgression.ShouldApply(message.Status, effective))
+                {
+                    continue;
+                }
+
+                message.Status = effective;
+                changed.Add(new KeyValuePair<string, ChatMessage>(pair.Key, message));
+            }
+
+            return changed;
+        }
+
+        /// <summary>
         /// Folds every conversation held under a non-canonical key into the one
         /// <paramref name="canonicalOf"/> names, through <see cref="MergeInto"/>. A key whose
         /// canonical form is blank is left where it is.

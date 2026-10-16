@@ -549,4 +549,73 @@ public class ChatMessageCacheTests
 
         Assert.Equal(0, cache.CanonicalizeKeys(key => Ana));
     }
+
+    private static ChatMessage Outgoing(string id, string status) =>
+        new ChatMessage { Id = id, IsFromMe = true, Status = status };
+
+    [Fact]
+    public void An_outgoing_status_moves_forward_in_every_conversation_holding_the_message()
+    {
+        var cache = new ChatMessageCache();
+        var inPn = Outgoing("A", ChatMessage.StatusSent);
+        var inLid = Outgoing("A", ChatMessage.StatusSent);
+        cache.GetOrAdd(Ana).Add(inPn);
+        cache.GetOrAdd(AnaLid).Add(inLid);
+
+        var changed = cache.ApplyOutgoingStatus("A", ChatMessage.StatusRead, (chat, status) => status);
+
+        Assert.Equal(2, changed.Count);
+        Assert.Equal(ChatMessage.StatusRead, inPn.Status);
+        Assert.Equal(ChatMessage.StatusRead, inLid.Status);
+    }
+
+    [Fact]
+    public void An_outgoing_status_never_moves_backwards()
+    {
+        var cache = new ChatMessageCache();
+        var message = Outgoing("A", ChatMessage.StatusRead);
+        cache.GetOrAdd(Ana).Add(message);
+
+        var changed = cache.ApplyOutgoingStatus("A", ChatMessage.StatusDelivered, (chat, status) => status);
+
+        Assert.Empty(changed);
+        Assert.Equal(ChatMessage.StatusRead, message.Status);
+    }
+
+    [Fact]
+    public void An_outgoing_status_skips_messages_that_are_not_ours()
+    {
+        var cache = new ChatMessageCache();
+        var theirs = new ChatMessage { Id = "A", IsFromMe = false, Status = ChatMessage.StatusSent };
+        cache.GetOrAdd(Ana).Add(theirs);
+
+        Assert.Empty(cache.ApplyOutgoingStatus("A", ChatMessage.StatusRead, (chat, status) => status));
+        Assert.Equal(ChatMessage.StatusSent, theirs.Status);
+    }
+
+    [Fact]
+    public void The_chat_policy_decides_the_status_written()
+    {
+        var cache = new ChatMessageCache();
+        var message = Outgoing("A", ChatMessage.StatusPending);
+        cache.GetOrAdd(Ana).Add(message);
+
+        var changed = cache.ApplyOutgoingStatus(
+            "A",
+            ChatMessage.StatusRead,
+            (chat, status) => chat == Ana ? ChatMessage.StatusSent : status);
+
+        Assert.Equal(Ana, Assert.Single(changed).Key);
+        Assert.Equal(ChatMessage.StatusSent, message.Status);
+    }
+
+    [Fact]
+    public void An_unknown_message_or_blank_id_changes_nothing()
+    {
+        var cache = new ChatMessageCache();
+        cache.GetOrAdd(Ana).Add(Outgoing("A", ChatMessage.StatusSent));
+
+        Assert.Empty(cache.ApplyOutgoingStatus("B", ChatMessage.StatusRead, (chat, status) => status));
+        Assert.Empty(cache.ApplyOutgoingStatus(" ", ChatMessage.StatusRead, (chat, status) => status));
+    }
 }
