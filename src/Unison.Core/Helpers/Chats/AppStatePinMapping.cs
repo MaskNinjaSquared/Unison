@@ -43,6 +43,31 @@ namespace Unison.Core.Helpers
             };
         }
 
+        /// <summary>
+        /// Reads the pin half of a partial chat update. <paramref name="appliesPin"/> false with
+        /// no sort key means the update does not speak about pin. Older updates carried only the
+        /// sort key: positive pins, zero unpins.
+        /// </summary>
+        public static Result FromChatUpdate(bool appliesPin, long? pinned, long fallbackTimestampMs)
+        {
+            if (appliesPin)
+            {
+                return FromAction(pinned.HasValue, pinned ?? 0, fallbackTimestampMs);
+            }
+
+            if (pinned.HasValue)
+            {
+                return new Result
+                {
+                    AppliesPin = true,
+                    IsPinned = pinned.Value > 0,
+                    PinnedTimestampUnixSeconds = NormalizeSortKey(pinned) ?? 0
+                };
+            }
+
+            return new Result { AppliesPin = false };
+        }
+
         public static long? NormalizeSortKey(long? raw)
         {
             if (!raw.HasValue)

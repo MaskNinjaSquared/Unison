@@ -35,5 +35,25 @@ namespace Unison.Core.Helpers
                         unchecked((ulong)muteEndTimestamp))
             };
         }
+
+        /// <summary>
+        /// Reads the mute half of a partial chat update. <paramref name="appliesMute"/> false with
+        /// no deadline means the update does not speak about mute. Older updates carried a
+        /// deadline without the flag, and that still mutes.
+        /// </summary>
+        public static Result FromChatUpdate(bool appliesMute, long? muteEndTime)
+        {
+            if (appliesMute)
+            {
+                return FromAction(muteEndTime.HasValue, muteEndTime ?? 0);
+            }
+
+            if (muteEndTime.HasValue)
+            {
+                return FromAction(true, muteEndTime.Value);
+            }
+
+            return new Result { AppliesMute = false, MutedUntilUnixSeconds = null };
+        }
     }
 }
