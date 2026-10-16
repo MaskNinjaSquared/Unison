@@ -266,9 +266,6 @@ namespace Unison.Uwp.UI.Controls
             }
 
             ApplyMembersLoadingUi();
-            LegacyInfoText.Apply(NameLabel, NameValue);
-            LegacyInfoText.Apply(StatusLabel, StatusValue);
-            LegacyInfoText.Apply(MembersLabel, MembersValue);
         }
 
         private void BindMediaPanes()

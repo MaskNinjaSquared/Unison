@@ -57,6 +57,10 @@
             <SolidColorBrush x:Key="AvatarFallbackIconBrush" Color="#FF808080"/>
             <SolidColorBrush x:Key="AvatarBorderBrush" Color="Transparent"/>
             <SolidColorBrush x:Key="ChatDetailAccentBrush" Color="#FF20C064"/>
+            <!-- Chat detail info pane: name/phone (not SystemAccent). -->
+            <SolidColorBrush x:Key="ChatDetailInfoLabelBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ChatDetailInfoValueBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ChatDetailInfoMutedBrush" Color="#E8FFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailPaneSeparatorBrush" Color="#FF3B3B3B"/>
             <SolidColorBrush x:Key="ChatDetailPinnedBarBackgroundBrush" Color="#FF32373B"/>
             <SolidColorBrush x:Key="ChatDetailPinnedPreviewBrush" Color="#FFFFFFFF"/>
@@ -186,6 +190,10 @@
             <SolidColorBrush x:Key="AvatarFallbackIconBrush" Color="#FF808080"/>
             <SolidColorBrush x:Key="AvatarBorderBrush" Color="Transparent"/>
             <SolidColorBrush x:Key="ChatDetailAccentBrush" Color="#FF20C064"/>
+            <!-- Chat detail info pane: name/phone (not SystemAccent). -->
+            <SolidColorBrush x:Key="ChatDetailInfoLabelBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ChatDetailInfoValueBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ChatDetailInfoMutedBrush" Color="#E8FFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailPaneSeparatorBrush" Color="#FF3B3B3B"/>
             <SolidColorBrush x:Key="ChatDetailPinnedBarBackgroundBrush" Color="#FF32373B"/>
             <SolidColorBrush x:Key="ChatDetailPinnedPreviewBrush" Color="#FFFFFFFF"/>
@@ -313,6 +321,10 @@
             <SolidColorBrush x:Key="AvatarFallbackIconBrush" Color="#FFBABABA"/>
             <SolidColorBrush x:Key="AvatarBorderBrush" Color="#FFE0E0E0"/>
             <SolidColorBrush x:Key="ChatDetailAccentBrush" Color="#FF20C064"/>
+            <!-- Chat detail info pane: name/phone (not SystemAccent). -->
+            <SolidColorBrush x:Key="ChatDetailInfoLabelBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ChatDetailInfoValueBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ChatDetailInfoMutedBrush" Color="#E8FFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailPaneSeparatorBrush" Color="#FFE9EDEF"/>
             <SolidColorBrush x:Key="ChatDetailPinnedBarBackgroundBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailPinnedPreviewBrush" Color="#FF111B21"/>

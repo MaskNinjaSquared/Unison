@@ -193,11 +193,6 @@ namespace Unison.Uwp.UI.Controls
                 vm,
                 ref _notificationsToggleQuiet);
 
-            LegacyInfoText.Apply(NameLabel, NameValue);
-            LegacyInfoText.Apply(PhoneLabel, PhoneValue);
-            LegacyInfoText.Apply(null, PhoneValueFallback);
-            LegacyInfoText.Apply(StatusLabel, StatusValue);
-            LegacyInfoText.ApplyValue(PhoneCallButton);
         }
 
         private void BindMediaPanes()

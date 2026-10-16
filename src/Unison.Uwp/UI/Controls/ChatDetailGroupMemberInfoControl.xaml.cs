@@ -189,10 +189,6 @@ namespace Unison.Uwp.UI.Controls
                 SharedGroupsEmpty.Visibility = vm.HasSharedGroups ? Visibility.Collapsed : Visibility.Visible;
             }
 
-            LegacyInfoText.Apply(NameLabel, NameValue);
-            LegacyInfoText.Apply(PhoneLabel, PhoneValue);
-            LegacyInfoText.Apply(null, PhoneValueFallback);
-            LegacyInfoText.ApplyValue(PhoneCallButton);
         }
 
         private void BindMediaPanes()

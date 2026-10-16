@@ -18,7 +18,7 @@
     </UserControl.Resources>
 
     <Pivot x:Name="InfoPivot"
-           Foreground="White"
+           Foreground="{ThemeResource ChatDetailInfoLabelBrush}"
            Margin="0,10,0,0"
            HorizontalAlignment="Stretch"
            VerticalAlignment="Stretch"
@@ -87,7 +87,7 @@
                              BorderThickness="0"
                              IsIndeterminate="True"
                              IsHitTestVisible="False"
-                             Foreground="White"
+                             Foreground="{ThemeResource ChatDetailInfoValueBrush}"
                              Background="Transparent"
                              Visibility="Collapsed"/>
                 <TextBlock x:Name="MembersEmptyText"
@@ -128,7 +128,7 @@
                                            Text="{Binding DisplayName}"
                                            FontFamily="{StaticResource MainFont}"
                                            FontSize="16"
-                                           Foreground="White"
+                                           Foreground="{ThemeResource ChatDetailInfoValueBrush}"
                                            VerticalAlignment="Center"
                                            Margin="12,0,8,0"
                                            TextTrimming="CharacterEllipsis"/>
@@ -137,7 +137,7 @@
                                            Text="Admin"
                                            FontFamily="{StaticResource MainFont}"
                                            FontSize="13"
-                                           Foreground="#E8FFFFFF"
+                                           Foreground="{ThemeResource ChatDetailInfoMutedBrush}"
                                            VerticalAlignment="Center"
                                            Visibility="{Binding IsAdmin, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                             </Grid>
@@ -150,7 +150,7 @@
                              Height="48"
                              HorizontalAlignment="Center"
                              VerticalAlignment="Center"
-                             Foreground="White"
+                             Foreground="{ThemeResource ChatDetailInfoValueBrush}"
                              IsActive="False"
                              Visibility="Collapsed"
                              IsHitTestVisible="False"/>

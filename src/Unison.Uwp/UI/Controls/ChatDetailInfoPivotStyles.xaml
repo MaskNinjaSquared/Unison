@@ -3,8 +3,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:helpers="using:Unison.Uwp.UI.Helpers">
 
-    <SolidColorBrush x:Key="ChatDetailInfoTextBrush" Color="White"/>
-    <SolidColorBrush x:Key="ChatDetailInfoMutedTextBrush" Color="#E8FFFFFF"/>
+    <!-- Label/Value/Muted colors live in Themes/*/ ThemeDictionaries as ChatDetailInfo*Brush. -->
 
     <SolidColorBrush x:Key="ToggleSwitchKnobFillOn" Color="White"/>
     <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPointerOver" Color="White"/>
@@ -20,20 +19,41 @@
         <Setter Property="FontFamily" Value="{StaticResource MainFontSemibold}"/>
         <Setter Property="FontWeight" Value="Bold"/>
         <Setter Property="FontSize" Value="12"/>
-        <Setter Property="Foreground" Value="{StaticResource ChatDetailInfoTextBrush}"/>
+        <Setter Property="Foreground" Value="{ThemeResource ChatDetailInfoLabelBrush}"/>
         <Setter Property="Margin" Value="0,16,0,4"/>
     </Style>
     <Style x:Key="ChatDetailInfoSectionValueStyle" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource MainFont}"/>
         <Setter Property="FontWeight" Value="Normal"/>
         <Setter Property="FontSize" Value="16"/>
-        <Setter Property="Foreground" Value="{StaticResource ChatDetailInfoTextBrush}"/>
+        <Setter Property="Foreground" Value="{ThemeResource ChatDetailInfoValueBrush}"/>
         <Setter Property="TextWrapping" Value="Wrap"/>
+    </Style>
+    <Style x:Key="ChatDetailInfoHyperlinkButtonStyle" TargetType="HyperlinkButton">
+        <Setter Property="Foreground" Value="{ThemeResource ChatDetailInfoValueBrush}"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="HorizontalAlignment" Value="Left"/>
+        <Setter Property="HorizontalContentAlignment" Value="Left"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="HyperlinkButton">
+                    <ContentPresenter x:Name="ContentPresenter"
+                                      Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      Foreground="{TemplateBinding Foreground}"
+                                      Background="Transparent"
+                                      HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                      VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                      Margin="{TemplateBinding Padding}"/>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
         <Style x:Key="ChatDetailInfoEmptyIconStyle" TargetType="TextBlock">
             <Setter Property="FontFamily" Value="{StaticResource IconFont}"/>
             <Setter Property="FontSize" Value="96"/>
-            <Setter Property="Foreground" Value="#66FFFFFF"/>
+            <Setter Property="Foreground" Value="{ThemeResource ChatDetailInfoMutedBrush}"/>
+            <Setter Property="Opacity" Value="0.4"/>
             <Setter Property="HorizontalAlignment" Value="Center"/>
             <Setter Property="TextAlignment" Value="Center"/>
             <Setter Property="IsHitTestVisible" Value="False"/>
@@ -41,7 +61,7 @@
     <Style x:Key="ChatDetailInfoEmptyTextStyle" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource MainFont}"/>
         <Setter Property="FontSize" Value="15"/>
-        <Setter Property="Foreground" Value="{StaticResource ChatDetailInfoMutedTextBrush}"/>
+        <Setter Property="Foreground" Value="{ThemeResource ChatDetailInfoMutedBrush}"/>
         <Setter Property="TextWrapping" Value="Wrap"/>
         <Setter Property="TextAlignment" Value="Center"/>
         <Setter Property="HorizontalAlignment" Value="Center"/>
