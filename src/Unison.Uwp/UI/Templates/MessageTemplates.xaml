@@ -246,7 +246,7 @@
                                     <!-- Error badge sits on top of download glyph; tap still hits the button below -->
                                     <TextBlock Text="&#xEBFF;"
                                                FontFamily="{StaticResource IconFont}"
-                                               FontSize="14"
+                                               FontSize="16"
                                                FontWeight="Bold"
                                                Foreground="#FFFF3B30"
                                                HorizontalAlignment="Right"

@@ -523,10 +523,10 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="MenuFlyoutItem">
-                    <Grid x:Name="LayoutRoot" 
-                          Background="{TemplateBinding Background}"
-                          CornerRadius="4"
-                          Margin="4,2">
+                    <Border x:Name="LayoutRoot"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="4"
+                            Margin="4,2">
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CommonStates">
                                 <VisualState x:Name="Normal" />
@@ -551,7 +551,8 @@
                                 </VisualState>
                             </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
-                        <Grid.ColumnDefinitions>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="34" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
@@ -570,28 +571,22 @@
                                    Foreground="{TemplateBinding Foreground}"
                                    VerticalAlignment="Center"
                                    Margin="8,0,0,0"/>
-                    </Grid>
+                                            </Grid>
+                    </Border>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
     </Style>
 
-    <!-- W10M keeps a dark flyout chrome while light theme paints SubItem text black. -->
-    <Style TargetType="MenuFlyoutSubItem" x:Key="ModernMenuFlyoutSubItemStyle">
-        <Setter Property="Background" Value="Transparent" />
-        <Setter Property="Padding" Value="12,0" />
-        <Setter Property="MinHeight" Value="38" />
-        <Setter Property="FontSize" Value="14" />
-        <Setter Property="FontFamily" Value="{StaticResource MainFont}" />
-        <Setter Property="Foreground" Value="White" />
-        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <!-- Pin to Start only. Same row as the menu, icon slot 20 instead of 16. -->
+    <Style TargetType="MenuFlyoutItem" x:Key="ModernMenuFlyoutPinItemStyle" BasedOn="{StaticResource ModernMenuFlyoutItemStyle}">
         <Setter Property="Template">
             <Setter.Value>
-                <ControlTemplate TargetType="MenuFlyoutSubItem">
-                    <Grid x:Name="LayoutRoot"
-                          Background="{TemplateBinding Background}"
-                          CornerRadius="4"
-                          Margin="4,2">
+                <ControlTemplate TargetType="MenuFlyoutItem">
+                    <Border x:Name="LayoutRoot"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="4"
+                            Margin="4,2">
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CommonStates">
                                 <VisualState x:Name="Normal" />
@@ -616,7 +611,69 @@
                                 </VisualState>
                             </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
-                        <Grid.ColumnDefinitions>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="34" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Viewbox Grid.Column="0" Width="20" Height="20"
+                                 HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <ContentPresenter Content="{TemplateBinding Icon}" Foreground="{TemplateBinding Foreground}"/>
+                        </Viewbox>
+                        <TextBlock Grid.Column="1"
+                                   Text="{TemplateBinding Text}"
+                                   Foreground="{TemplateBinding Foreground}"
+                                   VerticalAlignment="Center"
+                                   Margin="8,0,0,0"/>
+                                            </Grid>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- W10M keeps a dark flyout chrome while light theme paints SubItem text black. -->
+    <Style TargetType="MenuFlyoutSubItem" x:Key="ModernMenuFlyoutSubItemStyle">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="MinHeight" Value="38" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontFamily" Value="{StaticResource MainFont}" />
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="MenuFlyoutSubItem">
+                    <Border x:Name="LayoutRoot"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="4"
+                            Margin="4,2">
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="PointerOver">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="LayoutRoot" Storyboard.TargetProperty="Background">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="#33FFFFFF" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="LayoutRoot" Storyboard.TargetProperty="Background">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="#44FFFFFF" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Disabled">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="LayoutRoot" Storyboard.TargetProperty="Opacity" To="0.5" Duration="0" />
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="34" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="24" />
@@ -640,7 +697,8 @@
                                    Foreground="{TemplateBinding Foreground}"
                                    VerticalAlignment="Center"
                                    HorizontalAlignment="Center"/>
-                    </Grid>
+                                            </Grid>
+                    </Border>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>

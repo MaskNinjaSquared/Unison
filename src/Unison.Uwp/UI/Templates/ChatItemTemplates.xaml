@@ -35,20 +35,20 @@
                     <MenuFlyoutItem Tag="widgetPin"
                                    x:Uid="ChatDetail_PinToStart"
                                    Text="Pin to Start"
-                                   Style="{StaticResource ModernMenuFlyoutItemStyle}"
+                                   Style="{StaticResource ModernMenuFlyoutPinItemStyle}"
                                    Click="PinToStart_Click">
                         <MenuFlyoutItem.Icon>
-                            <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE718;"/>
+                            <FontIcon FontFamily="{StaticResource LegacyIconFont}" Glyph="&#xEB08;" FontSize="20"/>
                         </MenuFlyoutItem.Icon>
                     </MenuFlyoutItem>
                     <MenuFlyoutItem Tag="widgetUnpin"
                                    x:Uid="ChatDetail_UnpinFromStart"
                                    Text="Unpin from Start"
                                    Visibility="Collapsed"
-                                   Style="{StaticResource ModernMenuFlyoutItemStyle}"
+                                   Style="{StaticResource ModernMenuFlyoutPinItemStyle}"
                                    Click="PinToStart_Click">
                         <MenuFlyoutItem.Icon>
-                            <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE718;"/>
+                            <FontIcon FontFamily="{StaticResource LegacyIconFont}" Glyph="&#xEB08;" FontSize="24"/>
                         </MenuFlyoutItem.Icon>
                     </MenuFlyoutItem>
                     <MenuFlyoutItem Tag="addContact"
