@@ -108,7 +108,9 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 jids,
                 pushNames,
                 new ContactLabelSanitizer(selfMarkers),
-                chats);
+                chats,
+                avatars,
+                ui);
             _names = new ContactNameResolver(whatsAppService, _addressBook, _directory, _usync, jids, groups, ui, catalog);
             _avatars = new ChatAvatarPolicy(
                 whatsAppService,

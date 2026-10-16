@@ -12,6 +12,11 @@ the chat list through `IChatCatalogPersistence`, instead of calling `RunOnUiThre
 left the contract. The save debounce itself still lives in the client until the connection
 shutdown moves (phase 4). No behaviour change.
 
+The picture a contact lookup finds is fetched by the contact façade too
+(`FetchAvatarForResolvedContactAsync` left the contract). It now fills the same row the "has no
+picture yet" check found; before, when a person had two rows, it could look at the one that already
+had a picture and fill nothing.
+
 ## A deleted message is a state, shown in your language
 
 Deleting a message for everyone used to overwrite its text with the English "[Message Deleted]", and

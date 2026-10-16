@@ -158,9 +158,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         bool TryFileUsyncAlias(string userJid, string lidJid, out bool wasAlreadyAliased);
 
-        /// <summary>Fetches the picture URL and applies it to the listed chat if it still has none.</summary>
-        Task FetchAvatarForResolvedContactAsync(string jid);
-
         /// <summary>Collapses the LID and phone rows of one person into one chat.</summary>
         Task MergeDuplicateChatsAsync(string lidJid, string pnJid);
 

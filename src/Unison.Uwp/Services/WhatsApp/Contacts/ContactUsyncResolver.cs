@@ -5,16 +5,17 @@
 // change: the LID/phone pair, a one-time merge of the two chats, the push name,
 // a missing avatar.
 //
-// The push name and the "listed without a picture" check go straight to the
-// Core tables. Filing the pair (socket registration, identity heal), merging
-// the two chats and fetching the picture still go through narrow primitives
-// on the client, which owns the socket, the auth state and the row surgery.
+// The push name, the "listed without a picture" check and the picture fetch
+// are done here. Filing the pair (socket registration, identity heal) and
+// merging the two chats still go through narrow primitives on the client,
+// which owns the auth state and the row surgery.
 // What this class owns is everything that decides: which numbers to ask
 // about, the gate that keeps usync from competing with itself, and the plan.
 // =============================================================================
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading;
 using System.Threading.Tasks;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
@@ -36,6 +37,8 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly DisplayNameTable _pushNames;
         private readonly ContactLabelSanitizer _labels;
         private readonly IChatStateStore _chats;
+        private readonly AvatarFetcher _avatars;
+        private readonly IDispatcher _ui;
 
         internal ContactUsyncResolver(
             IWhatsAppService client,
@@ -44,8 +47,12 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             IJidResolver jids,
             DisplayNameTable pushNames,
             ContactLabelSanitizer labels,
-            IChatStateStore chats)
+            IChatStateStore chats,
+            AvatarFetcher avatars,
+            IDispatcher ui)
         {
+            _avatars = avatars ?? throw new ArgumentNullException(nameof(avatars));
+            _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _client = client ?? throw new ArgumentNullException(nameof(client));
             _directory = directory ?? throw new ArgumentNullException(nameof(directory));
             _gate = gate ?? throw new ArgumentNullException(nameof(gate));
@@ -173,10 +180,26 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             // Not awaited: the picture fetch queues behind the same usync gate this pass is holding.
             if (plan.FetchAvatar)
             {
-                _ = _client.FetchAvatarForResolvedContactAsync(contact.Jid);
+                _ = FetchAvatarAsync(contact.Jid);
             }
 
             return plan.CachesChanged;
+        }
+
+        /// <summary>The usync answer only says a picture exists; the URL is a separate round trip.</summary>
+        private async Task FetchAvatarAsync(string jid)
+        {
+            string url = await _avatars.FetchAndCacheAsync(jid, CancellationToken.None).ConfigureAwait(false);
+            if (string.IsNullOrEmpty(url))
+            {
+                return;
+            }
+
+            DateTime nowUtc = DateTime.UtcNow;
+            await _ui.RunAsync(() => ChatAvatarOutcome.RecordCached(
+                UsyncContactCaches.FindListedChatWithoutAvatar(_chats.Chats, jid),
+                url,
+                nowUtc));
         }
 
         private bool StorePushName(string user, string rawName)

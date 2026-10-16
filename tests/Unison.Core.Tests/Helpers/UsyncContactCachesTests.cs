@@ -108,5 +108,28 @@ namespace Unison.Core.Tests.Helpers
             Assert.False(UsyncContactCaches.HasListedChatWithoutAvatar(null, Pn));
             Assert.False(UsyncContactCaches.HasListedChatWithoutAvatar(new[] { new ChatItem { JID = Pn } }, " "));
         }
+
+        [Fact]
+        public void RowToFillIsTheFirstListedOneStillWithoutAvatar()
+        {
+            var withAvatar = new ChatItem { JID = Pn, AvatarUrl = "ms-appdata:///local/a.jpg" };
+            var bare = new ChatItem { JID = "5511999990001:3@s.whatsapp.net" };
+            var chats = new List<ChatItem> { withAvatar, bare };
+
+            Assert.Same(bare, UsyncContactCaches.FindListedChatWithoutAvatar(chats, Pn));
+        }
+
+        [Fact]
+        public void NoRowToFillWhenEveryMatchHasAvatar()
+        {
+            var chats = new List<ChatItem>
+            {
+                new ChatItem { JID = Pn, AvatarUrl = "ms-appdata:///local/a.jpg" },
+                new ChatItem { JID = "5511999990002@s.whatsapp.net" }
+            };
+
+            Assert.Null(UsyncContactCaches.FindListedChatWithoutAvatar(chats, Pn));
+            Assert.Null(UsyncContactCaches.FindListedChatWithoutAvatar(null, Pn));
+        }
     }
 }

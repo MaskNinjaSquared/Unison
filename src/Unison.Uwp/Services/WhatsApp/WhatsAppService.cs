@@ -5260,28 +5260,5 @@ namespace Unison.Uwp.Services.WhatsApp
                 _ = PersistAuthStateAsync(null, "usync-identity-purge");
             }
         }
-
-        /// <summary>The id only says the picture exists and which one it is; the URL is a separate round trip.</summary>
-        public async Task FetchAvatarForResolvedContactAsync(string jid)
-        {
-            string normalizedUser = NormalizeJid(jid);
-            var url = await GetProfilePictureAsync(jid).ConfigureAwait(false);
-            if (string.IsNullOrEmpty(url))
-            {
-                return;
-            }
-
-            await RunOnUiThreadAsync(() =>
-            {
-                var chat = Chats.FirstOrDefault(c => NormalizeJid(c.JID) == normalizedUser);
-                if (chat != null && string.IsNullOrEmpty(chat.AvatarUrl))
-                {
-                    chat.AvatarUrl = url;
-                    chat.AvatarFetchedAtUtc = DateTime.UtcNow;
-                    chat.AvatarFetchFailedAtUtc = null;
-                    chat.AvatarFetchFailureReason = null;
-                }
-            });
-        }
     }
 }

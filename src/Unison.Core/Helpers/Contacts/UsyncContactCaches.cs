@@ -61,10 +61,18 @@ namespace Unison.Core.Helpers
         /// <summary>Whether a row for this contact is listed with no preview picture yet.</summary>
         public static bool HasListedChatWithoutAvatar(IEnumerable<ChatItem> chats, string jid)
         {
+            return FindListedChatWithoutAvatar(chats, jid) != null;
+        }
+
+        /// <summary>
+        /// The row a picture fetched for this contact may fill. A row that already shows one keeps it.
+        /// </summary>
+        public static ChatItem FindListedChatWithoutAvatar(IEnumerable<ChatItem> chats, string jid)
+        {
             string address = JidHelper.Normalize(jid);
             if (chats == null || string.IsNullOrWhiteSpace(address))
             {
-                return false;
+                return null;
             }
 
             foreach (ChatItem chat in chats)
@@ -73,11 +81,11 @@ namespace Unison.Core.Helpers
                     string.Equals(JidHelper.Normalize(chat.JID), address, StringComparison.Ordinal) &&
                     string.IsNullOrEmpty(chat.AvatarUrl))
                 {
-                    return true;
+                    return chat;
                 }
             }
 
-            return false;
+            return null;
         }
     }
 }

@@ -640,11 +640,12 @@ against `IJidResolver`), `IUsyncGate`, the session (`ContactDirectory.GetReadySe
 calls it instead of the client, and the number-search fallback (`SearchContactAsync`) now lives on
 the façade. `ResolveContactsAsync` and `SearchContactAsync` are gone from `IWhatsAppService`.
 
-What the client keeps is three narrow, façade-only primitives over what it still owns:
+What the client keeps is two narrow, façade-only primitives over what it still owns:
 `TryFileUsyncAlias` (accept, write both directions, register with the socket, heal our identity
-in the auth state), `FetchAvatarForResolvedContactAsync` (a socket round trip, then the row) and
-`MergeDuplicateChatsAsync` (chat-row surgery). They go with the socket and the auth state — phase 4 —
-and with the row surgery.
+in the auth state) and `MergeDuplicateChatsAsync` (chat-row surgery). They go with the auth state —
+phase 4 — and with the row surgery. `FetchAvatarForResolvedContactAsync` was a third until the
+resolver took it: it fetches through the shared `AvatarFetcher` and stamps the row
+`UsyncContactCaches.FindListedChatWithoutAvatar` picks, the same row the fetch decision looked at.
 
 **Three primitives left once their tables were Core types.** The alias table (`JidAliasTable`) and
 the push names (`DisplayNameTable`) are DI singletons shared with the client, so `ContactFacade`
