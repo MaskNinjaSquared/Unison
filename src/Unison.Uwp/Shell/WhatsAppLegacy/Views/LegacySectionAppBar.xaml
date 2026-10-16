@@ -3,7 +3,10 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <!-- Search opens the shell search chrome. It does not query this section. -->
+    <!-- Search opens the shell search chrome. It does not query this section.
+         The grid paints the full 54. The CommandBar template only paints its content strip. -->
+    <Grid MinHeight="{StaticResource LegacyCommandBarCompactHeight}"
+          Background="{ThemeResource LegacyCommandBarBackgroundBrush}">
     <CommandBar Style="{StaticResource LegacyCommandBarStyle}"
                 Loaded="Bar_Loaded">
         <AppBarButton x:Uid="Shell_LegacyAppBar_Search"
@@ -18,7 +21,8 @@
                        VerticalAlignment="Center"/>
         </AppBarButton>
         <CommandBar.SecondaryCommands>
-            <AppBarButton x:Uid="Shell_LegacyMenu_Profile"
+            <AppBarButton x:Name="ProfileSecondaryButton"
+                          x:Uid="Shell_LegacyMenu_Profile"
                           Label="profile"
                           Click="Profile_Click">
                 <AppBarButton.Icon>
@@ -35,4 +39,5 @@
             </AppBarButton>
         </CommandBar.SecondaryCommands>
     </CommandBar>
+    </Grid>
 </UserControl>

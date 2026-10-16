@@ -305,6 +305,9 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="ChatDetail_MessageInput.PlaceholderText" xml:space="preserve">
     <value>Ketik pesan</value>
   </data>
+  <data name="ChatDetail_GroupOnlyAdminsCanSend.Text" xml:space="preserve">
+    <value>Hanya admin yang dapat mengirim pesan</value>
+  </data>
   <data name="ChatDetail_AttachCamera.Text" xml:space="preserve">
     <value>Kamera</value>
   </data>
@@ -667,6 +670,12 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   </data>
   <data name="Settings_NotificationsSection.Text" xml:space="preserve">
     <value>Notifikasi</value>
+  </data>
+  <data name="Settings_ShowSyncStatus.Header" xml:space="preserve">
+    <value>Tampilkan status sinkronisasi</value>
+  </data>
+  <data name="Settings_ShowSyncStatus.Text" xml:space="preserve">
+    <value>Menampilkan status sinkronisasi di daftar chat.</value>
   </data>
   <data name="Settings_Notifications.Header" xml:space="preserve">
     <value>Notifikasi</value>
@@ -1172,6 +1181,12 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   </data>
   <data name="Shell_LegacyBrand.Text" xml:space="preserve">
     <value>WHATSAPP LEGACY</value>
+  </data>
+  <data name="Shell_LegacyAppBar_Filter.Text" xml:space="preserve">
+    <value>filter</value>
+  </data>
+  <data name="Shell_LegacyAppBar_Filter.Label" xml:space="preserve">
+    <value>filter</value>
   </data>
   <data name="Shell_LegacyAppBar_Search.Label" xml:space="preserve">
     <value>cari</value>

@@ -299,6 +299,9 @@ Wyłącz po zakończeniu diagnozy: pozostawienie włączonego spowalnia aplikacj
   <data name="ChatDetail_MessageInput.PlaceholderText" xml:space="preserve">
     <value>Napisz wiadomość</value>
   </data>
+  <data name="ChatDetail_GroupOnlyAdminsCanSend.Text" xml:space="preserve">
+    <value>Tylko administratorzy mogą wysyłać wiadomości</value>
+  </data>
   <data name="ChatDetail_AttachCamera.Text" xml:space="preserve">
     <value>Aparat</value>
   </data>
@@ -637,6 +640,12 @@ Wyłącz po zakończeniu diagnozy: pozostawienie włączonego spowalnia aplikacj
   </data>
   <data name="Settings_NotificationsSection.Text" xml:space="preserve">
     <value>Powiadomienia</value>
+  </data>
+  <data name="Settings_ShowSyncStatus.Header" xml:space="preserve">
+    <value>Pokaż stan synchronizacji</value>
+  </data>
+  <data name="Settings_ShowSyncStatus.Text" xml:space="preserve">
+    <value>Pokazuje stan synchronizacji na liście czatów.</value>
   </data>
   <data name="Settings_Notifications.Header" xml:space="preserve">
     <value>Powiadomienia</value>
@@ -1172,6 +1181,12 @@ Wyłącz po zakończeniu diagnozy: pozostawienie włączonego spowalnia aplikacj
   </data>
   <data name="Shell_LegacyBrand.Text" xml:space="preserve">
     <value>WHATSAPP LEGACY</value>
+  </data>
+  <data name="Shell_LegacyAppBar_Filter.Text" xml:space="preserve">
+    <value>filtruj</value>
+  </data>
+  <data name="Shell_LegacyAppBar_Filter.Label" xml:space="preserve">
+    <value>filtruj</value>
   </data>
   <data name="Shell_LegacyAppBar_Search.Label" xml:space="preserve">
     <value>szukaj</value>

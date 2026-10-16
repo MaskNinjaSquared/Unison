@@ -1,4 +1,7 @@
 using System;
+using System.ComponentModel;
+using Microsoft.Extensions.DependencyInjection;
+using Unison.Core.ViewModels;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 
@@ -9,6 +12,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
     /// </summary>
     public sealed partial class LegacySectionAppBar : UserControl
     {
+        private ShellViewModel _shell;
+
         public event EventHandler SearchRequested;
 
         public event EventHandler ProfileRequested;
@@ -17,8 +22,42 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         public LegacySectionAppBar()
         {
+            _shell = App.Services?.GetService<ShellViewModel>();
             InitializeComponent();
+            Loaded += LegacySectionAppBar_Loaded;
+            Unloaded += LegacySectionAppBar_Unloaded;
         }
+
+        private void LegacySectionAppBar_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (_shell != null)
+            {
+                _shell.PropertyChanged -= Shell_PropertyChanged;
+                _shell.PropertyChanged += Shell_PropertyChanged;
+            }
+
+            RefreshProfileSecondary();
+        }
+
+        private void LegacySectionAppBar_Unloaded(object sender, RoutedEventArgs e)
+        {
+            if (_shell != null)
+            {
+                _shell.PropertyChanged -= Shell_PropertyChanged;
+            }
+        }
+
+        private void Shell_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(ShellViewModel.CurrentUserName) ||
+                e.PropertyName == nameof(ShellViewModel.CurrentUserAvatar))
+            {
+                RefreshProfileSecondary();
+            }
+        }
+
+        private void RefreshProfileSecondary() =>
+            LegacyProfileSecondary.Apply(ProfileSecondaryButton, _shell);
 
         private void Search_Click(object sender, RoutedEventArgs e)
         {

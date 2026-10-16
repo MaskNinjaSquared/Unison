@@ -246,6 +246,9 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   <data name="ChatDetail_MessageInput.PlaceholderText" xml:space="preserve">
     <value>Escribe un mensaje</value>
   </data>
+  <data name="ChatDetail_GroupOnlyAdminsCanSend.Text" xml:space="preserve">
+    <value>Solo los admins pueden enviar mensajes</value>
+  </data>
   <data name="ChatDetail_AttachCamera.Text" xml:space="preserve">
     <value>Cámara</value>
   </data>
@@ -608,6 +611,12 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   </data>
   <data name="Settings_NotificationsSection.Text" xml:space="preserve">
     <value>Notificaciones</value>
+  </data>
+  <data name="Settings_ShowSyncStatus.Header" xml:space="preserve">
+    <value>Mostrar estado de sincronización</value>
+  </data>
+  <data name="Settings_ShowSyncStatus.Text" xml:space="preserve">
+    <value>Muestra el estado de sincronización en la lista de chats.</value>
   </data>
   <data name="Settings_Notifications.Header" xml:space="preserve">
     <value>Notificaciones</value>
@@ -1113,6 +1122,12 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   </data>
   <data name="Shell_LegacyBrand.Text" xml:space="preserve">
     <value>WHATSAPP LEGACY</value>
+  </data>
+  <data name="Shell_LegacyAppBar_Filter.Text" xml:space="preserve">
+    <value>filtrar</value>
+  </data>
+  <data name="Shell_LegacyAppBar_Filter.Label" xml:space="preserve">
+    <value>filtrar</value>
   </data>
   <data name="Shell_LegacyAppBar_Search.Label" xml:space="preserve">
     <value>buscar</value>

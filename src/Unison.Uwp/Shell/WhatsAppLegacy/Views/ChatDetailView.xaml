@@ -661,7 +661,7 @@
                 <Grid x:Name="ComposerHost">
 
                 <!-- Normal input bar (hidden while recording) -->
-                <Grid Padding="12"
+                <Grid Padding="12,7"
                       Visibility="{Binding IsRecording, Converter={StaticResource InvertedBooleanToVisibilityConverter}}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
@@ -674,13 +674,18 @@
                     <Button x:Name="AttachFlyoutButton"
                             Style="{StaticResource WhatsAppIconButtonStyle}"
                             Width="40" Height="40"
-                            VerticalAlignment="Bottom"
+                            VerticalAlignment="Center"
                             Visibility="Collapsed"
                             IsEnabled="{Binding CanCompose}">
                         <ToolTipService.ToolTip>
                             <ToolTip x:Uid="ChatDetail_AttachFlyoutTooltip" Content="Attach"/>
                         </ToolTipService.ToolTip>
-                        <TextBlock Text="&#xE710;" FontFamily="{StaticResource IconFont}" FontSize="20"/>
+                        <TextBlock Text="&#xEB03;"
+                                   FontFamily="{StaticResource LegacyIconFont}"
+                                   FontSize="{StaticResource LegacyAppBarGlyphSize}"
+                                   TextLineBounds="Tight"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
                         <Button.Flyout>
                             <MenuFlyout MenuFlyoutPresenterStyle="{StaticResource ModernMenuFlyoutStyle}">
                                 <MenuFlyoutItem x:Uid="ChatDetail_AttachCamera"
@@ -794,7 +799,7 @@
                 </Grid>
 
                 <!-- Recording overlay: red mic + elapsed | trash + send -->
-                <Grid x:Name="RecordingOverlay" Padding="12"
+                <Grid x:Name="RecordingOverlay" Padding="12,7"
                       Visibility="{Binding IsRecording, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
@@ -857,7 +862,7 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="64"/>
+                        <RowDefinition Height="54"/>
                     </Grid.RowDefinitions>
 
                     <!-- Heading, left edge flush with the first tile. -->
@@ -968,6 +973,7 @@
 
             <!-- Group announce-only lock (replaces composer on row 3) -->
             <Grid Grid.Row="3"
+                  Height="{StaticResource LegacyCommandBarCompactHeight}"
                   Background="{ThemeResource ChatDetailInputBarBackgroundBrush}"
                   helpers:DesktopCursor.CursorKind="Blocked"
                   Visibility="{Binding IsGroupLockedForMessages, Converter={StaticResource BooleanToVisibilityConverter}}">

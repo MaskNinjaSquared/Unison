@@ -305,6 +305,9 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   <data name="ChatDetail_MessageInput.PlaceholderText" xml:space="preserve">
     <value>Type een bericht</value>
   </data>
+  <data name="ChatDetail_GroupOnlyAdminsCanSend.Text" xml:space="preserve">
+    <value>Alleen beheerders kunnen berichten sturen</value>
+  </data>
   <data name="ChatDetail_AttachCamera.Text" xml:space="preserve">
     <value>Camera</value>
   </data>
@@ -667,6 +670,12 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   </data>
   <data name="Settings_NotificationsSection.Text" xml:space="preserve">
     <value>Meldingen</value>
+  </data>
+  <data name="Settings_ShowSyncStatus.Header" xml:space="preserve">
+    <value>Synchronisatiestatus tonen</value>
+  </data>
+  <data name="Settings_ShowSyncStatus.Text" xml:space="preserve">
+    <value>Toont de synchronisatiestatus in de chatlijst.</value>
   </data>
   <data name="Settings_Notifications.Header" xml:space="preserve">
     <value>Meldingen</value>
@@ -1172,6 +1181,12 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   </data>
   <data name="Shell_LegacyBrand.Text" xml:space="preserve">
     <value>WHATSAPP LEGACY</value>
+  </data>
+  <data name="Shell_LegacyAppBar_Filter.Text" xml:space="preserve">
+    <value>filteren</value>
+  </data>
+  <data name="Shell_LegacyAppBar_Filter.Label" xml:space="preserve">
+    <value>filteren</value>
   </data>
   <data name="Shell_LegacyAppBar_Search.Label" xml:space="preserve">
     <value>zoeken</value>

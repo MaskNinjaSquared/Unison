@@ -305,6 +305,9 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="ChatDetail_MessageInput.PlaceholderText" xml:space="preserve">
     <value>Digite uma mensagem</value>
   </data>
+  <data name="ChatDetail_GroupOnlyAdminsCanSend.Text" xml:space="preserve">
+    <value>Somente admins podem enviar mensagens</value>
+  </data>
   <data name="ChatDetail_AttachCamera.Text" xml:space="preserve">
     <value>Câmera</value>
   </data>
@@ -667,6 +670,12 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   </data>
   <data name="Settings_NotificationsSection.Text" xml:space="preserve">
     <value>Notificações</value>
+  </data>
+  <data name="Settings_ShowSyncStatus.Header" xml:space="preserve">
+    <value>Mostrar status da sincronização</value>
+  </data>
+  <data name="Settings_ShowSyncStatus.Text" xml:space="preserve">
+    <value>Exibe o status da sincronização na lista de conversas.</value>
   </data>
   <data name="Settings_Notifications.Header" xml:space="preserve">
     <value>Notificações</value>
@@ -1172,6 +1181,12 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   </data>
   <data name="Shell_LegacyBrand.Text" xml:space="preserve">
     <value>WHATSAPP LEGACY</value>
+  </data>
+  <data name="Shell_LegacyAppBar_Filter.Text" xml:space="preserve">
+    <value>filtrar</value>
+  </data>
+  <data name="Shell_LegacyAppBar_Filter.Label" xml:space="preserve">
+    <value>filtrar</value>
   </data>
   <data name="Shell_LegacyAppBar_Search.Label" xml:space="preserve">
     <value>pesquisar</value>

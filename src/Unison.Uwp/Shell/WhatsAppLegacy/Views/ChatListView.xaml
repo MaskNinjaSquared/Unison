@@ -26,14 +26,13 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Top actions moved to list CommandBar; keep sync strip only. -->
-        <!-- Fixed row: the spinner line stays reserved so the list does not jump. -->
+        <!-- Sync left; filter right. MinHeight (not fixed Height) so LegacySettingsButtonStyle can be 32px. -->
         <Grid Grid.Row="0"
-              Height="32"
-              Padding="0,4"
+              MinHeight="44"
+              Padding="0,6"
               Background="Transparent">
             <Grid x:Name="SyncStatusPanel"
-                  Margin="10,0,0,0"
+                  Margin="10,0,120,0"
                   Visibility="{x:Bind ViewModel.ShowSyncStatusInUi, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
                   VerticalAlignment="Center" HorizontalAlignment="Left"
                   MaxWidth="220"
@@ -55,8 +54,29 @@
                            TextTrimming="CharacterEllipsis"
                            MaxLines="1"/>
             </Grid>
-            <!-- Kept for archived-scope code; never shown on Legacy list chrome. -->
-            <Button x:Name="FilterButton" Visibility="Collapsed"/>
+            <!-- Same Padding/MinHeight as settings actions (LegacySettingsButtonStyle). -->
+            <Button x:Name="FilterButton"
+                    Style="{StaticResource LegacySettingsButtonStyle}"
+                    Margin="0,0,8,0"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Center"
+                    Click="FilterButton_Click"
+                    AutomationProperties.Name="Filter">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <FontIcon Glyph="&#xEA01;"
+                              FontFamily="{StaticResource UnisonIconFont}"
+                              FontSize="14"
+                              Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                              VerticalAlignment="Center"/>
+                    <TextBlock x:Name="FilterLabel"
+                               Text="filtrar"
+                               Margin="6,0,0,0"
+                               FontSize="13"
+                               FontFamily="{StaticResource MainFont}"
+                               Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
             <Button x:Name="MenuButton" Visibility="Collapsed" Click="MenuButton_Click"/>
             <Button x:Name="NewChatButton" Visibility="Collapsed"/>
         </Grid>
@@ -96,69 +116,73 @@
             </StackPanel>
         </Grid>
 
-        <!-- List-side only: collapses with the list in NarrowDetail (chat fullscreen). -->
+        <!-- List-side only: collapses with the list in NarrowDetail (chat fullscreen).
+             The grid paints the full 54. The CommandBar template only paints its content strip. -->
+        <Grid Grid.Row="3"
+              MinHeight="{StaticResource LegacyCommandBarCompactHeight}"
+              Background="{ThemeResource LegacyCommandBarBackgroundBrush}">
         <CommandBar x:Name="ListCommandBar"
-                    Grid.Row="3"
                     Style="{StaticResource LegacyCommandBarStyle}"
                     Loaded="ListCommandBar_Loaded">
-            <AppBarButton x:Uid="Shell_LegacyAppBar_Search"
+                <AppBarButton x:Uid="Shell_LegacyAppBar_Search"
                           Style="{StaticResource LegacyAppBarButtonStyle}"
                           Label="search"
                           Click="SearchAppBar_Click">
-                <TextBlock Text="&#xEB01;"
+                    <TextBlock Text="&#xEB01;"
                            FontFamily="{StaticResource LegacyIconFont}"
                            FontSize="{StaticResource LegacyAppBarGlyphSize}"
                            TextLineBounds="Tight"
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"/>
-            </AppBarButton>
-            <AppBarButton x:Uid="Shell_LegacyAppBar_NewChat"
+                </AppBarButton>
+                <AppBarButton x:Uid="Shell_LegacyAppBar_NewChat"
                           Style="{StaticResource LegacyAppBarButtonStyle}"
                           Label="new chat"
                           Click="NewChatAppBar_Click">
-                <TextBlock Text="&#xEB06;"
+                    <TextBlock Text="&#xEB06;"
                            FontFamily="{StaticResource LegacyIconFont}"
                            FontSize="{StaticResource LegacyAppBarGlyphSize}"
                            TextLineBounds="Tight"
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"/>
-            </AppBarButton>
-            <AppBarButton x:Uid="Shell_LegacyAppBar_AddContact"
+                </AppBarButton>
+                <AppBarButton x:Uid="Shell_LegacyAppBar_AddContact"
                           Style="{StaticResource LegacyAppBarButtonStyle}"
                           Label="add contact"
                           Command="{x:Bind ViewModel.AddContactCommand}">
-                <TextBlock Text="&#xEB02;"
+                    <TextBlock Text="&#xEB02;"
                            FontFamily="{StaticResource LegacyIconFont}"
                            FontSize="{StaticResource LegacyAppBarGlyphSize}"
                            TextLineBounds="Tight"
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"/>
-            </AppBarButton>
-            <CommandBar.SecondaryCommands>
-                <AppBarButton x:Name="ProfileSecondaryButton"
+                </AppBarButton>
+                <CommandBar.SecondaryCommands>
+                    <AppBarButton x:Name="ProfileSecondaryButton"
                               x:Uid="Shell_LegacyMenu_Profile"
                               Label="profile"
                               Click="ProfileAppBar_Click">
-                    <AppBarButton.Icon>
-                        <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE77B;"/>
-                    </AppBarButton.Icon>
-                </AppBarButton>
-                <AppBarSeparator/>
-                <AppBarButton x:Uid="Shell_LegacyMenu_Debug"
+                        <AppBarButton.Icon>
+                            <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE77B;"/>
+                        </AppBarButton.Icon>
+                    </AppBarButton>
+                    <AppBarSeparator/>
+                    <AppBarButton x:Uid="Shell_LegacyMenu_Debug"
                               Label="debug"
                               Click="DebugAppBar_Click">
-                    <AppBarButton.Icon>
-                        <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xEBE8;"/>
-                    </AppBarButton.Icon>
-                </AppBarButton>
-                <AppBarButton x:Uid="Shell_LegacyMenu_Settings"
+                        <AppBarButton.Icon>
+                            <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xEBE8;"/>
+                        </AppBarButton.Icon>
+                    </AppBarButton>
+                    <AppBarButton x:Uid="Shell_LegacyMenu_Settings"
                               Label="settings"
                               Click="SettingsAppBar_Click">
-                    <AppBarButton.Icon>
-                        <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE713;"/>
-                    </AppBarButton.Icon>
-                </AppBarButton>
-            </CommandBar.SecondaryCommands>
+                        <AppBarButton.Icon>
+                            <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE713;"/>
+                        </AppBarButton.Icon>
+                    </AppBarButton>
+                </CommandBar.SecondaryCommands>
         </CommandBar>
+        </Grid>
     </Grid>
 </UserControl>

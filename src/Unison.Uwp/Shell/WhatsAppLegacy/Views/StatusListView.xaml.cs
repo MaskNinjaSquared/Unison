@@ -22,6 +22,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
     {
         private bool _hooked;
         private bool _suppressSelectionChanged;
+        private ShellViewModel _shell;
 
         public StatusListViewModel ViewModel { get; private set; }
 
@@ -43,6 +44,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             {
                 ViewModel = App.Services.GetRequiredService<StatusListViewModel>();
                 DataContext = ViewModel;
+                _shell = App.Services.GetService<ShellViewModel>();
             }
 
             InitializeComponent();
@@ -66,6 +68,14 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private void StatusListView_Loaded(object sender, RoutedEventArgs e)
         {
+            if (_shell != null)
+            {
+                _shell.PropertyChanged -= Shell_PropertyChanged;
+                _shell.PropertyChanged += Shell_PropertyChanged;
+            }
+
+            RefreshProfileSecondary();
+
             if (ViewModel == null || _hooked)
             {
                 return;
@@ -80,6 +90,11 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private void StatusListView_Unloaded(object sender, RoutedEventArgs e)
         {
+            if (_shell != null)
+            {
+                _shell.PropertyChanged -= Shell_PropertyChanged;
+            }
+
             if (ViewModel == null || !_hooked)
             {
                 return;
@@ -90,6 +105,18 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
             ViewModel.Detach();
         }
+
+        private void Shell_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(ShellViewModel.CurrentUserName) ||
+                e.PropertyName == nameof(ShellViewModel.CurrentUserAvatar))
+            {
+                RefreshProfileSecondary();
+            }
+        }
+
+        private void RefreshProfileSecondary() =>
+            LegacyProfileSecondary.Apply(ProfileSecondaryButton, _shell);
 
         public void ClearSelection()
         {

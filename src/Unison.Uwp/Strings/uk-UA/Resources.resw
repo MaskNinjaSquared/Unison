@@ -305,6 +305,9 @@
   <data name="ChatDetail_MessageInput.PlaceholderText" xml:space="preserve">
     <value>Введіть повідомлення</value>
   </data>
+  <data name="ChatDetail_GroupOnlyAdminsCanSend.Text" xml:space="preserve">
+    <value>Лише адміністратори можуть надсилати повідомлення</value>
+  </data>
   <data name="ChatDetail_AttachCamera.Text" xml:space="preserve">
     <value>Камера</value>
   </data>
@@ -667,6 +670,12 @@
   </data>
   <data name="Settings_NotificationsSection.Text" xml:space="preserve">
     <value>Сповіщення</value>
+  </data>
+  <data name="Settings_ShowSyncStatus.Header" xml:space="preserve">
+    <value>Показувати статус синхронізації</value>
+  </data>
+  <data name="Settings_ShowSyncStatus.Text" xml:space="preserve">
+    <value>Показує статус синхронізації у списку чатів.</value>
   </data>
   <data name="Settings_Notifications.Header" xml:space="preserve">
     <value>Сповіщення</value>
@@ -1172,6 +1181,12 @@
   </data>
   <data name="Shell_LegacyBrand.Text" xml:space="preserve">
     <value>WHATSAPP LEGACY</value>
+  </data>
+  <data name="Shell_LegacyAppBar_Filter.Text" xml:space="preserve">
+    <value>фільтр</value>
+  </data>
+  <data name="Shell_LegacyAppBar_Filter.Label" xml:space="preserve">
+    <value>фільтр</value>
   </data>
   <data name="Shell_LegacyAppBar_Search.Label" xml:space="preserve">
     <value>пошук</value>

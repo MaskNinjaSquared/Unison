@@ -19,17 +19,21 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
+        <!-- Host stretches up to 800px; the 120px avatar stays centered inside it. -->
         <Grid Grid.Row="0"
-              Width="120"
-              Height="120"
-              HorizontalAlignment="Center"
+              MaxWidth="800"
+              HorizontalAlignment="Stretch"
               Margin="0,16,0,0">
-            <controls:ChatAvatarControl Size="120"
-                                        HorizontalAlignment="Stretch"
-                                        VerticalAlignment="Stretch"
-                                        AvatarUrl="{Binding CurrentUserAvatar}"/>
-            <controls:ProfilePhotoButton HorizontalAlignment="Right"
-                                         VerticalAlignment="Bottom"/>
+            <Grid Width="120"
+                  Height="120"
+                  HorizontalAlignment="Center">
+                <controls:ChatAvatarControl Size="120"
+                                            HorizontalAlignment="Stretch"
+                                            VerticalAlignment="Stretch"
+                                            AvatarUrl="{Binding CurrentUserAvatar}"/>
+                <controls:ProfilePhotoButton HorizontalAlignment="Right"
+                                             VerticalAlignment="Bottom"/>
+            </Grid>
         </Grid>
 
         <Grid Grid.Row="1"

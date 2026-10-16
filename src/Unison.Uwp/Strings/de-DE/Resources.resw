@@ -305,6 +305,9 @@ Nach der Diagnose deaktivieren: Wenn es aktiviert bleibt, wird die App langsamer
   <data name="ChatDetail_MessageInput.PlaceholderText" xml:space="preserve">
     <value>Nachricht eingeben</value>
   </data>
+  <data name="ChatDetail_GroupOnlyAdminsCanSend.Text" xml:space="preserve">
+    <value>Nur Admins können Nachrichten senden</value>
+  </data>
   <data name="ChatDetail_AttachCamera.Text" xml:space="preserve">
     <value>Kamera</value>
   </data>
@@ -667,6 +670,12 @@ Nach der Diagnose deaktivieren: Wenn es aktiviert bleibt, wird die App langsamer
   </data>
   <data name="Settings_NotificationsSection.Text" xml:space="preserve">
     <value>Benachrichtigungen</value>
+  </data>
+  <data name="Settings_ShowSyncStatus.Header" xml:space="preserve">
+    <value>Synchronisierungsstatus anzeigen</value>
+  </data>
+  <data name="Settings_ShowSyncStatus.Text" xml:space="preserve">
+    <value>Zeigt den Synchronisierungsstatus in der Chatliste.</value>
   </data>
   <data name="Settings_Notifications.Header" xml:space="preserve">
     <value>Benachrichtigungen</value>
@@ -1172,6 +1181,12 @@ Nach der Diagnose deaktivieren: Wenn es aktiviert bleibt, wird die App langsamer
   </data>
   <data name="Shell_LegacyBrand.Text" xml:space="preserve">
     <value>WHATSAPP LEGACY</value>
+  </data>
+  <data name="Shell_LegacyAppBar_Filter.Text" xml:space="preserve">
+    <value>filtern</value>
+  </data>
+  <data name="Shell_LegacyAppBar_Filter.Label" xml:space="preserve">
+    <value>filtern</value>
   </data>
   <data name="Shell_LegacyAppBar_Search.Label" xml:space="preserve">
     <value>suchen</value>

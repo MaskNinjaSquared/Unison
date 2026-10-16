@@ -51,11 +51,15 @@
 
         <ScrollViewer x:Name="SettingsScroll"
                       Grid.Row="1"
+                      HorizontalAlignment="Stretch"
+                      HorizontalContentAlignment="Stretch"
                       VerticalScrollBarVisibility="Auto"
                       Padding="0,12,0,24">
-            <Grid>
+            <Grid HorizontalAlignment="Stretch">
                 <!-- Root: one row per category. The open category hides this list. -->
-                <StackPanel x:Name="RootCategories">
+                <StackPanel x:Name="RootCategories"
+                            MaxWidth="800"
+                            HorizontalAlignment="Left">
                     <Button Tag="profile" Click="Category_Click" Style="{StaticResource LegacySettingsCategoryStyle}">
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -148,14 +152,24 @@
                     </Button>
                 </StackPanel>
 
-                <StackPanel x:Name="ProfileCategory" Visibility="Collapsed">
-                    <TextBlock x:Uid="Settings_Profile" Text="Perfil" FontSize="32" Margin="20,8,10,16"
-                               FontFamily="{StaticResource MainFontLight}"
-                               Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
-                    <controls:WhatsAppProfileControl/>
-                </StackPanel>
+                <!-- Profile: MaxWidth 800 centered so the avatar stays in the middle on desktop. -->
+                <Grid x:Name="ProfileCategory"
+                      Visibility="Collapsed"
+                      HorizontalAlignment="Stretch">
+                    <Grid MaxWidth="800" HorizontalAlignment="Center">
+                        <StackPanel>
+                            <TextBlock x:Uid="Settings_Profile" Text="Perfil" FontSize="32" Margin="20,8,10,16"
+                                       FontFamily="{StaticResource MainFontLight}"
+                                       Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
+                            <controls:WhatsAppProfileControl/>
+                        </StackPanel>
+                    </Grid>
+                </Grid>
 
-                <StackPanel x:Name="GeneralCategory" Visibility="Collapsed">
+                <StackPanel x:Name="GeneralCategory"
+                            Visibility="Collapsed"
+                            MaxWidth="800"
+                            HorizontalAlignment="Left">
                     <TextBlock x:Uid="Settings_General" Text="Geral" FontSize="32" Margin="20,8,10,16"
                                FontFamily="{StaticResource MainFontLight}"
                                Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
@@ -185,7 +199,10 @@
                     </controls:SettingBox>
                 </StackPanel>
 
-                <StackPanel x:Name="NotificationsCategory" Visibility="Collapsed">
+                <StackPanel x:Name="NotificationsCategory"
+                            Visibility="Collapsed"
+                            MaxWidth="800"
+                            HorizontalAlignment="Left">
                     <TextBlock x:Uid="Settings_NotificationsSection" Text="Notificações" FontSize="32" Margin="20,8,10,16"
                                FontFamily="{StaticResource MainFontLight}"
                                Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
@@ -235,7 +252,10 @@
                     </controls:SettingBox>
                 </StackPanel>
 
-                <StackPanel x:Name="CustomizationCategory" Visibility="Collapsed">
+                <StackPanel x:Name="CustomizationCategory"
+                            Visibility="Collapsed"
+                            MaxWidth="800"
+                            HorizontalAlignment="Left">
                     <TextBlock x:Uid="Settings_Customization" Text="Personalização" FontSize="32" Margin="20,8,10,16"
                                FontFamily="{StaticResource MainFontLight}"
                                Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
@@ -302,10 +322,21 @@
                     </controls:SettingBox>
                 </StackPanel>
 
-                <StackPanel x:Name="AccountCategory" Visibility="Collapsed">
+                <StackPanel x:Name="AccountCategory"
+                            Visibility="Collapsed"
+                            MaxWidth="800"
+                            HorizontalAlignment="Left">
                     <TextBlock x:Uid="Settings_Advanced" Text="Conta" FontSize="32" Margin="20,8,10,16"
                                FontFamily="{StaticResource MainFontLight}"
                                Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
+                    <controls:SettingBox LocalizationUid="Settings_ShowSyncStatus" Margin="10,0,10,4"
+                                         Header="Show sync status"
+                                         Text="Show the synchronization status in the chat list.">
+                        <controls:SettingBox.Control>
+                            <ToggleSwitch OnContent="" OffContent="" MinWidth="0"
+                                          IsOn="{Binding ShowSyncStatus, Mode=TwoWay}"/>
+                        </controls:SettingBox.Control>
+                    </controls:SettingBox>
                     <controls:SettingBox LocalizationUid="Settings_KeepAlive" Margin="10,0,10,4"
                                          Header="Background mode"
                                          Text="Uses location only so the system does not freeze the app. The position is not read or sent.">

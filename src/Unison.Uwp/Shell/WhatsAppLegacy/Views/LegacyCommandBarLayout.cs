@@ -24,13 +24,73 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return;
             }
 
+            bar.SizeChanged -= Bar_SizeChanged;
+            bar.SizeChanged += Bar_SizeChanged;
+            bar.Opening -= Bar_ChromeChanged;
+            bar.Opening += Bar_ChromeChanged;
+            bar.Opened -= Bar_ChromeChanged;
+            bar.Opened += Bar_ChromeChanged;
+            bar.Closed -= Bar_ChromeChanged;
+            bar.Closed += Bar_ChromeChanged;
             Apply(bar);
             // Display-mode states can reset the column after Loaded. Re-apply once they settle.
             var ignored = bar.Dispatcher.RunAsync(CoreDispatcherPriority.Low, () => Apply(bar));
         }
 
+        private static void Bar_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            Apply(sender as CommandBar);
+        }
+
+        private static void Bar_ChromeChanged(object sender, object e)
+        {
+            Apply(sender as CommandBar);
+        }
+
+        private static bool _applying;
+
         private static void Apply(CommandBar bar)
         {
+            if (bar == null || _applying)
+            {
+                return;
+            }
+
+            _applying = true;
+            try
+            {
+                ApplyCore(bar);
+            }
+            finally
+            {
+                _applying = false;
+            }
+        }
+
+        private static void ApplyCore(CommandBar bar)
+        {
+            // The template paints Background only on the content strip. The closed state
+            // keeps that strip at the stock compact height, so a taller bar shows the page
+            // underneath. Paint the root as well, and let the content row fill the bar.
+            var layoutRoot = FindDescendant(bar, "LayoutRoot") as Panel;
+            if (layoutRoot != null)
+            {
+                layoutRoot.Background = bar.Background;
+            }
+
+            var contentRoot = FindDescendant(bar, "ContentRoot") as Grid;
+            if (contentRoot != null)
+            {
+                contentRoot.HorizontalAlignment = HorizontalAlignment.Stretch;
+                // Inline bars measure to their closed height and draw the open strip upward.
+                // A local height here would cap the labels again.
+                contentRoot.ClearValue(FrameworkElement.HeightProperty);
+                if (contentRoot.RowDefinitions.Count > 0)
+                {
+                    contentRoot.RowDefinitions[0].Height = new GridLength(1, GridUnitType.Star);
+                }
+            }
+
             var primary = FindDescendant(bar, "PrimaryItemsControl") as FrameworkElement;
             if (primary == null)
             {
@@ -40,12 +100,13 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             // Fill the strip beside the more button, then center the icon row inside it.
             // Centering the items control itself does nothing once that strip stretches it.
             primary.HorizontalAlignment = HorizontalAlignment.Stretch;
+            // Top: when open the labels hang below the icons, so the icons keep their closed position.
             primary.VerticalAlignment = VerticalAlignment.Top;
             StackPanel icons = FindStackPanel(primary);
             if (icons != null)
             {
                 icons.HorizontalAlignment = HorizontalAlignment.Center;
-                icons.VerticalAlignment = VerticalAlignment.Center;
+                icons.VerticalAlignment = VerticalAlignment.Top;
             }
 
             var host = VisualTreeHelper.GetParent(primary) as Grid;

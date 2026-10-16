@@ -11,6 +11,7 @@ using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Media;
 using Windows.UI.Xaml.Navigation;
 using Microsoft.Extensions.DependencyInjection;
+using Unison.Core.Constants;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Factories;
@@ -27,7 +28,12 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
     public sealed partial class ShellView : Page
     {
         private const double NarrowWindowWidth = 720;
-        private const double WideListWidth = 380;
+
+        private bool _splitterDragging;
+        private bool _splitterHover;
+        private double _dragStartX;
+        private double _dragStartListWidth;
+        private CoreCursor _previousCursor;
 
         private ShellViewModel _shell;
         private INavigator _navigator;
@@ -48,6 +54,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         private bool _detailHooked;
         private bool _overlayOpen;
         private StatusView _statusSection;
+        private int _sectionLoadGeneration;
+        private readonly bool _isWindowsMobile;
 
         public ShellView()
         {
@@ -63,6 +71,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 _messages = App.Services.GetService<IMessageService>();
                 _chatState = App.Services.GetService<IChatStateStore>();
                 _strings = App.Services.GetService<IStringResources>();
+                _isWindowsMobile = App.Services.GetService<ISystemInfoProvider>()?.IsMobile() == true;
                 DataContext = _shell;
             }
 
@@ -89,6 +98,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             ApplySearchState(false);
             ApplyShellChrome();
             ApplyDetailLayout();
+            // The header strip is created with the template, which can land after this pass.
+            _ = Dispatcher.RunAsync(CoreDispatcherPriority.Low, () => InsetPivotHeaders(SectionPivot));
         }
 
         private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -283,9 +294,12 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             if (!_detailOpen)
             {
                 DetailColumn.Width = new GridLength(0);
+                ListColumn.MinWidth = 0;
+                ListColumn.MaxWidth = 10000;
                 ListColumn.Width = new GridLength(1, GridUnitType.Star);
                 DetailHost.Visibility = Visibility.Collapsed;
                 ListChromeRoot.Visibility = Visibility.Visible;
+                ApplyListDesktopDivider(narrow);
                 return;
             }
 
@@ -293,6 +307,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             if (narrow)
             {
                 // Fullscreen chat: list column gone, pivot hidden via HidesLegacyShellChrome.
+                ListColumn.MinWidth = 0;
+                ListColumn.MaxWidth = 10000;
                 ListColumn.Width = new GridLength(0);
                 DetailColumn.Width = new GridLength(1, GridUnitType.Star);
                 ListChromeRoot.Visibility = Visibility.Collapsed;
@@ -300,8 +316,238 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             else
             {
                 ListChromeRoot.Visibility = Visibility.Visible;
-                ListColumn.Width = new GridLength(WideListWidth);
                 DetailColumn.Width = new GridLength(1, GridUnitType.Star);
+                ApplyListWidth(_shell != null
+                    ? _shell.ChatListPaneWidth
+                    : ChatPaneLayoutConstants.DefaultListWidth);
+            }
+
+            ApplyListDesktopDivider(narrow);
+            UpdateSplitterPosition();
+        }
+
+        /// <summary>Hairline on the list's right edge. Desktop only; the phone list stays full-bleed.</summary>
+        private void ApplyListDesktopDivider(bool narrow)
+        {
+            if (ListDesktopDivider == null)
+            {
+                return;
+            }
+
+            bool listOnScreen = ListChromeRoot != null &&
+                ListChromeRoot.Visibility == Visibility.Visible;
+            bool sideBySide = !narrow && listOnScreen && _detailOpen;
+            ListDesktopDivider.Visibility = sideBySide
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            if (PaneSplitter != null)
+            {
+                PaneSplitter.Visibility = sideBySide
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+            }
+        }
+
+        private void ApplyListWidth(double desired)
+        {
+            double max = GetMaxListWidth();
+            double width = Math.Max(
+                ChatPaneLayoutConstants.MinListWidth,
+                Math.Min(max, desired));
+            ListColumn.Width = new GridLength(width);
+            ListColumn.MinWidth = ChatPaneLayoutConstants.MinListWidth;
+            ListColumn.MaxWidth = ChatPaneLayoutConstants.MaxListWidth;
+        }
+
+        private double GetMaxListWidth()
+        {
+            double total = RootContentGrid != null ? RootContentGrid.ActualWidth : 0;
+            if (total <= 0)
+            {
+                return ChatPaneLayoutConstants.MaxListWidth;
+            }
+
+            double maxFromDetail = Math.Max(
+                ChatPaneLayoutConstants.MinListWidth,
+                total - ChatPaneLayoutConstants.MinDetailWidth);
+            return Math.Min(ChatPaneLayoutConstants.MaxListWidth, maxFromDetail);
+        }
+
+        private void UpdateSplitterPosition()
+        {
+            if (PaneSplitter == null || PaneSplitter.Visibility != Visibility.Visible)
+            {
+                return;
+            }
+
+            double listWidth = ListColumn.ActualWidth;
+            if (listWidth <= 0 && ListColumn.Width.IsAbsolute)
+            {
+                listWidth = ListColumn.Width.Value;
+            }
+
+            double left = Math.Max(0, listWidth - ChatPaneLayoutConstants.SplitterOverlapList);
+            PaneSplitter.Margin = new Thickness(left, 0, 0, 0);
+        }
+
+        private void UpdateSplitterChrome()
+        {
+            if (SplitterChrome == null)
+            {
+                return;
+            }
+
+            SplitterChrome.Opacity = (_splitterHover || _splitterDragging) ? 1 : 0;
+        }
+
+        private void PaneSplitter_PointerEntered(object sender, PointerRoutedEventArgs e)
+        {
+            if (PaneSplitter.Visibility != Visibility.Visible)
+            {
+                return;
+            }
+
+            _splitterHover = true;
+            UpdateSplitterChrome();
+            SetResizeCursor();
+        }
+
+        private void PaneSplitter_PointerExited(object sender, PointerRoutedEventArgs e)
+        {
+            if (_splitterDragging)
+            {
+                return;
+            }
+
+            _splitterHover = false;
+            UpdateSplitterChrome();
+            RestoreCursor();
+        }
+
+        private void PaneSplitter_PointerPressed(object sender, PointerRoutedEventArgs e)
+        {
+            if (PaneSplitter.Visibility != Visibility.Visible)
+            {
+                return;
+            }
+
+            _splitterDragging = true;
+            _splitterHover = true;
+            _dragStartX = e.GetCurrentPoint(RootContentGrid).Position.X;
+            _dragStartListWidth = ListColumn.ActualWidth > 0
+                ? ListColumn.ActualWidth
+                : (ListColumn.Width.IsAbsolute
+                    ? ListColumn.Width.Value
+                    : ChatPaneLayoutConstants.DefaultListWidth);
+            PaneSplitter.CapturePointer(e.Pointer);
+            UpdateSplitterChrome();
+            SetResizeCursor();
+            e.Handled = true;
+        }
+
+        private void PaneSplitter_PointerMoved(object sender, PointerRoutedEventArgs e)
+        {
+            if (!_splitterDragging)
+            {
+                return;
+            }
+
+            double x = e.GetCurrentPoint(RootContentGrid).Position.X;
+            ApplyListWidth(_dragStartListWidth + (x - _dragStartX));
+            UpdateSplitterPosition();
+            e.Handled = true;
+        }
+
+        private void PaneSplitter_PointerReleased(object sender, PointerRoutedEventArgs e)
+        {
+            if (!_splitterDragging)
+            {
+                return;
+            }
+
+            EndSplitterDrag(e.Pointer);
+            e.Handled = true;
+        }
+
+        private void PaneSplitter_PointerCaptureLost(object sender, PointerRoutedEventArgs e)
+        {
+            if (_splitterDragging)
+            {
+                EndSplitterDrag(null);
+            }
+        }
+
+        private void EndSplitterDrag(Pointer pointer)
+        {
+            _splitterDragging = false;
+            if (pointer != null)
+            {
+                try
+                {
+                    PaneSplitter.ReleasePointerCapture(pointer);
+                }
+                catch
+                {
+                }
+            }
+
+            double width = ListColumn.ActualWidth > 0
+                ? ListColumn.ActualWidth
+                : (ListColumn.Width.IsAbsolute
+                    ? ListColumn.Width.Value
+                    : ChatPaneLayoutConstants.DefaultListWidth);
+            width = Math.Max(
+                ChatPaneLayoutConstants.MinListWidth,
+                Math.Min(GetMaxListWidth(), width));
+            if (_shell != null)
+            {
+                _shell.ChatListPaneWidth = width;
+            }
+
+            UpdateSplitterChrome();
+            if (!_splitterHover)
+            {
+                RestoreCursor();
+            }
+        }
+
+        private void SetResizeCursor()
+        {
+            try
+            {
+                var window = Window.Current;
+                if (window?.CoreWindow == null)
+                {
+                    return;
+                }
+
+                if (_previousCursor == null)
+                {
+                    _previousCursor = window.CoreWindow.PointerCursor;
+                }
+
+                window.CoreWindow.PointerCursor = new CoreCursor(CoreCursorType.SizeWestEast, 1);
+            }
+            catch
+            {
+            }
+        }
+
+        private void RestoreCursor()
+        {
+            try
+            {
+                var window = Window.Current;
+                if (window?.CoreWindow == null)
+                {
+                    return;
+                }
+
+                window.CoreWindow.PointerCursor = _previousCursor ?? new CoreCursor(CoreCursorType.Arrow, 1);
+                _previousCursor = null;
+            }
+            catch
+            {
             }
         }
 
@@ -385,6 +631,11 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             }
 
             _overlayOpen = content is SettingsView || content is DebugView;
+            if (_overlayOpen && _detailOpen)
+            {
+                _ = CloseDetailAsync();
+            }
+
             ApplyShellChrome();
         }
 
@@ -647,6 +898,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return;
             }
 
+            int generation = ++_sectionLoadGeneration;
             string previous = _loadedSection;
             _loadedSection = tag;
             SelectPivotIndex(tag);
@@ -658,6 +910,11 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 await _statusSection.LeaveAsync();
             }
 
+            if (generation != _sectionLoadGeneration)
+            {
+                return;
+            }
+
             if (!string.Equals(tag, "chats", StringComparison.OrdinalIgnoreCase) &&
                 !string.Equals(tag, "archived", StringComparison.OrdinalIgnoreCase) &&
                 _detailOpen)
@@ -665,7 +922,16 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 await CloseDetailAsync();
             }
 
-            OpenSection(tag);
+            if (generation != _sectionLoadGeneration)
+            {
+                return;
+            }
+
+            await OpenSectionAsync(tag);
+            if (generation != _sectionLoadGeneration)
+            {
+                return;
+            }
 
             if (_shell != null &&
                 !string.Equals(_shell.ActiveSection, tag, StringComparison.OrdinalIgnoreCase))
@@ -677,8 +943,11 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             ApplyShellChrome();
         }
 
-        /// <summary>Creates the theme view into the presenter the first time that index is selected.</summary>
-        private void OpenSection(string tag)
+        /// <summary>
+        /// First open: show spinner, yield so it paints (Mobile needs a real delay), then create.
+        /// Revisit: only re-init Status.
+        /// </summary>
+        private async Task OpenSectionAsync(string tag)
         {
             ContentPresenter presenter = PresenterFor(tag);
             if (presenter == null)
@@ -686,49 +955,108 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return;
             }
 
-            if (presenter.Content == null)
+            if (presenter.Content != null)
             {
-                presenter.Content = CreateSection(tag);
-            }
-            else if (presenter.Content is StatusView openStatus)
-            {
-                _ = openStatus.InitAsync(_shell);
+                if (presenter.Content is StatusView openStatus)
+                {
+                    await openStatus.InitAsync(_shell);
+                    _statusSection = openStatus;
+                }
+
+                return;
             }
 
-            var status = presenter.Content as StatusView;
-            if (status != null)
+            SetSectionLoadingVisible(true);
+            try
             {
-                _statusSection = status;
+                await YieldForSectionPaintAsync();
+                FrameworkElement section = CreateSectionView(tag);
+                presenter.Content = section;
+                await InitSectionViewAsync(section, tag);
+
+                var status = section as StatusView;
+                if (status != null)
+                {
+                    _statusSection = status;
+                }
+            }
+            finally
+            {
+                SetSectionLoadingVisible(false);
             }
         }
 
-        private FrameworkElement CreateSection(string tag)
+        private FrameworkElement CreateSectionView(string tag)
         {
             if (string.Equals(tag, "status", StringComparison.OrdinalIgnoreCase))
             {
-                var status = new StatusView();
-                status.InitAsync(_shell);
-                return status;
+                return new StatusView();
             }
 
             if (string.Equals(tag, "archived", StringComparison.OrdinalIgnoreCase))
             {
-                var archived = new ArchivedChatsView();
-                archived.InitAsync(_shell);
-                return archived;
+                return new ArchivedChatsView();
             }
 
             if (string.Equals(tag, "calls", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(tag, "favorites", StringComparison.OrdinalIgnoreCase))
             {
-                var placeholder = new LegacyPivotPlaceholderView();
-                placeholder.InitAsync(tag);
-                return placeholder;
+                return new LegacyPivotPlaceholderView();
             }
 
-            var chats = new ChatsView();
-            chats.InitAsync(_shell);
-            return chats;
+            return new ChatsView();
+        }
+
+        private Task InitSectionViewAsync(FrameworkElement section, string tag)
+        {
+            if (section is StatusView status)
+            {
+                return status.InitAsync(_shell);
+            }
+
+            if (section is ArchivedChatsView archived)
+            {
+                return archived.InitAsync(_shell);
+            }
+
+            if (section is LegacyPivotPlaceholderView placeholder)
+            {
+                return placeholder.InitAsync(tag);
+            }
+
+            if (section is ChatsView chats)
+            {
+                return chats.InitAsync(_shell);
+            }
+
+            return Task.CompletedTask;
+        }
+
+        private void SetSectionLoadingVisible(bool visible)
+        {
+            if (SectionLoadingOverlay == null)
+            {
+                return;
+            }
+
+            SectionLoadingOverlay.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        /// <summary>
+        /// Lets the pivot spinner paint before InitializeComponent / Attach freeze the UI thread.
+        /// Mobile needs a real delay — one dispatcher turn is not enough (same as chat detail).
+        /// </summary>
+        private async Task YieldForSectionPaintAsync()
+        {
+            await Dispatcher.RunAsync(CoreDispatcherPriority.Low, () => { });
+            if (_isWindowsMobile)
+            {
+                await Task.Delay(48);
+            }
+            else
+            {
+                await Task.Yield();
+            }
         }
 
         private void SelectPivotIndex(string tag)
@@ -833,6 +1161,30 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             if (header != null)
             {
                 header.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+            }
+
+            // 10px each side of the header strip only. The section content stays full width.
+            InsetPivotHeaders(SectionPivot);
+        }
+
+        private static void InsetPivotHeaders(DependencyObject root)
+        {
+            if (root == null)
+            {
+                return;
+            }
+
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                DependencyObject child = VisualTreeHelper.GetChild(root, i);
+                var panel = child as PivotHeaderPanel;
+                if (panel != null)
+                {
+                    panel.Margin = new Thickness(10, 0, 10, 0);
+                }
+
+                InsetPivotHeaders(child);
             }
         }
 
@@ -969,20 +1321,26 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             }
         }
 
-        private void DebugMenu_Click(object sender, RoutedEventArgs e)
+        private async void DebugMenu_Click(object sender, RoutedEventArgs e)
         {
             if (_searchState)
             {
                 ExitSearchState();
             }
 
-            _ = CloseDetailAsync();
+            await CloseDetailAsync();
             _navigator?.NavigateInShell(NavigationDestination.Debug);
             SyncOverlayFromFrame();
         }
 
-        private void SettingsMenu_Click(object sender, RoutedEventArgs e)
+        private async void SettingsMenu_Click(object sender, RoutedEventArgs e)
         {
+            if (_searchState)
+            {
+                ExitSearchState();
+            }
+
+            await CloseDetailAsync();
             _navigator?.OpenSettings();
             SyncOverlayFromFrame();
         }

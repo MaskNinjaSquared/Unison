@@ -246,6 +246,9 @@
   <data name="ChatDetail_MessageInput.PlaceholderText" xml:space="preserve">
     <value>Сообщение</value>
   </data>
+  <data name="ChatDetail_GroupOnlyAdminsCanSend.Text" xml:space="preserve">
+    <value>Только администраторы могут отправлять сообщения</value>
+  </data>
   <data name="ChatDetail_AttachCamera.Text" xml:space="preserve">
     <value>Камера</value>
   </data>
@@ -608,6 +611,12 @@
   </data>
   <data name="Settings_NotificationsSection.Text" xml:space="preserve">
     <value>Уведомления</value>
+  </data>
+  <data name="Settings_ShowSyncStatus.Header" xml:space="preserve">
+    <value>Показывать статус синхронизации</value>
+  </data>
+  <data name="Settings_ShowSyncStatus.Text" xml:space="preserve">
+    <value>Показывает статус синхронизации в списке чатов.</value>
   </data>
   <data name="Settings_Notifications.Header" xml:space="preserve">
     <value>Уведомления</value>
@@ -1113,6 +1122,12 @@
   </data>
   <data name="Shell_LegacyBrand.Text" xml:space="preserve">
     <value>WHATSAPP LEGACY</value>
+  </data>
+  <data name="Shell_LegacyAppBar_Filter.Text" xml:space="preserve">
+    <value>фильтр</value>
+  </data>
+  <data name="Shell_LegacyAppBar_Filter.Label" xml:space="preserve">
+    <value>фильтр</value>
   </data>
   <data name="Shell_LegacyAppBar_Search.Label" xml:space="preserve">
     <value>поиск</value>

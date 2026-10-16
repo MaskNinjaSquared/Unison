@@ -25,9 +25,10 @@
     <x:Double x:Key="LegacyAppBarGlyphSize">24</x:Double>
     <!-- Compact strip +6 for a 3px air gap above and below the 40px ring (was 48). -->
     <x:Double x:Key="LegacyCommandBarCompactHeight">54</x:Double>
-
     <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Default">
+            <!-- CommandBar closed state sets its content height from this, and ignores MinHeight. -->
+            <x:Double x:Key="AppBarThemeCompactHeight">54</x:Double>
             <SolidColorBrush x:Key="ApplicationPageBackgroundThemeBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="WhatsAppBackgroundBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="WhatsAppHeaderBrush" Color="#FF000000"/>
@@ -70,6 +71,9 @@
             <SolidColorBrush x:Key="ChatListUnreadBadgeBrush" Color="#FF00656A"/>
             <SolidColorBrush x:Key="ChatListSyncStatusBrush" Color="#FF00656A"/>
             <SolidColorBrush x:Key="ChatDetailAccentBrush" Color="#FF00656A"/>
+            <SolidColorBrush x:Key="ChatDetailInfoLabelBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ChatDetailInfoValueBrush" Color="#FF1DAA61"/>
+            <SolidColorBrush x:Key="ChatDetailInfoMutedBrush" Color="#FFCCCCCC"/>
             <SolidColorBrush x:Key="WhatsAppGreenFocusBrush" Color="#FF00656A"/>
             <SolidColorBrush x:Key="ChatDetailInputBarBackgroundBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="ChatDetailInputBarTopBorderBrush" Color="#FF333333"/>
@@ -122,6 +126,9 @@
             <SolidColorBrush x:Key="ChatListUnreadBadgeBrush" Color="#FF00656A"/>
             <SolidColorBrush x:Key="ChatListSyncStatusBrush" Color="#FF00656A"/>
             <SolidColorBrush x:Key="ChatDetailAccentBrush" Color="#FF00656A"/>
+            <SolidColorBrush x:Key="ChatDetailInfoLabelBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ChatDetailInfoValueBrush" Color="#FF1DAA61"/>
+            <SolidColorBrush x:Key="ChatDetailInfoMutedBrush" Color="#FFCCCCCC"/>
             <SolidColorBrush x:Key="WhatsAppGreenFocusBrush" Color="#FF00656A"/>
             <SolidColorBrush x:Key="ChatDetailInputBarBackgroundBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="ChatDetailInputBarTopBorderBrush" Color="#FF333333"/>
@@ -133,6 +140,7 @@
         </ResourceDictionary>
 
         <ResourceDictionary x:Key="Light">
+            <x:Double x:Key="AppBarThemeCompactHeight">54</x:Double>
             <SolidColorBrush x:Key="ApplicationPageBackgroundThemeBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="WhatsAppBackgroundBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="WhatsAppHeaderBrush" Color="#FFFFFFFF"/>
@@ -174,6 +182,9 @@
             <SolidColorBrush x:Key="ChatListUnreadBadgeBrush" Color="#FF00656A"/>
             <SolidColorBrush x:Key="ChatListSyncStatusBrush" Color="#FF00656A"/>
             <SolidColorBrush x:Key="ChatDetailAccentBrush" Color="#FF00656A"/>
+            <SolidColorBrush x:Key="ChatDetailInfoLabelBrush" Color="#FF000000"/>
+            <SolidColorBrush x:Key="ChatDetailInfoValueBrush" Color="#FF1DAA61"/>
+            <SolidColorBrush x:Key="ChatDetailInfoMutedBrush" Color="#FF333333"/>
             <SolidColorBrush x:Key="WhatsAppGreenFocusBrush" Color="#FF00656A"/>
             <SolidColorBrush x:Key="ChatDetailInputBarBackgroundBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailInputBarTopBorderBrush" Color="#FFCCCCCC"/>

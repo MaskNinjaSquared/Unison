@@ -164,7 +164,7 @@
                 Width="1"
                 HorizontalAlignment="Left"
                 VerticalAlignment="Stretch"
-                Background="#FF808080"
+                Background="{ThemeResource ChatDetailInputBarTopBorderBrush}"
                 Visibility="Collapsed"
                 Canvas.ZIndex="2"
                 IsHitTestVisible="False"/>
@@ -200,7 +200,7 @@
               VerticalAlignment="Bottom"
               Background="{StaticResource ChatDetailInfoCommandBarBrush}">
             <StackPanel>
-                <Grid Height="62">
+                <Grid Height="54">
                     <StackPanel Orientation="Horizontal"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center">
@@ -232,7 +232,8 @@
                                 Click="PinButton_Click">
                             <TextBlock Text="&#xEB08;"
                                        FontFamily="{StaticResource LegacyIconFont}"
-                                       FontSize="18"
+                                       FontSize="28"
+                                       Margin="1,0,0,0"
                                        TextLineBounds="Tight"
                                        Foreground="White"
                                        HorizontalAlignment="Center"

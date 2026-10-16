@@ -69,8 +69,25 @@
                    FontFamily="{StaticResource MainFont}"
                    Visibility="{x:Bind ViewModel.IsEmpty, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
 
+        <Grid Grid.Row="0"
+              Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+              Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                <controls:ModernProgressRing IsActive="True" Width="36" Height="36"/>
+                <TextBlock x:Uid="ChatList_Loading"
+                           Text="Preparing conversations…"
+                           FontSize="14"
+                           Margin="0,16,0,0"
+                           HorizontalAlignment="Center"
+                           Foreground="{ThemeResource WhatsAppTextMediumBrush}"
+                           FontFamily="{StaticResource MainFont}"/>
+            </StackPanel>
+        </Grid>
+
+        <Grid Grid.Row="1"
+              MinHeight="{StaticResource LegacyCommandBarCompactHeight}"
+              Background="{ThemeResource LegacyCommandBarBackgroundBrush}">
         <CommandBar x:Name="StatusCommandBar"
-                    Grid.Row="1"
                     Style="{StaticResource LegacyCommandBarStyle}"
                     Loaded="StatusCommandBar_Loaded">
             <AppBarButton x:Uid="Shell_LegacyAppBar_Search"
@@ -96,7 +113,8 @@
                            VerticalAlignment="Center"/>
             </AppBarButton>
             <CommandBar.SecondaryCommands>
-                <AppBarButton x:Uid="Shell_LegacyMenu_Profile"
+                <AppBarButton x:Name="ProfileSecondaryButton"
+                              x:Uid="Shell_LegacyMenu_Profile"
                               Label="profile"
                               Click="ProfileAppBar_Click">
                     <AppBarButton.Icon>
@@ -113,5 +131,6 @@
                 </AppBarButton>
             </CommandBar.SecondaryCommands>
         </CommandBar>
+        </Grid>
     </Grid>
 </UserControl>

@@ -305,6 +305,9 @@ Disable after diagnosing: keeping it on slows the app.</value>
   <data name="ChatDetail_MessageInput.PlaceholderText" xml:space="preserve">
     <value>Type a message</value>
   </data>
+  <data name="ChatDetail_GroupOnlyAdminsCanSend.Text" xml:space="preserve">
+    <value>Only admins can send messages</value>
+  </data>
   <data name="ChatDetail_AttachCamera.Text" xml:space="preserve">
     <value>Camera</value>
   </data>
@@ -667,6 +670,12 @@ Disable after diagnosing: keeping it on slows the app.</value>
   </data>
   <data name="Settings_NotificationsSection.Text" xml:space="preserve">
     <value>Notifications</value>
+  </data>
+  <data name="Settings_ShowSyncStatus.Header" xml:space="preserve">
+    <value>Show sync status</value>
+  </data>
+  <data name="Settings_ShowSyncStatus.Text" xml:space="preserve">
+    <value>Show the synchronization status in the chat list.</value>
   </data>
   <data name="Settings_Notifications.Header" xml:space="preserve">
     <value>Notifications</value>
@@ -1172,6 +1181,12 @@ Disable after diagnosing: keeping it on slows the app.</value>
   </data>
   <data name="Shell_LegacyBrand.Text" xml:space="preserve">
     <value>WHATSAPP LEGACY</value>
+  </data>
+  <data name="Shell_LegacyAppBar_Filter.Text" xml:space="preserve">
+    <value>filter</value>
+  </data>
+  <data name="Shell_LegacyAppBar_Filter.Label" xml:space="preserve">
+    <value>filter</value>
   </data>
   <data name="Shell_LegacyAppBar_Search.Label" xml:space="preserve">
     <value>search</value>

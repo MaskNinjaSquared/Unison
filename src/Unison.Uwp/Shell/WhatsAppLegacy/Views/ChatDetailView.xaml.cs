@@ -174,19 +174,20 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         }
 
         /// <summary>
-        /// WhatsApp Legacy: solid page-colored 48px composer + themed mic/send bitmaps.
+        /// WhatsApp Legacy: solid page-colored 54px composer + themed mic/send bitmaps.
         /// </summary>
         private void ApplyLegacyComposerChrome()
         {
+            const double ComposerHeight = 54;
             try
             {
                 // The attach dock shares this grid with the composer. Locking the grid to the
                 // composer height clips the dock to that strip, so only the composer is fixed.
                 if (ComposerHost != null)
                 {
-                    ComposerHost.Height = 48;
-                    ComposerHost.MinHeight = 48;
-                    ComposerHost.MaxHeight = 48;
+                    ComposerHost.Height = ComposerHeight;
+                    ComposerHost.MinHeight = ComposerHeight;
+                    ComposerHost.MaxHeight = ComposerHeight;
                 }
 
                 var bar = ComposerHost?.Parent as FrameworkElement;
@@ -215,23 +216,27 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                         if (grid != null)
                         {
                             grid.Padding = new Thickness(8, 0, 8, 0);
-                            grid.Height = 48;
+                            grid.Height = ComposerHeight;
                         }
                     }
                 }
 
                 // Anexo | Texto | Enviar | Áudio — glyphs from LegacyIconFont (EB03/EB04/EB05).
+                // Which attach button is showing is the layout state's decision: the bar on a
+                // phone, the flyout on the desktop. Both carry the same clip glyph, centered.
+                Brush attachBrush = ResolveLegacyBrush("WhatsAppTextHighBrush", Colors.White);
                 if (AttachBarButton != null)
                 {
                     Grid.SetColumn(AttachBarButton, 0);
-                    AttachBarButton.Visibility = Visibility.Visible;
                     AttachBarButton.VerticalAlignment = VerticalAlignment.Center;
-                    ApplyLegacyFontIconButton(AttachBarButton, "\uEB03", ResolveLegacyBrush("WhatsAppTextHighBrush", Colors.White));
+                    ApplyLegacyFontIconButton(AttachBarButton, "\uEB03", attachBrush);
                 }
 
                 if (AttachFlyoutButton != null)
                 {
-                    AttachFlyoutButton.Visibility = Visibility.Collapsed;
+                    Grid.SetColumn(AttachFlyoutButton, 0);
+                    AttachFlyoutButton.VerticalAlignment = VerticalAlignment.Center;
+                    ApplyLegacyFontIconButton(AttachFlyoutButton, "\uEB03", attachBrush);
                 }
 
                 if (SendButton != null)
@@ -450,7 +455,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 SetAttachMenuOpen(false);
             }
 
-            // Extended VSM setters flip attach to the flyout button; Legacy always keeps the bar icon.
+            // Extended shows the flyout button. Re-apply so that button keeps the legacy glyph
+            // and stays centered after the state swaps which attach control is visible.
             ApplyLegacyComposerChrome();
         }
 
@@ -2625,7 +2631,14 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return;
             }
 
-            ViewModel.ApplyMessageRunLayout(messages, isGroup, _activeChat ?? ViewModel.ActiveChat);
+            ChatItem chat = _activeChat ?? ViewModel.ActiveChat;
+            if (!isGroup && chat != null)
+            {
+                isGroup = chat.IsGroup ||
+                    (chat.JID != null && chat.JID.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase));
+            }
+
+            ViewModel.ApplyMessageRunLayout(messages, isGroup, chat);
         }
 
         /// <summary>

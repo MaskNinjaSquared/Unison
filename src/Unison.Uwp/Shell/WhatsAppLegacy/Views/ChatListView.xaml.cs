@@ -10,7 +10,6 @@ using Windows.Foundation;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Media;
-using Windows.UI.Xaml.Media.Imaging;
 
 namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 {
@@ -98,12 +97,14 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private void ApplyScopeChrome(ChatListScope scope)
         {
-            if (scope != ChatListScope.Archived || FilterButton == null)
+            if (FilterButton == null)
             {
                 return;
             }
 
-            FilterButton.Visibility = Visibility.Collapsed;
+            FilterButton.Visibility = scope == ChatListScope.Archived
+                ? Visibility.Collapsed
+                : Visibility.Visible;
         }
 
         private void ChatListView_Loaded(object sender, RoutedEventArgs e)
@@ -114,8 +115,60 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 _shell.PropertyChanged += Shell_PropertyChanged;
             }
 
+            ApplyFilterLabel();
             RefreshProfileSecondary();
             TryAttach();
+        }
+
+        private void ApplyFilterLabel()
+        {
+            if (FilterLabel == null)
+            {
+                return;
+            }
+
+            var strings = App.Services?.GetService<IStringResources>();
+            FilterLabel.Text = strings?.Get("Shell_LegacyAppBar_Filter.Text", "filtrar") ?? "filtrar";
+        }
+
+        /// <summary>
+        /// Stock MenuFlyout only — ModernMenuFlyout* templates historically used Grid.CornerRadius
+        /// (1809+) and XAML-parse-crash Creators Update when the chats list loads.
+        /// </summary>
+        private void FilterButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (FilterButton == null || ViewModel?.FilterChatsCommand == null)
+            {
+                return;
+            }
+
+            var strings = App.Services?.GetService<IStringResources>();
+            var flyout = new MenuFlyout();
+            flyout.Items.Add(CreateFilterItem(
+                strings?.Get("ChatList_FilterAll.Text", "All") ?? "All", 0));
+            flyout.Items.Add(CreateFilterItem(
+                strings?.Get("ChatList_FilterUnread.Text", "Unread") ?? "Unread", 1));
+            flyout.Items.Add(CreateFilterItem(
+                strings?.Get("ChatList_FilterFavorites.Text", "Favorites") ?? "Favorites", 2));
+            flyout.Items.Add(CreateFilterItem(
+                strings?.Get("ChatList_FilterContacts.Text", "Contacts") ?? "Contacts", 3));
+            flyout.Items.Add(CreateFilterItem(
+                strings?.Get("ChatList_FilterNonContacts.Text", "Non-contacts") ?? "Non-contacts", 4));
+            flyout.Items.Add(CreateFilterItem(
+                strings?.Get("ChatList_FilterGroups.Text", "Groups") ?? "Groups", 5));
+            flyout.Items.Add(CreateFilterItem(
+                strings?.Get("ChatList_FilterDrafts.Text", "Drafts") ?? "Drafts", 6));
+            flyout.ShowAt(FilterButton);
+        }
+
+        private MenuFlyoutItem CreateFilterItem(string text, int filter)
+        {
+            return new MenuFlyoutItem
+            {
+                Text = text,
+                Command = ViewModel.FilterChatsCommand,
+                CommandParameter = filter
+            };
         }
 
         private void Shell_PropertyChanged(object sender, PropertyChangedEventArgs e)
@@ -152,65 +205,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         private void SettingsAppBar_Click(object sender, RoutedEventArgs e) =>
             SettingsRequested?.Invoke(this, EventArgs.Empty);
 
-        private void RefreshProfileSecondary()
-        {
-            if (ProfileSecondaryButton == null)
-            {
-                return;
-            }
-
-            string name = _shell?.CurrentUserName;
-            if (string.IsNullOrWhiteSpace(name))
-            {
-                var strings = App.Services?.GetService<IStringResources>();
-                name = strings?.Get("Shell_LegacyMenu_Profile.Label", "profile") ?? "profile";
-            }
-
-            ProfileSecondaryButton.Label = name;
-
-            string avatar = _shell?.CurrentUserAvatar;
-            if (!string.IsNullOrWhiteSpace(avatar))
-            {
-                try
-                {
-                    ProfileSecondaryButton.Icon = new BitmapIcon
-                    {
-                        UriSource = new Uri(avatar, UriKind.RelativeOrAbsolute),
-                        ShowAsMonochrome = false
-                    };
-                    return;
-                }
-                catch
-                {
-                }
-            }
-
-            try
-            {
-                if (Application.Current.Resources.ContainsKey("AvatarContactFallbackImage"))
-                {
-                    var bmp = Application.Current.Resources["AvatarContactFallbackImage"] as BitmapImage;
-                    if (bmp?.UriSource != null)
-                    {
-                        ProfileSecondaryButton.Icon = new BitmapIcon
-                        {
-                            UriSource = bmp.UriSource,
-                            ShowAsMonochrome = false
-                        };
-                        return;
-                    }
-                }
-            }
-            catch
-            {
-            }
-
-            ProfileSecondaryButton.Icon = new FontIcon
-            {
-                FontFamily = new FontFamily("Segoe MDL2 Assets"),
-                Glyph = "\uE77B"
-            };
-        }
+        private void RefreshProfileSecondary() =>
+            LegacyProfileSecondary.Apply(ProfileSecondaryButton, _shell);
 
         private void TryAttach()
         {

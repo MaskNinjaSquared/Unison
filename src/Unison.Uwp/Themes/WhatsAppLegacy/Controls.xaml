@@ -9,6 +9,7 @@
         <Setter Property="Width" Value="50"/>
         <Setter Property="MinHeight" Value="54"/>
         <Setter Property="Margin" Value="7,0"/>
+        <!-- Top: open labels wrap to one or two lines, and centering would push single-line icons down. -->
         <Setter Property="VerticalAlignment" Value="Top"/>
         <Setter Property="IsCompact" Value="False"/>
         <Setter Property="Template">
@@ -255,9 +256,11 @@
         <Setter Property="Foreground" Value="{ThemeResource LegacyCommandBarForegroundBrush}"/>
         <Setter Property="ClosedDisplayMode" Value="Compact"/>
         <Setter Property="IsOpen" Value="False"/>
-        <Setter Property="MinHeight" Value="54"/>
-        <Setter Property="VerticalAlignment" Value="Bottom"/>
-        <Setter Property="VerticalContentAlignment" Value="Top"/>
+        <!-- MinHeight only: a fixed Height caps the content measure, so opening has no labels to show. -->
+        <Setter Property="MinHeight" Value="{StaticResource LegacyCommandBarCompactHeight}"/>
+        <Setter Property="HorizontalAlignment" Value="Stretch"/>
+        <Setter Property="VerticalAlignment" Value="Stretch"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
         <Setter Property="HorizontalContentAlignment" Value="Center"/>
     </Style>
 

@@ -42,6 +42,9 @@
     <AppxOSMinVersionReplaceManifestVersion>false</AppxOSMinVersionReplaceManifestVersion>
     <AppxOSMaxVersionTestedReplaceManifestVersion>false</AppxOSMaxVersionTestedReplaceManifestVersion>
     <LangVersion>preview</LangVersion>
+    <!-- Debug turns on reflection XamlTypeInfo, which registers System.Windows.Input.ICommand
+         again even though the Windows SDK already includes it. -->
+    <EnableTypeInfoReflection>false</EnableTypeInfoReflection>
     <AppxPackageSigningTimestampDigestAlgorithm>SHA256</AppxPackageSigningTimestampDigestAlgorithm>
     <GenerateTestArtifacts>False</GenerateTestArtifacts>
     <HoursBetweenUpdateChecks>0</HoursBetweenUpdateChecks>
@@ -200,6 +203,7 @@
       <DependentUpon>LegacyImageViewerView.xaml</DependentUpon>
     </Compile>
     <Compile Include="Shell\WhatsAppLegacy\Views\LegacyCommandBarLayout.cs" />
+    <Compile Include="Shell\WhatsAppLegacy\Views\LegacyProfileSecondary.cs" />
     <Compile Include="Shell\WhatsAppLegacy\Views\LegacySectionAppBar.xaml.cs">
       <DependentUpon>LegacySectionAppBar.xaml</DependentUpon>
     </Compile>
