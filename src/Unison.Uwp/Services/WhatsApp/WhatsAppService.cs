@@ -4304,57 +4304,23 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            if (update.Archived.HasValue ||
-                update.AppliesPin ||
-                update.Pinned.HasValue ||
-                update.AppliesMute ||
-                update.MuteEndTime.HasValue)
+            AppStateMuteMapping.Result mute = AppStateMuteMapping.FromChatUpdate(
+                update.AppliesMute,
+                update.MuteEndTime);
+            AppStatePinMapping.Result pin = AppStatePinMapping.FromChatUpdate(
+                update.AppliesPin,
+                update.Pinned,
+                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+
+            if (update.Archived.HasValue || pin.AppliesPin || mute.AppliesMute)
             {
-                long? muteSeconds = null;
-                bool applyMute = update.AppliesMute;
-                if (applyMute)
-                {
-                    // Wire timestamps are usually ms; ChatItem.MutedUntil is unix seconds.
-                    AppStateMuteMapping.Result mute = AppStateMuteMapping.FromAction(
-                        muted: update.MuteEndTime.HasValue,
-                        muteEndTimestamp: update.MuteEndTime ?? 0);
-                    muteSeconds = mute.MutedUntilUnixSeconds;
-                }
-                else if (update.MuteEndTime.HasValue)
-                {
-                    // Legacy updates without AppliesMute still carried a deadline.
-                    AppStateMuteMapping.Result mute = AppStateMuteMapping.FromAction(
-                        muted: true,
-                        muteEndTimestamp: update.MuteEndTime.Value);
-                    muteSeconds = mute.MutedUntilUnixSeconds;
-                    applyMute = true;
-                }
-
-                bool? pinned = null;
-                long? pinTs = null;
-                if (update.AppliesPin)
-                {
-                    AppStatePinMapping.Result pin = AppStatePinMapping.FromAction(
-                        pinned: update.Pinned.HasValue,
-                        actionTimestamp: update.Pinned ?? 0,
-                        fallbackTimestampMs: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
-                    pinned = pin.IsPinned;
-                    pinTs = pin.PinnedTimestampUnixSeconds;
-                }
-                else if (update.Pinned.HasValue)
-                {
-                    // Legacy: positive timestamp = pinned, 0 = unpin.
-                    pinned = update.Pinned.Value > 0;
-                    pinTs = AppStatePinMapping.NormalizeSortKey(update.Pinned);
-                }
-
                 await ApplyAppStateChatFlagsAsync(
                     update.Id,
                     archived: update.Archived,
-                    pinned: pinned,
-                    muteEndTimestamp: muteSeconds,
-                    pinnedTimestamp: pinTs,
-                    applyMute: applyMute);
+                    pinned: pin.AppliesPin ? pin.IsPinned : (bool?)null,
+                    muteEndTimestamp: mute.MutedUntilUnixSeconds,
+                    pinnedTimestamp: pin.AppliesPin ? pin.PinnedTimestampUnixSeconds : (long?)null,
+                    applyMute: mute.AppliesMute);
             }
 
             if (update.UnreadCount.HasValue)
@@ -4663,13 +4629,10 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            DateTime pinnedAt = senderTimestampMs > 0
-                ? UnixMillisecondsToUtc(senderTimestampMs)
-                : DateTime.UtcNow;
-            DateTime? expires = pin && durationSeconds > 0
-                ? pinnedAt.AddSeconds(durationSeconds)
-                : (DateTime?)null;
-            await ApplyPinnedMessageStateAsync(chatJid, targetMessageId, pin, pinnedAt, expires);
+            MessagePinWindow window = MessagePinWindow.FromIncoming(
+                pin, senderTimestampMs, durationSeconds, DateTime.UtcNow);
+            await ApplyPinnedMessageStateAsync(
+                chatJid, targetMessageId, pin, window.PinnedAtUtc, window.ExpiresAtUtc);
         }
 
         public async Task SetMessagePinnedAsync(string chatJid, ChatMessage message, bool pin, uint durationSeconds = 604800)
@@ -4691,8 +4654,9 @@ namespace Unison.Uwp.Services.WhatsApp
             if (!string.IsNullOrWhiteSpace(message.ParticipantJid)) key.Participant = message.ParticipantJid;
 
             await _socket.SendPinInChatMessageAsync(canonical, key, pin, durationSeconds);
-            DateTime now = DateTime.UtcNow;
-            await ApplyPinnedMessageStateAsync(canonical, message.Id, pin, now, pin ? now.AddSeconds(durationSeconds) : (DateTime?)null);
+            MessagePinWindow window = MessagePinWindow.FromLocal(pin, durationSeconds, DateTime.UtcNow);
+            await ApplyPinnedMessageStateAsync(
+                canonical, message.Id, pin, window.PinnedAtUtc, window.ExpiresAtUtc);
         }
 
         private void InvalidateCurrentSocket(IWhatsAppSocket socket, string reason)
