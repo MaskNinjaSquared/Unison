@@ -154,6 +154,15 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private void ShellView_BackRequested(object sender, BackRequestedEventArgs e)
         {
+            // Overlay first: Settings/Debug sit above the list and any open chat. Checking
+            // _detailOpen before them left the hardware back closing the chat underneath
+            // while the overlay stayed up (CloseDetailAsync is async and can still be mid-flight).
+            if (TryHandleOverlayBack())
+            {
+                e.Handled = true;
+                return;
+            }
+
             if (_searchState)
             {
                 e.Handled = true;
@@ -168,30 +177,6 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return;
             }
 
-            if (ContentFrame?.Content is SettingsView settings)
-            {
-                e.Handled = true;
-                if (settings.DataContext is SettingsViewModel vm &&
-                    vm.LeaveCommand != null &&
-                    vm.LeaveCommand.CanExecute(null))
-                {
-                    vm.LeaveCommand.Execute(null);
-                }
-                else if (_shell != null)
-                {
-                    _shell.ActiveSection = "chats";
-                }
-
-                return;
-            }
-
-            if (_overlayOpen && ContentFrame?.Content is DebugView)
-            {
-                e.Handled = true;
-                DismissOverlay();
-                return;
-            }
-
             if (ActivePivotContent() is IConversationShellPage conversation &&
                 conversation.TryHandleBack())
             {
@@ -203,6 +188,38 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             {
                 e.Handled = true;
             }
+        }
+
+        /// <summary>Closes Settings or Debug when either is the active overlay.</summary>
+        private bool TryHandleOverlayBack()
+        {
+            if (ContentFrame?.Content is SettingsView settings)
+            {
+                if (settings.DataContext is SettingsViewModel vm &&
+                    vm.LeaveCommand != null &&
+                    vm.LeaveCommand.CanExecute(null))
+                {
+                    vm.LeaveCommand.Execute(null);
+                }
+                else
+                {
+                    DismissOverlay();
+                    if (_shell != null)
+                    {
+                        _shell.ActiveSection = "chats";
+                    }
+                }
+
+                return true;
+            }
+
+            if (_overlayOpen && ContentFrame?.Content is DebugView)
+            {
+                DismissOverlay();
+                return true;
+            }
+
+            return false;
         }
 
         private void Shell_PropertyChanged(object sender, PropertyChangedEventArgs e)
