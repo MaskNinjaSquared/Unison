@@ -56,6 +56,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
         private readonly IJidResolver _jids;
         private readonly IContactService _contacts;
         private readonly INotificationService _notifications;
+        private readonly IDispatcher _ui;
         private readonly OfflineReplayTips _offlineReplayTips;
 
         /// <summary>Short enough that the first recovered chat shows while a long replay continues.</summary>
@@ -66,8 +67,9 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             IWhatsAppService appState,
             IJidResolver jids,
             IOfflineReplayHost offlineReplay,
-            IContactService contacts = null,
-            INotificationService notifications = null)
+            IContactService contacts,
+            INotificationService notifications,
+            IDispatcher ui)
         {
             if (offlineReplay == null)
             {
@@ -89,6 +91,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _contacts = contacts;
             _notifications = notifications;
+            _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _offlineReplayTips = new OfflineReplayTips(
                 _jids,
                 offlineReplay,
@@ -332,7 +335,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
                 return;
             }
 
-            await _appState.RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 IReadOnlyList<ChatItem> rows = _appState.GetChatRowsForCanonicalJid(chatJid);
                 if (rows == null || rows.Count == 0)
@@ -404,7 +407,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             }
 
             LiveIncomingChatListApplyResult result = new LiveIncomingChatListApplyResult();
-            await _appState.RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 ChatItem chat = ApplyStripOnUiThread(
                     request.ChatJid,
@@ -443,7 +446,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
                 return;
             }
 
-            await _appState.RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 int created = 0;
                 int updated = 0;

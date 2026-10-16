@@ -194,6 +194,9 @@ namespace Unison.Uwp
             var services = new ServiceCollection();
 
             services.AddSingleton<IDispatcher, DispatcherService>();
+            // Not the IDispatcher above: before a window exists this one drops work instead of
+            // running it inline. The client and its façades marshal bound-list edits through it.
+            services.AddSingleton<AttachedUiDispatcher>();
 
             // Single owner of the in-memory chat state, and built before the service that fills
             // it: WhatsAppService receives this instance rather than creating one, so the store
@@ -266,7 +269,8 @@ namespace Unison.Uwp
                     sp.GetRequiredService<IPersonStore>(),
                     sp.GetRequiredService<IGroupRosterStore>(),
                     sp.GetRequiredService<IChatStore>(),
-                    sp.GetRequiredService<ISystemInfoProvider>()));
+                    sp.GetRequiredService<ISystemInfoProvider>(),
+                    sp.GetRequiredService<AttachedUiDispatcher>()));
             // The send flow lives on MessageFacade; the timeline caches and the socket it writes
             // through are still the client's, reached only through this narrow port.
             services.AddSingleton<IOutgoingMessageHost>(
@@ -370,7 +374,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IAvatarCache>(),
                 sp.GetRequiredService<JidAliasTable>(),
                 sp.GetRequiredService<ChatStateStore>().PushNames,
-                sp.GetRequiredService<ISelfMarkerNaming>()));
+                sp.GetRequiredService<ISelfMarkerNaming>(),
+                sp.GetRequiredService<AttachedUiDispatcher>()));
             services.AddSingleton<IOfflineReplayHost>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IChatService>(sp => new ChatFacade(
@@ -379,7 +384,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IJidResolver>(),
                 sp.GetRequiredService<IOfflineReplayHost>(),
                 sp.GetRequiredService<IContactService>(),
-                sp.GetRequiredService<INotificationService>()));
+                sp.GetRequiredService<INotificationService>(),
+                sp.GetRequiredService<AttachedUiDispatcher>()));
             // After IChatService: the projection persists resolved strip rows so cold start keeps names.
             services.AddSingleton<IChatAuthorProjection>(sp => new ChatAuthorProjection(
                 sp.GetRequiredService<IChatStateStore>(),
@@ -476,7 +482,7 @@ namespace Unison.Uwp
             // has to marshal onto. Done here rather than from a page's Loaded so the client is
             // never without one: whichever surface happens to come up first, the container is
             // already built by then.
-            whatsAppImpl.AttachUiDispatcher(rootFrame?.Dispatcher);
+            Services.GetRequiredService<AttachedUiDispatcher>().Attach(rootFrame?.Dispatcher);
             whatsAppImpl.AttachMessageService(Services.GetRequiredService<IMessageService>());
             whatsAppImpl.AttachChatService(Services.GetRequiredService<IChatService>());
             whatsAppImpl.AttachContactService(Services.GetRequiredService<IContactService>());

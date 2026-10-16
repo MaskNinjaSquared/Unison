@@ -39,6 +39,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private const string GroupAvatarFallbackMissReason = "group-avatar-fallback-miss";
 
         private readonly IWhatsAppService _whatsAppService;
+        private readonly IDispatcher _ui;
         private readonly IJidResolver _jids;
         private readonly ChatAvatarFetch _fetch;
 
@@ -48,8 +49,9 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         /// <summary>JIDs realized on screen; background batches pull these first.</summary>
         private readonly HashSet<string> _viewportPriority = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        internal ChatAvatarPolicy(IWhatsAppService whatsAppService, IJidResolver jids, ChatAvatarFetch fetch)
+        internal ChatAvatarPolicy(IWhatsAppService whatsAppService, IJidResolver jids, ChatAvatarFetch fetch, IDispatcher ui)
         {
+            _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _fetch = fetch ?? throw new ArgumentNullException(nameof(fetch));
@@ -134,7 +136,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 {
                     Debug.WriteLine($"[ChatAvatarPolicy] Error fetching profile pic for {chat.JID}: {ex.Message}");
                     DateTime failedAtUtc = DateTime.UtcNow;
-                    await _whatsAppService.RunOnUiThreadAsync(() =>
+                    await _ui.RunAsync(() =>
                     {
                         chat.AvatarFetchFailedAtUtc = failedAtUtc;
                         chat.AvatarFetchFailureReason = ex.GetType().Name + ":" + ex.Message;
@@ -276,7 +278,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private async Task<List<ChatItem>> SnapshotChatsAsync()
         {
             List<ChatItem> snapshot = null;
-            await _whatsAppService.RunOnUiThreadAsync(
+            await _ui.RunAsync(
                 () => snapshot = _whatsAppService.Chats.Where(c => c != null).ToList());
             return snapshot ?? new List<ChatItem>();
         }

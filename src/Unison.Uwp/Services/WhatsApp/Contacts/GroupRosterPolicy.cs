@@ -30,6 +30,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private const int BatchSize = 16;
 
         private readonly IWhatsAppService _whatsAppService;
+        private readonly IDispatcher _ui;
         private readonly IGroupService _groups;
         private readonly IContactService _contacts;
         private readonly IJidResolver _jids;
@@ -46,8 +47,10 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             IWhatsAppService whatsAppService,
             IGroupService groups,
             IContactService contacts,
-            IJidResolver jids)
+            IJidResolver jids,
+            IDispatcher ui)
         {
+            _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
             _groups = groups ?? throw new ArgumentNullException(nameof(groups));
             _contacts = contacts ?? throw new ArgumentNullException(nameof(contacts));
@@ -242,7 +245,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                         };
                     }
 
-                    await _whatsAppService.RunOnUiThreadAsync(
+                    await _ui.RunAsync(
                         () => _groups.ApplyGroupMemberAvatarOutcome(member.Jid, result))
                         .ConfigureAwait(false);
 
@@ -350,7 +353,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         {
             var batch = new List<GroupMember>();
             DateTime nowUtc = DateTime.UtcNow;
-            await _whatsAppService.RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 ChatItem chat = FindGroup(groupJid);
                 if (chat?.GroupMembers == null)
@@ -407,7 +410,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             }
 
             DateTime nowUtc = DateTime.UtcNow;
-            await _whatsAppService.RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 ChatItem chat = FindGroup(groupJid);
                 if (chat?.GroupMembers == null)
@@ -470,7 +473,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         {
             bool remaining = false;
             DateTime nowUtc = DateTime.UtcNow;
-            await _whatsAppService.RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 ChatItem chat = FindGroup(groupJid);
                 if (chat?.GroupMembers == null)

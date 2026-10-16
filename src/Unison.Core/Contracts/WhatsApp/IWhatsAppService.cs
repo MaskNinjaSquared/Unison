@@ -167,9 +167,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>True while a reconnect/history replay drain is in progress; background refreshes should back off.</summary>
         bool IsReplayDrainActive { get; }
 
-        /// <summary>Marshals an action onto the UI thread (safe access to <see cref="Chats"/> items).</summary>
-        Task RunOnUiThreadAsync(Action action);
-
         /// <summary>Schedules a debounced persist of chats/session state.</summary>
         void SchedulePersistPublic();
 

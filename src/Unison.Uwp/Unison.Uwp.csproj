@@ -141,6 +141,7 @@
     <Compile Include="Helpers\WebPDecoder.cs" />
     <Compile Include="Services\DispatcherService.cs" />
     <Compile Include="Services\UiThreadDispatcherService.cs" />
+    <Compile Include="Services\AttachedUiDispatcher.cs" />
     <Compile Include="Services\DialogService.cs" />
     <Compile Include="Services\MediaDiskUsageService.cs" />
     <Compile Include="Services\StartTileMarkAssets.cs" />

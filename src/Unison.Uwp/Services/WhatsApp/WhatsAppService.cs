@@ -559,7 +559,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly object _messageControlQueueLock = new object();
         private Task _messageControlQueueTail = Task.CompletedTask;
         private const int LiveIncomingMessageTimeoutMs = 12000;
-        private CoreDispatcher _uiDispatcher;
+        private readonly AttachedUiDispatcher _ui;
         private readonly ChatStateStore _chatState;
 
         // Refactor Phase A: always-on counters. They are intentionally independent
@@ -658,31 +658,6 @@ namespace Unison.Uwp.Services.WhatsApp
         /// <summary>Session keys; prefer <see cref="IWhatsAppService.CurrentProfile"/> externally.</summary>
         internal AuthState AuthState => _authState;
 
-        public void AttachUiDispatcher(CoreDispatcher dispatcher)
-        {
-            if (dispatcher != null)
-            {
-                _uiDispatcher = dispatcher;
-            }
-        }
-
-        private CoreDispatcher GetUiDispatcher()
-        {
-            if (_uiDispatcher != null)
-            {
-                return _uiDispatcher;
-            }
-
-            try
-            {
-                return CoreApplication.MainView?.CoreWindow?.Dispatcher;
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
         public bool IsConnected =>
             _socket != null &&
             _socket.IsConnected &&
@@ -694,8 +669,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
         /// <summary>True while a reconnect/history replay drain is in progress; satellites should back off.</summary>
         public bool IsReplayDrainActive => ShouldDeferReconnectReplayWork();
-
-        Task IWhatsAppService.RunOnUiThreadAsync(Action action) => RunOnUiThreadAsync(action);
 
         /// <summary>
         /// Publishes a transient status string through <see cref="OnSyncStatus"/>.
@@ -1343,7 +1316,8 @@ namespace Unison.Uwp.Services.WhatsApp
             IPersonStore personStore,
             IGroupRosterStore groupRosterStore,
             IChatStore chatStore,
-            ISystemInfoProvider systemInfo)
+            ISystemInfoProvider systemInfo,
+            AttachedUiDispatcher ui)
         {
             if (chatState == null)
             {
@@ -1360,6 +1334,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _groupRosterStore = groupRosterStore ?? throw new ArgumentNullException(nameof(groupRosterStore));
             _chatStore = chatStore ?? throw new ArgumentNullException(nameof(chatStore));
             _isWindowsMobile = systemInfo.IsMobile();
+            _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _chatRows = new ChatRowIndex(() => Chats, GetCanonicalJid);
             _historyRequests = historyRequests ?? throw new ArgumentNullException(nameof(historyRequests));
             _historyMessages = historyMessages ?? throw new ArgumentNullException(nameof(historyMessages));
@@ -1405,11 +1380,12 @@ namespace Unison.Uwp.Services.WhatsApp
             IPersonStore personStore,
             IGroupRosterStore groupRosterStore,
             IChatStore chatStore,
-            ISystemInfoProvider systemInfo)
+            ISystemInfoProvider systemInfo,
+            AttachedUiDispatcher ui)
         {
             return _instance ?? (_instance = new WhatsAppService(
                 chatState, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, historyRequests,
-                personStore, groupRosterStore, chatStore, systemInfo));
+                personStore, groupRosterStore, chatStore, systemInfo, ui));
         }
 
         /// <summary>
@@ -4680,68 +4656,9 @@ namespace Unison.Uwp.Services.WhatsApp
 
         internal bool IsSelfChatJid(string jid) => IsSelfJid(jid);
 
-        internal async Task RunOnUiThreadTaskAsync(Func<Task> action)
-        {
-            if (action == null)
-            {
-                return;
-            }
+        internal Task RunOnUiThreadTaskAsync(Func<Task> action) => _ui.RunTaskAsync(action);
 
-            var dispatcher = GetUiDispatcher();
-            if (dispatcher == null)
-            {
-                RuntimeDiagnosticsService.Instance.Write(
-                    "runtime",
-                    "ui-dispatch-skipped",
-                    "kind=async; reason=no-dispatcher");
-                return;
-            }
-            if (dispatcher.HasThreadAccess)
-            {
-                await action();
-                return;
-            }
-
-            var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            await dispatcher.RunAsync(CoreDispatcherPriority.Low, async () =>
-            {
-                try
-                {
-                    await action();
-                    completion.TrySetResult(true);
-                }
-                catch (Exception ex)
-                {
-                    completion.TrySetException(ex);
-                }
-            });
-            await completion.Task;
-        }
-
-        internal async Task RunOnUiThreadAsync(Action action)
-        {
-            if (action == null)
-            {
-                return;
-            }
-
-            var dispatcher = GetUiDispatcher();
-            if (dispatcher == null)
-            {
-                RuntimeDiagnosticsService.Instance.Write(
-                    "runtime",
-                    "ui-dispatch-skipped",
-                    "kind=sync; reason=no-dispatcher");
-                return;
-            }
-            if (dispatcher.HasThreadAccess)
-            {
-                action();
-                return;
-            }
-
-            await dispatcher.RunAsync(CoreDispatcherPriority.Normal, () => action());
-        }
+        internal Task RunOnUiThreadAsync(Action action) => _ui.RunAsync(action);
 
         private void QueueChatMessagesChanged(string chatJid)
         {
@@ -4750,21 +4667,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            var dispatcher = GetUiDispatcher();
-            if (dispatcher == null)
-            {
-                return;
-            }
-            if (dispatcher.HasThreadAccess)
-            {
-                RaiseChatMessagesChanged(chatJid);
-                return;
-            }
-
-            _ = dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
-            {
-                RaiseChatMessagesChanged(chatJid);
-            });
+            _ui.Post(() => RaiseChatMessagesChanged(chatJid));
         }
 
         /// <summary>

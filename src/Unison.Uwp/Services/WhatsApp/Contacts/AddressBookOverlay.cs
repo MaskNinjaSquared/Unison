@@ -26,14 +26,17 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly ILocalContactsService _localContacts;
         private readonly IPersonStore _personStore;
         private readonly IWhatsAppService _whatsAppService;
+        private readonly IDispatcher _ui;
         private readonly IJidResolver _jids;
 
         internal AddressBookOverlay(
             ILocalContactsService localContacts,
             IPersonStore personStore,
             IWhatsAppService whatsAppService,
-            IJidResolver jids)
+            IJidResolver jids,
+            IDispatcher ui)
         {
+            _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _localContacts = localContacts ?? throw new ArgumentNullException(nameof(localContacts));
             _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
             _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
@@ -195,7 +198,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
             var extraPhones = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             List<string> jids = null;
-            await _whatsAppService.RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 jids = new List<string>();
                 var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

@@ -38,6 +38,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
     {
         private readonly IPersonStore _personStore;
         private readonly IWhatsAppService _whatsAppService;
+        private readonly IDispatcher _ui;
         private readonly IJidResolver _jids;
         private readonly ILocalContactsService _localContacts;
         private readonly ILocalSettings _localSettings;
@@ -71,9 +72,11 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             IAvatarCache avatarCache,
             JidAliasTable aliases,
             DisplayNameTable pushNames,
-            ISelfMarkerNaming selfMarkers)
+            ISelfMarkerNaming selfMarkers,
+            IDispatcher ui)
         {
             if (selfMarkers == null) throw new ArgumentNullException(nameof(selfMarkers));
+            _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             if (sessions == null) throw new ArgumentNullException(nameof(sessions));
             if (localContacts == null) throw new ArgumentNullException(nameof(localContacts));
             if (lidMappings == null) throw new ArgumentNullException(nameof(lidMappings));
@@ -94,7 +97,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             _pushNames = pushNames ?? throw new ArgumentNullException(nameof(pushNames));
 
             _directory = new ContactDirectory(sessions, lidMappings);
-            _addressBook = new AddressBookOverlay(localContacts, personStore, whatsAppService, jids);
+            _addressBook = new AddressBookOverlay(localContacts, personStore, whatsAppService, jids, ui);
             _usync = new ContactUsyncResolver(
                 whatsAppService,
                 _directory,
@@ -103,12 +106,13 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 pushNames,
                 new ContactLabelSanitizer(selfMarkers),
                 chats);
-            _names = new ContactNameResolver(whatsAppService, _addressBook, _directory, _usync, jids, groups);
+            _names = new ContactNameResolver(whatsAppService, _addressBook, _directory, _usync, jids, groups, ui);
             _avatars = new ChatAvatarPolicy(
                 whatsAppService,
                 jids,
-                new ChatAvatarFetch(whatsAppService, sessions, groups, jids, chats, avatarReport, avatars, avatarCache));
-            _roster = new GroupRosterPolicy(whatsAppService, groups, this, jids);
+                new ChatAvatarFetch(whatsAppService, sessions, groups, jids, chats, avatarReport, avatars, avatarCache, ui),
+                ui);
+            _roster = new GroupRosterPolicy(whatsAppService, groups, this, jids, ui);
 
             // Both live as long as the app does, so there is nothing to unhook from.
             _whatsAppService.OnDisplayNamesUpdated += (s, e) =>
@@ -473,7 +477,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             try
             {
                 var exports = new List<AppContactExport>();
-                await _whatsAppService.RunOnUiThreadAsync(() => CollectWindowsContactExports(exports))
+                await _ui.RunAsync(() => CollectWindowsContactExports(exports))
                     .ConfigureAwait(false);
                 await _localContacts.PublishAppContactsAsync(exports).ConfigureAwait(false);
                 _lastWindowsPublishUtc = DateTime.UtcNow;

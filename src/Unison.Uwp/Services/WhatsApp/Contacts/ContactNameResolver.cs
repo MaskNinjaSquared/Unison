@@ -35,6 +35,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private DateTime _lastForcedGroupPassUtc = DateTime.MinValue;
 
         private readonly IWhatsAppService _whatsAppService;
+        private readonly IDispatcher _ui;
         private readonly IGroupService _groups;
         private readonly AddressBookOverlay _addressBook;
         private readonly ContactDirectory _directory;
@@ -50,8 +51,10 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             ContactDirectory directory,
             ContactUsyncResolver usync,
             IJidResolver jids,
-            IGroupService groups)
+            IGroupService groups,
+            IDispatcher ui)
         {
+            _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
             _groups = groups ?? throw new ArgumentNullException(nameof(groups));
             _addressBook = addressBook ?? throw new ArgumentNullException(nameof(addressBook));
@@ -111,7 +114,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 // and an observable collection answers that with InvalidOperationException -
                 // on a background task, with nobody to catch it.
                 var directJids = new List<string>();
-                await _whatsAppService.RunOnUiThreadAsync(() =>
+                await _ui.RunAsync(() =>
                 {
                     var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                     foreach (ChatItem chat in _whatsAppService.Chats)
@@ -190,7 +193,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             }
 
             var list = new List<ChatItem>();
-            await _whatsAppService.RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 foreach (var c in _whatsAppService.Chats) list.Add(c);
             });

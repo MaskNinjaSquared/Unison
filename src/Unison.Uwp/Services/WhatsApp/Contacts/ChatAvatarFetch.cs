@@ -23,6 +23,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private const string GroupAvatarFallbackMissReason = "group-avatar-fallback-miss";
 
         private readonly IWhatsAppService _client;
+        private readonly IDispatcher _ui;
         private readonly IWhatsAppSessionProvider _sessions;
         private readonly IGroupService _groups;
         private readonly IJidResolver _jids;
@@ -40,8 +41,10 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             IChatStateStore chats,
             IAvatarReport report,
             AvatarFetcher avatars,
-            IAvatarCache cache)
+            IAvatarCache cache,
+            IDispatcher ui)
         {
+            _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _client = client ?? throw new ArgumentNullException(nameof(client));
             _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
             _groups = groups ?? throw new ArgumentNullException(nameof(groups));
@@ -75,7 +78,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         public async Task HydrateCachedAsync(string reason)
         {
             List<AvatarHydrateCandidate> candidates = null;
-            await _client.RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 candidates = new List<AvatarHydrateCandidate>();
                 foreach (ChatItem chat in _chats.Chats)
@@ -144,7 +147,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             }
 
             int hydrated = 0;
-            await _client.RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 foreach (ChatItem chat in _chats.Chats)
                 {
@@ -195,7 +198,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 }
                 catch (Exception ex)
                 {
-                    await _client.RunOnUiThreadAsync(() =>
+                    await _ui.RunAsync(() =>
                         ChatAvatarOutcome.RecordFailure(chat, "download:" + ex.Message, nowUtc));
                     Debug.WriteLine($"[WhatsAppService] Avatar download/cache failed for {chat.JID}: target={result.TargetJid}, reason={ex.Message}");
                     return;
@@ -203,12 +206,12 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
                 if (string.IsNullOrWhiteSpace(localUri))
                 {
-                    await _client.RunOnUiThreadAsync(() =>
+                    await _ui.RunAsync(() =>
                         ChatAvatarOutcome.RecordFailure(chat, "download:empty", nowUtc));
                     return;
                 }
 
-                await _client.RunOnUiThreadAsync(() =>
+                await _ui.RunAsync(() =>
                 {
                     ChatAvatarOutcome.RecordCached(chat, localUri, nowUtc);
                     _groups.ApplyGroupMemberAvatarOutcome(
@@ -232,7 +235,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                     failureReason = failureReason + ":" + GroupAvatarFallbackMissReason;
                 }
 
-                await _client.RunOnUiThreadAsync(() =>
+                await _ui.RunAsync(() =>
                     ChatAvatarOutcome.RecordAbsent(chat, failureReason, nowUtc));
                 Debug.WriteLine($"[WhatsAppService] Avatar confirmed absent for {chat.JID}: target={result.TargetJid}, reason={failureReason}");
                 return;
@@ -243,7 +246,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 return;
             }
 
-            await _client.RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
                 ChatAvatarOutcome.RecordFailure(
                     chat,
                     result.FailureReason ?? (result.IsTimeout ? "timeout" : "transient"),
@@ -298,7 +301,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                     }
 
                     DateTime nowUtc = DateTime.UtcNow;
-                    await _client.RunOnUiThreadAsync(() =>
+                    await _ui.RunAsync(() =>
                     {
                         chat.AvatarUrl = localUri;
                         chat.AvatarFetchedAtUtc = nowUtc;
@@ -332,7 +335,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             string sourceAvatarHigh = source.AvatarHighUrl;
             DateTime nowUtc = DateTime.UtcNow;
 
-            await _client.RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 chat.AvatarUrl = sourceAvatar;
                 if (!string.IsNullOrWhiteSpace(sourceAvatarHigh))
