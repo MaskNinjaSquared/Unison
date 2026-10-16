@@ -98,6 +98,54 @@ namespace Unison.Core.Helpers
         }
 
         /// <summary>
+        /// Whether the reconcile pass may put this message on the strip. A revoke, the old
+        /// "[Message Deleted]" body and an untrusted clock never may.
+        /// </summary>
+        /// <remarks>
+        /// Stricter than the live paths, which keep a revoked message as the tip and show its
+        /// tombstone. Recorded, not endorsed.
+        /// </remarks>
+        public static bool IsReconcileCandidate(ChatMessage message, DateTime utcNow) =>
+            message != null &&
+            !message.IsRevoked &&
+            MessageTimestampValidity.IsValid(message.Timestamp, utcNow) &&
+            !string.Equals(message.Content, LegacyDeletedPreview.Marker, StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// The newest <see cref="IsReconcileCandidate"/> message; on the same clock the higher id
+        /// wins, so the answer does not depend on the order the timelines were read.
+        /// </summary>
+        public static ChatMessage PickNewestReconcileCandidate(IEnumerable<ChatMessage> messages, DateTime utcNow)
+        {
+            if (messages == null)
+            {
+                return null;
+            }
+
+            ChatMessage best = null;
+            DateTime bestUtc = DateTime.MinValue;
+            foreach (ChatMessage message in messages)
+            {
+                if (!IsReconcileCandidate(message, utcNow))
+                {
+                    continue;
+                }
+
+                DateTime utc = ChatMessageOrder.ToComparableUtc(message.Timestamp);
+                if (best == null ||
+                    utc > bestUtc ||
+                    (utc == bestUtc &&
+                     string.CompareOrdinal(message.Id ?? string.Empty, best.Id ?? string.Empty) > 0))
+                {
+                    best = message;
+                    bestUtc = utc;
+                }
+            }
+
+            return best;
+        }
+
+        /// <summary>
         /// Blanks the preview of a chat with nothing left to show.
         /// </summary>
         /// <remarks>

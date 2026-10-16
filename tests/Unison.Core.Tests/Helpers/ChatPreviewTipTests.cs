@@ -376,5 +376,55 @@ namespace Unison.Core.Tests.Helpers
             Assert.False(ChatPreviewTip.ShowsOutgoingMessage(null, Msg("m1", 0, fromMe: true), Window));
             Assert.False(ChatPreviewTip.ShowsOutgoingMessage(SentRow("m1"), null, Window));
         }
+
+        // --- Reconcile candidates -------------------------------------------
+
+        private static readonly DateTime Now = T0.AddHours(1);
+
+        [Fact]
+        public void A_revoke_a_deleted_marker_or_an_untrusted_clock_cannot_be_the_reconciled_tip()
+        {
+            var revoked = Msg("r");
+            revoked.IsRevoked = true;
+            var marker = Msg("d");
+            marker.Content = "[message deleted]";
+            var noClock = new ChatMessage { Id = "z", Timestamp = DateTime.MinValue };
+
+            Assert.False(ChatPreviewTip.IsReconcileCandidate(revoked, Now));
+            Assert.False(ChatPreviewTip.IsReconcileCandidate(marker, Now));
+            Assert.False(ChatPreviewTip.IsReconcileCandidate(noClock, Now));
+            Assert.False(ChatPreviewTip.IsReconcileCandidate(null, Now));
+            Assert.True(ChatPreviewTip.IsReconcileCandidate(Msg("ok"), Now));
+        }
+
+        [Fact]
+        public void The_newest_candidate_wins_and_ineligible_ones_are_passed_over()
+        {
+            var older = Msg("a", seconds: 10);
+            var newest = Msg("b", seconds: 20);
+            var revokedNewer = Msg("c", seconds: 30);
+            revokedNewer.IsRevoked = true;
+
+            Assert.Same(
+                newest,
+                ChatPreviewTip.PickNewestReconcileCandidate(new[] { older, revokedNewer, newest, null }, Now));
+        }
+
+        [Fact]
+        public void On_the_same_clock_the_higher_id_wins_whatever_the_order()
+        {
+            var low = Msg("a", seconds: 10);
+            var high = Msg("b", seconds: 10);
+
+            Assert.Same(high, ChatPreviewTip.PickNewestReconcileCandidate(new[] { low, high }, Now));
+            Assert.Same(high, ChatPreviewTip.PickNewestReconcileCandidate(new[] { high, low }, Now));
+        }
+
+        [Fact]
+        public void No_candidate_means_no_tip()
+        {
+            Assert.Null(ChatPreviewTip.PickNewestReconcileCandidate(new ChatMessage[0], Now));
+            Assert.Null(ChatPreviewTip.PickNewestReconcileCandidate(null, Now));
+        }
     }
 }
