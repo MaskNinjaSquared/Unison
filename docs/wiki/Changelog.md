@@ -4,6 +4,17 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## A contact found by number keeps its pin, mute and unread count
+
+When a contact lookup or a new chat pairs a LID row with the phone row of the same person, the two
+rows now fold through the same pass as the list dedupe. The LID row's pin, mute, unread count,
+newer preview and picture used to be dropped; only its messages moved. Removing a message deleted on
+another device, and the leftover row of an old revoke, also go through the message cache now, so the
+message id is forgotten with it. A row repaired from an old "[Message Deleted]" line with nothing to
+replace it also loses the stale message id. A chat update that touches only pin or only mute is read
+by `AppStatePinMapping` / `AppStateMuteMapping`, and the badge total, the chat-row index, the reconcile
+tip choice, the self name precedence and the pin-in-chat window are Core rules with tests.
+
 ## Usync names filed by the contact façade
 
 What a contact lookup learns about a name is now stored by `ContactFacade` directly in the shared

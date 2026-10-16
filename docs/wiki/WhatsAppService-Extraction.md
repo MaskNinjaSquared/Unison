@@ -1009,6 +1009,32 @@ many labels changed. The startup pass still logs each title and saves; the live 
 the names-changed event. A member keeps the weaker rule it had: any non-blank name that differs is
 written, with no check that it is recognisable.
 
+**Another sweep of the main file.** Reading a partial `ChatUpdate` (does it speak about pin or mute,
+and the legacy shape that carried only a sort key or a deadline) is `AppStatePinMapping.FromChatUpdate`
+/ `AppStateMuteMapping.FromChatUpdate`. When a pin-in-chat starts and expires is `MessagePinWindow`;
+a local pin with no duration no longer expires the moment it is made. The repair of rows an old build
+left showing "[Message Deleted]" is `LegacyDeletedPreview`, and its blank-out goes through
+`ChatPreviewTip.Clear`, which also drops the stale `LastMessageId`. The canonical row index is
+`ChatRowIndex` (`Unison.Core/State`): built on demand, published only when nothing invalidated it during
+the build, copies handed out. Moving our message's status forward across every timeline holding it is
+`ChatMessageCache.ApplyOutgoingStatus`. The badge total is `ChatUnreadTally.TotalAcrossConversations`.
+The self base-name precedence (phone contact, WhatsApp cache, credentials, current name, number) and
+the "established self name" gate are `SelfDisplayNameResolution`.
+
+The reconcile pass's tip choice is `ChatPreviewTip.IsReconcileCandidate` / `PickNewestReconcileCandidate`.
+**Recorded, not endorsed:** it skips revoked messages, while the live paths (`PickLatest`, the revoke
+apply) keep a revoked message as the tip and show its tombstone. Which one is right is a product call.
+
+Two edits that bypassed the cache are gone: the revoke apply removed the old synthetic envelope row with
+`List.Remove` (the id stayed in the index), and the app-state delete wrote the remove-plus-forget pair by
+hand. Both use `ChatMessageCache.RemoveMessage`; the revoke target is found with `AliasLinkedMessageFind`.
+
+**Fixed in the same sweep:** `CheckAndMergeDuplicateChatsAsync` only moved messages and removed the LID
+row, so a contact paired by usync or by a new chat lost the LID row's pin, mute, unread count, newer
+preview and picture. When the pair is filed (both callers file it first) it now runs the dedupe pass,
+which folds through `DuplicateChatFold` and persists identity. The bare message move stays for a pair
+the table does not know.
+
 ### History on demand — the bookkeeping left first
 
 The on-demand history cluster (per-chat `HISTORY_SYNC_ON_DEMAND`, the paginated
