@@ -42,6 +42,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         private IMessageService _messages;
         private IChatStateStore _chatState;
         private IStringResources _strings;
+        private IJidResolver _jids;
         private bool _pivotReady;
         private string _loadedSection;
         private bool _searchState;
@@ -71,6 +72,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 _messages = App.Services.GetService<IMessageService>();
                 _chatState = App.Services.GetService<IChatStateStore>();
                 _strings = App.Services.GetService<IStringResources>();
+                _jids = App.Services.GetService<IJidResolver>();
                 _isWindowsMobile = App.Services.GetService<ISystemInfoProvider>()?.IsMobile() == true;
                 DataContext = _shell;
             }
@@ -582,6 +584,10 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
             try
             {
+                bool alreadyOpen = _detailOpen &&
+                    ShellChatDetail.HasActiveChat &&
+                    IsSameConversation(ShellChatDetail.ActiveChatItem, chat);
+
                 await ShellChatDetail.PrepareActiveChatAsync(chat);
                 if (!ShellChatDetail.HasActiveChat)
                 {
@@ -589,6 +595,13 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 }
 
                 _shell?.SelectChat(chat);
+                if (alreadyOpen)
+                {
+                    // The list re-reports the open chat after every reorder. Loading it again
+                    // cleared and rebuilt the whole timeline under the user.
+                    return;
+                }
+
                 _shell?.ReportActiveChat(true);
                 _detailOpen = true;
                 ApplyDetailLayout();
@@ -599,6 +612,19 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             {
                 Debug.WriteLine("[WhatsAppLegacy] OpenDetail: " + ex.Message);
             }
+        }
+
+        private bool IsSameConversation(ChatItem active, ChatItem chat)
+        {
+            if (active == null || chat == null ||
+                string.IsNullOrWhiteSpace(active.JID) || string.IsNullOrWhiteSpace(chat.JID))
+            {
+                return false;
+            }
+
+            string activeJid = _jids?.GetCanonicalJid(active.JID) ?? active.JID;
+            string chatJid = _jids?.GetCanonicalJid(chat.JID) ?? chat.JID;
+            return string.Equals(activeJid, chatJid, StringComparison.OrdinalIgnoreCase);
         }
 
         private async Task CloseDetailAsync()

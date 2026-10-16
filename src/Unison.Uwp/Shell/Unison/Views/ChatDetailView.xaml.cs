@@ -1593,9 +1593,6 @@ namespace Unison.Uwp.Shell.Unison.Views
         /// </summary>
         public Task PrepareActiveChatAsync(ChatItem chat)
         {
-            TryCloseVideoViewer();
-            TryCloseImageViewer();
-
             var chats = ChatsFacade;
             var contacts = Contacts;
             if (chat != null)
@@ -1645,6 +1642,11 @@ namespace Unison.Uwp.Shell.Unison.Views
                     return Task.CompletedTask;
                 }
             }
+
+            // After the same-chat return: the list re-reports the open chat after every reorder,
+            // and that must not close a picture the user is looking at.
+            TryCloseVideoViewer();
+            TryCloseImageViewer();
 
             _chatLoadCts?.Cancel();
             _chatLoadCts?.Dispose();
