@@ -45,6 +45,7 @@ namespace Unison.Uwp.UI.Controls
         {
             this.InitializeComponent();
             this.Loaded += AttachTile_Loaded;
+            this.DataContextChanged += (s, e) => ApplyLocalizedLabel();
         }
 
         /// <summary>White-on-transparent artwork, drawn at 54px.</summary>
@@ -84,7 +85,9 @@ namespace Unison.Uwp.UI.Controls
         /// </summary>
         public event RoutedEventHandler Invoked;
 
-        private void AttachTile_Loaded(object sender, RoutedEventArgs e)
+        private void AttachTile_Loaded(object sender, RoutedEventArgs e) => ApplyLocalizedLabel();
+
+        private void ApplyLocalizedLabel()
         {
             if (string.IsNullOrEmpty(LocalizationUid))
             {

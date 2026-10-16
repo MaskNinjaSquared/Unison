@@ -1130,40 +1130,52 @@
     <value>WHATSAPP LEGACY</value>
   </data>
   <data name="Shell_LegacyAppBar_Filter.Text" xml:space="preserve">
-    <value>фильтр</value>
+    <value>Фильтровать сообщения</value>
   </data>
   <data name="Shell_LegacyAppBar_Filter.Label" xml:space="preserve">
-    <value>фильтр</value>
+    <value>Фильтровать сообщения</value>
   </data>
   <data name="Shell_LegacyAppBar_Search.Label" xml:space="preserve">
-    <value>поиск</value>
+    <value>Поиск</value>
   </data>
   <data name="Shell_LegacyAppBar_NewChat.Label" xml:space="preserve">
-    <value>новый чат</value>
+    <value>Новый чат</value>
   </data>
   <data name="Shell_LegacyAppBar_AddContact.Label" xml:space="preserve">
-    <value>добавить контакт</value>
+    <value>Добавить контакт</value>
   </data>
   <data name="Shell_LegacyAppBar_NewStatus.Label" xml:space="preserve">
-    <value>новый статус</value>
+    <value>Новый статус</value>
   </data>
   <data name="Shell_LegacyAppBar_More.Label" xml:space="preserve">
-    <value>ещё</value>
+    <value>Ещё</value>
   </data>
   <data name="Shell_LegacyMenu_Debug.Label" xml:space="preserve">
-    <value>debug</value>
+    <value>Debug</value>
   </data>
   <data name="Shell_LegacyMenu_Settings.Label" xml:space="preserve">
-    <value>настройки</value>
+    <value>Настройки</value>
   </data>
   <data name="Shell_LegacyMenu_Profile.Label" xml:space="preserve">
-    <value>профиль</value>
+    <value>Профиль</value>
   </data>
   <data name="Shell_LegacySearch_Cancel.Content" xml:space="preserve">
-    <value>cancel</value>
+    <value>Отмена</value>
   </data>
   <data name="Shell_LegacySearchBox.PlaceholderText" xml:space="preserve">
-    <value>search</value>
+    <value>Поиск</value>
   </data>  <data name="Shell_LegacyPlaceholder.Text" xml:space="preserve">
     <value>Скоро</value>
-  </data></root>
+  </data>  <data name="Shell_LegacySearchTitle.Text" xml:space="preserve">
+    <value>Поиск</value>
+  </data>
+  <data name="ChatDetail_DocumentOpen.Label" xml:space="preserve">
+    <value>Открыть документ</value>
+  </data>
+  <data name="ChatDetail_DocumentSaveAs.Label" xml:space="preserve">
+    <value>Сохранить как…</value>
+  </data>
+  <data name="ChatDetail_Back.ToolTip" xml:space="preserve">
+    <value>Назад</value>
+  </data>
+</root>

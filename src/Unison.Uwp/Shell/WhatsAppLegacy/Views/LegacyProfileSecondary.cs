@@ -25,7 +25,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             if (string.IsNullOrWhiteSpace(name))
             {
                 var strings = App.Services?.GetService<IStringResources>();
-                name = strings?.Get("Shell_LegacyMenu_Profile.Label", "profile") ?? "profile";
+                name = strings?.Get("Shell_LegacyMenu_Profile.Label", "Profile") ?? "Profile";
             }
 
             button.Label = name;

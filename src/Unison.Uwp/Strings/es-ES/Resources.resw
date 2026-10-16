@@ -1130,40 +1130,52 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
     <value>WHATSAPP LEGACY</value>
   </data>
   <data name="Shell_LegacyAppBar_Filter.Text" xml:space="preserve">
-    <value>filtrar</value>
+    <value>Filtrar mensajes</value>
   </data>
   <data name="Shell_LegacyAppBar_Filter.Label" xml:space="preserve">
-    <value>filtrar</value>
+    <value>Filtrar mensajes</value>
   </data>
   <data name="Shell_LegacyAppBar_Search.Label" xml:space="preserve">
-    <value>buscar</value>
+    <value>Buscar</value>
   </data>
   <data name="Shell_LegacyAppBar_NewChat.Label" xml:space="preserve">
-    <value>chat nuevo</value>
+    <value>Chat nuevo</value>
   </data>
   <data name="Shell_LegacyAppBar_AddContact.Label" xml:space="preserve">
-    <value>añadir contacto</value>
+    <value>Añadir contacto</value>
   </data>
   <data name="Shell_LegacyAppBar_NewStatus.Label" xml:space="preserve">
-    <value>estado nuevo</value>
+    <value>Nuevo estado</value>
   </data>
   <data name="Shell_LegacyAppBar_More.Label" xml:space="preserve">
-    <value>más</value>
+    <value>Más</value>
   </data>
   <data name="Shell_LegacyMenu_Debug.Label" xml:space="preserve">
-    <value>debug</value>
+    <value>Debug</value>
   </data>
   <data name="Shell_LegacyMenu_Settings.Label" xml:space="preserve">
-    <value>ajustes</value>
+    <value>Ajustes</value>
   </data>
   <data name="Shell_LegacyMenu_Profile.Label" xml:space="preserve">
-    <value>perfil</value>
+    <value>Perfil</value>
   </data>
   <data name="Shell_LegacySearch_Cancel.Content" xml:space="preserve">
-    <value>cancel</value>
+    <value>Cancelar</value>
   </data>
   <data name="Shell_LegacySearchBox.PlaceholderText" xml:space="preserve">
-    <value>search</value>
+    <value>Buscar</value>
   </data>  <data name="Shell_LegacyPlaceholder.Text" xml:space="preserve">
     <value>Próximamente</value>
-  </data></root>
+  </data>  <data name="Shell_LegacySearchTitle.Text" xml:space="preserve">
+    <value>Buscar</value>
+  </data>
+  <data name="ChatDetail_DocumentOpen.Label" xml:space="preserve">
+    <value>Abrir documento</value>
+  </data>
+  <data name="ChatDetail_DocumentSaveAs.Label" xml:space="preserve">
+    <value>Guardar como…</value>
+  </data>
+  <data name="ChatDetail_Back.ToolTip" xml:space="preserve">
+    <value>Atrás</value>
+  </data>
+</root>

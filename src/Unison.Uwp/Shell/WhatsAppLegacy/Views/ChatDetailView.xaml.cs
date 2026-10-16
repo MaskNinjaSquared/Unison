@@ -262,11 +262,32 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                     MessageInput.Padding = new Thickness(8, 6, 8, 6);
                     MessageInput.VerticalAlignment = VerticalAlignment.Center;
                 }
+
+                // Header / composer tooltips were English literals; bind them to the same keys
+                // the MenuFlyout items already use so the detail chrome follows the UI language.
+                ApplyLocalizedTooltip(ContactMoreButton, "Shell_LegacyAppBar_More.Label", "More");
+                ApplyLocalizedTooltip(GroupMoreButton, "Shell_LegacyAppBar_More.Label", "More");
+                ApplyLocalizedTooltip(ContactAudioCallButton, "ChatDetail_VoiceCall.Text", "Voice call");
+                ApplyLocalizedTooltip(ContactVideoCallButton, "ChatDetail_VideoCall.Text", "Video call");
+                ApplyLocalizedTooltip(GroupVideoCallButton, "ChatDetail_VideoCall.Text", "Video call");
+                ApplyLocalizedTooltip(BackButton, "ChatDetail_Back.ToolTip", "Back");
+                ApplyLocalizedTooltip(EmptyBackButton, "ChatDetail_Back.ToolTip", "Back");
+                ApplyLocalizedTooltip(CancelRecordingButton, "Shell_LegacySearch_Cancel.Content", "Cancel");
             }
             catch (Exception ex)
             {
                 Debug.WriteLine("[ChatDetailView] Legacy composer chrome: " + ex.Message);
             }
+        }
+
+        private static void ApplyLocalizedTooltip(FrameworkElement element, string key, string fallback)
+        {
+            if (element == null)
+            {
+                return;
+            }
+
+            ToolTipService.SetToolTip(element, LocalizedStrings.Get(key, fallback));
         }
 
         private static void ApplyLegacyBackButton(Button button)

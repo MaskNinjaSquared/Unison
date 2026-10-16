@@ -1189,40 +1189,52 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
     <value>WHATSAPP LEGACY</value>
   </data>
   <data name="Shell_LegacyAppBar_Filter.Text" xml:space="preserve">
-    <value>filter</value>
+    <value>Filter pesan</value>
   </data>
   <data name="Shell_LegacyAppBar_Filter.Label" xml:space="preserve">
-    <value>filter</value>
+    <value>Filter pesan</value>
   </data>
   <data name="Shell_LegacyAppBar_Search.Label" xml:space="preserve">
-    <value>cari</value>
+    <value>Cari</value>
   </data>
   <data name="Shell_LegacyAppBar_NewChat.Label" xml:space="preserve">
-    <value>chat baru</value>
+    <value>Chat baru</value>
   </data>
   <data name="Shell_LegacyAppBar_AddContact.Label" xml:space="preserve">
-    <value>tambah kontak</value>
+    <value>Tambah kontak</value>
   </data>
   <data name="Shell_LegacyAppBar_NewStatus.Label" xml:space="preserve">
-    <value>status baru</value>
+    <value>Status baru</value>
   </data>
   <data name="Shell_LegacyAppBar_More.Label" xml:space="preserve">
-    <value>lainnya</value>
+    <value>Lainnya</value>
   </data>
   <data name="Shell_LegacyMenu_Debug.Label" xml:space="preserve">
-    <value>debug</value>
+    <value>Debug</value>
   </data>
   <data name="Shell_LegacyMenu_Settings.Label" xml:space="preserve">
-    <value>pengaturan</value>
+    <value>Pengaturan</value>
   </data>
   <data name="Shell_LegacyMenu_Profile.Label" xml:space="preserve">
-    <value>profil</value>
+    <value>Profil</value>
   </data>
   <data name="Shell_LegacySearch_Cancel.Content" xml:space="preserve">
-    <value>cancel</value>
+    <value>Batal</value>
   </data>
   <data name="Shell_LegacySearchBox.PlaceholderText" xml:space="preserve">
-    <value>search</value>
+    <value>Cari</value>
   </data>  <data name="Shell_LegacyPlaceholder.Text" xml:space="preserve">
     <value>Segera hadir</value>
-  </data></root>
+  </data>  <data name="Shell_LegacySearchTitle.Text" xml:space="preserve">
+    <value>Cari</value>
+  </data>
+  <data name="ChatDetail_DocumentOpen.Label" xml:space="preserve">
+    <value>Buka dokumen</value>
+  </data>
+  <data name="ChatDetail_DocumentSaveAs.Label" xml:space="preserve">
+    <value>Simpan sebagai…</value>
+  </data>
+  <data name="ChatDetail_Back.ToolTip" xml:space="preserve">
+    <value>Kembali</value>
+  </data>
+</root>

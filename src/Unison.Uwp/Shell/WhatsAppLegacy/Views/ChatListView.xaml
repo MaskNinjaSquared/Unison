@@ -69,7 +69,7 @@
                               Foreground="{ThemeResource WhatsAppTextHighBrush}"
                               VerticalAlignment="Center"/>
                     <TextBlock x:Name="FilterLabel"
-                               Text="filtrar"
+                               Text="Filter Messages"
                                Margin="6,0,0,0"
                                FontSize="13"
                                FontFamily="{StaticResource MainFont}"
@@ -126,7 +126,7 @@
                     Loaded="ListCommandBar_Loaded">
                 <AppBarButton x:Uid="Shell_LegacyAppBar_Search"
                           Style="{StaticResource LegacyAppBarButtonStyle}"
-                          Label="search"
+                          Label="Search"
                           Click="SearchAppBar_Click">
                     <TextBlock Text="&#xEB01;"
                            FontFamily="{StaticResource LegacyIconFont}"
@@ -137,7 +137,7 @@
                 </AppBarButton>
                 <AppBarButton x:Uid="Shell_LegacyAppBar_NewChat"
                           Style="{StaticResource LegacyAppBarButtonStyle}"
-                          Label="new chat"
+                          Label="New chat"
                           Click="NewChatAppBar_Click">
                     <TextBlock Text="&#xEB06;"
                            FontFamily="{StaticResource LegacyIconFont}"
@@ -148,7 +148,7 @@
                 </AppBarButton>
                 <AppBarButton x:Uid="Shell_LegacyAppBar_AddContact"
                           Style="{StaticResource LegacyAppBarButtonStyle}"
-                          Label="add contact"
+                          Label="Add contact"
                           Command="{x:Bind ViewModel.AddContactCommand}">
                     <TextBlock Text="&#xEB02;"
                            FontFamily="{StaticResource LegacyIconFont}"
@@ -160,7 +160,7 @@
                 <CommandBar.SecondaryCommands>
                     <AppBarButton x:Name="ProfileSecondaryButton"
                               x:Uid="Shell_LegacyMenu_Profile"
-                              Label="profile"
+                              Label="Profile"
                               Click="ProfileAppBar_Click">
                         <AppBarButton.Icon>
                             <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE77B;"/>
@@ -168,14 +168,14 @@
                     </AppBarButton>
                     <AppBarSeparator/>
                     <AppBarButton x:Uid="Shell_LegacyMenu_Debug"
-                              Label="debug"
+                              Label="Debug"
                               Click="DebugAppBar_Click">
                         <AppBarButton.Icon>
                             <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xEBE8;"/>
                         </AppBarButton.Icon>
                     </AppBarButton>
                     <AppBarButton x:Uid="Shell_LegacyMenu_Settings"
-                              Label="settings"
+                              Label="Settings"
                               Click="SettingsAppBar_Click">
                         <AppBarButton.Icon>
                             <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE713;"/>

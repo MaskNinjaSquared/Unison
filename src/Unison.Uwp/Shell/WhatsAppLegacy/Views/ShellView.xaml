@@ -73,7 +73,7 @@
                             Style="{StaticResource LegacyBackButtonStyle}"
                             VerticalAlignment="Center"/>
                     <TextBlock x:Uid="Shell_LegacySearchTitle"
-                               Text="buscar"
+                               Text="Search"
                                Margin="8,0,0,0"
                                VerticalAlignment="Center"
                                FontSize="28"
