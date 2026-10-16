@@ -42,12 +42,6 @@ namespace Unison.Uwp.Services.WhatsApp
 {
     public partial class WhatsAppService
     {
-        /// <summary>Delegates to <see cref="IContactService"/> (owns dedup/backoff policy); this class only supplies the fetch primitive.</summary>
-        private void RequestAvatarRefresh(ChatItem chat, bool force = false)
-        {
-            _contactService?.RequestAvatarRefresh(chat, force);
-        }
-
         private string FindAvatarOnChatRows(string jid)
         {
             if (string.IsNullOrWhiteSpace(jid))

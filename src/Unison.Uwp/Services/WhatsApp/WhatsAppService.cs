@@ -249,7 +249,8 @@ namespace Unison.Uwp.Services.WhatsApp
         /// <summary>
         /// Wired from App DI so the legacy <see cref="IWhatsAppService"/> contact members still
         /// resolve. Only pass-throughs are left here — the notifications this used to push at the
-        /// facade are events now (see <see cref="OnAvatarCached"/>, <see cref="OnJidAliasResolved"/>).
+        /// facade are events now (see <see cref="OnAvatarCached"/>, <see cref="OnJidAliasResolved"/>,
+        /// <see cref="OnAvatarRetryDue"/>).
         /// </summary>
         public void AttachContactService(IContactService contactService)
         {
@@ -1231,6 +1232,7 @@ namespace Unison.Uwp.Services.WhatsApp
         public event EventHandler<AvatarCachedEventArgs> OnAvatarCached;
         public event EventHandler OnGroupListingDue;
         public event EventHandler<JidAliasResolvedEventArgs> OnJidAliasResolved;
+        public event EventHandler<AvatarRetryDueEventArgs> OnAvatarRetryDue;
 
         /// <summary>
         /// These are raised from the socket's own threads, so a facade that throws would otherwise

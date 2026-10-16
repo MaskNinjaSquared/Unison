@@ -134,6 +134,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             };
             _whatsAppService.OnAvatarCached += Client_OnAvatarCached;
             _whatsAppService.OnJidAliasResolved += Client_OnJidAliasResolved;
+            _whatsAppService.OnAvatarRetryDue += Client_OnAvatarRetryDue;
         }
 
         /// <summary>
@@ -154,6 +155,19 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             ClearAvatarAttempted(e.LidJid);
             ClearAvatarAttempted(e.PhoneJid);
             ClearAvatarAttempted(_jids.GetCanonicalJid(e.PhoneJid));
+        }
+
+        /// <summary>
+        /// Forced past the backoff: the failure it would honour was recorded under the half of the
+        /// identity that could not answer. Runs on the UI thread the client raised it on, which
+        /// <see cref="ChatAvatarPolicy.RequestRefresh"/> needs to read the live list.
+        /// </summary>
+        private void Client_OnAvatarRetryDue(object sender, AvatarRetryDueEventArgs e)
+        {
+            foreach (ChatItem chat in e.Chats)
+            {
+                RequestAvatarRefresh(chat, force: true);
+            }
         }
 
         public event EventHandler DisplayNamesUpdated;

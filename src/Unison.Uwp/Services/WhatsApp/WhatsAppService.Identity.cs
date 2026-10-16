@@ -485,13 +485,18 @@ namespace Unison.Uwp.Services.WhatsApp
                 {
                     await RunOnUiThreadAsync(() =>
                     {
+                        var rows = new List<ChatItem>();
                         foreach (var pn in batch.AvatarTargets)
                         {
-                            foreach (var chat in GetChatRowsForCanonicalJid(pn)
-                                         .Where(c => string.IsNullOrWhiteSpace(c.AvatarUrl)))
-                            {
-                                RequestAvatarRefresh(chat, force: true);
-                            }
+                            rows.AddRange(GetChatRowsForCanonicalJid(pn)
+                                .Where(c => string.IsNullOrWhiteSpace(c.AvatarUrl)));
+                        }
+
+                        if (rows.Count > 0)
+                        {
+                            RaiseReport(
+                                () => OnAvatarRetryDue?.Invoke(this, new AvatarRetryDueEventArgs(rows)),
+                                nameof(OnAvatarRetryDue));
                         }
                     });
                 }

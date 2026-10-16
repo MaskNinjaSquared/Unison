@@ -85,6 +85,11 @@ namespace Unison.Core.Contracts.WhatsApp
         event EventHandler OnGroupListingDue;
         /// <summary>A phone JID and a LID were newly paired.</summary>
         event EventHandler<JidAliasResolvedEventArgs> OnJidAliasResolved;
+        /// <summary>
+        /// After a burst of new pairs, the rows still without an avatar under them. Raised on the
+        /// UI thread; the contact façade decides how they are asked again.
+        /// </summary>
+        event EventHandler<AvatarRetryDueEventArgs> OnAvatarRetryDue;
 
         /// <summary>Active pairing helper after ConnectAsync; may be null before connect.</summary>
         IPairingService Pairing { get; }
