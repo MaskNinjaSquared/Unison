@@ -2928,10 +2928,6 @@ namespace Unison.Uwp.Services.WhatsApp
                         {
                             await _contactService.RetrieveContactPicturesAsync(token);
                         }
-                        else
-                        {
-                            await FetchProfilePicturesAsync(token);
-                        }
                     }
 
                     // Last step: the group façade shows the status, runs the listing and clears it.
@@ -3026,14 +3022,6 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             return reason != null;
-        }
-
-        /// <summary>
-        /// Fetches profile pictures for chats that don't have one yet
-        /// </summary>
-        private async Task FetchProfilePicturesAsync(CancellationToken token)
-        {
-            await RetrieveContactPicturesCoreAsync(token);
         }
 
         private string FindExistingAvatarUrl(string jid, string phone, string lid)

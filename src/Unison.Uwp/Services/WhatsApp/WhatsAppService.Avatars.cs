@@ -48,17 +48,6 @@ namespace Unison.Uwp.Services.WhatsApp
             _contactService?.RequestAvatarRefresh(chat, force);
         }
 
-        /// <summary>Delegates to <see cref="IContactService"/> (owns batch/backoff policy); this class only supplies the fetch primitives.</summary>
-        private Task RetrieveContactPicturesCoreAsync(CancellationToken token)
-        {
-            if (_socket == null)
-            {
-                return Task.CompletedTask;
-            }
-
-            return _contactService?.RetrieveContactPicturesAsync(token) ?? Task.CompletedTask;
-        }
-
         private string FindAvatarOnChatRows(string jid)
         {
             if (string.IsNullOrWhiteSpace(jid))
