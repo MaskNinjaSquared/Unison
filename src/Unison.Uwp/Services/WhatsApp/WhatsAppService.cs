@@ -1013,12 +1013,7 @@ namespace Unison.Uwp.Services.WhatsApp
         public ObservableCollection<ChatItem> Chats => _chatState.Chats;
         public ChatMessageCache MessagesByChat => _chatState.MessagesByChat;
 
-        /// <summary>
-        /// Canonical address to the rows that carry it. Null means "not built"; see
-        /// <see cref="GetChatRowsForCanonicalJid"/>.
-        /// </summary>
-        private Dictionary<string, List<ChatItem>> _chatRowsByCanonical;
-        private int _chatRowIndexVersion;
+        private readonly ChatRowIndex _chatRows;
 
         bool IWhatsAppService.VerboseLogging => VerboseLogging;
 
@@ -1120,13 +1115,6 @@ namespace Unison.Uwp.Services.WhatsApp
         /// Every row that stands for the same conversation - a chat addressed by LID and the same
         /// chat addressed by phone number are two rows until they are merged.
         /// </summary>
-        /// <remarks>
-        /// Answered from an index that is built on demand and thrown away whenever the list or
-        /// the aliases change. This is the most-called lookup in the service - a message, a
-        /// receipt, a preview, a conversation in a history chunk all go through it - and it used
-        /// to canonicalise every row in the list on every call. With a few hundred chats and a
-        /// sync's worth of calls that is tens of millions of string operations on the UI thread.
-        /// </remarks>
         private List<ChatItem> GetChatRowsForCanonicalJid(string jid)
         {
             string canonical = GetCanonicalJid(jid);
@@ -1135,55 +1123,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 canonical = NormalizeJid(jid);
             }
 
-            if (string.IsNullOrWhiteSpace(canonical))
-            {
-                return new List<ChatItem>();
-            }
-
-            var index = _chatRowsByCanonical;
-            if (index == null)
-            {
-                int builtFrom = _chatRowIndexVersion;
-                index = new Dictionary<string, List<ChatItem>>(StringComparer.OrdinalIgnoreCase);
-                foreach (var chat in Chats)
-                {
-                    if (chat == null)
-                    {
-                        continue;
-                    }
-
-                    string key = GetCanonicalJid(chat.JID);
-                    if (string.IsNullOrWhiteSpace(key))
-                    {
-                        continue;
-                    }
-
-                    List<ChatItem> bucket;
-                    if (!index.TryGetValue(key, out bucket))
-                    {
-                        bucket = new List<ChatItem>();
-                        index[key] = bucket;
-                    }
-
-                    bucket.Add(chat);
-                }
-
-                // Only published if nothing changed while it was being built. Without this a
-                // build that raced an invalidation would install an index describing a list that
-                // no longer exists, and it would stay installed.
-                if (_chatRowIndexVersion == builtFrom)
-                {
-                    _chatRowsByCanonical = index;
-                }
-            }
-
-            List<ChatItem> rows;
-
-            // Copied out: callers routinely add to or remove from the chat list while walking the
-            // result, which is exactly what the old ToList was protecting them from.
-            return index.TryGetValue(canonical, out rows)
-                ? new List<ChatItem>(rows)
-                : new List<ChatItem>();
+            return _chatRows.Find(canonical);
         }
 
         IReadOnlyList<ChatItem> IWhatsAppService.GetChatRowsForCanonicalJid(string jid) =>
@@ -1199,11 +1139,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// Drops the row index. Called whenever the list changes or a JID stops resolving to what
         /// it used to - a new alias, a row re-keyed to its canonical address.
         /// </summary>
-        private void InvalidateChatRowIndex()
-        {
-            Interlocked.Increment(ref _chatRowIndexVersion);
-            _chatRowsByCanonical = null;
-        }
+        private void InvalidateChatRowIndex() => _chatRows.Invalidate();
 
         /// <summary>
         /// Updates the chat-list strip when the candidate is not older than the current tip.
@@ -1478,6 +1414,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             _chatState = chatState;
+            _chatRows = new ChatRowIndex(() => Chats, GetCanonicalJid);
             _historyRequests = historyRequests ?? throw new ArgumentNullException(nameof(historyRequests));
             _historyMessages = historyMessages ?? throw new ArgumentNullException(nameof(historyMessages));
             _chatPreviews = chatPreviews ?? throw new ArgumentNullException(nameof(chatPreviews));
@@ -2339,11 +2276,7 @@ namespace Unison.Uwp.Services.WhatsApp
             // Builds before v5.14 could persist a replayed revoke envelope as a new
             // "[Message Deleted]" row with DateTime.Now. Repair only those known-bad
             // previews and leave normal chats untouched, keeping startup lightweight.
-            var suspicious = Chats
-                .Where(c => c != null &&
-                            string.Equals(c.LastMessage, "[Message Deleted]", StringComparison.OrdinalIgnoreCase) &&
-                            !string.IsNullOrWhiteSpace(c.JID))
-                .ToList();
+            var suspicious = Chats.Where(LegacyDeletedPreview.IsSuspect).ToList();
             if (suspicious.Count == 0) return;
 
             bool changed = false;
@@ -2354,22 +2287,9 @@ namespace Unison.Uwp.Services.WhatsApp
                     string jid = GetCanonicalJid(chat.JID);
                     IReadOnlyList<HistoryMessage> recentRows =
                         await _historyMessages.GetForChatAsync(jid, 120).ConfigureAwait(false);
-                    ChatMessage replacement = null;
-                    if (recentRows != null)
-                    {
-                        for (int i = recentRows.Count - 1; i >= 0; i--)
-                        {
-                            ChatMessage mapped = HistoryMessageMapper.ToChatMessage(recentRows[i]);
-                            if (mapped != null &&
-                                IsValidMessageTimestamp(mapped.Timestamp) &&
-                                !string.Equals(mapped.Content, "[Message Deleted]", StringComparison.OrdinalIgnoreCase) &&
-                                !mapped.IsRevoked)
-                            {
-                                replacement = mapped;
-                                break;
-                            }
-                        }
-                    }
+                    ChatMessage replacement = LegacyDeletedPreview.PickReplacement(
+                        recentRows?.Select(HistoryMessageMapper.ToChatMessage).ToList(),
+                        DateTime.UtcNow);
 
                     await RunOnUiThreadAsync(() =>
                     {
@@ -2404,12 +2324,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             }
                             else
                             {
-                                row.LastMessage = string.Empty;
-                                row.LastMessageAuthor = string.Empty;
-                                row.LastMessageMentionedJids = null;
-                                row.LastMessageKind = ChatPreviewKind.Text;
-                                row.Timestamp = string.Empty;
-                                row.LastMessageTimestampUtc = null;
+                                ChatPreviewTip.Clear(row);
                             }
                         }
                         SortChatsForDisplay();
