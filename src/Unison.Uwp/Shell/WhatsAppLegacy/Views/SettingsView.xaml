@@ -152,18 +152,22 @@
                     </Button>
                 </StackPanel>
 
-                <!-- Profile: MaxWidth 800 centered so the avatar stays in the middle on desktop. -->
+                <!-- Profile: fills the available width up to 800px and stays on the left, so the
+                     avatar centers in that column. HorizontalAlignment=Left would size the grid
+                     to its content, and Stretch with MaxWidth would center the whole block. -->
                 <Grid x:Name="ProfileCategory"
                       Visibility="Collapsed"
                       HorizontalAlignment="Stretch">
-                    <Grid MaxWidth="800" HorizontalAlignment="Center">
-                        <StackPanel>
-                            <TextBlock x:Uid="Settings_Profile" Text="Perfil" FontSize="32" Margin="20,8,10,16"
-                                       FontFamily="{StaticResource MainFontLight}"
-                                       Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
-                            <controls:WhatsAppProfileControl/>
-                        </StackPanel>
-                    </Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" MaxWidth="800"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock x:Uid="Settings_Profile" Text="Perfil" FontSize="32" Margin="20,8,10,16"
+                                   FontFamily="{StaticResource MainFontLight}"
+                                   Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
+                        <controls:WhatsAppProfileControl/>
+                    </StackPanel>
                 </Grid>
 
                 <StackPanel x:Name="GeneralCategory"

@@ -19,7 +19,7 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Host stretches up to 800px; the 120px avatar stays centered inside it. -->
+        <!-- The avatar centers in whatever width the host gives, capped at 800px. -->
         <Grid Grid.Row="0"
               MaxWidth="800"
               HorizontalAlignment="Stretch"
