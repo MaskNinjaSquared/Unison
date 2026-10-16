@@ -16,6 +16,12 @@ namespace Unison.Core.Contracts
         /// <summary>Removes the Start shortcut when present.</summary>
         Task<bool> UnpinChatAsync(string chatJid);
 
+        /// <summary>
+        /// Removes every Start shortcut this app created. Each removal asks the system,
+        /// so a tile the user keeps is left in place.
+        /// </summary>
+        Task UnpinAllChatsAsync();
+
         /// <summary>True when a Start shortcut exists for this chat.</summary>
         Task<bool> IsChatPinnedAsync(string chatJid);
 

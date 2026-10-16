@@ -24,6 +24,9 @@ namespace Unison.Uwp.Services.WhatsApp.Connection
         private readonly IStringResources _strings;
         private readonly IWhatsAppSessionProvider _sessions;
         private readonly ILocalContactsService _localContacts;
+        private readonly IShortcutService _shortcuts;
+        private readonly ILiveTilesService _liveTiles;
+        private readonly IShellThemeService _shellTheme;
         private IWhatsAppService _whatsApp;
         private int _handlingRelink;
 
@@ -32,13 +35,19 @@ namespace Unison.Uwp.Services.WhatsApp.Connection
             INotificationService notificationService,
             IStringResources strings,
             IWhatsAppSessionProvider sessions,
-            ILocalContactsService localContacts)
+            ILocalContactsService localContacts,
+            IShortcutService shortcuts,
+            ILiveTilesService liveTiles,
+            IShellThemeService shellTheme)
         {
             _localSettings = localSettings ?? throw new ArgumentNullException(nameof(localSettings));
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
             _strings = strings ?? throw new ArgumentNullException(nameof(strings));
             _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
             _localContacts = localContacts;
+            _shortcuts = shortcuts ?? throw new ArgumentNullException(nameof(shortcuts));
+            _liveTiles = liveTiles ?? throw new ArgumentNullException(nameof(liveTiles));
+            _shellTheme = shellTheme ?? throw new ArgumentNullException(nameof(shellTheme));
         }
 
         public event EventHandler<ConnectionEndedEventArgs> ConnectionEnded;
@@ -207,6 +216,43 @@ namespace Unison.Uwp.Services.WhatsApp.Connection
                     Debug.WriteLine("[ConnectionFacade] Clearing Windows People list failed: " + ex.Message);
                 }
             }
+
+            await AutoRestoreDefaultAsync().ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Puts the device back to a fresh Unison after the account is gone: the Start
+        /// shortcuts this app created, the primary live tile, and the shell theme.
+        /// Called for a disconnect the user asked for and for one the phone imposed.
+        /// </summary>
+        private async Task AutoRestoreDefaultAsync()
+        {
+            try
+            {
+                await _shortcuts.UnpinAllChatsAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ConnectionFacade] Unpinning Start tiles failed: " + ex.Message);
+            }
+
+            try
+            {
+                _liveTiles.Clear();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ConnectionFacade] Clearing the live tile failed: " + ex.Message);
+            }
+
+            try
+            {
+                await _shellTheme.ChangeShellAndRestartAsync(AppShell.Unison).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ConnectionFacade] Restoring the Unison shell failed: " + ex.Message);
+            }
         }
 
         private void EvaluateAndMaybeUnlink(DisconnectReason reason, string code, string trigger)
@@ -319,6 +365,8 @@ namespace Unison.Uwp.Services.WhatsApp.Connection
                 {
                     Debug.WriteLine("[ConnectionFacade] Logged-out toast failed: " + toastEx.Message);
                 }
+
+                await AutoRestoreDefaultAsync().ConfigureAwait(false);
             }
             catch (Exception ex)
             {

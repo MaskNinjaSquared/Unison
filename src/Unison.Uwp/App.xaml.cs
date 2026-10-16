@@ -435,7 +435,10 @@ namespace Unison.Uwp
                 sp.GetRequiredService<INotificationService>(),
                 sp.GetRequiredService<IStringResources>(),
                 sp.GetRequiredService<IWhatsAppSessionProvider>(),
-                sp.GetRequiredService<ILocalContactsService>()));
+                sp.GetRequiredService<ILocalContactsService>(),
+                sp.GetRequiredService<IShortcutService>(),
+                sp.GetRequiredService<ILiveTilesService>(),
+                sp.GetRequiredService<IShellThemeService>()));
             services.AddSingleton<ISystemInfoProvider, SystemInfoProvider>();
             services.AddSingleton<IStatusBarService, StatusBarService>();
             services.AddSingleton<ILocationKeepAliveService, LocationKeepAliveService>();

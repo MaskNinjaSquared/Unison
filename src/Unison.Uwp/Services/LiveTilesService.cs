@@ -120,7 +120,9 @@ namespace Unison.Uwp.Services
             try
             {
                 TileUpdateManager.CreateTileUpdaterForApplication().Clear();
+                BadgeUpdateManager.CreateBadgeUpdaterForApplication().Clear();
                 StartTileMirror.ClearTile();
+                StartTileMirror.ClearBadge();
             }
             catch
             {
