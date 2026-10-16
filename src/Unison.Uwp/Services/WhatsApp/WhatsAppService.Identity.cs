@@ -153,13 +153,10 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             // Cold cache: warm from disk without blocking the UI name path.
-            if (_personStore != null)
+            _ = WarmPersonIntoCacheAsync(canonical);
+            if (!string.Equals(canonical, normalized, StringComparison.OrdinalIgnoreCase))
             {
-                _ = WarmPersonIntoCacheAsync(canonical);
-                if (!string.Equals(canonical, normalized, StringComparison.OrdinalIgnoreCase))
-                {
-                    _ = WarmPersonIntoCacheAsync(normalized);
-                }
+                _ = WarmPersonIntoCacheAsync(normalized);
             }
 
             return DisplayNameResolution.Resolve(new DisplayNameSources

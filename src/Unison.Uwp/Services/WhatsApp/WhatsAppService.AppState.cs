@@ -430,7 +430,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 SortChatsForDisplay();
             });
 
-            if (touched != null && _chatStore != null && change.TouchesAnything)
+            if (touched != null && change.TouchesAnything)
             {
                 foreach (var chat in touched)
                 {

@@ -41,7 +41,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         void IGroupHost.SaveGroupRoster(string groupJid, List<GroupMember> snapshot)
         {
-            if (_groupRosterStore == null || snapshot == null || snapshot.Count == 0)
+            if (snapshot == null || snapshot.Count == 0)
             {
                 return;
             }
@@ -51,7 +51,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         void IGroupHost.SaveGroupMemberships(string groupJid, List<PersonGroupMembership> rows)
         {
-            if (_personStore == null || rows == null || rows.Count == 0)
+            if (rows == null || rows.Count == 0)
             {
                 return;
             }

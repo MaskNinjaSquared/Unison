@@ -262,7 +262,11 @@ namespace Unison.Uwp
                     sp.GetRequiredService<AvatarFetcher>(),
                     sp.GetRequiredService<IMediaCache>(),
                     sp.GetRequiredService<JidAliasTable>(),
-                    sp.GetRequiredService<HistoryOnDemandRegistry>()));
+                    sp.GetRequiredService<HistoryOnDemandRegistry>(),
+                    sp.GetRequiredService<IPersonStore>(),
+                    sp.GetRequiredService<IGroupRosterStore>(),
+                    sp.GetRequiredService<IChatStore>(),
+                    sp.GetRequiredService<ISystemInfoProvider>()));
             // The send flow lives on MessageFacade; the timeline caches and the socket it writes
             // through are still the client's, reached only through this narrow port.
             services.AddSingleton<IOutgoingMessageHost>(
@@ -473,7 +477,6 @@ namespace Unison.Uwp
             // never without one: whichever surface happens to come up first, the container is
             // already built by then.
             whatsAppImpl.AttachUiDispatcher(rootFrame?.Dispatcher);
-            whatsAppImpl.AttachSystemInfoProvider(Services.GetRequiredService<ISystemInfoProvider>());
             whatsAppImpl.AttachMessageService(Services.GetRequiredService<IMessageService>());
             whatsAppImpl.AttachChatService(Services.GetRequiredService<IChatService>());
             whatsAppImpl.AttachContactService(Services.GetRequiredService<IContactService>());
@@ -484,9 +487,6 @@ namespace Unison.Uwp
             Services.GetRequiredService<IProfileService>();
             Services.GetRequiredService<IHistoryService>();
             Services.GetRequiredService<IStatusService>();
-            whatsAppImpl.AttachPersonStore(Services.GetRequiredService<IPersonStore>());
-            whatsAppImpl.AttachGroupRosterStore(Services.GetRequiredService<IGroupRosterStore>());
-            whatsAppImpl.AttachChatStore(Services.GetRequiredService<IChatStore>());
             // Rewrites group author strips as names resolve, list open or not.
             Services.GetRequiredService<IChatAuthorProjection>().Start();
 #if DEBUG

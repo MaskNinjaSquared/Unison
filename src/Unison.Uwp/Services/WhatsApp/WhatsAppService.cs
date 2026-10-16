@@ -229,12 +229,11 @@ namespace Unison.Uwp.Services.WhatsApp
         private IChatService _chatService;
         private IGroupService _groupService;
         private IContactService _contactService;
-        private IPersonStore _personStore;
-        private IGroupRosterStore _groupRosterStore;
-        private IChatStore _chatStore;
-        private ISystemInfoProvider _systemInfo;
+        private readonly IPersonStore _personStore;
+        private readonly IGroupRosterStore _groupRosterStore;
+        private readonly IChatStore _chatStore;
         private IDebugSendService _debugSendService;
-        private bool _isWindowsMobile;
+        private readonly bool _isWindowsMobile;
 
         /// <summary>Wired from App DI so history sync goes through MessageFacade (Person upsert + domain mapping).</summary>
         public void AttachMessageService(IMessageService messageService)
@@ -263,75 +262,13 @@ namespace Unison.Uwp.Services.WhatsApp
             _contactService = contactService;
         }
 
-        /// <summary>
-        /// Wired from App DI for Mobile / desktop branching (Imgur ISystemInfoProvider).
-        /// </summary>
         /// <summary>Dev-only tooling, only ever attached under DEBUG builds (see App.xaml.cs).</summary>
         public void AttachDebugSendService(IDebugSendService debugSendService)
         {
             _debugSendService = debugSendService;
         }
 
-        public void AttachSystemInfoProvider(ISystemInfoProvider systemInfo)
-        {
-            _systemInfo = systemInfo;
-            _isWindowsMobile = systemInfo != null && systemInfo.IsMobile();
-            Debug.WriteLine(
-                "[WhatsAppService] Sync budget=" +
-                (PreferFrugalSyncBudget ? "frugal" : "generous") +
-                ", mobile=" + _isWindowsMobile +
-                ", memory=" + Windows.System.MemoryManager.AppMemoryUsageLevel);
-        }
-
-        /// <summary>
-        /// Wired from App DI so display-name resolution can read Person (in-memory cache / SQLite).
-        /// </summary>
-        public void AttachPersonStore(IPersonStore personStore)
-        {
-            _personStore = personStore;
-            if (_personStore != null)
-            {
-                _ = WarmPersonStoreAsync();
-            }
-        }
-
-        /// <summary>
-        /// Wired from App DI so group Members lists survive restart (SQLite roster cache).
-        /// </summary>
-        public void AttachGroupRosterStore(IGroupRosterStore groupRosterStore)
-        {
-            _groupRosterStore = groupRosterStore;
-            if (_groupRosterStore != null)
-            {
-                _ = WarmGroupRosterStoreAsync();
-            }
-        }
-
-        /// <summary>
-        /// Wired from App DI for local chat status / live-tile pin in SQLite.
-        /// </summary>
-        public void AttachChatStore(IChatStore chatStore)
-        {
-            _chatStore = chatStore;
-            if (_chatStore != null)
-            {
-                _ = WarmChatStoreAsync();
-            }
-        }
-
-        /// <summary>Cached after <see cref="AttachSystemInfoProvider"/>; falls back until DI wires up.</summary>
-        private bool IsWindowsMobile
-        {
-            get
-            {
-                if (_systemInfo != null)
-                {
-                    return _isWindowsMobile;
-                }
-
-                return SystemInfoProvider.DetectIsMobile();
-            }
-        }
+        private bool IsWindowsMobile => _isWindowsMobile;
 
         /// <summary>
         /// Frugal when memory is not Low, or on Mobile while the catalog/sync is heavy.
@@ -1404,14 +1341,27 @@ namespace Unison.Uwp.Services.WhatsApp
             AvatarFetcher avatarFetcher,
             IMediaCache mediaCache,
             JidAliasTable jidAlias,
-            HistoryOnDemandRegistry historyRequests)
+            HistoryOnDemandRegistry historyRequests,
+            IPersonStore personStore,
+            IGroupRosterStore groupRosterStore,
+            IChatStore chatStore,
+            ISystemInfoProvider systemInfo)
         {
             if (chatState == null)
             {
                 throw new ArgumentNullException(nameof(chatState));
             }
 
+            if (systemInfo == null)
+            {
+                throw new ArgumentNullException(nameof(systemInfo));
+            }
+
             _chatState = chatState;
+            _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
+            _groupRosterStore = groupRosterStore ?? throw new ArgumentNullException(nameof(groupRosterStore));
+            _chatStore = chatStore ?? throw new ArgumentNullException(nameof(chatStore));
+            _isWindowsMobile = systemInfo.IsMobile();
             _chatRows = new ChatRowIndex(() => Chats, GetCanonicalJid);
             _historyRequests = historyRequests ?? throw new ArgumentNullException(nameof(historyRequests));
             _historyMessages = historyMessages ?? throw new ArgumentNullException(nameof(historyMessages));
@@ -1431,6 +1381,14 @@ namespace Unison.Uwp.Services.WhatsApp
             _groupApply = new GroupMetadataApply(this, jidResolver, _chatState);
             _receipts = new ReceiptReader(jidResolver);
             _chatState.Chats.CollectionChanged += (s, e) => InvalidateChatRowIndex();
+
+            Debug.WriteLine(
+                "[WhatsAppService] mobile=" + _isWindowsMobile +
+                ", memory=" + Windows.System.MemoryManager.AppMemoryUsageLevel);
+
+            _ = WarmPersonStoreAsync();
+            _ = WarmGroupRosterStoreAsync();
+            _ = WarmChatStoreAsync();
         }
 
         /// <summary>
@@ -1445,10 +1403,15 @@ namespace Unison.Uwp.Services.WhatsApp
             AvatarFetcher avatarFetcher,
             IMediaCache mediaCache,
             JidAliasTable jidAlias,
-            HistoryOnDemandRegistry historyRequests)
+            HistoryOnDemandRegistry historyRequests,
+            IPersonStore personStore,
+            IGroupRosterStore groupRosterStore,
+            IChatStore chatStore,
+            ISystemInfoProvider systemInfo)
         {
             return _instance ?? (_instance = new WhatsAppService(
-                chatState, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, historyRequests));
+                chatState, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, historyRequests,
+                personStore, groupRosterStore, chatStore, systemInfo));
         }
 
         /// <summary>
@@ -4590,7 +4553,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private string TryGetPersonDisplayName(string jid)
         {
-            if (_personStore == null || string.IsNullOrWhiteSpace(jid))
+            if (string.IsNullOrWhiteSpace(jid))
             {
                 return null;
             }
@@ -4613,7 +4576,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private async Task WarmPersonIntoCacheAsync(string jid)
         {
-            if (_personStore == null || string.IsNullOrWhiteSpace(jid))
+            if (string.IsNullOrWhiteSpace(jid))
             {
                 return;
             }
@@ -4646,10 +4609,6 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             ContactNames.Set(norm, sanitized);
-            if (_personStore == null)
-            {
-                return;
-            }
 
             // History sync repeats the same push name on every message its author wrote, and each
             // repeat used to start its own database task. A group with five hundred messages from
