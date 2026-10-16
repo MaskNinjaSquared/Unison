@@ -38,7 +38,7 @@ namespace Unison.Uwp.Services.Themes
         public override string ShellBrandName => "Unison";
 
         public override string ShellBrandIcon =>
-            "ms-appx:///Assets/Square44x44Logo.altform-unplated_targetsize-48.png";
+            "ms-appx:///Assets/BadgeLogo.scale-125.png";
 
         public override void SetTitleBar()
         {
