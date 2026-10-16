@@ -366,14 +366,58 @@ namespace Unison.Core.Helpers
         /// </summary>
         private static void CopyReactors(ChatMessage target, ChatMessage source)
         {
+            bool sameReactors = HaveSameReactors(target.Reactions, source.Reactions);
             if (source.AreReactionDetailsLoaded)
             {
-                target.ApplyReactionDetails(source.Reactions);
+                if (!sameReactors || !target.AreReactionDetailsLoaded)
+                {
+                    target.ApplyReactionDetails(source.Reactions);
+                }
+
                 return;
             }
 
-            target.Reactions = new List<MessageReaction>(source.Reactions);
+            if (!sameReactors)
+            {
+                target.Reactions = new List<MessageReaction>(source.Reactions);
+            }
         }
+
+        private static bool HaveSameReactors(IList<MessageReaction> left, IList<MessageReaction> right)
+        {
+            int leftCount = left?.Count ?? 0;
+            int rightCount = right?.Count ?? 0;
+            if (leftCount != rightCount)
+            {
+                return false;
+            }
+
+            if (leftCount == 0)
+            {
+                return true;
+            }
+
+            var keys = new HashSet<string>(StringComparer.Ordinal);
+            for (int i = 0; i < leftCount; i++)
+            {
+                keys.Add(ReactorKey(left[i]));
+            }
+
+            for (int i = 0; i < rightCount; i++)
+            {
+                if (!keys.Contains(ReactorKey(right[i])))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static string ReactorKey(MessageReaction reaction) =>
+            reaction == null
+                ? string.Empty
+                : (reaction.ReactorJid ?? string.Empty) + "\u001f" + (reaction.Emoji ?? string.Empty) + "\u001f" + reaction.FromMe;
 
         /// <summary>
         /// When a live/JSON row wins on id, keep SQLite media keys if the winner has none.
