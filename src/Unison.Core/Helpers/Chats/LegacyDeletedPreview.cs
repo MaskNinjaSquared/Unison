@@ -5,6 +5,10 @@
 // row stamped with the current time, and the list line then showed it as the
 // newest message. These answer which rows carry that mark and which stored
 // message should take the line back.
+//
+// A revoke is now the IsRevoked flag with an empty body, so nothing writes the
+// marker any more: a row repaired once is never suspect again. Old strips
+// cannot tell that fake row from a real revoke, so a real one is replaced too.
 // =============================================================================
 using System;
 using System.Collections.Generic;

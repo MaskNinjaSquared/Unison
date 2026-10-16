@@ -62,9 +62,11 @@ namespace Unison.Core.Helpers
             }
 
             message.EnsureKindFromLegacyFlags();
-            ChatPreviewKind kind = ChatPreviewNormalizer.InferKindFromMessage(message);
             bool revoked = message.IsRevoked ||
-                           string.Equals(message.Content, "[Message Deleted]", StringComparison.OrdinalIgnoreCase);
+                           string.Equals(message.Content, LegacyDeletedPreview.Marker, StringComparison.OrdinalIgnoreCase);
+            ChatPreviewKind kind = revoked
+                ? ChatPreviewKind.Text
+                : ChatPreviewNormalizer.InferKindFromMessage(message);
             string body = message.Content ?? string.Empty;
             if (!revoked &&
                 (kind == ChatPreviewKind.Image ||
@@ -92,7 +94,7 @@ namespace Unison.Core.Helpers
                 IsFromMe = message.IsFromMe,
                 ParticipantJid = JidHelper.Normalize(message.ParticipantJid),
                 SenderName = message.SenderName,
-                Body = revoked ? (message.Content ?? string.Empty) : body,
+                Body = revoked ? string.Empty : body,
                 Kind = kind,
                 SendState = FromStatus(message.Status, message.IsFromMe),
                 IsRevoked = revoked,

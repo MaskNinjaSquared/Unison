@@ -27,7 +27,7 @@ namespace Unison.Core.Helpers
             {
                 Id = row.MessageId,
                 RemoteJid = row.ChatJid,
-                Content = row.IsRevoked ? "[Message Deleted]" : NormalizeStoredBody(row.Body, row.Kind),
+                Content = row.IsRevoked ? string.Empty : NormalizeStoredBody(row.Body, row.Kind),
                 Timestamp = AsUtc(row.TimestampUtc) ?? DateTime.UtcNow,
                 IsFromMe = row.IsFromMe,
                 ParticipantJid = row.ParticipantJid,

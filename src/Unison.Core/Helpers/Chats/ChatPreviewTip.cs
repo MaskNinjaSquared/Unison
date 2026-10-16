@@ -98,18 +98,18 @@ namespace Unison.Core.Helpers
         }
 
         /// <summary>
-        /// Whether the reconcile pass may put this message on the strip. A revoke, the old
-        /// "[Message Deleted]" body and an untrusted clock never may.
+        /// Whether the reconcile pass may put this message on the strip. A revoke may, as on the
+        /// phone; an unflagged "[Message Deleted]" body and an untrusted clock never may.
         /// </summary>
         /// <remarks>
-        /// Stricter than the live paths, which keep a revoked message as the tip and show its
-        /// tombstone. Recorded, not endorsed.
+        /// The unflagged marker is what builds before v5.14 left behind for a replayed revoke
+        /// envelope: a fake newest message, not a deleted one.
         /// </remarks>
         public static bool IsReconcileCandidate(ChatMessage message, DateTime utcNow) =>
             message != null &&
-            !message.IsRevoked &&
             MessageTimestampValidity.IsValid(message.Timestamp, utcNow) &&
-            !string.Equals(message.Content, LegacyDeletedPreview.Marker, StringComparison.OrdinalIgnoreCase);
+            (message.IsRevoked ||
+             !string.Equals(message.Content, LegacyDeletedPreview.Marker, StringComparison.OrdinalIgnoreCase));
 
         /// <summary>
         /// The newest <see cref="IsReconcileCandidate"/> message; on the same clock the higher id

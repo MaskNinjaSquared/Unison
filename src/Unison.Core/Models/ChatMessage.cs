@@ -335,7 +335,7 @@ namespace Unison.Core.Models
         /// Body text is hidden for audio, images, video, stickers, and documents.
         /// </summary>
         [JsonIgnore]
-        public bool ShowTextContent => !IsAudio && !IsImage && !IsVideo && !IsSticker && !IsDocument;
+        public bool ShowTextContent => !IsRevoked && !IsAudio && !IsImage && !IsVideo && !IsSticker && !IsDocument;
 
         /// <summary>Protocol video message (local file may still be pending download).</summary>
         [JsonIgnore]
@@ -635,7 +635,7 @@ namespace Unison.Core.Models
             {
                 if (_isRevoked == value) return;
                 _isRevoked = value;
-                OnPropertyChanged();
+                Raise(nameof(IsRevoked), nameof(ShowTextContent));
             }
         }
 

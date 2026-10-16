@@ -1,9 +1,10 @@
 // =============================================================================
 // MessageRevocationContent
 //
-// What a revoked message looks like on the timeline: a text tombstone with
-// media fields cleared. Extracted so revoke apply cannot drift from history
-// replay or a future façade path.
+// What a revoked message looks like on the timeline: flagged, with no body and
+// no media. The words the user reads are the UI's, in the user's language.
+// Extracted so revoke apply cannot drift from history replay or a future
+// façade path.
 // =============================================================================
 using Unison.Core.Models;
 
@@ -11,8 +12,6 @@ namespace Unison.Core.Helpers
 {
     public static class MessageRevocationContent
     {
-        public const string DeletedLabel = "[Message Deleted]";
-
         public static void ApplyTombstone(ChatMessage target)
         {
             if (target == null)
@@ -20,7 +19,8 @@ namespace Unison.Core.Helpers
                 return;
             }
 
-            target.Content = DeletedLabel;
+            target.IsRevoked = true;
+            target.Content = string.Empty;
             target.Caption = string.Empty;
             target.Kind = ChatMessageKind.Text;
             target.IsImage = false;

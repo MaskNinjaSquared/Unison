@@ -7,7 +7,7 @@ namespace Unison.Core.Tests.Helpers
     public class MessageRevocationContentTests
     {
         [Fact]
-        public void Tombstone_clears_media_and_sets_deleted_label()
+        public void Tombstone_flags_the_message_and_clears_body_and_media()
         {
             var message = new ChatMessage
             {
@@ -23,7 +23,8 @@ namespace Unison.Core.Tests.Helpers
 
             MessageRevocationContent.ApplyTombstone(message);
 
-            Assert.Equal(MessageRevocationContent.DeletedLabel, message.Content);
+            Assert.True(message.IsRevoked);
+            Assert.Equal(string.Empty, message.Content);
             Assert.Equal(string.Empty, message.Caption);
             Assert.Equal(ChatMessageKind.Text, message.Kind);
             Assert.False(message.IsImage);

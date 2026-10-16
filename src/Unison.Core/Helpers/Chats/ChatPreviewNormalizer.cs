@@ -69,6 +69,9 @@ namespace Unison.Core.Helpers
                 case ChatPreviewKind.Reaction:
                     ConsumeTag(ref s, "[Reaction]");
                     break;
+                case ChatPreviewKind.Revoked:
+                    ConsumeTag(ref s, LegacyDeletedPreview.Marker);
+                    break;
             }
         }
 
@@ -109,6 +112,11 @@ namespace Unison.Core.Helpers
             if (message == null)
             {
                 return ChatPreviewKind.Text;
+            }
+
+            if (message.IsRevoked)
+            {
+                return ChatPreviewKind.Revoked;
             }
 
             message.EnsureKindFromLegacyFlags();

@@ -688,6 +688,8 @@ namespace Unison.Core.ViewModels
         public string Caption => Model.Caption;
         public bool HasCaption => Model.HasCaption;
         public bool ShowTextContent => Model.ShowTextContent;
+
+        public bool IsRevoked => Model.IsRevoked;
         public bool HasQuote => Model.HasQuote;
         public string QuotedText => Model.QuotedText;
         public ChatPreviewKind QuotedKind => Model.QuotedKind;

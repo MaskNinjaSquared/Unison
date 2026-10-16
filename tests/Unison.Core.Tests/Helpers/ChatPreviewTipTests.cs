@@ -382,15 +382,21 @@ namespace Unison.Core.Tests.Helpers
         private static readonly DateTime Now = T0.AddHours(1);
 
         [Fact]
-        public void A_revoke_a_deleted_marker_or_an_untrusted_clock_cannot_be_the_reconciled_tip()
+        public void A_revoke_stays_the_tip_like_on_the_phone()
         {
             var revoked = Msg("r");
             revoked.IsRevoked = true;
+
+            Assert.True(ChatPreviewTip.IsReconcileCandidate(revoked, Now));
+        }
+
+        [Fact]
+        public void An_unflagged_deleted_marker_or_an_untrusted_clock_cannot_be_the_reconciled_tip()
+        {
             var marker = Msg("d");
             marker.Content = "[message deleted]";
             var noClock = new ChatMessage { Id = "z", Timestamp = DateTime.MinValue };
 
-            Assert.False(ChatPreviewTip.IsReconcileCandidate(revoked, Now));
             Assert.False(ChatPreviewTip.IsReconcileCandidate(marker, Now));
             Assert.False(ChatPreviewTip.IsReconcileCandidate(noClock, Now));
             Assert.False(ChatPreviewTip.IsReconcileCandidate(null, Now));
@@ -402,12 +408,12 @@ namespace Unison.Core.Tests.Helpers
         {
             var older = Msg("a", seconds: 10);
             var newest = Msg("b", seconds: 20);
-            var revokedNewer = Msg("c", seconds: 30);
-            revokedNewer.IsRevoked = true;
+            var markerNewer = Msg("c", seconds: 30);
+            markerNewer.Content = "[Message Deleted]";
 
             Assert.Same(
                 newest,
-                ChatPreviewTip.PickNewestReconcileCandidate(new[] { older, revokedNewer, newest, null }, Now));
+                ChatPreviewTip.PickNewestReconcileCandidate(new[] { older, markerNewer, newest, null }, Now));
         }
 
         [Fact]
