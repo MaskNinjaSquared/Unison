@@ -4303,23 +4303,8 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
 
-        private static int GetMessageStatusRank(string status)
-        {
-            return MessageStatusProgression.Rank(status);
-        }
-
-        private static bool ShouldApplyMessageStatus(string current, string incoming)
-        {
-            return MessageStatusProgression.ShouldApply(current, incoming);
-        }
-
         private static string MapWebMessageStatus(Proto.WebMessageInfo message) =>
             WebMessageStatusMap.FromWebMessageInfo(message);
-
-        private static DateTime UnixMillisecondsToUtc(long milliseconds)
-        {
-            return UnixTime.FromMilliseconds(milliseconds);
-        }
 
         private bool ApplyPendingStateToMessage(string chatJid, ChatMessage message)
         {
@@ -4347,22 +4332,15 @@ namespace Unison.Uwp.Services.WhatsApp
             if (string.IsNullOrWhiteSpace(messageId) || string.IsNullOrWhiteSpace(status)) return;
 
             var changedChats = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var changedMessages = new List<Tuple<string, ChatMessage>>();
+            var changedMessages = new List<KeyValuePair<string, ChatMessage>>();
 
             await RunOnUiThreadAsync(() =>
             {
-                foreach (var pair in MessagesByChat.Snapshot())
+                changedMessages = MessagesByChat.ApplyOutgoingStatus(messageId, status, ApplyChatStatusPolicy);
+                foreach (var change in changedMessages)
                 {
-                    var message = pair.Value?.FirstOrDefault(m => string.Equals(m?.Id, messageId, StringComparison.Ordinal));
-                    if (message == null || !message.IsFromMe) continue;
-
-                    string effective = ApplyChatStatusPolicy(pair.Key, status);
-                    if (!ShouldApplyMessageStatus(message.Status, effective)) continue;
-
-                    message.Status = effective;
-                    changedChats.Add(pair.Key);
-                    changedMessages.Add(Tuple.Create(pair.Key, message));
-                    ApplyListPreviewSendState(pair.Key, message, effective);
+                    changedChats.Add(change.Key);
+                    ApplyListPreviewSendState(change.Key, change.Value, change.Value.Status);
                 }
             });
 
@@ -4379,7 +4357,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             foreach (var item in changedMessages)
             {
-                QueueOfflineReplayMessageForPersist(item.Item1, item.Item2);
+                QueueOfflineReplayMessageForPersist(item.Key, item.Value);
             }
             if (changedMessages.Count > 0) SchedulePersist();
             foreach (var chat in changedChats) QueueChatMessagesChanged(chat);
