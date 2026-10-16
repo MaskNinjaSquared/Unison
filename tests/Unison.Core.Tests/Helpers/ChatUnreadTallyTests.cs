@@ -144,5 +144,56 @@ namespace Unison.Core.Tests.Helpers
         {
             Assert.Equal(1, ChatUnreadTally.Bump(null!, null!, 1));
         }
+
+        // --- The badge total ----------------------------------------------------
+
+        private const string Pn = "5511988887777@s.whatsapp.net";
+        private const string Lid = "123456@lid";
+
+        private static string Canonical(string jid) => jid == Lid ? Pn : jid;
+
+        [Fact]
+        public void The_total_counts_each_conversation_once_at_its_highest_row()
+        {
+            var rows = new List<ChatItem>
+            {
+                new ChatItem { JID = Pn, UnreadCount = 2 },
+                new ChatItem { JID = Lid, UnreadCount = 5 },
+                new ChatItem { JID = "other@s.whatsapp.net", UnreadCount = 1 }
+            };
+
+            Assert.Equal(6, ChatUnreadTally.TotalAcrossConversations(rows, Canonical));
+        }
+
+        [Fact]
+        public void The_total_ignores_negative_counts_and_null_rows()
+        {
+            var rows = new List<ChatItem>
+            {
+                null!,
+                new ChatItem { JID = Pn, UnreadCount = -3 },
+                new ChatItem { JID = "other@s.whatsapp.net", UnreadCount = 4 }
+            };
+
+            Assert.Equal(4, ChatUnreadTally.TotalAcrossConversations(rows, Canonical));
+        }
+
+        [Fact]
+        public void Conversation_keys_are_case_insensitive()
+        {
+            var rows = new List<ChatItem>
+            {
+                new ChatItem { JID = Pn, UnreadCount = 3 },
+                new ChatItem { JID = Pn.ToUpperInvariant(), UnreadCount = 3 }
+            };
+
+            Assert.Equal(3, ChatUnreadTally.TotalAcrossConversations(rows, jid => jid));
+        }
+
+        [Fact]
+        public void No_rows_total_zero()
+        {
+            Assert.Equal(0, ChatUnreadTally.TotalAcrossConversations(null!, Canonical));
+        }
     }
 }

@@ -48,6 +48,41 @@ namespace Unison.Core.Helpers
         }
 
         /// <summary>
+        /// The badge total: each conversation counted once, at the highest of its rows.
+        /// </summary>
+        public static int TotalAcrossConversations(IEnumerable<ChatItem> rows, Func<string, string> canonicalOf)
+        {
+            if (rows == null || canonicalOf == null)
+            {
+                return 0;
+            }
+
+            var highestByConversation = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (ChatItem row in rows)
+            {
+                if (row == null)
+                {
+                    continue;
+                }
+
+                string key = canonicalOf(row.JID) ?? string.Empty;
+                int unread = Math.Max(0, row.UnreadCount);
+                if (!highestByConversation.TryGetValue(key, out int highest) || unread > highest)
+                {
+                    highestByConversation[key] = unread;
+                }
+            }
+
+            int total = 0;
+            foreach (int count in highestByConversation.Values)
+            {
+                total += count;
+            }
+
+            return total;
+        }
+
+        /// <summary>
         /// Adds <paramref name="delta"/> to a conversation's unread count and writes the
         /// result onto every row of it. Returns the new count.
         /// </summary>
