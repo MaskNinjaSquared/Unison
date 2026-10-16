@@ -36,6 +36,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
         private readonly IWhatsAppService _whatsAppService;
         private readonly IDispatcher _ui;
+        private readonly IChatCatalogPersistence _catalog;
         private readonly IGroupService _groups;
         private readonly AddressBookOverlay _addressBook;
         private readonly ContactDirectory _directory;
@@ -52,9 +53,11 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             ContactUsyncResolver usync,
             IJidResolver jids,
             IGroupService groups,
-            IDispatcher ui)
+            IDispatcher ui,
+            IChatCatalogPersistence catalog)
         {
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
+            _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
             _groups = groups ?? throw new ArgumentNullException(nameof(groups));
             _addressBook = addressBook ?? throw new ArgumentNullException(nameof(addressBook));
@@ -150,7 +153,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
                 await _addressBook.RefreshAsync(force);
                 await _whatsAppService.ApplyResolvedDisplayNamesToChatsAsync();
-                _whatsAppService.SchedulePersistPublic();
+                _catalog.Schedule();
                 _lastRefreshUtc = DateTime.UtcNow;
 
                 Debug.WriteLine($"[ContactNameResolver] Refresh complete: directChats={directJids.Count}, includeGroups={includeGroups}, force={force}");
@@ -256,7 +259,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             {
                 await _addressBook.RefreshAsync(force: false);
                 await _whatsAppService.ApplyResolvedDisplayNamesToChatsAsync();
-                _whatsAppService.SchedulePersistPublic();
+                _catalog.Schedule();
             }
             catch (Exception exPost)
             {

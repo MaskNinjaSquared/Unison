@@ -167,16 +167,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>True while a reconnect/history replay drain is in progress; background refreshes should back off.</summary>
         bool IsReplayDrainActive { get; }
 
-        /// <summary>Schedules a debounced persist of chats/session state.</summary>
-        void SchedulePersistPublic();
-
-        /// <summary>
-        /// Writes only the given chat-list rows to the preview store (no contact JSON rewrite).
-        /// Prefer this after mark-read or a single-row preview update; use
-        /// <see cref="SchedulePersistPublic"/> when aliases/names must flush too.
-        /// </summary>
-        void PersistChatListRowsPublic(IList<ChatItem> chats);
-
         /// <summary>True when a JID already has a resolved display name in the local name cache.</summary>
         bool HasResolvedContactName(string jid);
 

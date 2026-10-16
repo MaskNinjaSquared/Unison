@@ -40,7 +40,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService
+    public partial class WhatsAppService : IChatCatalogPersistence
     {
 
         private void LoadHistoryFreshnessRepairState()
@@ -472,13 +472,9 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        /// <summary>
-        /// Public accessor for SchedulePersist - allows UI to trigger debounced save
-        /// </summary>
-        public void SchedulePersistPublic() => SchedulePersist();
+        void IChatCatalogPersistence.Schedule() => SchedulePersist();
 
-        /// <inheritdoc />
-        public void PersistChatListRowsPublic(IList<ChatItem> chats)
+        void IChatCatalogPersistence.PersistRows(IList<ChatItem> chats)
         {
             if (chats == null || chats.Count == 0)
             {

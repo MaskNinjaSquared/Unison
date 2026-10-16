@@ -39,6 +39,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly IPersonStore _personStore;
         private readonly IWhatsAppService _whatsAppService;
         private readonly IDispatcher _ui;
+        private readonly IChatCatalogPersistence _catalog;
         private readonly IJidResolver _jids;
         private readonly ILocalContactsService _localContacts;
         private readonly ILocalSettings _localSettings;
@@ -73,10 +74,12 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             JidAliasTable aliases,
             DisplayNameTable pushNames,
             ISelfMarkerNaming selfMarkers,
-            IDispatcher ui)
+            IDispatcher ui,
+            IChatCatalogPersistence catalog)
         {
             if (selfMarkers == null) throw new ArgumentNullException(nameof(selfMarkers));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
+            _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             if (sessions == null) throw new ArgumentNullException(nameof(sessions));
             if (localContacts == null) throw new ArgumentNullException(nameof(localContacts));
             if (lidMappings == null) throw new ArgumentNullException(nameof(lidMappings));
@@ -106,13 +109,14 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 pushNames,
                 new ContactLabelSanitizer(selfMarkers),
                 chats);
-            _names = new ContactNameResolver(whatsAppService, _addressBook, _directory, _usync, jids, groups, ui);
+            _names = new ContactNameResolver(whatsAppService, _addressBook, _directory, _usync, jids, groups, ui, catalog);
             _avatars = new ChatAvatarPolicy(
                 whatsAppService,
                 jids,
-                new ChatAvatarFetch(whatsAppService, sessions, groups, jids, chats, avatarReport, avatars, avatarCache, ui),
-                ui);
-            _roster = new GroupRosterPolicy(whatsAppService, groups, this, jids, ui);
+                new ChatAvatarFetch(whatsAppService, sessions, groups, jids, chats, avatarReport, avatars, avatarCache, ui, catalog),
+                ui,
+                catalog);
+            _roster = new GroupRosterPolicy(whatsAppService, groups, this, jids, ui, catalog);
 
             // Both live as long as the app does, so there is nothing to unhook from.
             _whatsAppService.OnDisplayNamesUpdated += (s, e) =>
@@ -193,7 +197,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             chat.AvatarFetchFailureReason = string.IsNullOrWhiteSpace(reason) ? "ui-image-failed" : reason;
             Debug.WriteLine($"[ContactFacade] UI avatar image load failed for {chat.JID}: {chat.AvatarFetchFailureReason}");
             RequestAvatarRefresh(chat, force: true);
-            _whatsAppService.SchedulePersistPublic();
+            _catalog.Schedule();
         }
 
         public bool IsContactRefreshRunning => _names.IsRunning;

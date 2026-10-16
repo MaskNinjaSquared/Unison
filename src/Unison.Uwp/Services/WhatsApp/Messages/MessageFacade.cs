@@ -34,6 +34,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
         private readonly OutgoingTextSend _textSend;
         private readonly OutgoingMediaSend _mediaSend;
         private readonly MediaAvailability _availability;
+        private readonly IChatCatalogPersistence _catalog;
         private readonly IRuntimeDiagnostics _diagnostics;
         private readonly int _sqlOpenPageSize;
         private readonly int _sqlLoadMorePageSize;
@@ -54,6 +55,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             MediaDownloadGate downloadGate,
             IMediaDownloadHost mediaHost,
             IEncryptedMediaDownloader mediaDownloader,
+            IChatCatalogPersistence catalog,
             IChatStore chatStore = null,
             IChatStateStore chatState = null,
             ISystemInfoProvider systemInfo = null,
@@ -69,6 +71,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             _historyMessageStore = historyMessageStore
                 ?? throw new ArgumentNullException(nameof(historyMessageStore));
             _notifications = notifications ?? throw new ArgumentNullException(nameof(notifications));
+            _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _chatStore = chatStore;
             _chatState = chatState;
             if (outgoingHost == null)
@@ -88,7 +91,8 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                 _jids,
                 mediaCache,
                 derivation ?? throw new ArgumentNullException(nameof(derivation)),
-                downloadGate ?? throw new ArgumentNullException(nameof(downloadGate)));
+                downloadGate ?? throw new ArgumentNullException(nameof(downloadGate)),
+                _catalog);
             // systemInfo kept in the ctor for DI compatibility; page sizes match desktop on all devices.
             _ = systemInfo;
 
@@ -1188,7 +1192,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             }
 
             _whatsAppService.QueueIncomingMessagePersist(chatJid, message);
-            _whatsAppService.SchedulePersistPublic();
+            _catalog.Schedule();
         }
 
         public Task ApplyIncomingRevocationAsync(

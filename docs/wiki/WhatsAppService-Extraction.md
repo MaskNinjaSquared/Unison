@@ -140,20 +140,25 @@ the order.
 
 `ContactFacade`, `MessageFacade`, `ChatFacade`, `GroupFacade`, `HistoryFacade`, `ProfileFacade`, `StatusFacade`, `ConnectionFacade` take `IWhatsAppService` (or `AttachWhatsAppService`). Policy is already on the façade; **primitives** (fetch a chat avatar, send bytes, persist, canonical JID) still run inside the client. Group send-permission refresh and roster restore are the exception: they run in Core and call back through `IGroupHost`. The full-size group picture and member pictures are fetched by `GroupFacade`.
 
-Helpers under `Contacts/` (`ContactNameResolver`, `ChatAvatarPolicy`, `GroupRosterPolicy`, `AddressBookOverlay`) are the largest non-UI consumers of client members (`RunOnUiThreadAsync`, `SchedulePersistPublic`, `RaiseSyncStatus`, `FetchAndApplyAvatarAsync`, `IsTransportReady`, …). Extracting avatars/names is mostly moving those primitives so the helpers stop needing the god client.
+Helpers under `Contacts/` (`ContactNameResolver`, `ChatAvatarPolicy`, `GroupRosterPolicy`, `AddressBookOverlay`) are the largest non-UI consumers of client members (`RaiseSyncStatus`, `FetchAndApplyAvatarAsync`, `IsTransportReady`, …). Extracting avatars/names is mostly moving those primitives so the helpers stop needing the god client.
+
+Two primitives already left the contract:
+
+- **UI thread.** `AttachedUiDispatcher` (UWP, `IDispatcher`) is a singleton the client, `ChatFacade`, `ContactFacade` and the contact helpers take in their constructors. `App` attaches the root frame's `CoreDispatcher` to it; `AttachUiDispatcher` and `IWhatsAppService.RunOnUiThreadAsync` are gone.
+- **Catalog save.** `IChatCatalogPersistence` (`Schedule`, `PersistRows`) replaces `SchedulePersistPublic` / `PersistChatListRowsPublic`. It is a narrow port the client implements, like `IGroupHost`: the debounce timer stays in the client because `ShutdownAsync` (phase 4) resets it.
 
 ### DI still injects façades *into* the client
 
-After `BuildServiceProvider`, `App.ConfigureServices` does:
+The stores (`IPersonStore`, `IChatStore`, `IGroupRosterStore`) are constructor parameters of the client now. After `BuildServiceProvider`, `App.ConfigureServices` still does:
 
-- `AttachMessageService` / `AttachContactService`
-- `AttachPersonStore` / `AttachChatStore` / `AttachGroupRosterStore`
+- `AttachMessageService` / `AttachChatService` / `AttachContactService` / `AttachGroupService`
+- `AttachDebugSendService` (Debug only)
 
 That is the wrong direction: live ingest (status, names) **starts** in `WhatsAppService` and calls up. Phase 2 inverted the reportable half of it (client publishes; façade subscribes); the rest is blocked on phase 3 and is described below.
 
 ### What still holds the client
 
-`App.xaml.cs` for lifecycle (`ResumeAsync`, `TransferActiveSocketToBrokerAsync`, `PrepareForSuspendAsync`, `ShutdownAsync`, `ReleaseMemoryAsync`, `IsConnected`, `AttachUiDispatcher`), the façades and their policy helpers, and `RuntimeDiagnosticsService` for health snapshots.
+`App.xaml.cs` for lifecycle (`ResumeAsync`, `TransferActiveSocketToBrokerAsync`, `PrepareForSuspendAsync`, `ShutdownAsync`, `ReleaseMemoryAsync`, `IsConnected`), the façades and their policy helpers, and `RuntimeDiagnosticsService` for health snapshots.
 
 Raw `IWhatsAppService` **events** are façade-only; ViewModels should not subscribe there.
 

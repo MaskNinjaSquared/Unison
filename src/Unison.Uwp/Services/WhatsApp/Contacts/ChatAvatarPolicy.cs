@@ -40,6 +40,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
         private readonly IWhatsAppService _whatsAppService;
         private readonly IDispatcher _ui;
+        private readonly IChatCatalogPersistence _catalog;
         private readonly IJidResolver _jids;
         private readonly ChatAvatarFetch _fetch;
 
@@ -49,9 +50,11 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         /// <summary>JIDs realized on screen; background batches pull these first.</summary>
         private readonly HashSet<string> _viewportPriority = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        internal ChatAvatarPolicy(IWhatsAppService whatsAppService, IJidResolver jids, ChatAvatarFetch fetch, IDispatcher ui)
+        internal ChatAvatarPolicy(IWhatsAppService whatsAppService, IJidResolver jids, ChatAvatarFetch fetch, IDispatcher ui,
+            IChatCatalogPersistence catalog)
         {
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
+            _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _fetch = fetch ?? throw new ArgumentNullException(nameof(fetch));
@@ -155,7 +158,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             // One debounced catalog write for the whole batch — not per download.
             if (anyUpdated)
             {
-                _whatsAppService.SchedulePersistPublic();
+                _catalog.Schedule();
             }
 
             await ScheduleNextBatchIfNeededAsync(token);
@@ -217,7 +220,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 try
                 {
                     await _fetch.FetchAndApplyAsync(chat, CancellationToken.None, fetchHighQuality: true);
-                    _whatsAppService.SchedulePersistPublic();
+                    _catalog.Schedule();
                     ClearViewportPriority(chat);
                 }
                 catch (Exception ex)

@@ -4,6 +4,14 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## UI thread and chat-list save are no longer client members
+
+Facades and contact helpers now get the UI thread from an injected `AttachedUiDispatcher` and save
+the chat list through `IChatCatalogPersistence`, instead of calling `RunOnUiThreadAsync`,
+`SchedulePersistPublic` and `PersistChatListRowsPublic` on `IWhatsAppService`. Those three members
+left the contract. The save debounce itself still lives in the client until the connection
+shutdown moves (phase 4). No behaviour change.
+
 ## A deleted message is a state, shown in your language
 
 Deleting a message for everyone used to overwrite its text with the English "[Message Deleted]", and

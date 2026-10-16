@@ -24,6 +24,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
         private readonly IWhatsAppService _client;
         private readonly IDispatcher _ui;
+        private readonly IChatCatalogPersistence _catalog;
         private readonly IWhatsAppSessionProvider _sessions;
         private readonly IGroupService _groups;
         private readonly IJidResolver _jids;
@@ -42,9 +43,11 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             IAvatarReport report,
             AvatarFetcher avatars,
             IAvatarCache cache,
-            IDispatcher ui)
+            IDispatcher ui,
+            IChatCatalogPersistence catalog)
         {
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
+            _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _client = client ?? throw new ArgumentNullException(nameof(client));
             _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
             _groups = groups ?? throw new ArgumentNullException(nameof(groups));
@@ -176,7 +179,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 if (hydrated > 0)
                 {
                     Debug.WriteLine($"[WhatsAppService] Hydrated {hydrated} avatar URLs from local cache ({reason})");
-                    _client.SchedulePersistPublic();
+                    _catalog.Schedule();
                 }
             });
         }

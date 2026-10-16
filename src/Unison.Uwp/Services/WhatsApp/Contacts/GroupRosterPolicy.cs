@@ -31,6 +31,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
         private readonly IWhatsAppService _whatsAppService;
         private readonly IDispatcher _ui;
+        private readonly IChatCatalogPersistence _catalog;
         private readonly IGroupService _groups;
         private readonly IContactService _contacts;
         private readonly IJidResolver _jids;
@@ -48,9 +49,11 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             IGroupService groups,
             IContactService contacts,
             IJidResolver jids,
-            IDispatcher ui)
+            IDispatcher ui,
+            IChatCatalogPersistence catalog)
         {
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
+            _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
             _groups = groups ?? throw new ArgumentNullException(nameof(groups));
             _contacts = contacts ?? throw new ArgumentNullException(nameof(contacts));
@@ -129,7 +132,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
                 if (persist)
                 {
-                    _whatsAppService.SchedulePersistPublic();
+                    _catalog.Schedule();
                 }
 
                 if (await HasRemainingAsync(canonical).ConfigureAwait(false))
@@ -196,7 +199,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 bool persist = await FetchMembersAsync(batch, token).ConfigureAwait(false);
                 if (persist)
                 {
-                    _whatsAppService.SchedulePersistPublic();
+                    _catalog.Schedule();
                 }
             }
             catch (TaskCanceledException)

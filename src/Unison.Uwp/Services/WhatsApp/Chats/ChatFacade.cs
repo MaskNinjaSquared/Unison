@@ -57,6 +57,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
         private readonly IContactService _contacts;
         private readonly INotificationService _notifications;
         private readonly IDispatcher _ui;
+        private readonly IChatCatalogPersistence _catalog;
         private readonly OfflineReplayTips _offlineReplayTips;
 
         /// <summary>Short enough that the first recovered chat shows while a long replay continues.</summary>
@@ -69,7 +70,8 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             IOfflineReplayHost offlineReplay,
             IContactService contacts,
             INotificationService notifications,
-            IDispatcher ui)
+            IDispatcher ui,
+            IChatCatalogPersistence catalog)
         {
             if (offlineReplay == null)
             {
@@ -92,6 +94,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             _contacts = contacts;
             _notifications = notifications;
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
+            _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _offlineReplayTips = new OfflineReplayTips(
                 _jids,
                 offlineReplay,
@@ -310,7 +313,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
                 return;
             }
 
-            _appState.PersistChatListRowsPublic(chats);
+            _catalog.PersistRows(chats);
         }
 
         public Task ReconcileChatPreviewsFromSqliteAsync(

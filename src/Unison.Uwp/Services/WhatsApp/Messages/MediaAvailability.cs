@@ -27,6 +27,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
         private readonly IMediaCache _cache;
         private readonly MediaDerivationService _derivation;
         private readonly MediaDownloadGate _gate;
+        private readonly IChatCatalogPersistence _catalog;
 
         public MediaAvailability(
             IWhatsAppService client,
@@ -35,9 +36,11 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             IJidResolver jids,
             IMediaCache cache,
             MediaDerivationService derivation,
-            MediaDownloadGate gate)
+            MediaDownloadGate gate,
+            IChatCatalogPersistence catalog)
         {
             _client = client ?? throw new ArgumentNullException(nameof(client));
+            _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _host = host ?? throw new ArgumentNullException(nameof(host));
             _downloader = downloader ?? throw new ArgumentNullException(nameof(downloader));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
@@ -831,7 +834,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
         private async Task RememberLiveAsync(string chatJid, ChatMessage message)
         {
             await _host.SaveMessageQuietAsync(chatJid, message);
-            _client.SchedulePersistPublic();
+            _catalog.Schedule();
             _host.NotifyMessagesChanged(chatJid);
         }
 

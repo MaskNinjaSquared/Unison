@@ -323,6 +323,10 @@ namespace Unison.Uwp
 
             services.AddSingleton<IMediaDownloadHost>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+            // The save debounce stays on the client until its shutdown path moves (phase 4);
+            // façades reach it only through this port.
+            services.AddSingleton<IChatCatalogPersistence>(
+                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IEncryptedMediaDownloader>(_ => new HttpEncryptedMediaDownloader(
                 new DelegateSocketLog(line => Diag.W("[Media] " + line))));
             services.AddSingleton(sp => new MediaDownloadGate(
@@ -342,6 +346,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<MediaDownloadGate>(),
                 sp.GetRequiredService<IMediaDownloadHost>(),
                 sp.GetRequiredService<IEncryptedMediaDownloader>(),
+                sp.GetRequiredService<IChatCatalogPersistence>(),
                 sp.GetRequiredService<IChatStore>(),
                 sp.GetRequiredService<IChatStateStore>(),
                 sp.GetRequiredService<ISystemInfoProvider>(),
@@ -375,7 +380,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<JidAliasTable>(),
                 sp.GetRequiredService<ChatStateStore>().PushNames,
                 sp.GetRequiredService<ISelfMarkerNaming>(),
-                sp.GetRequiredService<AttachedUiDispatcher>()));
+                sp.GetRequiredService<AttachedUiDispatcher>(),
+                sp.GetRequiredService<IChatCatalogPersistence>()));
             services.AddSingleton<IOfflineReplayHost>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IChatService>(sp => new ChatFacade(
@@ -385,7 +391,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IOfflineReplayHost>(),
                 sp.GetRequiredService<IContactService>(),
                 sp.GetRequiredService<INotificationService>(),
-                sp.GetRequiredService<AttachedUiDispatcher>()));
+                sp.GetRequiredService<AttachedUiDispatcher>(),
+                sp.GetRequiredService<IChatCatalogPersistence>()));
             // After IChatService: the projection persists resolved strip rows so cold start keeps names.
             services.AddSingleton<IChatAuthorProjection>(sp => new ChatAuthorProjection(
                 sp.GetRequiredService<IChatStateStore>(),
