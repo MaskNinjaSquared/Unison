@@ -4671,74 +4671,34 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private string ResolveSelfDisplayName(string canonical, string normalized, string context)
         {
-            string source = null;
-            string baseName = null;
-
-            if (PhoneContactNamesByJid.TryGetValue(canonical, out var phoneCanonical))
+            var sources = new[]
             {
-                baseName = NormalizeSelfNameCandidate(phoneCanonical, canonical, normalized);
-                if (!string.IsNullOrWhiteSpace(baseName))
-                {
-                    source = "phone-canonical";
-                }
+                SelfNameSource("phone-canonical", () => PhoneContactNameOrNull(canonical)),
+                SelfNameSource("phone-normalized", () => PhoneContactNameOrNull(normalized)),
+                SelfNameSource("whatsapp-cache", () => GetBestWhatsAppName(canonical, normalized, _authState?.Me?.Id, _authState?.Me?.Lid)),
+                SelfNameSource("auth-me-name", () => _authState?.Me?.Name),
+                SelfNameSource("current-user-name", () => CurrentUserName)
+            };
+
+            SelfDisplayNameResolution.Result result = SelfDisplayNameResolution.Pick(
+                sources,
+                candidate => NormalizeSelfNameCandidate(candidate, canonical, normalized),
+                CurrentUserPhone);
+
+            if (!string.Equals(_lastResolvedSelfDisplayNameForLog, result.Name, StringComparison.Ordinal))
+            {
+                _lastResolvedSelfDisplayNameForLog = result.Name;
+                Debug.WriteLine($"[WhatsAppService] Self base name resolved for {canonical}: '{(result.Name.Length == 0 ? "(empty)" : result.Name)}' (source={result.Source ?? "fallback"})");
             }
 
-            if (string.IsNullOrWhiteSpace(baseName) && PhoneContactNamesByJid.TryGetValue(normalized, out var phoneNormalized))
-            {
-                baseName = NormalizeSelfNameCandidate(phoneNormalized, canonical, normalized);
-                if (!string.IsNullOrWhiteSpace(baseName))
-                {
-                    source = "phone-normalized";
-                }
-            }
-
-            if (string.IsNullOrWhiteSpace(baseName))
-            {
-                string waName = GetBestWhatsAppName(canonical, normalized, _authState?.Me?.Id, _authState?.Me?.Lid);
-                baseName = NormalizeSelfNameCandidate(waName, canonical, normalized);
-                if (!string.IsNullOrWhiteSpace(baseName))
-                {
-                    source = "whatsapp-cache";
-                }
-            }
-
-            if (string.IsNullOrWhiteSpace(baseName))
-            {
-                baseName = NormalizeSelfNameCandidate(_authState?.Me?.Name, canonical, normalized);
-                if (!string.IsNullOrWhiteSpace(baseName))
-                {
-                    source = "auth-me-name";
-                }
-            }
-
-            if (string.IsNullOrWhiteSpace(baseName))
-            {
-                baseName = NormalizeSelfNameCandidate(CurrentUserName, canonical, normalized);
-                if (!string.IsNullOrWhiteSpace(baseName))
-                {
-                    source = "current-user-name";
-                }
-            }
-
-            // Persist / protocol path: base name only — UI adds localized (You)/(Você).
-            string resolved = string.IsNullOrWhiteSpace(baseName) ? null : baseName.Trim();
-            if (string.IsNullOrWhiteSpace(resolved))
-            {
-                resolved = CurrentUserPhone;
-                if (!string.IsNullOrWhiteSpace(resolved))
-                {
-                    source = "me-phone-placeholder";
-                }
-            }
-
-            if (!string.Equals(_lastResolvedSelfDisplayNameForLog, resolved ?? string.Empty, StringComparison.Ordinal))
-            {
-                _lastResolvedSelfDisplayNameForLog = resolved ?? string.Empty;
-                Debug.WriteLine($"[WhatsAppService] Self base name resolved for {canonical}: '{resolved ?? "(empty)"}' (source={source ?? "fallback"})");
-            }
-
-            return resolved ?? string.Empty;
+            return result.Name;
         }
+
+        private static KeyValuePair<string, Func<string>> SelfNameSource(string source, Func<string> read) =>
+            new KeyValuePair<string, Func<string>>(source, read);
+
+        private string PhoneContactNameOrNull(string jid) =>
+            jid != null && PhoneContactNamesByJid.TryGetValue(jid, out var name) ? name : null;
 
         private string NormalizeSelfNameCandidate(string candidate, string canonical, string normalized) =>
             SelfNameCandidate.Normalize(candidate, canonical, normalized, _selfMarkers);
@@ -5202,18 +5162,8 @@ namespace Unison.Uwp.Services.WhatsApp
         /// phone number. A phone echo is not a name, which is why the credentials are read through
         /// <see cref="IsOwnPhoneEchoLabel"/> rather than tested for emptiness.
         /// </summary>
-        private string ResolveEstablishedSelfName()
-        {
-            if (!string.IsNullOrWhiteSpace(CurrentUserName))
-            {
-                return CurrentUserName;
-            }
-
-            string fromCredentials = _authState?.Me?.Name;
-            return !string.IsNullOrWhiteSpace(fromCredentials) && !IsOwnPhoneEchoLabel(fromCredentials)
-                ? fromCredentials
-                : null;
-        }
+        private string ResolveEstablishedSelfName() =>
+            SelfDisplayNameResolution.Established(CurrentUserName, _authState?.Me?.Name, IsOwnPhoneEchoLabel);
 
         private bool IsLidLikeJid(string jid) => JidAlias.IsLidLike(jid);
 
