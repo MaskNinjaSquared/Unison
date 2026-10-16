@@ -543,6 +543,21 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   <data name="Shell_Starred.Text" xml:space="preserve">
     <value>Mensajes destacados</value>
   </data>
+  <data name="Shell_Favorites.Text" xml:space="preserve">
+    <value>Favoritos</value>
+  </data>
+  <data name="Favorites_Header.Text" xml:space="preserve">
+    <value>Favoritos</value>
+  </data>
+  <data name="Favorites_Empty.Text" xml:space="preserve">
+    <value>Los favoritos se muestran en las secciones de Chats y Llamadas. Añade todas las personas y grupos que quieras.</value>
+  </data>
+  <data name="Calls_Header.Text" xml:space="preserve">
+    <value>Llamadas</value>
+  </data>
+  <data name="Calls_Empty.Text" xml:space="preserve">
+    <value>Para iniciar una llamada, selecciona un contacto y pulsa Llamar.</value>
+  </data>
   <data name="Shell_Archived.Text" xml:space="preserve">
     <value>Chats archivados</value>
   </data>

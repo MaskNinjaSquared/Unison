@@ -602,6 +602,21 @@ Disable after diagnosing: keeping it on slows the app.</value>
   <data name="Shell_Starred.Text" xml:space="preserve">
     <value>Starred messages</value>
   </data>
+  <data name="Shell_Favorites.Text" xml:space="preserve">
+    <value>Favorites</value>
+  </data>
+  <data name="Favorites_Header.Text" xml:space="preserve">
+    <value>Favorites</value>
+  </data>
+  <data name="Favorites_Empty.Text" xml:space="preserve">
+    <value>Favorites are shown in the Chats and Calls sections. Add as many people and groups as you want.</value>
+  </data>
+  <data name="Calls_Header.Text" xml:space="preserve">
+    <value>Calls</value>
+  </data>
+  <data name="Calls_Empty.Text" xml:space="preserve">
+    <value>To start a call, select a contact and tap Call.</value>
+  </data>
   <data name="Shell_Archived.Text" xml:space="preserve">
     <value>Archived chats</value>
   </data>

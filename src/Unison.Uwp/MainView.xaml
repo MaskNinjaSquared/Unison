@@ -106,12 +106,10 @@
                             </Grid>
                         </ListViewItem>
 
-                        <ListViewItem Tag="calls" IsEnabled="False" Foreground="{ThemeResource WhatsAppTextLowBrush}">
+                        <ListViewItem Tag="calls">
                             <StackPanel Orientation="Horizontal" Padding="12,0">
-                                <TextBlock Text="&#xE717;" FontFamily="{StaticResource IconFont}" FontSize="20" VerticalAlignment="Center" Width="24"
-                                           Foreground="{ThemeResource WhatsAppTextLowBrush}"/>
-                                <TextBlock x:Uid="Shell_Calls" Text="Calls" Margin="16,0,0,0" FontSize="14" VerticalAlignment="Center"
-                                           Foreground="{ThemeResource WhatsAppTextLowBrush}"/>
+                                <TextBlock Text="&#xE717;" FontFamily="{StaticResource IconFont}" FontSize="20" VerticalAlignment="Center" Width="24"/>
+                                <TextBlock x:Uid="Shell_Calls" Text="Calls" Margin="16,0,0,0" FontSize="14" VerticalAlignment="Center"/>
                             </StackPanel>
                         </ListViewItem>
 
@@ -124,12 +122,10 @@
                             </Grid>
                         </ListViewItem>
 
-                        <ListViewItem Tag="starred" IsEnabled="False" Foreground="{ThemeResource WhatsAppTextLowBrush}">
+                        <ListViewItem Tag="favorites">
                             <StackPanel Orientation="Horizontal" Padding="12,0">
-                                <TextBlock Text="&#xE734;" FontFamily="{StaticResource IconFont}" FontSize="20" VerticalAlignment="Center" Width="24"
-                                           Foreground="{ThemeResource WhatsAppTextLowBrush}"/>
-                                <TextBlock x:Uid="Shell_Starred" Text="Starred messages" Margin="16,0,0,0" FontSize="14" VerticalAlignment="Center"
-                                           Foreground="{ThemeResource WhatsAppTextLowBrush}"/>
+                                <TextBlock Text="&#xE735;" FontFamily="{StaticResource IconFont}" FontSize="20" VerticalAlignment="Center" Width="24"/>
+                                <TextBlock x:Uid="Shell_Favorites" Text="Favorites" Margin="16,0,0,0" FontSize="14" VerticalAlignment="Center"/>
                             </StackPanel>
                         </ListViewItem>
 

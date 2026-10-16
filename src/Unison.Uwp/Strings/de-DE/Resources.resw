@@ -602,6 +602,21 @@ Nach der Diagnose deaktivieren: Wenn es aktiviert bleibt, wird die App langsamer
   <data name="Shell_Starred.Text" xml:space="preserve">
     <value>Markierte Nachrichten</value>
   </data>
+  <data name="Shell_Favorites.Text" xml:space="preserve">
+    <value>Favoriten</value>
+  </data>
+  <data name="Favorites_Header.Text" xml:space="preserve">
+    <value>Favoriten</value>
+  </data>
+  <data name="Favorites_Empty.Text" xml:space="preserve">
+    <value>Favoriten werden in den Bereichen Chats und Anrufe angezeigt. Füge so viele Personen und Gruppen hinzu, wie du möchtest.</value>
+  </data>
+  <data name="Calls_Header.Text" xml:space="preserve">
+    <value>Anrufe</value>
+  </data>
+  <data name="Calls_Empty.Text" xml:space="preserve">
+    <value>Um einen Anruf zu starten, wähle einen Kontakt und tippe auf Anrufen.</value>
+  </data>
   <data name="Shell_Archived.Text" xml:space="preserve">
     <value>Archivierte Chats</value>
   </data>

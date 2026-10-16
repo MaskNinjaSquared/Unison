@@ -833,6 +833,21 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
   <data name="Shell_Starred.Text" xml:space="preserve">
     <value>Messaggi preferiti</value>
   </data>
+  <data name="Shell_Favorites.Text" xml:space="preserve">
+    <value>Preferiti</value>
+  </data>
+  <data name="Favorites_Header.Text" xml:space="preserve">
+    <value>Preferiti</value>
+  </data>
+  <data name="Favorites_Empty.Text" xml:space="preserve">
+    <value>I preferiti vengono mostrati nelle sezioni Chat e Chiamate. Aggiungi tutte le persone e i gruppi che vuoi.</value>
+  </data>
+  <data name="Calls_Header.Text" xml:space="preserve">
+    <value>Chiamate</value>
+  </data>
+  <data name="Calls_Empty.Text" xml:space="preserve">
+    <value>Per avviare una chiamata, seleziona un contatto e tocca Chiama.</value>
+  </data>
   <data name="Shell_Status.Text" xml:space="preserve">
     <value>Stato</value>
   </data>

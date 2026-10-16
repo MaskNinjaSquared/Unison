@@ -602,6 +602,21 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   <data name="Shell_Starred.Text" xml:space="preserve">
     <value>Berichten met ster</value>
   </data>
+  <data name="Shell_Favorites.Text" xml:space="preserve">
+    <value>Favorieten</value>
+  </data>
+  <data name="Favorites_Header.Text" xml:space="preserve">
+    <value>Favorieten</value>
+  </data>
+  <data name="Favorites_Empty.Text" xml:space="preserve">
+    <value>Favorieten worden weergegeven in de secties Chats en Oproepen. Voeg zoveel mensen en groepen toe als je wilt.</value>
+  </data>
+  <data name="Calls_Header.Text" xml:space="preserve">
+    <value>Oproepen</value>
+  </data>
+  <data name="Calls_Empty.Text" xml:space="preserve">
+    <value>Om een oproep te starten, selecteer je een contact en tik je op Bellen.</value>
+  </data>
   <data name="Shell_Archived.Text" xml:space="preserve">
     <value>Gearchiveerde chats</value>
   </data>

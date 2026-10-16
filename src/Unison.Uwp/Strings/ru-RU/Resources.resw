@@ -543,6 +543,21 @@
   <data name="Shell_Starred.Text" xml:space="preserve">
     <value>Избранное</value>
   </data>
+  <data name="Shell_Favorites.Text" xml:space="preserve">
+    <value>Избранное</value>
+  </data>
+  <data name="Favorites_Header.Text" xml:space="preserve">
+    <value>Избранное</value>
+  </data>
+  <data name="Favorites_Empty.Text" xml:space="preserve">
+    <value>Избранное отображается в разделах Чаты и Звонки. Добавьте столько людей и групп, сколько хотите.</value>
+  </data>
+  <data name="Calls_Header.Text" xml:space="preserve">
+    <value>Звонки</value>
+  </data>
+  <data name="Calls_Empty.Text" xml:space="preserve">
+    <value>Чтобы начать звонок, выберите контакт и нажмите Позвонить.</value>
+  </data>
   <data name="Shell_Archived.Text" xml:space="preserve">
     <value>Архив</value>
   </data>

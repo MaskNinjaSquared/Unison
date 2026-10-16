@@ -602,6 +602,21 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="Shell_Starred.Text" xml:space="preserve">
     <value>Mensagens favoritas</value>
   </data>
+  <data name="Shell_Favorites.Text" xml:space="preserve">
+    <value>Favoritos</value>
+  </data>
+  <data name="Favorites_Header.Text" xml:space="preserve">
+    <value>Favoritos</value>
+  </data>
+  <data name="Favorites_Empty.Text" xml:space="preserve">
+    <value>Os Favoritos São Exibidos nas seções de Conversas e Ligações. Adicione quantas pessoas e quantos grupos você quiser.</value>
+  </data>
+  <data name="Calls_Header.Text" xml:space="preserve">
+    <value>Chamadas</value>
+  </data>
+  <data name="Calls_Empty.Text" xml:space="preserve">
+    <value>Para iniciar uma chamada, selecione um contato e clique em Ligar.</value>
+  </data>
   <data name="Shell_Archived.Text" xml:space="preserve">
     <value>Conversas arquivadas</value>
   </data>

@@ -402,6 +402,18 @@
     <Compile Include="UI\Views\StatusDetailView.xaml.cs">
       <DependentUpon>StatusDetailView.xaml</DependentUpon>
     </Compile>
+    <Compile Include="UI\Views\CallsView.xaml.cs">
+      <DependentUpon>CallsView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Views\FavoritesView.xaml.cs">
+      <DependentUpon>FavoritesView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Controls\CallsEmptyControl.xaml.cs">
+      <DependentUpon>CallsEmptyControl.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Controls\FavoritesEmptyControl.xaml.cs">
+      <DependentUpon>FavoritesEmptyControl.xaml</DependentUpon>
+    </Compile>
     <Compile Include="UI\Views\ImageViewerView.xaml.cs">
       <DependentUpon>ImageViewerView.xaml</DependentUpon>
     </Compile>
@@ -901,6 +913,22 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="UI\Views\StatusDetailView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Views\CallsView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Views\FavoritesView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Controls\CallsEmptyControl.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Controls\FavoritesEmptyControl.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

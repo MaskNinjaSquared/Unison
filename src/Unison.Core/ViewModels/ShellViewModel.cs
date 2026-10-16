@@ -878,6 +878,14 @@ namespace Unison.Core.ViewModels
                 {
                     _navigator.NavigateInShellAndClear(NavigationDestination.Status);
                 }
+                else if (string.Equals(section, NavigationRoutes.Calls, StringComparison.OrdinalIgnoreCase))
+                {
+                    _navigator.NavigateInShellAndClear(NavigationDestination.Calls);
+                }
+                else if (string.Equals(section, NavigationRoutes.Favorites, StringComparison.OrdinalIgnoreCase))
+                {
+                    _navigator.NavigateInShellAndClear(NavigationDestination.Favorites);
+                }
                 else if (string.Equals(section, NavigationRoutes.Archived, StringComparison.OrdinalIgnoreCase))
                 {
                     _navigator.NavigateInShellAndClear(NavigationDestination.Archived);

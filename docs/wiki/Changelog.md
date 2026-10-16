@@ -4,6 +4,13 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Calls and Favorites empty states are unlocked
+
+Unison and WhatsApp shells can open Calls and Favorites from the sidebar (they were greyed out).
+Each section is a shared page with title and hamburger, and a shared empty-state control for the body:
+desktop shows the hint at the top-left, mobile centered. The Legacy pivot uses the same controls
+instead of “Coming soon”. There is still no call history or favorites list — only the empty copy.
+
 ## UI thread and chat-list save are no longer client members
 
 Facades and contact helpers now get the UI thread from an injected `AttachedUiDispatcher` and save

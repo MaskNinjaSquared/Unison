@@ -17,6 +17,8 @@ namespace Unison.Core.Models
         Status = 11,
         Debug = 12,
         Archived = 13,
+        Calls = 14,
+        Favorites = 15,
 
         /// <summary>
         /// Tracked as the active section when settings is open; do not pass to

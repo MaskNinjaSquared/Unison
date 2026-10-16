@@ -6,7 +6,7 @@ using Windows.UI.Xaml.Navigation;
 
 namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 {
-    /// <summary>Demand-loaded pivot stub (calls / favorites) for the WhatsApp Legacy shell.</summary>
+    /// <summary>Demand-loaded pivot body (calls / favorites) for the WhatsApp Legacy shell.</summary>
     public sealed partial class LegacyPivotPlaceholderView : Page
     {
         public event EventHandler SearchRequested;
@@ -26,12 +26,11 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         public Task InitAsync(string section)
         {
-            if (!string.IsNullOrWhiteSpace(section) && PlaceholderText != null)
-            {
-                PlaceholderText.Text = section;
-            }
-
             bool calls = string.Equals(section, "calls", StringComparison.OrdinalIgnoreCase);
+            bool favorites = string.Equals(section, "favorites", StringComparison.OrdinalIgnoreCase);
+
+            CallsEmpty.Visibility = calls ? Visibility.Visible : Visibility.Collapsed;
+            FavoritesEmpty.Visibility = favorites ? Visibility.Visible : Visibility.Collapsed;
             SectionBar.Visibility = calls ? Visibility.Visible : Visibility.Collapsed;
             return Task.CompletedTask;
         }

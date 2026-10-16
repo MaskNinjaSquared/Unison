@@ -833,6 +833,21 @@ Wyłącz po zakończeniu diagnozy: pozostawienie włączonego spowalnia aplikacj
   <data name="Shell_Starred.Text" xml:space="preserve">
     <value>Oznaczone wiadomości</value>
   </data>
+  <data name="Shell_Favorites.Text" xml:space="preserve">
+    <value>Ulubione</value>
+  </data>
+  <data name="Favorites_Header.Text" xml:space="preserve">
+    <value>Ulubione</value>
+  </data>
+  <data name="Favorites_Empty.Text" xml:space="preserve">
+    <value>Ulubione są wyświetlane w sekcjach Czaty i Połączenia. Dodaj tyle osób i grup, ile chcesz.</value>
+  </data>
+  <data name="Calls_Header.Text" xml:space="preserve">
+    <value>Połączenia</value>
+  </data>
+  <data name="Calls_Empty.Text" xml:space="preserve">
+    <value>Aby rozpocząć połączenie, wybierz kontakt i naciśnij Zadzwoń.</value>
+  </data>
   <data name="Shell_Status.Text" xml:space="preserve">
     <value>Status</value>
   </data>

@@ -73,6 +73,10 @@ namespace Unison.Uwp.Services.Themes
                     return typeof(UI.Views.ArchivedChatsView);
                 case NavigationDestination.Status:
                     return typeof(UI.Views.StatusView);
+                case NavigationDestination.Calls:
+                    return typeof(UI.Views.CallsView);
+                case NavigationDestination.Favorites:
+                    return typeof(UI.Views.FavoritesView);
                 case NavigationDestination.Debug:
                     return typeof(UI.Views.DebugView);
                 case NavigationDestination.Settings:
@@ -119,6 +123,18 @@ namespace Unison.Uwp.Services.Themes
             if (content is UI.Views.StatusView)
             {
                 destination = NavigationDestination.Status;
+                return true;
+            }
+
+            if (content is UI.Views.CallsView)
+            {
+                destination = NavigationDestination.Calls;
+                return true;
+            }
+
+            if (content is UI.Views.FavoritesView)
+            {
+                destination = NavigationDestination.Favorites;
                 return true;
             }
 

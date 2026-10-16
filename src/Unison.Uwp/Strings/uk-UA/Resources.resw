@@ -602,6 +602,21 @@
   <data name="Shell_Starred.Text" xml:space="preserve">
     <value>Позначені зірочкою</value>
   </data>
+  <data name="Shell_Favorites.Text" xml:space="preserve">
+    <value>Обране</value>
+  </data>
+  <data name="Favorites_Header.Text" xml:space="preserve">
+    <value>Обране</value>
+  </data>
+  <data name="Favorites_Empty.Text" xml:space="preserve">
+    <value>Обране відображається в розділах Чати та Виклики. Додайте скільки завгодно людей і груп.</value>
+  </data>
+  <data name="Calls_Header.Text" xml:space="preserve">
+    <value>Виклики</value>
+  </data>
+  <data name="Calls_Empty.Text" xml:space="preserve">
+    <value>Щоб почати виклик, виберіть контакт і натисніть Виклик.</value>
+  </data>
   <data name="Shell_Archived.Text" xml:space="preserve">
     <value>Архівовані чати</value>
   </data>

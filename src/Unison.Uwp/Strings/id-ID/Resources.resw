@@ -602,6 +602,21 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="Shell_Starred.Text" xml:space="preserve">
     <value>Pesan berbintang</value>
   </data>
+  <data name="Shell_Favorites.Text" xml:space="preserve">
+    <value>Favorit</value>
+  </data>
+  <data name="Favorites_Header.Text" xml:space="preserve">
+    <value>Favorit</value>
+  </data>
+  <data name="Favorites_Empty.Text" xml:space="preserve">
+    <value>Favorit ditampilkan di bagian Obrolan dan Panggilan. Tambahkan sebanyak orang dan grup yang Anda inginkan.</value>
+  </data>
+  <data name="Calls_Header.Text" xml:space="preserve">
+    <value>Panggilan</value>
+  </data>
+  <data name="Calls_Empty.Text" xml:space="preserve">
+    <value>Untuk memulai panggilan, pilih kontak lalu ketuk Panggil.</value>
+  </data>
   <data name="Shell_Archived.Text" xml:space="preserve">
     <value>Obrolan diarsipkan</value>
   </data>
