@@ -2483,7 +2483,20 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private void ScrollToBottomButton_Click(object sender, RoutedEventArgs e)
         {
-            ScrollToBottom();
+            if (ViewModel?.IsDetachedFromEnd != true)
+            {
+                ScrollToBottom();
+                return;
+            }
+
+            _stickToBottomUntilUtc = DateTime.UtcNow.AddSeconds(2);
+            if (_isSyncingFromService)
+            {
+                _syncRequestedAgain = true;
+                return;
+            }
+
+            _ = SyncMessagesFromServiceAsync();
         }
 
         private void ScrollToBottom()
@@ -2758,13 +2771,22 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                     (_scrollViewer.VerticalOffset + 120) < maxOffset;
             }
 
-            ScrollToBottomButton.Visibility = sendBarVisible && awayFromBottom
+            ScrollToBottomButton.Visibility = sendBarVisible && (awayFromBottom || ViewModel?.IsDetachedFromEnd == true)
                 ? Visibility.Visible
                 : Visibility.Collapsed;
         }
 
         private bool ShouldStickScrollToBottom() =>
             DateTime.UtcNow <= _stickToBottomUntilUtc || IsNearBottom();
+
+        /// <summary>
+        /// A window trimmed by load-more ends before the latest message, so resting at its bottom is
+        /// not following the chat; only an explicit jump (send, the chip) is.
+        /// </summary>
+        private bool IsFollowingTimelineEnd() =>
+            ViewModel?.IsDetachedFromEnd == true
+                ? DateTime.UtcNow <= _stickToBottomUntilUtc
+                : ShouldStickScrollToBottom();
 
         private async Task SyncMessagesFromServiceAsync()
         {
@@ -2777,7 +2799,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             string requestedJid = Jids.GetCanonicalJid(_activeChat.JID);
             try
             {
-                bool stickToBottom = ShouldStickScrollToBottom();
+                bool stickToBottom = IsFollowingTimelineEnd();
                 List<ChatMessage> serviceMessages = await MessagesFacade.LoadRecentMessagesForSyncAsync(requestedJid);
                 if (_activeChat == null ||
                     !string.Equals(Jids.GetCanonicalJid(_activeChat.JID), requestedJid, StringComparison.OrdinalIgnoreCase) ||
@@ -2794,7 +2816,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                         return;
                     }
 
-                    bool changed = ViewModel.MergeTimelineFromService(serviceMessages, requestedJid);
+                    bool followingEnd = stickToBottom || IsFollowingTimelineEnd();
+                    bool changed = ViewModel.MergeTimelineFromService(serviceMessages, requestedJid, followingEnd);
                     UpdatePinnedBanner();
 
                     if (changed)
@@ -2802,7 +2825,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                         bool isGroup = _activeChat.IsGroup ||
                             requestedJid.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
                         RecomputeMessageRuns(_messages, isGroup);
-                        if (stickToBottom || ShouldStickScrollToBottom())
+                        if (followingEnd)
                         {
                             ScrollToBottom();
                         }

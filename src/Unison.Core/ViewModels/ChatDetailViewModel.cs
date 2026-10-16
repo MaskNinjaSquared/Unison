@@ -341,6 +341,7 @@ namespace Unison.Core.ViewModels
             }
 
             Messages.Clear();
+            IsDetachedFromEnd = false;
         }
 
         /// <summary>Removes one timeline row after <see cref="ChatMessageViewModel.Detach"/>.</summary>
@@ -380,7 +381,20 @@ namespace Unison.Core.ViewModels
             while (Messages.Count > maxCount)
             {
                 RemoveTimelineAt(Messages.Count - 1);
+                IsDetachedFromEnd = true;
             }
+        }
+
+        private bool _isDetachedFromEnd;
+
+        /// <summary>
+        /// True after load-more trimmed the newest rows: the window no longer reaches the latest
+        /// message, and only <see cref="ChatTimelineMergeMode.RejoinEnd"/> brings it back.
+        /// </summary>
+        public bool IsDetachedFromEnd
+        {
+            get => _isDetachedFromEnd;
+            private set => Set(ref _isDetachedFromEnd, value);
         }
 
         /// <summary>Clears top-scroll paging flags when switching conversations.</summary>
@@ -1678,16 +1692,25 @@ namespace Unison.Core.ViewModels
 
         /// <summary>
         /// Merges a freshly loaded page into the open timeline: strips preview bubbles, refreshes
-        /// rows we already show, inserts what is new in order, then trims to the UI window.
+        /// rows we already show, inserts what is new in order. Only a reader at the end gets the
+        /// oldest rows trimmed; <paramref name="followingEnd"/> false leaves every row under the user.
         /// Returns true when the collection changed, so the view knows to redo runs / scroll.
         /// </summary>
-        public bool MergeTimelineFromService(IList<ChatMessage> serviceMessages, string requestedJid)
+        public bool MergeTimelineFromService(IList<ChatMessage> serviceMessages, string requestedJid, bool followingEnd = true)
         {
             if (serviceMessages == null || serviceMessages.Count == 0)
             {
                 return false;
             }
 
+            ChatTimelineMergeMode mode = ChatTimelineLiveMerge.Choose(followingEnd, IsDetachedFromEnd);
+            if (mode == ChatTimelineMergeMode.RejoinEnd)
+            {
+                RejoinTimelineEnd(serviceMessages, requestedJid);
+                return true;
+            }
+
+            DateTime? newestShown = Messages.Count > 0 ? Messages[Messages.Count - 1]?.Timestamp : null;
             int countBeforeFallbackStrip = Messages.Count;
             RemovePreviewFallbackMessages();
             bool changed = Messages.Count != countBeforeFallbackStrip;
@@ -1721,6 +1744,11 @@ namespace Unison.Core.ViewModels
                     continue;
                 }
 
+                if (!ChatTimelineLiveMerge.ShouldInsert(msg.Timestamp, newestShown, IsDetachedFromEnd))
+                {
+                    continue;
+                }
+
                 StampGroupRemoteJid(new[] { msg }, requestedJid);
                 ChatMessageViewModel inserted = InsertTimelineMessage(msg);
                 if (inserted != null && !string.IsNullOrWhiteSpace(msg.Id))
@@ -1731,8 +1759,32 @@ namespace Unison.Core.ViewModels
                 changed = true;
             }
 
-            TrimTimelineToMax(MaxUiMessageWindow);
+            if (mode == ChatTimelineMergeMode.FollowEnd)
+            {
+                TrimTimelineToMax(MaxUiMessageWindow);
+            }
+
             return changed;
+        }
+
+        /// <summary>
+        /// The window lost its newest rows to load-more, so the recent page cannot be stitched onto
+        /// it without a gap. The reader asked for the end: show the latest page instead.
+        /// </summary>
+        private void RejoinTimelineEnd(IList<ChatMessage> serviceMessages, string requestedJid)
+        {
+            var latest = serviceMessages.Where(m => m != null).ToList();
+            ChatMessageOrder.SortInPlace(latest);
+            if (latest.Count > InitialUiMessageWindow)
+            {
+                latest.RemoveRange(0, latest.Count - InitialUiMessageWindow);
+            }
+
+            StampGroupRemoteJid(latest, requestedJid);
+            ReplaceTimelineWindow(latest);
+            _hasReachedStart = false;
+            _emptyLoadAttempts = 0;
+            OnPropertyChanged(nameof(CanLoadMore));
         }
 
         /// <summary>
