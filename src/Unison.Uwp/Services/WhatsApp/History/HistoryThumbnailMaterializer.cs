@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
+using Unison.Core.Contracts;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
-using Windows.Storage;
 
 namespace Unison.Uwp.Services.WhatsApp.History
 {
@@ -175,8 +175,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
         {
             try
             {
-                string root = ApplicationData.Current.LocalFolder.Path;
-                string folder = Path.Combine(root, "MediaCache", "Images");
+                string folder = MediaCacheService.LocalFolderPath(MediaCacheKind.Image);
                 Directory.CreateDirectory(folder);
                 return folder;
             }
@@ -209,7 +208,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
                 File.WriteAllBytes(path, bytes);
             }
 
-            return "ms-appdata:///local/MediaCache/Images/" + fileName;
+            return MediaCacheService.UriFor(MediaCacheKind.Image, fileName);
         }
 
         private static bool IsPng(byte[] bytes)

@@ -290,9 +290,13 @@ write is skipped, while documents, posters and transcodes are things we produced
 
 Two follow-ups, both real:
 
-- The same folder boilerplate is still duplicated in `OggOpusToWavConverter`,
-  `OggOpusHandlerService` and `HistoryThumbnailMaterializer`. They should take `IMediaCache`. Left
-  out of 3.3a deliberately — the audio path is the fragile one on Mobile and deserves its own change.
+- The same folder boilerplate is still duplicated in `OggOpusToWavConverter` and
+  `OggOpusHandlerService`. They should take `IMediaCache`. Left out of 3.3a deliberately — the audio
+  path is the fragile one on Mobile and deserves its own change.
+- `HistoryThumbnailMaterializer` reads the folder path and the URI from `MediaCacheService`
+  (`LocalFolderPath`, `UriFor`) but keeps writing with `System.IO`. It does **not** take
+  `IMediaCache`: it writes a whole history lot of thumbs on a worker thread while the sync awaits it,
+  and `SaveAsync` costs several StorageFile round trips per file on Mobile.
 - ~~`TryTranscodeOggOpusToM4aAsync` still opens the Audio folder itself.~~ Resolved in 3.3b.
 
 **3.3b is done: the second renditions left.** `MediaDerivationService` owns the four things that
