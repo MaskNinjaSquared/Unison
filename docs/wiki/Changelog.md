@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Usync alias filing left the client contract
+
+`TryFileUsyncAlias` is `IUsyncAliasHost`. The usync resolver no longer takes
+`IWhatsAppService` for that write. The member left the contract.
+
+
 ## History sync notifies left the client contract
 
 Chunk started/applied, LID filing from history and the full on-demand request go through

@@ -89,7 +89,8 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             InitialSyncProgressState initialSync,
             ChatNameRefresh nameRefresh,
             ChatListAliasMerge aliasMerge,
-            IDeferredAvatarResolution deferredAvatars)
+            IDeferredAvatarResolution deferredAvatars,
+            IUsyncAliasHost usyncAliases)
         {
             _displayNames = displayNames ?? throw new ArgumentNullException(nameof(displayNames));
             _nameRefresh = nameRefresh ?? throw new ArgumentNullException(nameof(nameRefresh));
@@ -122,7 +123,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             _directory = new ContactDirectory(sessions, lidMappings);
             _addressBook = new AddressBookOverlay(localContacts, personStore, jids, ui, addressBookNames, chats);
             _usync = new ContactUsyncResolver(
-                whatsAppService,
+                usyncAliases ?? throw new ArgumentNullException(nameof(usyncAliases)),
                 _directory,
                 usyncGate,
                 jids,

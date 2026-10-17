@@ -1404,9 +1404,9 @@ directly (not through `IChatService`) so DI does not cycle through `IContactServ
 
 **Usync table filing is `UsyncAliasFiling`.** (Core, DI singleton over `JidAliasTable`.) It
 runs `AliasPairPolicy` and `AliasPairFiling.FileBothWays`, then returns the accepted pair.
-`TryFileUsyncAlias` stays on the client as a thin forward: after a successful file it
-registers the pair with the live socket and heals our own identity in the auth state — both
-need session and auth the Core type must not own.
+`TryFileUsyncAlias` is `IUsyncAliasHost` on the client: after a successful
+`UsyncAliasFiling` it registers the pair with the live socket and heals our own identity
+in the auth state — both need session and auth the Core type must not own.
 
 **Opening a chat merges SQLite and the live overlay in Core.** `OpenChatMessageMerge` is the
 id-prefer-live merge `MessageFacade` used to inline twice (open page and sync reload). Live
@@ -1438,6 +1438,10 @@ owns the UI path and reaches those three through the host; ViewModels still call
 **SQLite history notifies are `IHistorySyncHost`.** Chunk started/applied, LID mapping
 filing and `RequestFullHistoryOnDemandAsync` leave `IWhatsAppService`. `HistoryFacade`
 still takes the client for events and `EnsureConnectedAsync`.
+
+**Usync socket filing is `IUsyncAliasHost`.** `TryFileUsyncAlias` left `IWhatsAppService`.
+`ContactUsyncResolver` takes that port only (no more `IWhatsAppService`); table write stays
+`UsyncAliasFiling`, socket register + identity heal stay on the client behind the host.
 
 **Done when:** `.Connection.cs` + a small main file; no façade needs send/history/avatar/group/list methods on the client; leftover `IWhatsAppSocket` drop is [Migration](Migration) item 9, after this.
 

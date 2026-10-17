@@ -106,16 +106,5 @@ namespace Unison.Core.Contracts.WhatsApp
         Task<bool> TransferActiveSocketToBrokerAsync(string reason);
         Task PrepareForSuspendAsync();
         Task ShutdownAsync(bool persist = true);
-
-        // Usync contact apply (3.6). The contact façade decides and writes the push name itself;
-        // these reach the socket, the auth state and the chat rows the client still owns.
-        // Not for ViewModels.
-
-        /// <summary>
-        /// Files a usync LID/phone pair when <see cref="Unison.Core.Helpers.AliasPairPolicy"/> accepts it, and
-        /// heals our own identity if the pair touches it. <paramref name="wasAlreadyAliased"/> is read
-        /// before the write.
-        /// </summary>
-        bool TryFileUsyncAlias(string userJid, string lidJid, out bool wasAlreadyAliased);
     }
 }

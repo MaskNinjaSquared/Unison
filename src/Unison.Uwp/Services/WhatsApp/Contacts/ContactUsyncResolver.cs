@@ -6,9 +6,8 @@
 // a missing avatar.
 //
 // The push name, the "listed without a picture" check and the picture fetch
-// are done here. Filing the pair (socket registration, identity heal) and
-// merging the two chats goes through ChatListAliasMerge; filing the pair still needs
-// the client for socket registration and identity healing.
+// are done here. Filing the pair (socket registration, identity heal) goes
+// through IUsyncAliasHost; merging the two chats goes through ChatListAliasMerge.
 // What this class owns is everything that decides: which numbers to ask
 // about, the gate that keeps usync from competing with itself, and the plan.
 // =============================================================================
@@ -30,7 +29,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private static readonly TimeSpan SingleTimeout = TimeSpan.FromSeconds(8);
         private static readonly TimeSpan BatchTimeout = TimeSpan.FromSeconds(15);
 
-        private readonly IWhatsAppService _client;
+        private readonly IUsyncAliasHost _aliases;
         private readonly ContactDirectory _directory;
         private readonly IUsyncGate _gate;
         private readonly IJidResolver _jids;
@@ -43,7 +42,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly ChatListAliasMerge _aliasMerge;
 
         internal ContactUsyncResolver(
-            IWhatsAppService client,
+            IUsyncAliasHost aliases,
             ContactDirectory directory,
             IUsyncGate gate,
             IJidResolver jids,
@@ -59,7 +58,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _nameRefresh = nameRefresh ?? throw new ArgumentNullException(nameof(nameRefresh));
             _aliasMerge = aliasMerge ?? throw new ArgumentNullException(nameof(aliasMerge));
-            _client = client ?? throw new ArgumentNullException(nameof(client));
+            _aliases = aliases ?? throw new ArgumentNullException(nameof(aliases));
             _directory = directory ?? throw new ArgumentNullException(nameof(directory));
             _gate = gate ?? throw new ArgumentNullException(nameof(gate));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
@@ -166,7 +165,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
             bool lidAlreadyAliased = false;
             bool pairAccepted = !string.IsNullOrEmpty(lid) &&
-                _client.TryFileUsyncAlias(user, lid, out lidAlreadyAliased);
+                _aliases.TryFileUsyncAlias(user, lid, out lidAlreadyAliased);
             bool pushNameStored = StorePushName(user, contact.Name);
             bool listedWithoutAvatar = !string.IsNullOrEmpty(contact.PictureId) &&
                 UsyncContactCaches.HasListedChatWithoutAvatar(_chats.Chats, user);

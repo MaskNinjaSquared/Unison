@@ -433,6 +433,8 @@ namespace Unison.Uwp
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IDeferredAvatarResolution>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+            services.AddSingleton<IUsyncAliasHost>(
+                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IAppStateLocalHost>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IEncryptedMediaDownloader>(_ => new HttpEncryptedMediaDownloader(
@@ -501,7 +503,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<InitialSyncProgressState>(),
                 sp.GetRequiredService<ChatNameRefresh>(),
                 sp.GetRequiredService<ChatListAliasMerge>(),
-                sp.GetRequiredService<IDeferredAvatarResolution>()));
+                sp.GetRequiredService<IDeferredAvatarResolution>(),
+                sp.GetRequiredService<IUsyncAliasHost>()));
             services.AddSingleton<IOfflineReplayHost>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IChatService>(sp => new ChatFacade(
