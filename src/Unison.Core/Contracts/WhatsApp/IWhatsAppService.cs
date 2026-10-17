@@ -144,10 +144,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>Schedules another background resolution pass (names+avatars+groups) after a delay.</summary>
         void ScheduleDeferredAvatarResolution(string reason, TimeSpan? delay = null);
 
-
-        /// <summary>Schedules a chat-list dedupe pass (new row / alias noise).</summary>
-        void RequestChatListDedup(string reason);
-
         /// <summary>Schedules a PN/LID duplicate-row merge scan.</summary>
         void RequestAliasChatMerge(string lidJid, string pnJid);
 

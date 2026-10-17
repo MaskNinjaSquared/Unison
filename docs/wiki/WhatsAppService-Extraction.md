@@ -1384,6 +1384,15 @@ owns both members on `IChatService`; the client calls the helper after a large o
 `RefreshAllChatPreviewsFromStoredAsync` and `ReconcileChatListFromStoredAsync` left
 `IWhatsAppService`.
 
+**Chat-list dedupe is `ChatListDeduper`.** (Core, DI singleton over the UI dispatcher,
+`ChatStateStore`, `ChatRowIndex`, `JidAliasTable` and the push-name table.) It runs
+`DuplicateChatFold`, removes the folded rows, re-keys `MessagesByChat` and invalidates the
+row index in one UI pass. `IChatService.RequestChatListDedup` lives on `ChatFacade`, which
+schedules the catalogue save, raises display-name listeners through `IContactService` and
+asks `IChatIdentityPersistence` (the client) to write names and aliases immediately when
+rows merged. The member left `IWhatsAppService`; the client still runs the helper from its
+own alias and startup paths.
+
 **Done when:** `.Connection.cs` + a small main file; no façade needs send/history/avatar/group/list methods on the client; leftover `IWhatsAppSocket` drop is [Migration](Migration) item 9, after this.
 
 ---

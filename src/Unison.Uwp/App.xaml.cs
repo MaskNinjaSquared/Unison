@@ -320,6 +320,12 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ContactDisplayNames>(),
                 sp.GetRequiredService<ISelfMarkerNaming>(),
                 sp.GetRequiredService<IStringResources>()));
+            services.AddSingleton(sp => new ChatListDeduper(
+                sp.GetRequiredService<AttachedUiDispatcher>(),
+                sp.GetRequiredService<ChatStateStore>(),
+                sp.GetRequiredService<ChatRowIndex>(),
+                sp.GetRequiredService<JidAliasTable>(),
+                sp.GetRequiredService<ChatStateStore>().PushNames));
             services.AddSingleton<IWhatsAppService>(
                 sp => WhatsAppService.Create(
                     sp.GetRequiredService<ChatStateStore>(),
@@ -346,7 +352,8 @@ namespace Unison.Uwp
                     sp.GetRequiredService<AttachedUiDispatcher>(),
                     sp.GetRequiredService<ChatPreviewReconciler>(),
                     sp.GetRequiredService<ChatNameRefresh>(),
-                    sp.GetRequiredService<StoredChatPreviewRefresh>()));
+                    sp.GetRequiredService<StoredChatPreviewRefresh>(),
+                    sp.GetRequiredService<ChatListDeduper>()));
             // The send flow lives on MessageFacade; the timeline caches and the socket it writes
             // through are still the client's, reached only through this narrow port.
             services.AddSingleton<IOutgoingMessageHost>(
@@ -407,6 +414,8 @@ namespace Unison.Uwp
             // The save debounce stays on the client until its shutdown path moves (phase 4);
             // façades reach it only through this port.
             services.AddSingleton<IChatCatalogPersistence>(
+                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+            services.AddSingleton<IChatIdentityPersistence>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IEncryptedMediaDownloader>(_ => new HttpEncryptedMediaDownloader(
                 new DelegateSocketLog(line => Diag.W("[Media] " + line))));
@@ -487,7 +496,9 @@ namespace Unison.Uwp
                 sp.GetRequiredService<AttachedUiDispatcher>(),
                 sp.GetRequiredService<IChatCatalogPersistence>(),
                 sp.GetRequiredService<IShortcutService>(),
-                sp.GetRequiredService<StoredChatPreviewRefresh>()));
+                sp.GetRequiredService<StoredChatPreviewRefresh>(),
+                sp.GetRequiredService<ChatListDeduper>(),
+                sp.GetRequiredService<IChatIdentityPersistence>()));
             // After IChatService: the projection persists resolved strip rows so cold start keeps names.
             services.AddSingleton<IChatAuthorProjection>(sp => new ChatAuthorProjection(
                 sp.GetRequiredService<IChatStateStore>(),

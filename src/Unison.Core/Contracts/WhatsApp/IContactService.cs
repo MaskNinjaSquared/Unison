@@ -17,6 +17,12 @@ namespace Unison.Core.Contracts.WhatsApp
         event System.EventHandler DisplayNamesUpdated;
 
         /// <summary>
+        /// Asks listeners to re-read labels after the list fold or another bulk rename that did
+        /// not go through the usual name-resolution path.
+        /// </summary>
+        void NotifyDisplayNamesUpdated();
+
+        /// <summary>
         /// Best known label for a JID: device address book first, then the push name the account
         /// broadcasts, then the bare number. <paramref name="context"/> only labels the call site
         /// in diagnostics.

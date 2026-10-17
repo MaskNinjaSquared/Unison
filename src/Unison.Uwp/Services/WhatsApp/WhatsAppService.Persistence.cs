@@ -40,7 +40,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : IChatCatalogPersistence
+    public partial class WhatsAppService : IChatCatalogPersistence, IChatIdentityPersistence
     {
 
         private void LoadHistoryFreshnessRepairState()
@@ -473,6 +473,9 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         void IChatCatalogPersistence.Schedule() => SchedulePersist();
+        void IChatIdentityPersistence.PersistNow(string reason) =>
+            _ = PersistChatIdentityStateAsync(reason ?? "facade");
+
 
         void IChatCatalogPersistence.PersistRows(IList<ChatItem> chats)
         {

@@ -687,6 +687,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly ChatPreviewReconciler _previewReconciler;
         private readonly ChatNameRefresh _nameRefresh;
         private readonly StoredChatPreviewRefresh _storedPreviews;
+        private readonly ChatListDeduper _deduper;
 
         public DisplayNameTable ContactNames => _chatState.PushNames;
         public DisplayNameTable PhoneContactNamesByJid => _chatState.AddressBookNames;
@@ -751,8 +752,6 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         private List<ChatItem> GetChatRowsForCanonicalJid(string jid) => _chatRows.FindConversation(jid);
 
-        void IWhatsAppService.RequestChatListDedup(string reason) =>
-            _ = DeduplicateChatsAsync(reason ?? "facade");
 
         void IWhatsAppService.RequestAliasChatMerge(string lidJid, string pnJid) =>
             _ = CheckAndMergeDuplicateChatsAsync(lidJid, pnJid);
@@ -1028,7 +1027,8 @@ namespace Unison.Uwp.Services.WhatsApp
             AttachedUiDispatcher ui,
             ChatPreviewReconciler previewReconciler,
             ChatNameRefresh nameRefresh,
-            StoredChatPreviewRefresh storedPreviews)
+            StoredChatPreviewRefresh storedPreviews,
+            ChatListDeduper deduper)
         {
             if (chatState == null)
             {
@@ -1050,6 +1050,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _nameRefresh = nameRefresh ?? throw new ArgumentNullException(nameof(nameRefresh));
             _nameRefresh.Applied += OnChatNamesApplied;
             _storedPreviews = storedPreviews ?? throw new ArgumentNullException(nameof(storedPreviews));
+            _deduper = deduper ?? throw new ArgumentNullException(nameof(deduper));
             _chatRows = chatRows ?? throw new ArgumentNullException(nameof(chatRows));
             _activeChat = activeChat ?? throw new ArgumentNullException(nameof(activeChat));
             _activeChat.Changed += OnActiveChatChanged;
@@ -1129,11 +1130,12 @@ namespace Unison.Uwp.Services.WhatsApp
             AttachedUiDispatcher ui,
             ChatPreviewReconciler previewReconciler,
             ChatNameRefresh nameRefresh,
-            StoredChatPreviewRefresh storedPreviews)
+            StoredChatPreviewRefresh storedPreviews,
+            ChatListDeduper deduper)
         {
             return _instance ?? (_instance = new WhatsAppService(
                 chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
-                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, previewReconciler, nameRefresh, storedPreviews));
+                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, previewReconciler, nameRefresh, storedPreviews, deduper));
         }
 
         /// <summary>
@@ -4353,45 +4355,21 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private async Task DeduplicateChatsAsync(string reason)
         {
-            await _ui.RunAsync(() =>
-                {
-                    var snapshots = Chats
-                        .Where(c => c != null && !string.IsNullOrWhiteSpace(c.JID))
-                        .ToList();
+            ChatListDeduperResult result = await _deduper.RunAsync(reason ?? "client").ConfigureAwait(false);
+            if (result.Merged <= 0 && result.NormalizedKeys <= 0)
+            {
+                return;
+            }
 
-                    if (snapshots.Count < 2)
-                    {
-                        snapshots.ForEach(c => c.JID = GetCanonicalJid(c.JID));
-                        InvalidateChatRowIndex();
-                    }
-
-                    DuplicateChatFoldResult folded =
-                        new DuplicateChatFold(MessagesByChat, ContactNames, JidAlias).Run(snapshots);
-                    foreach (var secondary in folded.Removed)
-                    {
-                        Chats.Remove(secondary);
-                    }
-
-                    int mergedCount = folded.Removed.Count;
-                    if (mergedCount > 0)
-                    {
-                        InvalidateChatRowIndex();
-                    }
-
-                    // Ensure message-cache keys are canonicalized even when a secondary chat row no longer exists.
-                    int normalizedMessageKeyCount = MessagesByChat.CanonicalizeKeys(GetCanonicalJid);
-
-                    if (mergedCount > 0 || normalizedMessageKeyCount > 0)
-                    {
-                        Debug.WriteLine($"[WhatsAppService] Deduplicated {mergedCount} duplicate chat entries and normalized {normalizedMessageKeyCount} message caches (reason={reason})");
-                        OnDisplayNamesUpdated?.Invoke(this, EventArgs.Empty);
-                        SchedulePersist();
-                        if (mergedCount > 0)
-                        {
-                            _ = PersistChatIdentityStateAsync($"dedupe:{reason}");
-                        }
-                    }
-                });
+            Debug.WriteLine(
+                $"[WhatsAppService] Deduplicated {result.Merged} duplicate chat entries and normalized " +
+                $"{result.NormalizedKeys} message caches (reason={reason})");
+            OnDisplayNamesUpdated?.Invoke(this, EventArgs.Empty);
+            SchedulePersist();
+            if (result.Merged > 0)
+            {
+                _ = PersistChatIdentityStateAsync("dedupe:" + reason);
+            }
         }
 
         private static string FormatTimestamp(DateTime msgTime)

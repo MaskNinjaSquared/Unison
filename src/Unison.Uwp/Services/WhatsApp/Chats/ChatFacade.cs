@@ -63,6 +63,8 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
         private readonly IChatCatalogPersistence _catalog;
         private readonly IShortcutService _shortcuts;
         private readonly StoredChatPreviewRefresh _storedPreviews;
+        private readonly ChatListDeduper _deduper;
+        private readonly IChatIdentityPersistence _identity;
         private readonly OfflineReplayTips _offlineReplayTips;
 
         /// <summary>Short enough that the first recovered chat shows while a long replay continues.</summary>
@@ -81,7 +83,9 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             IDispatcher ui,
             IChatCatalogPersistence catalog,
             IShortcutService shortcuts,
-            StoredChatPreviewRefresh storedPreviews)
+            StoredChatPreviewRefresh storedPreviews,
+            ChatListDeduper deduper,
+            IChatIdentityPersistence identity)
         {
             if (offlineReplay == null)
             {
@@ -110,6 +114,8 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _shortcuts = shortcuts ?? throw new ArgumentNullException(nameof(shortcuts));
             _storedPreviews = storedPreviews ?? throw new ArgumentNullException(nameof(storedPreviews));
+            _deduper = deduper ?? throw new ArgumentNullException(nameof(deduper));
+            _identity = identity ?? throw new ArgumentNullException(nameof(identity));
             _offlineReplayTips = new OfflineReplayTips(
                 _jids,
                 offlineReplay,
@@ -330,7 +336,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
                     Timestamp = "",
                     Kind = JidHelper.ResolveKind(normalized, _jids.IsSelfLinked(normalized))
                 });
-                _appState.RequestChatListDedup("start-new-chat");
+                RequestChatListDedup("start-new-chat");
             });
         }
 
@@ -484,6 +490,30 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             Debug.WriteLine(
                 $"[ChatFacade] Reconciled {result.Refreshed} chat previews from cached messages " +
                 $"(created={result.Created}, reason={reason})");
+        }
+        public void RequestChatListDedup(string reason)
+        {
+            _ = RunChatListDedupAsync(reason);
+        }
+
+        private async Task RunChatListDedupAsync(string reason)
+        {
+            ChatListDeduperResult result = await _deduper.RunAsync(reason ?? "facade").ConfigureAwait(false);
+            if (result.Merged <= 0 && result.NormalizedKeys <= 0)
+            {
+                return;
+            }
+
+            Debug.WriteLine(
+                $"[ChatFacade] Deduplicated {result.Merged} duplicate chat entries and normalized " +
+                $"{result.NormalizedKeys} message caches (reason={reason})");
+            _catalog.Schedule();
+            _chatState.NotifyDisplayNamesChanged();
+            _contacts.NotifyDisplayNamesUpdated();
+            if (result.Merged > 0)
+            {
+                _identity.PersistNow("dedupe:" + (reason ?? "facade"));
+            }
         }
 
         public async Task<LiveIncomingChatListApplyResult> ApplyLiveIncomingChatListAsync(
@@ -659,7 +689,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
 
                 createdRow = true;
                 Debug.WriteLine("[ChatFacade] Created new chat entry for " + jid + " (" + chatName + ")");
-                _appState.RequestChatListDedup(createAtFront ? "incoming-new-chat" : "offline-new-chat");
+                RequestChatListDedup(createAtFront ? "incoming-new-chat" : "offline-new-chat");
 
                 if (!string.IsNullOrWhiteSpace(aliasLid) && !string.IsNullOrWhiteSpace(aliasPn))
                 {

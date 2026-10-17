@@ -212,6 +212,8 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
         public event EventHandler DisplayNamesUpdated;
 
+        public void NotifyDisplayNamesUpdated() => DisplayNamesUpdated?.Invoke(this, EventArgs.Empty);
+
         public string ResolveDisplayName(string jid, string context)
         {
             return _displayNames.Resolve(jid, context);

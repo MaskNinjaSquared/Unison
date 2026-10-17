@@ -111,5 +111,12 @@ namespace Unison.Core.Contracts.WhatsApp
 
         /// <summary>Creates missing rows and re-tips/reorders from the in-memory message cache.</summary>
         Task ReconcileChatListFromStoredAsync(string reason);
+
+        /// <summary>
+        /// Collapses rows that are the same person and re-keys in-memory timelines to the
+        /// canonical address. Fire-and-forget from the list; the fold itself is awaited by
+        /// callers that need the list settled first.
+        /// </summary>
+        void RequestChatListDedup(string reason);
     }
 }
