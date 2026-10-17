@@ -473,8 +473,13 @@
                                           Margin="4,1,0,0"
                                           VerticalAlignment="Center"
                                           Visibility="{x:Bind ShowReadStatusCheckmark, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                                <TextBlock Text="!" Foreground="{ThemeResource ChatDetailSendFailedBrush}" FontSize="12" FontWeight="Bold" Margin="4,0,0,0"
-                                           Visibility="{x:Bind IsSendFailed, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                <FontIcon Glyph="&#xE783;"
+                                          FontFamily="{StaticResource IconFont}"
+                                          FontSize="14"
+                                          Foreground="{ThemeResource ChatDetailSendFailedBrush}"
+                                          Margin="4,1,0,0"
+                                          VerticalAlignment="Center"
+                                          Visibility="{x:Bind IsSendFailed, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                             </StackPanel>
                         </Grid>
                         </StackPanel>
