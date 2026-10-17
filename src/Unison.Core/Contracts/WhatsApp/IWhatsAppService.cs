@@ -275,11 +275,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         void ApplyHistoryLidMappings(IEnumerable<KeyValuePair<string, string>> lidToPn, string source);
 
-        /// <summary>
-        /// Clears on-demand in-flight / backoff for chats after a SQLite history chunk.
-        /// </summary>
-        void CompleteHistoryOnDemandForChats(IEnumerable<string> chatJids);
-
         /// <summary>True when the noise handshake completed and IQ calls are safe.</summary>
         bool IsTransportReady { get; }
 

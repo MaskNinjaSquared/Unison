@@ -2086,17 +2086,6 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        /// <inheritdoc />
-        public void CompleteHistoryOnDemandForChats(IEnumerable<string> chatJids)
-        {
-            if (chatJids == null)
-            {
-                return;
-            }
-
-            _historyRequests.CompleteChats(chatJids.Select(NormalizeJid).ToList());
-        }
-
         private async Task RepairLegacyDeletedPreviewsAsync()
         {
             // Builds before v5.14 could persist a replayed revoke envelope as a new

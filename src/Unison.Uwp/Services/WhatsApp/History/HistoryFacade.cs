@@ -443,7 +443,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
                     IReadOnlyList<string> latchJids = result.ConversationJids.Count > 0
                         ? result.ConversationJids
                         : result.MessageChatJids;
-                    _appState.CompleteHistoryOnDemandForChats(latchJids);
+                    _onDemandRequests.CompleteChats(latchJids.Select(JidHelper.Normalize).ToList());
                 }
                 catch (Exception ex)
                 {
