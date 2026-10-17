@@ -50,6 +50,30 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         /// <summary>
+        /// Every row for <paramref name="canonical"/>, adding one at the end when the account
+        /// speaks about a chat the list does not hold yet. UI thread only.
+        /// </summary>
+        private List<ChatItem> GetOrAddChatRowsForAppState(string canonical, out ChatItem created)
+        {
+            created = null;
+            List<ChatItem> rows = GetChatRowsForCanonicalJid(canonical);
+            if (rows.Count > 0)
+            {
+                return rows;
+            }
+
+            created = new ChatItem
+            {
+                JID = canonical,
+                Name = ResolveDisplayName(canonical),
+                Kind = ResolveChatKind(canonical)
+            };
+            Chats.Add(created);
+            rows.Add(created);
+            return rows;
+        }
+
+        /// <summary>
         /// A group was created or renamed while we were connected. The subject is the group's
         /// only name, so it goes in the same cache a resolved contact name would.
         /// </summary>
@@ -113,17 +137,9 @@ namespace Unison.Uwp.Services.WhatsApp
             int resolved = 0;
             await RunOnUiThreadAsync(() =>
             {
-                var rows = GetChatRowsForCanonicalJid(canonical);
-                if (rows.Count == 0)
+                var rows = GetOrAddChatRowsForAppState(canonical, out ChatItem created);
+                if (created != null)
                 {
-                    var created = new ChatItem
-                    {
-                        JID = canonical,
-                        Name = ResolveDisplayName(canonical),
-                        Kind = ResolveChatKind(canonical)
-                    };
-                    Chats.Add(created);
-                    rows.Add(created);
                     dirty = new List<ChatItem> { created };
                 }
 
@@ -405,18 +421,7 @@ namespace Unison.Uwp.Services.WhatsApp
             List<ChatItem> touched = null;
             await RunOnUiThreadAsync(() =>
             {
-                var rows = GetChatRowsForCanonicalJid(canonical);
-                if (rows.Count == 0)
-                {
-                    var created = new ChatItem
-                    {
-                        JID = canonical,
-                        Name = ResolveDisplayName(canonical),
-                        Kind = ResolveChatKind(canonical)
-                    };
-                    Chats.Add(created);
-                    rows.Add(created);
-                }
+                var rows = GetOrAddChatRowsForAppState(canonical, out _);
 
                 long nowUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
