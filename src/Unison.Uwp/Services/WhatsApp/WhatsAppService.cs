@@ -4062,28 +4062,14 @@ namespace Unison.Uwp.Services.WhatsApp
                 chatJid, targetMessageId, pin, window.PinnedAtUtc, window.ExpiresAtUtc);
         }
 
-        public async Task SetMessagePinnedAsync(string chatJid, ChatMessage message, bool pin, uint durationSeconds = 604800)
+        public Task ApplyMessagePinAsync(
+            string chatJid,
+            string messageId,
+            bool isPinned,
+            DateTime? pinnedAtUtc,
+            DateTime? expiresAtUtc)
         {
-            await EnsureConnectedAsync();
-            if (message == null || string.IsNullOrWhiteSpace(message.Id))
-                throw new ArgumentException("A valid message is required", nameof(message));
-
-            string canonical = GetCanonicalJid(chatJid);
-            string targetRemoteJid = string.IsNullOrWhiteSpace(message.RemoteJid)
-                ? canonical
-                : NormalizeJid(message.RemoteJid);
-            var key = new Proto.MessageKey
-            {
-                RemoteJid = targetRemoteJid,
-                FromMe = message.IsFromMe,
-                Id = message.Id
-            };
-            if (!string.IsNullOrWhiteSpace(message.ParticipantJid)) key.Participant = message.ParticipantJid;
-
-            await _socket.SendPinInChatMessageAsync(canonical, key, pin, durationSeconds);
-            MessagePinWindow window = MessagePinWindow.FromLocal(pin, durationSeconds, DateTime.UtcNow);
-            await ApplyPinnedMessageStateAsync(
-                canonical, message.Id, pin, window.PinnedAtUtc, window.ExpiresAtUtc);
+            return ApplyPinnedMessageStateAsync(chatJid, messageId, isPinned, pinnedAtUtc, expiresAtUtc);
         }
 
         private void InvalidateCurrentSocket(IWhatsAppSocket socket, string reason)

@@ -872,9 +872,38 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             return _availability.HydrateStickerAsync(message, sticker, messageId, chatJid);
         }
 
-        public Task SetMessagePinnedAsync(string chatJid, ChatMessage message, bool pin, uint durationSeconds = 604800)
+        public async Task SetMessagePinnedAsync(string chatJid, ChatMessage message, bool pin, uint durationSeconds = 604800)
         {
-            return _whatsAppService.SetMessagePinnedAsync(chatJid, message, pin, durationSeconds);
+            await _whatsAppService.EnsureConnectedAsync();
+            if (message == null || string.IsNullOrWhiteSpace(message.Id))
+            {
+                throw new ArgumentException("A valid message is required", nameof(message));
+            }
+
+            IWhatsAppSocket socket = _sessions.Socket;
+            if (socket == null)
+            {
+                throw new InvalidOperationException("Not connected: the message pin was not sent.");
+            }
+
+            string canonical = _jids.GetCanonicalJid(chatJid);
+            var key = new MessageKey
+            {
+                RemoteJid = string.IsNullOrWhiteSpace(message.RemoteJid)
+                    ? canonical
+                    : JidHelper.Normalize(message.RemoteJid),
+                FromMe = message.IsFromMe,
+                Id = message.Id
+            };
+            if (!string.IsNullOrWhiteSpace(message.ParticipantJid))
+            {
+                key.Participant = message.ParticipantJid;
+            }
+
+            await socket.SendPinInChatMessageAsync(canonical, key, pin, durationSeconds);
+            MessagePinWindow window = MessagePinWindow.FromLocal(pin, durationSeconds, DateTime.UtcNow);
+            await _whatsAppService.ApplyMessagePinAsync(
+                canonical, message.Id, pin, window.PinnedAtUtc, window.ExpiresAtUtc);
         }
 
         public bool TryHandleReaction(

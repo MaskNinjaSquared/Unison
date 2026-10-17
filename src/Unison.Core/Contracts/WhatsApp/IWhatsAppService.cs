@@ -203,7 +203,17 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         Task<bool> RequestFullHistoryOnDemandAsync(string reason = null, bool force = false);
 
-        Task SetMessagePinnedAsync(string chatJid, ChatMessage message, bool pin, uint durationSeconds = 604800);
+        /// <summary>
+        /// Writes a message pin to the timeline and local storage, without telling the server.
+        /// Prefer <see cref="IMessageService.SetMessagePinnedAsync"/>, which sends it; this is the
+        /// local half of it.
+        /// </summary>
+        Task ApplyMessagePinAsync(
+            string chatJid,
+            string messageId,
+            bool isPinned,
+            DateTime? pinnedAtUtc,
+            DateTime? expiresAtUtc);
 
         /// <summary>
         /// Completes resync wait / initial-sync progress after the SQLite history path applied a chunk.

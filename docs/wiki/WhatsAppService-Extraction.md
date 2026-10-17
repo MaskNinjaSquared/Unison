@@ -1312,6 +1312,11 @@ the read through `ChatStateStore.BeginPersistedChatsLoad()` (disposed even when 
 `AttachWhatsAppService`. `IsLoadingPersistedChats` and `GetRuntimeDiagnosticsSnapshot` left the
 contract.
 
+**Message pins are sent by the façade.** `MessageFacade.SetMessagePinnedAsync` reconnects,
+builds the key, sends on `IWhatsAppSessionProvider.Socket` and works out the pin window; then it
+hands the local half to the client, the same split as chat pins. `IWhatsAppService.SetMessagePinnedAsync`
+became `ApplyMessagePinAsync` (timeline, pending pin, SQLite and replay queue; no wire).
+
 **Done when:** `.Connection.cs` + a small main file; no façade needs send/history/avatar/group/list methods on the client; leftover `IWhatsAppSocket` drop is [Migration](Migration) item 9, after this.
 
 ---
