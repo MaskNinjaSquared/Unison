@@ -32,7 +32,7 @@
                     Grid.Column="1"
                     Click="MenuButton_Click"
                     Style="{StaticResource ModernIconButtonStyle}">
-                <FontIcon Glyph="&#xE700;" FontFamily="{StaticResource IconFont}" FontSize="18"/>
+                <FontIcon Glyph="&#xE712;" FontFamily="{StaticResource IconFont}" FontSize="18"/>
             </Button>
         </Grid>
 
