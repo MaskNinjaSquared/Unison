@@ -68,7 +68,6 @@ namespace Unison.Core.ViewModels
         private readonly ISessionLogger _sessionLogger;
         private readonly IRuntimeDiagnostics _diagnostics;
         private readonly ILocalSettings _localSettings;
-        private readonly ISystemInfoProvider _systemInfo;
         private readonly SyncWorkloadStrategy _workload;
 
         private CancellationTokenSource _refreshCts;
@@ -171,7 +170,6 @@ namespace Unison.Core.ViewModels
             ISessionLogger sessionLogger = null,
             IRuntimeDiagnostics diagnostics = null,
             ILocalSettings localSettings = null,
-            ISystemInfoProvider systemInfo = null,
             SyncWorkloadStrategy workload = null)
         {
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
@@ -179,7 +177,6 @@ namespace Unison.Core.ViewModels
             _sessionLogger = sessionLogger;
             _diagnostics = diagnostics;
             _localSettings = localSettings;
-            _systemInfo = systemInfo;
             _workload = workload ?? HighSyncWorkload.Instance;
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _messageService = messageService ?? throw new ArgumentNullException(nameof(messageService));
@@ -367,6 +364,12 @@ namespace Unison.Core.ViewModels
         }
 
         /// <summary>
+        /// False during the first history sync: the list control is not even created (x:Load),
+        /// so no template or container exists while the bulk write runs.
+        /// </summary>
+        public bool IsChatListMaterialized => !IsListHeldForSync;
+
+        /// <summary>
         /// What the overlay says. Empty means "use the default from the markup", which is what a
         /// cold start shows before anything has happened.
         /// </summary>
@@ -489,23 +492,22 @@ namespace Unison.Core.ViewModels
 
             IsLoadingOverlayVisible = _chatState.Chats.Count == 0;
 
-            if (_history.IsInitialSyncSafeMode)
+            RaiseChatListMaterialized();
+
+            // First history sync only: keep the list unmaterialized until the persist
+            // quiet-finalize. Later bursts release progressively.
+            if (IsListHeldForSync)
             {
-                // Mobile: keep the list empty until the persist quiet-finalize. Desktop is fast
-                // enough that progressive release during the burst is fine.
-                if (HoldListUntilSyncCompleted)
-                {
-                    ShowSyncProgressOnly(
-                        _history.InitialSyncProcessedConversations,
-                        _history.InitialSyncTotalConversations);
-                }
-                else
-                {
-                    BeginBatchRendering(
-                        _history.InitialSyncProcessedConversations,
-                        _history.InitialSyncTotalConversations,
-                        _chatState.Chats.Count);
-                }
+                ShowSyncProgressOnly(
+                    _history.InitialSyncProcessedConversations,
+                    _history.InitialSyncTotalConversations);
+            }
+            else if (IsInSafeMode)
+            {
+                BeginBatchRendering(
+                    _history.InitialSyncProcessedConversations,
+                    _history.InitialSyncTotalConversations,
+                    _chatState.Chats.Count);
             }
 
             _ = PresentFromConnectionStatusAsync(_connection.CurrentStatus);
@@ -1213,7 +1215,7 @@ namespace Unison.Core.ViewModels
                 }
 
                 // SQLite path: progress events own the banner until quiet-finalize / hydrate drain.
-                if (sync == null && (IsInSafeMode || HasPendingPreviewHydrate()))
+                if (IsListHeldForSync || (sync == null && (IsInSafeMode || HasPendingPreviewHydrate())))
                 {
                     return;
                 }
@@ -1235,10 +1237,12 @@ namespace Unison.Core.ViewModels
             {
                 // Safe mode gates the menu actions, and it flips with this event.
                 RaiseMenuCommandsCanExecuteChanged();
+                // HistoryFacade clears the first-sync flag before relaying a completed event.
+                RaiseChatListMaterialized();
 
                 if (!e.IsCompleted)
                 {
-                    if (HoldListUntilSyncCompleted)
+                    if (IsListHeldForSync)
                     {
                         ShowSyncProgressOnly(e.ProcessedConversations, e.TotalConversations);
                         return;
@@ -1251,7 +1255,7 @@ namespace Unison.Core.ViewModels
                     return;
                 }
 
-                // Persist quiet-finalize: now (and only now on Mobile) release rows.
+                // Persist quiet-finalize: on the first sync, this is where rows are released.
                 BeginBatchRendering(
                     e.ProcessedConversations,
                     e.TotalConversations,
@@ -1290,6 +1294,13 @@ namespace Unison.Core.ViewModels
         private void History_MessageChunkPersisted(object sender, HistoryMessageChunkEventArgs e)
         {
             if (e?.ChatJids == null || e.ChatJids.Count == 0 || _chatService == null)
+            {
+                return;
+            }
+
+            // Each per-chunk reconcile is a UI-thread pass plus a full re-sort of the store. The
+            // completion event runs one full reconcile, so the first sync skips these.
+            if (IsListHeldForSync)
             {
                 return;
             }
@@ -1831,6 +1842,14 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
+            // App-state rows (mute/pin) land before the first history chunk; the completion
+            // event releases everything the store holds by then.
+            if (IsListHeldForSync)
+            {
+                TrackItems(args);
+                return;
+            }
+
             if (_batchRendering || IsInSafeMode)
             {
                 TrackItems(args);
@@ -1910,11 +1929,17 @@ namespace Unison.Core.ViewModels
                 // batch loop re-sorts in place; otherwise the pin only reaches the top of the list
                 // after the sync ends.
                 _visibleOrderDirty = true;
-                _ = _dispatcher.RunAsync(ScheduleRefreshVisibleChats);
+                // While the first sync holds the list, the release builds it sorted from scratch;
+                // a dispatcher post per preview hydrate would only queue no-ops on the UI thread.
+                if (!IsListHeldForSync)
+                {
+                    _ = _dispatcher.RunAsync(ScheduleRefreshVisibleChats);
+                }
+
                 return;
             }
 
-            if (string.IsNullOrWhiteSpace(SearchQuery))
+            if (IsListHeldForSync || string.IsNullOrWhiteSpace(SearchQuery))
             {
                 return;
             }
@@ -1933,7 +1958,7 @@ namespace Unison.Core.ViewModels
 
         private void ScheduleRefreshVisibleChats()
         {
-            if (_batchRendering || IsInSafeMode)
+            if (_batchRendering || IsInSafeMode || IsListHeldForSync)
             {
                 return;
             }
@@ -1959,7 +1984,7 @@ namespace Unison.Core.ViewModels
         /// </summary>
         public void RefreshVisibleChats()
         {
-            if (_batchRendering || IsInSafeMode)
+            if (_batchRendering || IsInSafeMode || IsListHeldForSync)
             {
                 return;
             }
@@ -2374,10 +2399,16 @@ namespace Unison.Core.ViewModels
         private bool IsInSafeMode => _history.IsInitialSyncSafeMode;
 
         /// <summary>
-        /// Mobile always waits for persist completion before putting rows on screen, so the UI
-        /// thread is not fighting the SQLite write. Desktop keeps progressive release.
+        /// The first history sync persists before any row reaches the screen, so the UI thread is
+        /// not fighting that bulk SQLite write. See <see cref="ChatListSyncHold"/>.
         /// </summary>
-        private bool HoldListUntilSyncCompleted => _systemInfo != null && _systemInfo.IsMobile();
+        private bool IsListHeldForSync => ChatListSyncHold.ShouldHoldRows(
+            _history.IsAwaitingFirstHistorySync);
+
+        private void RaiseChatListMaterialized()
+        {
+            RaiseProperties(nameof(IsChatListMaterialized));
+        }
 
         // ---------------------------------------------------------------------
         // Batch rendering
@@ -2447,7 +2478,8 @@ namespace Unison.Core.ViewModels
         {
             try
             {
-                while (_batchRendering)
+                // Held: stop polling; the completion event restarts the loop.
+                while (_batchRendering && !IsListHeldForSync)
                 {
                     await Task.Delay(BatchInterval).ConfigureAwait(false);
                     await _dispatcher.RunAsync(ReleaseNextBatch);
@@ -2469,7 +2501,7 @@ namespace Unison.Core.ViewModels
         /// </summary>
         private void ReleaseNextBatch()
         {
-            if (!_batchRendering)
+            if (!_batchRendering || IsListHeldForSync)
             {
                 return;
             }

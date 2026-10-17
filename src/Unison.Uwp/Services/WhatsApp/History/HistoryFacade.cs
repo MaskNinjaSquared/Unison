@@ -78,6 +78,13 @@ namespace Unison.Uwp.Services.WhatsApp.History
         private int _historySyncBounceTimes;
         private readonly object _historySyncToastGate = new object();
 
+        /// <summary>
+        /// False until the SQLite warm says otherwise, so an unknown state never hides a list
+        /// that is already there.
+        /// </summary>
+        private volatile bool _awaitingFirstHistorySync;
+        private volatile bool _firstHistorySyncCompletedThisSession;
+
         internal HistoryFacade(
             IWhatsAppSessionProvider sessions,
             IWhatsAppService appState,
@@ -145,7 +152,17 @@ namespace Unison.Uwp.Services.WhatsApp.History
                 Relay(() => SyncStatusChanged?.Invoke(this, status), "SyncStatusChanged");
             };
             _appState.OnHistorySyncReceived += (s, sync) => Relay(() => HistorySyncReceived?.Invoke(this, sync), "HistorySyncReceived");
-            _initialSync.Changed += (s, e) => Relay(() => InitialSyncProgress?.Invoke(this, e), "InitialSyncProgress");
+            _initialSync.Changed += (s, e) =>
+            {
+                // Before the relay: the list reads IsAwaitingFirstHistorySync inside its handler.
+                if (e != null && e.IsCompleted)
+                {
+                    _firstHistorySyncCompletedThisSession = true;
+                    _awaitingFirstHistorySync = false;
+                }
+
+                Relay(() => InitialSyncProgress?.Invoke(this, e), "InitialSyncProgress");
+            };
             _appState.OnSessionCleared += (s, e) => { _ = ResetHistorySqliteAsync("session-cleared"); };
             _appState.OnBackgroundHistorySyncBounced += (s, e) => NoteBackgroundHistorySyncBounce();
             if (_chatPreviewStore != null)
@@ -176,6 +193,8 @@ namespace Unison.Uwp.Services.WhatsApp.History
         public bool IsLoadingPersistedChats => _chatState.IsLoadingPersistedChats;
 
         public bool IsInitialSyncSafeMode => _initialSync.IsActive;
+
+        public bool IsAwaitingFirstHistorySync => _awaitingFirstHistorySync;
 
         public bool PreferFrugalSyncBudget => _syncBudget.IsFrugal;
 
@@ -252,6 +271,8 @@ namespace Unison.Uwp.Services.WhatsApp.History
         public async Task ResetHistorySqliteAsync(string reason = null)
         {
             string resetReason = reason ?? string.Empty;
+            _firstHistorySyncCompletedThisSession = false;
+            _awaitingFirstHistorySync = true;
             if (_migrationStore != null)
             {
                 try
@@ -724,10 +745,36 @@ namespace Unison.Uwp.Services.WhatsApp.History
                 {
                     await _statusStore.InitializeAsync().ConfigureAwait(false);
                 }
+
+                await ResolveAwaitingFirstHistorySyncAsync().ConfigureAwait(false);
             }
             catch (Exception ex)
             {
                 Debug.WriteLine("[HistoryFacade] SQLite warm failed: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Awaiting only when no history batch ever succeeded and no list preview is stored:
+        /// an older install with rows but a gate never marked must not get an empty list.
+        /// </summary>
+        private async Task ResolveAwaitingFirstHistorySyncAsync()
+        {
+            if (_migrationStore == null || _chatPreviewStore == null)
+            {
+                return;
+            }
+
+            HistoryMigrationState gate = await _migrationStore.GetAsync().ConfigureAwait(false);
+            if (gate != null && gate.IsSucceeded)
+            {
+                return;
+            }
+
+            int storedPreviews = await _chatPreviewStore.CountAsync().ConfigureAwait(false);
+            if (storedPreviews == 0 && !_firstHistorySyncCompletedThisSession)
+            {
+                _awaitingFirstHistorySync = true;
             }
         }
 

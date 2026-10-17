@@ -32,6 +32,12 @@ namespace Unison.Core.Contracts.WhatsApp
         bool IsInitialSyncSafeMode { get; }
 
         /// <summary>
+        /// True until the first sync for this account has landed and gone quiet. Already true
+        /// right after login, before the first chunk arrives; false again only after a reset.
+        /// </summary>
+        bool IsAwaitingFirstHistorySync { get; }
+
+        /// <summary>
         /// True when startup and sync work should use smaller batches, longer quiet floors and
         /// gentler list updates. Driven by memory pressure and how hot the sync is, not by
         /// form factor alone.

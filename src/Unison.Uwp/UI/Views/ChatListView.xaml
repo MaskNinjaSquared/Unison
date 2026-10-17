@@ -205,6 +205,7 @@
 
         
         <ListView Grid.Row="2" x:Name="ChatList" 
+                  x:Load="{x:Bind ViewModel.IsChatListMaterialized, Mode=OneWay}"
                   ItemsSource="{x:Bind ViewModel.VisibleChats}"
                   ItemTemplate="{StaticResource ChatItemTemplate}"
                   ItemContainerStyle="{StaticResource WhatsAppChatListItemStyle}"
