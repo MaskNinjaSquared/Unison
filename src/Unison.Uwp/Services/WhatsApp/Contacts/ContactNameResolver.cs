@@ -182,6 +182,11 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 return;
             }
 
+            // Names already on file come first and need no network. Every exit below (refresh
+            // running, cooldown, nothing left to ask) used to skip them, so after a sync the list
+            // kept numbers the chat screen could already name.
+            await _whatsAppService.ApplyResolvedDisplayNamesToChatsAsync();
+
             if (_isRunning)
             {
                 Debug.WriteLine("[ContactNameResolver] ResolveMissing skipped (refresh in progress)");
@@ -191,7 +196,6 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             if (!_whatsAppService.IsTransportReady)
             {
                 Debug.WriteLine("[ContactNameResolver] ResolveMissing skipped network query (handshake not complete)");
-                await _whatsAppService.ApplyResolvedDisplayNamesToChatsAsync();
                 return;
             }
 

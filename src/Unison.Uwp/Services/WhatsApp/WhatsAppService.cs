@@ -748,6 +748,10 @@ namespace Unison.Uwp.Services.WhatsApp
                 "catch-up-banner-end",
                 "reason=" + (reason ?? string.Empty));
             PublishSyncStatus(null);
+
+            // The post-sync enrichment that would rename the list gives up when the window is
+            // hidden or the socket dropped; names learned from the sync itself need neither.
+            _ = ApplyResolvedNamesToChatsAsync();
         }
 
         /// <summary>
@@ -5156,6 +5160,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     if (updated > 0)
                     {
                         Debug.WriteLine($"[WhatsAppService] Applied resolved display names to {updated} chats");
+                        RuntimeDiagnosticsService.Instance.Write("names", "list-names-applied", "count=" + updated);
                         OnDisplayNamesUpdated?.Invoke(this, EventArgs.Empty);
                     }
                 });
