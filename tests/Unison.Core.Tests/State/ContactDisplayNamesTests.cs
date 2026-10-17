@@ -105,6 +105,32 @@ namespace Unison.Core.Tests.State
         }
 
         [Fact]
+        public void The_profile_name_beats_a_push_name_on_the_self_chat()
+        {
+            _self.CurrentUserName = "Marcos Profile";
+            _pushNames.Set(Me, "RandomWaNick");
+
+            Assert.Equal("Marcos Profile", Build().Resolve(Me, "chat"));
+        }
+
+        [Fact]
+        public void The_profile_name_beats_an_address_book_entry_on_the_self_chat()
+        {
+            _self.CurrentUserName = "Marcos Profile";
+            _addressBook.Set(Me, "Agenda Me");
+
+            Assert.Equal("Marcos Profile", Build().Resolve(Me, "chat"));
+        }
+
+        [Fact]
+        public void Without_a_profile_name_the_push_name_still_names_the_self_chat()
+        {
+            _pushNames.Set(Me, "WaNick");
+
+            Assert.Equal("WaNick", Build().Resolve(Me, "chat"));
+        }
+
+        [Fact]
         public void The_account_falls_back_to_its_number()
         {
             Assert.Equal("5511911112222", Build().Resolve(MeLid, "chat"));

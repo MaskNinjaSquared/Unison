@@ -2,6 +2,14 @@
 
 Newest first.
 
+## Personal chat keeps the profile name
+
+The notes-to-self row used to take a WhatsApp push nick or an agenda entry under the
+account's own number ahead of the logged-in profile name, so name enrichment could rename
+it to something unrelated. `ContactDisplayNames` now prefers the profile (then credentials)
+for self addresses; push and agenda only fill gaps.
+
+
 ## Chat pin and delete no longer name the client
 
 Local chat pin, chat delete and message pin go through `IAppStateLocalHost`. The chat

@@ -28,7 +28,7 @@ namespace Unison.Core.State
         /// <summary>The name stored with the session credentials.</summary>
         public string CredentialsName;
 
-        /// <summary>The name the app settled on for the account (profile, push name).</summary>
+        /// <summary>The name the profile façade shows for the account. Wins over push / agenda on self.</summary>
         public string CurrentUserName;
 
         /// <summary>Digits shown when no name is usable.</summary>
@@ -132,13 +132,16 @@ namespace Unison.Core.State
         private string ResolveSelf(string canonical, string normalized)
         {
             SelfNameInputs self = _self();
+            // Profile first: the personal chat must match Settings / the logged-in account.
+            // A WhatsApp push nick or an agenda entry under our own number used to win here and
+            // rename the notes-to-self row to something unrelated during name enrichment.
             var sources = new[]
             {
-                Source("phone-canonical", () => RawPhoneContactName(canonical)),
-                Source("phone-normalized", () => RawPhoneContactName(normalized)),
-                Source("whatsapp-cache", () => _pushNames.FindBest(canonical, normalized, self.Id, self.Lid)),
+                Source("current-user-name", () => self.CurrentUserName),
                 Source("auth-me-name", () => self.CredentialsName),
-                Source("current-user-name", () => self.CurrentUserName)
+                Source("whatsapp-cache", () => _pushNames.FindBest(canonical, normalized, self.Id, self.Lid)),
+                Source("phone-canonical", () => RawPhoneContactName(canonical)),
+                Source("phone-normalized", () => RawPhoneContactName(normalized))
             };
 
             SelfDisplayNameResolution.Result result = SelfDisplayNameResolution.Pick(
