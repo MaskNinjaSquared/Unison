@@ -308,12 +308,9 @@ namespace Unison.Uwp
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IHistoryOnDemandSocket>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
-            // Asking "is this the same person?" no longer means naming the client. The table is
-            // still built there; only the question moved.
+            // Asking "is this the same person?" no longer means naming the client.
             services.AddSingleton<IJidResolver>(
-                sp => new JidResolver(
-                    sp.GetRequiredService<JidAliasTable>(),
-                    sp.GetRequiredService<IWhatsAppService>()));
+                sp => new JidResolver(sp.GetRequiredService<JidAliasTable>()));
 #if DEBUG
             // Dev-only tooling: file-watch based debug send. Never attached/started in Release.
             services.AddSingleton<IDebugSendService, DebugSendService>();
