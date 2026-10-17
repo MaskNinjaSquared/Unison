@@ -302,7 +302,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                 try
                 {
                     // Seed even when rows came only from live/client so on-demand has a cursor.
-                    await _whatsAppService.SeedChatMessagesInMemoryAsync(jid, merged).ConfigureAwait(false);
+                    await _chatState.AddMissingMessagesAsync(jid, merged).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {

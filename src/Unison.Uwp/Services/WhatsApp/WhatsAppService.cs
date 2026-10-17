@@ -2166,24 +2166,6 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         /// <inheritdoc />
-        public Task SeedChatMessagesInMemoryAsync(string chatJid, IList<ChatMessage> messages)
-        {
-            if (string.IsNullOrWhiteSpace(chatJid) || messages == null || messages.Count == 0)
-            {
-                return Task.CompletedTask;
-            }
-
-            string normJid = NormalizeJid(chatJid);
-            var incoming = messages.Where(m => m != null).ToList();
-            if (incoming.Count == 0)
-            {
-                return Task.CompletedTask;
-            }
-
-            return RunOnUiThreadAsync(() => MessagesByChat.AddMissing(normJid, incoming));
-        }
-
-        /// <inheritdoc />
         public void CompleteHistoryOnDemandForChats(IEnumerable<string> chatJids)
         {
             if (chatJids == null)

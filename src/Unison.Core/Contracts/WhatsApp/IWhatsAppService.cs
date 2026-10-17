@@ -287,11 +287,6 @@ namespace Unison.Core.Contracts.WhatsApp
         void ApplyHistoryLidMappings(IEnumerable<KeyValuePair<string, string>> lidToPn, string source);
 
         /// <summary>
-        /// Seeds in-memory message cache from SQLite history rows (detail open after SQLite-only sync).
-        /// </summary>
-        Task SeedChatMessagesInMemoryAsync(string chatJid, IList<ChatMessage> messages);
-
-        /// <summary>
         /// Clears on-demand in-flight / backoff for chats after a SQLite history chunk.
         /// </summary>
         void CompleteHistoryOnDemandForChats(IEnumerable<string> chatJids);
