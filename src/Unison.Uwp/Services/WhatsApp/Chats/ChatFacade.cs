@@ -52,7 +52,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
         private const int MaxDeleteRangeMessages = 5;
 
         private readonly IWhatsAppSessionProvider _sessions;
-        private readonly IWhatsAppService _appState;
+        private readonly IAppStateLocalHost _localAppState;
         private readonly IJidResolver _jids;
         private readonly IChatStateStore _chatState;
         private readonly ChatRowIndex _chatRows;
@@ -75,7 +75,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
 
         internal ChatFacade(
             IWhatsAppSessionProvider sessions,
-            IWhatsAppService appState,
+            IAppStateLocalHost localAppState,
             IJidResolver jids,
             IChatStateStore chatState,
             ChatRowIndex chatRows,
@@ -97,13 +97,8 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
                 throw new ArgumentNullException(nameof(sessions));
             }
 
-            if (appState == null)
-            {
-                throw new ArgumentNullException(nameof(appState));
-            }
-
             _sessions = sessions;
-            _appState = appState;
+            _localAppState = localAppState ?? throw new ArgumentNullException(nameof(localAppState));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _chatRows = chatRows ?? throw new ArgumentNullException(nameof(chatRows));
@@ -149,7 +144,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             var canonicalJid = _jids.GetCanonicalJid(chat.JID);
             var wasPinned = chat.IsChatPinned;
 
-            await _appState.ApplyChatPinAsync(canonicalJid, pinned).ConfigureAwait(false);
+            await _localAppState.ApplyChatPinAsync(canonicalJid, pinned).ConfigureAwait(false);
 
             var socket = _sessions.Socket;
             if (socket == null)
@@ -184,7 +179,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
 
                 try
                 {
-                    await _appState.ApplyChatPinAsync(canonicalJid, wasPinned).ConfigureAwait(false);
+                    await _localAppState.ApplyChatPinAsync(canonicalJid, wasPinned).ConfigureAwait(false);
                 }
                 catch (Exception rollbackEx)
                 {
@@ -302,7 +297,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
                     (socket == null ? "no socket" : "no messages to build the range with"));
             }
 
-            await _appState.ApplyChatDeletionAsync(jid).ConfigureAwait(false);
+            await _localAppState.ApplyChatDeletionAsync(jid).ConfigureAwait(false);
         }
 
         // ---------------------------------------------------------------------

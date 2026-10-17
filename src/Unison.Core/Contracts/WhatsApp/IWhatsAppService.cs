@@ -138,38 +138,11 @@ namespace Unison.Core.Contracts.WhatsApp
         bool TryFileUsyncAlias(string userJid, string lidJid, out bool wasAlreadyAliased);
 
         /// <summary>
-        /// Writes the account's chat-list pin to the in-memory rows and to the local mirror,
-        /// without telling the server. Prefer <see cref="IChatService.SetPinnedAsync"/>, which is
-        /// what actually pins the chat; this is the local half of it.
-        /// </summary>
-        Task ApplyChatPinAsync(string jid, bool pinned);
-
-        /// <summary>
-        /// Removes a conversation from the list, the in-memory timeline and local storage, without
-        /// telling the server. Prefer <see cref="IChatService.DeleteChatAsync"/>, which is what
-        /// actually deletes the chat for the account; this is the local half of it, and also the
-        /// path taken when the phone is the one that deleted it.
-        /// </summary>
-        Task ApplyChatDeletionAsync(string jid);
-
-        /// <summary>
         /// Asks the phone for a FULL_HISTORY_SYNC_ON_DEMAND lot (no local wipe).
         /// Prefer <see cref="IHistoryService.RequestFullHistoryOnDemandAsync"/> from UI.
         /// When <paramref name="force"/> is true, clears any in-flight session gate first.
         /// </summary>
         Task<bool> RequestFullHistoryOnDemandAsync(string reason = null, bool force = false);
-
-        /// <summary>
-        /// Writes a message pin to the timeline and local storage, without telling the server.
-        /// Prefer <see cref="IMessageService.SetMessagePinnedAsync"/>, which sends it; this is the
-        /// local half of it.
-        /// </summary>
-        Task ApplyMessagePinAsync(
-            string chatJid,
-            string messageId,
-            bool isPinned,
-            DateTime? pinnedAtUtc,
-            DateTime? expiresAtUtc);
 
         /// <summary>
         /// Completes resync wait / initial-sync progress after the SQLite history path applied a chunk.

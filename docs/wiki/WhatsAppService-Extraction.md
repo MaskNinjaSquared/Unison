@@ -163,7 +163,7 @@ What is left on `_contactService` is awaited and ordered by the client, so it is
 
 ### Facades still depend on the client
 
-`ContactFacade`, `MessageFacade`, `ChatFacade`, `GroupFacade`, `HistoryFacade`, `ProfileFacade`, `StatusFacade`, `ConnectionFacade` take `IWhatsAppService` (or `AttachWhatsAppService`). Policy is already on the façade; **primitives** (fetch a chat avatar, send bytes, persist, canonical JID) still run inside the client. Group send-permission refresh and roster restore are the exception: they run in Core, and nothing in them calls back into the client. The full-size group picture and member pictures are fetched by `GroupFacade`.
+`ContactFacade`, `MessageFacade`, `GroupFacade`, `HistoryFacade`, `ProfileFacade`, `StatusFacade`, `ConnectionFacade` take `IWhatsAppService` (or `AttachWhatsAppService`). **`ChatFacade` no longer does** — it reaches local pin/delete through `IAppStateLocalHost` and tip reconcile through `ChatPreviewReconciler` / `IOfflineReplayHost`. Policy is already on the façades; **primitives** (fetch a chat avatar, send bytes, persist, canonical JID) still run inside the client for the others. Group send-permission refresh and roster restore are the exception: they run in Core, and nothing in them calls back into the client. The full-size group picture and member pictures are fetched by `GroupFacade`.
 
 Helpers under `Contacts/` (`ContactNameResolver`, `ChatAvatarPolicy`, `GroupRosterPolicy`, `AddressBookOverlay`) are the largest non-UI consumers of client members (`RaiseSyncStatus`, `FetchAndApplyAvatarAsync`, `IsTransportReady`, …). Extracting avatars/names is mostly moving those primitives so the helpers stop needing the god client.
 
@@ -1424,6 +1424,11 @@ runs `ChatPreviewReconciler`, then notes catch-up progress and schedules persist
 `ChatAvatarPolicy` needs to ask for another background pass without naming the whole client.
 The timer and `TriggerBackgroundResolution` stay on the client (`ShutdownAsync` cancels them).
 `ScheduleDeferredAvatarResolution` left `IWhatsAppService`.
+
+**Local pin/delete halves are `IAppStateLocalHost`.** Chat pin, chat delete and message pin
+write the rows and the durable mirror through that port. `ChatFacade` no longer takes
+`IWhatsAppService` at all; `MessageFacade` still does for events and `EnsureConnectedAsync`.
+`ApplyChatPinAsync`, `ApplyChatDeletionAsync` and `ApplyMessagePinAsync` left `IWhatsAppService`.
 
 **Done when:** `.Connection.cs` + a small main file; no façade needs send/history/avatar/group/list methods on the client; leftover `IWhatsAppSocket` drop is [Migration](Migration) item 9, after this.
 

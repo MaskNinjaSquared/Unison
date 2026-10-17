@@ -25,6 +25,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
     {
         private readonly IPersonStore _personStore;
         private readonly IWhatsAppService _whatsAppService;
+        private readonly IAppStateLocalHost _localAppState;
         private readonly IChatMessageMapper _chatMessageMapper;
         private readonly IReactionMapper _reactionMapper;
         private readonly HistoryFacade _history;
@@ -47,6 +48,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
         internal MessageFacade(
             IPersonStore personStore,
             IWhatsAppService whatsAppService,
+            IAppStateLocalHost localAppState,
             IChatMessageMapper chatMessageMapper,
             IReactionMapper reactionMapper,
             HistoryFacade history,
@@ -70,6 +72,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
             _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
+            _localAppState = localAppState ?? throw new ArgumentNullException(nameof(localAppState));
             _chatMessageMapper = chatMessageMapper ?? throw new ArgumentNullException(nameof(chatMessageMapper));
             _reactionMapper = reactionMapper ?? throw new ArgumentNullException(nameof(reactionMapper));
             _history = history ?? throw new ArgumentNullException(nameof(history));
@@ -742,7 +745,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
 
             await socket.SendPinInChatMessageAsync(canonical, key, pin, durationSeconds);
             MessagePinWindow window = MessagePinWindow.FromLocal(pin, durationSeconds, DateTime.UtcNow);
-            await _whatsAppService.ApplyMessagePinAsync(
+            await _localAppState.ApplyMessagePinAsync(
                 canonical, message.Id, pin, window.PinnedAtUtc, window.ExpiresAtUtc);
         }
 

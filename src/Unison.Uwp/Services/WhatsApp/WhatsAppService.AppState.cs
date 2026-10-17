@@ -198,11 +198,8 @@ namespace Unison.Uwp.Services.WhatsApp
         /// straight back; a delete that leaves the tail behind is undone by the next history chunk.
         /// Hence both: a tombstone on the preview and a real delete of the messages.
         /// </remarks>
-        /// <inheritdoc />
-        public Task ApplyChatDeletionAsync(string jid)
-        {
-            return ApplyAppStateDeleteChatAsync(jid);
-        }
+        Task IAppStateLocalHost.ApplyChatDeletionAsync(string jid) =>
+            ApplyAppStateDeleteChatAsync(jid);
 
         internal async Task ApplyAppStateDeleteChatAsync(string jid)
         {
@@ -370,7 +367,7 @@ namespace Unison.Uwp.Services.WhatsApp
             return removed;
         }
 
-        public Task ApplyChatPinAsync(string jid, bool pinned)
+        Task IAppStateLocalHost.ApplyChatPinAsync(string jid, bool pinned)
         {
             return ApplyAppStateChatFlagsAsync(
                 jid,

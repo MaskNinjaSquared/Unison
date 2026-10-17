@@ -427,6 +427,8 @@ namespace Unison.Uwp
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IDeferredAvatarResolution>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+            services.AddSingleton<IAppStateLocalHost>(
+                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IEncryptedMediaDownloader>(_ => new HttpEncryptedMediaDownloader(
                 new DelegateSocketLog(line => Diag.W("[Media] " + line))));
             services.AddSingleton(sp => new MediaDownloadGate(
@@ -434,6 +436,7 @@ namespace Unison.Uwp
             services.AddSingleton<IMessageService>(sp => new MessageFacade(
                 sp.GetRequiredService<IPersonStore>(),
                 sp.GetRequiredService<IWhatsAppService>(),
+                sp.GetRequiredService<IAppStateLocalHost>(),
                 sp.GetRequiredService<IChatMessageMapper>(),
                 sp.GetRequiredService<IReactionMapper>(),
                 sp.GetRequiredService<HistoryFacade>(),
@@ -497,7 +500,7 @@ namespace Unison.Uwp
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IChatService>(sp => new ChatFacade(
                 sp.GetRequiredService<IWhatsAppSessionProvider>(),
-                sp.GetRequiredService<IWhatsAppService>(),
+                sp.GetRequiredService<IAppStateLocalHost>(),
                 sp.GetRequiredService<IJidResolver>(),
                 sp.GetRequiredService<IChatStateStore>(),
                 sp.GetRequiredService<ChatRowIndex>(),

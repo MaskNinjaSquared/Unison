@@ -45,7 +45,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IMediaDownloadHost, IAvatarReport, IOfflineReplayHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IDeferredAvatarResolution
+    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IMediaDownloadHost, IAvatarReport, IOfflineReplayHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IDeferredAvatarResolution, IAppStateLocalHost
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -3701,7 +3701,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 chatJid, targetMessageId, pin, window.PinnedAtUtc, window.ExpiresAtUtc);
         }
 
-        public Task ApplyMessagePinAsync(
+        Task IAppStateLocalHost.ApplyMessagePinAsync(
             string chatJid,
             string messageId,
             bool isPinned,

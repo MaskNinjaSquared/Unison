@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Chat pin and delete no longer name the client
+
+Local chat pin, chat delete and message pin go through `IAppStateLocalHost`. The chat
+façade dropped its `IWhatsAppService` dependency. The three members left the contract.
+
+
 ## SQLite tip reconcile and deferred avatars left the client contract
 
 `ChatFacade` owns `ReconcileChatPreviewsFromSqliteAsync` over `ChatPreviewReconciler`.
