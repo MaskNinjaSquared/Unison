@@ -112,6 +112,38 @@ namespace Unison.Core.Helpers
              !string.Equals(message.Content, LegacyDeletedPreview.Marker, StringComparison.OrdinalIgnoreCase));
 
         /// <summary>
+        /// The tip a stored page offers: its newest row that may go on the strip.
+        /// </summary>
+        /// <remarks>
+        /// The page is oldest first. A legacy marker or a bogus clock on the top row must not hide
+        /// the real tip, so the page is walked down instead of giving up on the first row.
+        /// </remarks>
+        public static ChatMessage PickStoredTip(IReadOnlyList<HistoryMessage> pageOldestFirst, DateTime utcNow)
+        {
+            if (pageOldestFirst == null)
+            {
+                return null;
+            }
+
+            for (int i = pageOldestFirst.Count - 1; i >= 0; i--)
+            {
+                HistoryMessage row = pageOldestFirst[i];
+                if (row == null || !row.TimestampUtc.HasValue)
+                {
+                    continue;
+                }
+
+                ChatMessage mapped = HistoryMessageMapper.ToChatMessage(row);
+                if (IsReconcileCandidate(mapped, utcNow))
+                {
+                    return mapped;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
         /// The newest <see cref="IsReconcileCandidate"/> message; on the same clock the higher id
         /// wins, so the answer does not depend on the order the timelines were read.
         /// </summary>

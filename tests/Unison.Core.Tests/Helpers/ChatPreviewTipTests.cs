@@ -98,6 +98,52 @@ namespace Unison.Core.Tests.Helpers
             Assert.Same(remembered, ChatPreviewTip.PickNewer(stored, remembered));
         }
 
+        // --- PickStoredTip ---------------------------------------------------
+
+        private static HistoryMessage StoredRow(string id, int? seconds, string body = "hi") =>
+            new HistoryMessage
+            {
+                MessageId = id,
+                ChatJid = "5511999999999@s.whatsapp.net",
+                Body = body,
+                Kind = ChatPreviewKind.Text,
+                TimestampUtc = seconds.HasValue ? T0.AddSeconds(seconds.Value) : (DateTime?)null
+            };
+
+        [Fact]
+        public void The_newest_stored_row_is_the_tip()
+        {
+            // The store pages oldest first.
+            var page = new[] { StoredRow("a", 0), StoredRow("b", 10), StoredRow("c", 20) };
+
+            Assert.Equal("c", ChatPreviewTip.PickStoredTip(page, Now)?.Id);
+        }
+
+        [Fact]
+        public void A_legacy_deleted_marker_on_top_does_not_hide_the_real_tip()
+        {
+            var page = new[] { StoredRow("a", 0), StoredRow("b", 10), StoredRow("marker", 20, LegacyDeletedPreview.Marker) };
+
+            Assert.Equal("b", ChatPreviewTip.PickStoredTip(page, Now)?.Id);
+        }
+
+        [Fact]
+        public void A_row_without_a_clock_is_skipped()
+        {
+            var page = new[] { StoredRow("a", 0), StoredRow("no-clock", null) };
+
+            Assert.Equal("a", ChatPreviewTip.PickStoredTip(page, Now)?.Id);
+        }
+
+        [Fact]
+        public void A_page_with_nothing_usable_has_no_stored_tip()
+        {
+            Assert.Null(ChatPreviewTip.PickStoredTip(null, Now));
+            Assert.Null(ChatPreviewTip.PickStoredTip(new HistoryMessage[0], Now));
+            Assert.Null(ChatPreviewTip.PickStoredTip(
+                new[] { null, StoredRow("marker", 5, LegacyDeletedPreview.Marker) }, Now));
+        }
+
         // --- PickLatest ------------------------------------------------------
 
         [Fact]
