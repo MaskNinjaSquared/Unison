@@ -1135,7 +1135,7 @@ namespace Unison.Uwp.Services.WhatsApp
             var jidResolver = new JidResolver(JidAlias);
             _jids = jidResolver;
             _groupMetadata = new GroupMetadataReader(jidResolver);
-            _groupApply = new GroupMetadataApply(this, _ui, this, new GroupRosterWriter(_groupRosterStore, _personStore), jidResolver, _chatState);
+            _groupApply = new GroupMetadataApply(this, _ui, this, new GroupRosterWriter(_groupRosterStore, _personStore), jidResolver, _chatState, _chatRows, _chatState.PushNames);
             _receipts = new ReceiptReader(jidResolver);
             _chatState.Chats.CollectionChanged += (s, e) => InvalidateChatRowIndex();
 
@@ -4136,7 +4136,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     {
                         if (!GroupNameSyncBlacklist.ShouldCacheSyncedSubject(
                                 entry.Name,
-                                HasMeaningfulGroupLabel(entry.Canonical, FindGroupRowName(entry.Canonical))))
+                                HasMeaningfulGroupLabel(entry.Canonical, DuplicateChatRowPick.FirstNonBlankName(_chatRows.FindConversation(entry.Canonical)))))
                         {
                             continue;
                         }

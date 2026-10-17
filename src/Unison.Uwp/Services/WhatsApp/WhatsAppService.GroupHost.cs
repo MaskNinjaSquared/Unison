@@ -28,10 +28,6 @@ namespace Unison.Uwp.Services.WhatsApp
         bool IGroupHost.HasMeaningfulGroupLabel(string groupJid, string rowName) =>
             HasMeaningfulGroupLabel(groupJid, rowName);
 
-        string IGroupHost.FindGroupRowName(string groupJid) => FindGroupRowName(groupJid);
-
-        void IGroupHost.CacheGroupSubject(string groupJid, string subject) => ContactNames.Set(groupJid, subject);
-
         string IGroupHost.FindExistingAvatarUrl(string jid, string phoneNumber, string lid) =>
             FindExistingAvatarUrl(jid, phoneNumber, lid);
     }

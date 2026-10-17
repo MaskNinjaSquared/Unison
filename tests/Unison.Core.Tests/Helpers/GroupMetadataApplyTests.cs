@@ -68,7 +68,6 @@ namespace Unison.Core.Tests.Helpers
             f.Jids.Canonical["alias@g.us"] = Group;
             var chat = f.AddChat("alias@g.us", "120363000000000001");
             var other = f.AddChat("999@g.us", "Outro");
-            f.Host.RowNames[Group] = "120363000000000001";
 
             await f.Apply.ApplyListingAsync(Listing(new GroupMetadataSnapshot
             {
@@ -80,7 +79,6 @@ namespace Unison.Core.Tests.Helpers
             }));
 
             Assert.Equal("Família", f.Host.CachedNames[Group]);
-            Assert.Equal(new[] { Group }, f.Host.RowNameLookups);
             Assert.Equal(1, f.Ui.Passes);
             Assert.Equal(1, f.Catalog.Schedules);
             Assert.True(chat.IsGroup);
@@ -116,7 +114,19 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
-        public async Task ApplyListing_skips_the_row_name_lookup_for_a_placeholder_subject()
+        public async Task ApplyListing_keeps_a_good_name_on_an_alias_row_against_a_blacklisted_subject()
+        {
+            var f = new Fixture();
+            f.Jids.Canonical["alias@g.us"] = Group;
+            f.AddChat("alias@g.us", "Família");
+
+            await f.Apply.ApplyListingAsync(Listing(new GroupMetadataSnapshot { Jid = Group, Subject = "Invite link" }));
+
+            Assert.Empty(f.Host.CachedNames);
+        }
+
+        [Fact]
+        public async Task ApplyListing_ignores_a_placeholder_subject()
         {
             var f = new Fixture();
             var chat = f.AddChat(Group, "Família");
@@ -127,8 +137,6 @@ namespace Unison.Core.Tests.Helpers
                 Subject = "120363000000000001",
                 MemberCount = 0
             }));
-
-            Assert.Empty(f.Host.RowNameLookups);
             Assert.Empty(f.Host.CachedNames);
             Assert.Equal("Família", chat.Name);
         }
@@ -320,7 +328,9 @@ namespace Unison.Core.Tests.Helpers
             {
                 Chats = new ChatStateStore(new InlineDispatcher());
                 Chats.GroupRosterChanged += (s, jid) => Announced.Add(jid);
-                Apply = new GroupMetadataApply(Host, Ui, Catalog, new GroupRosterWriter(Rosters, People), Jids, Chats, () => Now);
+                Rows = new ChatRowIndex(() => Chats.Chats, Jids.GetCanonicalJid);
+                Apply = new GroupMetadataApply(
+                    Host, Ui, Catalog, new GroupRosterWriter(Rosters, People), Jids, Chats, Rows, Host.CachedNames, () => Now);
             }
 
             public FakeGroupHost Host { get; } = new FakeGroupHost();
@@ -336,6 +346,9 @@ namespace Unison.Core.Tests.Helpers
             public FakeJids Jids { get; } = new FakeJids();
 
             public ChatStateStore Chats { get; }
+
+
+            public ChatRowIndex Rows { get; }
 
             public GroupMetadataApply Apply { get; }
 

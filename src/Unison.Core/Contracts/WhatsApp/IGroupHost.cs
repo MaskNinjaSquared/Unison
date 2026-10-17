@@ -9,12 +9,9 @@ namespace Unison.Core.Contracts.WhatsApp
     /// What the group flows in Core still need from the compatibility client.
     /// </summary>
     /// <remarks>
-    /// Each member is a primitive the client owns for reasons unrelated to groups. The UI
-    /// dispatcher is attached after the container is built, and a pass that arrives before then
-    /// is dropped rather than run on a worker thread against a bound list — unlike
-    /// <see cref="IDispatcher"/>, which runs inline. Names come from the contact-name cache and
-    /// the localized self-chat wording (3.6). The chat-list save and the roster and membership
-    /// stores sit behind the client's debounce and its late-attached stores (3.9b).
+    /// Each member is a primitive the client owns for reasons unrelated to groups: names come from
+    /// the contact-name cache and the localized self-chat wording (3.6), and the avatar lookup
+    /// walks the 1:1 rows.
     /// <para>
     /// The flows decide the order; nothing here decides anything about groups.
     /// </para>
@@ -32,12 +29,6 @@ namespace Unison.Core.Contracts.WhatsApp
 
         /// <summary>Whether a usable name is already known for the group, cached or on the row.</summary>
         bool HasMeaningfulGroupLabel(string groupJid, string rowName);
-
-        /// <summary>The first non-blank name among the rows that resolve to this group.</summary>
-        string FindGroupRowName(string groupJid);
-
-        /// <summary>Writes a synced subject into the contact-name cache.</summary>
-        void CacheGroupSubject(string groupJid, string subject);
 
         /// <summary>An avatar already cached for this person on a 1:1 row, or null.</summary>
         string FindExistingAvatarUrl(string jid, string phoneNumber, string lid);

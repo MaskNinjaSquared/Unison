@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
+using Unison.Core.State;
 
 namespace Unison.Core.Tests.Helpers
 {
@@ -16,16 +17,10 @@ namespace Unison.Core.Tests.Helpers
         public Dictionary<string, string> ChatNames { get; } =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        public Dictionary<string, string> CachedNames { get; } =
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        public Dictionary<string, string> RowNames { get; } =
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        public DisplayNameTable CachedNames { get; } = new DisplayNameTable();
 
         public Dictionary<string, string> Avatars { get; } =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        public List<string> RowNameLookups { get; } = new List<string>();
 
         public string ResolveMemberDisplayName(string jid)
         {
@@ -53,15 +48,6 @@ namespace Unison.Core.Tests.Helpers
             return (CachedNames.TryGetValue(groupJid, out cached) && IsMeaningfulGroupLabel(cached, groupJid)) ||
                    IsMeaningfulGroupLabel(rowName, groupJid);
         }
-
-        public string FindGroupRowName(string groupJid)
-        {
-            RowNameLookups.Add(groupJid);
-            string name;
-            return RowNames.TryGetValue(groupJid, out name) ? name : null;
-        }
-
-        public void CacheGroupSubject(string groupJid, string subject) => CachedNames[groupJid] = subject;
 
         public string FindExistingAvatarUrl(string jid, string phoneNumber, string lid)
         {

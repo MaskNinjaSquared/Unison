@@ -499,7 +499,9 @@ namespace Unison.Uwp
                         sp.GetRequiredService<IGroupRosterStore>(),
                         sp.GetRequiredService<IPersonStore>()),
                     sp.GetRequiredService<IJidResolver>(),
-                    sp.GetRequiredService<IChatStateStore>()),
+                    sp.GetRequiredService<IChatStateStore>(),
+                    sp.GetRequiredService<ChatRowIndex>(),
+                    sp.GetRequiredService<ChatStateStore>().PushNames),
                 new GroupRosterRestore(
                     sp.GetRequiredService<IGroupHost>(),
                     sp.GetRequiredService<AttachedUiDispatcher>(),

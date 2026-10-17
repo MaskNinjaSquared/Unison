@@ -1233,7 +1233,9 @@ Drop `RunOnUiThreadAsync` (`IDispatcher`) and `SchedulePersistPublic` (the write
 `GroupMetadataApply` and `GroupFacade` call `IChatCatalogPersistence.Schedule`, like the other
 façades. The roster and membership saves left too: `GroupRosterWriter` (Core) owns
 `IGroupRosterStore` and `IPersonStore` and writes in the background, so a failed save is logged
-and never reaches the UI pass.
+and never reaches the UI pass. `FindGroupRowName` and `CacheGroupSubject` went next: the applier reads
+the group's rows from `ChatRowIndex` and writes the subject into the push-name `DisplayNameTable`
+(`ContactNames`) itself. What is left on the port is the name rules and the 1:1 avatar lookup.
 
 **Step 1 is done: the app lifecycle goes through the façade.** `IConnectionService` gained
 `ResumeAsync`, `ReleaseMemoryAsync`, `TransferActiveSocketToBrokerAsync`, `PrepareForSuspendAsync`

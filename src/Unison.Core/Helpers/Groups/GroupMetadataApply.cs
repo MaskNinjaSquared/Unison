@@ -28,6 +28,8 @@ namespace Unison.Core.Helpers
         private readonly GroupRosterWriter _rosterWriter;
         private readonly IJidResolver _jids;
         private readonly IChatStateStore _chats;
+        private readonly ChatRowIndex _rows;
+        private readonly DisplayNameTable _subjects;
         private readonly Func<DateTime> _utcNow;
 
         public GroupMetadataApply(
@@ -37,6 +39,8 @@ namespace Unison.Core.Helpers
             GroupRosterWriter rosterWriter,
             IJidResolver jids,
             IChatStateStore chats,
+            ChatRowIndex rows,
+            DisplayNameTable subjects,
             Func<DateTime> utcNow = null)
         {
             _host = host ?? throw new ArgumentNullException(nameof(host));
@@ -45,6 +49,8 @@ namespace Unison.Core.Helpers
             _rosterWriter = rosterWriter ?? throw new ArgumentNullException(nameof(rosterWriter));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _chats = chats ?? throw new ArgumentNullException(nameof(chats));
+            _rows = rows ?? throw new ArgumentNullException(nameof(rows));
+            _subjects = subjects ?? throw new ArgumentNullException(nameof(subjects));
             _utcNow = utcNow ?? (() => DateTime.UtcNow);
         }
 
@@ -78,7 +84,7 @@ namespace Unison.Core.Helpers
                         continue;
                     }
 
-                    if (CacheIfAllowed(entry.Jid, entry.Subject, _host.FindGroupRowName(entry.Jid)))
+                    if (CacheIfAllowed(entry.Jid, entry.Subject, DuplicateChatRowPick.FirstNonBlankName(_rows.FindConversation(entry.Jid))))
                     {
                         Debug.WriteLine($"[GroupMetadataApply] Group resolved: {entry.Jid} -> {entry.Subject}");
                     }
@@ -287,7 +293,7 @@ namespace Unison.Core.Helpers
                 return false;
             }
 
-            _host.CacheGroupSubject(groupJid, subject);
+            _subjects.Set(groupJid, subject);
             return true;
         }
 

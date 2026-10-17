@@ -80,12 +80,6 @@ namespace Unison.Uwp.Services.WhatsApp
             return IsMeaningfulChatLabel(rowName, groupJid, true);
         }
 
-        private string FindGroupRowName(string groupJid)
-        {
-            return DuplicateChatRowPick.FirstNonBlankName(
-                GetChatRowsForCanonicalJid(GetCanonicalJid(groupJid)));
-        }
-
         private void ApplyGroupSendPermissionsFromMetadata(BinaryNode response, string groupJid)
         {
             _ = _groupApply.ApplyMetadataAsync(groupJid, _groupMetadata.ReadMetadata(response, groupJid));
