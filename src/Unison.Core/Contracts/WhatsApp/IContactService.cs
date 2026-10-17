@@ -88,6 +88,12 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>Refreshes the device-contact name overlay for the given direct chats.</summary>
         Task RefreshPhoneContactOverlayAsync(bool force);
 
+        /// <summary>
+        /// Names the 1:1 chats already in the list from the device address book, then relabels
+        /// the rows. Groups are skipped. Local only, so it can run before the session is up.
+        /// </summary>
+        Task RefreshChatListAddressBookNamesAsync();
+
         /// <summary>True while a <see cref="RefreshContactNamesAsync"/> call is in flight.</summary>
         bool IsContactRefreshRunning { get; }
 

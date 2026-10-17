@@ -590,6 +590,15 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             return _addressBook.RefreshAsync(force);
         }
 
+        public async Task RefreshChatListAddressBookNamesAsync()
+        {
+            int mapped = await _addressBook.RefreshChatListAsync().ConfigureAwait(false);
+            if (mapped > 0)
+            {
+                await _whatsAppService.ApplyResolvedDisplayNamesToChatsAsync().ConfigureAwait(false);
+            }
+        }
+
         public Task ResolveMissingNamesAsync()
         {
             return _names.ResolveMissingAsync();

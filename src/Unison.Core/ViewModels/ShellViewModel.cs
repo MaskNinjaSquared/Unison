@@ -46,6 +46,9 @@ namespace Unison.Core.ViewModels
         private readonly ISessionLogger _sessionLogger;
         private readonly IBackgroundAccessPrompt _backgroundAccessPrompt;
 
+        /// <summary>Only for the startup address-book pass over the restored chat list.</summary>
+        private readonly IContactService _contactService;
+
         private bool _isPaneOpen;
         private string _currentUserName;
         private string _currentUserPhone;
@@ -85,7 +88,8 @@ namespace Unison.Core.ViewModels
             IStringResources strings,
             ILocalSettings localSettings,
             ISessionLogger sessionLogger = null,
-            IBackgroundAccessPrompt backgroundAccessPrompt = null)
+            IBackgroundAccessPrompt backgroundAccessPrompt = null,
+            IContactService contactService = null)
         {
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _connectionService = connectionService ?? throw new ArgumentNullException(nameof(connectionService));
@@ -101,6 +105,7 @@ namespace Unison.Core.ViewModels
             _localSettings = localSettings ?? throw new ArgumentNullException(nameof(localSettings));
             _sessionLogger = sessionLogger;
             _backgroundAccessPrompt = backgroundAccessPrompt;
+            _contactService = contactService;
 
             _chatListPaneWidth = ReadStoredChatListPaneWidth();
 
@@ -1295,6 +1300,7 @@ namespace Unison.Core.ViewModels
             {
                 await Task.Delay(120);
                 await _connectionService.LoadPersistedUiStateAsync();
+                StartChatListAddressBookPass();
                 if (_chatService != null)
                 {
                     _notificationService.UpdateBadge(_chatService.GetTotalUnreadCount());
@@ -1319,6 +1325,31 @@ namespace Unison.Core.ViewModels
                     ex);
                 Debug.WriteLine($"[ShellViewModel] Persisted UI load failed: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// Address-book names for the restored 1:1 chats, without waiting for the session.
+        /// Off the UI thread: reading the agenda is slow on phones.
+        /// </summary>
+        private void StartChatListAddressBookPass()
+        {
+            if (_contactService == null)
+            {
+                return;
+            }
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await _contactService.RefreshChatListAddressBookNamesAsync().ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _diagnostics?.RecordException("startup", "chat-list-address-book-failed", ex);
+                    Debug.WriteLine($"[ShellViewModel] Chat-list address-book pass failed: {ex.Message}");
+                }
+            });
         }
 
         private double ReadStoredChatListPaneWidth()
