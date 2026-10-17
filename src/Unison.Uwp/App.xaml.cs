@@ -302,6 +302,12 @@ namespace Unison.Uwp
                 () => Windows.System.MemoryManager.AppMemoryUsageLevel == Windows.System.AppMemoryUsageLevel.Low,
                 sp.GetRequiredService<ISystemInfoProvider>().IsMobile(),
                 sp.GetRequiredService<SyncWorkloadStrategy>()));
+            services.AddSingleton(sp => new ChatPreviewReconciler(
+                sp.GetRequiredService<IHistoryMessageStore>(),
+                sp.GetRequiredService<JidAliasTable>(),
+                sp.GetRequiredService<ChatStateStore>(),
+                sp.GetRequiredService<ChatRowIndex>(),
+                sp.GetRequiredService<AttachedUiDispatcher>()));
             services.AddSingleton<IWhatsAppService>(
                 sp => WhatsAppService.Create(
                     sp.GetRequiredService<ChatStateStore>(),
@@ -325,7 +331,8 @@ namespace Unison.Uwp
                     sp.GetRequiredService<IGroupRosterStore>(),
                     sp.GetRequiredService<IChatStore>(),
                     sp.GetRequiredService<ISystemInfoProvider>(),
-                    sp.GetRequiredService<AttachedUiDispatcher>()));
+                    sp.GetRequiredService<AttachedUiDispatcher>(),
+                    sp.GetRequiredService<ChatPreviewReconciler>()));
             // The send flow lives on MessageFacade; the timeline caches and the socket it writes
             // through are still the client's, reached only through this narrow port.
             services.AddSingleton<IOutgoingMessageHost>(

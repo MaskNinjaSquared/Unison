@@ -586,10 +586,15 @@ pin paths only read it.
 *Preview reconcile — the tip choice left:* `ChatPreviewTip.PickStoredTip` walks a stored page down
 to its newest row that may go on the strip (the walk that was inline, plus the client's
 `MapPreviewTipCandidate`), and the client compares it with the memory tip through `PickNewer`
-directly. What stays in `ReconcileChatPreviewsFromSqliteAsync` is the SQLite read, the memory
-lookup and the per-row apply (`ApplyReconciledPreviewTip`), which runs on the UI thread in slices
-of 24 chats with one sort at the end. The apply waits for `ApplyChatPreviewIfNewer` and
-`SchedulePersist` to leave the client.
+directly.
+
+*Preview reconcile — the pass left:* `ChatPreviewReconciler` (UWP, DI singleton over
+`IHistoryMessageStore`, `JidAliasTable`, `ChatStateStore`, `ChatRowIndex` and the dispatcher) owns
+the SQLite read, the memory lookup and the per-row apply, on the UI thread in slices of 24 chats
+with one sort at the end, and returns how many rows changed. The client's
+`ReconcileChatPreviewsFromSqliteAsync` is a forward that notes catch-up progress and schedules the
+catalog save when something changed; `ChatFacade` still reaches it through the client for that
+reason.
 
 ### 3.4 — send moved to `MessageFacade`
 

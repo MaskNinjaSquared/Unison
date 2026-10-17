@@ -168,6 +168,7 @@
     <Compile Include="Services\WhatsApp\Contacts\ContactNameResolver.cs" />
     <Compile Include="Services\WhatsApp\Contacts\ContactUsyncResolver.cs" />
     <Compile Include="Services\WhatsApp\Chats\ChatFacade.cs" />
+    <Compile Include="Services\WhatsApp\Chats\ChatPreviewReconciler.cs" />
     <Compile Include="Services\WhatsApp\Groups\GroupFacade.cs" />
     <Compile Include="Services\WhatsApp\Groups\GroupMetadataReader.cs" />
     <Compile Include="Services\WhatsApp\History\HistoryFacade.cs" />

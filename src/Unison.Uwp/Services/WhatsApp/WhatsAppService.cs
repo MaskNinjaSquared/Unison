@@ -34,6 +34,7 @@ using Unison.Core.Constants;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.State;
+using Unison.Uwp.Services.WhatsApp.Chats;
 using Unison.Uwp.Services.WhatsApp.Contacts;
 using Unison.Uwp.Services.WhatsApp.Groups;
 using Unison.Uwp.Services.WhatsApp.Messages;
@@ -729,6 +730,7 @@ namespace Unison.Uwp.Services.WhatsApp
         public ChatMessageCache MessagesByChat => _chatState.MessagesByChat;
 
         private readonly ChatRowIndex _chatRows;
+        private readonly ChatPreviewReconciler _previewReconciler;
 
         public DisplayNameTable ContactNames => _chatState.PushNames;
         public DisplayNameTable PhoneContactNamesByJid => _chatState.AddressBookNames;
@@ -1077,7 +1079,8 @@ namespace Unison.Uwp.Services.WhatsApp
             IGroupRosterStore groupRosterStore,
             IChatStore chatStore,
             ISystemInfoProvider systemInfo,
-            AttachedUiDispatcher ui)
+            AttachedUiDispatcher ui,
+            ChatPreviewReconciler previewReconciler)
         {
             if (chatState == null)
             {
@@ -1095,6 +1098,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _chatStore = chatStore ?? throw new ArgumentNullException(nameof(chatStore));
             _isWindowsMobile = systemInfo.IsMobile();
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
+            _previewReconciler = previewReconciler ?? throw new ArgumentNullException(nameof(previewReconciler));
             _chatRows = chatRows ?? throw new ArgumentNullException(nameof(chatRows));
             _activeChat = activeChat ?? throw new ArgumentNullException(nameof(activeChat));
             _activeChat.Changed += OnActiveChatChanged;
@@ -1170,11 +1174,12 @@ namespace Unison.Uwp.Services.WhatsApp
             IGroupRosterStore groupRosterStore,
             IChatStore chatStore,
             ISystemInfoProvider systemInfo,
-            AttachedUiDispatcher ui)
+            AttachedUiDispatcher ui,
+            ChatPreviewReconciler previewReconciler)
         {
             return _instance ?? (_instance = new WhatsAppService(
                 chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
-                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui));
+                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, previewReconciler));
         }
 
         /// <summary>
@@ -2084,328 +2089,12 @@ namespace Unison.Uwp.Services.WhatsApp
             IReadOnlyList<string> chatJids = null,
             string reason = null)
         {
-            string tag = string.IsNullOrWhiteSpace(reason) ? "unknown" : reason;
-            if (_historyMessages == null)
-            {
-                RuntimeDiagnosticsService.Instance.Write(
-                    "preview-tip", "reconcile-skipped", "reason=" + tag + "; cause=no-history-store");
-                return;
-            }
-
-            // One work item per canonical chat, with PN+LID (+canonical) keys — same expansion
-            // as MessageFacade.LoadMessages. Querying only the list JID misses cross-device
-            // fromMe rows stored under the alias and leaves the strip on the older peer line.
-            var work = new List<Tuple<string, List<string>>>();
-            var seenCanonical = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            void EnqueueChat(string raw)
-            {
-                string norm = JidHelper.Normalize(raw);
-                if (string.IsNullOrWhiteSpace(norm))
-                {
-                    return;
-                }
-
-                string canonical = GetCanonicalJid(norm);
-                if (string.IsNullOrWhiteSpace(canonical))
-                {
-                    canonical = norm;
-                }
-
-                if (!seenCanonical.Add(canonical))
-                {
-                    return;
-                }
-
-                work.Add(Tuple.Create(canonical, ExpandHistoryChatKeys(norm)));
-            }
-
-            if (chatJids != null && chatJids.Count > 0)
-            {
-                for (int i = 0; i < chatJids.Count; i++)
-                {
-                    EnqueueChat(chatJids[i]);
-                }
-            }
-            else
-            {
-                await RunOnUiThreadAsync(() =>
-                {
-                    for (int i = 0; i < Chats.Count; i++)
-                    {
-                        EnqueueChat(Chats[i]?.JID);
-                    }
-                }).ConfigureAwait(false);
-            }
-
-            RuntimeDiagnosticsService.Instance.Write(
-                "preview-tip",
-                "reconcile-begin",
-                "reason=" + tag + "; requested=" + (chatJids != null ? chatJids.Count : -1) +
-                "; chats=" + work.Count);
-
-            if (work.Count == 0)
-            {
-                return;
-            }
-
-            var newestByCanonical = new List<Tuple<string, List<string>, List<HistoryMessage>>>(work.Count);
-            for (int i = 0; i < work.Count; i++)
-            {
-                string canonical = work[i].Item1;
-                List<string> keys = work[i].Item2;
-                if (keys == null || keys.Count == 0)
-                {
-                    continue;
-                }
-
-                List<HistoryMessage> page = null;
-                try
-                {
-                    // Newest across every alias key (IN + ORDER BY ts DESC LIMIT 8), oldest first.
-                    IReadOnlyList<HistoryMessage> rows =
-                        await _historyMessages.GetForChatKeysAsync(keys, 8).ConfigureAwait(false);
-                    if (rows != null && rows.Count > 0)
-                    {
-                        page = new List<HistoryMessage>(rows);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine(
-                        "[WhatsAppService] ReconcileChatPreviewsFromSqlite query failed for " +
-                        canonical + ": " + ex.Message);
-                }
-
-                if (page == null)
-                {
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "preview-tip",
-                        "db-empty",
-                        "reason=" + tag + "; jid=" + MaskJidForDiagnostics(canonical) +
-                        "; keys=" + keys.Count);
-                }
-
-                // Always enqueue: memory tip alone can still fix the strip.
-                newestByCanonical.Add(Tuple.Create(canonical, keys, page));
-            }
-
-            if (newestByCanonical.Count == 0)
-            {
-                return;
-            }
-
-            // Sliced so a full reconcile (hundreds of chats after the first sync) does not hold
-            // the UI thread in one block; the store is sorted once, after the last slice.
-            int updated = 0;
-            for (int start = 0; start < newestByCanonical.Count; start += PreviewReconcileUiSliceSize)
-            {
-                int sliceStart = start;
-                int sliceEnd = Math.Min(newestByCanonical.Count, start + PreviewReconcileUiSliceSize);
-                await RunOnUiThreadAsync(() =>
-                {
-                    for (int i = sliceStart; i < sliceEnd; i++)
-                    {
-                        updated += ApplyReconciledPreviewTip(
-                            newestByCanonical[i].Item1,
-                            newestByCanonical[i].Item2,
-                            newestByCanonical[i].Item3,
-                            tag);
-                    }
-                }).ConfigureAwait(false);
-            }
-
+            int updated = await _previewReconciler.ReconcileAsync(chatJids, reason).ConfigureAwait(false);
             if (updated > 0)
             {
-                await RunOnUiThreadAsync(SortChatsForDisplay).ConfigureAwait(false);
-            }
-
-            if (updated > 0)
-            {
-                Debug.WriteLine("[WhatsAppService] ReconcileChatPreviewsFromSqlite updated=" + updated);
                 NoteFullHistoryCatchUpProgress("tip-swapped:" + updated);
                 SchedulePersist();
             }
-        }
-
-        private const int PreviewReconcileUiSliceSize = 24;
-
-        /// <summary>
-        /// UI thread. Applies the newest tip (SQLite page or memory) to every row of one chat.
-        /// Returns how many rows changed.
-        /// </summary>
-        private int ApplyReconciledPreviewTip(
-            string canonical,
-            List<string> keys,
-            List<HistoryMessage> page,
-            string tag)
-        {
-            ChatMessage stored = ChatPreviewTip.PickStoredTip(page, DateTime.UtcNow);
-            // Open-chat merge can show a live tip SQLite has not caught up with yet.
-            ChatMessage memoryTip = FindNewestInMemoryForChat(canonical, keys);
-            ChatMessage best = ChatPreviewTip.PickNewer(stored, memoryTip);
-            if (best == null)
-            {
-                return 0;
-            }
-
-            bool isGroup = canonical.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
-            ChatListStrip strip = ChatListStrip.FromMessage(
-                best,
-                isGroup,
-                SelfListDisplayName(),
-                GetCanonicalJid(best.ParticipantJid));
-
-            int updated = 0;
-            foreach (var chat in GetChatRowsForCanonicalJid(canonical))
-            {
-                // Tip from DB/memory by TimestampUtc; swap when MessageId differs (or body).
-                if (ChatPreviewTip.IsAlreadyShowing(chat, best, strip.Preview))
-                {
-                    // Same tip body — still promote a bubble-resolved author onto the strip.
-                    if (isGroup)
-                    {
-                        LiveChatPreviewApplier.ApplyAuthorParts(
-                            chat,
-                            strip.ParticipantJid,
-                            strip.SenderName,
-                            strip.AuthorPrefix);
-                    }
-
-                    continue;
-                }
-
-                // force: tip was already chosen as newest by TimestampUtc (DB+RAM).
-                // A strip poisoned by Unspecified→ToUniversalTime (+3h in Brazil) must
-                // not win the stale gate and keep an older Last Message.
-                bool applied = ApplyChatPreviewIfNewer(
-                    chat,
-                    strip.Preview,
-                    strip.Timestamp,
-                    true,
-                    strip.Kind,
-                    strip.AuthorPrefix,
-                    strip.MentionedJids,
-                    strip.IsFromMe,
-                    strip.SendState,
-                    strip.MessageId,
-                    strip.ParticipantJid,
-                    strip.SenderName);
-
-                // Schema v4 upgrade: old preview rows have no LastMessageId. Stamp it from
-                // history_message without a WhatsApp history resync when the tip already matches.
-                if (!applied && ChatPreviewTip.ShouldStampMissingMessageId(chat, best))
-                {
-                    chat.LastMessageId = best.Id;
-                    applied = true;
-                }
-
-                if (applied)
-                {
-                    updated++;
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "preview-tip",
-                        "tip-swapped",
-                        "reason=" + tag +
-                        "; jid=" + MaskJidForDiagnostics(chat.JID) +
-                        "; tipId=" + (best.Id ?? "-") +
-                        "; tipFromMe=" + best.IsFromMe +
-                        "; tipTs=" + ToComparableUtc(best.Timestamp).ToString("O"));
-                }
-                else
-                {
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "preview-tip",
-                        "kept-old-tip",
-                        "reason=" + tag +
-                        "; jid=" + MaskJidForDiagnostics(chat.JID) +
-                        "; stripTs=" + (chat.LastMessageTimestampUtc.HasValue
-                            ? ToComparableUtc(chat.LastMessageTimestampUtc.Value).ToString("O")
-                            : "-") +
-                        "; stripId=" + (chat.LastMessageId ?? "-") +
-                        "; stripFromMe=" + chat.LastMessageIsFromMe +
-                        "; tipTs=" + ToComparableUtc(best.Timestamp).ToString("O") +
-                        "; tipId=" + (best.Id ?? "-") +
-                        "; tipFromMe=" + best.IsFromMe +
-                        "; src=" + (ReferenceEquals(best, memoryTip) ? "mem" : "db") +
-                        "; dbRows=" + (page != null ? page.Count : 0));
-                }
-            }
-
-            return updated;
-        }
-
-        /// <summary>
-        /// Keeps the runtime journal free of full phone numbers while still allowing one chat to be
-        /// followed across events.
-        /// </summary>
-        private static string MaskJidForDiagnostics(string jid)
-        {
-            return DiagnosticJidMask.Apply(jid);
-        }
-
-        /// <summary>
-        /// history_message row to a list-strip candidate, or null when it must never own the strip
-        /// (old unflagged tombstone body, or a timestamp we do not trust).
-        /// </summary>
-        private ChatMessage FindNewestInMemoryForChat(string canonical, List<string> keys)
-        {
-            var candidates = new List<ChatMessage>();
-
-            void Consider(IList<ChatMessage> list)
-            {
-                if (list == null)
-                {
-                    return;
-                }
-
-                // Snapshot: open-chat / unload can mutate the list while reconcile runs.
-                try
-                {
-                    candidates.AddRange(list.ToArray());
-                }
-                catch (ArgumentException)
-                {
-                }
-                catch (InvalidOperationException)
-                {
-                }
-            }
-
-            if (keys != null)
-            {
-                for (int i = 0; i < keys.Count; i++)
-                {
-                    string key = keys[i];
-                    if (string.IsNullOrWhiteSpace(key))
-                    {
-                        continue;
-                    }
-
-                    List<ChatMessage> list;
-                    if (MessagesByChat.TryGet(key, out list))
-                    {
-                        Consider(list);
-                    }
-                }
-            }
-
-            KeyValuePair<string, List<ChatMessage>>[] pairs = MessagesByChat.Snapshot();
-
-            for (int i = 0; i < pairs.Length; i++)
-            {
-                KeyValuePair<string, List<ChatMessage>> pair = pairs[i];
-                if (pair.Value == null ||
-                    string.IsNullOrWhiteSpace(pair.Key) ||
-                    !string.Equals(GetCanonicalJid(pair.Key), canonical, StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                Consider(pair.Value);
-            }
-
-            return ChatPreviewTip.PickNewestReconcileCandidate(candidates, DateTime.UtcNow);
         }
 
         /// <summary>
