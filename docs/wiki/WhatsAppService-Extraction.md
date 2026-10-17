@@ -1255,6 +1255,20 @@ to it for its internal callers. `IWhatsAppService.ResolveDisplayName` is gone, a
 names rows through `IContactService` only. Writing names (push names, the person store, the
 overlay) did not move.
 
+**Identity and transport readiness no longer go through the client.** `JidAliasTable.BindSelf`
+takes the account's phone too and the table answers `Self` (`Id`, `Lid`, `Phone`; null before
+pairing). `JidResolver` reads it there and lost its `IWhatsAppService` parameter;
+`IJidResolver.Self` is identity only, and the profile (name, picture) stays with
+`ProfileFacade`. `IWhatsAppSessionProvider.IsTransportReady` asks the current socket whether the
+handshake finished, the same test the client made; `ProfileFacade`, `DebugSendService`,
+`ContactNameResolver`, `ChatAvatarPolicy` and `GroupRosterPolicy` ask it, and the member left
+`IWhatsAppService`. `AddressBookOverlay`, `ChatAvatarFetch` and `GroupRosterPolicy` no longer take
+the client at all.
+
+Next candidate: the sync budget (`PreferFrugalSyncBudget`, `IsInitialSyncSafeMode`, the initial
+sync counters). It reads the client's safe-mode flag, which `PublishInitialSyncProgress` owns, so
+it moves together with that state rather than as a rule on its own.
+
 **Done when:** `.Connection.cs` + a small main file; no façade needs send/history/avatar/group/list methods on the client; leftover `IWhatsAppSocket` drop is [Migration](Migration) item 9, after this.
 
 ---
