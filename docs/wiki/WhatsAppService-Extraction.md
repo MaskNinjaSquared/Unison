@@ -1408,6 +1408,13 @@ runs `AliasPairPolicy` and `AliasPairFiling.FileBothWays`, then returns the acce
 registers the pair with the live socket and heals our own identity in the auth state — both
 need session and auth the Core type must not own.
 
+**Opening a chat merges SQLite and the live overlay in Core.** `OpenChatMessageMerge` is the
+id-prefer-live merge `MessageFacade` used to inline twice (open page and sync reload). Live
+still wins on collision and keeps SQLite media keys / quote / reactions when blank. The RAM
+overlay itself stays on the client through `IOutgoingMessageHost.LoadLiveOverlayAsync`
+(rebuild window, apply held receipts, queue dirty rows); `LoadMessagesForChatAsync` left
+`IWhatsAppService`. UI keeps calling `IMessageService.LoadMessagesForChatAsync`.
+
 **Done when:** `.Connection.cs` + a small main file; no façade needs send/history/avatar/group/list methods on the client; leftover `IWhatsAppSocket` drop is [Migration](Migration) item 9, after this.
 
 ---

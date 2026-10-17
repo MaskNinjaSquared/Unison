@@ -103,5 +103,11 @@ namespace Unison.Core.Contracts.WhatsApp
 
         /// <summary>Surfaces the failure to whoever listens for client errors.</summary>
         void ReportError(Exception error);
+
+        /// <summary>
+        /// RAM overlay for an open chat: rebuilds the in-memory window, applies held receipts
+        /// and queues dirty rows for persist. SQLite history is merged by the message façade.
+        /// </summary>
+        Task<System.Collections.Generic.List<ChatMessage>> LoadLiveOverlayAsync(string chatJid);
     }
 }

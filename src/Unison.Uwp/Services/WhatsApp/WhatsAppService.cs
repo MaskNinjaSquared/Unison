@@ -2198,18 +2198,10 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         /// <summary>
-        /// Loads messages for a specific chat from disk if not already in memory.
-        /// Call this when opening a chat to lazy-load messages.
+        /// Loads only the initial messages for a chat from the RAM overlay.
+        /// SQLite history is merged by <c>MessageFacade</c>.
         /// </summary>
-        public async Task<List<ChatMessage>> LoadMessagesForChatAsync(string chatJid)
-        {
-            return await LoadInitialMessagesAsync(chatJid);
-        }
-
-        /// <summary>
-        /// Loads only the initial (last 30) messages for a chat.
-        /// </summary>
-        public async Task<List<ChatMessage>> LoadInitialMessagesAsync(string chatJid)
+        private async Task<List<ChatMessage>> LoadInitialMessagesAsync(string chatJid)
         {
             string normJid = NormalizeJid(chatJid);
 

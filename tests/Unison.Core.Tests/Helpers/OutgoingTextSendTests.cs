@@ -245,6 +245,9 @@ namespace Unison.Core.Tests.Helpers
                 Errors.Add(error);
                 Log.Add("error");
             }
+
+            public Task<List<ChatMessage>> LoadLiveOverlayAsync(string chatJid) =>
+                throw new NotSupportedException();
         }
 
         private sealed class FakeJids : IJidResolver

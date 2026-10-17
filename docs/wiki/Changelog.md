@@ -2,6 +2,13 @@
 
 Newest first.
 
+## Open-chat merge left the façade body
+
+Combining SQLite history rows with the live RAM overlay is `OpenChatMessageMerge`. The
+message façade maps history rows and asks `IOutgoingMessageHost.LoadLiveOverlayAsync` for
+the overlay; `LoadMessagesForChatAsync` left `IWhatsAppService`. No behaviour change.
+
+
 ## Alias merge and usync filing left the client
 
 Collapsing a LID chat into its phone row is `ChatListAliasMerge`. Filing an accepted usync

@@ -259,6 +259,9 @@ namespace Unison.Core.Tests.Helpers
             public void RecordSendFailure(string messageId, Exception error) => throw new NotSupportedException();
 
             public void ReportError(Exception error) => ReportedError = error;
+
+            public Task<List<ChatMessage>> LoadLiveOverlayAsync(string chatJid) =>
+                throw new NotSupportedException();
         }
 
         private sealed class FakeCache : IMediaCache

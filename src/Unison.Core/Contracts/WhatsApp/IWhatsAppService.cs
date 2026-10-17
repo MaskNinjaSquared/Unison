@@ -154,9 +154,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         Task ApplyChatDeletionAsync(string jid);
 
-
-        Task<List<ChatMessage>> LoadMessagesForChatAsync(string jid);
-
         /// <summary>
         /// Asks the phone for a FULL_HISTORY_SYNC_ON_DEMAND lot (no local wipe).
         /// Prefer <see cref="IHistoryService.RequestFullHistoryOnDemandAsync"/> from UI.

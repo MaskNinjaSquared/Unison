@@ -155,5 +155,8 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         void IOutgoingMessageHost.ReportError(Exception error) => OnError?.Invoke(this, error);
+
+        Task<List<ChatMessage>> IOutgoingMessageHost.LoadLiveOverlayAsync(string chatJid) =>
+            LoadInitialMessagesAsync(chatJid);
     }
 }
