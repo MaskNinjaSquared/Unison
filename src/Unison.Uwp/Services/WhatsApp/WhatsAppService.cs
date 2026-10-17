@@ -979,20 +979,11 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly SemaphoreSlim _historyBackfillLock = new SemaphoreSlim(1, 1);
         private volatile bool _historyBackfillActive = false;
         private readonly PendingMessageState _pendingMessageState = new PendingMessageState();
-        private readonly object _messageStateLock = new object();
-
-        private sealed class GroupRecipientCountCacheEntry
-        {
-            public int RecipientCount { get; set; }
-            public DateTime FetchedUtc { get; set; }
-        }
-
         private readonly GroupReceiptTally _groupReceipts = new GroupReceiptTally();
+        private readonly GroupRecipientCountCache _groupRecipientCounts = new GroupRecipientCountCache();
         // Field initializers run in declaration order, so _selfMarkers is set before it is read below.
         private readonly ISelfMarkerNaming _selfMarkers = new SelfMarkerNaming();
         private readonly ContactLabelSanitizer _contactLabels = new ContactLabelSanitizer(new SelfMarkerNaming());
-        private readonly Dictionary<string, GroupRecipientCountCacheEntry> _groupRecipientCountByChat =
-            new Dictionary<string, GroupRecipientCountCacheEntry>(StringComparer.OrdinalIgnoreCase);
 
         private bool ShouldDeferReconnectReplayWork()
         {
