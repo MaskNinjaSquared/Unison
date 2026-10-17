@@ -1371,6 +1371,12 @@ sets its kind from `IJidResolver.IsSelfLinked` and asks the client for a dedup p
 (`RequestChatListDedup`, still a client primitive). `ChatListViewModel` and the legacy `ShellView`
 call the chat façade; the member left `IMessageService` and `IWhatsAppService`.
 
+**A stored tip reaches the strip through `ChatMessageTipApply`.** (Core.) It is the glue the
+client called `ApplyMessageAsChatTip`: `ChatListStrip.FromMessage` plus
+`LiveChatPreviewApplier.ApplyIfNewer`, with the yesterday label and the self name passed in.
+The client method is a thin forward. Bulk refresh and reconcile still live on the client for
+one more step.
+
 **Done when:** `.Connection.cs` + a small main file; no façade needs send/history/avatar/group/list methods on the client; leftover `IWhatsAppSocket` drop is [Migration](Migration) item 9, after this.
 
 ---
