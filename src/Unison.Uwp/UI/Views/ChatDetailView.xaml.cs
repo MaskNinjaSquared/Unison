@@ -86,6 +86,7 @@ namespace Unison.Uwp.UI.Views
         private bool _isSyncingFromService = false;
         private bool _syncRequestedAgain = false;
         private DateTime _suppressLoadMoreUntilUtc = DateTime.MinValue;
+        private bool _isLoadingMoreFromScroll;
         /// <summary>Throttle visible group-author avatar hydrate while scrolling.</summary>
         private DateTime _lastVisibleAvatarRequestUtc = DateTime.MinValue;
         private bool _messageListCacheLengthApplied;
@@ -508,39 +509,6 @@ namespace Unison.Uwp.UI.Views
                 UpdateScrollToBottomButton();
             }
 
-            if (e.PropertyName == nameof(ChatDetailViewModel.IsTimelineBusy) ||
-                e.PropertyName == nameof(ChatDetailViewModel.IsLoadingMessages) ||
-                e.PropertyName == nameof(ChatDetailViewModel.IsLoadingMore))
-            {
-                ApplyTimelineScrollLock();
-            }
-        }
-
-        /// <summary>
-        /// While the timeline is loading (open or load-more), freeze vertical scroll so Mobile
-        /// does not stack ViewChanged / layout thrash on top of VM materialization.
-        /// </summary>
-        private void ApplyTimelineScrollLock()
-        {
-            bool busy = ViewModel?.IsTimelineBusy == true;
-            EnsureMessageListScrollViewer();
-
-            if (MessageListView != null)
-            {
-                ScrollViewer.SetVerticalScrollMode(
-                    MessageListView,
-                    busy ? ScrollMode.Disabled : ScrollMode.Auto);
-                ScrollViewer.SetVerticalScrollBarVisibility(
-                    MessageListView,
-                    busy ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto);
-            }
-
-            if (_scrollViewer != null)
-            {
-                _scrollViewer.VerticalScrollMode = busy ? ScrollMode.Disabled : ScrollMode.Auto;
-                _scrollViewer.VerticalScrollBarVisibility =
-                    busy ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto;
-            }
         }
 
         /// <summary>
@@ -899,33 +867,41 @@ namespace Unison.Uwp.UI.Views
             return null;
         }
 
+        private ItemsStackPanel GetMessagesPanel()
+        {
+            if (MessageListView == null)
+            {
+                return null;
+            }
+
+            return MessageListView.ItemsPanelRoot as ItemsStackPanel ?? FindItemsStackPanel(MessageListView);
+        }
+
         private async void ScrollViewer_ViewChanged(object sender, ScrollViewerViewChangedEventArgs e)
         {
             UpdateScrollToBottomButton();
 
             if (_scrollViewer == null || ViewModel == null || _activeChat == null) return;
-            if (ViewModel.IsTimelineBusy) return;
-
-            // Wait for the gesture to settle. Firing while e.IsIntermediate is true means the
-            // load-more (and its ChangeView) lands on top of an active manipulation/fling, which
-            // the platform discards - the viewport then ends the scroll at the top anyway.
-            if (e.IsIntermediate) return;
+            if (_isLoadingMoreFromScroll || ViewModel.IsTimelineBusy) return;
             if (DateTime.UtcNow < _suppressLoadMoreUntilUtc) return;
 
-            RequestVisibleParticipantAvatarsFromViewportThrottled();
+            if (!e.IsIntermediate)
+            {
+                RequestVisibleParticipantAvatarsFromViewportThrottled();
+            }
 
             // Exige conteudo realmente rolavel. Sem isso, uma conversa curta abre com
             // offset baixo, dispara "carregar mais" imediatamente, prepende mensagens
             // antigas e a tela nunca assenta no fim.
             bool temConteudoRolavel = _scrollViewer.ExtentHeight > (_scrollViewer.ViewportHeight * 1.5);
+            if (!temConteudoRolavel || !ViewModel.CanLoadMore) return;
 
-            if (temConteudoRolavel &&
-                _scrollViewer.VerticalOffset < 300 &&
-                ViewModel.CanLoadMore)
-            {
-                Debug.WriteLine($"[ChatDetailView] TRIGGER HIT: Offset={_scrollViewer.VerticalOffset} < 300. Loading more...");
-                await LoadMoreMessagesAsync();
-            }
+            // Safe during a fling: load-more never moves the viewport itself.
+            ItemsStackPanel panel = GetMessagesPanel();
+            if (panel == null || panel.FirstCacheIndex != 0) return;
+
+            Debug.WriteLine($"[ChatDetailView] TRIGGER HIT: FirstCacheIndex=0, Offset={_scrollViewer.VerticalOffset}. Loading more...");
+            await LoadMoreMessagesAsync();
         }
 
         private void RequestVisibleParticipantAvatarsFromViewportThrottled()
@@ -1011,28 +987,22 @@ namespace Unison.Uwp.UI.Views
 
         private async Task LoadMoreMessagesAsync()
         {
-            if (ViewModel == null || _activeChat == null || !ViewModel.CanLoadMore)
+            if (ViewModel == null || _activeChat == null || !ViewModel.CanLoadMore || _isLoadingMoreFromScroll)
             {
                 return;
             }
 
-            // Arm before the await: near-top offset stays low during the fetch, and without this
-            // a settled ViewChanged can start a second load-more on top of the first.
-            _suppressLoadMoreUntilUtc = DateTime.UtcNow.AddMilliseconds(1500);
-
+            _isLoadingMoreFromScroll = true;
             try
             {
                 string requestedJid = Jids.GetCanonicalJid(_activeChat.JID);
                 Debug.WriteLine($"[ChatDetailView] Loading more messages for {requestedJid}. Current: {_messages.Count}");
+                WriteTimelineDiagnostics(
+                    "load-more-start",
+                    "firstCache=" + (GetMessagesPanel()?.FirstCacheIndex ?? -1));
 
-                // KeepItemsInView alone does not hold position here (variable bubble heights + many
-                // Inserts + offset already near 0). Capture the first visible bubble and put it
-                // back after layout.
-                object anchor = CaptureTopVisibleMessage(out double anchorTopInViewport);
-                double oldExtent = _scrollViewer?.ExtentHeight ?? 0;
-                double oldOffset = _scrollViewer?.VerticalOffset ?? 0;
-                WriteTimelineDiagnostics("load-more-start", "anchor=" + (anchor != null));
-
+                // Position is held by ItemsUpdatingScrollMode="KeepLastItemInView" alone; a ChangeView
+                // here would cut the user's fling short.
                 ChatTimelineLoadMoreResult result = await ViewModel.LoadMoreMessagesAsync();
                 WriteTimelineDiagnostics(
                     "load-more-result",
@@ -1052,10 +1022,7 @@ namespace Unison.Uwp.UI.Views
                     bool isGroup = _activeChat.IsGroup ||
                         requestedJid.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
                     RecomputeMessageRuns(_messages, isGroup);
-
-                    await RestoreScrollAfterPrependAsync(anchor, anchorTopInViewport, oldExtent, oldOffset);
-                    WriteTimelineDiagnostics("load-more-restored", "oldOffset=" + oldOffset.ToString("0"));
-                    _suppressLoadMoreUntilUtc = DateTime.UtcNow.AddMilliseconds(800);
+                    WriteTimelineDiagnostics("load-more-applied", null);
                 }
                 else if (result != null && result.WaitingForOnDemand)
                 {
@@ -1069,155 +1036,12 @@ namespace Unison.Uwp.UI.Views
             catch (Exception ex)
             {
                 Debug.WriteLine($"[ChatDetailView] Error loading more messages: {ex.Message}");
+                WriteTimelineDiagnostics("load-more-failed", null, ex);
             }
-        }
-
-        /// <summary>
-        /// First realized timeline row that intersects the viewport, plus its Y relative to the
-        /// ScrollViewer top. Null when virtualization has not generated any container yet.
-        /// </summary>
-        private object CaptureTopVisibleMessage(out double topInViewport)
-        {
-            topInViewport = 0;
-            if (MessageListView == null || _scrollViewer == null || _messages == null)
+            finally
             {
-                return null;
+                _isLoadingMoreFromScroll = false;
             }
-
-            int count = MessageListView.Items?.Count ?? 0;
-            for (int i = 0; i < count; i++)
-            {
-                var container = MessageListView.ContainerFromIndex(i) as FrameworkElement;
-                if (container == null || container.ActualHeight <= 0)
-                {
-                    continue;
-                }
-
-                try
-                {
-                    GeneralTransform transform = container.TransformToVisual(_scrollViewer);
-                    double top = transform.TransformPoint(new Point(0, 0)).Y;
-                    if (top + container.ActualHeight <= 0)
-                    {
-                        continue;
-                    }
-
-                    if (top >= _scrollViewer.ViewportHeight)
-                    {
-                        break;
-                    }
-
-                    topInViewport = top;
-                    return MessageListView.Items[i];
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine("[ChatDetailView] CaptureTopVisibleMessage: " + ex.Message);
-                }
-            }
-
-            return null;
-        }
-
-        /// <summary>
-        /// After older rows are prepended, bring the pre-load anchor back to the same viewport
-        /// position. ScrollIntoView gets the item on screen; a second pass with TransformToVisual
-        /// (or extent delta) fine-tunes once containers exist.
-        /// </summary>
-        private async Task RestoreScrollAfterPrependAsync(
-            object anchor,
-            double anchorTopInViewport,
-            double oldExtent,
-            double oldOffset)
-        {
-            EnsureMessageListScrollViewer();
-            if (_scrollViewer == null)
-            {
-                return;
-            }
-
-            // Let ItemsStackPanel realize the new leading rows before we ask for containers.
-            await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () => { });
-            await Task.Delay(16);
-
-            if (anchor != null)
-            {
-                TryScrollIntoView(anchor, ScrollIntoViewAlignment.Leading);
-
-                await Dispatcher.RunAsync(CoreDispatcherPriority.Low, () =>
-                {
-                    if (_scrollViewer == null)
-                    {
-                        return;
-                    }
-
-                    FrameworkElement container = null;
-                    try
-                    {
-                        container = MessageListView.ContainerFromItem(anchor) as FrameworkElement;
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine("[ChatDetailView] Anchor container lookup failed: " + ex.Message);
-                    }
-
-                    if (container != null)
-                    {
-                        try
-                        {
-                            double top = container.TransformToVisual(_scrollViewer)
-                                .TransformPoint(new Point(0, 0)).Y;
-                            double delta = top - anchorTopInViewport;
-                            if (Math.Abs(delta) > 1)
-                            {
-                                double target = Math.Max(0, _scrollViewer.VerticalOffset + delta);
-                                _scrollViewer.ChangeView(null, target, null, true);
-                                Debug.WriteLine(
-                                    $"[ChatDetailView] Restored scroll via anchor delta={delta:0.#} -> {target:0.#}");
-                                return;
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            Debug.WriteLine("[ChatDetailView] Anchor fine-tune failed: " + ex.Message);
-                        }
-                    }
-
-                    ApplyExtentDeltaScroll(oldExtent, oldOffset);
-                });
-            }
-            else
-            {
-                await Dispatcher.RunAsync(CoreDispatcherPriority.Low, () =>
-                    ApplyExtentDeltaScroll(oldExtent, oldOffset));
-            }
-        }
-
-        private void ApplyExtentDeltaScroll(double oldExtent, double oldOffset)
-        {
-            if (_scrollViewer == null)
-            {
-                return;
-            }
-
-            double deltaExtent = _scrollViewer.ExtentHeight - oldExtent;
-            if (deltaExtent <= 0.5)
-            {
-                return;
-            }
-
-            double target = Math.Max(0, oldOffset + deltaExtent);
-            try
-            {
-                _scrollViewer.ChangeView(null, target, null, true);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[ChatDetailView] Extent delta scroll failed: " + ex.Message);
-                return;
-            }
-            Debug.WriteLine(
-                $"[ChatDetailView] Restored scroll via extent delta={deltaExtent:0.#} -> {target:0.#}");
         }
 
         private void BackButton_Click(object sender, RoutedEventArgs e)

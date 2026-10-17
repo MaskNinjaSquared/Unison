@@ -600,10 +600,8 @@
                 </ListView.ItemContainerStyle>
                 <ListView.ItemsPanel>
                     <ItemsPanelTemplate>
-                        <!-- Prefer KeepItemsInView as a first pass; ChatDetailView still restores
-                             scroll explicitly after load-more because variable bubble heights and
-                             near-zero offsets make the panel alone unreliable. -->
-                        <ItemsStackPanel ItemsUpdatingScrollMode="KeepItemsInView"/>
+                        <!-- Sole owner of the viewport position when older rows are prepended. -->
+                        <ItemsStackPanel ItemsUpdatingScrollMode="KeepLastItemInView"/>
                     </ItemsPanelTemplate>
                 </ListView.ItemsPanel>
             </ListView>
