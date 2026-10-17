@@ -1227,6 +1227,15 @@ every status leaves as a clear. `GroupFacade`, `HistoryFacade`, `ContactNameReso
 and `SettingsViewModel` no longer takes the client. The client keeps when history catch-up begins
 and ends — that follows its FULL_HISTORY request — and only latches the banner on the channel.
 
+**"Should enrichment wait?" is asked of `SyncWorkGate`.** `SyncWorkGate` (`Unison.Core/State`, DI
+singleton over `HistoryOnDemandRegistry` and a lazy read of the socket's `IsAwaitingInitialSync`)
+answers `IsReplayDrainActive` and `ShouldDeferAvatarFetch`. The replay-drain flag lives there now;
+`.Connection.cs` still decides when it is set (auth loaded and registered) and cleared (offline
+replay released) and only reports it. `GroupFacade`, `ContactNameResolver`, `ChatAvatarPolicy` and
+`GroupRosterPolicy` ask the gate; both members left `IWhatsAppService`. The client's
+`_historyBackfillActive` went with it: nothing ever set it, so it and the matching
+`PlaceholderResendDeferral` argument were removed.
+
 **Done when:** `.Connection.cs` + a small main file; no façade needs send/history/avatar/group/list methods on the client; leftover `IWhatsAppSocket` drop is [Migration](Migration) item 9, after this.
 
 ---
