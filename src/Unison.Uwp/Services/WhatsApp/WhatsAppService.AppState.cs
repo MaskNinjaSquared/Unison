@@ -448,23 +448,12 @@ namespace Unison.Uwp.Services.WhatsApp
                             {
                                 JidAlias.TryGetValue(normalizedRow, out alias);
                             }
-                            IReadOnlyList<string> pinKeys = ChatPinStoreKeys.For(
-                                chat.JID,
-                                GetCanonicalJid(chat.JID),
-                                alias);
-                            IReadOnlyList<string> wireKeys = ChatPinStoreKeys.For(
-                                jid,
-                                GetCanonicalJid(jid),
-                                null);
+                            IReadOnlyList<string> pinKeys = ChatPinStoreKeys.Merge(
+                                ChatPinStoreKeys.For(chat.JID, GetCanonicalJid(chat.JID), alias),
+                                ChatPinStoreKeys.For(jid, GetCanonicalJid(jid), null));
                             for (int i = 0; i < pinKeys.Count; i++)
                             {
                                 await _chatStore.SetChatPinnedAsync(pinKeys[i], change.Pinned.Value)
-                                    .ConfigureAwait(false);
-                            }
-
-                            for (int i = 0; i < wireKeys.Count; i++)
-                            {
-                                await _chatStore.SetChatPinnedAsync(wireKeys[i], change.Pinned.Value)
                                     .ConfigureAwait(false);
                             }
                         }
