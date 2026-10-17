@@ -1208,6 +1208,15 @@ startup. Before the client is attached, it answers as if nothing were there: the
 answers false and the rest do nothing. `App.GetWhatsAppService()` is gone; `App` resolves
 `IConnectionService`. The client's reconnect, resume and broker logic did not change.
 
+**The open conversation is shared state.** `ActiveChat` (`Unison.Core/State`, DI singleton over
+`JidAliasTable.GetCanonicalJid`) holds the conversation the user has open by its canonical
+address. `ChatFacade.SetActiveChatJid` opens it there; `IWhatsAppService.SetActiveChatJid` is
+gone, and so is the unused `IsChatCurrentlyOpen`. The client reads `ActiveChat` wherever it read
+its own field (unread counts, timeline refreshes, the status banner, memory release) and
+subscribes to `Changed` for the two side effects it kept: dropping the previous conversation's
+messages from memory and clearing the list banner when a conversation opens. Both still run on
+the caller's thread, after the new conversation is already open, as before.
+
 **Done when:** `.Connection.cs` + a small main file; no façade needs send/history/avatar/group/list methods on the client; leftover `IWhatsAppSocket` drop is [Migration](Migration) item 9, after this.
 
 ---
