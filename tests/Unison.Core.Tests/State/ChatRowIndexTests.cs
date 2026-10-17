@@ -103,6 +103,26 @@ namespace Unison.Core.Tests.State
         }
 
         [Fact]
+        public void Finding_a_conversation_canonicalizes_the_address_first()
+        {
+            var pnRow = new ChatItem { JID = Pn };
+            var lidRow = new ChatItem { JID = Lid };
+            var index = new ChatRowIndex(() => new[] { pnRow, lidRow }, Canonical);
+
+            Assert.Equal(new[] { pnRow, lidRow }, index.FindConversation(Lid));
+            Assert.Equal(new[] { pnRow, lidRow }, index.FindConversation(Pn));
+        }
+
+        [Fact]
+        public void Finding_a_blank_conversation_finds_nothing()
+        {
+            var index = new ChatRowIndex(() => new[] { new ChatItem { JID = Pn } }, Canonical);
+
+            Assert.Empty(index.FindConversation(" "));
+            Assert.Empty(index.FindConversation(null));
+        }
+
+        [Fact]
         public void Callers_get_a_copy_they_can_edit()
         {
             var index = new ChatRowIndex(() => new[] { new ChatItem { JID = Pn } }, Canonical);

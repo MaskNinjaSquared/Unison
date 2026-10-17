@@ -13,6 +13,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using Unison.Core.Helpers;
 using Unison.Core.Models;
 
 namespace Unison.Core.State
@@ -52,6 +53,21 @@ namespace Unison.Core.State
             return index.TryGetValue(canonical, out List<ChatItem> rows)
                 ? new List<ChatItem>(rows)
                 : new List<ChatItem>();
+        }
+
+        /// <summary>
+        /// Every row that stands for the conversation at <paramref name="jid"/>, whichever alias
+        /// it is given in. A copy, like <see cref="Find"/>.
+        /// </summary>
+        public List<ChatItem> FindConversation(string jid)
+        {
+            string canonical = _canonicalOf(jid);
+            if (string.IsNullOrWhiteSpace(canonical))
+            {
+                canonical = JidHelper.Normalize(jid);
+            }
+
+            return Find(canonical);
         }
 
         private Dictionary<string, List<ChatItem>> Build()
