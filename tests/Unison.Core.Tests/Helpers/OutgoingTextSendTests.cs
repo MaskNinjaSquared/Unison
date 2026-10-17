@@ -188,9 +188,9 @@ namespace Unison.Core.Tests.Helpers
 
             public Task EnsureConnectedAsync() => throw new NotSupportedException();
 
-            public Task<string> SendImageAsync(string jid, byte[] imageBytes, string caption) => throw new NotSupportedException();
+            public Task SendImageAsync(string jid, byte[] imageBytes, string caption, string messageId) => throw new NotSupportedException();
 
-            public Task<string> SendAudioAsync(string jid, OutgoingAudio audio) => throw new NotSupportedException();
+            public Task SendAudioAsync(string jid, OutgoingAudio audio, string messageId) => throw new NotSupportedException();
 
             public void AcceptOutgoing(string chatJid, ChatMessage message)
             {

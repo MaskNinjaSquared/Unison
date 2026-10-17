@@ -23,19 +23,20 @@ namespace Unison.Uwp.Services.WhatsApp
     {
         Task IOutgoingMessageHost.EnsureConnectedAsync() => EnsureConnectedAsync();
 
-        Task<string> IOutgoingMessageHost.SendImageAsync(string jid, byte[] imageBytes, string caption)
+        Task IOutgoingMessageHost.SendImageAsync(string jid, byte[] imageBytes, string caption, string messageId)
         {
-            return Task.Run(async () => await _socket.SendImageMessageAsync(jid, imageBytes, caption));
+            return Task.Run(async () => await _socket.SendImageMessageAsync(jid, imageBytes, caption, messageId));
         }
 
-        Task<string> IOutgoingMessageHost.SendAudioAsync(string jid, OutgoingAudio audio)
+        Task IOutgoingMessageHost.SendAudioAsync(string jid, OutgoingAudio audio, string messageId)
         {
             return _socket.SendAudioMessageAsync(
                 jid,
                 audio.Bytes,
                 audio.MimeType,
                 audio.DurationSeconds,
-                audio.IsVoiceMessage);
+                audio.IsVoiceMessage,
+                messageId);
         }
 
         void IOutgoingMessageHost.AcceptOutgoing(string chatJid, ChatMessage message)

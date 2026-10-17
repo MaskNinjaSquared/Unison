@@ -1,13 +1,14 @@
 // =============================================================================
 // OutgoingMediaSend
 //
-// Sending an image or an audio clip. Unlike text there is no optimistic bubble:
-// the upload has to finish before the server hands back the id the bubble and
-// the cached file are named after, so the bubble appears already sent. There is
-// no retry either, and a failed send throws instead of leaving a failed bubble.
+// Sending an image or an audio clip. Like text, the id is chosen up front so the
+// bubble (and the cached file named after it) goes on screen as pending before
+// the upload, then settles as sent or failed. There is no retry, and a transport
+// failure never throws: the failure is the bubble's status.
 // =============================================================================
 using System;
 using System.Threading.Tasks;
+using Unison.Baileys.Crypto;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Models;
@@ -23,17 +24,20 @@ namespace Unison.Core.Helpers
         private readonly IJidResolver _jids;
         private readonly IMediaCache _mediaCache;
         private readonly Func<DateTime> _utcNow;
+        private readonly Func<string> _newMessageId;
 
         public OutgoingMediaSend(
             IOutgoingMessageHost host,
             IJidResolver jids,
             IMediaCache mediaCache,
-            Func<DateTime> utcNow = null)
+            Func<DateTime> utcNow = null,
+            Func<string> newMessageId = null)
         {
             _host = host ?? throw new ArgumentNullException(nameof(host));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _mediaCache = mediaCache ?? throw new ArgumentNullException(nameof(mediaCache));
             _utcNow = utcNow ?? (() => DateTime.UtcNow);
+            _newMessageId = newMessageId ?? NewRandomMessageId;
         }
 
         // No ConfigureAwait(false) anywhere below: the host mutates the in-memory timeline,
@@ -45,19 +49,21 @@ namespace Unison.Core.Helpers
                 throw new ArgumentException("Image payload is empty", nameof(imageBytes));
             }
 
-            await _host.EnsureConnectedAsync();
-
             // Normalized only, unlike text and audio, which file under the canonical JID.
             string chatJid = JidHelper.Normalize(jid);
-            string messageId = await _host.SendImageAsync(jid, imageBytes, caption);
+            string messageId = _newMessageId();
             string localUri = await _mediaCache.SaveAsync(
                 MediaCacheKind.Image,
                 messageId + OutgoingFileSuffix,
                 MediaFileExtensions.ForImage(OutgoingImageMimeType),
                 imageBytes);
 
-            ChatMessage message = OutgoingChatMessage.Image(SentStamp(messageId, chatJid), caption, localUri);
-            await ShowAsync(chatJid, message, ChatPreviewKind.Image);
+            ChatMessage message = OutgoingChatMessage.Image(PendingStamp(messageId, chatJid), caption, localUri);
+            await SendAsync(
+                chatJid,
+                message,
+                ChatPreviewKind.Image,
+                () => _host.SendImageAsync(jid, imageBytes, caption, messageId));
             return message;
         }
 
@@ -68,10 +74,8 @@ namespace Unison.Core.Helpers
                 throw new ArgumentException("Audio payload is empty", nameof(audio));
             }
 
-            await _host.EnsureConnectedAsync();
-
             string chatJid = _jids.GetCanonicalJid(JidHelper.Normalize(jid));
-            string messageId = await _host.SendAudioAsync(jid, audio);
+            string messageId = _newMessageId();
             string localUri = await _mediaCache.SaveAsync(
                 MediaCacheKind.Audio,
                 messageId + OutgoingFileSuffix,
@@ -80,16 +84,20 @@ namespace Unison.Core.Helpers
                 reuseExisting: false);
 
             ChatMessage message = OutgoingChatMessage.Audio(
-                SentStamp(messageId, chatJid),
+                PendingStamp(messageId, chatJid),
                 localUri,
                 audio.MimeType,
                 audio.DurationSeconds,
                 audio.IsVoiceMessage);
-            await ShowAsync(chatJid, message, ChatPreviewKind.Voice);
+            await SendAsync(
+                chatJid,
+                message,
+                ChatPreviewKind.Voice,
+                () => _host.SendAudioAsync(jid, audio, messageId));
             return message;
         }
 
-        private OutgoingMessageStamp SentStamp(string messageId, string chatJid)
+        private OutgoingMessageStamp PendingStamp(string messageId, string chatJid)
         {
             return new OutgoingMessageStamp
             {
@@ -97,16 +105,42 @@ namespace Unison.Core.Helpers
                 ChatJid = chatJid,
                 ParticipantJid = _jids.Self?.Id,
                 TimestampUtc = _utcNow(),
-                Status = SelfChatStatusPolicy.Resolve(ChatMessage.StatusSent, _jids.IsSelfLinked(chatJid))
+                Status = ChatMessage.StatusPending
             };
         }
 
-        private async Task ShowAsync(string chatJid, ChatMessage message, ChatPreviewKind kind)
+        private async Task SendAsync(string chatJid, ChatMessage message, ChatPreviewKind kind, Func<Task> upload)
         {
             _host.AcceptOutgoing(chatJid, message);
             await _host.ShowLocalSendPreviewAsync(chatJid, message, kind);
+            _host.NotifyChatChanged(chatJid);
+            await _host.PersistLiveAsync(chatJid, message);
+
+            try
+            {
+                await _host.EnsureConnectedAsync();
+                await upload();
+                if (OutgoingSendSettlement.ShouldPromotePending(message.Status))
+                {
+                    message.Status = SelfChatStatusPolicy.Resolve(
+                        ChatMessage.StatusSent,
+                        _jids.IsSelfLinked(chatJid));
+                }
+            }
+            catch (Exception ex)
+            {
+                message.Status = ChatMessage.StatusFailed;
+                _host.ReportError(ex);
+            }
+
+            await _host.PersistLiveAsync(chatJid, message);
             _host.QueueForPersist(chatJid, message);
             _host.NotifyChatChanged(chatJid);
+        }
+
+        private static string NewRandomMessageId()
+        {
+            return OutgoingMessageId.FromRandomBytes(CryptoUtils.RandomBytes(OutgoingMessageId.RandomByteCount));
         }
     }
 }

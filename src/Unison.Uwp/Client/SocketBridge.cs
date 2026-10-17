@@ -1048,7 +1048,11 @@ namespace Unison.Uwp.Client
             return SendAsync(jid, new TextContent(text), explicitMessageId);
         }
 
-        public async Task<string> SendImageMessageAsync(string jid, byte[] imageBytes, string caption = null)
+        public async Task<string> SendImageMessageAsync(
+            string jid,
+            byte[] imageBytes,
+            string caption = null,
+            string explicitMessageId = null)
         {
             var content = new MediaContent(imageBytes, Unison.Socket.Media.MediaType.Image)
             {
@@ -1057,7 +1061,7 @@ namespace Unison.Uwp.Client
                 Thumbnail = await BuildThumbnailAsync(imageBytes).ConfigureAwait(false)
             };
 
-            return await SendAsync(jid, content, null).ConfigureAwait(false);
+            return await SendAsync(jid, content, explicitMessageId).ConfigureAwait(false);
         }
 
         public Task<string> SendAudioMessageAsync(
@@ -1065,7 +1069,8 @@ namespace Unison.Uwp.Client
             byte[] audioBytes,
             string mimeType,
             uint durationSeconds,
-            bool isVoiceMessage = false)
+            bool isVoiceMessage = false,
+            string explicitMessageId = null)
         {
             var content = new MediaContent(
                 audioBytes,
@@ -1075,7 +1080,7 @@ namespace Unison.Uwp.Client
                 Seconds = (int)durationSeconds
             };
 
-            return SendAsync(jid, content, null);
+            return SendAsync(jid, content, explicitMessageId);
         }
 
         public Task<string> SendPinInChatMessageAsync(

@@ -19,7 +19,8 @@ namespace Unison.Core.Tests.Helpers
         private readonly FakeJids _jids = new FakeJids();
         private readonly FakeCache _cache = new FakeCache();
 
-        private OutgoingMediaSend Create() => new OutgoingMediaSend(_host, _jids, _cache, () => At);
+        private OutgoingMediaSend Create(string id = "IMG1") =>
+            new OutgoingMediaSend(_host, _jids, _cache, () => At, () => id);
 
         [Fact]
         public async Task Empty_image_is_rejected_without_reconnecting()
@@ -30,22 +31,26 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
-        public async Task Image_is_sent_first_then_cached_under_its_id_and_shown_as_sent()
+        public async Task Image_bubble_shows_as_pending_before_the_upload_then_settles_as_sent()
         {
             ChatMessage m = await Create().SendImageAsync("555@s.whatsapp.net", Bytes, "look");
 
             Assert.Equal(
                 new[]
                 {
-                    "connect",
-                    "send-image:555@s.whatsapp.net",
-                    "accept:555@s.whatsapp.net:sent",
+                    "accept:555@s.whatsapp.net:pending",
                     "preview:555@s.whatsapp.net:Image",
+                    "changed:555@s.whatsapp.net",
+                    "persist:555@s.whatsapp.net:pending",
+                    "connect",
+                    "send-image:555@s.whatsapp.net:IMG1",
+                    "persist:555@s.whatsapp.net:sent",
                     "queue-persist:555@s.whatsapp.net",
                     "changed:555@s.whatsapp.net"
                 },
                 _host.Log);
             Assert.Equal("IMG1", m.Id);
+            Assert.Equal(ChatMessage.StatusSent, m.Status);
             Assert.Equal(ChatMessageKind.Image, m.Kind);
             Assert.Equal("look", m.Caption);
             Assert.Equal("cache://Image/IMG1_out" + MediaFileExtensions.ForImage("image/jpeg"), m.ImageUri);
@@ -53,6 +58,42 @@ namespace Unison.Core.Tests.Helpers
             Assert.Same(Bytes, _cache.Saves[0].Bytes);
             Assert.Equal(At, m.Timestamp);
             Assert.Equal("111@s.whatsapp.net", m.ParticipantJid);
+        }
+
+        [Fact]
+        public async Task A_refused_image_stays_on_screen_as_failed_instead_of_throwing()
+        {
+            var error = new InvalidOperationException("upload failed");
+            _host.SendError = error;
+
+            ChatMessage m = await Create().SendImageAsync("555@s.whatsapp.net", Bytes, null);
+
+            Assert.Equal(ChatMessage.StatusFailed, m.Status);
+            Assert.Contains("persist:555@s.whatsapp.net:failed", _host.Log);
+            Assert.Contains("queue-persist:555@s.whatsapp.net", _host.Log);
+            Assert.Same(error, _host.ReportedError);
+            Assert.Single(_cache.Saves);
+        }
+
+        [Fact]
+        public async Task An_image_that_cannot_reconnect_also_fails_in_place()
+        {
+            _host.ConnectError = new TimeoutException("offline");
+
+            ChatMessage m = await Create().SendImageAsync("555@s.whatsapp.net", Bytes, null);
+
+            Assert.Equal(ChatMessage.StatusFailed, m.Status);
+            Assert.DoesNotContain(_host.Log, e => e.StartsWith("send-image:", StringComparison.Ordinal));
+        }
+
+        [Fact]
+        public async Task A_status_the_server_already_reported_is_not_overwritten_by_sent()
+        {
+            _host.OnSend = message => message.Status = ChatMessage.StatusDelivered;
+
+            ChatMessage m = await Create().SendImageAsync("555@s.whatsapp.net", Bytes, null);
+
+            Assert.Equal(ChatMessage.StatusDelivered, m.Status);
         }
 
         [Fact]
@@ -76,17 +117,6 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
-        public async Task A_refused_image_throws_and_leaves_no_bubble()
-        {
-            _host.SendError = new InvalidOperationException("upload failed");
-
-            await Assert.ThrowsAsync<InvalidOperationException>(() => Create().SendImageAsync("555@s.whatsapp.net", Bytes, null));
-
-            Assert.DoesNotContain(_host.Log, e => e.StartsWith("accept:", StringComparison.Ordinal));
-            Assert.Empty(_cache.Saves);
-        }
-
-        [Fact]
         public async Task Empty_audio_is_rejected_without_reconnecting()
         {
             await Assert.ThrowsAsync<ArgumentException>(() => Create().SendAudioAsync("555@s.whatsapp.net", Audio(new byte[0], true)));
@@ -99,15 +129,18 @@ namespace Unison.Core.Tests.Helpers
         {
             _jids.Canonical["999@lid"] = "555@s.whatsapp.net";
 
-            ChatMessage m = await Create().SendAudioAsync("999@lid", Audio(Bytes, true));
+            ChatMessage m = await Create("AUD1").SendAudioAsync("999@lid", Audio(Bytes, true));
 
             Assert.Equal(
                 new[]
                 {
-                    "connect",
-                    "send-audio:999@lid",
-                    "accept:555@s.whatsapp.net:sent",
+                    "accept:555@s.whatsapp.net:pending",
                     "preview:555@s.whatsapp.net:Voice",
+                    "changed:555@s.whatsapp.net",
+                    "persist:555@s.whatsapp.net:pending",
+                    "connect",
+                    "send-audio:999@lid:AUD1",
+                    "persist:555@s.whatsapp.net:sent",
                     "queue-persist:555@s.whatsapp.net",
                     "changed:555@s.whatsapp.net"
                 },
@@ -122,10 +155,21 @@ namespace Unison.Core.Tests.Helpers
         [Fact]
         public async Task Plain_audio_still_previews_as_voice()
         {
-            ChatMessage m = await Create().SendAudioAsync("555@s.whatsapp.net", Audio(Bytes, false));
+            ChatMessage m = await Create("AUD1").SendAudioAsync("555@s.whatsapp.net", Audio(Bytes, false));
 
             Assert.Equal(ChatMessageKind.Audio, m.Kind);
             Assert.Contains("preview:555@s.whatsapp.net:Voice", _host.Log);
+        }
+
+        [Fact]
+        public async Task A_refused_voice_note_stays_on_screen_as_failed()
+        {
+            _host.SendError = new InvalidOperationException("upload failed");
+
+            ChatMessage m = await Create("AUD1").SendAudioAsync("555@s.whatsapp.net", Audio(Bytes, true));
+
+            Assert.Equal(ChatMessage.StatusFailed, m.Status);
+            Assert.Equal("cache://Audio/AUD1_out" + MediaFileExtensions.ForAudio("audio/ogg; codecs=opus"), m.AudioUri);
         }
 
         private static OutgoingAudio Audio(byte[] bytes, bool isVoice) => new OutgoingAudio
@@ -140,32 +184,53 @@ namespace Unison.Core.Tests.Helpers
         {
             public List<string> Log { get; } = new List<string>();
             public Exception SendError { get; set; }
+            public Exception ConnectError { get; set; }
+            public Exception ReportedError { get; private set; }
+
+            /// <summary>Stands in for a receipt landing on the bubble while the upload is out.</summary>
+            public Action<ChatMessage> OnSend { get; set; }
+
+            private ChatMessage _accepted;
 
             public Task EnsureConnectedAsync()
             {
                 Log.Add("connect");
+                if (ConnectError != null)
+                {
+                    throw ConnectError;
+                }
+
                 return Task.CompletedTask;
             }
 
-            public Task<string> SendImageAsync(string jid, byte[] imageBytes, string caption)
+            public Task SendImageAsync(string jid, byte[] imageBytes, string caption, string messageId)
             {
-                Log.Add("send-image:" + jid);
+                Log.Add("send-image:" + jid + ":" + messageId);
+                return Sent();
+            }
+
+            public Task SendAudioAsync(string jid, OutgoingAudio audio, string messageId)
+            {
+                Log.Add("send-audio:" + jid + ":" + messageId);
+                return Sent();
+            }
+
+            private Task Sent()
+            {
                 if (SendError != null)
                 {
                     throw SendError;
                 }
 
-                return Task.FromResult("IMG1");
+                OnSend?.Invoke(_accepted);
+                return Task.CompletedTask;
             }
 
-            public Task<string> SendAudioAsync(string jid, OutgoingAudio audio)
+            public void AcceptOutgoing(string chatJid, ChatMessage message)
             {
-                Log.Add("send-audio:" + jid);
-                return Task.FromResult("AUD1");
-            }
-
-            public void AcceptOutgoing(string chatJid, ChatMessage message) =>
+                _accepted = message;
                 Log.Add("accept:" + chatJid + ":" + message.Status);
+            }
 
             public Task ShowLocalSendPreviewAsync(string chatJid, ChatMessage message, ChatPreviewKind kind)
             {
@@ -177,7 +242,11 @@ namespace Unison.Core.Tests.Helpers
 
             public void QueueForPersist(string chatJid, ChatMessage message) => Log.Add("queue-persist:" + chatJid);
 
-            public Task PersistLiveAsync(string chatJid, ChatMessage message) => throw new NotSupportedException();
+            public Task PersistLiveAsync(string chatJid, ChatMessage message)
+            {
+                Log.Add("persist:" + chatJid + ":" + message.Status);
+                return Task.CompletedTask;
+            }
 
             public Task<OutgoingSendAttempt> TrySendTextOnceAsync(OutgoingTextAttempt request) => throw new NotSupportedException();
 
@@ -189,7 +258,7 @@ namespace Unison.Core.Tests.Helpers
 
             public void RecordSendFailure(string messageId, Exception error) => throw new NotSupportedException();
 
-            public void ReportError(Exception error) => throw new NotSupportedException();
+            public void ReportError(Exception error) => ReportedError = error;
         }
 
         private sealed class FakeCache : IMediaCache

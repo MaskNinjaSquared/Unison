@@ -67,11 +67,11 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>Reconnects with the default budget when the socket is down.</summary>
         Task EnsureConnectedAsync();
 
-        /// <summary>Uploads and sends. Returns the message id; throws when the send fails.</summary>
-        Task<string> SendImageAsync(string jid, byte[] imageBytes, string caption);
+        /// <summary>Uploads and sends under <paramref name="messageId"/>; throws when the send fails.</summary>
+        Task SendImageAsync(string jid, byte[] imageBytes, string caption, string messageId);
 
-        /// <summary>Uploads and sends. Returns the message id; throws when the send fails.</summary>
-        Task<string> SendAudioAsync(string jid, OutgoingAudio audio);
+        /// <summary>Uploads and sends under <paramref name="messageId"/>; throws when the send fails.</summary>
+        Task SendAudioAsync(string jid, OutgoingAudio audio, string messageId);
 
         /// <summary>Files the bubble in memory: pending receipts applied, inserted in order, id indexed.</summary>
         void AcceptOutgoing(string chatJid, ChatMessage message);

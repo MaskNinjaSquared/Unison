@@ -165,14 +165,19 @@ namespace Unison.Uwp.Client
 
         Task<string> SendTextMessageAsync(string jid, string text, string explicitMessageId = null);
 
-        Task<string> SendImageMessageAsync(string jid, byte[] imageBytes, string caption = null);
+        Task<string> SendImageMessageAsync(
+            string jid,
+            byte[] imageBytes,
+            string caption = null,
+            string explicitMessageId = null);
 
         Task<string> SendAudioMessageAsync(
             string jid,
             byte[] audioBytes,
             string mimeType,
             uint durationSeconds,
-            bool isVoiceMessage = false);
+            bool isVoiceMessage = false,
+            string explicitMessageId = null);
 
         Task<string> SendPinInChatMessageAsync(
             string jid,
