@@ -22,7 +22,7 @@ namespace Unison.Core.Helpers
     /// </remarks>
     public sealed class GroupMetadataApply
     {
-        private readonly IGroupHost _host;
+        private readonly IGroupNaming _naming;
         private readonly IDispatcher _ui;
         private readonly IChatCatalogPersistence _catalog;
         private readonly GroupRosterWriter _rosterWriter;
@@ -33,7 +33,7 @@ namespace Unison.Core.Helpers
         private readonly Func<DateTime> _utcNow;
 
         public GroupMetadataApply(
-            IGroupHost host,
+            IGroupNaming naming,
             IDispatcher ui,
             IChatCatalogPersistence catalog,
             GroupRosterWriter rosterWriter,
@@ -43,7 +43,7 @@ namespace Unison.Core.Helpers
             DisplayNameTable subjects,
             Func<DateTime> utcNow = null)
         {
-            _host = host ?? throw new ArgumentNullException(nameof(host));
+            _naming = naming ?? throw new ArgumentNullException(nameof(naming));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _rosterWriter = rosterWriter ?? throw new ArgumentNullException(nameof(rosterWriter));
@@ -245,7 +245,7 @@ namespace Unison.Core.Helpers
                     PhoneNumber = string.IsNullOrWhiteSpace(draft.PhoneNumber) ? null : draft.PhoneNumber,
                     Lid = string.IsNullOrWhiteSpace(draft.Lid) ? null : draft.Lid,
                     Role = draft.Role,
-                    DisplayName = _host.ResolveMemberDisplayName(draft.Jid),
+                    DisplayName = _naming.ResolveMemberDisplayName(draft.Jid),
                     AvatarUrl = avatarUrl,
                     AvatarFetchedAtUtc = fetchedAt,
                     AvatarFetchFailedAtUtc = prior?.AvatarFetchFailedAtUtc,
@@ -275,9 +275,9 @@ namespace Unison.Core.Helpers
 
         private void ApplySyncedLabel(ChatItem chat)
         {
-            string resolved = _host.ResolveChatDisplayName(chat.JID);
-            bool incomingMeaningful = _host.IsMeaningfulGroupLabel(resolved, chat.JID);
-            bool existingMeaningful = _host.IsMeaningfulGroupLabel(chat.Name, chat.JID);
+            string resolved = _naming.ResolveChatDisplayName(chat.JID);
+            bool incomingMeaningful = _naming.IsMeaningfulGroupLabel(resolved, chat.JID);
+            bool existingMeaningful = _naming.IsMeaningfulGroupLabel(chat.Name, chat.JID);
             if (GroupNameSyncBlacklist.ShouldApplySyncedSubject(resolved, incomingMeaningful, existingMeaningful))
             {
                 chat.Name = resolved;
@@ -303,9 +303,9 @@ namespace Unison.Core.Helpers
 
             string cached;
 
-            return (_subjects.TryGetValue(groupJid, out cached) && _host.IsMeaningfulGroupLabel(cached, groupJid)) ||
+            return (_subjects.TryGetValue(groupJid, out cached) && _naming.IsMeaningfulGroupLabel(cached, groupJid)) ||
 
-                   _host.IsMeaningfulGroupLabel(rowName, groupJid);
+                   _naming.IsMeaningfulGroupLabel(rowName, groupJid);
 
         }
 

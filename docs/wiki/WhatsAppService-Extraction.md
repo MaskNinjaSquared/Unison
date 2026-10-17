@@ -646,7 +646,7 @@ account, then one `SchedulePersist`. The reader now hands it `GroupMetadataSnaps
 **Restore.** `GroupRosterRestore` (Core) reads `IGroupRosterStore`, finds the canonical row in
 `IChatStateStore.Chats` and fills it if it is still empty.
 
-**Names.** Both flows label members and rows through `IGroupHost`, which was once implemented by
+**Names.** Both flows label members and rows through `IGroupNaming` (formerly `IGroupHost`), which was once implemented by
 the client and is now `GroupNaming` (Core) over `ContactDisplayNames`, `ISelfMarkerNaming` and
 `IStringResources`. The UI hop, the saves, the row and avatar lookups and the subject cache left
 the port one at a time; see phase 4 below.
@@ -1231,7 +1231,7 @@ façades. The roster and membership saves left too: `GroupRosterWriter` (Core) o
 `IGroupRosterStore` and `IPersonStore` and writes in the background, so a failed save is logged
 and never reaches the UI pass. `FindGroupRowName` and `CacheGroupSubject` went next: the applier reads
 the group's rows from `ChatRowIndex` and writes the subject into the push-name `DisplayNameTable`
-(`ContactNames`) itself. So did `HasMeaningfulGroupLabel`, which only combined that cache with the label rule. The 1:1 avatar lookup is `ChatRowAvatarLookup` (Core), which tries the member's JID, phone and LID on `ChatRowIndex`. The name rules went last: `GroupNaming` (Core) implements the port over `ContactDisplayNames`, so the client no longer implements `IGroupHost` and `WhatsAppService.GroupHost.cs` is gone. The client builds its own `GroupNaming` for the receipt-path applier, the way it already builds `JidResolver`.
+(`ContactNames`) itself. So did `HasMeaningfulGroupLabel`, which only combined that cache with the label rule. The 1:1 avatar lookup is `ChatRowAvatarLookup` (Core), which tries the member's JID, phone and LID on `ChatRowIndex`. The name rules went last: `GroupNaming` (Core) implements the port over `ContactDisplayNames`, so the client no longer implements `IGroupHost` and `WhatsAppService.GroupHost.cs` is gone. The client builds its own `GroupNaming` for the receipt-path applier, the way it already builds `JidResolver`. With nothing of the client left behind it, the port was renamed `IGroupNaming`.
 
 **Step 1 is done: the app lifecycle goes through the façade.** `IConnectionService` gained
 `ResumeAsync`, `ReleaseMemoryAsync`, `TransferActiveSocketToBrokerAsync`, `PrepareForSuspendAsync`

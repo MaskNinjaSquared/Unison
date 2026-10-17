@@ -18,20 +18,20 @@ namespace Unison.Core.Helpers
     {
         private const string GroupServer = "@g.us";
 
-        private readonly IGroupHost _host;
+        private readonly IGroupNaming _naming;
         private readonly IDispatcher _ui;
         private readonly IJidResolver _jids;
         private readonly IChatStateStore _chats;
         private readonly IGroupRosterStore _store;
 
         public GroupRosterRestore(
-            IGroupHost host,
+            IGroupNaming naming,
             IDispatcher ui,
             IJidResolver jids,
             IChatStateStore chats,
             IGroupRosterStore store)
         {
-            _host = host ?? throw new ArgumentNullException(nameof(host));
+            _naming = naming ?? throw new ArgumentNullException(nameof(naming));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _chats = chats ?? throw new ArgumentNullException(nameof(chats));
@@ -79,7 +79,7 @@ namespace Unison.Core.Helpers
                 return;
             }
 
-            List<GroupMember> hydrated = GroupRosterRules.HydrateFromStore(stored, _host.ResolveMemberDisplayName);
+            List<GroupMember> hydrated = GroupRosterRules.HydrateFromStore(stored, _naming.ResolveMemberDisplayName);
             if (hydrated.Count == 0)
             {
                 return;

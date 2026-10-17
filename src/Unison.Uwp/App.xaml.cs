@@ -482,7 +482,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IChatService>()));
             // The group apply and the roster restore live in Core and run from GroupFacade; they
             // label members and rows through the shared contact-name resolver.
-            services.AddSingleton<IGroupHost>(sp => new GroupNaming(
+            services.AddSingleton<IGroupNaming>(sp => new GroupNaming(
                 sp.GetRequiredService<ContactDisplayNames>(),
                 sp.GetRequiredService<IJidResolver>(),
                 sp.GetRequiredService<ISelfMarkerNaming>(),
@@ -490,11 +490,11 @@ namespace Unison.Uwp
             services.AddSingleton<IGroupService>(sp => new GroupFacade(
                 sp.GetRequiredService<IWhatsAppService>(),
                 sp.GetRequiredService<IWhatsAppSessionProvider>(),
-                sp.GetRequiredService<IGroupHost>(),
+                sp.GetRequiredService<IGroupNaming>(),
                 sp.GetRequiredService<IChatStateStore>(),
                 sp.GetRequiredService<IJidResolver>(),
                 new GroupMetadataApply(
-                    sp.GetRequiredService<IGroupHost>(),
+                    sp.GetRequiredService<IGroupNaming>(),
                     sp.GetRequiredService<AttachedUiDispatcher>(),
                     sp.GetRequiredService<IChatCatalogPersistence>(),
                     new GroupRosterWriter(
@@ -505,7 +505,7 @@ namespace Unison.Uwp
                     sp.GetRequiredService<ChatRowIndex>(),
                     sp.GetRequiredService<ChatStateStore>().PushNames),
                 new GroupRosterRestore(
-                    sp.GetRequiredService<IGroupHost>(),
+                    sp.GetRequiredService<IGroupNaming>(),
                     sp.GetRequiredService<AttachedUiDispatcher>(),
                     sp.GetRequiredService<IJidResolver>(),
                     sp.GetRequiredService<IChatStateStore>(),

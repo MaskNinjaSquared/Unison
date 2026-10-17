@@ -10,7 +10,7 @@ namespace Unison.Core.Helpers
     /// name. Reads the shared name tables through <see cref="ContactDisplayNames"/>, the same
     /// resolver the chat list and <c>ContactFacade</c> use.
     /// </summary>
-    public sealed class GroupNaming : IGroupHost
+    public sealed class GroupNaming : IGroupNaming
     {
         private const string ChatContext = "chat";
         private const string SenderContext = "sender";

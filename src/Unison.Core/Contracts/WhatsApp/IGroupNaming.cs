@@ -1,21 +1,15 @@
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using Unison.Core.Models;
-
 namespace Unison.Core.Contracts.WhatsApp
 {
     /// <summary>
-    /// What the group flows in Core still need from the compatibility client.
+    /// The labels the group flows in Core put on members and rows, and whether a group label is
+    /// a real name.
     /// </summary>
     /// <remarks>
-    /// Each member is a primitive the client owns for reasons unrelated to groups: names come from
-    /// the contact-name cache and the localized self-chat wording (3.6).
-    /// <para>
-    /// The flows decide the order; nothing here decides anything about groups.
-    /// </para>
+    /// Behind an interface so the flows can be tested without the contact-name tables, the
+    /// person store and the localized self wording (3.6). The flows decide the order; nothing
+    /// here decides anything about groups.
     /// </remarks>
-    public interface IGroupHost
+    public interface IGroupNaming
     {
         /// <summary>The label a member shows in the roster. Never null; falls back to the JID.</summary>
         string ResolveMemberDisplayName(string jid);

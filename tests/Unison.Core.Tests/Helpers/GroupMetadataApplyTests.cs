@@ -24,7 +24,7 @@ namespace Unison.Core.Tests.Helpers
 
             Assert.True(f.Apply.TryCacheSyncedSubject(Group, "Família", null));
 
-            Assert.Equal("Família", f.Host.CachedNames[Group]);
+            Assert.Equal("Família", f.Naming.CachedNames[Group]);
         }
 
         [Fact]
@@ -35,7 +35,7 @@ namespace Unison.Core.Tests.Helpers
             Assert.False(f.Apply.TryCacheSyncedSubject(Group, " ", null));
             Assert.False(f.Apply.TryCacheSyncedSubject(Group, "120363000000000001", null));
 
-            Assert.Empty(f.Host.CachedNames);
+            Assert.Empty(f.Naming.CachedNames);
         }
 
         [Fact]
@@ -51,22 +51,22 @@ namespace Unison.Core.Tests.Helpers
         public void TryCacheSyncedSubject_keeps_a_good_cached_subject_from_a_blacklisted_one()
         {
             var f = new Fixture();
-            f.Host.CachedNames.Set(Group, "Família");
+            f.Naming.CachedNames.Set(Group, "Família");
 
             Assert.False(f.Apply.TryCacheSyncedSubject(Group, "Invite link", null));
 
-            Assert.Equal("Família", f.Host.CachedNames[Group]);
+            Assert.Equal("Família", f.Naming.CachedNames[Group]);
         }
 
         [Fact]
         public void TryCacheSyncedSubject_replaces_a_cached_placeholder()
         {
             var f = new Fixture();
-            f.Host.CachedNames.Set(Group, "120363000000000001");
+            f.Naming.CachedNames.Set(Group, "120363000000000001");
 
             Assert.True(f.Apply.TryCacheSyncedSubject(Group, "Invite link", null));
 
-            Assert.Equal("Invite link", f.Host.CachedNames[Group]);
+            Assert.Equal("Invite link", f.Naming.CachedNames[Group]);
         }
 
         // ---- listing --------------------------------------------------------
@@ -100,7 +100,7 @@ namespace Unison.Core.Tests.Helpers
                 MemberCount = 12
             }));
 
-            Assert.Equal("Família", f.Host.CachedNames[Group]);
+            Assert.Equal("Família", f.Naming.CachedNames[Group]);
             Assert.Equal(1, f.Ui.Passes);
             Assert.Equal(1, f.Catalog.Schedules);
             Assert.True(chat.IsGroup);
@@ -128,7 +128,7 @@ namespace Unison.Core.Tests.Helpers
         {
             var f = new Fixture();
             var chat = f.AddChat(Group, "Família");
-            f.Host.ChatNames[Group] = "Invite link";
+            f.Naming.ChatNames[Group] = "Invite link";
 
             await f.Apply.ApplyListingAsync(Listing(new GroupMetadataSnapshot { Jid = Group, Subject = "Invite link" }));
 
@@ -144,7 +144,7 @@ namespace Unison.Core.Tests.Helpers
 
             await f.Apply.ApplyListingAsync(Listing(new GroupMetadataSnapshot { Jid = Group, Subject = "Invite link" }));
 
-            Assert.Empty(f.Host.CachedNames);
+            Assert.Empty(f.Naming.CachedNames);
         }
 
         [Fact]
@@ -159,7 +159,7 @@ namespace Unison.Core.Tests.Helpers
                 Subject = "120363000000000001",
                 MemberCount = 0
             }));
-            Assert.Empty(f.Host.CachedNames);
+            Assert.Empty(f.Naming.CachedNames);
             Assert.Equal("Família", chat.Name);
         }
 
@@ -219,7 +219,7 @@ namespace Unison.Core.Tests.Helpers
         {
             var f = new Fixture();
             var chat = f.AddChat(Group, "Família");
-            f.Host.MemberNames["111@s.whatsapp.net"] = "Ana";
+            f.Naming.MemberNames["111@s.whatsapp.net"] = "Ana";
             f.AddChat("222@s.whatsapp.net", "Bia").AvatarUrl = "b.jpg";
             var drafts = new List<GroupMemberDraft>
             {
@@ -300,7 +300,7 @@ namespace Unison.Core.Tests.Helpers
             var list = new List<GroupMember> { ana };
             chat.GroupMembers = list;
             chat.GroupMemberCount = 0;
-            f.Host.MemberNames["111@s.whatsapp.net"] = "Ana";
+            f.Naming.MemberNames["111@s.whatsapp.net"] = "Ana";
 
             f.Apply.ApplyMembers(chat, new List<GroupMemberDraft>
             {
@@ -352,10 +352,10 @@ namespace Unison.Core.Tests.Helpers
                 Chats.GroupRosterChanged += (s, jid) => Announced.Add(jid);
                 Rows = new ChatRowIndex(() => Chats.Chats, Jids.GetCanonicalJid);
                 Apply = new GroupMetadataApply(
-                    Host, Ui, Catalog, new GroupRosterWriter(Rosters, People), Jids, Chats, Rows, Host.CachedNames, () => Now);
+                    Naming, Ui, Catalog, new GroupRosterWriter(Rosters, People), Jids, Chats, Rows, Naming.CachedNames, () => Now);
             }
 
-            public FakeGroupHost Host { get; } = new FakeGroupHost();
+            public FakeGroupNaming Naming { get; } = new FakeGroupNaming();
 
             public CountingDispatcher Ui { get; } = new CountingDispatcher();
 

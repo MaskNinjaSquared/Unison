@@ -25,7 +25,7 @@ namespace Unison.Core.Tests.Helpers
                 new GroupMember { Jid = "111@s.whatsapp.net", DisplayName = "Ana" },
                 new GroupMember { Jid = "222@s.whatsapp.net" }
             };
-            fixture.Host.MemberNames["222@s.whatsapp.net"] = "Bia";
+            fixture.Naming.MemberNames["222@s.whatsapp.net"] = "Bia";
 
             await fixture.Restore.EnsureLoadedAsync("1203-alias@g.us");
 
@@ -101,10 +101,10 @@ namespace Unison.Core.Tests.Helpers
             {
                 Chats = new ChatStateStore(new InlineDispatcher());
                 Chats.GroupRosterChanged += (s, jid) => Announced.Add(jid);
-                Restore = new GroupRosterRestore(Host, Ui, Jids, Chats, Store);
+                Restore = new GroupRosterRestore(Naming, Ui, Jids, Chats, Store);
             }
 
-            public FakeGroupHost Host { get; } = new FakeGroupHost();
+            public FakeGroupNaming Naming { get; } = new FakeGroupNaming();
 
             public CountingDispatcher Ui { get; } = new CountingDispatcher();
 

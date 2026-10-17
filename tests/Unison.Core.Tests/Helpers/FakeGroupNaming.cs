@@ -8,8 +8,8 @@ using Unison.Core.State;
 
 namespace Unison.Core.Tests.Helpers
 {
-    /// <summary>Records what the group flows asked the client to do.</summary>
-    internal sealed class FakeGroupHost : IGroupHost
+    /// <summary>Names from dictionaries; the subject cache is a real table the applier writes.</summary>
+    internal sealed class FakeGroupNaming : IGroupNaming
     {
         public Dictionary<string, string> MemberNames { get; } =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

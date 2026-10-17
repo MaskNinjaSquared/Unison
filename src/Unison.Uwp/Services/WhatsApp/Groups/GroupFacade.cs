@@ -35,7 +35,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
 
         private readonly IWhatsAppService _client;
         private readonly IWhatsAppSessionProvider _sessions;
-        private readonly IGroupHost _host;
+        private readonly IGroupNaming _naming;
         private readonly IDispatcher _ui;
         private readonly IChatCatalogPersistence _catalog;
         private readonly IChatStateStore _chats;
@@ -53,7 +53,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
         internal GroupFacade(
             IWhatsAppService client,
             IWhatsAppSessionProvider sessions,
-            IGroupHost host,
+            IGroupNaming naming,
             IChatStateStore chats,
             IJidResolver jids,
             GroupMetadataApply apply,
@@ -71,7 +71,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
             _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
             _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
             _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
-            _host = host ?? throw new ArgumentNullException(nameof(host));
+            _naming = naming ?? throw new ArgumentNullException(nameof(naming));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _chats = chats ?? throw new ArgumentNullException(nameof(chats));
@@ -361,7 +361,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
                     if (GroupQuery.NeedsMetadata(
                             chat.IsGroup,
                             chat.JID,
-                            _host.IsMeaningfulGroupLabel(chat.Name, chat.JID)))
+                            _naming.IsMeaningfulGroupLabel(chat.Name, chat.JID)))
                     {
                         unresolved.Add(chat);
                     }
