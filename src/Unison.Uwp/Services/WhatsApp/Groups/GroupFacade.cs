@@ -36,6 +36,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
         private readonly IWhatsAppService _client;
         private readonly IWhatsAppSessionProvider _sessions;
         private readonly IGroupNaming _naming;
+        private readonly ChatNameRefresh _nameRefresh;
         private readonly IDispatcher _ui;
         private readonly IChatCatalogPersistence _catalog;
         private readonly IChatStateStore _chats;
@@ -64,7 +65,8 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
             SyncWorkGate syncWork,
             SyncWorkloadStrategy workload,
             IDispatcher ui,
-            IChatCatalogPersistence catalog)
+            IChatCatalogPersistence catalog,
+            ChatNameRefresh nameRefresh)
         {
             _client = client ?? throw new ArgumentNullException(nameof(client));
             _workload = workload ?? throw new ArgumentNullException(nameof(workload));
@@ -74,6 +76,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
             _naming = naming ?? throw new ArgumentNullException(nameof(naming));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
+            _nameRefresh = nameRefresh ?? throw new ArgumentNullException(nameof(nameRefresh));
             _chats = chats ?? throw new ArgumentNullException(nameof(chats));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _apply = apply ?? throw new ArgumentNullException(nameof(apply));
@@ -416,7 +419,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
 
             if (resolved > 0)
             {
-                await _client.ApplyResolvedDisplayNamesToChatsAsync();
+                await _nameRefresh.ApplyAsync();
                 _catalog.Schedule();
             }
 

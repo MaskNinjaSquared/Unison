@@ -308,6 +308,11 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ChatStateStore>(),
                 sp.GetRequiredService<ChatRowIndex>(),
                 sp.GetRequiredService<AttachedUiDispatcher>()));
+            services.AddSingleton(sp => new ChatNameRefresh(
+                sp.GetRequiredService<AttachedUiDispatcher>(),
+                sp.GetRequiredService<IChatStateStore>(),
+                sp.GetRequiredService<ContactDisplayNames>(),
+                sp.GetRequiredService<ISelfMarkerNaming>()));
             services.AddSingleton<IWhatsAppService>(
                 sp => WhatsAppService.Create(
                     sp.GetRequiredService<ChatStateStore>(),
@@ -332,7 +337,8 @@ namespace Unison.Uwp
                     sp.GetRequiredService<IChatStore>(),
                     sp.GetRequiredService<ISystemInfoProvider>(),
                     sp.GetRequiredService<AttachedUiDispatcher>(),
-                    sp.GetRequiredService<ChatPreviewReconciler>()));
+                    sp.GetRequiredService<ChatPreviewReconciler>(),
+                    sp.GetRequiredService<ChatNameRefresh>()));
             // The send flow lives on MessageFacade; the timeline caches and the socket it writes
             // through are still the client's, reached only through this narrow port.
             services.AddSingleton<IOutgoingMessageHost>(
@@ -456,7 +462,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ContactDisplayNames>(),
                 sp.GetRequiredService<SyncBudget>(),
                 sp.GetRequiredService<SyncWorkloadStrategy>(),
-                sp.GetRequiredService<InitialSyncProgressState>()));
+                sp.GetRequiredService<InitialSyncProgressState>(),
+                sp.GetRequiredService<ChatNameRefresh>()));
             services.AddSingleton<IOfflineReplayHost>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IChatService>(sp => new ChatFacade(
@@ -516,7 +523,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<SyncWorkGate>(),
                 sp.GetRequiredService<SyncWorkloadStrategy>(),
                 sp.GetRequiredService<AttachedUiDispatcher>(),
-                sp.GetRequiredService<IChatCatalogPersistence>()));
+                sp.GetRequiredService<IChatCatalogPersistence>(),
+                sp.GetRequiredService<ChatNameRefresh>()));
             services.AddSingleton<ILiveTilesService>(_ => LiveTilesService.Instance);
             services.AddSingleton<IShortcutService, ShortcutService>();
             services.AddSingleton<INotificationService>(sp =>

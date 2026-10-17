@@ -39,6 +39,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly IWhatsAppService _whatsAppService;
         private readonly IWhatsAppSessionProvider _sessions;
         private readonly IDispatcher _ui;
+        private readonly ChatNameRefresh _nameRefresh;
         private readonly IChatCatalogPersistence _catalog;
         private readonly IGroupService _groups;
         private readonly AddressBookOverlay _addressBook;
@@ -66,9 +67,11 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             IChatStateStore chatState,
             SyncStatusChannel syncStatus,
             SyncWorkGate syncWork,
-            IWhatsAppSessionProvider sessions)
+            IWhatsAppSessionProvider sessions,
+            ChatNameRefresh nameRefresh)
         {
             _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
+            _nameRefresh = nameRefresh ?? throw new ArgumentNullException(nameof(nameRefresh));
             _pushNames = pushNames ?? throw new ArgumentNullException(nameof(pushNames));
             _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
             _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
@@ -169,7 +172,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 }
 
                 await _addressBook.RefreshAsync(force);
-                await _whatsAppService.ApplyResolvedDisplayNamesToChatsAsync();
+                await _nameRefresh.ApplyAsync();
                 _catalog.Schedule();
                 _lastRefreshUtc = DateTime.UtcNow;
 
@@ -202,7 +205,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             // Names already on file come first and need no network. Every exit below (refresh
             // running, cooldown, nothing left to ask) used to skip them, so after a sync the list
             // kept numbers the chat screen could already name.
-            await _whatsAppService.ApplyResolvedDisplayNamesToChatsAsync();
+            await _nameRefresh.ApplyAsync();
 
             if (_isRunning)
             {
@@ -279,7 +282,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             try
             {
                 await _addressBook.RefreshAsync(force: false);
-                await _whatsAppService.ApplyResolvedDisplayNamesToChatsAsync();
+                await _nameRefresh.ApplyAsync();
                 _catalog.Schedule();
             }
             catch (Exception exPost)

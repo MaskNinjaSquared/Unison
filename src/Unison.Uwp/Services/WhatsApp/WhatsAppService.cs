@@ -732,6 +732,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private readonly ChatRowIndex _chatRows;
         private readonly ChatPreviewReconciler _previewReconciler;
+        private readonly ChatNameRefresh _nameRefresh;
 
         public DisplayNameTable ContactNames => _chatState.PushNames;
         public DisplayNameTable PhoneContactNamesByJid => _chatState.AddressBookNames;
@@ -1081,7 +1082,8 @@ namespace Unison.Uwp.Services.WhatsApp
             IChatStore chatStore,
             ISystemInfoProvider systemInfo,
             AttachedUiDispatcher ui,
-            ChatPreviewReconciler previewReconciler)
+            ChatPreviewReconciler previewReconciler,
+            ChatNameRefresh nameRefresh)
         {
             if (chatState == null)
             {
@@ -1100,6 +1102,8 @@ namespace Unison.Uwp.Services.WhatsApp
             _isWindowsMobile = systemInfo.IsMobile();
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _previewReconciler = previewReconciler ?? throw new ArgumentNullException(nameof(previewReconciler));
+            _nameRefresh = nameRefresh ?? throw new ArgumentNullException(nameof(nameRefresh));
+            _nameRefresh.Applied += OnChatNamesApplied;
             _chatRows = chatRows ?? throw new ArgumentNullException(nameof(chatRows));
             _activeChat = activeChat ?? throw new ArgumentNullException(nameof(activeChat));
             _activeChat.Changed += OnActiveChatChanged;
@@ -1177,11 +1181,12 @@ namespace Unison.Uwp.Services.WhatsApp
             IChatStore chatStore,
             ISystemInfoProvider systemInfo,
             AttachedUiDispatcher ui,
-            ChatPreviewReconciler previewReconciler)
+            ChatPreviewReconciler previewReconciler,
+            ChatNameRefresh nameRefresh)
         {
             return _instance ?? (_instance = new WhatsAppService(
                 chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
-                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, previewReconciler));
+                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, previewReconciler, nameRefresh));
         }
 
         /// <summary>
@@ -4477,23 +4482,13 @@ namespace Unison.Uwp.Services.WhatsApp
             return LocalizedStrings.Get("Chat_SelfFallbackName", "You");
         }
 
-        private async Task ApplyResolvedNamesToChatsAsync()
-        {
-            await _ui.RunAsync(() =>
-                {
-                    int updated = ResolvedNameApply.Apply(
-                        Chats,
-                        ResolveDisplayName,
-                        IsMeaningfulChatLabel,
-                        membersToo: true);
+        private Task ApplyResolvedNamesToChatsAsync() => _nameRefresh.ApplyAsync();
 
-                    if (updated > 0)
-                    {
-                        Debug.WriteLine($"[WhatsAppService] Applied resolved display names to {updated} chats");
-                        RuntimeDiagnosticsService.Instance.Write("names", "list-names-applied", "count=" + updated);
-                        OnDisplayNamesUpdated?.Invoke(this, EventArgs.Empty);
-                    }
-                });
+        private void OnChatNamesApplied(object sender, int updated)
+        {
+            Debug.WriteLine($"[WhatsAppService] Applied resolved display names to {updated} chats");
+            RuntimeDiagnosticsService.Instance.Write("names", "list-names-applied", "count=" + updated);
+            OnDisplayNamesUpdated?.Invoke(this, EventArgs.Empty);
         }
 
         /// <summary>Delegates to <see cref="IContactService"/>; this class only supplies the client primitives.</summary>

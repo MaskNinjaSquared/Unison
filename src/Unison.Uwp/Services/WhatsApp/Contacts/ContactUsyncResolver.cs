@@ -39,6 +39,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly IChatStateStore _chats;
         private readonly AvatarFetcher _avatars;
         private readonly IDispatcher _ui;
+        private readonly ChatNameRefresh _nameRefresh;
 
         internal ContactUsyncResolver(
             IWhatsAppService client,
@@ -49,10 +50,12 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             ContactLabelSanitizer labels,
             IChatStateStore chats,
             AvatarFetcher avatars,
-            IDispatcher ui)
+            IDispatcher ui,
+            ChatNameRefresh nameRefresh)
         {
             _avatars = avatars ?? throw new ArgumentNullException(nameof(avatars));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
+            _nameRefresh = nameRefresh ?? throw new ArgumentNullException(nameof(nameRefresh));
             _client = client ?? throw new ArgumentNullException(nameof(client));
             _directory = directory ?? throw new ArgumentNullException(nameof(directory));
             _gate = gate ?? throw new ArgumentNullException(nameof(gate));
@@ -96,7 +99,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
                     if (cachesChanged)
                     {
-                        await _client.ApplyResolvedDisplayNamesToChatsAsync().ConfigureAwait(false);
+                        await _nameRefresh.ApplyAsync().ConfigureAwait(false);
                     }
                 }
             }

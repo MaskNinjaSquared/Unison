@@ -1351,6 +1351,14 @@ skipped and row property changes do not post refreshes; the completed event rele
 runs one full reconcile, which applies its tips to the UI thread in slices. Later syncs release
 progressively.
 
+**Renaming rows after names arrive is `ChatNameRefresh`.** (`Unison.Core`, DI singleton over the UI
+dispatcher, `IChatStateStore`, `ContactDisplayNames` and `ISelfMarkerNaming`.) It runs
+`ResolvedNameApply` over the rows in one UI pass and raises `Applied` inside that pass. `GroupFacade`,
+`ContactFacade`, `ContactNameResolver` and `ContactUsyncResolver` call it directly, and
+`ApplyResolvedDisplayNamesToChatsAsync` left `IWhatsAppService`. The client still runs it from its own
+paths, and on `Applied` writes the diagnostics line and raises `OnDisplayNamesUpdated`, which
+`ContactFacade` relays as `DisplayNamesUpdated`.
+
 **Done when:** `.Connection.cs` + a small main file; no façade needs send/history/avatar/group/list methods on the client; leftover `IWhatsAppSocket` drop is [Migration](Migration) item 9, after this.
 
 ---

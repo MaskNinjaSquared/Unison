@@ -48,6 +48,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly DisplayNameTable _addressBookNames;
         private readonly IChatStateStore _chatState;
         private readonly ContactDisplayNames _displayNames;
+        private readonly ChatNameRefresh _nameRefresh;
 
         private readonly ContactDirectory _directory;
         private readonly AddressBookOverlay _addressBook;
@@ -85,9 +86,11 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             ContactDisplayNames displayNames,
             SyncBudget syncBudget,
             SyncWorkloadStrategy workload,
-            InitialSyncProgressState initialSync)
+            InitialSyncProgressState initialSync,
+            ChatNameRefresh nameRefresh)
         {
             _displayNames = displayNames ?? throw new ArgumentNullException(nameof(displayNames));
+            _nameRefresh = nameRefresh ?? throw new ArgumentNullException(nameof(nameRefresh));
             if (selfMarkers == null) throw new ArgumentNullException(nameof(selfMarkers));
             if (syncStatus == null) throw new ArgumentNullException(nameof(syncStatus));
             if (syncWork == null) throw new ArgumentNullException(nameof(syncWork));
@@ -125,7 +128,8 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 labels,
                 chats,
                 avatars,
-                ui);
+                ui,
+                nameRefresh);
             _names = new ContactNameResolver(
                 whatsAppService,
                 _addressBook,
@@ -139,7 +143,8 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 chats,
                 syncStatus,
                 syncWork,
-                sessions);
+                sessions,
+                nameRefresh);
             _avatars = new ChatAvatarPolicy(
                 whatsAppService,
                 jids,
@@ -601,7 +606,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             int mapped = await _addressBook.RefreshChatListAsync().ConfigureAwait(false);
             if (mapped > 0)
             {
-                await _whatsAppService.ApplyResolvedDisplayNamesToChatsAsync().ConfigureAwait(false);
+                await _nameRefresh.ApplyAsync().ConfigureAwait(false);
             }
         }
 

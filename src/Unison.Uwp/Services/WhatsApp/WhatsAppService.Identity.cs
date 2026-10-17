@@ -42,9 +42,6 @@ namespace Unison.Uwp.Services.WhatsApp
 {
     public partial class WhatsAppService
     {
-        /// <summary>Re-applies <see cref="ResolveDisplayName"/> to each chat's Name where it changed.</summary>
-        public Task ApplyResolvedDisplayNamesToChatsAsync() => ApplyResolvedNamesToChatsAsync();
-
         private void RegisterSocketAlias(string jidA, string jidB, string source)
         {
             _socket?.RegisterJidAlias(jidA, jidB, source);

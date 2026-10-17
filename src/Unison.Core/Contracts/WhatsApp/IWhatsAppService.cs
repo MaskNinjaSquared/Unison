@@ -140,8 +140,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>Collapses the LID and phone rows of one person into one chat.</summary>
         Task MergeDuplicateChatsAsync(string lidJid, string pnJid);
 
-        /// <summary>Re-applies <see cref="ResolveDisplayName"/> to each chat's Name where it changed.</summary>
-        Task ApplyResolvedDisplayNamesToChatsAsync();
 
         /// <summary>Schedules another background resolution pass (names+avatars+groups) after a delay.</summary>
         void ScheduleDeferredAvatarResolution(string reason, TimeSpan? delay = null);
