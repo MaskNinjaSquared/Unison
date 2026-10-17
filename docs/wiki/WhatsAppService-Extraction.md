@@ -1245,6 +1245,16 @@ on-demand chats on `HistoryOnDemandRegistry` itself, so `CompleteHistoryOnDemand
 contract too. What the pump still asks of the façades (`ApplyLiveIncomingChatListAsync`, the
 offline tips, reactions, notifications, media hydration) is real façade work.
 
+**Names are answered by `ContactDisplayNames`.** (`Unison.Core/State`, DI singleton over
+`JidAliasTable`, the push-name and address-book `DisplayNameTable`s, `IPersonStore` and
+`ISelfMarkerNaming`.) It holds the lookups that feed `DisplayNameResolution` and the self-name
+rule that were in `.Identity.cs`. The client binds it once, like `JidAliasTable.BindSelf`, with
+the account's id, LID, credentials name, current name and phone, plus its label-decision log.
+`ContactFacade.ResolveDisplayName` answers from it; the client's own `ResolveDisplayName` delegates
+to it for its internal callers. `IWhatsAppService.ResolveDisplayName` is gone, and `ChatFacade`
+names rows through `IContactService` only. Writing names (push names, the person store, the
+overlay) did not move.
+
 **Done when:** `.Connection.cs` + a small main file; no façade needs send/history/avatar/group/list methods on the client; leftover `IWhatsAppSocket` drop is [Migration](Migration) item 9, after this.
 
 ---
