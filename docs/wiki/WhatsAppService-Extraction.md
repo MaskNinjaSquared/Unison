@@ -1270,9 +1270,14 @@ handshake finished, the same test the client made; `ProfileFacade`, `DebugSendSe
 `IWhatsAppService`. `AddressBookOverlay`, `ChatAvatarFetch` and `GroupRosterPolicy` no longer take
 the client at all.
 
-Next candidate: the sync budget (`PreferFrugalSyncBudget`, `IsInitialSyncSafeMode`, the initial
-sync counters). It reads the client's safe-mode flag, which `PublishInitialSyncProgress` owns, so
-it moves together with that state rather than as a rule on its own.
+**The sync budget and first-sync progress are shared state.** `InitialSyncProgressState`
+(`Unison.Core/State`, DI singleton) holds whether the first sync is active and its counters, and
+raises `Changed`; the client still decides when it starts and ends and calls `Publish` from
+`PublishInitialSyncProgress`, which keeps the diagnostics line. `SyncBudget` (DI singleton over the
+chat store, that state, `SyncWorkGate`, `HistoryOnDemandRegistry`, a memory-headroom `Func` and the
+Mobile flag) answers `IsFrugal`; the rule itself is the pure `SyncBudget.PreferFrugal`, tested.
+`HistoryFacade` and `ChatAvatarPolicy` read both directly. `IsInitialSyncSafeMode`,
+`PreferFrugalSyncBudget`, the two counters and `OnInitialSyncProgress` left `IWhatsAppService`.
 
 **Done when:** `.Connection.cs` + a small main file; no façade needs send/history/avatar/group/list methods on the client; leftover `IWhatsAppSocket` drop is [Migration](Migration) item 9, after this.
 
