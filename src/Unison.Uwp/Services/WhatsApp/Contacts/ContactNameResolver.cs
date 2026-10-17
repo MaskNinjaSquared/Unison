@@ -45,6 +45,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly IJidResolver _jids;
         private readonly PushNameLookup _pushNames;
         private readonly IChatStateStore _chatState;
+        private readonly SyncStatusChannel _syncStatus;
 
         private DateTime _lastRefreshUtc = DateTime.MinValue;
         private volatile bool _isRunning;
@@ -59,9 +60,11 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             IGroupService groups,
             IDispatcher ui,
             IChatCatalogPersistence catalog,
-            IChatStateStore chatState)
+            IChatStateStore chatState,
+            SyncStatusChannel syncStatus)
         {
             _pushNames = pushNames ?? throw new ArgumentNullException(nameof(pushNames));
+            _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
@@ -112,7 +115,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             try
             {
                 _isRunning = true;
-                _whatsAppService.RaiseSyncStatus(SyncPhaseStatus.Format(SyncPhaseStatus.Names));
+                _syncStatus.Raise(SyncPhaseStatus.Format(SyncPhaseStatus.Names));
 
                 if (includeGroups)
                 {
@@ -172,7 +175,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             finally
             {
                 _isRunning = false;
-                _whatsAppService.RaiseSyncStatus(null);
+                _syncStatus.Raise(null);
                 _refreshLock.Release();
             }
         }
@@ -224,7 +227,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             if (needsGroupQuery && DateTime.UtcNow - _lastForcedGroupPassUtc >= ForcedGroupPassWindow)
             {
                 _lastForcedGroupPassUtc = DateTime.UtcNow;
-                _whatsAppService.RaiseSyncStatus(SyncPhaseStatus.Format(SyncPhaseStatus.Groups));
+                _syncStatus.Raise(SyncPhaseStatus.Format(SyncPhaseStatus.Groups));
                 try
                 {
                     // The participating query already falls back to per-group metadata for the
@@ -331,7 +334,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
                 // Each usync can sit for seconds; without a count this whole stretch looked to
                 // the user like the app had stopped doing anything.
-                _whatsAppService.RaiseSyncStatus(
+                _syncStatus.Raise(
                     SyncPhaseStatus.Format(SyncPhaseStatus.Names, i, jids.Count));
 
                 try
@@ -373,7 +376,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             {
                 try
                 {
-                    _whatsAppService.RaiseSyncStatus(
+                    _syncStatus.Raise(
                         SyncPhaseStatus.Format(SyncPhaseStatus.Names, retried++, unresolved.Count));
                     await _usync.ResolveAsync(new[] { jid });
                 }

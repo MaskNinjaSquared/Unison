@@ -45,6 +45,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
         private readonly GroupRosterRestore _rosterRestore;
         private readonly AvatarFetcher _avatars;
         private readonly IUsyncGate _usyncGate;
+        private readonly SyncStatusChannel _syncStatus;
         private readonly GroupQueryWindow _queryWindow = new GroupQueryWindow();
 
         internal GroupFacade(
@@ -56,9 +57,11 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
             GroupMetadataApply apply,
             GroupRosterRestore rosterRestore,
             AvatarFetcher avatars,
-            IUsyncGate usyncGate)
+            IUsyncGate usyncGate,
+            SyncStatusChannel syncStatus)
         {
             _client = client ?? throw new ArgumentNullException(nameof(client));
+            _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
             _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
             _host = host ?? throw new ArgumentNullException(nameof(host));
             _chats = chats ?? throw new ArgumentNullException(nameof(chats));
@@ -75,7 +78,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
 
         private async Task RunBackgroundListingAsync()
         {
-            _client.RaiseSyncStatus(SyncPhaseStatus.Format(SyncPhaseStatus.Groups));
+            _syncStatus.Raise(SyncPhaseStatus.Format(SyncPhaseStatus.Groups));
             try
             {
                 using (new StartupPhaseTrace("background-groups"))
@@ -89,7 +92,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
             }
             finally
             {
-                _client.RaiseSyncStatus(null);
+                _syncStatus.Raise(null);
             }
         }
 
@@ -378,7 +381,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
                 }
 
                 attempts++;
-                _client.RaiseSyncStatus(SyncPhaseStatus.Format(SyncPhaseStatus.Groups, attempts, pending.Count));
+                _syncStatus.Raise(SyncPhaseStatus.Format(SyncPhaseStatus.Groups, attempts, pending.Count));
 
                 try
                 {
@@ -399,7 +402,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
                 await Task.Delay(UnresolvedMetadataPause);
             }
 
-            _client.RaiseSyncStatus(null);
+            _syncStatus.Raise(null);
 
             if (resolved > 0)
             {

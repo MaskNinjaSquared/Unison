@@ -65,6 +65,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
         private readonly HistoryOnDemandRegistry _onDemandRequests;
         private readonly HistoryOnDemandDispatch _onDemand;
         private readonly IChatStateStore _chatState;
+        private readonly SyncStatusChannel _syncStatus;
 
         /// <summary>
         /// Session-scoped: one toast after repeated background history lots. Not reset until
@@ -82,6 +83,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
             HistoryOnDemandRegistry onDemandRequests,
             IHistoryOnDemandSocket onDemandSocket,
             IChatStateStore chatState,
+            SyncStatusChannel syncStatus,
             IHistoryChatPreviewStore chatPreviewStore = null,
             IHistoryMigrationStore migrationStore = null,
             IHistoryMessageStore messageHistoryStore = null,
@@ -119,6 +121,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
                 onDemandSocket ?? throw new ArgumentNullException(nameof(onDemandSocket)),
                 line => Debug.WriteLine("[HistoryFacade] " + line));
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
+            _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
             _chatPreviewStore = chatPreviewStore;
             _migrationStore = migrationStore;
             _messageHistoryStore = messageHistoryStore;
@@ -127,7 +130,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
             _strings = strings;
 
             // Both live as long as the app does, so there is nothing to unhook from.
-            _appState.OnSyncStatus += (s, status) =>
+            _syncStatus.Changed += (s, status) =>
             {
                 Debug.WriteLine("[HistoryFacade] SyncStatusChanged → " + (status ?? "<null>"));
                 Relay(() => SyncStatusChanged?.Invoke(this, status), "SyncStatusChanged");
@@ -712,7 +715,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
             await WipeLocalConversationsAsync().ConfigureAwait(false);
 
             progress?.Report(ConversationResyncPhase.PreparingConversations);
-            _appState.RaiseSyncStatus("Re-syncing conversations...");
+            _syncStatus.Raise("Re-syncing conversations...");
 
             try
             {
@@ -721,7 +724,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
             catch (Exception ex)
             {
                 Debug.WriteLine("[ConversationResync] Could not connect before requesting history: " + ex.Message);
-                _appState.RaiseSyncStatus("Could not start history download. Try again.");
+                _syncStatus.Raise("Could not start history download. Try again.");
                 return;
             }
 
@@ -730,7 +733,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
             var session = _sessions.Current;
             if (socket == null || session == null)
             {
-                _appState.RaiseSyncStatus("Could not start history download. Try again.");
+                _syncStatus.Raise("Could not start history download. Try again.");
                 return;
             }
 
@@ -740,12 +743,12 @@ namespace Unison.Uwp.Services.WhatsApp.History
                 // The latch only exists to make a later connection retry a request that was never
                 // answered. It was, so it would only cause a second full download.
                 TrySetForceHistoryRepair(false);
-                _appState.RaiseSyncStatus(null);
+                _syncStatus.Raise(null);
                 return;
             }
 
             Debug.WriteLine("[ConversationResync] The phone did not answer with history.");
-            _appState.RaiseSyncStatus("History did not arrive. It will be retried on the next connection.");
+            _syncStatus.Raise("History did not arrive. It will be retried on the next connection.");
         }
 
         private async Task WipeLocalConversationsAsync()

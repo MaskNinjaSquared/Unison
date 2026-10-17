@@ -2,6 +2,7 @@ using System.Windows.Input;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
+using Unison.Core.State;
 
 namespace Unison.Core.ViewModels
 {
@@ -33,7 +34,7 @@ namespace Unison.Core.ViewModels
             IConnectionService connectionService,
             ShellViewModel shell,
             IContactService contacts = null,
-            IWhatsAppService whatsApp = null)
+            SyncStatusChannel syncStatus = null)
             : base(
                 localSettings,
                 liveTilesService,
@@ -48,7 +49,7 @@ namespace Unison.Core.ViewModels
                 connectionService,
                 shell,
                 contacts,
-                whatsApp)
+                syncStatus)
         {
             OpenCategoryCommand = new RelayCommand<string>(OpenCategory);
         }

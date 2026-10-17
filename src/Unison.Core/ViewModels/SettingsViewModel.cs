@@ -9,6 +9,7 @@ using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Mappers;
 using Unison.Core.Models;
+using Unison.Core.State;
 
 namespace Unison.Core.ViewModels
 {
@@ -33,7 +34,7 @@ namespace Unison.Core.ViewModels
         /// <summary>Owns leaving the account: unlink on the server, then wipe locally.</summary>
         private readonly IConnectionService _connectionService;
         private readonly IContactService _contacts;
-        private readonly IWhatsAppService _whatsApp;
+        private readonly SyncStatusChannel _syncStatus;
 
         private readonly ShellViewModel _shell;
 
@@ -64,7 +65,7 @@ namespace Unison.Core.ViewModels
             IConnectionService connectionService,
             ShellViewModel shell,
             IContactService contacts = null,
-            IWhatsAppService whatsApp = null)
+            SyncStatusChannel syncStatus = null)
         {
             _localSettings = localSettings;
             _liveTilesService = liveTilesService;
@@ -79,7 +80,7 @@ namespace Unison.Core.ViewModels
             _connectionService = connectionService ?? throw new ArgumentNullException(nameof(connectionService));
             _shell = shell;
             _contacts = contacts;
-            _whatsApp = whatsApp;
+            _syncStatus = syncStatus;
 
             _shell.PropertyChanged += OnShellPropertyChanged;
 
@@ -183,7 +184,7 @@ namespace Unison.Core.ViewModels
                 _localSettings.Set(LocalSettingsConstants.ShowSyncStatus, value);
                 if (!value)
                 {
-                    _whatsApp?.RaiseSyncStatus(null);
+                    _syncStatus?.Raise(null);
                 }
 
                 OnPropertyChanged();

@@ -4,7 +4,7 @@ using System.Globalization;
 namespace Unison.Core.Helpers
 {
     /// <summary>
-    /// The wire format for startup phases reported through <c>IWhatsAppService.OnSyncStatus</c>.
+    /// The wire format for startup phases reported through <see cref="State.SyncStatusChannel"/>.
     /// </summary>
     /// <remarks>
     /// The service used to push finished English sentences ("Fetching contact names..."), which the

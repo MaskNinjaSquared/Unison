@@ -78,9 +78,11 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             DisplayNameTable addressBookNames,
             ISelfMarkerNaming selfMarkers,
             IDispatcher ui,
-            IChatCatalogPersistence catalog)
+            IChatCatalogPersistence catalog,
+            SyncStatusChannel syncStatus)
         {
             if (selfMarkers == null) throw new ArgumentNullException(nameof(selfMarkers));
+            if (syncStatus == null) throw new ArgumentNullException(nameof(syncStatus));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             if (sessions == null) throw new ArgumentNullException(nameof(sessions));
@@ -126,14 +128,16 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 groups,
                 ui,
                 catalog,
-                chats);
+                chats,
+                syncStatus);
             _avatars = new ChatAvatarPolicy(
                 whatsAppService,
                 jids,
                 new ChatAvatarFetch(whatsAppService, sessions, groups, jids, chats, avatarReport, avatars, avatarCache, ui, catalog),
                 ui,
                 catalog,
-                chats);
+                chats,
+                syncStatus);
             _roster = new GroupRosterPolicy(whatsAppService, groups, this, jids, ui, catalog, chats);
 
             // Both live as long as the app does, so there is nothing to unhook from.

@@ -39,7 +39,6 @@ namespace Unison.Core.Contracts.WhatsApp
 
         event EventHandler<string> OnConnectionUpdate;
         event EventHandler<HistorySync> OnHistorySyncReceived;
-        event EventHandler<string> OnSyncStatus;
         event EventHandler OnDisplayNamesUpdated;
         event EventHandler OnSessionInitialized;
         /// <summary>
@@ -170,9 +169,6 @@ namespace Unison.Core.Contracts.WhatsApp
 
         /// <summary>Re-applies <see cref="ResolveDisplayName"/> to each chat's Name where it changed.</summary>
         Task ApplyResolvedDisplayNamesToChatsAsync();
-
-        /// <summary>Publishes a transient status string through <see cref="OnSyncStatus"/>.</summary>
-        void RaiseSyncStatus(string status);
 
         /// <summary>True when sync traffic (history-on-demand/backfill/replay) means avatar work should be postponed.</summary>
         bool ShouldDeferAvatarFetch(out string reason);

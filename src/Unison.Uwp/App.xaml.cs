@@ -325,6 +325,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<HistoryOnDemandRegistry>(),
                 sp.GetRequiredService<IHistoryOnDemandSocket>(),
                 sp.GetRequiredService<IChatStateStore>(),
+                sp.GetRequiredService<SyncStatusChannel>(),
                 sp.GetRequiredService<IHistoryChatPreviewStore>(),
                 sp.GetRequiredService<IHistoryMigrationStore>(),
                 sp.GetRequiredService<IHistoryMessageStore>(),
@@ -401,7 +402,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ChatStateStore>().AddressBookNames,
                 sp.GetRequiredService<ISelfMarkerNaming>(),
                 sp.GetRequiredService<AttachedUiDispatcher>(),
-                sp.GetRequiredService<IChatCatalogPersistence>()));
+                sp.GetRequiredService<IChatCatalogPersistence>(),
+                sp.GetRequiredService<SyncStatusChannel>()));
             services.AddSingleton<IOfflineReplayHost>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IChatService>(sp => new ChatFacade(
@@ -446,7 +448,8 @@ namespace Unison.Uwp
                     sp.GetRequiredService<IChatStateStore>(),
                     sp.GetRequiredService<IGroupRosterStore>()),
                 sp.GetRequiredService<AvatarFetcher>(),
-                sp.GetRequiredService<IUsyncGate>()));
+                sp.GetRequiredService<IUsyncGate>(),
+                sp.GetRequiredService<SyncStatusChannel>()));
             services.AddSingleton<ILiveTilesService>(_ => LiveTilesService.Instance);
             services.AddSingleton<IShortcutService, ShortcutService>();
             services.AddSingleton<INotificationService>(sp =>

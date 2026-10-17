@@ -373,7 +373,7 @@ namespace Unison.Uwp.Services.WhatsApp
             await _persistRunLock.WaitAsync();
             try
             {
-                // No OnSyncStatus here: mark-read and avatar/name enrichment used to surface
+                // No sync line here: mark-read and avatar/name enrichment used to surface
                 // "Saving chats..." on the Mobile status bar for the whole catalog rewrite, which
                 // looked like opening a chat was blocked on disk. Sync stages already report
                 // through SyncPhaseStatus; this path is housekeeping.

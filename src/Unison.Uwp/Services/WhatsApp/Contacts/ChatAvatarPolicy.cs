@@ -41,6 +41,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
         private readonly IWhatsAppService _whatsAppService;
         private readonly IChatStateStore _chatState;
+        private readonly SyncStatusChannel _syncStatus;
         private readonly IDispatcher _ui;
         private readonly IChatCatalogPersistence _catalog;
         private readonly IJidResolver _jids;
@@ -53,9 +54,10 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly HashSet<string> _viewportPriority = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         internal ChatAvatarPolicy(IWhatsAppService whatsAppService, IJidResolver jids, ChatAvatarFetch fetch, IDispatcher ui,
-            IChatCatalogPersistence catalog, IChatStateStore chatState)
+            IChatCatalogPersistence catalog, IChatStateStore chatState, SyncStatusChannel syncStatus)
         {
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
+            _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
@@ -132,7 +134,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
                     if (available > 0 && ShouldRaiseAvatarProgress(fetched, batch.Count))
                     {
-                        _whatsAppService.RaiseSyncStatus(
+                        _syncStatus.Raise(
                             SyncPhaseStatus.Format(SyncPhaseStatus.Avatars, fetched, available));
                     }
 
@@ -154,7 +156,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
             if (fetched > 0 && available > 0)
             {
-                _whatsAppService.RaiseSyncStatus(
+                _syncStatus.Raise(
                     SyncPhaseStatus.Format(SyncPhaseStatus.Avatars, Math.Min(fetched, available), available));
             }
 
@@ -275,7 +277,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
             // Nothing is scheduled behind this, so the banner would otherwise stay on the last
             // count forever.
-            _whatsAppService.RaiseSyncStatus(null);
+            _syncStatus.Raise(null);
         }
 
         /// <summary>

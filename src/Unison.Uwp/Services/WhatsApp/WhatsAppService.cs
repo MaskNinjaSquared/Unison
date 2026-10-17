@@ -644,7 +644,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// <summary>True while a reconnect/history replay drain is in progress; satellites should back off.</summary>
         public bool IsReplayDrainActive => ShouldDeferReconnectReplayWork();
 
-        public void RaiseSyncStatus(string status) => _syncStatus.Raise(status);
+        private void RaiseSyncStatus(string status) => _syncStatus.Raise(status);
 
         private void PublishSyncStatus(string status) => _syncStatus.Publish(status);
 
@@ -1129,7 +1129,6 @@ namespace Unison.Uwp.Services.WhatsApp
         public event EventHandler<SessionClearedEventArgs> OnSessionCleared;
         public event EventHandler OnUserProfileChanged;
         public event EventHandler<Exception> OnError;
-        public event EventHandler<string> OnSyncStatus;
         public event EventHandler OnDisplayNamesUpdated;
         public event EventHandler<string> OnChatMessagesChanged;
         public event EventHandler<PresenceUpdateEventArgs> OnPresenceUpdate;
@@ -1247,7 +1246,6 @@ namespace Unison.Uwp.Services.WhatsApp
             _activeChat = activeChat ?? throw new ArgumentNullException(nameof(activeChat));
             _activeChat.Changed += OnActiveChatChanged;
             _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
-            _syncStatus.Changed += (s, status) => OnSyncStatus?.Invoke(this, status);
             _historyRequests = historyRequests ?? throw new ArgumentNullException(nameof(historyRequests));
             _historyMessages = historyMessages ?? throw new ArgumentNullException(nameof(historyMessages));
             _chatPreviews = chatPreviews ?? throw new ArgumentNullException(nameof(chatPreviews));
