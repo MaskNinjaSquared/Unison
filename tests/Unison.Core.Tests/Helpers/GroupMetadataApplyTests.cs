@@ -220,7 +220,7 @@ namespace Unison.Core.Tests.Helpers
             var f = new Fixture();
             var chat = f.AddChat(Group, "Família");
             f.Host.MemberNames["111@s.whatsapp.net"] = "Ana";
-            f.Host.Avatars["222@s.whatsapp.net"] = "b.jpg";
+            f.AddChat("222@s.whatsapp.net", "Bia").AvatarUrl = "b.jpg";
             var drafts = new List<GroupMemberDraft>
             {
                 new GroupMemberDraft { Jid = "111@s.whatsapp.net", PhoneNumber = " ", Lid = "999@lid", Role = GroupParticipantRole.Admin },
@@ -279,7 +279,7 @@ namespace Unison.Core.Tests.Helpers
                     AvatarFetchFailureReason = "timeout"
                 }
             };
-            f.Host.Avatars["999@lid"] = "a.jpg";
+            f.AddChat("999@lid", "Ana").AvatarUrl = "a.jpg";
 
             f.Apply.ApplyMembers(chat, Drafts("999@lid", "222@s.whatsapp.net"));
 

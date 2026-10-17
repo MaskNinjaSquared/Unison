@@ -10,8 +10,7 @@ namespace Unison.Core.Contracts.WhatsApp
     /// </summary>
     /// <remarks>
     /// Each member is a primitive the client owns for reasons unrelated to groups: names come from
-    /// the contact-name cache and the localized self-chat wording (3.6), and the avatar lookup
-    /// walks the 1:1 rows.
+    /// the contact-name cache and the localized self-chat wording (3.6).
     /// <para>
     /// The flows decide the order; nothing here decides anything about groups.
     /// </para>
@@ -26,8 +25,5 @@ namespace Unison.Core.Contracts.WhatsApp
 
         /// <summary>Whether a label is a real group name rather than an id, a placeholder or the self marker.</summary>
         bool IsMeaningfulGroupLabel(string label, string groupJid);
-
-        /// <summary>An avatar already cached for this person on a 1:1 row, or null.</summary>
-        string FindExistingAvatarUrl(string jid, string phoneNumber, string lid);
     }
 }

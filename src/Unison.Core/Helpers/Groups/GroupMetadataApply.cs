@@ -232,7 +232,7 @@ namespace Unison.Core.Helpers
                 GroupMember prior = GroupRosterRules.FindPrevious(
                     previous, previousList, draft.Jid, draft.Lid, draft.PhoneNumber, _jids);
                 string avatarUrl = prior?.AvatarUrl ??
-                                   _host.FindExistingAvatarUrl(draft.Jid, draft.PhoneNumber, draft.Lid);
+                                   ChatRowAvatarLookup.Find(_rows, draft.Jid, draft.PhoneNumber, draft.Lid);
                 DateTime? fetchedAt = prior?.AvatarFetchedAtUtc;
                 if (!string.IsNullOrWhiteSpace(avatarUrl) && !fetchedAt.HasValue)
                 {

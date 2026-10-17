@@ -42,24 +42,6 @@ namespace Unison.Uwp.Services.WhatsApp
 {
     public partial class WhatsAppService
     {
-        private string FindAvatarOnChatRows(string jid)
-        {
-            if (string.IsNullOrWhiteSpace(jid))
-            {
-                return null;
-            }
-
-            foreach (var row in GetChatRowsForCanonicalJid(jid))
-            {
-                if (row != null && !string.IsNullOrWhiteSpace(row.AvatarUrl))
-                {
-                    return row.AvatarUrl;
-                }
-            }
-
-            return null;
-        }
-
         public Task<string> GetProfilePictureAsync(string jid)
         {
             return _avatarFetcher.FetchAndCacheAsync(jid, CancellationToken.None);

@@ -24,8 +24,5 @@ namespace Unison.Uwp.Services.WhatsApp
 
         bool IGroupHost.IsMeaningfulGroupLabel(string label, string groupJid) =>
             IsMeaningfulChatLabel(label, groupJid, true);
-
-        string IGroupHost.FindExistingAvatarUrl(string jid, string phoneNumber, string lid) =>
-            FindExistingAvatarUrl(jid, phoneNumber, lid);
     }
 }

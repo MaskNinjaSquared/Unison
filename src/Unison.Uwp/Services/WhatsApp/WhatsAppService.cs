@@ -2483,35 +2483,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private bool ShouldDeferProfilePictureFetch(out string reason) => _syncWork.ShouldDeferAvatarFetch(out reason);
 
-        private string FindExistingAvatarUrl(string jid, string phone, string lid)
-        {
-            string fromChat = FindAvatarOnChatRows(jid);
-            if (!string.IsNullOrWhiteSpace(fromChat))
-            {
-                return fromChat;
-            }
-
-            if (!string.IsNullOrWhiteSpace(phone))
-            {
-                fromChat = FindAvatarOnChatRows(NormalizeJid(phone));
-                if (!string.IsNullOrWhiteSpace(fromChat))
-                {
-                    return fromChat;
-                }
-            }
-
-            if (!string.IsNullOrWhiteSpace(lid))
-            {
-                fromChat = FindAvatarOnChatRows(NormalizeJid(lid));
-                if (!string.IsNullOrWhiteSpace(fromChat))
-                {
-                    return fromChat;
-                }
-            }
-
-            return null;
-        }
-
         /// <summary>
         /// Watches an accepted FULL_HISTORY request and aborts only after a stretch with
         /// no catch-up progress (tips / SQLite chunks / offline apply). Progress resets

@@ -19,9 +19,6 @@ namespace Unison.Core.Tests.Helpers
 
         public DisplayNameTable CachedNames { get; } = new DisplayNameTable();
 
-        public Dictionary<string, string> Avatars { get; } =
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
         public string ResolveMemberDisplayName(string jid)
         {
             string name;
@@ -41,11 +38,5 @@ namespace Unison.Core.Tests.Helpers
 
         public bool IsMeaningfulGroupLabel(string label, string groupJid) =>
             !GroupIdPlaceholder.IsIdPlaceholder(label, groupJid);
-
-        public string FindExistingAvatarUrl(string jid, string phoneNumber, string lid)
-        {
-            string url;
-            return Avatars.TryGetValue(jid, out url) ? url : null;
-        }
     }
 }
