@@ -148,8 +148,6 @@ namespace Unison.Core.Contracts.WhatsApp
         Task PrepareForSuspendAsync();
         Task ShutdownAsync(bool persist = true);
 
-        string ResolveDisplayName(string jid, string context);
-
         // Usync contact apply (3.6). The contact façade decides and writes the push name itself;
         // these reach the socket, the auth state and the chat rows the client still owns.
         // Not for ViewModels.

@@ -100,7 +100,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _chatRows = chatRows ?? throw new ArgumentNullException(nameof(chatRows));
             _activeChat = activeChat ?? throw new ArgumentNullException(nameof(activeChat));
-            _contacts = contacts;
+            _contacts = contacts ?? throw new ArgumentNullException(nameof(contacts));
             _notifications = notifications;
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
@@ -674,15 +674,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             return chat;
         }
 
-        private string ResolveName(string jid, string context)
-        {
-            if (_contacts != null)
-            {
-                return _contacts.ResolveDisplayName(jid, context);
-            }
-
-            return _appState.ResolveDisplayName(jid, context);
-        }
+        private string ResolveName(string jid, string context) => _contacts.ResolveDisplayName(jid, context);
 
         /// <summary>
         /// The last <paramref name="take"/> messages of the conversation, oldest first. Both

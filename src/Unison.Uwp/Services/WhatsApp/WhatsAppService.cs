@@ -881,7 +881,7 @@ namespace Unison.Uwp.Services.WhatsApp
         // Field initializers run in declaration order, so _selfMarkers is set before it is read below.
         private readonly ISelfMarkerNaming _selfMarkers = new SelfMarkerNaming();
         private readonly ContactLabelSanitizer _contactLabels = new ContactLabelSanitizer(new SelfMarkerNaming());
-        private readonly PushNameLookup _pushNameLookup;
+        private readonly ContactDisplayNames _displayNames;
 
         private bool ShouldDeferReconnectReplayWork() => _syncWork.IsReplayDrainActive;
 
@@ -1024,7 +1024,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private readonly MissingMessageLedger _missing = new MissingMessageLedger();
         private PlaceholderResendDispatch _placeholderResends;
-        private string _lastResolvedSelfDisplayNameForLog;
         private static readonly TimeSpan HistoryBackfillCooldown = TimeSpan.FromHours(2);
         private static readonly TimeSpan HistoryBackfillStaleThreshold = TimeSpan.FromHours(8);
         private static readonly TimeSpan HistoryFreshnessStaleThreshold = TimeSpan.FromMinutes(30);
@@ -1212,6 +1211,7 @@ namespace Unison.Uwp.Services.WhatsApp
             AvatarFetcher avatarFetcher,
             IMediaCache mediaCache,
             JidAliasTable jidAlias,
+            ContactDisplayNames displayNames,
             HistoryOnDemandRegistry historyRequests,
             IPersonStore personStore,
             IGroupRosterStore groupRosterStore,
@@ -1249,7 +1249,17 @@ namespace Unison.Uwp.Services.WhatsApp
             JidAlias = jidAlias ?? throw new ArgumentNullException(nameof(jidAlias));
             JidAlias.BindSelf(() => _authState?.Me?.Id, () => _authState?.Me?.Lid);
             JidAlias.Changed += (s, e) => InvalidateChatRowIndex();
-            _pushNameLookup = new PushNameLookup(ContactNames, JidAlias, _contactLabels, LogContactLabelDecision);
+            _displayNames = displayNames ?? throw new ArgumentNullException(nameof(displayNames));
+            _displayNames.Bind(
+                () => new SelfNameInputs
+                {
+                    Id = _authState?.Me?.Id,
+                    Lid = _authState?.Me?.Lid,
+                    CredentialsName = _authState?.Me?.Name,
+                    CurrentUserName = CurrentUserName,
+                    Phone = CurrentUserPhone
+                },
+                LogContactLabelDecision);
 
             // After JidAlias: the readers below capture the table now rather than calling back
             // into this instance later, so the property has to be set before they are built.
@@ -1285,6 +1295,7 @@ namespace Unison.Uwp.Services.WhatsApp
             AvatarFetcher avatarFetcher,
             IMediaCache mediaCache,
             JidAliasTable jidAlias,
+            ContactDisplayNames displayNames,
             HistoryOnDemandRegistry historyRequests,
             IPersonStore personStore,
             IGroupRosterStore groupRosterStore,
@@ -1293,7 +1304,7 @@ namespace Unison.Uwp.Services.WhatsApp
             AttachedUiDispatcher ui)
         {
             return _instance ?? (_instance = new WhatsAppService(
-                chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, historyRequests,
+                chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
                 personStore, groupRosterStore, chatStore, systemInfo, ui));
         }
 
@@ -4287,48 +4298,6 @@ namespace Unison.Uwp.Services.WhatsApp
             SchedulePersist();
         }
 
-        private string TryGetPersonDisplayName(string jid, out bool isSaved)
-        {
-            isSaved = false;
-            if (string.IsNullOrWhiteSpace(jid))
-            {
-                return null;
-            }
-
-            try
-            {
-                var person = _personStore.TryGetCached(jid);
-                if (person == null || string.IsNullOrWhiteSpace(person.Name))
-                {
-                    return null;
-                }
-
-                isSaved = person.Source == PersonSource.AddressBook;
-                return SanitizeContactLabel(person.Name, jid);
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        private async Task WarmPersonIntoCacheAsync(string jid)
-        {
-            if (string.IsNullOrWhiteSpace(jid))
-            {
-                return;
-            }
-
-            try
-            {
-                await _personStore.GetAsync(jid).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[WhatsAppService] Person warm failed for " + jid + ": " + ex.Message);
-            }
-        }
-
         /// <summary>
         /// Updates ContactNames and persists Person name when it changes (fire-and-forget SQLite).
         /// </summary>
@@ -4365,37 +4334,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
             _ = PersistPersonNameAsync(norm, sanitized);
         }
-
-        private string ResolveSelfDisplayName(string canonical, string normalized, string context)
-        {
-            var sources = new[]
-            {
-                SelfNameSource("phone-canonical", () => PhoneContactNameOrNull(canonical)),
-                SelfNameSource("phone-normalized", () => PhoneContactNameOrNull(normalized)),
-                SelfNameSource("whatsapp-cache", () => GetBestWhatsAppName(canonical, normalized, _authState?.Me?.Id, _authState?.Me?.Lid)),
-                SelfNameSource("auth-me-name", () => _authState?.Me?.Name),
-                SelfNameSource("current-user-name", () => CurrentUserName)
-            };
-
-            SelfDisplayNameResolution.Result result = SelfDisplayNameResolution.Pick(
-                sources,
-                candidate => NormalizeSelfNameCandidate(candidate, canonical, normalized),
-                CurrentUserPhone);
-
-            if (!string.Equals(_lastResolvedSelfDisplayNameForLog, result.Name, StringComparison.Ordinal))
-            {
-                _lastResolvedSelfDisplayNameForLog = result.Name;
-                Debug.WriteLine($"[WhatsAppService] Self base name resolved for {canonical}: '{(result.Name.Length == 0 ? "(empty)" : result.Name)}' (source={result.Source ?? "fallback"})");
-            }
-
-            return result.Name;
-        }
-
-        private static KeyValuePair<string, Func<string>> SelfNameSource(string source, Func<string> read) =>
-            new KeyValuePair<string, Func<string>>(source, read);
-
-        private string PhoneContactNameOrNull(string jid) =>
-            jid != null && PhoneContactNamesByJid.TryGetValue(jid, out var name) ? name : null;
 
         private string NormalizeSelfNameCandidate(string candidate, string canonical, string normalized) =>
             SelfNameCandidate.Normalize(candidate, canonical, normalized, _selfMarkers);

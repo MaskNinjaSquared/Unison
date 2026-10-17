@@ -47,6 +47,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly DisplayNameTable _pushNames;
         private readonly DisplayNameTable _addressBookNames;
         private readonly IChatStateStore _chatState;
+        private readonly ContactDisplayNames _displayNames;
 
         private readonly ContactDirectory _directory;
         private readonly AddressBookOverlay _addressBook;
@@ -80,8 +81,10 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             IDispatcher ui,
             IChatCatalogPersistence catalog,
             SyncStatusChannel syncStatus,
-            SyncWorkGate syncWork)
+            SyncWorkGate syncWork,
+            ContactDisplayNames displayNames)
         {
+            _displayNames = displayNames ?? throw new ArgumentNullException(nameof(displayNames));
             if (selfMarkers == null) throw new ArgumentNullException(nameof(selfMarkers));
             if (syncStatus == null) throw new ArgumentNullException(nameof(syncStatus));
             if (syncWork == null) throw new ArgumentNullException(nameof(syncWork));
@@ -196,13 +199,9 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
         public event EventHandler DisplayNamesUpdated;
 
-        /// <summary>
-        /// Still answered by the client: the name caches are filled while decrypting messages and
-        /// applying history, so moving the lookup here before those move would only add a hop.
-        /// </summary>
         public string ResolveDisplayName(string jid, string context)
         {
-            return _whatsAppService.ResolveDisplayName(jid, context);
+            return _displayNames.Resolve(jid, context);
         }
 
         /// <summary>

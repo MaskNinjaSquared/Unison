@@ -120,83 +120,8 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        public string ResolveDisplayName(string jid, string context = null)
-        {
-            if (string.IsNullOrEmpty(jid)) return "";
-
-            string normalized = NormalizeJid(jid);
-            string canonical = GetCanonicalJid(normalized);
-            bool isGroup = canonical.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
-
-            // Self naming uses explicit "(You)" marker with graceful fallback.
-            if (IsSelfLinkedJid(canonical) || IsSelfLinkedJid(normalized))
-            {
-                return ResolveSelfDisplayName(canonical, normalized, context);
-            }
-
-            // Person in-memory cache (SQLite-backed store) — same idea as Redis in front of Dynamo.
-            bool personNameIsSaved;
-            string personName = TryGetPersonDisplayName(canonical, out personNameIsSaved);
-            if (string.IsNullOrWhiteSpace(personName))
-            {
-                personName = TryGetPersonDisplayName(normalized, out personNameIsSaved);
-            }
-
-            if (!string.IsNullOrWhiteSpace(personName) && personNameIsSaved)
-            {
-                return personName;
-            }
-
-            if (string.IsNullOrWhiteSpace(personName))
-            {
-                // Cold cache: warm from disk without blocking the UI name path.
-                _ = WarmPersonIntoCacheAsync(canonical);
-                if (!string.Equals(canonical, normalized, StringComparison.OrdinalIgnoreCase))
-                {
-                    _ = WarmPersonIntoCacheAsync(normalized);
-                }
-            }
-
-            return DisplayNameResolution.Resolve(new DisplayNameSources
-            {
-                PersonName = personName,
-                PersonNameIsSaved = personNameIsSaved,
-                PhoneContactName = FindPhoneContactName(canonical, normalized),
-                WhatsAppName = GetBestWhatsAppName(canonical, normalized),
-                CanonicalJid = canonical,
-                IsGroup = isGroup,
-                IsSenderContext = string.Equals(context, "sender", StringComparison.OrdinalIgnoreCase)
-            });
-        }
-
-        /// <summary>
-        /// The address book's name for either form of the address, once sanitized. Both forms
-        /// are tried because a contact saved under a phone number has to be found from a LID.
-        /// </summary>
-        private string FindPhoneContactName(string canonical, string normalized)
-        {
-            string fromCanonical = LookupSanitizedPhoneContactName(canonical);
-            if (!string.IsNullOrWhiteSpace(fromCanonical))
-            {
-                return fromCanonical;
-            }
-
-            return string.Equals(canonical, normalized, StringComparison.OrdinalIgnoreCase)
-                ? null
-                : LookupSanitizedPhoneContactName(normalized);
-        }
-
-        private string LookupSanitizedPhoneContactName(string jid)
-        {
-            if (string.IsNullOrWhiteSpace(jid) ||
-                !PhoneContactNamesByJid.TryGetValue(jid, out var raw) ||
-                string.IsNullOrWhiteSpace(raw))
-            {
-                return null;
-            }
-
-            return SanitizeContactLabel(raw, jid);
-        }
+        public string ResolveDisplayName(string jid, string context = null) =>
+            _displayNames.Resolve(jid, context);
 
         private async Task PersistPersonNameAsync(string jid, string displayName)
         {
@@ -216,7 +141,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        private string GetBestWhatsAppName(params string[] jids) => _pushNameLookup.FindBest(jids);
+        private string GetBestWhatsAppName(params string[] jids) => _displayNames.FindBestPushName(jids);
 
         public string GetCanonicalJid(string jid) => JidAlias.GetCanonicalJid(jid);
 
