@@ -1020,6 +1020,14 @@ member count a group receipt has to reach, kept per group for 30 minutes. It was
 triggers stay in the client. Edge kept, not endorsed: nothing expires an entry early, so a member who
 joins or leaves inside the window is not counted until it lapses.
 
+An app-state pin wrote the row's keys and then the wire address's keys, and the two are usually the
+same conversation, so most keys were upserted twice. `ChatPinStoreKeys.Merge` (4 tests) joins them
+without repeats and the client writes the merged list once. Two client-only dedupes went with it, no
+rule involved: the app-state find-or-add row (`GetOrAddChatRowsForAppState`, which the read-state and
+chat-flag paths had each written out) and building a list strip from a message and applying it
+(`ApplyMessageAsChatTip`, three copies across `.AppState.cs` and `.IncomingPump.cs`). The other three
+places that create a row stay separate: they differ in the name context and insert at the front.
+
 The newest message time history freshness reads is `NewestStoredMessage.FindUtc` over the timeline
 snapshot and the list strip (cold start has tips but no timelines), each value through
 `ChatMessageOrder.ToComparableUtc`. The client passes `MessagesByChat` and `Chats` and its filters.

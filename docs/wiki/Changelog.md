@@ -4,11 +4,23 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Chat names are applied to the list after sync
+
+When a sync ended, names the app already knew could stay off the chat list, which kept showing
+numbers and addresses even though opening the chat showed the name. The opportunistic name pass
+skipped the local re-apply on every early exit (cooldown, a refresh running, nothing left to ask the
+server). It now applies known names first, and the end of the history catch-up applies them too,
+without waiting on the post-sync enrichment.
+
 ## Group recipient count left the client
 
 How many members a group receipt has to hear from before a message turns delivered or read is cached
 by `GroupRecipientCountCache` in Core, 30 minutes per group as before. The client lost the dictionary,
 its entry class and `_messageStateLock`. No behaviour change.
+
+A pin arriving from another device now writes each store key once (`ChatPinStoreKeys.Merge`); the
+row and wire keys used to overlap and repeat the upsert. Two duplicated client blocks became helpers
+(find-or-add row for app-state, apply a message as the list tip).
 
 ## Calls and Favorites empty states are unlocked
 
