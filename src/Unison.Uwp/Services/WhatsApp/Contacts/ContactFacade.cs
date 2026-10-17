@@ -88,7 +88,8 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             SyncWorkloadStrategy workload,
             InitialSyncProgressState initialSync,
             ChatNameRefresh nameRefresh,
-            ChatListAliasMerge aliasMerge)
+            ChatListAliasMerge aliasMerge,
+            IDeferredAvatarResolution deferredAvatars)
         {
             _displayNames = displayNames ?? throw new ArgumentNullException(nameof(displayNames));
             _nameRefresh = nameRefresh ?? throw new ArgumentNullException(nameof(nameRefresh));
@@ -148,7 +149,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 sessions,
                 nameRefresh);
             _avatars = new ChatAvatarPolicy(
-                whatsAppService,
+                deferredAvatars ?? throw new ArgumentNullException(nameof(deferredAvatars)),
                 jids,
                 new ChatAvatarFetch(sessions, groups, jids, chats, avatarReport, avatars, avatarCache, ui, catalog),
                 ui,

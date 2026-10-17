@@ -136,8 +136,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// before the write.
         /// </summary>
         bool TryFileUsyncAlias(string userJid, string lidJid, out bool wasAlreadyAliased);
-        /// <summary>Schedules another background resolution pass (names+avatars+groups) after a delay.</summary>
-        void ScheduleDeferredAvatarResolution(string reason, TimeSpan? delay = null);
 
         /// <summary>
         /// Writes the account's chat-list pin to the in-memory rows and to the local mirror,
@@ -191,13 +189,5 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         void ApplyHistoryLidMappings(IEnumerable<KeyValuePair<string, string>> lidToPn, string source);
 
-        /// <summary>
-        /// Aligns list <c>LastMessage</c> with the newest SQLite row when the list is behind
-        /// (cross-device send / history chunk that persisted messages without updating the strip).
-        /// When <paramref name="chatJids"/> is null, every open chat row is checked.
-        /// </summary>
-        Task ReconcileChatPreviewsFromSqliteAsync(
-            IReadOnlyList<string> chatJids = null,
-            string reason = null);
     }
 }

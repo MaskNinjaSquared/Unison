@@ -2,6 +2,13 @@
 
 Newest first.
 
+## SQLite tip reconcile and deferred avatars left the client contract
+
+`ChatFacade` owns `ReconcileChatPreviewsFromSqliteAsync` over `ChatPreviewReconciler`.
+`ChatAvatarPolicy` asks for the next enrichment pass through `IDeferredAvatarResolution`.
+Both members left `IWhatsAppService`. No behaviour change.
+
+
 ## Open-chat merge left the façade body
 
 Combining SQLite history rows with the live RAM overlay is `OpenChatMessageMerge`. The

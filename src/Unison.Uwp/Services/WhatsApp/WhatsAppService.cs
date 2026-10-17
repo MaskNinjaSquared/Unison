@@ -45,7 +45,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IMediaDownloadHost, IAvatarReport, IOfflineReplayHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource
+    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IMediaDownloadHost, IAvatarReport, IOfflineReplayHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IDeferredAvatarResolution
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -553,7 +553,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 "; reason=" + (reason ?? string.Empty));
         }
 
-        void IWhatsAppService.ScheduleDeferredAvatarResolution(string reason, TimeSpan? delay) => ScheduleDeferredProfilePictureResolution(reason, delay);
+        void IDeferredAvatarResolution.Schedule(string reason, TimeSpan? delay) =>
+            ScheduleDeferredProfilePictureResolution(reason, delay);
 
         private Task HydrateCachedAvatarsFromContactAsync(string reason)
         {
@@ -2042,8 +2043,11 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        /// <inheritdoc />
-        public async Task ReconcileChatPreviewsFromSqliteAsync(
+        /// <summary>
+        /// Client-owned tip pass after startup / catch-up / quiet history. UI goes through
+        /// <see cref="IChatService.ReconcileChatPreviewsFromSqliteAsync"/>.
+        /// </summary>
+        private async Task ReconcileChatPreviewsFromSqliteAsync(
             IReadOnlyList<string> chatJids = null,
             string reason = null)
         {

@@ -224,7 +224,7 @@ Self-contained first. List/persist last.
 | 3.4 | Send (main file) | **Text, image and audio orchestration on `MessageFacade` (done)** via `OutgoingTextSend` / `OutgoingMediaSend` (Core) over `IOutgoingMessageHost`. Client keeps the timeline caches, outbox and socket behind that port — see below |
 | 3.5a | Receipt reading (done) | `ReceiptReader` |
 | 3.5b | Receipt aggregation state (done) | `GroupReceiptTally` (Core) |
-| 3.6 | Names / usync (`.Identity.cs`) | `ContactFacade` / `ContactUsyncResolver`. **Rules and usync orchestration out — see below.** Push name, avatar check and number match on the façade; alias filing, avatar fetch and chat merge remain on the client |
+| 3.6 | Names / usync (`.Identity.cs`) | `ContactFacade` / `ContactUsyncResolver`. **Rules and usync orchestration out — see below.** Push name, avatar check and number match on the façade; table filing is `UsyncAliasFiling`, chat merge is `ChatListAliasMerge`; the client keeps only `TryFileUsyncAlias` (socket + identity heal) |
 | 3.7a | Alias LID/PN + canonical (done) | `JidAliasTable` (Core), read through `IJidResolver` |
 | 3.7b | Converge onto `LidMappingStore` | Blocked: that store is async, canonicalization is not. See below |
 | 3.8 | `.AppState.cs` | **Rewritten — the premise was stale.** See below |
@@ -1368,9 +1368,9 @@ It takes `IShortcutService` by constructor instead of reaching `App.Services`, a
 
 **A new chat row is the chat façade's too.** `StartNewChat` moved from `IMessageService` to
 `IChatService`: `ChatFacade` inserts the row on the UI thread, names it through `IContactService`,
-sets its kind from `IJidResolver.IsSelfLinked` and asks the client for a dedup pass
-(`RequestChatListDedup`, still a client primitive). `ChatListViewModel` and the legacy `ShellView`
-call the chat façade; the member left `IMessageService` and `IWhatsAppService`.
+sets its kind from `IJidResolver.IsSelfLinked` and asks for a dedup pass through
+`IChatService.RequestChatListDedup` (`ChatListDeduper`). `ChatListViewModel` and the legacy
+`ShellView` call the chat façade; the member left `IMessageService` and `IWhatsAppService`.
 
 **A stored tip reaches the strip through `ChatMessageTipApply`.** (Core.) It is the glue the
 client called `ApplyMessageAsChatTip`: `ChatListStrip.FromMessage` plus
@@ -1414,6 +1414,16 @@ still wins on collision and keeps SQLite media keys / quote / reactions when bla
 overlay itself stays on the client through `IOutgoingMessageHost.LoadLiveOverlayAsync`
 (rebuild window, apply held receipts, queue dirty rows); `LoadMessagesForChatAsync` left
 `IWhatsAppService`. UI keeps calling `IMessageService.LoadMessagesForChatAsync`.
+
+**SQLite tip reconcile is the chat façade's.** `ChatFacade.ReconcileChatPreviewsFromSqliteAsync`
+runs `ChatPreviewReconciler`, then notes catch-up progress and schedules persist through
+`IOfflineReplayHost` — the same side effects the client attached. The member left
+`IWhatsAppService`; the client still runs the helper on its own startup and catch-up paths.
+
+**Deferred avatar enrichment is a narrow port.** `IDeferredAvatarResolution` is what
+`ChatAvatarPolicy` needs to ask for another background pass without naming the whole client.
+The timer and `TriggerBackgroundResolution` stay on the client (`ShutdownAsync` cancels them).
+`ScheduleDeferredAvatarResolution` left `IWhatsAppService`.
 
 **Done when:** `.Connection.cs` + a small main file; no façade needs send/history/avatar/group/list methods on the client; leftover `IWhatsAppSocket` drop is [Migration](Migration) item 9, after this.
 

@@ -57,12 +57,14 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
         private readonly IChatStateStore _chatState;
         private readonly ChatRowIndex _chatRows;
         private readonly ActiveChat _activeChat;
+        private readonly IOfflineReplayHost _offlineReplay;
         private readonly IContactService _contacts;
         private readonly INotificationService _notifications;
         private readonly IDispatcher _ui;
         private readonly IChatCatalogPersistence _catalog;
         private readonly IShortcutService _shortcuts;
         private readonly StoredChatPreviewRefresh _storedPreviews;
+        private readonly ChatPreviewReconciler _sqlitePreviews;
         private readonly ChatListDeduper _deduper;
         private readonly IChatIdentityPersistence _identity;
         private readonly ChatListAliasMerge _aliasMerge;
@@ -85,15 +87,11 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             IChatCatalogPersistence catalog,
             IShortcutService shortcuts,
             StoredChatPreviewRefresh storedPreviews,
+            ChatPreviewReconciler sqlitePreviews,
             ChatListDeduper deduper,
             IChatIdentityPersistence identity,
             ChatListAliasMerge aliasMerge)
         {
-            if (offlineReplay == null)
-            {
-                throw new ArgumentNullException(nameof(offlineReplay));
-            }
-
             if (sessions == null)
             {
                 throw new ArgumentNullException(nameof(sessions));
@@ -110,18 +108,20 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _chatRows = chatRows ?? throw new ArgumentNullException(nameof(chatRows));
             _activeChat = activeChat ?? throw new ArgumentNullException(nameof(activeChat));
+            _offlineReplay = offlineReplay ?? throw new ArgumentNullException(nameof(offlineReplay));
             _contacts = contacts ?? throw new ArgumentNullException(nameof(contacts));
             _notifications = notifications;
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _shortcuts = shortcuts ?? throw new ArgumentNullException(nameof(shortcuts));
             _storedPreviews = storedPreviews ?? throw new ArgumentNullException(nameof(storedPreviews));
+            _sqlitePreviews = sqlitePreviews ?? throw new ArgumentNullException(nameof(sqlitePreviews));
             _deduper = deduper ?? throw new ArgumentNullException(nameof(deduper));
             _identity = identity ?? throw new ArgumentNullException(nameof(identity));
             _aliasMerge = aliasMerge ?? throw new ArgumentNullException(nameof(aliasMerge));
             _offlineReplayTips = new OfflineReplayTips(
                 _jids,
-                offlineReplay,
+                _offlineReplay,
                 ApplyOfflineReplayChatSummariesAsync,
                 OfflineReplayTipThrottle);
         }
@@ -408,11 +408,20 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             _catalog.PersistRows(chats);
         }
 
-        public Task ReconcileChatPreviewsFromSqliteAsync(
+        public async Task ReconcileChatPreviewsFromSqliteAsync(
             IReadOnlyList<string> chatJids = null,
             string reason = null)
         {
-            return _appState.ReconcileChatPreviewsFromSqliteAsync(chatJids, reason);
+            int updated = await _sqlitePreviews.ReconcileAsync(chatJids, reason).ConfigureAwait(false);
+            if (updated <= 0)
+            {
+                return;
+            }
+
+            // Same side effects the client used to attach: keep the catch-up idle clock alive
+            // and flush the catalogue when a tip actually moved.
+            _offlineReplay.NoteCatchUpProgress("tip-swapped:" + updated);
+            _offlineReplay.SchedulePersist();
         }
 
         public async Task RefreshChatPreviewAsync(

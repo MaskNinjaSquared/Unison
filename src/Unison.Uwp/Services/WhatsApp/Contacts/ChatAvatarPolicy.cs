@@ -36,7 +36,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private const int AvatarStatusProgressStride = 3;
         private const string GroupAvatarFallbackMissReason = "group-avatar-fallback-miss";
 
-        private readonly IWhatsAppService _whatsAppService;
+        private readonly IDeferredAvatarResolution _deferredAvatars;
         private readonly IWhatsAppSessionProvider _sessions;
         private readonly IChatStateStore _chatState;
         private readonly SyncStatusChannel _syncStatus;
@@ -55,9 +55,18 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         /// <summary>JIDs realized on screen; background batches pull these first.</summary>
         private readonly HashSet<string> _viewportPriority = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        internal ChatAvatarPolicy(IWhatsAppService whatsAppService, IJidResolver jids, ChatAvatarFetch fetch, IDispatcher ui,
-            IChatCatalogPersistence catalog, IChatStateStore chatState, SyncStatusChannel syncStatus, SyncWorkGate syncWork,
-            IWhatsAppSessionProvider sessions, SyncBudget syncBudget, SyncWorkloadStrategy workload,
+        internal ChatAvatarPolicy(
+            IDeferredAvatarResolution deferredAvatars,
+            IJidResolver jids,
+            ChatAvatarFetch fetch,
+            IDispatcher ui,
+            IChatCatalogPersistence catalog,
+            IChatStateStore chatState,
+            SyncStatusChannel syncStatus,
+            SyncWorkGate syncWork,
+            IWhatsAppSessionProvider sessions,
+            SyncBudget syncBudget,
+            SyncWorkloadStrategy workload,
             InitialSyncProgressState initialSync)
         {
             _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
@@ -69,7 +78,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
-            _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
+            _deferredAvatars = deferredAvatars ?? throw new ArgumentNullException(nameof(deferredAvatars));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _fetch = fetch ?? throw new ArgumentNullException(nameof(fetch));
         }
@@ -128,7 +137,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                     if (_syncWork.ShouldDeferAvatarFetch(out deferReason))
                     {
                         Debug.WriteLine("[ChatAvatarPolicy] Pausing batch while sync traffic settles: " + deferReason);
-                        _whatsAppService.ScheduleDeferredAvatarResolution("avatar-batch-paused:" + deferReason);
+                        _deferredAvatars.Schedule("avatar-batch-paused:" + deferReason);
                         break;
                     }
 
@@ -276,7 +285,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             if (remaining > 0 && !token.IsCancellationRequested)
             {
                 Debug.WriteLine($"[ChatAvatarPolicy] Scheduling next batch: remaining={remaining}, backedOff={backedOff}");
-                _whatsAppService.ScheduleDeferredAvatarResolution("avatar-next-batch");
+                _deferredAvatars.Schedule("avatar-next-batch");
                 return;
             }
 

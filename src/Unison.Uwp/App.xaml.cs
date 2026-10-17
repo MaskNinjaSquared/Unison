@@ -425,6 +425,8 @@ namespace Unison.Uwp
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IChatIdentityPersistence>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+            services.AddSingleton<IDeferredAvatarResolution>(
+                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IEncryptedMediaDownloader>(_ => new HttpEncryptedMediaDownloader(
                 new DelegateSocketLog(line => Diag.W("[Media] " + line))));
             services.AddSingleton(sp => new MediaDownloadGate(
@@ -489,7 +491,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<SyncWorkloadStrategy>(),
                 sp.GetRequiredService<InitialSyncProgressState>(),
                 sp.GetRequiredService<ChatNameRefresh>(),
-                sp.GetRequiredService<ChatListAliasMerge>()));
+                sp.GetRequiredService<ChatListAliasMerge>(),
+                sp.GetRequiredService<IDeferredAvatarResolution>()));
             services.AddSingleton<IOfflineReplayHost>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IChatService>(sp => new ChatFacade(
@@ -506,6 +509,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IChatCatalogPersistence>(),
                 sp.GetRequiredService<IShortcutService>(),
                 sp.GetRequiredService<StoredChatPreviewRefresh>(),
+                sp.GetRequiredService<ChatPreviewReconciler>(),
                 sp.GetRequiredService<ChatListDeduper>(),
                 sp.GetRequiredService<IChatIdentityPersistence>(),
                 sp.GetRequiredService<ChatListAliasMerge>()));
