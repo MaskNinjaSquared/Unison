@@ -76,6 +76,9 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>Sends a recorded/picked audio clip (voice note when isVoiceMessage=true).</summary>
         Task<ChatMessage> SendAudioMessageAsync(string jid, byte[] audioBytes, string mimeType, uint durationSeconds, bool isVoiceMessage = false);
 
+        /// <summary>Sends a picked document (PDF / office / archive / text). MIME must be document-only.</summary>
+        Task<ChatMessage> SendDocumentAsync(string jid, byte[] documentBytes, string mimeType, string fileName, string caption = null);
+
         /// <summary>Downloads + decrypts the audio media on demand, caching the local URI on the message.</summary>
         Task<string> EnsureAudioAvailableAsync(ChatMessage message);
 

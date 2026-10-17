@@ -206,13 +206,12 @@ namespace Unison.Core.ViewModels
                 () => _ = RunSafeAsync(AttachAudioAsync, "attach-audio"),
                 () => CanCompose);
 
-            // The four below are declared, wired and permanently unavailable. Each needs a send
-            // route the app does not have yet - a document upload, a vCard, a location - and
-            // saying so through CanExecute means the flyout item and the tile grey themselves
-            // out from the same binding as the working ones. The day the route exists, only the
-            // predicate changes; no markup moves.
+            // Camera / contact / location stay unavailable until each has a send route.
+            // Document attach is live: picker + MessageFacade → DocumentMessage.
             AttachCameraCommand = new RelayCommand(() => { }, () => false);
-            AttachFileCommand = new RelayCommand(() => { }, () => false);
+            AttachFileCommand = new RelayCommand(
+                () => _ = RunSafeAsync(AttachDocumentAsync, "attach-file"),
+                () => CanCompose);
             AttachContactCommand = new RelayCommand(() => { }, () => false);
             AttachLocationCommand = new RelayCommand(() => { }, () => false);
 
@@ -661,10 +660,7 @@ namespace Unison.Core.ViewModels
         /// <summary>Take a photo. Unavailable: there is no capture surface yet.</summary>
         public ICommand AttachCameraCommand { get; }
 
-        /// <summary>
-        /// Send an arbitrary document. Unavailable: the socket can build and upload a
-        /// DocumentMessage, but nothing in the app asks it to.
-        /// </summary>
+        /// <summary>Opens the document picker and sends a DocumentMessage.</summary>
         public ICommand AttachFileCommand { get; }
 
         /// <summary>Share a contact card. Unavailable: no vCard send route.</summary>
@@ -1997,6 +1993,7 @@ namespace Unison.Core.ViewModels
             RaiseSendMessageCanExecuteChanged();
             (AttachMediaCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (AttachAudioCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (AttachFileCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (StartRecordingCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (CancelRecordingCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (SendRecordingCommand as RelayCommand)?.RaiseCanExecuteChanged();
@@ -2213,6 +2210,9 @@ namespace Unison.Core.ViewModels
         private Task AttachAudioAsync() =>
             AttachAsync(() => _filePicker.PickChatAudioAsync(), SendPickedAudioAsync, "audio");
 
+        private Task AttachDocumentAsync() =>
+            AttachAsync(() => _filePicker.PickChatDocumentAsync(), SendPickedDocumentAsync, "document");
+
         /// <summary>
         /// Picks a file of one kind and sends it, with the guards and the failure reporting that
         /// every attachment shares.
@@ -2281,6 +2281,45 @@ namespace Unison.Core.ViewModels
                 await PresentUserExceptionAsync(
                     new AudioSendException("Attach audio failed: " + ex.Message, ex),
                     "audio-attach-fail");
+            }
+            finally
+            {
+                IsSending = false;
+            }
+        }
+
+        private async Task SendPickedDocumentAsync(string targetJid, PickedChatMedia picked)
+        {
+            if (!picked.IsDocument)
+            {
+                await PresentUserExceptionAsync(
+                    new AttachmentSendException("Unsupported attachment type."),
+                    "attach-unsupported");
+                return;
+            }
+
+            IsSending = true;
+            MessageSent?.Invoke(this, EventArgs.Empty);
+            LogSend("document-attach-start", "bytes=" + picked.Bytes.Length);
+            try
+            {
+                await _messageService.SendDocumentAsync(
+                    targetJid,
+                    picked.Bytes,
+                    picked.MimeType,
+                    picked.FileName);
+                MessageSent?.Invoke(this, EventArgs.Empty);
+                LogSend("document-attach-ok");
+            }
+            catch (UnisonUserException ex)
+            {
+                await PresentUserExceptionAsync(ex, "document-attach-fail");
+            }
+            catch (Exception ex)
+            {
+                await PresentUserExceptionAsync(
+                    new AttachmentSendException("Attach document failed: " + ex.Message, ex),
+                    "document-attach-fail");
             }
             finally
             {

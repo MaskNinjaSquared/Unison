@@ -2,6 +2,7 @@ using System;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading.Tasks;
 using Unison.Core.Contracts;
+using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Windows.Graphics.Imaging;
 using Windows.Storage;
@@ -14,6 +15,7 @@ namespace Unison.Uwp.Services
     {
         private const ulong MaxImageBytes = 25UL * 1024UL * 1024UL;
         private const ulong MaxAudioBytes = 20UL * 1024UL * 1024UL;
+        private const ulong MaxDocumentBytes = 100UL * 1024UL * 1024UL;
 
         public async Task<string> PickOpenImagePathAsync()
         {
@@ -91,6 +93,33 @@ namespace Unison.Uwp.Services
                 PickerLocationId.MusicLibrary,
                 PickerViewMode.List,
                 "PickChatAudio");
+
+        public async Task<PickedChatMedia> PickChatDocumentAsync()
+        {
+            try
+            {
+                var picker = new FileOpenPicker();
+                picker.ViewMode = PickerViewMode.List;
+                picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
+                foreach (string extension in OutgoingDocumentKinds.FileExtensions)
+                {
+                    picker.FileTypeFilter.Add(extension);
+                }
+
+                StorageFile file = await picker.PickSingleFileAsync();
+                if (file == null)
+                {
+                    return null;
+                }
+
+                return await ReadPickedChatDocumentAsync(file);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[FilePickerService] PickChatDocument: " + ex.Message);
+                throw;
+            }
+        }
 
         /// <summary>
         /// Shows a picker restricted to the given extensions and reads whatever comes back.
@@ -170,6 +199,33 @@ namespace Unison.Uwp.Services
                 FileName = file.Name,
                 IsAudio = false,
                 IsImage = true
+            };
+        }
+
+        private static async Task<PickedChatMedia> ReadPickedChatDocumentAsync(StorageFile file)
+        {
+            string extension = (file.FileType ?? string.Empty).ToLowerInvariant();
+            string mime = OutgoingDocumentKinds.MimeForExtension(extension);
+            if (mime == null || !OutgoingDocumentKinds.IsAllowedMime(mime))
+            {
+                throw new InvalidOperationException("Unsupported document type.");
+            }
+
+            var properties = await file.GetBasicPropertiesAsync();
+            if (properties.Size > MaxDocumentBytes)
+            {
+                throw new InvalidOperationException("The selected document is larger than 100 MB.");
+            }
+
+            byte[] bytes = await ReadStorageFileBytesAsync(file);
+            return new PickedChatMedia
+            {
+                Bytes = bytes,
+                MimeType = mime,
+                FileName = file.Name,
+                IsDocument = true,
+                IsAudio = false,
+                IsImage = false
             };
         }
 

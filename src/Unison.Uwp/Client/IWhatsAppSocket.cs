@@ -179,6 +179,14 @@ namespace Unison.Uwp.Client
             bool isVoiceMessage = false,
             string explicitMessageId = null);
 
+        Task<string> SendDocumentMessageAsync(
+            string jid,
+            byte[] documentBytes,
+            string mimeType,
+            string fileName,
+            string caption = null,
+            string explicitMessageId = null);
+
         Task<string> SendPinInChatMessageAsync(
             string jid,
             global::Proto.MessageKey targetKey,

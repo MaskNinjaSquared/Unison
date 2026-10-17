@@ -39,6 +39,17 @@ namespace Unison.Uwp.Services.WhatsApp
                 messageId);
         }
 
+        Task IOutgoingMessageHost.SendDocumentAsync(string jid, OutgoingDocument document, string messageId)
+        {
+            return _socket.SendDocumentMessageAsync(
+                jid,
+                document.Bytes,
+                document.MimeType,
+                document.FileName,
+                document.Caption,
+                messageId);
+        }
+
         void IOutgoingMessageHost.AcceptOutgoing(string chatJid, ChatMessage message)
         {
             ApplyPendingStateToMessage(chatJid, message);

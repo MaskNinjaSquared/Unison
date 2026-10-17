@@ -677,6 +677,22 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             return message;
         }
 
+        public Task<ChatMessage> SendDocumentAsync(
+            string jid,
+            byte[] documentBytes,
+            string mimeType,
+            string fileName,
+            string caption = null)
+        {
+            return _mediaSend.SendDocumentAsync(jid, new OutgoingDocument
+            {
+                Bytes = documentBytes,
+                MimeType = mimeType,
+                FileName = fileName,
+                Caption = caption
+            });
+        }
+
         public Task<string> EnsureAudioAvailableAsync(ChatMessage message)
         {
             return _availability.EnsureAudioAsync(message);

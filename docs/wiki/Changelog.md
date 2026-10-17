@@ -2,6 +2,15 @@
 
 Newest first.
 
+## Composer can send documents
+
+`AttachFileCommand` opens a document-only picker (`OutgoingDocumentKinds`: PDF, office,
+archives, text — not image/audio/video). The send path mirrors image/audio:
+`OutgoingMediaSend` → `IOutgoingMessageHost.SendDocumentAsync` →
+`SocketBridge.SendDocumentMessageAsync` → Baileys `MediaType.Document` /
+`DocumentMessage`. `IMessageService.SendDocumentAsync` is the façade entry.
+
+
 ## Startup UI load left the client contract
 
 `LoadPersistedUiStateAsync` and `StartDeferredStartupMaintenance` go through

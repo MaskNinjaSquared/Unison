@@ -1083,6 +1083,24 @@ namespace Unison.Uwp.Client
             return SendAsync(jid, content, explicitMessageId);
         }
 
+        public Task<string> SendDocumentMessageAsync(
+            string jid,
+            byte[] documentBytes,
+            string mimeType,
+            string fileName,
+            string caption = null,
+            string explicitMessageId = null)
+        {
+            var content = new MediaContent(documentBytes, Unison.Socket.Media.MediaType.Document)
+            {
+                Mimetype = string.IsNullOrWhiteSpace(mimeType) ? "application/octet-stream" : mimeType,
+                FileName = string.IsNullOrWhiteSpace(fileName) ? "document" : fileName.Trim(),
+                Caption = caption
+            };
+
+            return SendAsync(jid, content, explicitMessageId);
+        }
+
         public Task<string> SendPinInChatMessageAsync(
             string jid,
             global::Proto.MessageKey targetKey,
