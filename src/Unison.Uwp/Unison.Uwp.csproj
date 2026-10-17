@@ -282,6 +282,7 @@
     <Compile Include="Services\LiveTilesService.cs" />
     <Compile Include="Services\ShortcutService.cs" />
     <Compile Include="Services\RuntimeDiagnosticsService.cs" />
+    <Compile Include="Services\VerboseLog.cs" />
     <Compile Include="Data\MessageStore.cs" />
     <Compile Include="Data\PersonStore.cs" />
     <Compile Include="Data\GroupRosterStore.cs" />

@@ -392,6 +392,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IMediaDownloadHost>(),
                 sp.GetRequiredService<IEncryptedMediaDownloader>(),
                 sp.GetRequiredService<IChatCatalogPersistence>(),
+                sp.GetRequiredService<IWhatsAppSessionProvider>(),
                 sp.GetRequiredService<IChatStore>(),
                 sp.GetRequiredService<IChatStateStore>(),
                 sp.GetRequiredService<ISystemInfoProvider>(),

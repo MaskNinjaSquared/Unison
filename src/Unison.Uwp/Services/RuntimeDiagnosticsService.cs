@@ -75,23 +75,11 @@ namespace Unison.Uwp.Services
             _whatsAppService = whatsAppService;
         }
 
-        /// <summary>
-        /// The gate itself lives on the client, which owns both the setting and the sink it
-        /// silences. Answering false before the client is attached is correct rather than
-        /// defensive: nothing is being traced yet either.
-        /// </summary>
-        public bool IsVerboseLoggingEnabled
-        {
-            get
-            {
-                var whatsApp = _whatsAppService;
-                return whatsApp != null && whatsApp.VerboseLogging;
-            }
-        }
+        public bool IsVerboseLoggingEnabled => VerboseLog.IsEnabled;
 
         public void SetVerboseLogging(bool enabled, string source)
         {
-            _whatsAppService?.SetVerboseLogging(enabled, source ?? "diagnostics");
+            VerboseLog.Set(enabled, source ?? "diagnostics");
         }
 
         public void Start()

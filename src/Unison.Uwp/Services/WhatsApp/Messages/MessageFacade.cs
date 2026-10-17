@@ -10,6 +10,8 @@ using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.Socket.Abstractions;
+using Unison.Uwp.Client;
+using Unison.Uwp.Services.Socket;
 using Unison.Uwp.Services.WhatsApp.History;
 using Unison.Uwp.Services;
 
@@ -35,6 +37,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
         private readonly OutgoingMediaSend _mediaSend;
         private readonly MediaAvailability _availability;
         private readonly IChatCatalogPersistence _catalog;
+        private readonly IWhatsAppSessionProvider _sessions;
         private readonly IRuntimeDiagnostics _diagnostics;
         private readonly int _sqlOpenPageSize;
         private readonly int _sqlLoadMorePageSize;
@@ -56,6 +59,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             IMediaDownloadHost mediaHost,
             IEncryptedMediaDownloader mediaDownloader,
             IChatCatalogPersistence catalog,
+            IWhatsAppSessionProvider sessions,
             IChatStore chatStore = null,
             IChatStateStore chatState = null,
             ISystemInfoProvider systemInfo = null,
@@ -72,6 +76,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                 ?? throw new ArgumentNullException(nameof(historyMessageStore));
             _notifications = notifications ?? throw new ArgumentNullException(nameof(notifications));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
+            _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
             _chatStore = chatStore;
             _chatState = chatState;
             if (outgoingHost == null)
@@ -112,7 +117,13 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
 
         public Task SubscribeToPresenceAsync(string jid)
         {
-            return _whatsAppService.PresenceSubscribeAsync(jid);
+            IWhatsAppSocket socket = _sessions.Socket;
+            if (string.IsNullOrWhiteSpace(jid) || socket == null || !socket.IsConnected)
+            {
+                return Task.CompletedTask;
+            }
+
+            return socket.PresenceSubscribeAsync(jid);
         }
 
         private static void Relay(Action raise, string name)

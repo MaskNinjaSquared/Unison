@@ -72,19 +72,7 @@ namespace Unison.Uwp.Services.WhatsApp
             handler(this, args);
         }
 
-        // Controls verbose debug output - can be toggled from Debug menu.
-        // Padrao alterado para FALSE: sao ~280 pontos de log (122 so no SignalHandler,
-        // 57 no MessageStore) executados nos caminhos mais quentes -- descriptografia
-        // e sincronizacao de historico. Ligado, isso deixa o app lento no Lumia.
-        private static bool _verboseLogging = false;
-        private static bool _loggingSettingsInitialized;
         private static volatile bool _suppressReplayDiagnostics;
-
-        public static bool VerboseLogging
-        {
-            get => _verboseLogging;
-            set => SetVerboseLogging(value, "property");
-        }
 
         public static bool SuppressReplayDiagnostics => _suppressReplayDiagnostics;
         
@@ -115,12 +103,12 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         /// <summary>
-        /// Logs a message to the debug output if VerboseLogging is enabled.
+        /// Logs a message to the debug output if <see cref="VerboseLog"/> is on.
         /// </summary>
         [Conditional("DEBUG")]
         public static void Log(string message)
         {
-            if (VerboseLogging && !ShouldSuppressReplayDiagnostic(message))
+            if (VerboseLog.IsEnabled && !ShouldSuppressReplayDiagnostic(message))
             {
                 Debug.WriteLine(message);
             }
@@ -143,7 +131,7 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         /// <summary>
-        /// Loads persisted verbose logging setting and reports startup state.
+        /// Routes protocol diagnostics through <see cref="Log"/> and loads the verbose switch.
         /// Safe to call multiple times.
         /// </summary>
         public static void InitializeLoggingSettings()
@@ -152,59 +140,7 @@ namespace Unison.Uwp.Services.WhatsApp
             // foreground, keep routing its optional diagnostics through the existing
             // Unison verbosity gate.
             ProtocolRuntimeLog.Sink = message => Log(message);
-
-            if (_loggingSettingsInitialized)
-            {
-                return;
-            }
-
-            try
-            {
-                var settings = LocalSettingsAccess.Current;
-                bool hasSaved = settings.ContainsKey(LocalSettingsConstants.VerboseLoggingEnabled);
-                _verboseLogging = settings.Get<bool>(LocalSettingsConstants.VerboseLoggingEnabled);
-
-                if (!hasSaved)
-                {
-                    settings.Set(LocalSettingsConstants.VerboseLoggingEnabled, _verboseLogging);
-                }
-
-                Debug.WriteLine($"[Logging] Startup verbose logging state: {(_verboseLogging ? "ON" : "OFF")} (persisted={hasSaved})");
-                _loggingSettingsInitialized = true;
-            }
-            catch (Exception ex)
-            {
-                _verboseLogging = true;
-                Debug.WriteLine($"[Logging] Failed to load verbose logging setting; defaulting ON. Error: {ex.Message}");
-                _loggingSettingsInitialized = true;
-            }
-        }
-
-        /// <summary>
-        /// Sets and persists verbose logging state, with explicit transition logging.
-        /// </summary>
-        public static void SetVerboseLogging(bool enabled, string source = "unknown")
-        {
-            bool previous = _verboseLogging;
-            _verboseLogging = enabled;
-
-            try
-            {
-                LocalSettingsAccess.Current.Set(LocalSettingsConstants.VerboseLoggingEnabled, enabled);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[Logging] Failed to persist verbose logging setting: {ex.Message}");
-            }
-
-            if (previous != enabled)
-            {
-                Debug.WriteLine($"[Logging] Verbose logging changed: {(previous ? "ON" : "OFF")} -> {(enabled ? "ON" : "OFF")} (source={source})");
-            }
-            else
-            {
-                Debug.WriteLine($"[Logging] Verbose logging unchanged: {(enabled ? "ON" : "OFF")} (source={source})");
-            }
+            VerboseLog.Initialize();
         }
 
         private IWhatsAppSocket _socket;
@@ -350,18 +286,6 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 RaiseSyncStatus(null);
             }
-        }
-
-        /// <summary>Forwards presence subscribe to the active socket when connected.</summary>
-        public Task PresenceSubscribeAsync(string jid)
-        {
-            var socket = _socket;
-            if (string.IsNullOrWhiteSpace(jid) || socket == null || !socket.IsConnected)
-            {
-                return Task.CompletedTask;
-            }
-
-            return socket.PresenceSubscribeAsync(jid);
         }
 
         public async Task ClearUnreadForChatAsync(string jid)
@@ -804,10 +728,6 @@ namespace Unison.Uwp.Services.WhatsApp
         public ChatMessageCache MessagesByChat => _chatState.MessagesByChat;
 
         private readonly ChatRowIndex _chatRows;
-
-        bool IWhatsAppService.VerboseLogging => VerboseLogging;
-
-        void IWhatsAppService.SetVerboseLogging(bool enabled, string source) => SetVerboseLogging(enabled, source);
 
         public DisplayNameTable ContactNames => _chatState.PushNames;
         public DisplayNameTable PhoneContactNamesByJid => _chatState.AddressBookNames;

@@ -16,7 +16,6 @@ namespace Unison.Core.Contracts.WhatsApp
         string CurrentUserAvatar { get; set; }
         /// <summary>Logged-in user snapshot (Id/Lid/Name/Phone/AvatarUrl).</summary>
         Profile CurrentProfile { get; }
-        bool VerboseLogging { get; }
         bool IsConnected { get; }
         bool IsLoadingPersistedChats { get; }
 
@@ -199,9 +198,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         Task ApplyChatDeletionAsync(string jid);
 
-        /// <summary>Subscribes to presence for a 1:1 JID when the socket is connected; no-op otherwise.</summary>
-        Task PresenceSubscribeAsync(string jid);
-
         /// <summary>Prefer <see cref="IMessageService.StartNewChat"/> from ViewModels.</summary>
         void StartNewChat(string jid);
 
@@ -244,7 +240,5 @@ namespace Unison.Core.Contracts.WhatsApp
             string reason = null);
 
         RuntimeDiagnosticsSnapshot GetRuntimeDiagnosticsSnapshot();
-
-        void SetVerboseLogging(bool enabled, string source);
     }
 }
