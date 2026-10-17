@@ -49,6 +49,45 @@ namespace Unison.Core.Tests.Helpers
             Assert.Equal(new[] { "111@s.whatsapp.net", "999@lid" }, keys);
         }
 
+        [Fact]
+        public void Merge_writes_a_key_both_lists_share_once()
+        {
+            // The app-state pin writes the row's keys and the wire address's keys. They are
+            // usually the same conversation, and each repeat was another SQLite upsert.
+            IReadOnlyList<string> row = ChatPinStoreKeys.For("111@s.whatsapp.net", "111@s.whatsapp.net", "999@lid");
+            IReadOnlyList<string> wire = ChatPinStoreKeys.For("999@lid", "111@s.whatsapp.net", null);
+
+            Assert.Equal(new[] { "111@s.whatsapp.net", "999@lid" }, ChatPinStoreKeys.Merge(row, wire));
+        }
+
+        [Fact]
+        public void Merge_keeps_the_row_keys_first_and_adds_what_only_the_wire_names()
+        {
+            IReadOnlyList<string> merged = ChatPinStoreKeys.Merge(
+                new[] { "111@s.whatsapp.net" },
+                new[] { "222@s.whatsapp.net", "111@s.whatsapp.net" });
+
+            Assert.Equal(new[] { "111@s.whatsapp.net", "222@s.whatsapp.net" }, merged);
+        }
+
+        [Fact]
+        public void Merge_compares_keys_without_regard_to_case()
+        {
+            IReadOnlyList<string> merged = ChatPinStoreKeys.Merge(
+                new[] { "999@lid" },
+                new[] { "999@LID" });
+
+            Assert.Equal(new[] { "999@lid" }, merged);
+        }
+
+        [Fact]
+        public void Merge_treats_a_missing_list_as_empty()
+        {
+            Assert.Equal(new[] { "999@lid" }, ChatPinStoreKeys.Merge(null, new[] { "999@lid" }));
+            Assert.Equal(new[] { "999@lid" }, ChatPinStoreKeys.Merge(new[] { "999@lid" }, null));
+            Assert.Empty(ChatPinStoreKeys.Merge(null, null));
+        }
+
         private sealed class FakeJids : IJidResolver
         {
             public Dictionary<string, string> Canonical { get; } =

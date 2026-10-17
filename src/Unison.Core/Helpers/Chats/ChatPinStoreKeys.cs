@@ -50,6 +50,31 @@ namespace Unison.Core.Helpers
             return keys;
         }
 
+        /// <summary>
+        /// The keys of <paramref name="first"/>, then each key of <paramref name="second"/> not
+        /// already among them, so a store write per key never repeats one.
+        /// </summary>
+        public static IReadOnlyList<string> Merge(IReadOnlyList<string> first, IReadOnlyList<string> second)
+        {
+            var keys = new List<string>((first?.Count ?? 0) + (second?.Count ?? 0));
+            AddAll(keys, first);
+            AddAll(keys, second);
+            return keys;
+        }
+
+        private static void AddAll(List<string> keys, IReadOnlyList<string> source)
+        {
+            if (source == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < source.Count; i++)
+            {
+                Add(keys, source[i]);
+            }
+        }
+
         private static string NormalizeForLookup(string jid)
         {
             string normalized = JidHelper.Normalize(jid);
