@@ -68,6 +68,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
         private readonly SyncStatusChannel _syncStatus;
         private readonly InitialSyncProgressState _initialSync;
         private readonly SyncBudget _syncBudget;
+        private readonly SyncWorkloadStrategy _workload;
 
         /// <summary>
         /// Session-scoped: one toast after repeated background history lots. Not reset until
@@ -88,6 +89,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
             SyncStatusChannel syncStatus,
             InitialSyncProgressState initialSync,
             SyncBudget syncBudget,
+            SyncWorkloadStrategy workload,
             IHistoryChatPreviewStore chatPreviewStore = null,
             IHistoryMigrationStore migrationStore = null,
             IHistoryMessageStore messageHistoryStore = null,
@@ -128,6 +130,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
             _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
             _initialSync = initialSync ?? throw new ArgumentNullException(nameof(initialSync));
             _syncBudget = syncBudget ?? throw new ArgumentNullException(nameof(syncBudget));
+            _workload = workload ?? throw new ArgumentNullException(nameof(workload));
             _chatPreviewStore = chatPreviewStore;
             _migrationStore = migrationStore;
             _messageHistoryStore = messageHistoryStore;
@@ -596,8 +599,9 @@ namespace Unison.Uwp.Services.WhatsApp.History
             }
 
             string syncId = CurrentSyncId();
+            int messageCap = _workload.MaxMessagesPerConversation;
             HistoryMessageWriteBatch batch = await Task.Run(
-                    () => HistoryMessageBuilder.Build(sync, syncId ?? string.Empty))
+                    () => HistoryMessageBuilder.Build(sync, syncId ?? string.Empty, messageCap))
                 .ConfigureAwait(false);
 
             if (batch == null || batch.IsEmpty)
@@ -605,24 +609,65 @@ namespace Unison.Uwp.Services.WhatsApp.History
                 return empty;
             }
 
-            try
+            if (_workload.MaterializeHistoryThumbsDuringSync)
             {
-                await HistoryThumbnailMaterializer.MaterializeMessageThumbsAsync(batch.Messages)
-                    .ConfigureAwait(false);
+                try
+                {
+                    await HistoryThumbnailMaterializer.MaterializeMessageThumbsAsync(batch.Messages)
+                        .ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[HistoryFacade] Thumbnail materialize failed: " + ex.Message);
+                }
             }
-            catch (Exception ex)
+            else
             {
-                Debug.WriteLine("[HistoryFacade] Thumbnail materialize failed: " + ex.Message);
+                DropInlineThumbnails(batch.Messages);
             }
 
-            HistoryWriteBatchResult written = await _messageHistoryStore.PersistWriteBatchAsync(batch)
-                .ConfigureAwait(false);
+            int upserted = 0;
+            var chatJids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (HistoryMessageWriteBatch slice in HistoryPersistBatching.Split(
+                batch,
+                _workload.HistoryPersistSubBatchSize))
+            {
+                HistoryWriteBatchResult written = await _messageHistoryStore.PersistWriteBatchAsync(slice)
+                    .ConfigureAwait(false);
+                upserted += written?.UpsertedCount ?? 0;
+                if (written?.ChatJids != null)
+                {
+                    for (int i = 0; i < written.ChatJids.Count; i++)
+                    {
+                        if (!string.IsNullOrWhiteSpace(written.ChatJids[i]))
+                        {
+                            chatJids.Add(written.ChatJids[i]);
+                        }
+                    }
+                }
+            }
 
             return new PersistMessagesResult
             {
-                Upserted = written?.UpsertedCount ?? 0,
-                ChatJids = written?.ChatJids ?? Array.Empty<string>()
+                Upserted = upserted,
+                ChatJids = chatJids.Count == 0 ? Array.Empty<string>() : chatJids.ToList()
             };
+        }
+
+        private static void DropInlineThumbnails(IList<HistoryMessage> messages)
+        {
+            if (messages == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < messages.Count; i++)
+            {
+                if (messages[i] != null)
+                {
+                    messages[i].MediaThumbnailJpeg = null;
+                }
+            }
         }
 
         private async Task PersistStatusesAsync(HistorySync sync)

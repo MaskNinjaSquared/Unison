@@ -7,6 +7,7 @@
 // stays generous.
 // =============================================================================
 using System;
+using Unison.Core.Models;
 
 namespace Unison.Core.State
 {
@@ -24,6 +25,9 @@ namespace Unison.Core.State
         public bool IsReplayDrainActive;
 
         public bool IsFullHistoryInFlight;
+
+        /// <summary>512 MB class devices always run frugal, even with momentary headroom.</summary>
+        public DeviceCategory DeviceCategory;
     }
 
     public sealed class SyncBudget
@@ -37,6 +41,7 @@ namespace Unison.Core.State
         private readonly HistoryOnDemandRegistry _history;
         private readonly Func<bool> _hasMemoryHeadroom;
         private readonly bool _isMobile;
+        private readonly DeviceCategory _deviceCategory;
 
         /// <param name="hasMemoryHeadroom">Read on every check; memory pressure changes while running.</param>
         public SyncBudget(
@@ -45,7 +50,8 @@ namespace Unison.Core.State
             SyncWorkGate syncWork,
             HistoryOnDemandRegistry history,
             Func<bool> hasMemoryHeadroom,
-            bool isMobile)
+            bool isMobile,
+            SyncWorkloadStrategy workload = null)
         {
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _initialSync = initialSync ?? throw new ArgumentNullException(nameof(initialSync));
@@ -53,6 +59,7 @@ namespace Unison.Core.State
             _history = history ?? throw new ArgumentNullException(nameof(history));
             _hasMemoryHeadroom = hasMemoryHeadroom ?? throw new ArgumentNullException(nameof(hasMemoryHeadroom));
             _isMobile = isMobile;
+            _deviceCategory = workload?.Category ?? DeviceCategory.High;
         }
 
         public bool IsFrugal => PreferFrugal(new SyncBudgetInputs
@@ -62,11 +69,17 @@ namespace Unison.Core.State
             ChatCount = _chatState.Chats.Count,
             IsInitialSyncActive = _initialSync.IsActive,
             IsReplayDrainActive = _syncWork.IsReplayDrainActive,
-            IsFullHistoryInFlight = _history.IsFullInFlight
+            IsFullHistoryInFlight = _history.IsFullInFlight,
+            DeviceCategory = _deviceCategory
         });
 
         public static bool PreferFrugal(SyncBudgetInputs inputs)
         {
+            if (inputs.DeviceCategory == DeviceCategory.Unsupported)
+            {
+                return true;
+            }
+
             if (!inputs.HasMemoryHeadroom)
             {
                 return true;

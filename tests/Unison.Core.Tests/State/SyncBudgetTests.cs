@@ -18,7 +18,8 @@ namespace Unison.Core.Tests.State
             int chats = 0,
             bool firstSync = false,
             bool replay = false,
-            bool fullHistory = false) =>
+            bool fullHistory = false,
+            DeviceCategory category = DeviceCategory.High) =>
             SyncBudget.PreferFrugal(new SyncBudgetInputs
             {
                 HasMemoryHeadroom = headroom,
@@ -26,10 +27,17 @@ namespace Unison.Core.Tests.State
                 ChatCount = chats,
                 IsInitialSyncActive = firstSync,
                 IsReplayDrainActive = replay,
-                IsFullHistoryInFlight = fullHistory
+                IsFullHistoryInFlight = fullHistory,
+                DeviceCategory = category
             });
 
         // --- The rule ----------------------------------------------------------
+
+        [Fact]
+        public void An_unsupported_device_is_always_frugal()
+        {
+            Assert.True(Frugal(headroom: true, mobile: false, category: DeviceCategory.Unsupported));
+        }
 
         [Fact]
         public void Memory_pressure_is_frugal_on_any_device()

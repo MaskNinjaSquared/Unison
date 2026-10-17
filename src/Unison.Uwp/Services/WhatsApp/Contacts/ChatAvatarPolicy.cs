@@ -33,10 +33,6 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
     {
         private static readonly TimeSpan AvatarRefreshInterval = TimeSpan.FromDays(7);
         private static readonly TimeSpan AvatarFetchFailureBackoff = TimeSpan.FromMinutes(30);
-        private static readonly TimeSpan AvatarFetchInterRequestDelayGenerous = TimeSpan.FromMilliseconds(900);
-        private static readonly TimeSpan AvatarFetchInterRequestDelayFrugal = TimeSpan.FromMilliseconds(750);
-        private const int AvatarFetchBatchSizeGenerous = 12;
-        private const int AvatarFetchBatchSizeFrugal = 4;
         private const int AvatarStatusProgressStride = 3;
         private const string GroupAvatarFallbackMissReason = "group-avatar-fallback-miss";
 
@@ -46,6 +42,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly SyncStatusChannel _syncStatus;
         private readonly SyncWorkGate _syncWork;
         private readonly SyncBudget _syncBudget;
+        private readonly SyncWorkloadStrategy _workload;
         private readonly InitialSyncProgressState _initialSync;
         private readonly IDispatcher _ui;
         private readonly IChatCatalogPersistence _catalog;
@@ -60,10 +57,12 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
         internal ChatAvatarPolicy(IWhatsAppService whatsAppService, IJidResolver jids, ChatAvatarFetch fetch, IDispatcher ui,
             IChatCatalogPersistence catalog, IChatStateStore chatState, SyncStatusChannel syncStatus, SyncWorkGate syncWork,
-            IWhatsAppSessionProvider sessions, SyncBudget syncBudget, InitialSyncProgressState initialSync)
+            IWhatsAppSessionProvider sessions, SyncBudget syncBudget, SyncWorkloadStrategy workload,
+            InitialSyncProgressState initialSync)
         {
             _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
             _syncBudget = syncBudget ?? throw new ArgumentNullException(nameof(syncBudget));
+            _workload = workload ?? throw new ArgumentNullException(nameof(workload));
             _initialSync = initialSync ?? throw new ArgumentNullException(nameof(initialSync));
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
@@ -86,11 +85,9 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         /// </summary>
         public async Task RetrieveBatchAsync(CancellationToken token = default(CancellationToken))
         {
+            int batchSize = _workload.AvatarFetchBatchSize;
+            TimeSpan interRequestDelay = TimeSpan.FromMilliseconds(_workload.AvatarFetchInterRequestDelayMs);
             bool frugal = _syncBudget.IsFrugal;
-            int batchSize = frugal ? AvatarFetchBatchSizeFrugal : AvatarFetchBatchSizeGenerous;
-            TimeSpan interRequestDelay = frugal
-                ? AvatarFetchInterRequestDelayFrugal
-                : AvatarFetchInterRequestDelayGenerous;
 
             // Progress only after the first completed fetch — "0 of N" is noise on Mobile StatusBar.
             // Bare phase:avatars is also skipped; hydrate/disk work stays silent.

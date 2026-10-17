@@ -1317,6 +1317,13 @@ builds the key, sends on `IWhatsAppSessionProvider.Socket` and works out the pin
 hands the local half to the client, the same split as chat pins. `IWhatsAppService.SetMessagePinnedAsync`
 became `ApplyMessagePinAsync` (timeline, pending pin, SQLite and replay queue; no wire).
 
+**Sync workload is a strategy per memory tier.** `SyncWorkloadStrategy` (`Unsupported` /
+`Low` / `High`, from `DeviceCategory`) owns message caps, SQLite sub-batch size, whether history
+thumbs materialize during sync, chat-list release size, avatar batch size and the
+`HistorySyncConfig` storage quota. Mobile alone decides UI: `ChatListViewModel` holds row release
+until initial-sync `IsCompleted` (banner only); desktop still releases progressively. Unsupported
+is always frugal in `SyncBudget`.
+
 **Done when:** `.Connection.cs` + a small main file; no façade needs send/history/avatar/group/list methods on the client; leftover `IWhatsAppSocket` drop is [Migration](Migration) item 9, after this.
 
 ---

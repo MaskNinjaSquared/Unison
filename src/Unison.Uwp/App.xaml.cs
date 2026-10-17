@@ -285,13 +285,23 @@ namespace Unison.Uwp
             // The client publishes first-sync progress; HistoryFacade and the budget read it.
             services.AddSingleton<InitialSyncProgressState>();
             services.AddSingleton<SelfProfileState>();
+            // Memory tier once: drives history caps, list release, avatars and the phone's quota ask.
+            services.AddSingleton(sp =>
+            {
+                SyncWorkloadStrategy workload = SyncWorkloadStrategy.For(
+                    sp.GetRequiredService<ISystemInfoProvider>().GetDeviceCategory());
+                Unison.Socket.Sync.HistorySyncConfigFactory.DefaultStorageQuotaMb =
+                    workload.HistoryStorageQuotaMb;
+                return workload;
+            });
             services.AddSingleton(sp => new SyncBudget(
                 sp.GetRequiredService<IChatStateStore>(),
                 sp.GetRequiredService<InitialSyncProgressState>(),
                 sp.GetRequiredService<SyncWorkGate>(),
                 sp.GetRequiredService<HistoryOnDemandRegistry>(),
                 () => Windows.System.MemoryManager.AppMemoryUsageLevel == Windows.System.AppMemoryUsageLevel.Low,
-                sp.GetRequiredService<ISystemInfoProvider>().IsMobile()));
+                sp.GetRequiredService<ISystemInfoProvider>().IsMobile(),
+                sp.GetRequiredService<SyncWorkloadStrategy>()));
             services.AddSingleton<IWhatsAppService>(
                 sp => WhatsAppService.Create(
                     sp.GetRequiredService<ChatStateStore>(),
@@ -354,6 +364,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<SyncStatusChannel>(),
                 sp.GetRequiredService<InitialSyncProgressState>(),
                 sp.GetRequiredService<SyncBudget>(),
+                sp.GetRequiredService<SyncWorkloadStrategy>(),
                 sp.GetRequiredService<IHistoryChatPreviewStore>(),
                 sp.GetRequiredService<IHistoryMigrationStore>(),
                 sp.GetRequiredService<IHistoryMessageStore>(),
@@ -436,6 +447,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<SyncWorkGate>(),
                 sp.GetRequiredService<ContactDisplayNames>(),
                 sp.GetRequiredService<SyncBudget>(),
+                sp.GetRequiredService<SyncWorkloadStrategy>(),
                 sp.GetRequiredService<InitialSyncProgressState>()));
             services.AddSingleton<IOfflineReplayHost>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());

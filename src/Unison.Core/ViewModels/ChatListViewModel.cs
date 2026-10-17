@@ -68,6 +68,8 @@ namespace Unison.Core.ViewModels
         private readonly ISessionLogger _sessionLogger;
         private readonly IRuntimeDiagnostics _diagnostics;
         private readonly ILocalSettings _localSettings;
+        private readonly ISystemInfoProvider _systemInfo;
+        private readonly SyncWorkloadStrategy _workload;
 
         private CancellationTokenSource _refreshCts;
         private CancellationTokenSource _refreshContinueCts;
@@ -98,7 +100,6 @@ namespace Unison.Core.ViewModels
         // progress instead of the list pretending to be finished.
         // ---------------------------------------------------------------------
 
-        private const int BatchSize = 20;
         private static readonly TimeSpan BatchInterval = TimeSpan.FromMilliseconds(140);
 
         /// <summary>
@@ -107,11 +108,9 @@ namespace Unison.Core.ViewModels
         /// </summary>
         private const int BatchBudgetMs = 8;
 
-        /// <summary>
-        /// How many SQLite preview rows to merge into <see cref="IChatStateStore"/> per UI tick.
-        /// Large chunks must not walk/add thousands of chats in one dispatcher callback.
-        /// </summary>
-        private const int PreviewHydrateBatchSize = 25;
+        private int BatchSize => _workload.ChatListReleaseBatchSize;
+
+        private int PreviewHydrateBatchSize => _workload.PreviewHydrateBatchSize;
         private static readonly TimeSpan VisibleRefreshDebounceGenerous = TimeSpan.FromMilliseconds(80);
         private static readonly TimeSpan VisibleRefreshDebounceFrugal = TimeSpan.FromMilliseconds(320);
         private const int VisibleRefreshMoveBudgetGenerous = 24;
@@ -171,13 +170,17 @@ namespace Unison.Core.ViewModels
             IChatService chatService = null,
             ISessionLogger sessionLogger = null,
             IRuntimeDiagnostics diagnostics = null,
-            ILocalSettings localSettings = null)
+            ILocalSettings localSettings = null,
+            ISystemInfoProvider systemInfo = null,
+            SyncWorkloadStrategy workload = null)
         {
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _chatService = chatService;
             _sessionLogger = sessionLogger;
             _diagnostics = diagnostics;
             _localSettings = localSettings;
+            _systemInfo = systemInfo;
+            _workload = workload ?? HighSyncWorkload.Instance;
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _messageService = messageService ?? throw new ArgumentNullException(nameof(messageService));
             _contactService = contactService ?? throw new ArgumentNullException(nameof(contactService));
@@ -488,10 +491,21 @@ namespace Unison.Core.ViewModels
 
             if (_history.IsInitialSyncSafeMode)
             {
-                BeginBatchRendering(
-                    _history.InitialSyncProcessedConversations,
-                    _history.InitialSyncTotalConversations,
-                    _chatState.Chats.Count);
+                // Mobile: keep the list empty until the persist quiet-finalize. Desktop is fast
+                // enough that progressive release during the burst is fine.
+                if (HoldListUntilSyncCompleted)
+                {
+                    ShowSyncProgressOnly(
+                        _history.InitialSyncProcessedConversations,
+                        _history.InitialSyncTotalConversations);
+                }
+                else
+                {
+                    BeginBatchRendering(
+                        _history.InitialSyncProcessedConversations,
+                        _history.InitialSyncTotalConversations,
+                        _chatState.Chats.Count);
+                }
             }
 
             _ = PresentFromConnectionStatusAsync(_connection.CurrentStatus);
@@ -1224,6 +1238,12 @@ namespace Unison.Core.ViewModels
 
                 if (!e.IsCompleted)
                 {
+                    if (HoldListUntilSyncCompleted)
+                    {
+                        ShowSyncProgressOnly(e.ProcessedConversations, e.TotalConversations);
+                        return;
+                    }
+
                     BeginBatchRendering(
                         e.ProcessedConversations,
                         e.TotalConversations,
@@ -1231,10 +1251,11 @@ namespace Unison.Core.ViewModels
                     return;
                 }
 
-                _batchRendering = true;
-                _batchProcessed = Math.Max(_batchProcessed, e.ProcessedConversations);
-                _batchTotal = Math.Max(_batchTotal, e.TotalConversations);
-                RaiseVisibleTarget(e.VisibleChatTarget);
+                // Persist quiet-finalize: now (and only now on Mobile) release rows.
+                BeginBatchRendering(
+                    e.ProcessedConversations,
+                    e.TotalConversations,
+                    Math.Max(e.VisibleChatTarget, _chatState.Chats.Count));
 
                 // SQLite previews may still be merging into the list after the chunk is marked
                 // complete — keep the syncing banner until that queue drains.
@@ -2352,9 +2373,24 @@ namespace Unison.Core.ViewModels
 
         private bool IsInSafeMode => _history.IsInitialSyncSafeMode;
 
+        /// <summary>
+        /// Mobile always waits for persist completion before putting rows on screen, so the UI
+        /// thread is not fighting the SQLite write. Desktop keeps progressive release.
+        /// </summary>
+        private bool HoldListUntilSyncCompleted => _systemInfo != null && _systemInfo.IsMobile();
+
         // ---------------------------------------------------------------------
         // Batch rendering
         // ---------------------------------------------------------------------
+
+        /// <summary>Banner and counts only — no VisibleChats mutations yet.</summary>
+        private void ShowSyncProgressOnly(int processed, int total)
+        {
+            _batchProcessed = Math.Max(_batchProcessed, Math.Max(0, processed));
+            _batchTotal = Math.Max(_batchTotal, Math.Max(0, total));
+            IsLoadingOverlayVisible = true;
+            UpdateBatchProgressText();
+        }
 
         private void BeginBatchRendering(int processed, int total, int visibleTarget)
         {

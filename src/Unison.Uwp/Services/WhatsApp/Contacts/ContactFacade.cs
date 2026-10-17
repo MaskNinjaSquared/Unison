@@ -84,6 +84,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             SyncWorkGate syncWork,
             ContactDisplayNames displayNames,
             SyncBudget syncBudget,
+            SyncWorkloadStrategy workload,
             InitialSyncProgressState initialSync)
         {
             _displayNames = displayNames ?? throw new ArgumentNullException(nameof(displayNames));
@@ -150,6 +151,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 syncWork,
                 sessions,
                 syncBudget,
+                workload ?? throw new ArgumentNullException(nameof(workload)),
                 initialSync);
             _roster = new GroupRosterPolicy(groups, this, jids, ui, catalog, chats, syncWork, sessions);
 

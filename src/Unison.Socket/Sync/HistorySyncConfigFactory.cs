@@ -17,14 +17,19 @@ namespace Unison.Socket.Sync
     public static class HistorySyncConfigFactory
     {
         /// <summary>
+        /// Overridden at app startup from the device's sync workload (Unsupported/Low ask for less).
+        /// </summary>
+        public static uint DefaultStorageQuotaMb { get; set; } = 10240;
+
+        /// <summary>
         /// What this client can be sent. Group history and call logs are declined: neither is
         /// shown anywhere, and asking for them only makes the sync slower.
         /// </summary>
-        public static global::Proto.DeviceProps.Types.HistorySyncConfig Create()
+        public static global::Proto.DeviceProps.Types.HistorySyncConfig Create(uint? storageQuotaMb = null)
         {
             return new global::Proto.DeviceProps.Types.HistorySyncConfig
             {
-                StorageQuotaMb = 10240,
+                StorageQuotaMb = storageQuotaMb ?? DefaultStorageQuotaMb,
                 InlineInitialPayloadInE2EeMsg = true,
                 SupportCallLogHistory = false,
                 SupportBotUserAgentChatHistory = true,

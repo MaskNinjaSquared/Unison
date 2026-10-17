@@ -12,7 +12,7 @@ namespace Unison.Core.Helpers
     /// </summary>
     public static class HistoryMessageBuilder
     {
-        /// <summary>Aligned with initial-sync safe-mode message cap on the legacy path.</summary>
+        /// <summary>High-tier default; prefer the sync workload strategy's per-conversation cap.</summary>
         public const int MaxMessagesPerConversation = 250;
 
         /// <summary>WhatsApp default pin length when the envelope has no duration.</summary>
@@ -20,11 +20,20 @@ namespace Unison.Core.Helpers
 
         public static HistoryMessageWriteBatch Build(HistorySync sync, string syncId)
         {
+            return Build(sync, syncId, MaxMessagesPerConversation);
+        }
+
+        public static HistoryMessageWriteBatch Build(HistorySync sync, string syncId, int maxMessagesPerConversation)
+        {
             var batch = new HistoryMessageWriteBatch();
             if (sync?.Conversations == null || sync.Conversations.Count == 0)
             {
                 return batch;
             }
+
+            int messageCap = maxMessagesPerConversation > 0
+                ? maxMessagesPerConversation
+                : MaxMessagesPerConversation;
 
             string syncType = sync.SyncType.ToString();
             DateTime now = DateTime.UtcNow;
@@ -54,14 +63,14 @@ namespace Unison.Core.Helpers
                     .OrderByDescending(m => m.MessageTimestamp);
 
                 int kept = 0;
-                var acceptedNewestFirst = new List<HistoryMessage>(MaxMessagesPerConversation);
+                var acceptedNewestFirst = new List<HistoryMessage>(messageCap);
                 var byId = new Dictionary<string, HistoryMessage>(StringComparer.Ordinal);
 
                 foreach (var info in newestFirst)
                 {
                     CollectSideEffects(info, chatJid, isGroup, pushNames, batch);
 
-                    if (kept >= MaxMessagesPerConversation)
+                    if (kept >= messageCap)
                     {
                         continue;
                     }
