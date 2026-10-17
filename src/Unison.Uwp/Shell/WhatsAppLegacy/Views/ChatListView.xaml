@@ -26,13 +26,13 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Sync left; filter right. MinHeight (not fixed Height) so LegacySettingsButtonStyle can be 32px. -->
+        <!-- Sync left; filter right as a text link (not a bordered button). -->
         <Grid Grid.Row="0"
-              MinHeight="44"
-              Padding="0,6"
+              MinHeight="36"
+              Padding="0,4"
               Background="Transparent">
             <Grid x:Name="SyncStatusPanel"
-                  Margin="10,0,120,0"
+                  Margin="10,0,100,0"
                   Visibility="{x:Bind ViewModel.ShowSyncStatusInUi, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
                   VerticalAlignment="Center" HorizontalAlignment="Left"
                   MaxWidth="220"
@@ -54,29 +54,28 @@
                            TextTrimming="CharacterEllipsis"
                            MaxLines="1"/>
             </Grid>
-            <!-- Same Padding/MinHeight as settings actions (LegacySettingsButtonStyle). -->
-            <Button x:Name="FilterButton"
-                    Style="{StaticResource LegacySettingsButtonStyle}"
-                    Margin="0,0,8,0"
-                    HorizontalAlignment="Right"
-                    VerticalAlignment="Center"
-                    Click="FilterButton_Click"
-                    AutomationProperties.Name="Filter">
+            <HyperlinkButton x:Name="FilterButton"
+                             Style="{StaticResource LegacyHyperlinkButtonStyle}"
+                             Margin="0,0,10,0"
+                             VerticalAlignment="Center"
+                             Click="FilterButton_Click"
+                             AutomationProperties.Name="Filter">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <FontIcon Glyph="&#xEA01;"
                               FontFamily="{StaticResource UnisonIconFont}"
-                              FontSize="14"
-                              Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                              FontSize="11"
+                              Foreground="{ThemeResource SystemControlForegroundAccentBrush}"
                               VerticalAlignment="Center"/>
                     <TextBlock x:Name="FilterLabel"
                                Text="Filter Messages"
-                               Margin="6,0,0,0"
-                               FontSize="13"
+                               Margin="5,0,0,0"
+                               FontSize="12"
                                FontFamily="{StaticResource MainFont}"
-                               Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                               Foreground="{ThemeResource SystemControlForegroundAccentBrush}"
+                               TextDecorations="Underline"
                                VerticalAlignment="Center"/>
                 </StackPanel>
-            </Button>
+            </HyperlinkButton>
             <Button x:Name="MenuButton" Visibility="Collapsed" Click="MenuButton_Click"/>
             <Button x:Name="NewChatButton" Visibility="Collapsed"/>
         </Grid>
