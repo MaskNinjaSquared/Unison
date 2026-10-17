@@ -1443,6 +1443,10 @@ still takes the client for events and `EnsureConnectedAsync`.
 `ContactUsyncResolver` takes that port only (no more `IWhatsAppService`); table write stays
 `UsyncAliasFiling`, socket register + identity heal stay on the client behind the host.
 
+**Startup UI load is `IStartupUiHost`.** `LoadPersistedUiStateAsync` and
+`StartDeferredStartupMaintenance` leave `IWhatsAppService`. `ConnectionFacade` takes the
+host and still attaches the client for events and the rest of lifecycle.
+
 **Done when:** `.Connection.cs` + a small main file; no façade needs send/history/avatar/group/list methods on the client; leftover `IWhatsAppSocket` drop is [Migration](Migration) item 9, after this.
 
 ---

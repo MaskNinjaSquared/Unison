@@ -96,12 +96,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>Ensures a healthy socket within timeoutMs.</summary>
         Task EnsureConnectedAsync(int timeoutMs = 35000, bool forceFreshTransport = false);
 
-        /// <summary>Loads chats.json / UI snapshot after auth is known.</summary>
-        Task LoadPersistedUiStateAsync();
-
-        /// <summary>Post-connect maintenance that must not block first paint.</summary>
-        void StartDeferredStartupMaintenance();
-
         Task ReleaseMemoryAsync();
         Task<bool> TransferActiveSocketToBrokerAsync(string reason);
         Task PrepareForSuspendAsync();

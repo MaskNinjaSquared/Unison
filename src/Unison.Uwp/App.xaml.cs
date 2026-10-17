@@ -435,6 +435,8 @@ namespace Unison.Uwp
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IUsyncAliasHost>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+            services.AddSingleton<IStartupUiHost>(
+                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IAppStateLocalHost>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IEncryptedMediaDownloader>(_ => new HttpEncryptedMediaDownloader(
@@ -603,7 +605,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ILocalContactsService>(),
                 sp.GetRequiredService<IShortcutService>(),
                 sp.GetRequiredService<ILiveTilesService>(),
-                sp.GetRequiredService<IShellThemeService>()));
+                sp.GetRequiredService<IShellThemeService>(),
+                sp.GetRequiredService<IStartupUiHost>()));
             services.AddSingleton<ISystemInfoProvider, SystemInfoProvider>();
             services.AddSingleton<IStatusBarService, StatusBarService>();
             services.AddSingleton<ILocationKeepAliveService, LocationKeepAliveService>();

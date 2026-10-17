@@ -27,6 +27,7 @@ namespace Unison.Uwp.Services.WhatsApp.Connection
         private readonly IShortcutService _shortcuts;
         private readonly ILiveTilesService _liveTiles;
         private readonly IShellThemeService _shellTheme;
+        private readonly IStartupUiHost _startupUi;
         private IWhatsAppService _whatsApp;
         private int _handlingRelink;
 
@@ -38,7 +39,8 @@ namespace Unison.Uwp.Services.WhatsApp.Connection
             ILocalContactsService localContacts,
             IShortcutService shortcuts,
             ILiveTilesService liveTiles,
-            IShellThemeService shellTheme)
+            IShellThemeService shellTheme,
+            IStartupUiHost startupUi)
         {
             _localSettings = localSettings ?? throw new ArgumentNullException(nameof(localSettings));
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
@@ -48,6 +50,7 @@ namespace Unison.Uwp.Services.WhatsApp.Connection
             _shortcuts = shortcuts ?? throw new ArgumentNullException(nameof(shortcuts));
             _liveTiles = liveTiles ?? throw new ArgumentNullException(nameof(liveTiles));
             _shellTheme = shellTheme ?? throw new ArgumentNullException(nameof(shellTheme));
+            _startupUi = startupUi ?? throw new ArgumentNullException(nameof(startupUi));
         }
 
         public event EventHandler<ConnectionEndedEventArgs> ConnectionEnded;
@@ -122,13 +125,12 @@ namespace Unison.Uwp.Services.WhatsApp.Connection
 
         public Task LoadPersistedUiStateAsync()
         {
-            var whatsApp = _whatsApp;
-            return whatsApp == null ? Task.CompletedTask : whatsApp.LoadPersistedUiStateAsync();
+            return _startupUi == null ? Task.CompletedTask : _startupUi.LoadPersistedUiStateAsync();
         }
 
         public void StartDeferredStartupMaintenance()
         {
-            _whatsApp?.StartDeferredStartupMaintenance();
+            _startupUi?.StartDeferredStartupMaintenance();
         }
 
         public Task ResumeAsync()

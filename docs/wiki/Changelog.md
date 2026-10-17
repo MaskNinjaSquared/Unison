@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Startup UI load left the client contract
+
+`LoadPersistedUiStateAsync` and `StartDeferredStartupMaintenance` go through
+`IStartupUiHost`. `ConnectionFacade` is the caller; both members left `IWhatsAppService`.
+
+
 ## Usync alias filing left the client contract
 
 `TryFileUsyncAlias` is `IUsyncAliasHost`. The usync resolver no longer takes
