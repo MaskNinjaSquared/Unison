@@ -558,7 +558,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// apart from a pairing that never got one, which need different things said to them.
         /// </summary>
         private volatile bool _qrDeliveredThisConnection = false;
-        private volatile bool _deferReconnectWorkUntilReplayDrain = false;
+        private readonly SyncWorkGate _syncWork;
         private int _offlineReplayReleased;
         private CancellationTokenSource _resolutionCts;
         private CancellationTokenSource _deferredProfilePictureResolutionCts;
@@ -641,8 +641,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _socket != null &&
             _socket.IsHandshakeComplete;
 
-        /// <summary>True while a reconnect/history replay drain is in progress; satellites should back off.</summary>
-        public bool IsReplayDrainActive => ShouldDeferReconnectReplayWork();
+        private bool IsReplayDrainActive => ShouldDeferReconnectReplayWork();
 
         private void RaiseSyncStatus(string status) => _syncStatus.Raise(status);
 
@@ -705,8 +704,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 "; lotProgress=" + countsAsLot +
                 "; reason=" + (reason ?? string.Empty));
         }
-
-        bool IWhatsAppService.ShouldDeferAvatarFetch(out string reason) => ShouldDeferProfilePictureFetch(out reason);
 
         void IWhatsAppService.ScheduleDeferredAvatarResolution(string reason, TimeSpan? delay) => ScheduleDeferredProfilePictureResolution(reason, delay);
 
@@ -886,10 +883,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly ContactLabelSanitizer _contactLabels = new ContactLabelSanitizer(new SelfMarkerNaming());
         private readonly PushNameLookup _pushNameLookup;
 
-        private bool ShouldDeferReconnectReplayWork()
-        {
-            return _deferReconnectWorkUntilReplayDrain || (_socket?.IsAwaitingInitialSync ?? false);
-        }
+        private bool ShouldDeferReconnectReplayWork() => _syncWork.IsReplayDrainActive;
 
         private bool ShouldPrioritizeHistoryFreshness(out string reason)
         {
@@ -1211,6 +1205,7 @@ namespace Unison.Uwp.Services.WhatsApp
             ChatRowIndex chatRows,
             ActiveChat activeChat,
             SyncStatusChannel syncStatus,
+            SyncWorkGate syncWork,
             IHistoryMessageStore historyMessages,
             IHistoryChatPreviewStore chatPreviews,
             IUsyncGate usyncGate,
@@ -1244,6 +1239,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _activeChat = activeChat ?? throw new ArgumentNullException(nameof(activeChat));
             _activeChat.Changed += OnActiveChatChanged;
             _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
+            _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
             _historyRequests = historyRequests ?? throw new ArgumentNullException(nameof(historyRequests));
             _historyMessages = historyMessages ?? throw new ArgumentNullException(nameof(historyMessages));
             _chatPreviews = chatPreviews ?? throw new ArgumentNullException(nameof(chatPreviews));
@@ -1282,6 +1278,7 @@ namespace Unison.Uwp.Services.WhatsApp
             ChatRowIndex chatRows,
             ActiveChat activeChat,
             SyncStatusChannel syncStatus,
+            SyncWorkGate syncWork,
             IHistoryMessageStore historyMessages,
             IHistoryChatPreviewStore chatPreviews,
             IUsyncGate usyncGate,
@@ -1296,7 +1293,7 @@ namespace Unison.Uwp.Services.WhatsApp
             AttachedUiDispatcher ui)
         {
             return _instance ?? (_instance = new WhatsAppService(
-                chatState, chatRows, activeChat, syncStatus, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, historyRequests,
+                chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, historyRequests,
                 personStore, groupRosterStore, chatStore, systemInfo, ui));
         }
 
@@ -2898,24 +2895,7 @@ namespace Unison.Uwp.Services.WhatsApp
             });
         }
 
-        private bool ShouldDeferProfilePictureFetch(out string reason)
-        {
-            reason = null;
-
-            if (ShouldDeferReconnectReplayWork())
-            {
-                reason = "reconnect-replay-active";
-                return true;
-            }
-
-            reason = _historyRequests.ProbeAvatarDeferral(out string staleCleared);
-            if (staleCleared != null)
-            {
-                Debug.WriteLine("[WhatsAppService] Cleared stale full-history state before avatar fetch: " + staleCleared);
-            }
-
-            return reason != null;
-        }
+        private bool ShouldDeferProfilePictureFetch(out string reason) => _syncWork.ShouldDeferAvatarFetch(out reason);
 
         private string FindExistingAvatarUrl(string jid, string phone, string lid)
         {

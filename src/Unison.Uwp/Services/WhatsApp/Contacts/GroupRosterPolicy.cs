@@ -32,6 +32,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
         private readonly IWhatsAppService _whatsAppService;
         private readonly IChatStateStore _chatState;
+        private readonly SyncWorkGate _syncWork;
         private readonly IDispatcher _ui;
         private readonly IChatCatalogPersistence _catalog;
         private readonly IGroupService _groups;
@@ -53,8 +54,10 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             IJidResolver jids,
             IDispatcher ui,
             IChatCatalogPersistence catalog,
-            IChatStateStore chatState)
+            IChatStateStore chatState,
+            SyncWorkGate syncWork)
         {
+            _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
@@ -116,7 +119,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             try
             {
                 string deferReason;
-                if (_whatsAppService.ShouldDeferAvatarFetch(out deferReason))
+                if (_syncWork.ShouldDeferAvatarFetch(out deferReason))
                 {
                     Debug.WriteLine("[GroupRosterPolicy] Deferred " + canonical + ": " + deferReason);
                     ScheduleNext(canonical, "deferred:" + deferReason);
@@ -184,7 +187,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             }
 
             string deferReason;
-            if (_whatsAppService.ShouldDeferAvatarFetch(out deferReason))
+            if (_syncWork.ShouldDeferAvatarFetch(out deferReason))
             {
                 Debug.WriteLine("[GroupRosterPolicy] Visible deferred " + canonical + ": " + deferReason);
                 return;

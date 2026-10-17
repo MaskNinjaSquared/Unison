@@ -79,10 +79,12 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             ISelfMarkerNaming selfMarkers,
             IDispatcher ui,
             IChatCatalogPersistence catalog,
-            SyncStatusChannel syncStatus)
+            SyncStatusChannel syncStatus,
+            SyncWorkGate syncWork)
         {
             if (selfMarkers == null) throw new ArgumentNullException(nameof(selfMarkers));
             if (syncStatus == null) throw new ArgumentNullException(nameof(syncStatus));
+            if (syncWork == null) throw new ArgumentNullException(nameof(syncWork));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             if (sessions == null) throw new ArgumentNullException(nameof(sessions));
@@ -129,7 +131,8 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 ui,
                 catalog,
                 chats,
-                syncStatus);
+                syncStatus,
+                syncWork);
             _avatars = new ChatAvatarPolicy(
                 whatsAppService,
                 jids,
@@ -137,8 +140,9 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 ui,
                 catalog,
                 chats,
-                syncStatus);
-            _roster = new GroupRosterPolicy(whatsAppService, groups, this, jids, ui, catalog, chats);
+                syncStatus,
+                syncWork);
+            _roster = new GroupRosterPolicy(whatsAppService, groups, this, jids, ui, catalog, chats, syncWork);
 
             // Both live as long as the app does, so there is nothing to unhook from.
             _whatsAppService.OnDisplayNamesUpdated += (s, e) =>

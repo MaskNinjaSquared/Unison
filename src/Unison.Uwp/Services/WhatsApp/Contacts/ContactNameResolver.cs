@@ -46,6 +46,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly PushNameLookup _pushNames;
         private readonly IChatStateStore _chatState;
         private readonly SyncStatusChannel _syncStatus;
+        private readonly SyncWorkGate _syncWork;
 
         private DateTime _lastRefreshUtc = DateTime.MinValue;
         private volatile bool _isRunning;
@@ -61,10 +62,12 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             IDispatcher ui,
             IChatCatalogPersistence catalog,
             IChatStateStore chatState,
-            SyncStatusChannel syncStatus)
+            SyncStatusChannel syncStatus,
+            SyncWorkGate syncWork)
         {
             _pushNames = pushNames ?? throw new ArgumentNullException(nameof(pushNames));
             _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
+            _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
@@ -86,7 +89,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         /// </summary>
         public async Task RefreshAsync(bool includeGroups = false, bool force = false)
         {
-            if (_whatsAppService.IsReplayDrainActive)
+            if (_syncWork.IsReplayDrainActive)
             {
                 Debug.WriteLine("[ContactNameResolver] Refresh skipped (replay drain active)");
                 return;
@@ -186,7 +189,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         /// </summary>
         public async Task ResolveMissingAsync()
         {
-            if (_whatsAppService.IsReplayDrainActive)
+            if (_syncWork.IsReplayDrainActive)
             {
                 Debug.WriteLine("[ContactNameResolver] ResolveMissing skipped (replay drain active)");
                 return;

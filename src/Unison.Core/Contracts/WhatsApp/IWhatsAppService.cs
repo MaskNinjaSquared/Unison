@@ -164,14 +164,8 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>Collapses the LID and phone rows of one person into one chat.</summary>
         Task MergeDuplicateChatsAsync(string lidJid, string pnJid);
 
-        /// <summary>True while a reconnect/history replay drain is in progress; background refreshes should back off.</summary>
-        bool IsReplayDrainActive { get; }
-
         /// <summary>Re-applies <see cref="ResolveDisplayName"/> to each chat's Name where it changed.</summary>
         Task ApplyResolvedDisplayNamesToChatsAsync();
-
-        /// <summary>True when sync traffic (history-on-demand/backfill/replay) means avatar work should be postponed.</summary>
-        bool ShouldDeferAvatarFetch(out string reason);
 
         /// <summary>Schedules another background resolution pass (names+avatars+groups) after a delay.</summary>
         void ScheduleDeferredAvatarResolution(string reason, TimeSpan? delay = null);

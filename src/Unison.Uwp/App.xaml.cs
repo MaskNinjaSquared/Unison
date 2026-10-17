@@ -272,12 +272,17 @@ namespace Unison.Uwp
                     sp.GetRequiredService<ActiveChat>(),
                     () => settings.Get<bool>(LocalSettingsConstants.ShowSyncStatus));
             });
+            // The socket is read lazily: the client takes this gate in its constructor.
+            services.AddSingleton(sp => new SyncWorkGate(
+                sp.GetRequiredService<HistoryOnDemandRegistry>(),
+                () => ((WhatsAppService)sp.GetRequiredService<IWhatsAppService>()).Socket?.IsAwaitingInitialSync ?? false));
             services.AddSingleton<IWhatsAppService>(
                 sp => WhatsAppService.Create(
                     sp.GetRequiredService<ChatStateStore>(),
                     sp.GetRequiredService<ChatRowIndex>(),
                     sp.GetRequiredService<ActiveChat>(),
                     sp.GetRequiredService<SyncStatusChannel>(),
+                    sp.GetRequiredService<SyncWorkGate>(),
                     sp.GetRequiredService<IHistoryMessageStore>(),
                     sp.GetRequiredService<IHistoryChatPreviewStore>(),
                     sp.GetRequiredService<IUsyncGate>(),
@@ -403,7 +408,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ISelfMarkerNaming>(),
                 sp.GetRequiredService<AttachedUiDispatcher>(),
                 sp.GetRequiredService<IChatCatalogPersistence>(),
-                sp.GetRequiredService<SyncStatusChannel>()));
+                sp.GetRequiredService<SyncStatusChannel>(),
+                sp.GetRequiredService<SyncWorkGate>()));
             services.AddSingleton<IOfflineReplayHost>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IChatService>(sp => new ChatFacade(
@@ -449,7 +455,8 @@ namespace Unison.Uwp
                     sp.GetRequiredService<IGroupRosterStore>()),
                 sp.GetRequiredService<AvatarFetcher>(),
                 sp.GetRequiredService<IUsyncGate>(),
-                sp.GetRequiredService<SyncStatusChannel>()));
+                sp.GetRequiredService<SyncStatusChannel>(),
+                sp.GetRequiredService<SyncWorkGate>()));
             services.AddSingleton<ILiveTilesService>(_ => LiveTilesService.Instance);
             services.AddSingleton<IShortcutService, ShortcutService>();
             services.AddSingleton<INotificationService>(sp =>

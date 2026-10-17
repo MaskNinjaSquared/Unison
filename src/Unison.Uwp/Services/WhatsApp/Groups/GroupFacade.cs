@@ -46,6 +46,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
         private readonly AvatarFetcher _avatars;
         private readonly IUsyncGate _usyncGate;
         private readonly SyncStatusChannel _syncStatus;
+        private readonly SyncWorkGate _syncWork;
         private readonly GroupQueryWindow _queryWindow = new GroupQueryWindow();
 
         internal GroupFacade(
@@ -58,10 +59,12 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
             GroupRosterRestore rosterRestore,
             AvatarFetcher avatars,
             IUsyncGate usyncGate,
-            SyncStatusChannel syncStatus)
+            SyncStatusChannel syncStatus,
+            SyncWorkGate syncWork)
         {
             _client = client ?? throw new ArgumentNullException(nameof(client));
             _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
+            _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
             _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
             _host = host ?? throw new ArgumentNullException(nameof(host));
             _chats = chats ?? throw new ArgumentNullException(nameof(chats));
@@ -263,14 +266,14 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
 
         public async Task QueryAllGroupsAsync(bool force)
         {
-            if (_client.IsReplayDrainActive)
+            if (_syncWork.IsReplayDrainActive)
             {
                 Debug.WriteLine("[GroupFacade] QueryAllGroupsAsync skipped (replay drain active)");
                 return;
             }
 
             string syncTrafficDeferReason;
-            if (_client.ShouldDeferAvatarFetch(out syncTrafficDeferReason))
+            if (_syncWork.ShouldDeferAvatarFetch(out syncTrafficDeferReason))
             {
                 Debug.WriteLine("[GroupFacade] QueryAllGroupsAsync skipped (sync traffic active: " + syncTrafficDeferReason + ")");
                 return;

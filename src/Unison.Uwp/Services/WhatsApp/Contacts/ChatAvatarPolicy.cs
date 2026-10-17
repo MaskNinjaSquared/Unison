@@ -42,6 +42,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly IWhatsAppService _whatsAppService;
         private readonly IChatStateStore _chatState;
         private readonly SyncStatusChannel _syncStatus;
+        private readonly SyncWorkGate _syncWork;
         private readonly IDispatcher _ui;
         private readonly IChatCatalogPersistence _catalog;
         private readonly IJidResolver _jids;
@@ -54,9 +55,10 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly HashSet<string> _viewportPriority = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         internal ChatAvatarPolicy(IWhatsAppService whatsAppService, IJidResolver jids, ChatAvatarFetch fetch, IDispatcher ui,
-            IChatCatalogPersistence catalog, IChatStateStore chatState, SyncStatusChannel syncStatus)
+            IChatCatalogPersistence catalog, IChatStateStore chatState, SyncStatusChannel syncStatus, SyncWorkGate syncWork)
         {
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
+            _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
             _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
@@ -118,7 +120,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 try
                 {
                     string deferReason;
-                    if (_whatsAppService.ShouldDeferAvatarFetch(out deferReason))
+                    if (_syncWork.ShouldDeferAvatarFetch(out deferReason))
                     {
                         Debug.WriteLine("[ChatAvatarPolicy] Pausing batch while sync traffic settles: " + deferReason);
                         _whatsAppService.ScheduleDeferredAvatarResolution("avatar-batch-paused:" + deferReason);

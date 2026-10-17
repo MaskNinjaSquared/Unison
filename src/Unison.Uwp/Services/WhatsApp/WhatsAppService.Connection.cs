@@ -1145,7 +1145,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     return;
                 }
 
-                _deferReconnectWorkUntilReplayDrain = auth.Registered;
+                _syncWork.SetReplayDrainPending(auth.Registered);
                 Interlocked.Exchange(ref _offlineReplayReleased, 0);
                 if (!_fatalSessionEnded)
                 {
@@ -1660,7 +1660,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     "connection",
                     "offline-replay-release",
                     "count=" + offlineCount + "; first=" + firstRelease);
-                _deferReconnectWorkUntilReplayDrain = false;
+                _syncWork.SetReplayDrainPending(false);
                 try
                 {
                     await FlushOfflineReplayMessagesAsync($"offline-complete:{offlineCount}");
