@@ -1236,6 +1236,15 @@ replay released) and only reports it. `GroupFacade`, `ContactNameResolver`, `Cha
 `_historyBackfillActive` went with it: nothing ever set it, so it and the matching
 `PlaceholderResendDeferral` argument were removed.
 
+**Round trips through the façades are gone.** The incoming pump called `IMessageService`
+(`AcceptIncomingTimeline`, `QueueIncomingPersist`, `ApplyIncomingRevocationAsync`,
+`ApplyIncomingPinInChatAsync`) and `IChatService` (the offline-drain repair) only for
+`MessageFacade` / `ChatFacade` to call straight back into the client. The pump now calls its own
+methods; the members left both `IMessageService` and `IWhatsAppService`. `HistoryFacade` completes
+on-demand chats on `HistoryOnDemandRegistry` itself, so `CompleteHistoryOnDemandForChats` left the
+contract too. What the pump still asks of the façades (`ApplyLiveIncomingChatListAsync`, the
+offline tips, reactions, notifications, media hydration) is real façade work.
+
 **Done when:** `.Connection.cs` + a small main file; no façade needs send/history/avatar/group/list methods on the client; leftover `IWhatsAppSocket` drop is [Migration](Migration) item 9, after this.
 
 ---
