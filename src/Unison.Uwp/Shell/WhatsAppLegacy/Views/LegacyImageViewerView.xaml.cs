@@ -82,6 +82,11 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         public event EventHandler CloseRequested;
 
+        private void ViewerCommandBar_Loaded(object sender, RoutedEventArgs e)
+        {
+            LegacyCommandBarLayout.CenterPrimaryCommands(sender as CommandBar);
+        }
+
         private void ImageViewerView_Unloaded(object sender, RoutedEventArgs e)
         {
             // Unsubscribing alone left the view model, and the full-screen bitmap it holds, alive
