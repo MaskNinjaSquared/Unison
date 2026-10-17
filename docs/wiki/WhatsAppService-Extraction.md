@@ -608,6 +608,13 @@ Behaviour is kept as it was, two quirks included and pinned by tests: an image i
 note. Two deliberate differences: image and audio now apply any receipt that arrived before the bubble
 existed (text always did), and an empty image is rejected before reconnecting rather than after.
 
+Later, media stopped throwing on a failed send. `OutgoingMediaSend` picks the id up front (the
+same generator as text) and passes it down through `IOutgoingMessageHost` and
+`IWhatsAppSocket.SendImageMessageAsync` / `SendAudioMessageAsync` (`explicitMessageId`), so the
+cached `_out` file and a pending bubble exist before the upload. A refused upload or a failed
+reconnect settles the bubble as failed and calls `OnError`; there is still no retry. The bridge's
+failed status now carries that id, so the list preview turns red too.
+
 ### 3.2b — group apply and roster out; the query passes stay
 
 **Rules.** `GroupRosterRules` (Core) holds the decisions a roster goes through: the detached copy
@@ -1278,6 +1285,13 @@ chat store, that state, `SyncWorkGate`, `HistoryOnDemandRegistry`, a memory-head
 Mobile flag) answers `IsFrugal`; the rule itself is the pure `SyncBudget.PreferFrugal`, tested.
 `HistoryFacade` and `ChatAvatarPolicy` read both directly. `IsInitialSyncSafeMode`,
 `PreferFrugalSyncBudget`, the two counters and `OnInitialSyncProgress` left `IWhatsAppService`.
+
+**Presence and the verbose switch no longer go through the client.** `MessageFacade` subscribes to
+presence on `IWhatsAppSessionProvider.Socket` when it is connected, the same test the client
+made; `PresenceSubscribeAsync` left `IWhatsAppService`. The verbose trace switch is a persisted
+setting, not connection state: `VerboseLog` (static, `Unison.Uwp/Services`) holds it, loads it and
+persists it, `WhatsAppService.Log` reads it, and `RuntimeDiagnosticsService` sets it directly.
+`VerboseLogging` and `SetVerboseLogging` left the contract.
 
 **Done when:** `.Connection.cs` + a small main file; no façade needs send/history/avatar/group/list methods on the client; leftover `IWhatsAppSocket` drop is [Migration](Migration) item 9, after this.
 
