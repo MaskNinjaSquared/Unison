@@ -61,12 +61,7 @@ namespace Unison.Core.Models
         /// <summary>True when incoming may replace <see cref="Name"/>.</summary>
         public static bool CanWriteName(PersonSource existing, PersonSource incoming)
         {
-            if (incoming == PersonSource.AddressBook)
-            {
-                return true;
-            }
-
-            return existing < PersonSource.AddressBook;
+            return existing.ToNameSource().CanBeReplacedBy(incoming.ToNameSource());
         }
 
         public static PersonSource Promote(PersonSource existing, PersonSource incoming)
