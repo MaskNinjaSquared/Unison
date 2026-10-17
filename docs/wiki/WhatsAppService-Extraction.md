@@ -1235,7 +1235,7 @@ façades. The roster and membership saves left too: `GroupRosterWriter` (Core) o
 `IGroupRosterStore` and `IPersonStore` and writes in the background, so a failed save is logged
 and never reaches the UI pass. `FindGroupRowName` and `CacheGroupSubject` went next: the applier reads
 the group's rows from `ChatRowIndex` and writes the subject into the push-name `DisplayNameTable`
-(`ContactNames`) itself. What is left on the port is the name rules and the 1:1 avatar lookup.
+(`ContactNames`) itself. So did `HasMeaningfulGroupLabel`, which only combined that cache with the label rule. What is left on the port is the name rules and the 1:1 avatar lookup.
 
 **Step 1 is done: the app lifecycle goes through the façade.** `IConnectionService` gained
 `ResumeAsync`, `ReleaseMemoryAsync`, `TransferActiveSocketToBrokerAsync`, `PrepareForSuspendAsync`

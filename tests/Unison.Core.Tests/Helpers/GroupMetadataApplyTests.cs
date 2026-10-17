@@ -47,6 +47,28 @@ namespace Unison.Core.Tests.Helpers
             Assert.True(f.Apply.TryCacheSyncedSubject(Group, "Invite link", null));
         }
 
+        [Fact]
+        public void TryCacheSyncedSubject_keeps_a_good_cached_subject_from_a_blacklisted_one()
+        {
+            var f = new Fixture();
+            f.Host.CachedNames.Set(Group, "Família");
+
+            Assert.False(f.Apply.TryCacheSyncedSubject(Group, "Invite link", null));
+
+            Assert.Equal("Família", f.Host.CachedNames[Group]);
+        }
+
+        [Fact]
+        public void TryCacheSyncedSubject_replaces_a_cached_placeholder()
+        {
+            var f = new Fixture();
+            f.Host.CachedNames.Set(Group, "120363000000000001");
+
+            Assert.True(f.Apply.TryCacheSyncedSubject(Group, "Invite link", null));
+
+            Assert.Equal("Invite link", f.Host.CachedNames[Group]);
+        }
+
         // ---- listing --------------------------------------------------------
 
         [Fact]

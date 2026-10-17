@@ -27,9 +27,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>Whether a label is a real group name rather than an id, a placeholder or the self marker.</summary>
         bool IsMeaningfulGroupLabel(string label, string groupJid);
 
-        /// <summary>Whether a usable name is already known for the group, cached or on the row.</summary>
-        bool HasMeaningfulGroupLabel(string groupJid, string rowName);
-
         /// <summary>An avatar already cached for this person on a 1:1 row, or null.</summary>
         string FindExistingAvatarUrl(string jid, string phoneNumber, string lid);
     }

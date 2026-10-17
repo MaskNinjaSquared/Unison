@@ -288,7 +288,7 @@ namespace Unison.Core.Helpers
         {
             if (!GroupNameSyncBlacklist.ShouldCacheSyncedSubject(
                     subject,
-                    _host.HasMeaningfulGroupLabel(groupJid, rowName)))
+                    HasMeaningfulLabel(groupJid, rowName)))
             {
                 return false;
             }
@@ -296,6 +296,19 @@ namespace Unison.Core.Helpers
             _subjects.Set(groupJid, subject);
             return true;
         }
+
+        private bool HasMeaningfulLabel(string groupJid, string rowName)
+
+        {
+
+            string cached;
+
+            return (_subjects.TryGetValue(groupJid, out cached) && _host.IsMeaningfulGroupLabel(cached, groupJid)) ||
+
+                   _host.IsMeaningfulGroupLabel(rowName, groupJid);
+
+        }
+
 
         private static bool IsUsableSubject(string subject, string groupJid)
         {

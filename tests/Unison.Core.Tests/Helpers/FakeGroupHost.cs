@@ -42,13 +42,6 @@ namespace Unison.Core.Tests.Helpers
         public bool IsMeaningfulGroupLabel(string label, string groupJid) =>
             !GroupIdPlaceholder.IsIdPlaceholder(label, groupJid);
 
-        public bool HasMeaningfulGroupLabel(string groupJid, string rowName)
-        {
-            string cached;
-            return (CachedNames.TryGetValue(groupJid, out cached) && IsMeaningfulGroupLabel(cached, groupJid)) ||
-                   IsMeaningfulGroupLabel(rowName, groupJid);
-        }
-
         public string FindExistingAvatarUrl(string jid, string phoneNumber, string lid)
         {
             string url;
