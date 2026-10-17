@@ -231,7 +231,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly IPersonStore _personStore;
         private readonly IGroupRosterStore _groupRosterStore;
         private readonly IChatStore _chatStore;
-        private IDebugSendService _debugSendService;
         private readonly bool _isWindowsMobile;
 
         /// <summary>Wired from App DI so history sync goes through MessageFacade (Person upsert + domain mapping).</summary>
@@ -255,12 +254,6 @@ namespace Unison.Uwp.Services.WhatsApp
         public void AttachContactService(IContactService contactService)
         {
             _contactService = contactService;
-        }
-
-        /// <summary>Dev-only tooling, only ever attached under DEBUG builds (see App.xaml.cs).</summary>
-        public void AttachDebugSendService(IDebugSendService debugSendService)
-        {
-            _debugSendService = debugSendService;
         }
 
         private bool IsWindowsMobile => _isWindowsMobile;

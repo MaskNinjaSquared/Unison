@@ -512,7 +512,7 @@ namespace Unison.Uwp
             // Rewrites group author strips as names resolve, list open or not.
             Services.GetRequiredService<IChatAuthorProjection>().Start();
 #if DEBUG
-            whatsAppImpl.AttachDebugSendService(Services.GetRequiredService<IDebugSendService>());
+            Services.GetRequiredService<IDebugSendService>().Start();
 #endif
             RuntimeDiagnosticsService.Instance.AttachWhatsAppService(whatsApp);
         }

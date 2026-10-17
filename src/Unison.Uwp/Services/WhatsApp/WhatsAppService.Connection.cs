@@ -558,7 +558,6 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             Log("[WhatsAppService] Hardening session wipe...");
             var keyStore = _socket?.KeyStore;
-            _debugSendService?.Stop("clear-session");
 
             // Block “Unison desconectado” before tearing the socket down — otherwise the
             // background broker sees close while AuthStore still says Registered+MeId.
@@ -1113,7 +1112,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 StopConnectionHealthMonitor("connect-replace-socket");
                 if (_socket != null)
                 {
-                    _debugSendService?.Stop("reconnect");
                     var previousSocket = _socket;
                     _socket = null;
                     previousSocket.Disconnect();
@@ -1706,7 +1704,6 @@ namespace Unison.Uwp.Services.WhatsApp
             // clears the flag and its own app state module runs the resync, so there is nothing
             // for the service to coordinate.
 
-            _debugSendService?.Start();
             try
             {
                 if (ShouldRefuseConnectBecauseSessionDied())
@@ -1901,7 +1898,6 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             _suppressReconnect = true;
             StopConnectionHealthMonitor("disconnect");
-            _debugSendService?.Stop("disconnect");
             var socket = _socket;
             _socket = null;
             if (socket != null)
@@ -1944,7 +1940,6 @@ namespace Unison.Uwp.Services.WhatsApp
             _postReplayMaintenanceCts?.Dispose();
             _postReplayMaintenanceCts = null;
             CancelDeferredProfilePictureResolution();
-            _debugSendService?.Stop("shutdown");
 
             lock (_persistLock)
             {
