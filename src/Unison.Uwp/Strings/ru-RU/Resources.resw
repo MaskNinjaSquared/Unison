@@ -375,7 +375,9 @@
   <data name="ChatDetail_SendImage.PrimaryButtonText" xml:space="preserve">
     <value>Отправить</value>
   </data>
-  <data name="ChatDetail_SendImage.SecondaryButtonText" xml:space="preserve">
+  <data name="ChatDetail_SendImageCaption.PlaceholderText" xml:space="preserve">
+    <value>???????? ???????...</value>
+  </data>  <data name="ChatDetail_SendImage.SecondaryButtonText" xml:space="preserve">
     <value>Отмена</value>
   </data>
   <data name="ChatDetail_AudioPlayFailed" xml:space="preserve">
@@ -1042,6 +1044,12 @@
   </data>
   <data name="ChatDetailInfo_NotificationsToggle.OffContent" xml:space="preserve">
     <value>Выкл</value>
+  </data>
+  <data name="LegacyImageViewer_Download.Label" xml:space="preserve">
+    <value>Download</value>
+  </data>
+  <data name="LegacyImageViewer_Share.Label" xml:space="preserve">
+    <value>Share</value>
   </data>
   <data name="ImageViewer_Download.ToolTipService.ToolTip" xml:space="preserve">
     <value>Сохранить</value>

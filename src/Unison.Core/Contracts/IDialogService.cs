@@ -52,9 +52,13 @@ namespace Unison.Core.Contracts
         Task<string> ShowNewChatDialogAsync(NewChatDialogViewModel newChatVm);
 
         /// <summary>
-        /// Image send confirmation with preview. Returns true if the user taps Send.
+        /// Image send confirmation with preview and an optional caption box.
+        /// <see cref="ImageSendPreviewResult.Confirmed"/> is false when cancelled.
         /// </summary>
-        Task<bool> ShowImageSendPreviewAsync(byte[] imageBytes, string infoText);
+        Task<ImageSendPreviewResult> ShowImageSendPreviewAsync(
+            byte[] imageBytes,
+            string infoText,
+            string initialCaption = null);
 
         /// <summary>
         /// Fullscreen pairing QR preview (tap on login QR). Subscribes to

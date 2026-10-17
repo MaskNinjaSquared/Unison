@@ -434,7 +434,9 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   <data name="ChatDetail_SendImage.PrimaryButtonText" xml:space="preserve">
     <value>Verzenden</value>
   </data>
-  <data name="ChatDetail_SendImage.SecondaryButtonText" xml:space="preserve">
+  <data name="ChatDetail_SendImageCaption.PlaceholderText" xml:space="preserve">
+    <value>Bijschrift toevoegen...</value>
+  </data>  <data name="ChatDetail_SendImage.SecondaryButtonText" xml:space="preserve">
     <value>Annuleren</value>
   </data>
   <data name="ChatDetail_AudioPlayFailed" xml:space="preserve">
@@ -1101,6 +1103,12 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   </data>
   <data name="ChatDetailInfo_NotificationsToggle.OffContent" xml:space="preserve">
     <value>Uit</value>
+  </data>
+  <data name="LegacyImageViewer_Download.Label" xml:space="preserve">
+    <value>Download</value>
+  </data>
+  <data name="LegacyImageViewer_Share.Label" xml:space="preserve">
+    <value>Share</value>
   </data>
   <data name="ImageViewer_Download.ToolTipService.ToolTip" xml:space="preserve">
     <value>Downloaden</value>

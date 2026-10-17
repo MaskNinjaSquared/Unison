@@ -434,7 +434,9 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="ChatDetail_SendImage.PrimaryButtonText" xml:space="preserve">
     <value>Enviar</value>
   </data>
-  <data name="ChatDetail_SendImage.SecondaryButtonText" xml:space="preserve">
+  <data name="ChatDetail_SendImageCaption.PlaceholderText" xml:space="preserve">
+    <value>Adicionar legenda...</value>
+  </data>  <data name="ChatDetail_SendImage.SecondaryButtonText" xml:space="preserve">
     <value>Cancelar</value>
   </data>
   <data name="ChatDetail_AudioPlayFailed" xml:space="preserve">
@@ -1101,6 +1103,12 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   </data>
   <data name="ChatDetailInfo_NotificationsToggle.OffContent" xml:space="preserve">
     <value>Desativadas</value>
+  </data>
+  <data name="LegacyImageViewer_Download.Label" xml:space="preserve">
+    <value>Baixar</value>
+  </data>
+  <data name="LegacyImageViewer_Share.Label" xml:space="preserve">
+    <value>Compartilhar</value>
   </data>
   <data name="ImageViewer_Download.ToolTipService.ToolTip" xml:space="preserve">
     <value>Baixar</value>

@@ -2223,21 +2223,25 @@ namespace Unison.Core.ViewModels
             }
 
             string info = string.Format("{0} ({1} KB)", picked.FileName ?? "image", picked.Bytes.Length / 1024);
-            bool confirmed = await _dialogs.ShowImageSendPreviewAsync(picked.Bytes, info);
-            if (!confirmed || _activeChat == null)
+            string seedCaption = string.IsNullOrWhiteSpace(MessageText) ? null : MessageText.Trim();
+            ImageSendPreviewResult preview = await _dialogs.ShowImageSendPreviewAsync(
+                picked.Bytes,
+                info,
+                seedCaption);
+            if (preview == null || !preview.Confirmed || _activeChat == null)
             {
                 LogSend("image-attach-cancelled");
                 return;
             }
 
-            string caption = string.IsNullOrWhiteSpace(MessageText) ? null : MessageText.Trim();
+            string caption = string.IsNullOrWhiteSpace(preview.Caption) ? null : preview.Caption.Trim();
             IsSending = true;
             MessageSent?.Invoke(this, EventArgs.Empty);
             LogSend("image-attach-start", "bytes=" + picked.Bytes.Length);
             try
             {
                 await _messageService.SendImageAsync(targetJid, picked.Bytes, caption);
-                if (caption != null)
+                if (seedCaption != null)
                 {
                     MessageText = string.Empty;
                 }

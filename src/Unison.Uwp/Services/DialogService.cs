@@ -171,26 +171,39 @@ namespace Unison.Uwp.Services
             return null;
         }
 
-        public async Task<bool> ShowImageSendPreviewAsync(byte[] imageBytes, string infoText)
+        public async Task<ImageSendPreviewResult> ShowImageSendPreviewAsync(
+            byte[] imageBytes,
+            string infoText,
+            string initialCaption = null)
         {
+            var cancelled = new ImageSendPreviewResult { Confirmed = false };
             try
             {
                 var dialog = new ImageSendPreviewDialog();
-                await dialog.SetPreviewAsync(imageBytes, infoText);
+                await dialog.SetPreviewAsync(imageBytes, infoText, initialCaption);
                 var result = await dialog.ShowAsync();
-                return result == ContentDialogResult.Primary;
+                if (result != ContentDialogResult.Primary)
+                {
+                    return cancelled;
+                }
+
+                return new ImageSendPreviewResult
+                {
+                    Confirmed = true,
+                    Caption = dialog.Caption
+                };
             }
             catch (System.Runtime.InteropServices.COMException ex)
                 when (ex.Message.Contains("single ContentDialog") ||
                       ex.HResult == unchecked((int)0x80070057))
             {
                 System.Diagnostics.Debug.WriteLine("[DialogService] Another dialog is already open (image preview).");
-                return false;
+                return cancelled;
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine("[DialogService] ShowImageSendPreviewAsync: " + ex.Message);
-                return false;
+                return cancelled;
             }
         }
 

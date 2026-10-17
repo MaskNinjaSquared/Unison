@@ -375,7 +375,9 @@ Desact铆valo tras el diagn贸stico: mantenerlo activo ralentiza la aplicaci贸n.</
   <data name="ChatDetail_SendImage.PrimaryButtonText" xml:space="preserve">
     <value>Enviar</value>
   </data>
-  <data name="ChatDetail_SendImage.SecondaryButtonText" xml:space="preserve">
+  <data name="ChatDetail_SendImageCaption.PlaceholderText" xml:space="preserve">
+    <value>A馻dir un pie de foto...</value>
+  </data>  <data name="ChatDetail_SendImage.SecondaryButtonText" xml:space="preserve">
     <value>Cancelar</value>
   </data>
   <data name="ChatDetail_AudioPlayFailed" xml:space="preserve">
@@ -1042,6 +1044,12 @@ Desact铆valo tras el diagn贸stico: mantenerlo activo ralentiza la aplicaci贸n.</
   </data>
   <data name="ChatDetailInfo_NotificationsToggle.OffContent" xml:space="preserve">
     <value>Desactivado</value>
+  </data>
+  <data name="LegacyImageViewer_Download.Label" xml:space="preserve">
+    <value>Download</value>
+  </data>
+  <data name="LegacyImageViewer_Share.Label" xml:space="preserve">
+    <value>Share</value>
   </data>
   <data name="ImageViewer_Download.ToolTipService.ToolTip" xml:space="preserve">
     <value>Descargar</value>
