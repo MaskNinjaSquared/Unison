@@ -194,7 +194,7 @@ That is the wrong direction: live ingest (status, names) **starts** in `WhatsApp
 
 ### What still holds the client
 
-`App.xaml.cs` for lifecycle (`ResumeAsync`, `TransferActiveSocketToBrokerAsync`, `PrepareForSuspendAsync`, `ShutdownAsync`, `ReleaseMemoryAsync`, `IsConnected`), the façades and their policy helpers, and `RuntimeDiagnosticsService` for health snapshots.
+The façades and their policy helpers, and `RuntimeDiagnosticsService` for health snapshots. `App.xaml.cs` no longer does: its lifecycle calls (`ResumeAsync`, `TransferActiveSocketToBrokerAsync`, `PrepareForSuspendAsync`, `ShutdownAsync`, `ReleaseMemoryAsync`, `IsConnected`) go through `IConnectionService` (phase 4, first step).
 
 Raw `IWhatsAppService` **events** are façade-only; ViewModels should not subscribe there.
 
@@ -1196,6 +1196,13 @@ Rename-able to `IWhatsAppConnection` / keep `IWhatsAppService` until the last ca
 - Raw events **for façades only**
 
 Drop `RunOnUiThreadAsync` (`IDispatcher`) and `SchedulePersistPublic` (the writer persists). `App` lifecycle calls `IConnectionService`, not `App.GetWhatsAppService()`.
+
+**Step 1 is done: the app lifecycle goes through the façade.** `IConnectionService` gained
+`ResumeAsync`, `ReleaseMemoryAsync`, `TransferActiveSocketToBrokerAsync`, `PrepareForSuspendAsync`
+and `ShutdownAsync`. `ConnectionFacade` forwards them to the client the way it already forwarded
+startup. Before the client is attached, it answers as if nothing were there: the broker transfer
+answers false and the rest do nothing. `App.GetWhatsAppService()` is gone; `App` resolves
+`IConnectionService`. The client's reconnect, resume and broker logic did not change.
 
 **Done when:** `.Connection.cs` + a small main file; no façade needs send/history/avatar/group/list methods on the client; leftover `IWhatsAppSocket` drop is [Migration](Migration) item 9, after this.
 

@@ -4,6 +4,12 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## App lifecycle goes through the connection façade
+
+Resume, memory release, broker hand-off, suspend and shutdown are called on `IConnectionService`
+instead of the WhatsApp client. The façade forwards to the client as before, and the hand-off still
+reports true only when the broker took the socket. No behaviour change.
+
 ## Façades read the chat list and name tables directly
 
 The chat and contact façades now take the chat list, the address-book names, the conversation row
