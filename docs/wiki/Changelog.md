@@ -4,6 +4,12 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Group recipient count left the client
+
+How many members a group receipt has to hear from before a message turns delivered or read is cached
+by `GroupRecipientCountCache` in Core, 30 minutes per group as before. The client lost the dictionary,
+its entry class and `_messageStateLock`. No behaviour change.
+
 ## Calls and Favorites empty states are unlocked
 
 Unison and WhatsApp shells can open Calls and Favorites from the sidebar (they were greyed out).

@@ -1012,8 +1012,13 @@ candidate with the JID user part as an exact string, so `+55 11 99999-0001` pass
 
 Receipts and pins for a message not in memory are held by `PendingMessageState` (`Unison.Core/State`)
 and applied once when the message next loads; the chat's status policy comes in as a function. The
-client lost two dictionaries, the pin state class and the store method; `_messageStateLock` now only
-guards the group recipient-count cache.
+client lost two dictionaries, the pin state class and the store method.
+
+The group recipient-count cache is `GroupRecipientCountCache` (`Unison.Core/State`, 9 tests): the
+member count a group receipt has to reach, kept per group for 30 minutes. It was the last thing under
+`_messageStateLock`, so the lock left with it. The metadata query and the send-permission refresh it
+triggers stay in the client. Edge kept, not endorsed: nothing expires an entry early, so a member who
+joins or leaves inside the window is not counted until it lapses.
 
 The newest message time history freshness reads is `NewestStoredMessage.FindUtc` over the timeline
 snapshot and the list strip (cold start has tips but no timelines), each value through
