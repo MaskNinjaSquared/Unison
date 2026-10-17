@@ -384,7 +384,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 Dictionary<string, string> contactSnapshot = null;
                 Dictionary<string, string> phoneContactSnapshot = null;
                 Dictionary<string, string> aliasSnapshot = null;
-                await RunOnUiThreadAsync(() =>
+                await _ui.RunAsync(() =>
                 {
                     catalog = ChatCatalogSnapshot.Take(Chats);
                     contactSnapshot = ContactNames.Snapshot();
@@ -529,7 +529,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     return;
                 }
 
-                await RunOnUiThreadAsync(() =>
+                await _ui.RunAsync(() =>
                 {
                     var existing = new HashSet<string>(
                         Chats.Where(c => c != null && !string.IsNullOrWhiteSpace(c.JID))
@@ -573,7 +573,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private async Task NormalizePersistedChatNamesAsync()
         {
-            await RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
                 {
                     var titles = new List<ResolvedNameChange>();
                     int updated = ResolvedNameApply.Apply(
@@ -600,7 +600,7 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             ChatCatalogSnapshot catalog = null;
             Dictionary<string, string> aliasSnapshot = null;
-            await RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 catalog = ChatCatalogSnapshot.Take(Chats);
                 aliasSnapshot = JidAlias.Snapshot();

@@ -135,7 +135,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             List<ChatItem> dirty = null;
             int resolved = 0;
-            await RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 var rows = GetOrAddChatRowsForAppState(canonical, out ChatItem created);
                 if (created != null)
@@ -214,7 +214,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             List<string> keys = ExpandHistoryChatKeys(canonical);
 
-            await RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 // Both rows, for the same reason the storage side already expands the key:
                 // the conversation is listed under PN and under LID, and removing one left
@@ -295,7 +295,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 // thread, and Chats is bound to the list: enumerating it while the UI adds a
                 // row throws, and the catch below would turn that into a silently skipped save.
                 List<ChatItem> snapshot = null;
-                await RunOnUiThreadAsync(() => snapshot = Chats.Where(c => c != null).ToList());
+                await _ui.RunAsync(() => snapshot = Chats.Where(c => c != null).ToList());
                 await PersistChatCatalogAsync(snapshot ?? new List<ChatItem>()).ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -313,7 +313,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             bool removed = false;
-            await RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 if (!MessagesByChat.TryGet(canonical, out var messages) ||
                     messages == null ||
@@ -402,7 +402,7 @@ namespace Unison.Uwp.Services.WhatsApp
             };
 
             List<ChatItem> touched = null;
-            await RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 var rows = GetOrAddChatRowsForAppState(canonical, out _);
 

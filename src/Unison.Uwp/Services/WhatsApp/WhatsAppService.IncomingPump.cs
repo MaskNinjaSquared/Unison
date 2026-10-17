@@ -1868,7 +1868,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            await RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
                 {
                     var rows = GetChatRowsForCanonicalJid(jid);
                     if (rows.Count == 0)
@@ -1916,7 +1916,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private async Task RefreshAllChatPreviewsFromStoredCoreAsync(string reason)
         {
-            await RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 int updated = 0;
                 foreach (var chat in Chats)
@@ -1950,7 +1950,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private async Task ReconcileChatListFromStoredMessagesAsync(string reason)
         {
-            await RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 int refreshed = 0;
                 int created = 0;

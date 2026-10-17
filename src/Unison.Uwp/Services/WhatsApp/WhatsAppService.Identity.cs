@@ -61,7 +61,7 @@ namespace Unison.Uwp.Services.WhatsApp
             try
             {
                 List<string> chatJids = null;
-                await RunOnUiThreadAsync(() =>
+                await _ui.RunAsync(() =>
                     {
                         chatJids = Chats
                             .Where(c => c != null && !string.IsNullOrWhiteSpace(c.JID))
@@ -95,7 +95,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 Dictionary<string, string> phoneSnapshot = null;
                 Dictionary<string, string> aliasSnapshot = null;
 
-                await RunOnUiThreadAsync(() =>
+                await _ui.RunAsync(() =>
                     {
                         catalog = ChatCatalogSnapshot.Take(Chats);
                         contactSnapshot = ContactNames.Snapshot();
@@ -161,7 +161,7 @@ namespace Unison.Uwp.Services.WhatsApp
             bool merged = false;
             List<ChatMessage> canonicalSnapshot = null;
 
-            await RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 if (MessagesByChat.MergeInto(normalizedTransient, normalizedCanonical))
                 {
@@ -401,7 +401,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 if (batch.AvatarTargets.Count > 0)
                 {
-                    await RunOnUiThreadAsync(() =>
+                    await _ui.RunAsync(() =>
                     {
                         var rows = new List<ChatItem>();
                         foreach (var pn in batch.AvatarTargets)

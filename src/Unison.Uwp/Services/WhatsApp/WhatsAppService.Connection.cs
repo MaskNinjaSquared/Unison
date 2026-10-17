@@ -658,7 +658,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             // 7. Clear in-memory state
-            await RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 Chats.Clear();
                 MessagesByChat.Clear();
@@ -683,7 +683,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private async Task RaiseSessionClearedAsync(bool startPairing)
         {
             var args = new SessionClearedEventArgs(startPairing);
-            await RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 try
                 {
@@ -1545,7 +1545,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         // Proactively update any matching chat on the captured UI
                         // dispatcher. Enumerating and mutating bound chat rows from the
                         // socket thread caused RPC_E_WRONG_THREAD after reconnect.
-                        _ = RunOnUiThreadAsync(() =>
+                        _ = _ui.RunAsync(() =>
                         {
                             // Matched on the normalized address and stopped at the first hit.
                             // A contact is listed under both PN and LID, so a notify arriving

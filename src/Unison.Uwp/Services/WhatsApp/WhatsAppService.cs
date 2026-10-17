@@ -249,7 +249,7 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 _messageStore?.ClearMemoryCache();
 
-                await RunOnUiThreadAsync(() =>
+                await _ui.RunAsync(() =>
                 {
                     var active = _activeChat.Jid;
                     var keys = MessagesByChat.ChatJids();
@@ -303,7 +303,7 @@ namespace Unison.Uwp.Services.WhatsApp
             // disk for the rows that actually changed. A full SchedulePersist here rewrote every
             // chat preview plus three JSON maps - fine on SSD, several seconds on Mobile eMMC.
             List<ChatItem> dirty = null;
-            await RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 foreach (var row in GetChatRowsForCanonicalJid(canonical))
                 {
@@ -1388,7 +1388,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </remarks>
         public Task ClearConversationCachesAsync()
         {
-            return RunOnUiThreadAsync(() =>
+            return _ui.RunAsync(() =>
             {
                 Chats.Clear();
                 MessagesByChat.Clear();
@@ -2018,7 +2018,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         recentRows?.Select(HistoryMessageMapper.ToChatMessage).ToList(),
                         DateTime.UtcNow);
 
-                    await RunOnUiThreadAsync(() =>
+                    await _ui.RunAsync(() =>
                     {
                         foreach (var row in GetChatRowsForCanonicalJid(jid))
                         {
@@ -2072,7 +2072,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     // Same reason as the other catalogue writes: Chats belongs to the UI thread
                     // and this loop has been yielding, so the snapshot has to be taken there.
                     List<ChatItem> snapshot = null;
-                    await RunOnUiThreadAsync(() => snapshot = Chats.Where(c => c != null).ToList());
+                    await _ui.RunAsync(() => snapshot = Chats.Where(c => c != null).ToList());
                     await PersistChatCatalogAsync(snapshot ?? new List<ChatItem>()).ConfigureAwait(false);
                 }
                 catch
@@ -2331,7 +2331,7 @@ namespace Unison.Uwp.Services.WhatsApp
             if (string.IsNullOrEmpty(jid)) return;
             
             string normJid = NormalizeJid(jid);
-            _ = RunOnUiThreadAsync(() =>
+            _ = _ui.RunAsync(() =>
             {
                 var existing = Chats.FirstOrDefault(c => NormalizeJid(c.JID) == normJid);
                 if (existing == null)
@@ -3605,7 +3605,7 @@ namespace Unison.Uwp.Services.WhatsApp
             var changedChats = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var changedMessages = new List<KeyValuePair<string, ChatMessage>>();
 
-            await RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 changedMessages = MessagesByChat.ApplyOutgoingStatus(messageId, status, ApplyChatStatusPolicy);
                 foreach (var change in changedMessages)
@@ -3677,7 +3677,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 canonical, messageId, isPinned, pinnedAtUtc, expiresAtUtc, DateTime.UtcNow);
 
             ChatMessage target = null;
-            await RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 if (MessagesByChat.TryGet(canonical, out var messages))
                 {
@@ -3705,7 +3705,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
                     if (IsActiveChatJid(canonical))
                     {
-                        await RunOnUiThreadAsync(() =>
+                        await _ui.RunAsync(() =>
                             MessagesByChat.InsertIfAbsent(canonical, target, MaxActiveChatMessagesInMemory, DateTime.UtcNow));
                     }
                 }
@@ -3846,7 +3846,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            await RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 // PN e LID podem existir temporariamente como duas linhas para o mesmo
                 // contato. Atualizar apenas FirstOrDefault deixava a linha visivel com
@@ -3983,7 +3983,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
         internal Task RunOnUiThreadTaskAsync(Func<Task> action) => _ui.RunTaskAsync(action);
 
-        internal Task RunOnUiThreadAsync(Action action) => _ui.RunAsync(action);
 
         private void QueueChatMessagesChanged(string chatJid)
         {
@@ -4129,7 +4128,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 byCanonical[entry.Canonical] = entry;
             }
 
-            await RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 foreach (var entry in entries)
                 {
@@ -4313,7 +4312,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            await RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 var lidChat = Chats.FirstOrDefault(c => NormalizeJid(c.JID) == normLidJid);
                 var pnChat = Chats.FirstOrDefault(c => NormalizeJid(c.JID) == normPnJid);
@@ -4452,7 +4451,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private async Task DeduplicateChatsAsync(string reason)
         {
-            await RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
                 {
                     var snapshots = Chats
                         .Where(c => c != null && !string.IsNullOrWhiteSpace(c.JID))
@@ -4507,7 +4506,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private async Task ApplyResolvedNamesToChatsAsync()
         {
-            await RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
                 {
                     int updated = ResolvedNameApply.Apply(
                         Chats,

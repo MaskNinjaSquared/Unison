@@ -18,7 +18,7 @@ namespace Unison.Uwp.Services.WhatsApp
     /// </remarks>
     public partial class WhatsAppService : IGroupHost
     {
-        Task IGroupHost.RunOnUiThreadAsync(Action action) => RunOnUiThreadAsync(action);
+        Task IGroupHost.RunOnUiThreadAsync(Action action) => _ui.RunAsync(action);
 
         string IGroupHost.ResolveMemberDisplayName(string jid) => ResolveGroupMemberDisplayName(jid);
 
