@@ -66,6 +66,8 @@ namespace Unison.Uwp.Services.WhatsApp.History
         private readonly HistoryOnDemandDispatch _onDemand;
         private readonly IChatStateStore _chatState;
         private readonly SyncStatusChannel _syncStatus;
+        private readonly InitialSyncProgressState _initialSync;
+        private readonly SyncBudget _syncBudget;
 
         /// <summary>
         /// Session-scoped: one toast after repeated background history lots. Not reset until
@@ -84,6 +86,8 @@ namespace Unison.Uwp.Services.WhatsApp.History
             IHistoryOnDemandSocket onDemandSocket,
             IChatStateStore chatState,
             SyncStatusChannel syncStatus,
+            InitialSyncProgressState initialSync,
+            SyncBudget syncBudget,
             IHistoryChatPreviewStore chatPreviewStore = null,
             IHistoryMigrationStore migrationStore = null,
             IHistoryMessageStore messageHistoryStore = null,
@@ -122,6 +126,8 @@ namespace Unison.Uwp.Services.WhatsApp.History
                 line => Debug.WriteLine("[HistoryFacade] " + line));
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
+            _initialSync = initialSync ?? throw new ArgumentNullException(nameof(initialSync));
+            _syncBudget = syncBudget ?? throw new ArgumentNullException(nameof(syncBudget));
             _chatPreviewStore = chatPreviewStore;
             _migrationStore = migrationStore;
             _messageHistoryStore = messageHistoryStore;
@@ -136,7 +142,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
                 Relay(() => SyncStatusChanged?.Invoke(this, status), "SyncStatusChanged");
             };
             _appState.OnHistorySyncReceived += (s, sync) => Relay(() => HistorySyncReceived?.Invoke(this, sync), "HistorySyncReceived");
-            _appState.OnInitialSyncProgress += (s, e) => Relay(() => InitialSyncProgress?.Invoke(this, e), "InitialSyncProgress");
+            _initialSync.Changed += (s, e) => Relay(() => InitialSyncProgress?.Invoke(this, e), "InitialSyncProgress");
             _appState.OnSessionCleared += (s, e) => { _ = ResetHistorySqliteAsync("session-cleared"); };
             _appState.OnBackgroundHistorySyncBounced += (s, e) => NoteBackgroundHistorySyncBounce();
             if (_chatPreviewStore != null)
@@ -166,13 +172,13 @@ namespace Unison.Uwp.Services.WhatsApp.History
 
         public bool IsLoadingPersistedChats => _appState.IsLoadingPersistedChats;
 
-        public bool IsInitialSyncSafeMode => _appState.IsInitialSyncSafeMode;
+        public bool IsInitialSyncSafeMode => _initialSync.IsActive;
 
-        public bool PreferFrugalSyncBudget => _appState.PreferFrugalSyncBudget;
+        public bool PreferFrugalSyncBudget => _syncBudget.IsFrugal;
 
-        public int InitialSyncProcessedConversations => _appState.InitialSyncProcessedConversations;
+        public int InitialSyncProcessedConversations => _initialSync.ProcessedConversations;
 
-        public int InitialSyncTotalConversations => _appState.InitialSyncTotalConversations;
+        public int InitialSyncTotalConversations => _initialSync.TotalConversations;
 
         public event EventHandler<global::Proto.HistorySync> HistorySyncReceived;
 

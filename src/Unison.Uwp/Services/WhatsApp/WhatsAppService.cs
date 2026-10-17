@@ -258,37 +258,10 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private bool IsWindowsMobile => _isWindowsMobile;
 
-        /// <summary>
-        /// Frugal when memory is not Low, or on Mobile while the catalog/sync is heavy.
-        /// Strong devices with Low memory stay generous (the old “desktop timings” path).
-        /// </summary>
-        public bool PreferFrugalSyncBudget
-        {
-            get
-            {
-                Windows.System.AppMemoryUsageLevel level =
-                    Windows.System.MemoryManager.AppMemoryUsageLevel;
-                if (level != Windows.System.AppMemoryUsageLevel.Low)
-                {
-                    return true;
-                }
-
-                if (!IsWindowsMobile)
-                {
-                    return false;
-                }
-
-                return Chats.Count >= 80
-                    || _initialSyncSafeModeActive
-                    || IsReplayDrainActive
-                    || _historyRequests.IsFullInFlight;
-            }
-        }
-
         internal bool UsesSingleMediaDownloadSlot => IsWindowsMobile;
 
-        /// <summary>Alias used by startup/enrichment timings.</summary>
-        private bool UseFrugalSyncBudget => PreferFrugalSyncBudget;
+        /// <summary>Startup and enrichment timings; the rule is <see cref="SyncBudget"/>.</summary>
+        private bool UseFrugalSyncBudget => _syncBudget.IsFrugal;
 
         private async Task WarmPersonStoreAsync()
         {
@@ -609,9 +582,8 @@ namespace Unison.Uwp.Services.WhatsApp
         // O historico completo continua no MessageStore.
         private readonly ActiveChat _activeChat;
         private const int MaxActiveChatMessagesInMemory = 300;
-        private volatile bool _initialSyncSafeModeActive;
-        private int _initialSyncProcessedConversations;
-        private int _initialSyncTotalConversations;
+        private readonly InitialSyncProgressState _initialSync;
+        private readonly SyncBudget _syncBudget;
 
         /// <summary>
         /// SQLite history arrives in several chunks. We accumulate conversation counts and only
@@ -622,10 +594,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private int _sqliteHistoryFinalizeGeneration;
         private const int SqliteHistoryFinalizeQuietMs = 2800;
         private const int SqliteHistoryFullFinalizeDelayMs = 900;
-
-        public bool IsInitialSyncSafeMode => _initialSyncSafeModeActive;
-        public int InitialSyncProcessedConversations => _initialSyncProcessedConversations;
-        public int InitialSyncTotalConversations => _initialSyncTotalConversations;
 
         /// <summary>UWP transport only; prefer <see cref="IWhatsAppService"/> APIs from outside this assembly.</summary>
         internal IWhatsAppSocket Socket => _socket;
@@ -727,7 +695,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 IsServiceConnected = IsConnected,
                 IsConnecting = _isConnecting,
                 SuppressReconnect = _suppressReconnect || _fatalSessionEnded,
-                HistorySyncProcessing = _initialSyncSafeModeActive ||
+                HistorySyncProcessing = _initialSync.IsActive ||
                                         IsHistoryCatchUpBannerActive ||
                                         _historyRequests.IsFullClaimed,
                 HistoryCatchUpBannerActive = IsHistoryCatchUpBannerActive,
@@ -740,8 +708,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 LastHistorySyncReceivedUtc = _lastHistorySyncReceivedUtc,
                 LastHistorySyncType = _lastHistorySyncTypeReceived?.ToString(),
                 SqliteHistoryConversationsAccumulated = _sqliteHistoryConversationsAccumulated,
-                InitialSyncProcessedConversations = _initialSyncProcessedConversations,
-                InitialSyncTotalConversations = _initialSyncTotalConversations,
+                InitialSyncProcessedConversations = _initialSync.ProcessedConversations,
+                InitialSyncTotalConversations = _initialSync.TotalConversations,
                 DecryptedEventCount = Interlocked.Read(ref _diagnosticsDecryptedEventCount),
                 AppliedMessageCount = Interlocked.Read(ref _diagnosticsAppliedMessageCount),
                 SendAttemptCount = Interlocked.Read(ref _diagnosticsSendAttemptCount),
@@ -1115,7 +1083,6 @@ namespace Unison.Uwp.Services.WhatsApp
         public event EventHandler OnQrExpired;
         public event EventHandler<string> OnConnectionUpdate;
         public event EventHandler<HistorySync> OnHistorySyncReceived;
-        public event EventHandler<InitialSyncProgressEventArgs> OnInitialSyncProgress;
         public event EventHandler OnSessionInitialized;
         public event EventHandler<SessionClearedEventArgs> OnSessionCleared;
         public event EventHandler OnUserProfileChanged;
@@ -1173,27 +1140,15 @@ namespace Unison.Uwp.Services.WhatsApp
         public string CurrentConnectionStatus { get; private set; }
         private void PublishInitialSyncProgress(bool active, bool completed, int processed, int total, string stage)
         {
-            _initialSyncSafeModeActive = active;
-            _initialSyncProcessedConversations = Math.Max(0, processed);
-            _initialSyncTotalConversations = Math.Max(0, total);
-
             RuntimeDiagnosticsService.Instance.Write(
                 "history",
                 completed ? "initial-sync-safe-mode-complete" : "initial-sync-safe-mode-progress",
                 "active=" + active +
-                "; processed=" + _initialSyncProcessedConversations +
-                "; total=" + _initialSyncTotalConversations +
+                "; processed=" + Math.Max(0, processed) +
+                "; total=" + Math.Max(0, total) +
                 "; stage=" + (stage ?? string.Empty));
 
-            OnInitialSyncProgress?.Invoke(this, new InitialSyncProgressEventArgs
-            {
-                IsActive = active,
-                IsCompleted = completed,
-                ProcessedConversations = _initialSyncProcessedConversations,
-                TotalConversations = _initialSyncTotalConversations,
-                VisibleChatTarget = Math.Min(_initialSyncTotalConversations, Math.Max(20, _initialSyncProcessedConversations)),
-                Stage = stage
-            });
+            _initialSync.Publish(active, completed, processed, total, stage);
         }
 
         public event EventHandler<BinaryNode> OnLinkCodeCompanionReg;
@@ -1213,6 +1168,8 @@ namespace Unison.Uwp.Services.WhatsApp
             JidAliasTable jidAlias,
             ContactDisplayNames displayNames,
             HistoryOnDemandRegistry historyRequests,
+            InitialSyncProgressState initialSync,
+            SyncBudget syncBudget,
             IPersonStore personStore,
             IGroupRosterStore groupRosterStore,
             IChatStore chatStore,
@@ -1241,6 +1198,8 @@ namespace Unison.Uwp.Services.WhatsApp
             _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
             _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
             _historyRequests = historyRequests ?? throw new ArgumentNullException(nameof(historyRequests));
+            _initialSync = initialSync ?? throw new ArgumentNullException(nameof(initialSync));
+            _syncBudget = syncBudget ?? throw new ArgumentNullException(nameof(syncBudget));
             _historyMessages = historyMessages ?? throw new ArgumentNullException(nameof(historyMessages));
             _chatPreviews = chatPreviews ?? throw new ArgumentNullException(nameof(chatPreviews));
             _usyncGate = usyncGate ?? throw new ArgumentNullException(nameof(usyncGate));
@@ -1297,6 +1256,8 @@ namespace Unison.Uwp.Services.WhatsApp
             JidAliasTable jidAlias,
             ContactDisplayNames displayNames,
             HistoryOnDemandRegistry historyRequests,
+            InitialSyncProgressState initialSync,
+            SyncBudget syncBudget,
             IPersonStore personStore,
             IGroupRosterStore groupRosterStore,
             IChatStore chatStore,
@@ -1305,7 +1266,7 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             return _instance ?? (_instance = new WhatsAppService(
                 chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
-                personStore, groupRosterStore, chatStore, systemInfo, ui));
+                initialSync, syncBudget, personStore, groupRosterStore, chatStore, systemInfo, ui));
         }
 
         /// <summary>

@@ -282,6 +282,15 @@ namespace Unison.Uwp
             services.AddSingleton(sp => new SyncWorkGate(
                 sp.GetRequiredService<HistoryOnDemandRegistry>(),
                 () => ((WhatsAppService)sp.GetRequiredService<IWhatsAppService>()).Socket?.IsAwaitingInitialSync ?? false));
+            // The client publishes first-sync progress; HistoryFacade and the budget read it.
+            services.AddSingleton<InitialSyncProgressState>();
+            services.AddSingleton(sp => new SyncBudget(
+                sp.GetRequiredService<IChatStateStore>(),
+                sp.GetRequiredService<InitialSyncProgressState>(),
+                sp.GetRequiredService<SyncWorkGate>(),
+                sp.GetRequiredService<HistoryOnDemandRegistry>(),
+                () => Windows.System.MemoryManager.AppMemoryUsageLevel == Windows.System.AppMemoryUsageLevel.Low,
+                sp.GetRequiredService<ISystemInfoProvider>().IsMobile()));
             services.AddSingleton<IWhatsAppService>(
                 sp => WhatsAppService.Create(
                     sp.GetRequiredService<ChatStateStore>(),
@@ -297,6 +306,8 @@ namespace Unison.Uwp
                     sp.GetRequiredService<JidAliasTable>(),
                     sp.GetRequiredService<ContactDisplayNames>(),
                     sp.GetRequiredService<HistoryOnDemandRegistry>(),
+                    sp.GetRequiredService<InitialSyncProgressState>(),
+                    sp.GetRequiredService<SyncBudget>(),
                     sp.GetRequiredService<IPersonStore>(),
                     sp.GetRequiredService<IGroupRosterStore>(),
                     sp.GetRequiredService<IChatStore>(),
@@ -338,6 +349,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IHistoryOnDemandSocket>(),
                 sp.GetRequiredService<IChatStateStore>(),
                 sp.GetRequiredService<SyncStatusChannel>(),
+                sp.GetRequiredService<InitialSyncProgressState>(),
+                sp.GetRequiredService<SyncBudget>(),
                 sp.GetRequiredService<IHistoryChatPreviewStore>(),
                 sp.GetRequiredService<IHistoryMigrationStore>(),
                 sp.GetRequiredService<IHistoryMessageStore>(),
@@ -417,7 +430,9 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IChatCatalogPersistence>(),
                 sp.GetRequiredService<SyncStatusChannel>(),
                 sp.GetRequiredService<SyncWorkGate>(),
-                sp.GetRequiredService<ContactDisplayNames>()));
+                sp.GetRequiredService<ContactDisplayNames>(),
+                sp.GetRequiredService<SyncBudget>(),
+                sp.GetRequiredService<InitialSyncProgressState>()));
             services.AddSingleton<IOfflineReplayHost>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IChatService>(sp => new ChatFacade(

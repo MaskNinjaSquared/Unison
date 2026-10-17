@@ -45,6 +45,8 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly IChatStateStore _chatState;
         private readonly SyncStatusChannel _syncStatus;
         private readonly SyncWorkGate _syncWork;
+        private readonly SyncBudget _syncBudget;
+        private readonly InitialSyncProgressState _initialSync;
         private readonly IDispatcher _ui;
         private readonly IChatCatalogPersistence _catalog;
         private readonly IJidResolver _jids;
@@ -58,9 +60,11 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
         internal ChatAvatarPolicy(IWhatsAppService whatsAppService, IJidResolver jids, ChatAvatarFetch fetch, IDispatcher ui,
             IChatCatalogPersistence catalog, IChatStateStore chatState, SyncStatusChannel syncStatus, SyncWorkGate syncWork,
-            IWhatsAppSessionProvider sessions)
+            IWhatsAppSessionProvider sessions, SyncBudget syncBudget, InitialSyncProgressState initialSync)
         {
             _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
+            _syncBudget = syncBudget ?? throw new ArgumentNullException(nameof(syncBudget));
+            _initialSync = initialSync ?? throw new ArgumentNullException(nameof(initialSync));
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
             _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
@@ -82,7 +86,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         /// </summary>
         public async Task RetrieveBatchAsync(CancellationToken token = default(CancellationToken))
         {
-            bool frugal = _whatsAppService.PreferFrugalSyncBudget;
+            bool frugal = _syncBudget.IsFrugal;
             int batchSize = frugal ? AvatarFetchBatchSizeFrugal : AvatarFetchBatchSizeGenerous;
             TimeSpan interRequestDelay = frugal
                 ? AvatarFetchInterRequestDelayFrugal
@@ -183,7 +187,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         {
             // Initial history sync must keep CPU, storage and network pressure focused on chats
             // and messages. Visible rows receive their avatars once safe mode ends.
-            if (_whatsAppService.IsInitialSyncSafeMode)
+            if (_initialSync.IsActive)
             {
                 return;
             }

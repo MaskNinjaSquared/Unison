@@ -19,14 +19,6 @@ namespace Unison.Core.Contracts.WhatsApp
         bool VerboseLogging { get; }
         bool IsConnected { get; }
         bool IsLoadingPersistedChats { get; }
-        bool IsInitialSyncSafeMode { get; }
-        /// <summary>
-        /// True when startup/sync work should use smaller batches, longer quiet floors and
-        /// gentler list updates. Driven by memory pressure and hot sync, not form-factor alone.
-        /// </summary>
-        bool PreferFrugalSyncBudget { get; }
-        int InitialSyncProcessedConversations { get; }
-        int InitialSyncTotalConversations { get; }
 
         // ---------------------------------------------------------------------
         // Raw client events.
@@ -58,7 +50,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// pairing surface has to offer a reload.
         /// </summary>
         event EventHandler OnQrExpired;
-        event EventHandler<InitialSyncProgressEventArgs> OnInitialSyncProgress;
         /// <summary>Presence / chatstate for the subscribed contact (forwards SocketClient).</summary>
         event EventHandler<PresenceUpdateEventArgs> OnPresenceUpdate;
         /// <summary>

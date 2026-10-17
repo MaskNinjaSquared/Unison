@@ -17,7 +17,7 @@ namespace Unison.Uwp.Services.WhatsApp
     /// minute of nothing followed by names appearing for no reason - so the wait now ends as soon
     /// as the sync actually settles, the pressure check retries instead of abandoning the pass, and
     /// both report what they are doing. Quiet floors and enrichment budgets follow
-    /// <c>PreferFrugalSyncBudget</c> (memory + hot sync), not a Mobile/desktop flag.
+    /// <c>SyncBudget</c> (memory + hot sync), not a Mobile/desktop flag.
     /// </remarks>
     public partial class WhatsAppService
     {
@@ -69,7 +69,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         continue;
                     }
 
-                    if (!_initialSyncSafeModeActive && !IsReplayDrainActive)
+                    if (!_initialSync.IsActive && !IsReplayDrainActive)
                     {
                         break;
                     }

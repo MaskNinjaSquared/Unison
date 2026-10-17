@@ -82,7 +82,9 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             IChatCatalogPersistence catalog,
             SyncStatusChannel syncStatus,
             SyncWorkGate syncWork,
-            ContactDisplayNames displayNames)
+            ContactDisplayNames displayNames,
+            SyncBudget syncBudget,
+            InitialSyncProgressState initialSync)
         {
             _displayNames = displayNames ?? throw new ArgumentNullException(nameof(displayNames));
             if (selfMarkers == null) throw new ArgumentNullException(nameof(selfMarkers));
@@ -146,7 +148,9 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 chats,
                 syncStatus,
                 syncWork,
-                sessions);
+                sessions,
+                syncBudget,
+                initialSync);
             _roster = new GroupRosterPolicy(groups, this, jids, ui, catalog, chats, syncWork, sessions);
 
             // Both live as long as the app does, so there is nothing to unhook from.
