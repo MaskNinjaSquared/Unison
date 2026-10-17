@@ -193,12 +193,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         Task ClearUnreadForChatAsync(string jid);
 
-        /// <summary>
-        /// Rows that share a canonical conversation id (PN/LID aliases). Copied for safe walk.
-        /// Transitional until the row index lives on <see cref="IChatStateStore"/>.
-        /// </summary>
-        IReadOnlyList<ChatItem> GetChatRowsForCanonicalJid(string jid);
-
         /// <summary>Schedules a chat-list dedupe pass (new row / alias noise).</summary>
         void RequestChatListDedup(string reason);
 

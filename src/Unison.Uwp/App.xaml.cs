@@ -256,9 +256,18 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IWhatsAppSessionProvider>(),
                 sp.GetRequiredService<IUsyncGate>(),
                 sp.GetRequiredService<IAvatarCache>()));
+            // One index for the client and ChatFacade: the client re-keys rows in place and
+            // invalidates it, and a second index would never hear about that.
+            services.AddSingleton(sp =>
+            {
+                ChatStateStore chatState = sp.GetRequiredService<ChatStateStore>();
+                JidAliasTable aliases = sp.GetRequiredService<JidAliasTable>();
+                return new ChatRowIndex(() => chatState.Chats, aliases.GetCanonicalJid);
+            });
             services.AddSingleton<IWhatsAppService>(
                 sp => WhatsAppService.Create(
                     sp.GetRequiredService<ChatStateStore>(),
+                    sp.GetRequiredService<ChatRowIndex>(),
                     sp.GetRequiredService<IHistoryMessageStore>(),
                     sp.GetRequiredService<IHistoryChatPreviewStore>(),
                     sp.GetRequiredService<IUsyncGate>(),
@@ -390,6 +399,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IWhatsAppService>(),
                 sp.GetRequiredService<IJidResolver>(),
                 sp.GetRequiredService<IChatStateStore>(),
+                sp.GetRequiredService<ChatRowIndex>(),
                 sp.GetRequiredService<IOfflineReplayHost>(),
                 sp.GetRequiredService<IContactService>(),
                 sp.GetRequiredService<INotificationService>(),

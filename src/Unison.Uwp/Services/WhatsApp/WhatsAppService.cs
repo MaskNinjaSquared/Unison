@@ -989,19 +989,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// Every row that stands for the same conversation - a chat addressed by LID and the same
         /// chat addressed by phone number are two rows until they are merged.
         /// </summary>
-        private List<ChatItem> GetChatRowsForCanonicalJid(string jid)
-        {
-            string canonical = GetCanonicalJid(jid);
-            if (string.IsNullOrWhiteSpace(canonical))
-            {
-                canonical = NormalizeJid(jid);
-            }
-
-            return _chatRows.Find(canonical);
-        }
-
-        IReadOnlyList<ChatItem> IWhatsAppService.GetChatRowsForCanonicalJid(string jid) =>
-            GetChatRowsForCanonicalJid(jid);
+        private List<ChatItem> GetChatRowsForCanonicalJid(string jid) => _chatRows.FindConversation(jid);
 
         void IWhatsAppService.RequestChatListDedup(string reason) =>
             _ = DeduplicateChatsAsync(reason ?? "facade");
@@ -1302,6 +1290,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private WhatsAppService(
             ChatStateStore chatState,
+            ChatRowIndex chatRows,
             IHistoryMessageStore historyMessages,
             IHistoryChatPreviewStore chatPreviews,
             IUsyncGate usyncGate,
@@ -1331,7 +1320,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _chatStore = chatStore ?? throw new ArgumentNullException(nameof(chatStore));
             _isWindowsMobile = systemInfo.IsMobile();
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
-            _chatRows = new ChatRowIndex(() => Chats, GetCanonicalJid);
+            _chatRows = chatRows ?? throw new ArgumentNullException(nameof(chatRows));
             _historyRequests = historyRequests ?? throw new ArgumentNullException(nameof(historyRequests));
             _historyMessages = historyMessages ?? throw new ArgumentNullException(nameof(historyMessages));
             _chatPreviews = chatPreviews ?? throw new ArgumentNullException(nameof(chatPreviews));
@@ -1366,6 +1355,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         internal static WhatsAppService Create(
             ChatStateStore chatState,
+            ChatRowIndex chatRows,
             IHistoryMessageStore historyMessages,
             IHistoryChatPreviewStore chatPreviews,
             IUsyncGate usyncGate,
@@ -1380,7 +1370,7 @@ namespace Unison.Uwp.Services.WhatsApp
             AttachedUiDispatcher ui)
         {
             return _instance ?? (_instance = new WhatsAppService(
-                chatState, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, historyRequests,
+                chatState, chatRows, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, historyRequests,
                 personStore, groupRosterStore, chatStore, systemInfo, ui));
         }
 

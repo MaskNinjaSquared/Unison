@@ -55,6 +55,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
         private readonly IWhatsAppService _appState;
         private readonly IJidResolver _jids;
         private readonly IChatStateStore _chatState;
+        private readonly ChatRowIndex _chatRows;
         private readonly IContactService _contacts;
         private readonly INotificationService _notifications;
         private readonly IDispatcher _ui;
@@ -69,6 +70,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             IWhatsAppService appState,
             IJidResolver jids,
             IChatStateStore chatState,
+            ChatRowIndex chatRows,
             IOfflineReplayHost offlineReplay,
             IContactService contacts,
             INotificationService notifications,
@@ -94,6 +96,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             _appState = appState;
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
+            _chatRows = chatRows ?? throw new ArgumentNullException(nameof(chatRows));
             _contacts = contacts;
             _notifications = notifications;
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
@@ -351,7 +354,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
 
             await _ui.RunAsync(() =>
             {
-                IReadOnlyList<ChatItem> rows = _appState.GetChatRowsForCanonicalJid(chatJid);
+                IReadOnlyList<ChatItem> rows = _chatRows.FindConversation(chatJid);
                 if (rows == null || rows.Count == 0)
                 {
                     return;
@@ -619,7 +622,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
                     participantJid,
                     senderName);
 
-                foreach (ChatItem equivalentRow in _appState.GetChatRowsForCanonicalJid(jid))
+                foreach (ChatItem equivalentRow in _chatRows.FindConversation(jid))
                 {
                     if (!ReferenceEquals(equivalentRow, chat))
                     {
@@ -662,7 +665,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
 
             if (unreadDelta > 0)
             {
-                ChatUnreadTally.Bump(chat, _appState.GetChatRowsForCanonicalJid(jid), unreadDelta);
+                ChatUnreadTally.Bump(chat, _chatRows.FindConversation(jid), unreadDelta);
             }
 
             return chat;
