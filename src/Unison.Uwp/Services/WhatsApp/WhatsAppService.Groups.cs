@@ -84,22 +84,5 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             _ = _groupApply.ApplyMetadataAsync(groupJid, _groupMetadata.ReadMetadata(response, groupJid));
         }
-
-        private string ResolveGroupMemberDisplayName(string jid)
-        {
-            if (IsSelfLinkedJid(jid))
-            {
-                return SelfListDisplayName();
-            }
-
-            string resolved = ResolveDisplayName(jid, "chat");
-            if (!string.IsNullOrWhiteSpace(resolved) && IsMeaningfulChatLabel(resolved, jid, false))
-            {
-                return resolved;
-            }
-
-            return GetResolvedName(jid) ?? jid;
-        }
-
     }
 }

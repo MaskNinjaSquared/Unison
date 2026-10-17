@@ -34,6 +34,7 @@ using Unison.Core.Constants;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.State;
+using Unison.Uwp.Services;
 using Unison.Uwp.Services.WhatsApp.Chats;
 using Unison.Uwp.Services.WhatsApp.Contacts;
 using Unison.Uwp.Services.WhatsApp.Groups;
@@ -1135,7 +1136,8 @@ namespace Unison.Uwp.Services.WhatsApp
             var jidResolver = new JidResolver(JidAlias);
             _jids = jidResolver;
             _groupMetadata = new GroupMetadataReader(jidResolver);
-            _groupApply = new GroupMetadataApply(this, _ui, this, new GroupRosterWriter(_groupRosterStore, _personStore), jidResolver, _chatState, _chatRows, _chatState.PushNames);
+            var groupNaming = new GroupNaming(displayNames, jidResolver, _selfMarkers, new StringResourcesService());
+            _groupApply = new GroupMetadataApply(groupNaming, _ui, this, new GroupRosterWriter(_groupRosterStore, _personStore), jidResolver, _chatState, _chatRows, _chatState.PushNames);
             _receipts = new ReceiptReader(jidResolver);
             _chatState.Chats.CollectionChanged += (s, e) => InvalidateChatRowIndex();
 

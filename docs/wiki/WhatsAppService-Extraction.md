@@ -47,7 +47,6 @@ No behaviour change for users. Prep so later diffs are one cluster, not a 16k-li
 | `WhatsAppService.Receipts.cs` | Receipt nodes → send state |
 | `WhatsAppService.IncomingPump.cs` | Decrypted-message queue, placeholders, offline replay summaries |
 | `WhatsAppService.OutgoingHost.cs` | Explicit `IOutgoingMessageHost`: the caches and socket the send flows on `MessageFacade` reach (3.4) |
-| `WhatsAppService.GroupHost.cs` | Explicit `IGroupHost`: member/chat display names and the group-label rule for the group flows in Core (3.2b) |
 
 `IWhatsAppService` is unchanged as the façade-facing surface (minus the deleted history body). Do not grow it for UI; add members on the façade that owns the subject ([Coding standards](Coding-Standards) §6).
 
@@ -164,14 +163,14 @@ What is left on `_contactService` is awaited and ordered by the client, so it is
 
 ### Facades still depend on the client
 
-`ContactFacade`, `MessageFacade`, `ChatFacade`, `GroupFacade`, `HistoryFacade`, `ProfileFacade`, `StatusFacade`, `ConnectionFacade` take `IWhatsAppService` (or `AttachWhatsAppService`). Policy is already on the façade; **primitives** (fetch a chat avatar, send bytes, persist, canonical JID) still run inside the client. Group send-permission refresh and roster restore are the exception: they run in Core and call back through `IGroupHost`. The full-size group picture and member pictures are fetched by `GroupFacade`.
+`ContactFacade`, `MessageFacade`, `ChatFacade`, `GroupFacade`, `HistoryFacade`, `ProfileFacade`, `StatusFacade`, `ConnectionFacade` take `IWhatsAppService` (or `AttachWhatsAppService`). Policy is already on the façade; **primitives** (fetch a chat avatar, send bytes, persist, canonical JID) still run inside the client. Group send-permission refresh and roster restore are the exception: they run in Core, and nothing in them calls back into the client. The full-size group picture and member pictures are fetched by `GroupFacade`.
 
 Helpers under `Contacts/` (`ContactNameResolver`, `ChatAvatarPolicy`, `GroupRosterPolicy`, `AddressBookOverlay`) are the largest non-UI consumers of client members (`RaiseSyncStatus`, `FetchAndApplyAvatarAsync`, `IsTransportReady`, …). Extracting avatars/names is mostly moving those primitives so the helpers stop needing the god client.
 
 Two primitives already left the contract:
 
 - **UI thread.** `AttachedUiDispatcher` (UWP, `IDispatcher`) is a singleton the client, `ChatFacade`, `ContactFacade` and the contact helpers take in their constructors. `App` attaches the root frame's `CoreDispatcher` to it; `AttachUiDispatcher` and `IWhatsAppService.RunOnUiThreadAsync` are gone.
-- **Catalog save.** `IChatCatalogPersistence` (`Schedule`, `PersistRows`) replaces `SchedulePersistPublic` / `PersistChatListRowsPublic`. It is a narrow port the client implements, like `IGroupHost`: the debounce timer stays in the client because `ShutdownAsync` (phase 4) resets it.
+- **Catalog save.** `IChatCatalogPersistence` (`Schedule`, `PersistRows`) replaces `SchedulePersistPublic` / `PersistChatListRowsPublic`. It is a narrow port the client implements: the debounce timer stays in the client because `ShutdownAsync` (phase 4) resets it.
 
 ### DI still injects façades *into* the client
 
@@ -647,13 +646,10 @@ account, then one `SchedulePersist`. The reader now hands it `GroupMetadataSnaps
 **Restore.** `GroupRosterRestore` (Core) reads `IGroupRosterStore`, finds the canonical row in
 `IChatStateStore.Chats` and fills it if it is still empty.
 
-**The port.** Both flows reach the client through `IGroupHost`, implemented explicitly in
-`WhatsAppService.GroupHost.cs`. Every member is a primitive the client owns for another reason: the
-UI dispatcher (which drops a pass when none is attached yet, unlike `IDispatcher`, which runs
-inline), the contact-name cache and the localized self wording (3.6), the 1:1 avatar lookup, and
-the debounced chat-list save plus the late-attached roster and person stores (3.9b). That is how
-this landed before 3.6 and 3.9b: the UI pass that writes the row, the name cache and the save is not
-split, it is driven from Core and calls back for the writes.
+**Names.** Both flows label members and rows through `IGroupHost`, which was once implemented by
+the client and is now `GroupNaming` (Core) over `ContactDisplayNames`, `ISelfMarkerNaming` and
+`IStringResources`. The UI hop, the saves, the row and avatar lookups and the subject cache left
+the port one at a time; see phase 4 below.
 
 **Owners.** `GroupMetadataApply` is stateless. `GroupFacade` holds the one that serves the listing, the send-permission refresh and the unresolved pass, plus `GroupQueryWindow` so those callers share the two minutes. The client keeps a second applier for the receipt path, which still applies a metadata reply it fetched itself. The full-size group picture is fetched by the façade.
 
@@ -1235,7 +1231,7 @@ façades. The roster and membership saves left too: `GroupRosterWriter` (Core) o
 `IGroupRosterStore` and `IPersonStore` and writes in the background, so a failed save is logged
 and never reaches the UI pass. `FindGroupRowName` and `CacheGroupSubject` went next: the applier reads
 the group's rows from `ChatRowIndex` and writes the subject into the push-name `DisplayNameTable`
-(`ContactNames`) itself. So did `HasMeaningfulGroupLabel`, which only combined that cache with the label rule. The 1:1 avatar lookup is `ChatRowAvatarLookup` (Core), which tries the member's JID, phone and LID on `ChatRowIndex`. What is left on the port is the name rules.
+(`ContactNames`) itself. So did `HasMeaningfulGroupLabel`, which only combined that cache with the label rule. The 1:1 avatar lookup is `ChatRowAvatarLookup` (Core), which tries the member's JID, phone and LID on `ChatRowIndex`. The name rules went last: `GroupNaming` (Core) implements the port over `ContactDisplayNames`, so the client no longer implements `IGroupHost` and `WhatsAppService.GroupHost.cs` is gone. The client builds its own `GroupNaming` for the receipt-path applier, the way it already builds `JidResolver`.
 
 **Step 1 is done: the app lifecycle goes through the façade.** `IConnectionService` gained
 `ResumeAsync`, `ReleaseMemoryAsync`, `TransferActiveSocketToBrokerAsync`, `PrepareForSuspendAsync`

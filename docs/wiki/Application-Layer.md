@@ -76,7 +76,7 @@ Unison.Uwp/Services/WhatsApp/
   Groups/GroupMetadataReader.cs
   Diagnostics/DebugSendService.cs
   WhatsAppService.cs         compatibility client (partial)
-  WhatsAppService.*.cs       Connection / Media / Groups / GroupHost / Avatars / Identity /
+  WhatsAppService.*.cs       Connection / Media / Groups / Avatars / Identity /
                              AppState / Persistence / Receipts / IncomingPump / OutgoingHost
 ```
 
