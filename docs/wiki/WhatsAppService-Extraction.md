@@ -1359,6 +1359,12 @@ dispatcher, `IChatStateStore`, `ContactDisplayNames` and `ISelfMarkerNaming`.) I
 paths, and on `Applied` writes the diagnostics line and raises `OnDisplayNamesUpdated`, which
 `ContactFacade` relays as `DisplayNamesUpdated`.
 
+**Clearing unread is the chat façade's.** `ChatFacade.ClearUnreadForChatAsync` zeroes every row of
+the conversation on the UI thread (`ChatUnreadTally.Clear`, tested), updates the badge and the
+shortcut, and saves only the rows that changed through `IChatCatalogPersistence.PersistRows`.
+It takes `IShortcutService` by constructor instead of reaching `App.Services`, and the member left
+`IWhatsAppService`.
+
 **Done when:** `.Connection.cs` + a small main file; no façade needs send/history/avatar/group/list methods on the client; leftover `IWhatsAppSocket` drop is [Migration](Migration) item 9, after this.
 
 ---

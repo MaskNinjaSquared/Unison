@@ -477,7 +477,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IContactService>(),
                 sp.GetRequiredService<INotificationService>(),
                 sp.GetRequiredService<AttachedUiDispatcher>(),
-                sp.GetRequiredService<IChatCatalogPersistence>()));
+                sp.GetRequiredService<IChatCatalogPersistence>(),
+                sp.GetRequiredService<IShortcutService>()));
             // After IChatService: the projection persists resolved strip rows so cold start keeps names.
             services.AddSingleton<IChatAuthorProjection>(sp => new ChatAuthorProjection(
                 sp.GetRequiredService<IChatStateStore>(),

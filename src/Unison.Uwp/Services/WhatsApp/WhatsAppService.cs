@@ -292,53 +292,6 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        public async Task ClearUnreadForChatAsync(string jid)
-        {
-            string canonical = GetCanonicalJid(jid);
-            if (string.IsNullOrWhiteSpace(canonical))
-            {
-                return;
-            }
-
-            // Same idea as Unigram's ViewMessages path: update memory immediately, and only touch
-            // disk for the rows that actually changed. A full SchedulePersist here rewrote every
-            // chat preview plus three JSON maps - fine on SSD, several seconds on Mobile eMMC.
-            List<ChatItem> dirty = null;
-            await _ui.RunAsync(() =>
-            {
-                foreach (var row in GetChatRowsForCanonicalJid(canonical))
-                {
-                    if (row == null || row.UnreadCount <= 0)
-                    {
-                        continue;
-                    }
-
-                    if (dirty == null)
-                    {
-                        dirty = new List<ChatItem>();
-                    }
-
-                    dirty.Add(row);
-                    row.UnreadCount = 0;
-                }
-            });
-
-            if (dirty == null || dirty.Count == 0)
-            {
-                return;
-            }
-
-            NotificationService.Instance.UpdateBadge(GetTotalUnreadCount());
-            try
-            {
-                App.Services?.GetService<IShortcutService>()?.UpdateChatUnread(canonical, 0);
-            }
-            catch
-            {
-            }
-
-            _ = PersistChatCatalogSliceAsync(dirty);
-        }
 
         private bool IsActiveChatJid(string jid) => _activeChat.IsOpen(jid);
 

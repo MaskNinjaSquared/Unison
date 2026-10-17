@@ -61,6 +61,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
         private readonly INotificationService _notifications;
         private readonly IDispatcher _ui;
         private readonly IChatCatalogPersistence _catalog;
+        private readonly IShortcutService _shortcuts;
         private readonly OfflineReplayTips _offlineReplayTips;
 
         /// <summary>Short enough that the first recovered chat shows while a long replay continues.</summary>
@@ -77,7 +78,8 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             IContactService contacts,
             INotificationService notifications,
             IDispatcher ui,
-            IChatCatalogPersistence catalog)
+            IChatCatalogPersistence catalog,
+            IShortcutService shortcuts)
         {
             if (offlineReplay == null)
             {
@@ -104,6 +106,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             _notifications = notifications;
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
+            _shortcuts = shortcuts ?? throw new ArgumentNullException(nameof(shortcuts));
             _offlineReplayTips = new OfflineReplayTips(
                 _jids,
                 offlineReplay,
@@ -201,7 +204,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             // Cleared first, and unconditionally: the badge is the part the user is looking at, it
             // should not wait for a round trip to disappear, and a PN/LID alias can leave a second
             // row carrying a count this one no longer has.
-            await _appState.ClearUnreadForChatAsync(jid).ConfigureAwait(false);
+            await ClearUnreadForChatAsync(jid).ConfigureAwait(false);
 
             var socket = _sessions.Socket;
             if (socket == null || unread <= 0)
@@ -303,11 +306,41 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             _activeChat.Open(jid);
         }
 
-        public Task ClearUnreadForChatAsync(string jid)
+        /// <remarks>
+        /// Memory first, then only the rows that changed go to disk: a full catalogue save here
+        /// rewrote every chat preview, which took seconds on Mobile eMMC.
+        /// </remarks>
+        public async Task ClearUnreadForChatAsync(string jid)
         {
-            return string.IsNullOrWhiteSpace(jid)
-                ? Task.CompletedTask
-                : _appState.ClearUnreadForChatAsync(jid);
+            if (string.IsNullOrWhiteSpace(jid))
+            {
+                return;
+            }
+
+            string canonical = _jids.GetCanonicalJid(jid);
+            if (string.IsNullOrWhiteSpace(canonical))
+            {
+                return;
+            }
+
+            List<ChatItem> changed = null;
+            await _ui.RunAsync(() => changed = ChatUnreadTally.Clear(_chatRows.FindConversation(canonical)));
+            if (changed == null || changed.Count == 0)
+            {
+                return;
+            }
+
+            _notifications?.UpdateBadge(GetTotalUnreadCount());
+            try
+            {
+                _shortcuts.UpdateChatUnread(canonical, 0);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatFacade] Shortcut unread update failed: " + ex.Message);
+            }
+
+            _catalog.PersistRows(changed);
         }
 
         public int GetTotalUnreadCount()

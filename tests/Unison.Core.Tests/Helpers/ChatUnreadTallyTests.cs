@@ -195,5 +195,28 @@ namespace Unison.Core.Tests.Helpers
         {
             Assert.Equal(0, ChatUnreadTally.TotalAcrossConversations(null!, Canonical));
         }
+
+        // --- Clearing ----------------------------------------------------------
+
+        [Fact]
+        public void Clearing_zeroes_every_row_and_returns_only_the_ones_that_changed()
+        {
+            var lid = Row(3);
+            var phone = Row(0);
+            var stale = Row(1);
+
+            List<ChatItem> changed = ChatUnreadTally.Clear(new List<ChatItem> { lid, phone, null, stale });
+
+            Assert.Equal(new[] { lid, stale }, changed);
+            Assert.Equal(0, lid.UnreadCount);
+            Assert.Equal(0, stale.UnreadCount);
+        }
+
+        [Fact]
+        public void Clearing_a_read_conversation_changes_nothing()
+        {
+            Assert.Empty(ChatUnreadTally.Clear(new List<ChatItem> { Row(0) }));
+            Assert.Empty(ChatUnreadTally.Clear(null!));
+        }
     }
 }

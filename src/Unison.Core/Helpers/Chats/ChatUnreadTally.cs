@@ -83,6 +83,32 @@ namespace Unison.Core.Helpers
         }
 
         /// <summary>
+        /// Zeroes every row of a conversation. Returns the rows that had a count, so only those
+        /// are written back to disk. Never null.
+        /// </summary>
+        public static List<ChatItem> Clear(IEnumerable<ChatItem> rows)
+        {
+            var changed = new List<ChatItem>();
+            if (rows == null)
+            {
+                return changed;
+            }
+
+            foreach (ChatItem row in rows)
+            {
+                if (row == null || row.UnreadCount <= 0)
+                {
+                    continue;
+                }
+
+                row.UnreadCount = 0;
+                changed.Add(row);
+            }
+
+            return changed;
+        }
+
+        /// <summary>
         /// Adds <paramref name="delta"/> to a conversation's unread count and writes the
         /// result onto every row of it. Returns the new count.
         /// </summary>

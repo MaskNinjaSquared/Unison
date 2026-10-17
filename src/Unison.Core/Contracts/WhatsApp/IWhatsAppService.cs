@@ -144,12 +144,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>Schedules another background resolution pass (names+avatars+groups) after a delay.</summary>
         void ScheduleDeferredAvatarResolution(string reason, TimeSpan? delay = null);
 
-        /// <summary>
-        /// Zeroes the unread count for a conversation, on every row that is the same conversation.
-        /// PN/LID aliases can briefly produce more than one row, and a leftover alias is enough to
-        /// put the green badge back on a chat the user just read.
-        /// </summary>
-        Task ClearUnreadForChatAsync(string jid);
 
         /// <summary>Schedules a chat-list dedupe pass (new row / alias noise).</summary>
         void RequestChatListDedup(string reason);
