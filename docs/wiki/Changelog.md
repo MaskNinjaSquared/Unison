@@ -4,6 +4,13 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 
 ---
 
+## Façades read the chat list and name tables directly
+
+The chat and contact façades now take the chat list, the address-book names, the conversation row
+index and the push-name lookup from the shared Core objects instead of asking the client.
+`Chats`, `PhoneContactNamesByJid`, `GetTotalUnreadCount`, `GetLiveMessages`,
+`GetChatRowsForCanonicalJid` and `HasResolvedContactName` left `IWhatsAppService`. No behaviour change.
+
 ## Chat names are applied to the list after sync
 
 When a sync ended, names the app already knew could stay off the chat list, which kept showing

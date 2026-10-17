@@ -1028,6 +1028,21 @@ chat-flag paths had each written out) and building a list strip from a message a
 (`ApplyMessageAsChatTip`, three copies across `.AppState.cs` and `.IncomingPump.cs`). The other three
 places that create a row stay separate: they differ in the name context and insert at the front.
 
+**Façades read shared state, not the client.** Six members left `IWhatsAppService` because the
+façades now take the Core objects those members only forwarded to:
+
+- `Chats`: the contact helpers and `ChatFacade` take `IChatStateStore`, the same collection.
+- `PhoneContactNamesByJid`: `ContactFacade` and `AddressBookOverlay` get `ChatStateStore.AddressBookNames`.
+- `GetTotalUnreadCount`: `ChatFacade` tallies over `IChatStateStore.Chats`.
+- `GetLiveMessages`: replaced by `IChatStateStore.GetConversationMessages`, over
+  `ChatMessageCache.CopyConversation` (4 tests). It tries the exact address first, then the first
+  conversation with the same canonical form.
+- `GetChatRowsForCanonicalJid`: `ChatRowIndex` is a DI singleton shared by the client and
+  `ChatFacade`, with `FindConversation` (2 tests). It has to be one instance: the client re-keys rows
+  in place and invalidates the index by hand, and a second index would never hear about that.
+- `HasResolvedContactName`: replaced by `PushNameLookup` (Core, 4 tests). The client uses it too and
+  passes its rejection log as the decision callback.
+
 The newest message time history freshness reads is `NewestStoredMessage.FindUtc` over the timeline
 snapshot and the list strip (cold start has tips but no timelines), each value through
 `ChatMessageOrder.ToComparableUtc`. The client passes `MessagesByChat` and `Chats` and its filters.
