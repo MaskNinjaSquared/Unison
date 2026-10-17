@@ -2,6 +2,13 @@
 
 Newest first.
 
+## Conversation resync left the client contract
+
+Wiping in-memory chats, forcing app-state pin/mute re-report and the no-socket full
+resync fallback go through `IConversationResyncHost`. `HistoryFacade` is the only
+caller; the three members left `IWhatsAppService`.
+
+
 ## Personal chat keeps the profile name
 
 The notes-to-self row used to take a WhatsApp push nick or an agenda entry under the

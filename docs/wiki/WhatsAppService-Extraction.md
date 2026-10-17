@@ -1430,6 +1430,11 @@ write the rows and the durable mirror through that port. `ChatFacade` no longer 
 `IWhatsAppService` at all; `MessageFacade` still does for events and `EnsureConnectedAsync`.
 `ApplyChatPinAsync`, `ApplyChatDeletionAsync` and `ApplyMessagePinAsync` left `IWhatsAppService`.
 
+**Conversation resync primitives are `IConversationResyncHost`.** Cache wipe, app-state flag
+re-report and the no-socket full resync fallback leave `IWhatsAppService`. `HistoryFacade`
+owns the UI path and reaches those three through the host; ViewModels still call
+`IHistoryService` / `IMessageService.ResyncConversationsAsync`.
+
 **Done when:** `.Connection.cs` + a small main file; no façade needs send/history/avatar/group/list methods on the client; leftover `IWhatsAppSocket` drop is [Migration](Migration) item 9, after this.
 
 ---

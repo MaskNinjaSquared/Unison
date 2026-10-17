@@ -390,9 +390,12 @@ namespace Unison.Uwp
 
             // Falls back to the service's own resync when the socket is down and the session
             // provider has nothing to give it.
+            services.AddSingleton<IConversationResyncHost>(
+                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton(sp => new HistoryFacade(
                 sp.GetRequiredService<IWhatsAppSessionProvider>(),
                 sp.GetRequiredService<IWhatsAppService>(),
+                sp.GetRequiredService<IConversationResyncHost>(),
                 sp.GetRequiredService<IMessageStore>(),
                 sp.GetRequiredService<ILocalSettings>(),
                 sp.GetRequiredService<HistoryOnDemandRegistry>(),

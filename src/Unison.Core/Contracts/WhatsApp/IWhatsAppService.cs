@@ -82,25 +82,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         Task NotifyServerLogoutAsync(string reason = null);
 
-        /// <summary>
-        /// Deletes local chats + messages and requests history sync again.
-        /// Keeps WhatsApp auth/session linked.
-        /// Prefer <see cref="IMessageService.ResyncConversationsAsync"/> from ViewModels.
-        /// </summary>
-        Task ResyncConversationsAsync(System.IProgress<Models.ConversationResyncPhase> progress = null);
-
-        /// <summary>
-        /// Drops the in-memory chats, messages and the seen-message index, so history delivered
-        /// after a wipe is applied instead of being mistaken for a duplicate.
-        /// </summary>
-        Task ClearConversationCachesAsync();
-
-        /// <summary>
-        /// Re-applies pin/mute/archive from app-state even when LT-hash is already current.
-        /// Call after a local conversation wipe — otherwise <c>pin_v1</c> is never re-emitted.
-        /// </summary>
-        Task ResyncChatListAppStateFlagsAsync();
-
         void Disconnect();
 
         /// <summary>

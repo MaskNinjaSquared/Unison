@@ -54,6 +54,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
 
         private readonly IWhatsAppSessionProvider _sessions;
         private readonly IWhatsAppService _appState;
+        private readonly IConversationResyncHost _resync;
         private readonly IMessageStore _store;
         private readonly ILocalSettings _settings;
         private readonly IHistoryChatPreviewStore _chatPreviewStore;
@@ -88,6 +89,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
         internal HistoryFacade(
             IWhatsAppSessionProvider sessions,
             IWhatsAppService appState,
+            IConversationResyncHost resync,
             IMessageStore store,
             ILocalSettings settings,
             HistoryOnDemandRegistry onDemandRequests,
@@ -126,6 +128,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
 
             _sessions = sessions;
             _appState = appState;
+            _resync = resync ?? throw new ArgumentNullException(nameof(resync));
             _store = store;
             _settings = settings;
             _onDemandRequests = onDemandRequests ?? throw new ArgumentNullException(nameof(onDemandRequests));
@@ -805,7 +808,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
                 // No socket to correlate an answer through. The service's own resync knows how to
                 // force a fresh transport first, which is the one thing worth trying from here.
                 await ResetHistorySqliteAsync("resync-fallback").ConfigureAwait(false);
-                await _appState.ResyncConversationsAsync(progress).ConfigureAwait(false);
+                await _resync.ResyncConversationsAsync(progress).ConfigureAwait(false);
                 return;
             }
 
@@ -853,7 +856,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
         {
             await ResetHistorySqliteAsync("resync-wipe").ConfigureAwait(false);
             await _store.WipeChatsAndMessagesAsync().ConfigureAwait(false);
-            await _appState.ClearConversationCachesAsync().ConfigureAwait(false);
+            await _resync.ClearConversationCachesAsync().ConfigureAwait(false);
 
             try
             {
@@ -868,7 +871,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
             // Force a snapshot re-report so pins/mutes land again on the rebuilt list.
             try
             {
-                await _appState.ResyncChatListAppStateFlagsAsync().ConfigureAwait(false);
+                await _resync.ResyncChatListAppStateFlagsAsync().ConfigureAwait(false);
             }
             catch (Exception ex)
             {
