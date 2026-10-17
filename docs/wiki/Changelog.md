@@ -10,6 +10,9 @@ Resume, memory release, broker hand-off, suspend and shutdown are called on `ICo
 instead of the WhatsApp client. The façade forwards to the client as before, and the hand-off still
 reports true only when the broker took the socket. No behaviour change.
 
+The Debug-only file-watch sender is started once by `App` instead of being started and stopped by
+the connection; it already waited for a ready transport before sending.
+
 ## Façades read the chat list and name tables directly
 
 The chat and contact façades now take the chat list, the address-book names, the conversation row

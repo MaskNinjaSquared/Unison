@@ -178,7 +178,11 @@ Two primitives already left the contract:
 The stores (`IPersonStore`, `IChatStore`, `IGroupRosterStore`) are constructor parameters of the client now. After `BuildServiceProvider`, `App.ConfigureServices` still does:
 
 - `AttachMessageService` / `AttachChatService` / `AttachContactService`
-- `AttachDebugSendService` (Debug only)
+
+`AttachDebugSendService` is gone (phase 4): `App` starts `IDebugSendService` once in Debug builds.
+The watcher already skipped requests while the transport was not ready, so the five start/stop
+calls in `.Connection.cs` were redundant. In Debug it now polls the request file while disconnected
+too; requests still wait for the transport.
 
 `AttachContactService` is down to the awaited steps listed under
 [What phase 2 could not do](#what-phase-2-could-not-do): avatar hydrate, the address-book overlay,
