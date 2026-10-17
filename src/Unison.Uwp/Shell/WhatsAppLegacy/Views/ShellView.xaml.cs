@@ -39,7 +39,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         private INavigator _navigator;
         private IDialogService _dialogs;
         private INewChatDialogViewModelFactory _newChatFactory;
-        private IMessageService _messages;
+        private IChatService _chats;
         private IChatStateStore _chatState;
         private IStringResources _strings;
         private IJidResolver _jids;
@@ -69,7 +69,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 _navigator = App.Services.GetRequiredService<INavigator>();
                 _dialogs = App.Services.GetService<IDialogService>();
                 _newChatFactory = App.Services.GetService<INewChatDialogViewModelFactory>();
-                _messages = App.Services.GetService<IMessageService>();
+                _chats = App.Services.GetService<IChatService>();
                 _chatState = App.Services.GetService<IChatStateStore>();
                 _strings = App.Services.GetService<IStringResources>();
                 _jids = App.Services.GetService<IJidResolver>();
@@ -1322,7 +1322,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private async Task StartNewChatAsync()
         {
-            if (_dialogs == null || _newChatFactory == null || _messages == null || _chatState == null)
+            if (_dialogs == null || _newChatFactory == null || _chats == null || _chatState == null)
             {
                 return;
             }
@@ -1352,7 +1352,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
                 if (!exists)
                 {
-                    _messages.StartNewChat(jid);
+                    _chats.StartNewChat(jid);
                     await Task.Delay(100);
                 }
 

@@ -2285,29 +2285,6 @@ namespace Unison.Uwp.Services.WhatsApp
             return null;
         }
 
-        public void StartNewChat(string jid)
-
-        {
-            if (string.IsNullOrEmpty(jid)) return;
-            
-            string normJid = NormalizeJid(jid);
-            _ = _ui.RunAsync(() =>
-            {
-                var existing = Chats.FirstOrDefault(c => NormalizeJid(c.JID) == normJid);
-                if (existing == null)
-                {
-                    Chats.Insert(0, new ChatItem
-                    {
-                        JID = normJid,
-                        Name = ResolveDisplayName(jid, "chat"),
-                        LastMessage = "",
-                        Timestamp = "",
-                        Kind = ResolveChatKind(normJid)
-                    });
-                    _ = DeduplicateChatsAsync("start-new-chat");
-                }
-            });
-        }
 
         private void TriggerBackgroundResolution()
         {

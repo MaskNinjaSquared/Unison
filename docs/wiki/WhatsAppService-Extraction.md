@@ -1365,6 +1365,12 @@ shortcut, and saves only the rows that changed through `IChatCatalogPersistence.
 It takes `IShortcutService` by constructor instead of reaching `App.Services`, and the member left
 `IWhatsAppService`.
 
+**A new chat row is the chat façade's too.** `StartNewChat` moved from `IMessageService` to
+`IChatService`: `ChatFacade` inserts the row on the UI thread, names it through `IContactService`,
+sets its kind from `IJidResolver.IsSelfLinked` and asks the client for a dedup pass
+(`RequestChatListDedup`, still a client primitive). `ChatListViewModel` and the legacy `ShellView`
+call the chat façade; the member left `IMessageService` and `IWhatsAppService`.
+
 **Done when:** `.Connection.cs` + a small main file; no façade needs send/history/avatar/group/list methods on the client; leftover `IWhatsAppSocket` drop is [Migration](Migration) item 9, after this.
 
 ---

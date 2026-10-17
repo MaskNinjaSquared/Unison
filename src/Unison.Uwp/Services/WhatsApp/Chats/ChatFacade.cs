@@ -301,6 +301,36 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
         // to the client because that is still where the rows live (phase 3.9).
         // ---------------------------------------------------------------------
 
+        public void StartNewChat(string jid)
+        {
+            if (string.IsNullOrEmpty(jid))
+            {
+                return;
+            }
+
+            string normalized = JidHelper.Normalize(jid);
+            _ = _ui.RunAsync(() =>
+            {
+                foreach (ChatItem chat in _chatState.Chats)
+                {
+                    if (chat != null && string.Equals(JidHelper.Normalize(chat.JID), normalized, StringComparison.Ordinal))
+                    {
+                        return;
+                    }
+                }
+
+                _chatState.Chats.Insert(0, new ChatItem
+                {
+                    JID = normalized,
+                    Name = _contacts.ResolveDisplayName(jid, "chat"),
+                    LastMessage = "",
+                    Timestamp = "",
+                    Kind = JidHelper.ResolveKind(normalized, _jids.IsSelfLinked(normalized))
+                });
+                _appState.RequestChatListDedup("start-new-chat");
+            });
+        }
+
         public void SetActiveChatJid(string jid)
         {
             _activeChat.Open(jid);

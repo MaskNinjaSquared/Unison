@@ -178,8 +178,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         Task ApplyChatDeletionAsync(string jid);
 
-        /// <summary>Prefer <see cref="IMessageService.StartNewChat"/> from ViewModels.</summary>
-        void StartNewChat(string jid);
 
         Task<List<ChatMessage>> LoadMessagesForChatAsync(string jid);
 

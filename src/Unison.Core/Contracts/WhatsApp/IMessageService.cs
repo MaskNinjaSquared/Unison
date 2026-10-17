@@ -151,10 +151,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         Task ResyncConversationsAsync(System.IProgress<ConversationResyncPhase> progress = null);
 
-        /// <summary>
-        /// User action: ensure a chat row exists for <paramref name="jid"/> (new-chat flow).
-        /// </summary>
-        void StartNewChat(string jid);
 
         /// <summary>
         /// Live inbound announce: toast / badge / tile. From-me is a no-op. Mute is read from

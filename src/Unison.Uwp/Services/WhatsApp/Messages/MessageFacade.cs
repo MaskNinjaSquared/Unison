@@ -1167,10 +1167,6 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             return _history.ResyncConversationsAsync(progress);
         }
 
-        public void StartNewChat(string jid)
-        {
-            _whatsAppService.StartNewChat(jid);
-        }
 
         public void NotifyLiveIncoming(
             string chatJid,

@@ -730,9 +730,9 @@ namespace Unison.Core.ViewModels
                 }
             }
 
-            if (!exists)
+            if (!exists && _chatService != null)
             {
-                _messageService.StartNewChat(jid);
+                _chatService.StartNewChat(jid);
                 await Task.Delay(100);
             }
 

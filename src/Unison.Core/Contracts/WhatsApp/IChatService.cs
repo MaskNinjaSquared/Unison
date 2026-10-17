@@ -47,6 +47,9 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         void SetActiveChatJid(string jid);
 
+        /// <summary>User action: makes sure a chat row exists for <paramref name="jid"/> (new-chat flow).</summary>
+        void StartNewChat(string jid);
+
         /// <summary>
         /// Zeroes the unread count locally, on every row that is the same conversation. PN and LID
         /// aliases can briefly produce more than one row, and a leftover alias is enough to put the
