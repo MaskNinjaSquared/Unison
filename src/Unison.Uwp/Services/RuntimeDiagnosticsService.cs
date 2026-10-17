@@ -496,7 +496,7 @@ namespace Unison.Uwp.Services
                 Package package = Package.Current;
                 PackageVersion version = package.Id.Version;
                 return string.Format(
-                    "package={0}; version={1}.{2}.{3}.{4}; architecture={5}; memory={6}/{7}MB; level={8}",
+                    "package={0}; version={1}.{2}.{3}.{4}; architecture={5}; memory={6}/{7}MB; level={8}; category={9}",
                     package.Id.Name,
                     version.Major,
                     version.Minor,
@@ -505,7 +505,8 @@ namespace Unison.Uwp.Services
                     package.Id.Architecture,
                     MemoryManager.AppMemoryUsage / (1024UL * 1024UL),
                     MemoryManager.AppMemoryUsageLimit / (1024UL * 1024UL),
-                    MemoryManager.AppMemoryUsageLevel);
+                    MemoryManager.AppMemoryUsageLevel,
+                    DeviceCategories.FromAppMemoryLimit(MemoryManager.AppMemoryUsageLimit));
             }
             catch (Exception ex)
             {

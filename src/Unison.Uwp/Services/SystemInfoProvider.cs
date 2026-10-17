@@ -1,4 +1,7 @@
+using System;
 using Unison.Core.Contracts;
+using Unison.Core.Models;
+using Windows.System;
 using Windows.System.Profile;
 using Windows.UI.ViewManagement;
 
@@ -10,7 +13,23 @@ namespace Unison.Uwp.Services
     /// </summary>
     public sealed class SystemInfoProvider : ISystemInfoProvider
     {
+        private readonly Lazy<DeviceCategory> _deviceCategory = new Lazy<DeviceCategory>(DetectDeviceCategory);
+
         public bool IsMobile() => DetectIsMobile();
+
+        public DeviceCategory GetDeviceCategory() => _deviceCategory.Value;
+
+        private static DeviceCategory DetectDeviceCategory()
+        {
+            try
+            {
+                return DeviceCategories.FromAppMemoryLimit(MemoryManager.AppMemoryUsageLimit);
+            }
+            catch
+            {
+                return DetectIsMobile() ? DeviceCategory.Low : DeviceCategory.High;
+            }
+        }
 
         public bool IsContinuum()
         {
