@@ -25,6 +25,7 @@ using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.Uwp.Services;
+using Unison.Uwp.Services.Socket;
 
 namespace Unison.Uwp.Services.WhatsApp.Contacts
 {
@@ -40,6 +41,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private const string GroupAvatarFallbackMissReason = "group-avatar-fallback-miss";
 
         private readonly IWhatsAppService _whatsAppService;
+        private readonly IWhatsAppSessionProvider _sessions;
         private readonly IChatStateStore _chatState;
         private readonly SyncStatusChannel _syncStatus;
         private readonly SyncWorkGate _syncWork;
@@ -55,8 +57,10 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly HashSet<string> _viewportPriority = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         internal ChatAvatarPolicy(IWhatsAppService whatsAppService, IJidResolver jids, ChatAvatarFetch fetch, IDispatcher ui,
-            IChatCatalogPersistence catalog, IChatStateStore chatState, SyncStatusChannel syncStatus, SyncWorkGate syncWork)
+            IChatCatalogPersistence catalog, IChatStateStore chatState, SyncStatusChannel syncStatus, SyncWorkGate syncWork,
+            IWhatsAppSessionProvider sessions)
         {
+            _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
             _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
@@ -184,7 +188,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 return;
             }
 
-            if (chat == null || string.IsNullOrWhiteSpace(chat.JID) || !_whatsAppService.IsTransportReady)
+            if (chat == null || string.IsNullOrWhiteSpace(chat.JID) || !_sessions.IsTransportReady)
             {
                 return;
             }

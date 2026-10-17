@@ -135,7 +135,8 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 catalog,
                 chats,
                 syncStatus,
-                syncWork);
+                syncWork,
+                sessions);
             _avatars = new ChatAvatarPolicy(
                 whatsAppService,
                 jids,
@@ -144,8 +145,9 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 catalog,
                 chats,
                 syncStatus,
-                syncWork);
-            _roster = new GroupRosterPolicy(whatsAppService, groups, this, jids, ui, catalog, chats, syncWork);
+                syncWork,
+                sessions);
+            _roster = new GroupRosterPolicy(whatsAppService, groups, this, jids, ui, catalog, chats, syncWork, sessions);
 
             // Both live as long as the app does, so there is nothing to unhook from.
             _whatsAppService.OnDisplayNamesUpdated += (s, e) =>

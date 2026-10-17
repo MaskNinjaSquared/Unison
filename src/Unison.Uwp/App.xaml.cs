@@ -313,7 +313,10 @@ namespace Unison.Uwp
                 sp => new JidResolver(sp.GetRequiredService<JidAliasTable>()));
 #if DEBUG
             // Dev-only tooling: file-watch based debug send. Never attached/started in Release.
-            services.AddSingleton<IDebugSendService, DebugSendService>();
+            services.AddSingleton<IDebugSendService>(sp => new DebugSendService(
+                sp.GetRequiredService<IWhatsAppSessionProvider>(),
+                sp.GetRequiredService<IMessageService>(),
+                sp.GetRequiredService<IJidResolver>()));
 #endif
             // The connection is a SocketBridge, so there is always a session to hand out.
             services.AddSingleton<IWhatsAppSessionProvider>(sp => new BridgeSessionProvider(

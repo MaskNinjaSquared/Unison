@@ -28,6 +28,12 @@ namespace Unison.Uwp.Services.Socket
         IWhatsAppSocket Socket { get; }
 
         bool IsReady { get; }
+
+        /// <summary>
+        /// The current connection finished the noise handshake, so IQ calls are safe. Asked of
+        /// whatever socket is current, bridge or not.
+        /// </summary>
+        bool IsTransportReady { get; }
     }
 
     /// <summary>
@@ -75,6 +81,15 @@ namespace Unison.Uwp.Services.Socket
             {
                 var session = Current;
                 return session != null && session.Connection.IsConnected;
+            }
+        }
+
+        public bool IsTransportReady
+        {
+            get
+            {
+                var socket = _socket();
+                return socket != null && socket.IsHandshakeComplete;
             }
         }
     }

@@ -19,6 +19,7 @@ using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.State;
+using Unison.Uwp.Services.Socket;
 
 namespace Unison.Uwp.Services.WhatsApp.Contacts
 {
@@ -31,6 +32,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private const int BatchSize = 16;
 
         private readonly IWhatsAppService _whatsAppService;
+        private readonly IWhatsAppSessionProvider _sessions;
         private readonly IChatStateStore _chatState;
         private readonly SyncWorkGate _syncWork;
         private readonly IDispatcher _ui;
@@ -55,8 +57,10 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             IDispatcher ui,
             IChatCatalogPersistence catalog,
             IChatStateStore chatState,
-            SyncWorkGate syncWork)
+            SyncWorkGate syncWork,
+            IWhatsAppSessionProvider sessions)
         {
+            _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
             _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
@@ -95,7 +99,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
         private async Task HydrateCoreAsync(string groupJid, CancellationToken token)
         {
-            if (string.IsNullOrWhiteSpace(groupJid) || !_whatsAppService.IsTransportReady)
+            if (string.IsNullOrWhiteSpace(groupJid) || !_sessions.IsTransportReady)
             {
                 return;
             }
@@ -175,7 +179,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             if (string.IsNullOrWhiteSpace(groupJid) ||
                 memberJids == null ||
                 memberJids.Count == 0 ||
-                !_whatsAppService.IsTransportReady)
+                !_sessions.IsTransportReady)
             {
                 return;
             }

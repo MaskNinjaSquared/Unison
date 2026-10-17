@@ -115,7 +115,7 @@ namespace Unison.Uwp.Services.WhatsApp.Profiles
             // the socket is usually still handshaking when we get here. Giving up at that point
             // is why an updated avatar never arrived: nothing asks again once the session opens,
             // so the app kept showing whatever was cached from the last run.
-            if (!_appState.IsTransportReady)
+            if (!_sessions.IsTransportReady)
             {
                 try
                 {

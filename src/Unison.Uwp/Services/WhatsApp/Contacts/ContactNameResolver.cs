@@ -22,6 +22,7 @@ using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.Uwp.Helpers;
+using Unison.Uwp.Services.Socket;
 
 namespace Unison.Uwp.Services.WhatsApp.Contacts
 {
@@ -36,6 +37,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private DateTime _lastForcedGroupPassUtc = DateTime.MinValue;
 
         private readonly IWhatsAppService _whatsAppService;
+        private readonly IWhatsAppSessionProvider _sessions;
         private readonly IDispatcher _ui;
         private readonly IChatCatalogPersistence _catalog;
         private readonly IGroupService _groups;
@@ -63,8 +65,10 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             IChatCatalogPersistence catalog,
             IChatStateStore chatState,
             SyncStatusChannel syncStatus,
-            SyncWorkGate syncWork)
+            SyncWorkGate syncWork,
+            IWhatsAppSessionProvider sessions)
         {
+            _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
             _pushNames = pushNames ?? throw new ArgumentNullException(nameof(pushNames));
             _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
             _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
@@ -101,7 +105,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 return;
             }
 
-            if (!_whatsAppService.IsTransportReady)
+            if (!_sessions.IsTransportReady)
             {
                 Debug.WriteLine("[ContactNameResolver] Refresh skipped (socket not ready)");
                 _refreshLock.Release();
@@ -206,7 +210,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 return;
             }
 
-            if (!_whatsAppService.IsTransportReady)
+            if (!_sessions.IsTransportReady)
             {
                 Debug.WriteLine("[ContactNameResolver] ResolveMissing skipped network query (handshake not complete)");
                 return;
@@ -394,7 +398,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
         private bool IsSelfJid(string jid)
         {
-            var profile = _whatsAppService.CurrentProfile;
+            var profile = _jids.Self;
             if (string.IsNullOrEmpty(jid) || profile == null)
             {
                 return false;

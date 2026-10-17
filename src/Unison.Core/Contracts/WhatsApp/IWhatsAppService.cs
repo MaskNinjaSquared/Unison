@@ -243,9 +243,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         void ApplyHistoryLidMappings(IEnumerable<KeyValuePair<string, string>> lidToPn, string source);
 
-        /// <summary>True when the noise handshake completed and IQ calls are safe.</summary>
-        bool IsTransportReady { get; }
-
         /// <summary>
         /// Aligns list <c>LastMessage</c> with the newest SQLite row when the list is behind
         /// (cross-device send / history chunk that persisted messages without updating the strip).
