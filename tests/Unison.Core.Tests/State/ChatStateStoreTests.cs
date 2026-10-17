@@ -65,6 +65,35 @@ public class ChatStateStoreTests
     }
 
     [Fact]
+    public async Task Adding_missing_messages_keeps_the_ones_already_held()
+    {
+        var store = NewStore();
+        ChatMessage held = At("A", 1);
+        await store.UpsertMessagesAsync(Ana, new[] { held });
+        var raised = new List<string>();
+        store.MessagesChanged += (_, jid) => raised.Add(jid);
+
+        await store.AddMissingMessagesAsync(Ana, new[] { At("B", 2), At("A", 1), null! });
+
+        Assert.Equal(new[] { "A", "B" }, store.GetMessages(Ana).Select(m => m.Id));
+        Assert.Same(held, store.GetMessages(Ana)[0]);
+        Assert.True(store.MessagesByChat.Ids.Contains(Ana, "B"));
+        Assert.Empty(raised);
+    }
+
+    [Fact]
+    public async Task Adding_missing_messages_to_a_blank_chat_or_with_nothing_does_nothing()
+    {
+        var store = NewStore();
+
+        await store.AddMissingMessagesAsync(" ", new[] { At("A", 1) });
+        await store.AddMissingMessagesAsync(Ana, null!);
+        await store.AddMissingMessagesAsync(Ana, new ChatMessage[] { null! });
+
+        Assert.Empty(store.MessagesByChat.ChatJids());
+    }
+
+    [Fact]
     public void Notifying_messages_changed_raises_for_that_chat()
     {
         IChatStateStore store = NewStore();

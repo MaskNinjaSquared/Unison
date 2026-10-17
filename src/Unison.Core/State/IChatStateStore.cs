@@ -62,6 +62,12 @@ namespace Unison.Core.State
         /// </summary>
         Task UpsertMessagesAsync(string chatJid, IEnumerable<ChatMessage> messages);
 
+        /// <summary>
+        /// Adds only the messages the timeline lacks, on the UI thread, leaving the ones already
+        /// held untouched. Raises nothing: the timeline is seeded, not changed for anyone watching.
+        /// </summary>
+        Task AddMissingMessagesAsync(string chatJid, IEnumerable<ChatMessage> messages);
+
         Task RemoveMessageAsync(string chatJid, string messageId);
 
         /// <summary>

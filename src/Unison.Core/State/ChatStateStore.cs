@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Threading.Tasks;
 using Unison.Core.Contracts;
+using Unison.Core.Helpers;
 using Unison.Core.Models;
 
 namespace Unison.Core.State
@@ -238,6 +239,37 @@ namespace Unison.Core.State
             }
 
             return Task.FromResult(true);
+        }
+
+        public Task AddMissingMessagesAsync(string chatJid, IEnumerable<ChatMessage> messages)
+        {
+            if (string.IsNullOrWhiteSpace(chatJid) || messages == null)
+            {
+                return Task.FromResult(true);
+            }
+
+            var incoming = new List<ChatMessage>();
+            foreach (ChatMessage message in messages)
+            {
+                if (message != null)
+                {
+                    incoming.Add(message);
+                }
+            }
+
+            if (incoming.Count == 0)
+            {
+                return Task.FromResult(true);
+            }
+
+            string key = JidHelper.Normalize(chatJid);
+            return _dispatcher.RunAsync(() =>
+            {
+                lock (_gate)
+                {
+                    _messagesByChat.AddMissing(key, incoming);
+                }
+            });
         }
 
         public Task RemoveMessageAsync(string chatJid, string messageId)
