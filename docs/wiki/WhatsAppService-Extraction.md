@@ -583,6 +583,14 @@ seed copy appended id-less rows every time — now the same reference rule as `M
 `RegisterMessageId` is gone. The client no longer edits a timeline list directly; the reaction and
 pin paths only read it.
 
+*Preview reconcile — the tip choice left:* `ChatPreviewTip.PickStoredTip` walks a stored page down
+to its newest row that may go on the strip (the walk that was inline, plus the client's
+`MapPreviewTipCandidate`), and the client compares it with the memory tip through `PickNewer`
+directly. What stays in `ReconcileChatPreviewsFromSqliteAsync` is the SQLite read, the memory
+lookup and the per-row apply (`ApplyReconciledPreviewTip`), which runs on the UI thread in slices
+of 24 chats with one sort at the end. The apply waits for `ApplyChatPreviewIfNewer` and
+`SchedulePersist` to leave the client.
+
 ### 3.4 — send moved to `MessageFacade`
 
 The flow left the client whole, and it lives in Core, so the suite reaches it now. `OutgoingTextSend`
@@ -1320,9 +1328,16 @@ became `ApplyMessagePinAsync` (timeline, pending pin, SQLite and replay queue; n
 **Sync workload is a strategy per memory tier.** `SyncWorkloadStrategy` (`Unsupported` /
 `Low` / `High`, from `DeviceCategory`) owns message caps, SQLite sub-batch size, whether history
 thumbs materialize during sync, chat-list release size, avatar batch size and the
-`HistorySyncConfig` storage quota. Mobile alone decides UI: `ChatListViewModel` holds row release
-until initial-sync `IsCompleted` (banner only); desktop still releases progressively. Unsupported
-is always frugal in `SyncBudget`.
+`HistorySyncConfig` storage quota, plus catch-up rounds, the finalize quiet window, group
+metadata/roster batches and `SyncPacing` (frugal and generous values; `SyncBudget` picks which).
+Unsupported is always frugal in `SyncBudget`.
+
+**The first history sync holds the list on every platform.** `ChatListSyncHold` answers from
+`IHistoryService.IsAwaitingFirstHistorySync` alone. While it holds, the chat `ListView` is not
+created (`x:Load` on `ChatListViewModel.IsChatListMaterialized`), the per-chunk preview reconcile is
+skipped and row property changes do not post refreshes; the completed event releases the list and
+runs one full reconcile, which applies its tips to the UI thread in slices. Later syncs release
+progressively.
 
 **Done when:** `.Connection.cs` + a small main file; no façade needs send/history/avatar/group/list methods on the client; leftover `IWhatsAppSocket` drop is [Migration](Migration) item 9, after this.
 
