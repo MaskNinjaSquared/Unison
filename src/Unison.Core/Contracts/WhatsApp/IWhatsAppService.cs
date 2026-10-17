@@ -12,10 +12,6 @@ namespace Unison.Core.Contracts.WhatsApp
     public interface IWhatsAppService
     {
         string CurrentConnectionStatus { get; }
-        string CurrentUserName { get; set; }
-        string CurrentUserAvatar { get; set; }
-        /// <summary>Logged-in user snapshot (Id/Lid/Name/Phone/AvatarUrl).</summary>
-        Profile CurrentProfile { get; }
         bool IsConnected { get; }
         bool IsLoadingPersistedChats { get; }
 
@@ -38,8 +34,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// again when auth is gone and pairing/QR can start.
         /// </summary>
         event EventHandler<SessionClearedEventArgs> OnSessionCleared;
-        /// <summary>Raised when CurrentUserName / CurrentUserAvatar change.</summary>
-        event EventHandler OnUserProfileChanged;
         event EventHandler<Exception> OnError;
         event EventHandler<string> OnChatMessagesChanged;
         event EventHandler<string> OnQRCodeReceived;

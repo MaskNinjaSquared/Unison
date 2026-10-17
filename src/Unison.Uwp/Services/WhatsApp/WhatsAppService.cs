@@ -508,6 +508,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private const int MaxActiveChatMessagesInMemory = 300;
         private readonly InitialSyncProgressState _initialSync;
         private readonly SyncBudget _syncBudget;
+        private readonly SelfProfileState _selfProfile;
 
         /// <summary>
         /// SQLite history arrives in several chunks. We accumulate conversation counts and only
@@ -521,7 +522,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         /// <summary>UWP transport only; prefer <see cref="IWhatsAppService"/> APIs from outside this assembly.</summary>
         internal IWhatsAppSocket Socket => _socket;
-        /// <summary>Session keys; prefer <see cref="IWhatsAppService.CurrentProfile"/> externally.</summary>
+        /// <summary>Session keys; the profile the app shows is <see cref="SelfProfileState"/>.</summary>
         internal AuthState AuthState => _authState;
 
         public bool IsConnected =>
@@ -939,50 +940,30 @@ namespace Unison.Uwp.Services.WhatsApp
             UseFrugalSyncBudget ? 3 : 2;
         private static readonly TimeSpan ActiveChatReconcileCooldown = TimeSpan.FromSeconds(12);
 
-        private string _currentUserAvatar;
-        public string CurrentUserAvatar
+        private string CurrentUserAvatar => _selfProfile.AvatarUrl;
+
+        private string CurrentUserName
         {
-            get => _currentUserAvatar;
-            set
-            {
-                if (string.Equals(_currentUserAvatar, value, StringComparison.Ordinal)) return;
-                _currentUserAvatar = value;
-                PersistSelfAvatarUrl(value);
-                OnPropertyChanged();
-                try { OnUserProfileChanged?.Invoke(this, EventArgs.Empty); } catch { }
-            }
+            get => _selfProfile.Name;
+            set => _selfProfile.Name = value;
         }
 
-        /// <summary>
-        /// Domain snapshot of the logged-in user (Core <see cref="Profile"/>).
-        /// </summary>
-        public Profile CurrentProfile => new Profile
+        private SelfProfileAccount ReadSelfProfileAccount()
         {
-            Id = _authState?.Me?.Id,
-            Lid = _authState?.Me?.Lid,
-            Name = !string.IsNullOrWhiteSpace(CurrentUserName)
-                ? CurrentUserName
-                : NormalizeSelfNameCandidate(
-                    _authState?.Me?.Name,
-                    NormalizeJid(_authState?.Me?.Id),
-                    NormalizeJid(_authState?.Me?.Lid)),
-            Phone = CurrentUserPhone,
-            AvatarUrl = !string.IsNullOrWhiteSpace(CurrentUserAvatar)
-                ? CurrentUserAvatar
-                : _authState?.Me?.AvatarUrl
-        };
-        private string _currentUserName;
-        public string CurrentUserName
-        {
-            get => _currentUserName;
-            set
+            var me = _authState?.Me;
+            if (me == null)
             {
-                string next = IsOwnPhoneEchoLabel(value) ? null : value;
-                if (_currentUserName == next) return;
-                _currentUserName = next;
-                OnPropertyChanged();
-                try { OnUserProfileChanged?.Invoke(this, EventArgs.Empty); } catch { }
+                return null;
             }
+
+            return new SelfProfileAccount
+            {
+                Id = me.Id,
+                Lid = me.Lid,
+                CredentialsName = NormalizeSelfNameCandidate(me.Name, NormalizeJid(me.Id), NormalizeJid(me.Lid)),
+                Phone = CurrentUserPhone,
+                AvatarUrl = me.AvatarUrl
+            };
         }
 
         /// <summary>Account phone digits — UI placeholder when the push name is unknown.</summary>
@@ -1005,7 +986,6 @@ namespace Unison.Uwp.Services.WhatsApp
         public event EventHandler<HistorySync> OnHistorySyncReceived;
         public event EventHandler OnSessionInitialized;
         public event EventHandler<SessionClearedEventArgs> OnSessionCleared;
-        public event EventHandler OnUserProfileChanged;
         public event EventHandler<Exception> OnError;
         public event EventHandler OnDisplayNamesUpdated;
         public event EventHandler<string> OnChatMessagesChanged;
@@ -1090,6 +1070,7 @@ namespace Unison.Uwp.Services.WhatsApp
             HistoryOnDemandRegistry historyRequests,
             InitialSyncProgressState initialSync,
             SyncBudget syncBudget,
+            SelfProfileState selfProfile,
             IPersonStore personStore,
             IGroupRosterStore groupRosterStore,
             IChatStore chatStore,
@@ -1120,6 +1101,8 @@ namespace Unison.Uwp.Services.WhatsApp
             _historyRequests = historyRequests ?? throw new ArgumentNullException(nameof(historyRequests));
             _initialSync = initialSync ?? throw new ArgumentNullException(nameof(initialSync));
             _syncBudget = syncBudget ?? throw new ArgumentNullException(nameof(syncBudget));
+            _selfProfile = selfProfile ?? throw new ArgumentNullException(nameof(selfProfile));
+            _selfProfile.Bind(ReadSelfProfileAccount, IsOwnPhoneEchoLabel, PersistSelfAvatarUrl);
             _historyMessages = historyMessages ?? throw new ArgumentNullException(nameof(historyMessages));
             _chatPreviews = chatPreviews ?? throw new ArgumentNullException(nameof(chatPreviews));
             _usyncGate = usyncGate ?? throw new ArgumentNullException(nameof(usyncGate));
@@ -1178,6 +1161,7 @@ namespace Unison.Uwp.Services.WhatsApp
             HistoryOnDemandRegistry historyRequests,
             InitialSyncProgressState initialSync,
             SyncBudget syncBudget,
+            SelfProfileState selfProfile,
             IPersonStore personStore,
             IGroupRosterStore groupRosterStore,
             IChatStore chatStore,
@@ -1186,7 +1170,7 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             return _instance ?? (_instance = new WhatsAppService(
                 chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
-                initialSync, syncBudget, personStore, groupRosterStore, chatStore, systemInfo, ui));
+                initialSync, syncBudget, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui));
         }
 
         /// <summary>
@@ -1228,10 +1212,7 @@ namespace Unison.Uwp.Services.WhatsApp
             if (string.IsNullOrWhiteSpace(CurrentUserAvatar) &&
                 !string.IsNullOrWhiteSpace(_authState.Me.AvatarUrl))
             {
-                // Assign field directly to avoid re-saving auth while hydrating.
-                _currentUserAvatar = _authState.Me.AvatarUrl;
-                OnPropertyChanged(nameof(CurrentUserAvatar));
-                try { OnUserProfileChanged?.Invoke(this, EventArgs.Empty); } catch { }
+                _selfProfile.RestoreAvatar(_authState.Me.AvatarUrl);
             }
         }
 
@@ -1259,7 +1240,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             _authState.Me.Phone = phone;
             OnPropertyChanged(nameof(CurrentUserPhone));
-            try { OnUserProfileChanged?.Invoke(this, EventArgs.Empty); } catch { }
+            _selfProfile.NotifyChanged();
             _ = PersistAuthStateAsync(null, "self-phone");
         }
 

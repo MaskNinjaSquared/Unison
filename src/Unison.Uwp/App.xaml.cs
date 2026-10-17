@@ -284,6 +284,7 @@ namespace Unison.Uwp
                 () => ((WhatsAppService)sp.GetRequiredService<IWhatsAppService>()).Socket?.IsAwaitingInitialSync ?? false));
             // The client publishes first-sync progress; HistoryFacade and the budget read it.
             services.AddSingleton<InitialSyncProgressState>();
+            services.AddSingleton<SelfProfileState>();
             services.AddSingleton(sp => new SyncBudget(
                 sp.GetRequiredService<IChatStateStore>(),
                 sp.GetRequiredService<InitialSyncProgressState>(),
@@ -308,6 +309,7 @@ namespace Unison.Uwp
                     sp.GetRequiredService<HistoryOnDemandRegistry>(),
                     sp.GetRequiredService<InitialSyncProgressState>(),
                     sp.GetRequiredService<SyncBudget>(),
+                    sp.GetRequiredService<SelfProfileState>(),
                     sp.GetRequiredService<IPersonStore>(),
                     sp.GetRequiredService<IGroupRosterStore>(),
                     sp.GetRequiredService<IChatStore>(),
@@ -336,6 +338,7 @@ namespace Unison.Uwp
             services.AddSingleton<IProfileService>(sp => new ProfileFacade(
                 sp.GetRequiredService<IWhatsAppSessionProvider>(),
                 sp.GetRequiredService<IWhatsAppService>(),
+                sp.GetRequiredService<SelfProfileState>(),
                 sp.GetRequiredService<IAvatarCache>()));
 
             // Falls back to the service's own resync when the socket is down and the session

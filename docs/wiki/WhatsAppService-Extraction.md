@@ -1293,6 +1293,16 @@ setting, not connection state: `VerboseLog` (static, `Unison.Uwp/Services`) hold
 persists it, `WhatsAppService.Log` reads it, and `RuntimeDiagnosticsService` sets it directly.
 `VerboseLogging` and `SetVerboseLogging` left the contract.
 
+**The account's own profile is shared state.** `SelfProfileState` (`Unison.Core/State`, DI
+singleton, tested) holds the name and picture the app shows for the logged-in account, applies
+the rule that the account's own phone digits are never kept as a name, and builds the `Profile`
+snapshot, falling back to the credentials name and picture. The client binds it once with a
+reader over its auth state, the phone-echo rule and how a new picture is persisted; it still writes
+the name when a push name or the credentials arrive, and restores the saved picture without
+saving it again. `ProfileFacade` reads and writes it directly and relays its `Changed`.
+`CurrentUserName`, `CurrentUserAvatar`, `CurrentProfile` and `OnUserProfileChanged` left
+`IWhatsAppService`.
+
 **Done when:** `.Connection.cs` + a small main file; no façade needs send/history/avatar/group/list methods on the client; leftover `IWhatsAppSocket` drop is [Migration](Migration) item 9, after this.
 
 ---
