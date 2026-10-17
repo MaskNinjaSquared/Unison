@@ -313,6 +313,13 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IChatStateStore>(),
                 sp.GetRequiredService<ContactDisplayNames>(),
                 sp.GetRequiredService<ISelfMarkerNaming>()));
+            services.AddSingleton(sp => new StoredChatPreviewRefresh(
+                sp.GetRequiredService<AttachedUiDispatcher>(),
+                sp.GetRequiredService<ChatStateStore>(),
+                sp.GetRequiredService<IJidResolver>(),
+                sp.GetRequiredService<ContactDisplayNames>(),
+                sp.GetRequiredService<ISelfMarkerNaming>(),
+                sp.GetRequiredService<IStringResources>()));
             services.AddSingleton<IWhatsAppService>(
                 sp => WhatsAppService.Create(
                     sp.GetRequiredService<ChatStateStore>(),
@@ -338,7 +345,8 @@ namespace Unison.Uwp
                     sp.GetRequiredService<ISystemInfoProvider>(),
                     sp.GetRequiredService<AttachedUiDispatcher>(),
                     sp.GetRequiredService<ChatPreviewReconciler>(),
-                    sp.GetRequiredService<ChatNameRefresh>()));
+                    sp.GetRequiredService<ChatNameRefresh>(),
+                    sp.GetRequiredService<StoredChatPreviewRefresh>()));
             // The send flow lives on MessageFacade; the timeline caches and the socket it writes
             // through are still the client's, reached only through this narrow port.
             services.AddSingleton<IOutgoingMessageHost>(
@@ -478,7 +486,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<INotificationService>(),
                 sp.GetRequiredService<AttachedUiDispatcher>(),
                 sp.GetRequiredService<IChatCatalogPersistence>(),
-                sp.GetRequiredService<IShortcutService>()));
+                sp.GetRequiredService<IShortcutService>(),
+                sp.GetRequiredService<StoredChatPreviewRefresh>()));
             // After IChatService: the projection persists resolved strip rows so cold start keeps names.
             services.AddSingleton<IChatAuthorProjection>(sp => new ChatAuthorProjection(
                 sp.GetRequiredService<IChatStateStore>(),

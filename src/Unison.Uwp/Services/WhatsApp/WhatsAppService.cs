@@ -686,6 +686,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly ChatRowIndex _chatRows;
         private readonly ChatPreviewReconciler _previewReconciler;
         private readonly ChatNameRefresh _nameRefresh;
+        private readonly StoredChatPreviewRefresh _storedPreviews;
 
         public DisplayNameTable ContactNames => _chatState.PushNames;
         public DisplayNameTable PhoneContactNamesByJid => _chatState.AddressBookNames;
@@ -1026,7 +1027,8 @@ namespace Unison.Uwp.Services.WhatsApp
             ISystemInfoProvider systemInfo,
             AttachedUiDispatcher ui,
             ChatPreviewReconciler previewReconciler,
-            ChatNameRefresh nameRefresh)
+            ChatNameRefresh nameRefresh,
+            StoredChatPreviewRefresh storedPreviews)
         {
             if (chatState == null)
             {
@@ -1047,6 +1049,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _previewReconciler = previewReconciler ?? throw new ArgumentNullException(nameof(previewReconciler));
             _nameRefresh = nameRefresh ?? throw new ArgumentNullException(nameof(nameRefresh));
             _nameRefresh.Applied += OnChatNamesApplied;
+            _storedPreviews = storedPreviews ?? throw new ArgumentNullException(nameof(storedPreviews));
             _chatRows = chatRows ?? throw new ArgumentNullException(nameof(chatRows));
             _activeChat = activeChat ?? throw new ArgumentNullException(nameof(activeChat));
             _activeChat.Changed += OnActiveChatChanged;
@@ -1125,11 +1128,12 @@ namespace Unison.Uwp.Services.WhatsApp
             ISystemInfoProvider systemInfo,
             AttachedUiDispatcher ui,
             ChatPreviewReconciler previewReconciler,
-            ChatNameRefresh nameRefresh)
+            ChatNameRefresh nameRefresh,
+            StoredChatPreviewRefresh storedPreviews)
         {
             return _instance ?? (_instance = new WhatsAppService(
                 chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
-                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, previewReconciler, nameRefresh));
+                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, previewReconciler, nameRefresh, storedPreviews));
         }
 
         /// <summary>
@@ -1518,11 +1522,11 @@ namespace Unison.Uwp.Services.WhatsApp
                     // Extra in-memory repair only for large desktop drains (already warmed timelines).
                     if (offlineCount >= 50 && !UseFrugalSyncBudget)
                     {
-                        await ReconcileChatListFromStoredMessagesAsync(
-                            "delayed-offline-repair:" + offlineCount);
+                        await _storedPreviews.ReconcileAsync(
+                            "delayed-offline-repair:" + offlineCount).ConfigureAwait(false);
                         await Task.Delay(400, token);
-                        await RefreshAllChatPreviewsFromStoredAsync(
-                            "delayed-post-offline-drain");
+                        await _storedPreviews.RefreshAsync(
+                            "delayed-post-offline-drain").ConfigureAwait(false);
                     }
 
                     RuntimeDiagnosticsService.Instance.Write(

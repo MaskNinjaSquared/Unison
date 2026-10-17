@@ -62,6 +62,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
         private readonly IDispatcher _ui;
         private readonly IChatCatalogPersistence _catalog;
         private readonly IShortcutService _shortcuts;
+        private readonly StoredChatPreviewRefresh _storedPreviews;
         private readonly OfflineReplayTips _offlineReplayTips;
 
         /// <summary>Short enough that the first recovered chat shows while a long replay continues.</summary>
@@ -79,7 +80,8 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             INotificationService notifications,
             IDispatcher ui,
             IChatCatalogPersistence catalog,
-            IShortcutService shortcuts)
+            IShortcutService shortcuts,
+            StoredChatPreviewRefresh storedPreviews)
         {
             if (offlineReplay == null)
             {
@@ -107,6 +109,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _shortcuts = shortcuts ?? throw new ArgumentNullException(nameof(shortcuts));
+            _storedPreviews = storedPreviews ?? throw new ArgumentNullException(nameof(storedPreviews));
             _offlineReplayTips = new OfflineReplayTips(
                 _jids,
                 offlineReplay,
@@ -465,14 +468,22 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             }).ConfigureAwait(false);
         }
 
-        public Task RefreshAllChatPreviewsFromStoredAsync(string reason)
+        public async Task RefreshAllChatPreviewsFromStoredAsync(string reason)
         {
-            return _appState.RefreshAllChatPreviewsFromStoredAsync(reason);
+            int updated = await _storedPreviews.RefreshAsync(reason).ConfigureAwait(false);
+            if (updated > 0)
+            {
+                Debug.WriteLine($"[ChatFacade] Bulk preview refresh ({reason}): updated {updated} chat previews");
+            }
         }
 
-        public Task ReconcileChatListFromStoredAsync(string reason)
+        public async Task ReconcileChatListFromStoredAsync(string reason)
         {
-            return _appState.ReconcileChatListFromStoredAsync(reason);
+            StoredChatPreviewReconcileResult result =
+                await _storedPreviews.ReconcileAsync(reason).ConfigureAwait(false);
+            Debug.WriteLine(
+                $"[ChatFacade] Reconciled {result.Refreshed} chat previews from cached messages " +
+                $"(created={result.Created}, reason={reason})");
         }
 
         public async Task<LiveIncomingChatListApplyResult> ApplyLiveIncomingChatListAsync(

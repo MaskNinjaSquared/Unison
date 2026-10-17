@@ -1374,8 +1374,15 @@ call the chat façade; the member left `IMessageService` and `IWhatsAppService`.
 **A stored tip reaches the strip through `ChatMessageTipApply`.** (Core.) It is the glue the
 client called `ApplyMessageAsChatTip`: `ChatListStrip.FromMessage` plus
 `LiveChatPreviewApplier.ApplyIfNewer`, with the yesterday label and the self name passed in.
-The client method is a thin forward. Bulk refresh and reconcile still live on the client for
-one more step.
+The client method is a thin forward.
+
+**Bulk in-memory preview refresh is `StoredChatPreviewRefresh`.** (Core, DI singleton over the UI
+dispatcher, `ChatStateStore`, `IJidResolver`, `ContactDisplayNames`, `ISelfMarkerNaming` and
+`IStringResources`.) `RefreshAsync` re-tips every row from `MessagesByChat`; `ReconcileAsync`
+also creates missing rows, clears placeholder direct names and sorts the list. `ChatFacade`
+owns both members on `IChatService`; the client calls the helper after a large offline drain.
+`RefreshAllChatPreviewsFromStoredAsync` and `ReconcileChatListFromStoredAsync` left
+`IWhatsAppService`.
 
 **Done when:** `.Connection.cs` + a small main file; no façade needs send/history/avatar/group/list methods on the client; leftover `IWhatsAppSocket` drop is [Migration](Migration) item 9, after this.
 
