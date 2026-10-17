@@ -134,7 +134,7 @@
                             VerticalAlignment="Center"
                             HorizontalAlignment="Center"
                             Margin="0,0,0,40">
-                    <Image Source="ms-appx:///Assets/Square44x44Logo.altform-unplated_targetsize-256.png"
+                    <Image Source="{ThemeResource LoginHeaderLogoImage}"
                            Width="50"
                            Height="50"
                            Stretch="Uniform"

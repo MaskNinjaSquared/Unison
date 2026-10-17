@@ -93,7 +93,7 @@
                     <TranslateTransform x:Name="BootIconTranslate" X="0" Y="0"/>
                 </TransformGroup>
             </Viewbox.RenderTransform>
-            <Image Source="ms-appx:///Assets/Square44x44Logo.altform-unplated_targetsize-256.png"
+            <Image Source="ms-appx:///Assets/Logo/BootLogo.png"
                    Width="200"
                    Height="200"
                    Stretch="Uniform"/>

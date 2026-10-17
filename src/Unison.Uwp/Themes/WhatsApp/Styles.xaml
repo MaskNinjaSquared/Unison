@@ -382,4 +382,7 @@
         </ResourceDictionary>
 
     </ResourceDictionary.ThemeDictionaries>
+
+    <!-- Logo baked on LoginHeaderBackgroundBrush; swap both together. -->
+    <BitmapImage x:Key="LoginHeaderLogoImage" UriSource="ms-appx:///Assets/Logo/LoginLogo_WhatsApp.png"/>
 </ResourceDictionary>
