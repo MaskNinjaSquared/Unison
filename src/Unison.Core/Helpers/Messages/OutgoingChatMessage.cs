@@ -66,6 +66,25 @@ namespace Unison.Core.Helpers
             return message;
         }
 
+        public static ChatMessage Document(
+            OutgoingMessageStamp stamp,
+            string localUri,
+            string fileName,
+            string mimeType,
+            long fileLengthBytes,
+            string caption)
+        {
+            ChatMessage message = FromStamp(stamp);
+            message.Content = MediaPreviewTag.ForDocument(fileName);
+            message.Kind = ChatMessageKind.Document;
+            message.DocumentUri = localUri;
+            message.DocumentFileName = fileName ?? string.Empty;
+            message.DocumentMimeType = mimeType ?? string.Empty;
+            message.DocumentFileLengthBytes = fileLengthBytes > 0 ? fileLengthBytes : 0;
+            message.Caption = caption ?? string.Empty;
+            return message;
+        }
+
         private static ChatMessage FromStamp(OutgoingMessageStamp stamp)
         {
             if (stamp == null)

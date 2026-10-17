@@ -1,10 +1,10 @@
 // =============================================================================
 // OutgoingMediaSend
 //
-// Sending an image or an audio clip. Like text, the id is chosen up front so the
-// bubble (and the cached file named after it) goes on screen as pending before
-// the upload, then settles as sent or failed. There is no retry, and a transport
-// failure never throws: the failure is the bubble's status.
+// Sending an image, an audio clip or a document. Like text, the id is chosen up
+// front so the bubble (and the cached file named after it) goes on screen as
+// pending before the upload, then settles as sent or failed. There is no retry,
+// and a transport failure never throws: the failure is the bubble's status.
 // =============================================================================
 using System;
 using System.Threading.Tasks;
@@ -94,6 +94,45 @@ namespace Unison.Core.Helpers
                 message,
                 ChatPreviewKind.Voice,
                 () => _host.SendAudioAsync(jid, audio, messageId));
+            return message;
+        }
+
+        public async Task<ChatMessage> SendDocumentAsync(string jid, OutgoingDocument document)
+        {
+            if (document?.Bytes == null || document.Bytes.Length == 0)
+            {
+                throw new ArgumentException("Document payload is empty", nameof(document));
+            }
+
+            if (!OutgoingDocumentKinds.IsAllowedMime(document.MimeType))
+            {
+                throw new ArgumentException("Document MIME type is not allowed", nameof(document));
+            }
+
+            string fileName = string.IsNullOrWhiteSpace(document.FileName)
+                ? "document"
+                : document.FileName.Trim();
+            string chatJid = _jids.GetCanonicalJid(JidHelper.Normalize(jid));
+            string messageId = _newMessageId();
+            string localUri = await _mediaCache.SaveAsync(
+                MediaCacheKind.Document,
+                messageId + OutgoingFileSuffix,
+                MediaFileExtensions.ForDocument(fileName, document.MimeType),
+                document.Bytes,
+                reuseExisting: false);
+
+            ChatMessage message = OutgoingChatMessage.Document(
+                PendingStamp(messageId, chatJid),
+                localUri,
+                fileName,
+                document.MimeType,
+                document.Bytes.Length,
+                document.Caption);
+            await SendAsync(
+                chatJid,
+                message,
+                ChatPreviewKind.Document,
+                () => _host.SendDocumentAsync(jid, document, messageId));
             return message;
         }
 

@@ -54,6 +54,20 @@ namespace Unison.Core.Contracts.WhatsApp
         public bool IsVoiceMessage { get; set; }
     }
 
+    /// <summary>A document file on its way out (PDF / office / archive / text).</summary>
+    public sealed class OutgoingDocument
+    {
+        public byte[] Bytes { get; set; }
+
+        public string MimeType { get; set; }
+
+        /// <summary>Name shown on the phone and stored on the bubble.</summary>
+        public string FileName { get; set; }
+
+        /// <summary>Optional caption; empty sends a plain DocumentMessage.</summary>
+        public string Caption { get; set; }
+    }
+
     /// <summary>
     /// What the send flows need from whoever still owns the timeline caches and the socket.
     /// </summary>
@@ -72,6 +86,9 @@ namespace Unison.Core.Contracts.WhatsApp
 
         /// <summary>Uploads and sends under <paramref name="messageId"/>; throws when the send fails.</summary>
         Task SendAudioAsync(string jid, OutgoingAudio audio, string messageId);
+
+        /// <summary>Uploads and sends under <paramref name="messageId"/>; throws when the send fails.</summary>
+        Task SendDocumentAsync(string jid, OutgoingDocument document, string messageId);
 
         /// <summary>Files the bubble in memory: pending receipts applied, inserted in order, id indexed.</summary>
         void AcceptOutgoing(string chatJid, ChatMessage message);

@@ -172,12 +172,86 @@ namespace Unison.Core.Tests.Helpers
             Assert.Equal("cache://Audio/AUD1_out" + MediaFileExtensions.ForAudio("audio/ogg; codecs=opus"), m.AudioUri);
         }
 
+        [Fact]
+        public async Task Empty_document_is_rejected_without_reconnecting()
+        {
+            await Assert.ThrowsAsync<ArgumentException>(
+                () => Create().SendDocumentAsync("555@s.whatsapp.net", Document(new byte[0])));
+
+            Assert.Empty(_host.Log);
+        }
+
+        [Fact]
+        public async Task Image_mime_as_document_is_rejected_without_reconnecting()
+        {
+            await Assert.ThrowsAsync<ArgumentException>(
+                () => Create().SendDocumentAsync(
+                    "555@s.whatsapp.net",
+                    Document(Bytes, "photo.jpg", "image/jpeg")));
+
+            Assert.Empty(_host.Log);
+        }
+
+        [Fact]
+        public async Task Document_lands_in_the_canonical_chat_cached_fresh_then_settles_as_sent()
+        {
+            _jids.Canonical["999@lid"] = "555@s.whatsapp.net";
+
+            ChatMessage m = await Create("DOC1").SendDocumentAsync("999@lid", Document(Bytes));
+
+            Assert.Equal(
+                new[]
+                {
+                    "accept:555@s.whatsapp.net:pending",
+                    "preview:555@s.whatsapp.net:Document",
+                    "changed:555@s.whatsapp.net",
+                    "persist:555@s.whatsapp.net:pending",
+                    "connect",
+                    "send-document:999@lid:DOC1",
+                    "persist:555@s.whatsapp.net:sent",
+                    "queue-persist:555@s.whatsapp.net",
+                    "changed:555@s.whatsapp.net"
+                },
+                _host.Log);
+            Assert.Equal("555@s.whatsapp.net", m.RemoteJid);
+            Assert.Equal(ChatMessageKind.Document, m.Kind);
+            Assert.Equal("contract.pdf", m.DocumentFileName);
+            Assert.Equal("application/pdf", m.DocumentMimeType);
+            Assert.Equal(3L, m.DocumentFileLengthBytes);
+            Assert.Equal(
+                "cache://Document/DOC1_out" + MediaFileExtensions.ForDocument("contract.pdf", "application/pdf"),
+                m.DocumentUri);
+            Assert.False(_cache.Saves[0].ReuseExisting);
+        }
+
+        [Fact]
+        public async Task A_refused_document_stays_on_screen_as_failed()
+        {
+            _host.SendError = new InvalidOperationException("upload failed");
+
+            ChatMessage m = await Create("DOC1").SendDocumentAsync("555@s.whatsapp.net", Document(Bytes));
+
+            Assert.Equal(ChatMessage.StatusFailed, m.Status);
+            Assert.Contains("persist:555@s.whatsapp.net:failed", _host.Log);
+            Assert.Same(_host.SendError, _host.ReportedError);
+        }
+
         private static OutgoingAudio Audio(byte[] bytes, bool isVoice) => new OutgoingAudio
         {
             Bytes = bytes,
             MimeType = "audio/ogg; codecs=opus",
             DurationSeconds = 9,
             IsVoiceMessage = isVoice
+        };
+
+        private static OutgoingDocument Document(
+            byte[] bytes,
+            string fileName = "contract.pdf",
+            string mime = "application/pdf") => new OutgoingDocument
+        {
+            Bytes = bytes,
+            FileName = fileName,
+            MimeType = mime
         };
 
         private sealed class FakeHost : IOutgoingMessageHost
@@ -212,6 +286,12 @@ namespace Unison.Core.Tests.Helpers
             public Task SendAudioAsync(string jid, OutgoingAudio audio, string messageId)
             {
                 Log.Add("send-audio:" + jid + ":" + messageId);
+                return Sent();
+            }
+
+            public Task SendDocumentAsync(string jid, OutgoingDocument document, string messageId)
+            {
+                Log.Add("send-document:" + jid + ":" + messageId);
                 return Sent();
             }
 

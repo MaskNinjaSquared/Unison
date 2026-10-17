@@ -76,5 +76,27 @@ namespace Unison.Core.Tests.Helpers
             Assert.Equal(MediaPreviewTag.ForAudio(isVoice), m.Content);
             Assert.Equal(ChatMessage.StatusRead, m.Status);
         }
+
+        [Fact]
+        public void Document_previews_with_the_file_name_and_points_at_the_local_copy()
+        {
+            ChatMessage m = OutgoingChatMessage.Document(
+                Stamp(ChatMessage.StatusPending),
+                "ms-appdata:///local/doc.pdf",
+                "contract.pdf",
+                "application/pdf",
+                4096,
+                null);
+
+            Assert.Equal(ChatMessageKind.Document, m.Kind);
+            Assert.True(m.IsDocument);
+            Assert.Equal("ms-appdata:///local/doc.pdf", m.DocumentUri);
+            Assert.Equal("contract.pdf", m.DocumentFileName);
+            Assert.Equal("application/pdf", m.DocumentMimeType);
+            Assert.Equal(4096L, m.DocumentFileLengthBytes);
+            Assert.Equal(string.Empty, m.Caption);
+            Assert.Equal(MediaPreviewTag.ForDocument("contract.pdf"), m.Content);
+            Assert.Equal(ChatMessage.StatusPending, m.Status);
+        }
     }
 }
