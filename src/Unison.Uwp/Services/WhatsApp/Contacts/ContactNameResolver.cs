@@ -42,6 +42,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly ContactDirectory _directory;
         private readonly ContactUsyncResolver _usync;
         private readonly IJidResolver _jids;
+        private readonly PushNameLookup _pushNames;
 
         private DateTime _lastRefreshUtc = DateTime.MinValue;
         private volatile bool _isRunning;
@@ -52,10 +53,12 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             ContactDirectory directory,
             ContactUsyncResolver usync,
             IJidResolver jids,
+            PushNameLookup pushNames,
             IGroupService groups,
             IDispatcher ui,
             IChatCatalogPersistence catalog)
         {
+            _pushNames = pushNames ?? throw new ArgumentNullException(nameof(pushNames));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
@@ -347,7 +350,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         {
             var unresolved = directJids
                 .Where(j => !IsSelfJid(j))
-                .Where(j => !_whatsAppService.HasResolvedContactName(j))
+                .Where(j => !_pushNames.HasName(j, _jids.GetCanonicalJid(j)))
                 .ToList();
 
             if (unresolved.Count == 0)

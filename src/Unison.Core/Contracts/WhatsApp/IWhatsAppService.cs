@@ -170,9 +170,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>True while a reconnect/history replay drain is in progress; background refreshes should back off.</summary>
         bool IsReplayDrainActive { get; }
 
-        /// <summary>True when a JID already has a resolved display name in the local name cache.</summary>
-        bool HasResolvedContactName(string jid);
-
         /// <summary>Re-applies <see cref="ResolveDisplayName"/> to each chat's Name where it changed.</summary>
         Task ApplyResolvedDisplayNamesToChatsAsync();
 

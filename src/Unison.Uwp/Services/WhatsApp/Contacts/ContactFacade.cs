@@ -102,6 +102,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             _pushNames = pushNames ?? throw new ArgumentNullException(nameof(pushNames));
             _addressBookNames = addressBookNames ?? throw new ArgumentNullException(nameof(addressBookNames));
 
+            var labels = new ContactLabelSanitizer(selfMarkers);
             _directory = new ContactDirectory(sessions, lidMappings);
             _addressBook = new AddressBookOverlay(localContacts, personStore, whatsAppService, jids, ui, addressBookNames);
             _usync = new ContactUsyncResolver(
@@ -110,11 +111,20 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 usyncGate,
                 jids,
                 pushNames,
-                new ContactLabelSanitizer(selfMarkers),
+                labels,
                 chats,
                 avatars,
                 ui);
-            _names = new ContactNameResolver(whatsAppService, _addressBook, _directory, _usync, jids, groups, ui, catalog);
+            _names = new ContactNameResolver(
+                whatsAppService,
+                _addressBook,
+                _directory,
+                _usync,
+                jids,
+                new PushNameLookup(pushNames, aliases, labels),
+                groups,
+                ui,
+                catalog);
             _avatars = new ChatAvatarPolicy(
                 whatsAppService,
                 jids,

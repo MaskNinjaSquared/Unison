@@ -42,10 +42,6 @@ namespace Unison.Uwp.Services.WhatsApp
 {
     public partial class WhatsAppService
     {
-
-        /// <summary>True when a JID already has a resolved display name in the local name cache.</summary>
-        public bool HasResolvedContactName(string jid) => !string.IsNullOrWhiteSpace(GetBestWhatsAppName(jid, GetCanonicalJid(jid)));
-
         /// <summary>Re-applies <see cref="ResolveDisplayName"/> to each chat's Name where it changed.</summary>
         public Task ApplyResolvedDisplayNamesToChatsAsync() => ApplyResolvedNamesToChatsAsync();
 
@@ -210,20 +206,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        private string GetBestWhatsAppName(params string[] jids)
-        {
-            var candidates = ExpandNameLookupCandidates(jids);
-            foreach (var candidate in candidates)
-            {
-                var name = GetWhatsAppNameFromCache(candidate);
-                if (!string.IsNullOrWhiteSpace(name))
-                {
-                    return name;
-                }
-            }
-
-            return null;
-        }
+        private string GetBestWhatsAppName(params string[] jids) => _pushNameLookup.FindBest(jids);
 
         public string GetCanonicalJid(string jid) => JidAlias.GetCanonicalJid(jid);
 

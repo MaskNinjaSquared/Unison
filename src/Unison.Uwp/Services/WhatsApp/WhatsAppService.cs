@@ -966,6 +966,7 @@ namespace Unison.Uwp.Services.WhatsApp
         // Field initializers run in declaration order, so _selfMarkers is set before it is read below.
         private readonly ISelfMarkerNaming _selfMarkers = new SelfMarkerNaming();
         private readonly ContactLabelSanitizer _contactLabels = new ContactLabelSanitizer(new SelfMarkerNaming());
+        private readonly PushNameLookup _pushNameLookup;
 
         private bool ShouldDeferReconnectReplayWork()
         {
@@ -1330,6 +1331,7 @@ namespace Unison.Uwp.Services.WhatsApp
             JidAlias = jidAlias ?? throw new ArgumentNullException(nameof(jidAlias));
             JidAlias.BindSelf(() => _authState?.Me?.Id, () => _authState?.Me?.Lid);
             JidAlias.Changed += (s, e) => InvalidateChatRowIndex();
+            _pushNameLookup = new PushNameLookup(ContactNames, JidAlias, _contactLabels, LogContactLabelDecision);
 
             // After JidAlias: the readers below capture the table now rather than calling back
             // into this instance later, so the property has to be set before they are built.
@@ -4552,25 +4554,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private string GetNamesFromCache(string jid)
         {
             return GetBestWhatsAppName(GetCanonicalJid(jid), NormalizeJid(jid));
-        }
-
-        private string GetWhatsAppNameFromCache(string jid)
-        {
-            if (string.IsNullOrEmpty(jid)) return null;
-
-            if (ContactNames.TryGetValue(jid, out var name))
-            {
-                string sanitized = SanitizeContactLabel(name, jid);
-                if (string.IsNullOrWhiteSpace(sanitized))
-                {
-                    Debug.WriteLine($"[WhatsAppService] Found stale/suspicious cached name '{name}' for {jid}. Ignoring cached value.");
-                    return null;
-                }
-
-                return sanitized;
-            }
-
-            return null;
         }
 
         private IEnumerable<string> ExpandNameLookupCandidates(params string[] jids)
