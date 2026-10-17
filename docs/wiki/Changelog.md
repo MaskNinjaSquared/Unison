@@ -2,6 +2,12 @@
 
 Newest first.
 
+## History sync notifies left the client contract
+
+Chunk started/applied, LID filing from history and the full on-demand request go through
+`IHistorySyncHost`. `HistoryFacade` is the caller; the four members left `IWhatsAppService`.
+
+
 ## Conversation resync left the client contract
 
 Wiping in-memory chats, forcing app-state pin/mute re-report and the no-socket full

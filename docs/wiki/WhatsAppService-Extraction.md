@@ -1435,6 +1435,10 @@ re-report and the no-socket full resync fallback leave `IWhatsAppService`. `Hist
 owns the UI path and reaches those three through the host; ViewModels still call
 `IHistoryService` / `IMessageService.ResyncConversationsAsync`.
 
+**SQLite history notifies are `IHistorySyncHost`.** Chunk started/applied, LID mapping
+filing and `RequestFullHistoryOnDemandAsync` leave `IWhatsAppService`. `HistoryFacade`
+still takes the client for events and `EnsureConnectedAsync`.
+
 **Done when:** `.Connection.cs` + a small main file; no façade needs send/history/avatar/group/list methods on the client; leftover `IWhatsAppSocket` drop is [Migration](Migration) item 9, after this.
 
 ---

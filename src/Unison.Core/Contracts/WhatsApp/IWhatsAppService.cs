@@ -117,31 +117,5 @@ namespace Unison.Core.Contracts.WhatsApp
         /// before the write.
         /// </summary>
         bool TryFileUsyncAlias(string userJid, string lidJid, out bool wasAlreadyAliased);
-
-        /// <summary>
-        /// Asks the phone for a FULL_HISTORY_SYNC_ON_DEMAND lot (no local wipe).
-        /// Prefer <see cref="IHistoryService.RequestFullHistoryOnDemandAsync"/> from UI.
-        /// When <paramref name="force"/> is true, clears any in-flight session gate first.
-        /// </summary>
-        Task<bool> RequestFullHistoryOnDemandAsync(string reason = null, bool force = false);
-
-        /// <summary>
-        /// Completes resync wait / initial-sync progress after the SQLite history path applied a chunk.
-        /// Prefer <see cref="IHistoryService.NotifySqliteHistoryChunkApplied"/> from façades.
-        /// </summary>
-        void NotifyHistorySqliteChunkApplied(string syncType, int conversationCount);
-
-        /// <summary>
-        /// Marks initial-sync progress as active when a non-on-demand SQLite history chunk starts
-        /// persisting (so the chat list banner is not blank during long writes).
-        /// </summary>
-        void NotifyHistorySqliteChunkStarted(string syncType, int conversationCount);
-
-        /// <summary>
-        /// Records LID↔PN pairs from a history chunk.
-        /// Called from <see cref="IHistoryService"/> on the SQLite path.
-        /// </summary>
-        void ApplyHistoryLidMappings(IEnumerable<KeyValuePair<string, string>> lidToPn, string source);
-
     }
 }

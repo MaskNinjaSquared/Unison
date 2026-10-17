@@ -55,6 +55,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
         private readonly IWhatsAppSessionProvider _sessions;
         private readonly IWhatsAppService _appState;
         private readonly IConversationResyncHost _resync;
+        private readonly IHistorySyncHost _historySync;
         private readonly IMessageStore _store;
         private readonly ILocalSettings _settings;
         private readonly IHistoryChatPreviewStore _chatPreviewStore;
@@ -90,6 +91,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
             IWhatsAppSessionProvider sessions,
             IWhatsAppService appState,
             IConversationResyncHost resync,
+            IHistorySyncHost historySync,
             IMessageStore store,
             ILocalSettings settings,
             HistoryOnDemandRegistry onDemandRequests,
@@ -129,6 +131,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
             _sessions = sessions;
             _appState = appState;
             _resync = resync ?? throw new ArgumentNullException(nameof(resync));
+            _historySync = historySync ?? throw new ArgumentNullException(nameof(historySync));
             _store = store;
             _settings = settings;
             _onDemandRequests = onDemandRequests ?? throw new ArgumentNullException(nameof(onDemandRequests));
@@ -330,7 +333,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
         {
             try
             {
-                _appState.NotifyHistorySqliteChunkApplied(syncType, conversationCount);
+                _historySync.NotifyHistorySqliteChunkApplied(syncType, conversationCount);
             }
             catch (Exception ex)
             {
@@ -422,7 +425,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
             try
             {
                 // Banner before SQLite work: Mobile can spend seconds here with no UI otherwise.
-                _appState.NotifyHistorySqliteChunkStarted(result.SyncType, result.ConversationCount);
+                _historySync.NotifyHistorySqliteChunkStarted(result.SyncType, result.ConversationCount);
             }
             catch (Exception ex)
             {
@@ -584,7 +587,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
                 return;
             }
 
-            _appState.ApplyHistoryLidMappings(pairs, "history-sqlite-chunk");
+            _historySync.ApplyHistoryLidMappings(pairs, "history-sqlite-chunk");
         }
 
         private async Task<int> PersistChatPreviewsAsync(HistorySync sync)
@@ -886,7 +889,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
         /// <inheritdoc />
         public Task<bool> RequestFullHistoryOnDemandAsync(string reason = null, bool force = false)
         {
-            return _appState.RequestFullHistoryOnDemandAsync(
+            return _historySync.RequestFullHistoryOnDemandAsync(
                 string.IsNullOrWhiteSpace(reason) ? "ui-full-history-on-demand" : reason,
                 force);
         }
