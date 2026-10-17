@@ -170,7 +170,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
         // and the chat list should not have to name the client to ask it.
         // ---------------------------------------------------------------------
 
-        public bool IsLoadingPersistedChats => _appState.IsLoadingPersistedChats;
+        public bool IsLoadingPersistedChats => _chatState.IsLoadingPersistedChats;
 
         public bool IsInitialSyncSafeMode => _initialSync.IsActive;
 

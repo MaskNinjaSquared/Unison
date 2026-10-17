@@ -26,6 +26,9 @@ namespace Unison.Core.State
         /// </summary>
         ObservableCollection<ChatItem> Chats { get; }
 
+        /// <summary>True while the saved chat rows are being read back into <see cref="Chats"/> at startup.</summary>
+        bool IsLoadingPersistedChats { get; }
+
         /// <summary>Raised with the chat JID whose message list changed.</summary>
         event EventHandler<string> MessagesChanged;
 

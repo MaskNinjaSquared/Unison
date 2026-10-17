@@ -519,7 +519,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         private async Task LoadPersistedChatsAsync()
         {
-            _isLoadingPersistedChats = true;
+            using (_chatState.BeginPersistedChatsLoad())
             try
             {
                 IReadOnlyList<HistoryChatPreview> stored =
@@ -564,10 +564,6 @@ namespace Unison.Uwp.Services.WhatsApp
             catch (Exception ex)
             {
                 Debug.WriteLine("[WhatsAppService] Failed to load persisted chat metadata: " + ex.Message);
-            }
-            finally
-            {
-                _isLoadingPersistedChats = false;
             }
         }
 

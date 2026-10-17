@@ -43,7 +43,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IMediaDownloadHost, IAvatarReport, IOfflineReplayHost, IPlaceholderResendSocket, IHistoryOnDemandSocket
+    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IMediaDownloadHost, IAvatarReport, IOfflineReplayHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -415,8 +415,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private FileKeyStore _sharedKeyStore;
         private int _forceFreshConnectOnResume;
         private int _deferredStartupMaintenanceStarted;
-        private volatile bool _isLoadingPersistedChats;
-        public bool IsLoadingPersistedChats => _isLoadingPersistedChats;
         private readonly SemaphoreSlim _connectLock = new SemaphoreSlim(1, 1);
         private readonly SemaphoreSlim _resumeConnectionLock = new SemaphoreSlim(1, 1);
 
@@ -611,7 +609,7 @@ namespace Unison.Uwp.Services.WhatsApp
             return _contactService.HydrateCachedAvatarUrisAsync(reason);
         }
 
-        public RuntimeDiagnosticsSnapshot GetRuntimeDiagnosticsSnapshot()
+        RuntimeDiagnosticsSnapshot IRuntimeSnapshotSource.CaptureRuntimeSnapshot()
         {
             var snapshot = new RuntimeDiagnosticsSnapshot
             {

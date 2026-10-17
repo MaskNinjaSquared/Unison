@@ -25,6 +25,20 @@ public class ChatStateStoreTests
     private static ChatStateStore NewStore() => new ChatStateStore(new InlineDispatcher());
 
     [Fact]
+    public void The_list_is_marked_as_loading_from_disk_only_inside_the_load()
+    {
+        var store = NewStore();
+        Assert.False(store.IsLoadingPersistedChats);
+
+        using (store.BeginPersistedChatsLoad())
+        {
+            Assert.True(store.IsLoadingPersistedChats);
+        }
+
+        Assert.False(store.IsLoadingPersistedChats);
+    }
+
+    [Fact]
     public async Task Upserting_messages_registers_their_ids_in_the_cache()
     {
         var store = NewStore();

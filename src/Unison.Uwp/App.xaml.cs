@@ -565,7 +565,7 @@ namespace Unison.Uwp
 #if DEBUG
             Services.GetRequiredService<IDebugSendService>().Start();
 #endif
-            RuntimeDiagnosticsService.Instance.AttachWhatsAppService(whatsApp);
+            RuntimeDiagnosticsService.Instance.AttachSnapshotSource(whatsAppImpl);
         }
 
         /// <summary>

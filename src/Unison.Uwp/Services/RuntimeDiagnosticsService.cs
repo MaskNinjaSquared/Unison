@@ -56,7 +56,7 @@ namespace Unison.Uwp.Services
         private int _flushRequested;
         private int _droppedLineCount;
         private string _lastHealthFingerprint;
-        private IWhatsAppService _whatsAppService;
+        private IRuntimeSnapshotSource _snapshotSource;
 
         public static RuntimeDiagnosticsService Instance
         {
@@ -67,12 +67,10 @@ namespace Unison.Uwp.Services
         {
         }
 
-        /// <summary>
-        /// Wires the WhatsApp service used by health snapshots (avoids static Instance lookup).
-        /// </summary>
-        public void AttachWhatsAppService(IWhatsAppService whatsAppService)
+        /// <summary>Wires what health snapshots sample (avoids a static Instance lookup).</summary>
+        public void AttachSnapshotSource(IRuntimeSnapshotSource source)
         {
-            _whatsAppService = whatsAppService;
+            _snapshotSource = source;
         }
 
         public bool IsVerboseLoggingEnabled => VerboseLog.IsEnabled;
@@ -177,8 +175,8 @@ namespace Unison.Uwp.Services
         {
             try
             {
-                var whatsApp = _whatsAppService;
-                if (whatsApp == null)
+                var source = _snapshotSource;
+                if (source == null)
                 {
                     return new RuntimeDiagnosticsSnapshot
                     {
@@ -193,7 +191,7 @@ namespace Unison.Uwp.Services
                     };
                 }
 
-                return whatsApp.GetRuntimeDiagnosticsSnapshot();
+                return source.CaptureRuntimeSnapshot();
             }
             catch (Exception ex)
             {

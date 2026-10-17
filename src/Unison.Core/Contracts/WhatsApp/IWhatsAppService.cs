@@ -13,7 +13,6 @@ namespace Unison.Core.Contracts.WhatsApp
     {
         string CurrentConnectionStatus { get; }
         bool IsConnected { get; }
-        bool IsLoadingPersistedChats { get; }
 
         // ---------------------------------------------------------------------
         // Raw client events.
@@ -232,7 +231,5 @@ namespace Unison.Core.Contracts.WhatsApp
         Task ReconcileChatPreviewsFromSqliteAsync(
             IReadOnlyList<string> chatJids = null,
             string reason = null);
-
-        RuntimeDiagnosticsSnapshot GetRuntimeDiagnosticsSnapshot();
     }
 }

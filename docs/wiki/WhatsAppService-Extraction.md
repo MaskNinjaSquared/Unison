@@ -1303,6 +1303,15 @@ saving it again. `ProfileFacade` reads and writes it directly and relays its `Ch
 `CurrentUserName`, `CurrentUserAvatar`, `CurrentProfile` and `OnUserProfileChanged` left
 `IWhatsAppService`.
 
+**Two small leftovers moved.** Whether the saved chat rows are still being read back at startup
+is the chat list's own state: `IChatStateStore.IsLoadingPersistedChats`, set by the client around
+the read through `ChatStateStore.BeginPersistedChatsLoad()` (disposed even when the read fails).
+`HistoryFacade` reads it there. The health journal samples the client through
+`IRuntimeSnapshotSource` (Core), a narrow port the client implements explicitly like
+`IOutgoingMessageHost`; `RuntimeDiagnosticsService.AttachSnapshotSource` replaced
+`AttachWhatsAppService`. `IsLoadingPersistedChats` and `GetRuntimeDiagnosticsSnapshot` left the
+contract.
+
 **Done when:** `.Connection.cs` + a small main file; no façade needs send/history/avatar/group/list methods on the client; leftover `IWhatsAppSocket` drop is [Migration](Migration) item 9, after this.
 
 ---

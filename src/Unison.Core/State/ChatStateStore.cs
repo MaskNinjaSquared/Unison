@@ -42,6 +42,36 @@ namespace Unison.Core.State
 
         public ObservableCollection<ChatItem> Chats { get; } = new ObservableCollection<ChatItem>();
 
+        private volatile bool _isLoadingPersistedChats;
+
+        public bool IsLoadingPersistedChats => _isLoadingPersistedChats;
+
+        /// <summary>Marks the startup read of saved rows; dispose when it ends, failed or not.</summary>
+        public IDisposable BeginPersistedChatsLoad()
+        {
+            _isLoadingPersistedChats = true;
+            return new PersistedChatsLoad(this);
+        }
+
+        private sealed class PersistedChatsLoad : IDisposable
+        {
+            private ChatStateStore _owner;
+
+            public PersistedChatsLoad(ChatStateStore owner)
+            {
+                _owner = owner;
+            }
+
+            public void Dispose()
+            {
+                if (_owner != null)
+                {
+                    _owner._isLoadingPersistedChats = false;
+                    _owner = null;
+                }
+            }
+        }
+
         public event EventHandler<string> MessagesChanged;
 
         public event EventHandler DisplayNamesChanged;
