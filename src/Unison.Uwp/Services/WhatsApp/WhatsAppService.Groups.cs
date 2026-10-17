@@ -86,35 +86,9 @@ namespace Unison.Uwp.Services.WhatsApp
                 GetChatRowsForCanonicalJid(GetCanonicalJid(groupJid)));
         }
 
-        private async Task PersistGroupRosterAsync(string groupJid, List<GroupMember> members)
-        {
-            try
-            {
-                await _groupRosterStore.InitializeAsync().ConfigureAwait(false);
-                await _groupRosterStore.ReplaceForGroupAsync(groupJid, members).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[WhatsAppService] Group roster persist failed: " + ex.Message);
-            }
-        }
-
         private void ApplyGroupSendPermissionsFromMetadata(BinaryNode response, string groupJid)
         {
             _ = _groupApply.ApplyMetadataAsync(groupJid, _groupMetadata.ReadMetadata(response, groupJid));
-        }
-
-        private async Task PersistGroupMembershipsAsync(string groupJid, List<PersonGroupMembership> members)
-        {
-            try
-            {
-                await _personStore.InitializeAsync().ConfigureAwait(false);
-                await _personStore.ReplaceGroupMembershipsAsync(groupJid, members).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[WhatsAppService] PersonGroup persist failed: " + ex.Message);
-            }
         }
 
         private string ResolveGroupMemberDisplayName(string jid)

@@ -495,6 +495,9 @@ namespace Unison.Uwp
                     sp.GetRequiredService<IGroupHost>(),
                     sp.GetRequiredService<AttachedUiDispatcher>(),
                     sp.GetRequiredService<IChatCatalogPersistence>(),
+                    new GroupRosterWriter(
+                        sp.GetRequiredService<IGroupRosterStore>(),
+                        sp.GetRequiredService<IPersonStore>()),
                     sp.GetRequiredService<IJidResolver>(),
                     sp.GetRequiredService<IChatStateStore>()),
                 new GroupRosterRestore(

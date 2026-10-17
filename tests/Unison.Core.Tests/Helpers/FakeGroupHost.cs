@@ -27,12 +27,6 @@ namespace Unison.Core.Tests.Helpers
 
         public List<string> RowNameLookups { get; } = new List<string>();
 
-        public List<KeyValuePair<string, List<GroupMember>>> SavedRosters { get; } =
-            new List<KeyValuePair<string, List<GroupMember>>>();
-
-        public List<KeyValuePair<string, List<PersonGroupMembership>>> SavedMemberships { get; } =
-            new List<KeyValuePair<string, List<PersonGroupMembership>>>();
-
         public string ResolveMemberDisplayName(string jid)
         {
             string name;
@@ -74,11 +68,5 @@ namespace Unison.Core.Tests.Helpers
             string url;
             return Avatars.TryGetValue(jid, out url) ? url : null;
         }
-
-        public void SaveGroupRoster(string groupJid, List<GroupMember> snapshot) =>
-            SavedRosters.Add(new KeyValuePair<string, List<GroupMember>>(groupJid, snapshot));
-
-        public void SaveGroupMemberships(string groupJid, List<PersonGroupMembership> rows) =>
-            SavedMemberships.Add(new KeyValuePair<string, List<PersonGroupMembership>>(groupJid, rows));
     }
 }

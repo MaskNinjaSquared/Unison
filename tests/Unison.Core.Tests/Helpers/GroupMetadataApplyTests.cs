@@ -224,10 +224,10 @@ namespace Unison.Core.Tests.Helpers
 
             f.Apply.ApplyMembers(chat, Drafts("111@s.whatsapp.net"));
 
-            var roster = Assert.Single(f.Host.SavedRosters);
+            var roster = Assert.Single(f.Rosters.Replaced);
             Assert.Equal(Group, roster.Key);
             Assert.NotSame(chat.GroupMembers[0], roster.Value[0]);
-            var memberships = Assert.Single(f.Host.SavedMemberships);
+            var memberships = Assert.Single(f.People.Memberships);
             Assert.Equal(new[] { "111@s.whatsapp.net" }, memberships.Value.Select(r => r.PersonJid).ToArray());
         }
 
@@ -283,7 +283,7 @@ namespace Unison.Core.Tests.Helpers
             Assert.Equal(GroupParticipantRole.Admin, ana.Role);
             Assert.Equal("a.jpg", ana.AvatarUrl);
             Assert.Equal(1, chat.GroupMemberCount);
-            Assert.Single(f.Host.SavedRosters);
+            Assert.Single(f.Rosters.Replaced);
             Assert.Equal(new[] { Group }, f.Announced);
         }
 
@@ -300,7 +300,7 @@ namespace Unison.Core.Tests.Helpers
             f.Apply.ApplyMembers(chat, new List<GroupMemberDraft> { new GroupMemberDraft { Jid = "" } });
 
             Assert.Same(existing, chat.GroupMembers);
-            Assert.Empty(f.Host.SavedRosters);
+            Assert.Empty(f.Rosters.Replaced);
             Assert.Empty(f.Announced);
         }
 
@@ -320,7 +320,7 @@ namespace Unison.Core.Tests.Helpers
             {
                 Chats = new ChatStateStore(new InlineDispatcher());
                 Chats.GroupRosterChanged += (s, jid) => Announced.Add(jid);
-                Apply = new GroupMetadataApply(Host, Ui, Catalog, Jids, Chats, () => Now);
+                Apply = new GroupMetadataApply(Host, Ui, Catalog, new GroupRosterWriter(Rosters, People), Jids, Chats, () => Now);
             }
 
             public FakeGroupHost Host { get; } = new FakeGroupHost();
@@ -328,6 +328,10 @@ namespace Unison.Core.Tests.Helpers
             public CountingDispatcher Ui { get; } = new CountingDispatcher();
 
             public FakeCatalog Catalog { get; } = new FakeCatalog();
+
+            public RecordingRosterStore Rosters { get; } = new RecordingRosterStore();
+
+            public RecordingPersonStore People { get; } = new RecordingPersonStore();
 
             public FakeJids Jids { get; } = new FakeJids();
 

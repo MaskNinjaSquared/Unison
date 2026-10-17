@@ -47,7 +47,7 @@ No behaviour change for users. Prep so later diffs are one cluster, not a 16k-li
 | `WhatsAppService.Receipts.cs` | Receipt nodes → send state |
 | `WhatsAppService.IncomingPump.cs` | Decrypted-message queue, placeholders, offline replay summaries |
 | `WhatsAppService.OutgoingHost.cs` | Explicit `IOutgoingMessageHost`: the caches and socket the send flows on `MessageFacade` reach (3.4) |
-| `WhatsAppService.GroupHost.cs` | Explicit `IGroupHost`: UI dispatch, name caches, avatar lookup and roster/membership/chat-list saves for the group flows in Core (3.2b) |
+| `WhatsAppService.GroupHost.cs` | Explicit `IGroupHost`: name caches and avatar lookup for the group flows in Core (3.2b) |
 
 `IWhatsAppService` is unchanged as the façade-facing surface (minus the deleted history body). Do not grow it for UI; add members on the façade that owns the subject ([Coding standards](Coding-Standards) §6).
 
@@ -1231,7 +1231,9 @@ Drop `RunOnUiThreadAsync` (`IDispatcher`) and `SchedulePersistPublic` (the write
 `GroupFacade` take `IDispatcher` in their constructors. The tests count hops on a
 `CountingDispatcher` instead of the fake host. The debounced save left the port the same way:
 `GroupMetadataApply` and `GroupFacade` call `IChatCatalogPersistence.Schedule`, like the other
-façades.
+façades. The roster and membership saves left too: `GroupRosterWriter` (Core) owns
+`IGroupRosterStore` and `IPersonStore` and writes in the background, so a failed save is logged
+and never reaches the UI pass.
 
 **Step 1 is done: the app lifecycle goes through the façade.** `IConnectionService` gained
 `ResumeAsync`, `ReleaseMemoryAsync`, `TransferActiveSocketToBrokerAsync`, `PrepareForSuspendAsync`

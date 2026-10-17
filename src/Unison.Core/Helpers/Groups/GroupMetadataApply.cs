@@ -25,6 +25,7 @@ namespace Unison.Core.Helpers
         private readonly IGroupHost _host;
         private readonly IDispatcher _ui;
         private readonly IChatCatalogPersistence _catalog;
+        private readonly GroupRosterWriter _rosterWriter;
         private readonly IJidResolver _jids;
         private readonly IChatStateStore _chats;
         private readonly Func<DateTime> _utcNow;
@@ -33,6 +34,7 @@ namespace Unison.Core.Helpers
             IGroupHost host,
             IDispatcher ui,
             IChatCatalogPersistence catalog,
+            GroupRosterWriter rosterWriter,
             IJidResolver jids,
             IChatStateStore chats,
             Func<DateTime> utcNow = null)
@@ -40,6 +42,7 @@ namespace Unison.Core.Helpers
             _host = host ?? throw new ArgumentNullException(nameof(host));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
+            _rosterWriter = rosterWriter ?? throw new ArgumentNullException(nameof(rosterWriter));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _chats = chats ?? throw new ArgumentNullException(nameof(chats));
             _utcNow = utcNow ?? (() => DateTime.UtcNow);
@@ -195,13 +198,13 @@ namespace Unison.Core.Helpers
             List<PersonGroupMembership> memberships = GroupRosterRules.Memberships(chat.JID, applied, _jids);
             if (memberships.Count > 0)
             {
-                _host.SaveGroupMemberships(chat.JID, memberships);
+                _rosterWriter.SaveMemberships(chat.JID, memberships);
             }
 
             List<GroupMember> snapshot = GroupRosterRules.CopyForStore(applied);
             if (snapshot != null && !string.IsNullOrWhiteSpace(chat.JID))
             {
-                _host.SaveGroupRoster(chat.JID, snapshot);
+                _rosterWriter.SaveRoster(chat.JID, snapshot);
             }
 
             _chats.NotifyGroupRosterChanged(chat.JID);

@@ -34,25 +34,5 @@ namespace Unison.Uwp.Services.WhatsApp
 
         string IGroupHost.FindExistingAvatarUrl(string jid, string phoneNumber, string lid) =>
             FindExistingAvatarUrl(jid, phoneNumber, lid);
-
-        void IGroupHost.SaveGroupRoster(string groupJid, List<GroupMember> snapshot)
-        {
-            if (snapshot == null || snapshot.Count == 0)
-            {
-                return;
-            }
-
-            _ = PersistGroupRosterAsync(groupJid, snapshot);
-        }
-
-        void IGroupHost.SaveGroupMemberships(string groupJid, List<PersonGroupMembership> rows)
-        {
-            if (rows == null || rows.Count == 0)
-            {
-                return;
-            }
-
-            _ = PersistGroupMembershipsAsync(groupJid, rows);
-        }
     }
 }
