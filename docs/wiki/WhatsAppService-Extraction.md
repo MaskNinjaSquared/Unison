@@ -1217,6 +1217,16 @@ subscribes to `Changed` for the two side effects it kept: dropping the previous 
 messages from memory and clearing the list banner when a conversation opens. Both still run on
 the caller's thread, after the new conversation is already open, as before.
 
+**The sync line is shared state too.** `SyncStatusChannel` (`Unison.Core/State`, DI singleton over
+`ActiveChat` and the `ShowSyncStatus` setting) owns the one status line the chat list shows and
+the rules that were inside the client: a clear during history catch-up puts "Synchronizing
+history…" back, list enrichment phases stay off an open conversation, and with the setting off
+every status leaves as a clear. `GroupFacade`, `HistoryFacade`, `ContactNameResolver`,
+`ChatAvatarPolicy` and `SettingsViewModel` raise on it directly; `HistoryFacade` relays its
+`Changed` as `SyncStatusChanged`. `IWhatsAppService.RaiseSyncStatus` and `OnSyncStatus` are gone,
+and `SettingsViewModel` no longer takes the client. The client keeps when history catch-up begins
+and ends — that follows its FULL_HISTORY request — and only latches the banner on the channel.
+
 **Done when:** `.Connection.cs` + a small main file; no façade needs send/history/avatar/group/list methods on the client; leftover `IWhatsAppSocket` drop is [Migration](Migration) item 9, after this.
 
 ---
