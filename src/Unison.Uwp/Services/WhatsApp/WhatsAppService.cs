@@ -1072,6 +1072,32 @@ namespace Unison.Uwp.Services.WhatsApp
                 senderName);
         }
 
+        /// <summary>
+        /// Shows <paramref name="message"/> as the chat's list strip when it is newer than the
+        /// tip already there, or regardless when <paramref name="force"/>.
+        /// </summary>
+        private bool ApplyMessageAsChatTip(ChatItem chat, ChatMessage message, bool isGroup, bool force)
+        {
+            ChatListStrip strip = ChatListStrip.FromMessage(
+                message,
+                isGroup,
+                SelfListDisplayName(),
+                GetCanonicalJid(message.ParticipantJid));
+            return ApplyChatPreviewIfNewer(
+                chat,
+                strip.Preview,
+                strip.Timestamp,
+                force,
+                strip.Kind,
+                strip.AuthorPrefix,
+                strip.MentionedJids,
+                strip.IsFromMe,
+                strip.SendState,
+                strip.MessageId,
+                strip.ParticipantJid,
+                strip.SenderName);
+        }
+
         private static int CompareChatsForDisplay(ChatItem left, ChatItem right) =>
             ChatDisplayOrder.Compare(left, right);
 

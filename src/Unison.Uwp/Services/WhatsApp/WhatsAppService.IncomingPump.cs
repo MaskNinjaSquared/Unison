@@ -1929,25 +1929,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
 
                     bool isGroup = canonicalJid.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
-                    ChatListStrip strip = ChatListStrip.FromMessage(
-                        latest,
-                        isGroup,
-                        SelfListDisplayName(),
-                        GetCanonicalJid(latest.ParticipantJid));
-
-                    if (ApplyChatPreviewIfNewer(
-                        chat,
-                        strip.Preview,
-                        strip.Timestamp,
-                        false,
-                        strip.Kind,
-                        strip.AuthorPrefix,
-                        strip.MentionedJids,
-                        strip.IsFromMe,
-                        strip.SendState,
-                        strip.MessageId,
-                        strip.ParticipantJid,
-                        strip.SenderName))
+                    if (ApplyMessageAsChatTip(chat, latest, isGroup, force: false))
                     {
                         updated++;
                     }
@@ -1997,24 +1979,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
 
                     bool isGroup = JidHelper.IsGroupJid(canonicalJid);
-                    ChatListStrip strip = ChatListStrip.FromMessage(
-                        latest,
-                        isGroup,
-                        SelfListDisplayName(),
-                        GetCanonicalJid(latest.ParticipantJid));
-                    ApplyChatPreviewIfNewer(
-                        chat,
-                        strip.Preview,
-                        strip.Timestamp,
-                        false,
-                        strip.Kind,
-                        strip.AuthorPrefix,
-                        strip.MentionedJids,
-                        strip.IsFromMe,
-                        strip.SendState,
-                        strip.MessageId,
-                        strip.ParticipantJid,
-                        strip.SenderName);
+                    ApplyMessageAsChatTip(chat, latest, isGroup, force: false);
                     ApplyChatKind(chat);
 
                     if (!chat.IsGroup && PlaceholderChatLabel.IsPlaceholder(chat.Name, canonicalJid, IsSelfMarkerLabel(chat.Name)))

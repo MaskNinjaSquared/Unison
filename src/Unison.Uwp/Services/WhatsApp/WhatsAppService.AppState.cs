@@ -336,24 +336,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     if (latest != null)
                     {
                         bool isGroup = JidHelper.IsGroupJid(canonical) || chat.IsGroup;
-                        ChatListStrip strip = ChatListStrip.FromMessage(
-                            latest,
-                            isGroup,
-                            SelfListDisplayName(),
-                            GetCanonicalJid(latest.ParticipantJid));
-                        ApplyChatPreviewIfNewer(
-                            chat,
-                            strip.Preview,
-                            strip.Timestamp,
-                            true,
-                            strip.Kind,
-                            strip.AuthorPrefix,
-                            strip.MentionedJids,
-                            strip.IsFromMe,
-                            strip.SendState,
-                            strip.MessageId,
-                            strip.ParticipantJid,
-                            strip.SenderName);
+                        ApplyMessageAsChatTip(chat, latest, isGroup, force: true);
                     }
                     else
                     {
