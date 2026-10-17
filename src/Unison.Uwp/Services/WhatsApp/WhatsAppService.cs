@@ -600,7 +600,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private CancellationTokenSource _postMessageEnrichmentCts;
         private int _postMessageEnrichmentStarted;
         private int _enrichmentAwaitingHeavyHistory;
-        private int _historyCatchUpBannerActive;
+        private readonly SyncStatusChannel _syncStatus;
 
         // Offline messages are intentionally kept off the UI thread while a large replay
         // is draining. Keep a compact per-chat summary so the chat list can still be
@@ -644,80 +644,25 @@ namespace Unison.Uwp.Services.WhatsApp
         /// <summary>True while a reconnect/history replay drain is in progress; satellites should back off.</summary>
         public bool IsReplayDrainActive => ShouldDeferReconnectReplayWork();
 
-        /// <summary>
-        /// Publishes a transient status string through <see cref="OnSyncStatus"/>.
-        /// List enrichment phases (settling / names / avatars / groups) are suppressed while a
-        /// conversation is open so Mobile StatusBar does not paint over chat detail.
-        /// </summary>
-        /// <summary>
-        /// Publishes a transient status string through <see cref="OnSyncStatus"/>.
-        /// While a FULL_HISTORY catch-up banner is latched, clears are swallowed so enrichment
-        /// phases cannot hide "Synchronizing history…".
-        /// </summary>
-        public void RaiseSyncStatus(string status)
-        {
-            if (string.IsNullOrEmpty(status))
-            {
-                if (Volatile.Read(ref _historyCatchUpBannerActive) == 1)
-                {
-                    PublishSyncStatus(SyncPhaseStatus.Format(SyncPhaseStatus.HistoryCatchUp));
-                    return;
-                }
+        public void RaiseSyncStatus(string status) => _syncStatus.Raise(status);
 
-                PublishSyncStatus(null);
-                return;
-            }
+        private void PublishSyncStatus(string status) => _syncStatus.Publish(status);
 
-            if (!string.IsNullOrWhiteSpace(_activeChat.Jid) &&
-                IsListEnrichmentPhase(status))
-            {
-                return;
-            }
-
-            PublishSyncStatus(status);
-        }
-
-        /// <summary>
-        /// The list reads whatever this event carries. When the setting is off, the text is
-        /// dropped here so the view never sees a status to show.
-        /// </summary>
-        private void PublishSyncStatus(string status)
-        {
-            if (!IsSyncStatusShown())
-            {
-                status = null;
-            }
-
-            OnSyncStatus?.Invoke(this, status);
-        }
-
-        private static bool IsSyncStatusShown()
-        {
-            try
-            {
-                return LocalSettingsAccess.Current.Get<bool>(LocalSettingsConstants.ShowSyncStatus);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[WhatsAppService] ShowSyncStatus read failed: " + ex.Message);
-                return true;
-            }
-        }
+        private bool IsHistoryCatchUpBannerActive => _syncStatus.IsHistoryCatchUpShown;
 
         private void BeginHistoryCatchUpBanner(string reason)
         {
-            Interlocked.Exchange(ref _historyCatchUpBannerActive, 1);
+            _syncStatus.BeginHistoryCatchUp();
             NoteFullHistoryCatchUpProgress("banner-begin:" + (reason ?? string.Empty));
             RuntimeDiagnosticsService.Instance.Write(
                 "history",
                 "catch-up-banner-begin",
                 "reason=" + (reason ?? string.Empty));
-            PublishSyncStatus(SyncPhaseStatus.Format(SyncPhaseStatus.HistoryCatchUp));
         }
 
         private void EndHistoryCatchUpBanner(string reason)
         {
-            if (Interlocked.Exchange(ref _historyCatchUpBannerActive, 0) == 0)
+            if (!_syncStatus.EndHistoryCatchUp())
             {
                 return;
             }
@@ -726,7 +671,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 "history",
                 "catch-up-banner-end",
                 "reason=" + (reason ?? string.Empty));
-            PublishSyncStatus(null);
 
             // The post-sync enrichment that would rename the list gives up when the window is
             // hidden or the socket dropped; names learned from the sync itself need neither.
@@ -740,7 +684,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         private void NoteFullHistoryCatchUpProgress(string reason)
         {
-            if (Volatile.Read(ref _historyCatchUpBannerActive) == 0 &&
+            if (!IsHistoryCatchUpBannerActive &&
                 !_historyRequests.IsFullClaimed &&
                 string.IsNullOrWhiteSpace(_historyRequests.FullRequestId))
             {
@@ -761,9 +705,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 "; lotProgress=" + countsAsLot +
                 "; reason=" + (reason ?? string.Empty));
         }
-
-        private static bool IsListEnrichmentPhase(string status) =>
-            ListEnrichmentPhase.Matches(status);
 
         bool IWhatsAppService.ShouldDeferAvatarFetch(out string reason) => ShouldDeferProfilePictureFetch(out reason);
 
@@ -790,9 +731,9 @@ namespace Unison.Uwp.Services.WhatsApp
                 IsConnecting = _isConnecting,
                 SuppressReconnect = _suppressReconnect || _fatalSessionEnded,
                 HistorySyncProcessing = _initialSyncSafeModeActive ||
-                                        Volatile.Read(ref _historyCatchUpBannerActive) == 1 ||
+                                        IsHistoryCatchUpBannerActive ||
                                         _historyRequests.IsFullClaimed,
-                HistoryCatchUpBannerActive = Volatile.Read(ref _historyCatchUpBannerActive) == 1,
+                HistoryCatchUpBannerActive = IsHistoryCatchUpBannerActive,
                 FullHistoryTriggerReason = null,
                 FullHistoryAckAccepted = false,
                 FullHistoryProgressSignalCount = 0,
@@ -1272,6 +1213,7 @@ namespace Unison.Uwp.Services.WhatsApp
             ChatStateStore chatState,
             ChatRowIndex chatRows,
             ActiveChat activeChat,
+            SyncStatusChannel syncStatus,
             IHistoryMessageStore historyMessages,
             IHistoryChatPreviewStore chatPreviews,
             IUsyncGate usyncGate,
@@ -1304,6 +1246,8 @@ namespace Unison.Uwp.Services.WhatsApp
             _chatRows = chatRows ?? throw new ArgumentNullException(nameof(chatRows));
             _activeChat = activeChat ?? throw new ArgumentNullException(nameof(activeChat));
             _activeChat.Changed += OnActiveChatChanged;
+            _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
+            _syncStatus.Changed += (s, status) => OnSyncStatus?.Invoke(this, status);
             _historyRequests = historyRequests ?? throw new ArgumentNullException(nameof(historyRequests));
             _historyMessages = historyMessages ?? throw new ArgumentNullException(nameof(historyMessages));
             _chatPreviews = chatPreviews ?? throw new ArgumentNullException(nameof(chatPreviews));
@@ -1341,6 +1285,7 @@ namespace Unison.Uwp.Services.WhatsApp
             ChatStateStore chatState,
             ChatRowIndex chatRows,
             ActiveChat activeChat,
+            SyncStatusChannel syncStatus,
             IHistoryMessageStore historyMessages,
             IHistoryChatPreviewStore chatPreviews,
             IUsyncGate usyncGate,
@@ -1355,7 +1300,7 @@ namespace Unison.Uwp.Services.WhatsApp
             AttachedUiDispatcher ui)
         {
             return _instance ?? (_instance = new WhatsAppService(
-                chatState, chatRows, activeChat, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, historyRequests,
+                chatState, chatRows, activeChat, syncStatus, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, historyRequests,
                 personStore, groupRosterStore, chatStore, systemInfo, ui));
         }
 
@@ -2107,7 +2052,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         "[WhatsAppService] SQLite quiet lot handed to catch-up continue: requestId=" +
                         (lotRequestId ?? "<none>") +
                         ", signals=" + lotProgressSignals +
-                        ", banner=" + (Volatile.Read(ref _historyCatchUpBannerActive) == 1));
+                        ", banner=" + (IsHistoryCatchUpBannerActive));
                     RuntimeDiagnosticsService.Instance.Write(
                         "history",
                         "catch-up-sqlite-lot-quiet",
@@ -3049,7 +2994,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             "; ackAccepted=" + tick.Request.AckAccepted +
                             "; baselineMsgs=" + tick.Request.BaselineMessageCount +
                             "; ramMsgs=" + GetStoredMessageCount() +
-                            "; banner=" + (Volatile.Read(ref _historyCatchUpBannerActive) == 1)))
+                            "; banner=" + (IsHistoryCatchUpBannerActive)))
                         .ConfigureAwait(false);
 
                     if (exit.Outcome == HistoryCatchUpWatchdogOutcome.RequestCleared)
@@ -3324,7 +3269,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private bool IsHistoryCatchUpActive()
         {
-            return _catchUp.IsActive(Volatile.Read(ref _historyCatchUpBannerActive) == 1);
+            return _catchUp.IsActive(IsHistoryCatchUpBannerActive);
         }
 
         private void FinishHistoryCatchUpContinue(string reason, bool releaseEnrichment)
@@ -3391,7 +3336,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _freshnessReconnectFallbackInProgress = true;
             Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 1);
             // Keep Synchronizing history… across the soft reconnect.
-            if (Volatile.Read(ref _historyCatchUpBannerActive) == 0)
+            if (!IsHistoryCatchUpBannerActive)
             {
                 BeginHistoryCatchUpBanner("catch-up-continue");
             }

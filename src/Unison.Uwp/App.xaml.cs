@@ -265,11 +265,19 @@ namespace Unison.Uwp
             // pump and drops the previous conversation's messages from memory on a change.
             services.AddSingleton(sp => new ActiveChat(
                 sp.GetRequiredService<JidAliasTable>().GetCanonicalJid));
+            services.AddSingleton(sp =>
+            {
+                ILocalSettings settings = sp.GetRequiredService<ILocalSettings>();
+                return new SyncStatusChannel(
+                    sp.GetRequiredService<ActiveChat>(),
+                    () => settings.Get<bool>(LocalSettingsConstants.ShowSyncStatus));
+            });
             services.AddSingleton<IWhatsAppService>(
                 sp => WhatsAppService.Create(
                     sp.GetRequiredService<ChatStateStore>(),
                     sp.GetRequiredService<ChatRowIndex>(),
                     sp.GetRequiredService<ActiveChat>(),
+                    sp.GetRequiredService<SyncStatusChannel>(),
                     sp.GetRequiredService<IHistoryMessageStore>(),
                     sp.GetRequiredService<IHistoryChatPreviewStore>(),
                     sp.GetRequiredService<IUsyncGate>(),
