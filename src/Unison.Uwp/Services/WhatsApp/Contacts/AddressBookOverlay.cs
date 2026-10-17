@@ -18,6 +18,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
+using Unison.Core.State;
 
 namespace Unison.Uwp.Services.WhatsApp.Contacts
 {
@@ -28,19 +29,22 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly IWhatsAppService _whatsAppService;
         private readonly IDispatcher _ui;
         private readonly IJidResolver _jids;
+        private readonly DisplayNameTable _addressBookNames;
 
         internal AddressBookOverlay(
             ILocalContactsService localContacts,
             IPersonStore personStore,
             IWhatsAppService whatsAppService,
             IJidResolver jids,
-            IDispatcher ui)
+            IDispatcher ui,
+            DisplayNameTable addressBookNames)
         {
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _localContacts = localContacts ?? throw new ArgumentNullException(nameof(localContacts));
             _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
             _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
+            _addressBookNames = addressBookNames ?? throw new ArgumentNullException(nameof(addressBookNames));
         }
 
         /// <summary>
@@ -191,7 +195,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         /// </summary>
         public async Task RefreshAsync(bool force)
         {
-            if (!force && _whatsAppService.PhoneContactNamesByJid.Count > 0)
+            if (!force && _addressBookNames.Count > 0)
             {
                 return;
             }
@@ -264,7 +268,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                     continue;
                 }
 
-                _whatsAppService.PhoneContactNamesByJid.Set(pair.Key, pair.Value.Trim());
+                _addressBookNames.Set(pair.Key, pair.Value.Trim());
                 updates++;
             }
 

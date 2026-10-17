@@ -45,6 +45,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly ILocalSettings _localSettings;
         private readonly JidAliasTable _aliases;
         private readonly DisplayNameTable _pushNames;
+        private readonly DisplayNameTable _addressBookNames;
 
         private readonly ContactDirectory _directory;
         private readonly AddressBookOverlay _addressBook;
@@ -73,6 +74,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             IAvatarCache avatarCache,
             JidAliasTable aliases,
             DisplayNameTable pushNames,
+            DisplayNameTable addressBookNames,
             ISelfMarkerNaming selfMarkers,
             IDispatcher ui,
             IChatCatalogPersistence catalog)
@@ -98,9 +100,10 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             _localSettings = localSettings ?? throw new ArgumentNullException(nameof(localSettings));
             _aliases = aliases ?? throw new ArgumentNullException(nameof(aliases));
             _pushNames = pushNames ?? throw new ArgumentNullException(nameof(pushNames));
+            _addressBookNames = addressBookNames ?? throw new ArgumentNullException(nameof(addressBookNames));
 
             _directory = new ContactDirectory(sessions, lidMappings);
-            _addressBook = new AddressBookOverlay(localContacts, personStore, whatsAppService, jids, ui);
+            _addressBook = new AddressBookOverlay(localContacts, personStore, whatsAppService, jids, ui, addressBookNames);
             _usync = new ContactUsyncResolver(
                 whatsAppService,
                 _directory,
@@ -185,11 +188,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         /// Handed out read-only. The overlay is rebuilt wholesale by the address-book pass, and a
         /// caller that could write to it would be writing into state the next pass discards.
         /// </summary>
-        public IReadOnlyDictionary<string, string> PhoneContactNamesByJid =>
-            _whatsAppService.PhoneContactNamesByJid ?? EmptyPhoneNames;
-
-        private static readonly IReadOnlyDictionary<string, string> EmptyPhoneNames =
-            new Dictionary<string, string>(0);
+        public IReadOnlyDictionary<string, string> PhoneContactNamesByJid => _addressBookNames;
 
         public Task HydrateCachedAvatarUrisAsync(string reason)
         {

@@ -379,6 +379,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IAvatarCache>(),
                 sp.GetRequiredService<JidAliasTable>(),
                 sp.GetRequiredService<ChatStateStore>().PushNames,
+                sp.GetRequiredService<ChatStateStore>().AddressBookNames,
                 sp.GetRequiredService<ISelfMarkerNaming>(),
                 sp.GetRequiredService<AttachedUiDispatcher>(),
                 sp.GetRequiredService<IChatCatalogPersistence>()));
