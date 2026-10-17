@@ -370,10 +370,6 @@ namespace Unison.Uwp.Services.WhatsApp
             MessagesByChat.Trim(jid, MaxActiveChatMessagesInMemory, DateTime.UtcNow);
         private AuthState _authState;
 
-        /// <summary>
-        /// Phone-code pairing lives on ConnectionFacade / WhatsAppSession, not here.
-        /// </summary>
-        public IPairingService Pairing => null;
         private bool _isReconnecting = false;
         private bool _isConnecting = false;
         private volatile bool _suppressReconnect = false;

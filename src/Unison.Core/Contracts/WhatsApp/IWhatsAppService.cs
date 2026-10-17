@@ -4,8 +4,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Proto;
 using Unison.Core.Models;
-// IPairingService lives in the parent Contracts namespace.
-using Unison.Core.Contracts;
 
 namespace Unison.Core.Contracts.WhatsApp
 {
@@ -70,9 +68,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// UI thread; the contact façade decides how they are asked again.
         /// </summary>
         event EventHandler<AvatarRetryDueEventArgs> OnAvatarRetryDue;
-
-        /// <summary>Active pairing helper after ConnectAsync; may be null before connect.</summary>
-        IPairingService Pairing { get; }
 
         Task InitializeAsync();
         Task ConnectAsync();
