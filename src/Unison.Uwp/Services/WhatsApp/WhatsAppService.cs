@@ -924,28 +924,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
         void IWhatsAppService.SetVerboseLogging(bool enabled, string source) => SetVerboseLogging(enabled, source);
 
-        public List<ChatMessage> GetLiveMessages(string jid)
-        {
-            if (string.IsNullOrWhiteSpace(jid))
-                return new List<ChatMessage>();
-
-            string key = NormalizeJid(jid);
-            List<ChatMessage> list;
-            if (!MessagesByChat.TryGet(key, out list) || list == null)
-            {
-                foreach (var kvp in MessagesByChat.Snapshot())
-                {
-                    if (string.Equals(GetCanonicalJid(kvp.Key), GetCanonicalJid(key), StringComparison.OrdinalIgnoreCase))
-                    {
-                        list = kvp.Value;
-                        break;
-                    }
-                }
-            }
-
-            return list != null ? new List<ChatMessage>(list) : new List<ChatMessage>();
-        }
-
         public DisplayNameTable ContactNames => _chatState.PushNames;
         public DisplayNameTable PhoneContactNamesByJid => _chatState.AddressBookNames;
 

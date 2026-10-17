@@ -139,6 +139,14 @@ namespace Unison.Core.State
             }
         }
 
+        public List<ChatMessage> GetConversationMessages(string chatJid, Func<string, string> canonicalOf)
+        {
+            lock (_gate)
+            {
+                return _messagesByChat.CopyConversation(chatJid, canonicalOf);
+            }
+        }
+
         public int GetMessageCount(string chatJid)
         {
             if (string.IsNullOrEmpty(chatJid))

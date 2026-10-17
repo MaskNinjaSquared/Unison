@@ -687,7 +687,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             List<ChatMessage> live;
             try
             {
-                live = _appState.GetLiveMessages(jid);
+                live = _chatState.GetConversationMessages(jid, _jids.GetCanonicalJid);
             }
             catch (Exception ex)
             {

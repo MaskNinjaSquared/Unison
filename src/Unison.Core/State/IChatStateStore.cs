@@ -44,6 +44,12 @@ namespace Unison.Core.State
         /// <summary>A snapshot ordered oldest to newest. Never null.</summary>
         IReadOnlyList<ChatMessage> GetMessages(string chatJid);
 
+        /// <summary>
+        /// Like <see cref="GetMessages"/>, but a conversation still held under its LID or phone
+        /// alias is found through <paramref name="canonicalOf"/>. A copy; never null.
+        /// </summary>
+        List<ChatMessage> GetConversationMessages(string chatJid, Func<string, string> canonicalOf);
+
         int GetMessageCount(string chatJid);
 
         /// <summary>Adds or updates chats, matching on JID. Existing instances are updated in place.</summary>

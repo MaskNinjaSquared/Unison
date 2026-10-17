@@ -269,7 +269,6 @@ namespace Unison.Core.Contracts.WhatsApp
         void StartNewChat(string jid);
 
         Task<List<ChatMessage>> LoadMessagesForChatAsync(string jid);
-        List<ChatMessage> GetLiveMessages(string jid);
 
         /// <summary>
         /// Asks the phone for a FULL_HISTORY_SYNC_ON_DEMAND lot (no local wipe).
