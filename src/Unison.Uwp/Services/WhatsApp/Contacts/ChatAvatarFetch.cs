@@ -22,7 +22,6 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
     {
         private const string GroupAvatarFallbackMissReason = "group-avatar-fallback-miss";
 
-        private readonly IWhatsAppService _client;
         private readonly IDispatcher _ui;
         private readonly IChatCatalogPersistence _catalog;
         private readonly IWhatsAppSessionProvider _sessions;
@@ -35,7 +34,6 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly GroupMetadataReader _reader;
 
         public ChatAvatarFetch(
-            IWhatsAppService client,
             IWhatsAppSessionProvider sessions,
             IGroupService groups,
             IJidResolver jids,
@@ -48,7 +46,6 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         {
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
-            _client = client ?? throw new ArgumentNullException(nameof(client));
             _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
             _groups = groups ?? throw new ArgumentNullException(nameof(groups));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));

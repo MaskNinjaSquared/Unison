@@ -112,7 +112,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
             var labels = new ContactLabelSanitizer(selfMarkers);
             _directory = new ContactDirectory(sessions, lidMappings);
-            _addressBook = new AddressBookOverlay(localContacts, personStore, whatsAppService, jids, ui, addressBookNames, chats);
+            _addressBook = new AddressBookOverlay(localContacts, personStore, jids, ui, addressBookNames, chats);
             _usync = new ContactUsyncResolver(
                 whatsAppService,
                 _directory,
@@ -140,14 +140,14 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             _avatars = new ChatAvatarPolicy(
                 whatsAppService,
                 jids,
-                new ChatAvatarFetch(whatsAppService, sessions, groups, jids, chats, avatarReport, avatars, avatarCache, ui, catalog),
+                new ChatAvatarFetch(sessions, groups, jids, chats, avatarReport, avatars, avatarCache, ui, catalog),
                 ui,
                 catalog,
                 chats,
                 syncStatus,
                 syncWork,
                 sessions);
-            _roster = new GroupRosterPolicy(whatsAppService, groups, this, jids, ui, catalog, chats, syncWork, sessions);
+            _roster = new GroupRosterPolicy(groups, this, jids, ui, catalog, chats, syncWork, sessions);
 
             // Both live as long as the app does, so there is nothing to unhook from.
             _whatsAppService.OnDisplayNamesUpdated += (s, e) =>

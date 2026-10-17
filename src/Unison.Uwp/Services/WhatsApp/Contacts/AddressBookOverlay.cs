@@ -26,7 +26,6 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
     {
         private readonly ILocalContactsService _localContacts;
         private readonly IPersonStore _personStore;
-        private readonly IWhatsAppService _whatsAppService;
         private readonly IDispatcher _ui;
         private readonly IJidResolver _jids;
         private readonly DisplayNameTable _addressBookNames;
@@ -35,7 +34,6 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         internal AddressBookOverlay(
             ILocalContactsService localContacts,
             IPersonStore personStore,
-            IWhatsAppService whatsAppService,
             IJidResolver jids,
             IDispatcher ui,
             DisplayNameTable addressBookNames,
@@ -45,7 +43,6 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _localContacts = localContacts ?? throw new ArgumentNullException(nameof(localContacts));
             _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
-            _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _addressBookNames = addressBookNames ?? throw new ArgumentNullException(nameof(addressBookNames));
         }

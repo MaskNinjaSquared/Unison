@@ -31,7 +31,6 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private static readonly TimeSpan FailureBackoff = TimeSpan.FromMinutes(30);
         private const int BatchSize = 16;
 
-        private readonly IWhatsAppService _whatsAppService;
         private readonly IWhatsAppSessionProvider _sessions;
         private readonly IChatStateStore _chatState;
         private readonly SyncWorkGate _syncWork;
@@ -50,7 +49,6 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private int _fullHydrateInFlight;
 
         internal GroupRosterPolicy(
-            IWhatsAppService whatsAppService,
             IGroupService groups,
             IContactService contacts,
             IJidResolver jids,
@@ -65,7 +63,6 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
-            _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
             _groups = groups ?? throw new ArgumentNullException(nameof(groups));
             _contacts = contacts ?? throw new ArgumentNullException(nameof(contacts));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
