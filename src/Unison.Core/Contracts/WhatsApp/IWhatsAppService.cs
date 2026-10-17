@@ -179,7 +179,6 @@ namespace Unison.Core.Contracts.WhatsApp
 
         /// <summary>Schedules another background resolution pass (names+avatars+groups) after a delay.</summary>
         void ScheduleDeferredAvatarResolution(string reason, TimeSpan? delay = null);
-        void SetActiveChatJid(string jid);
 
         /// <summary>
         /// Zeroes the unread count for a conversation, on every row that is the same conversation.

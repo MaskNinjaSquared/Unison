@@ -339,7 +339,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 await RunOnUiThreadAsync(() =>
                 {
-                    var active = _activeChatJid;
+                    var active = _activeChat.Jid;
                     var keys = MessagesByChat.ChatJids();
                     foreach (var key in keys)
                     {
@@ -361,11 +361,10 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        public void SetActiveChatJid(string jid)
+        private void OnActiveChatChanged(object sender, ActiveChatChangedEventArgs e)
         {
-            string previous = _activeChatJid;
-            string next = string.IsNullOrWhiteSpace(jid) ? null : GetCanonicalJid(jid);
-            _activeChatJid = next;
+            string previous = e.Previous;
+            string next = e.Current;
 
             if (!string.IsNullOrWhiteSpace(previous) &&
                 !string.Equals(previous, next, StringComparison.OrdinalIgnoreCase))
@@ -440,20 +439,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _ = PersistChatCatalogSliceAsync(dirty);
         }
 
-        private bool IsActiveChatJid(string jid)
-        {
-            if (string.IsNullOrWhiteSpace(jid) || string.IsNullOrWhiteSpace(_activeChatJid))
-            {
-                return false;
-            }
-
-            return string.Equals(GetCanonicalJid(jid), _activeChatJid, StringComparison.OrdinalIgnoreCase);
-        }
-
-        public bool IsChatCurrentlyOpen(string jid)
-        {
-            return IsActiveChatJid(jid);
-        }
+        private bool IsActiveChatJid(string jid) => _activeChat.IsOpen(jid);
 
         private int GetTotalUnreadCount()
         {
@@ -621,7 +607,7 @@ namespace Unison.Uwp.Services.WhatsApp
         // updated after the in-memory message cache is released for inactive chats.
         // Somente a conversa aberta deve manter uma janela grande de mensagens em RAM.
         // O historico completo continua no MessageStore.
-        private volatile string _activeChatJid;
+        private readonly ActiveChat _activeChat;
         private const int MaxActiveChatMessagesInMemory = 300;
         private volatile bool _initialSyncSafeModeActive;
         private int _initialSyncProcessedConversations;
@@ -682,7 +668,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            if (!string.IsNullOrWhiteSpace(_activeChatJid) &&
+            if (!string.IsNullOrWhiteSpace(_activeChat.Jid) &&
                 IsListEnrichmentPhase(status))
             {
                 return;
@@ -1285,6 +1271,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private WhatsAppService(
             ChatStateStore chatState,
             ChatRowIndex chatRows,
+            ActiveChat activeChat,
             IHistoryMessageStore historyMessages,
             IHistoryChatPreviewStore chatPreviews,
             IUsyncGate usyncGate,
@@ -1315,6 +1302,8 @@ namespace Unison.Uwp.Services.WhatsApp
             _isWindowsMobile = systemInfo.IsMobile();
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _chatRows = chatRows ?? throw new ArgumentNullException(nameof(chatRows));
+            _activeChat = activeChat ?? throw new ArgumentNullException(nameof(activeChat));
+            _activeChat.Changed += OnActiveChatChanged;
             _historyRequests = historyRequests ?? throw new ArgumentNullException(nameof(historyRequests));
             _historyMessages = historyMessages ?? throw new ArgumentNullException(nameof(historyMessages));
             _chatPreviews = chatPreviews ?? throw new ArgumentNullException(nameof(chatPreviews));
@@ -1351,6 +1340,7 @@ namespace Unison.Uwp.Services.WhatsApp
         internal static WhatsAppService Create(
             ChatStateStore chatState,
             ChatRowIndex chatRows,
+            ActiveChat activeChat,
             IHistoryMessageStore historyMessages,
             IHistoryChatPreviewStore chatPreviews,
             IUsyncGate usyncGate,
@@ -1365,7 +1355,7 @@ namespace Unison.Uwp.Services.WhatsApp
             AttachedUiDispatcher ui)
         {
             return _instance ?? (_instance = new WhatsAppService(
-                chatState, chatRows, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, historyRequests,
+                chatState, chatRows, activeChat, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, historyRequests,
                 personStore, groupRosterStore, chatStore, systemInfo, ui));
         }
 

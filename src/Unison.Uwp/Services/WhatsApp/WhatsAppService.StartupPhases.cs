@@ -48,7 +48,7 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             var elapsed = Stopwatch.StartNew();
             // Do not paint "Finishing startup…" over an open conversation.
-            if (string.IsNullOrWhiteSpace(_activeChatJid))
+            if (string.IsNullOrWhiteSpace(_activeChat.Jid))
             {
                 RaiseSyncStatus(SyncPhaseStatus.Format(SyncPhaseStatus.Settling));
             }

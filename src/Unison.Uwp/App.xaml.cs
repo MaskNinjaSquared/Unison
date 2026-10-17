@@ -261,10 +261,15 @@ namespace Unison.Uwp
                 JidAliasTable aliases = sp.GetRequiredService<JidAliasTable>();
                 return new ChatRowIndex(() => chatState.Chats, aliases.GetCanonicalJid);
             });
+            // ChatFacade opens and closes the conversation; the client reads it in the incoming
+            // pump and drops the previous conversation's messages from memory on a change.
+            services.AddSingleton(sp => new ActiveChat(
+                sp.GetRequiredService<JidAliasTable>().GetCanonicalJid));
             services.AddSingleton<IWhatsAppService>(
                 sp => WhatsAppService.Create(
                     sp.GetRequiredService<ChatStateStore>(),
                     sp.GetRequiredService<ChatRowIndex>(),
+                    sp.GetRequiredService<ActiveChat>(),
                     sp.GetRequiredService<IHistoryMessageStore>(),
                     sp.GetRequiredService<IHistoryChatPreviewStore>(),
                     sp.GetRequiredService<IUsyncGate>(),
@@ -397,6 +402,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IJidResolver>(),
                 sp.GetRequiredService<IChatStateStore>(),
                 sp.GetRequiredService<ChatRowIndex>(),
+                sp.GetRequiredService<ActiveChat>(),
                 sp.GetRequiredService<IOfflineReplayHost>(),
                 sp.GetRequiredService<IContactService>(),
                 sp.GetRequiredService<INotificationService>(),

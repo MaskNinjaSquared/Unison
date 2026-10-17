@@ -56,6 +56,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
         private readonly IJidResolver _jids;
         private readonly IChatStateStore _chatState;
         private readonly ChatRowIndex _chatRows;
+        private readonly ActiveChat _activeChat;
         private readonly IContactService _contacts;
         private readonly INotificationService _notifications;
         private readonly IDispatcher _ui;
@@ -71,6 +72,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             IJidResolver jids,
             IChatStateStore chatState,
             ChatRowIndex chatRows,
+            ActiveChat activeChat,
             IOfflineReplayHost offlineReplay,
             IContactService contacts,
             INotificationService notifications,
@@ -97,6 +99,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _chatRows = chatRows ?? throw new ArgumentNullException(nameof(chatRows));
+            _activeChat = activeChat ?? throw new ArgumentNullException(nameof(activeChat));
             _contacts = contacts;
             _notifications = notifications;
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
@@ -297,7 +300,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
 
         public void SetActiveChatJid(string jid)
         {
-            _appState.SetActiveChatJid(jid);
+            _activeChat.Open(jid);
         }
 
         public Task ClearUnreadForChatAsync(string jid)
