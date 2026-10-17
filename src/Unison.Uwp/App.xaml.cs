@@ -389,6 +389,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IWhatsAppSessionProvider>(),
                 sp.GetRequiredService<IWhatsAppService>(),
                 sp.GetRequiredService<IJidResolver>(),
+                sp.GetRequiredService<IChatStateStore>(),
                 sp.GetRequiredService<IOfflineReplayHost>(),
                 sp.GetRequiredService<IContactService>(),
                 sp.GetRequiredService<INotificationService>(),

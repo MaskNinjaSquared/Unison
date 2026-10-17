@@ -54,6 +54,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
         private readonly IWhatsAppSessionProvider _sessions;
         private readonly IWhatsAppService _appState;
         private readonly IJidResolver _jids;
+        private readonly IChatStateStore _chatState;
         private readonly IContactService _contacts;
         private readonly INotificationService _notifications;
         private readonly IDispatcher _ui;
@@ -67,6 +68,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             IWhatsAppSessionProvider sessions,
             IWhatsAppService appState,
             IJidResolver jids,
+            IChatStateStore chatState,
             IOfflineReplayHost offlineReplay,
             IContactService contacts,
             INotificationService notifications,
@@ -91,6 +93,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             _sessions = sessions;
             _appState = appState;
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
+            _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _contacts = contacts;
             _notifications = notifications;
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
@@ -303,7 +306,15 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
 
         public int GetTotalUnreadCount()
         {
-            return _appState.GetTotalUnreadCount();
+            try
+            {
+                return ChatUnreadTally.TotalAcrossConversations(_chatState.Chats, _jids.GetCanonicalJid);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatFacade] Unread total failed: " + ex.Message);
+                return 0;
+            }
         }
 
         public void PersistChatListRows(IList<ChatItem> chats)
@@ -380,7 +391,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
 
                 if (preferred != null)
                 {
-                    ChatDisplayOrder.Reposition(_appState.Chats, preferred);
+                    ChatDisplayOrder.Reposition(_chatState.Chats, preferred);
                 }
             }).ConfigureAwait(false);
         }
@@ -433,7 +444,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
 
                 result.Chat = chat;
                 result.DisplayName = chat != null ? chat.Name : null;
-                result.TotalUnread = _appState.GetTotalUnreadCount();
+                result.TotalUnread = GetTotalUnreadCount();
             }).ConfigureAwait(false);
 
             return result;
@@ -498,8 +509,8 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
                     }
                 }
 
-                ChatDisplayOrder.SortInPlace(_appState.Chats);
-                int totalUnread = _appState.GetTotalUnreadCount();
+                ChatDisplayOrder.SortInPlace(_chatState.Chats);
+                int totalUnread = GetTotalUnreadCount();
                 if (_notifications != null)
                 {
                     _notifications.UpdateBadge(totalUnread);
@@ -540,7 +551,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
         {
             createdRow = false;
             string canonicalLookup = _jids.GetCanonicalJid(jid) ?? jid;
-            ChatItem chat = _appState.Chats.FirstOrDefault(c =>
+            ChatItem chat = _chatState.Chats.FirstOrDefault(c =>
                 c != null &&
                 string.Equals(
                     _jids.GetCanonicalJid(c.JID),
@@ -559,11 +570,11 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
                 };
                 if (createAtFront)
                 {
-                    _appState.Chats.Insert(0, chat);
+                    _chatState.Chats.Insert(0, chat);
                 }
                 else
                 {
-                    _appState.Chats.Add(chat);
+                    _chatState.Chats.Add(chat);
                 }
 
                 createdRow = true;
@@ -646,7 +657,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
 
             if (createAtFront)
             {
-                ChatDisplayOrder.Reposition(_appState.Chats, chat);
+                ChatDisplayOrder.Reposition(_chatState.Chats, chat);
             }
 
             if (unreadDelta > 0)

@@ -462,7 +462,7 @@ namespace Unison.Uwp.Services.WhatsApp
             return IsActiveChatJid(jid);
         }
 
-        public int GetTotalUnreadCount()
+        private int GetTotalUnreadCount()
         {
             try
             {
