@@ -199,6 +199,8 @@ namespace Unison.Uwp.Services.WhatsApp
         /// <summary>Startup and enrichment timings; the rule is <see cref="SyncBudget"/>.</summary>
         private bool UseFrugalSyncBudget => _syncBudget.IsFrugal;
 
+        private SyncPacing CurrentSyncPacing => _workload.PacingFor(UseFrugalSyncBudget);
+
         private async Task WarmPersonStoreAsync()
         {
             try
@@ -502,6 +504,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private const int MaxActiveChatMessagesInMemory = 300;
         private readonly InitialSyncProgressState _initialSync;
         private readonly SyncBudget _syncBudget;
+        private readonly SyncWorkloadStrategy _workload;
         private readonly SelfProfileState _selfProfile;
 
         /// <summary>
@@ -511,8 +514,11 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         private int _sqliteHistoryConversationsAccumulated;
         private int _sqliteHistoryFinalizeGeneration;
-        private const int SqliteHistoryFinalizeQuietMs = 2800;
-        private const int SqliteHistoryFullFinalizeDelayMs = 900;
+        private int SqliteHistoryFinalizeQuietMs =>
+            Math.Max(200, _workload.HistoryFinalizeQuietMs);
+
+        private int SqliteHistoryFullFinalizeDelayMs =>
+            Math.Max(200, _workload.HistoryFullFinalizeDelayMs);
 
         /// <summary>UWP transport only; prefer <see cref="IWhatsAppService"/> APIs from outside this assembly.</summary>
         internal IWhatsAppSocket Socket => _socket;
@@ -922,16 +928,17 @@ namespace Unison.Uwp.Services.WhatsApp
         // --- FULL_HISTORY catch-up continue (next offline lot via soft-reconnect) ---
         // Idle must outlast slow Mobile SQLite/UI between chunks (15s was aborting too early).
         private TimeSpan FullHistoryCatchUpIdleAbort =>
-            UseFrugalSyncBudget ? TimeSpan.FromSeconds(45) : TimeSpan.FromSeconds(35);
+            TimeSpan.FromSeconds(CurrentSyncPacing.CatchUpIdleAbortSeconds);
 
         private static readonly TimeSpan FullHistoryCatchUpProgressPoll = TimeSpan.FromSeconds(8);
         private static readonly TimeSpan CatchUpContinueReconnectDelay = TimeSpan.FromSeconds(12);
         private static readonly TimeSpan CatchUpContinueReconnectCooldown = TimeSpan.FromSeconds(15);
 
-        private const int CatchUpContinueMaxRounds = 60;
+        private int CatchUpContinueMaxRounds =>
+            Math.Max(0, _workload.MaxFullHistoryCatchUpRounds);
         /// <summary>Tip watermark must stall this many idle cycles before catch-up stops.</summary>
         private int CatchUpStagnantCyclesBeforeStop =>
-            UseFrugalSyncBudget ? 3 : 2;
+            CurrentSyncPacing.CatchUpStagnantCyclesBeforeStop;
         private static readonly TimeSpan ActiveChatReconcileCooldown = TimeSpan.FromSeconds(12);
 
         private string CurrentUserAvatar => _selfProfile.AvatarUrl;
@@ -1064,6 +1071,7 @@ namespace Unison.Uwp.Services.WhatsApp
             HistoryOnDemandRegistry historyRequests,
             InitialSyncProgressState initialSync,
             SyncBudget syncBudget,
+            SyncWorkloadStrategy workload,
             SelfProfileState selfProfile,
             IPersonStore personStore,
             IGroupRosterStore groupRosterStore,
@@ -1095,6 +1103,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _historyRequests = historyRequests ?? throw new ArgumentNullException(nameof(historyRequests));
             _initialSync = initialSync ?? throw new ArgumentNullException(nameof(initialSync));
             _syncBudget = syncBudget ?? throw new ArgumentNullException(nameof(syncBudget));
+            _workload = workload ?? throw new ArgumentNullException(nameof(workload));
             _selfProfile = selfProfile ?? throw new ArgumentNullException(nameof(selfProfile));
             _selfProfile.Bind(ReadSelfProfileAccount, IsOwnPhoneEchoLabel, PersistSelfAvatarUrl);
             _historyMessages = historyMessages ?? throw new ArgumentNullException(nameof(historyMessages));
@@ -1155,6 +1164,7 @@ namespace Unison.Uwp.Services.WhatsApp
             HistoryOnDemandRegistry historyRequests,
             InitialSyncProgressState initialSync,
             SyncBudget syncBudget,
+            SyncWorkloadStrategy workload,
             SelfProfileState selfProfile,
             IPersonStore personStore,
             IGroupRosterStore groupRosterStore,
@@ -1164,7 +1174,7 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             return _instance ?? (_instance = new WhatsAppService(
                 chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
-                initialSync, syncBudget, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui));
+                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui));
         }
 
         /// <summary>
@@ -1647,12 +1657,8 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 try
                 {
-                    if (!await WaitForStartupQuietAsync(
-                            UseFrugalSyncBudget
-                                ? TimeSpan.FromSeconds(10)
-                                : TimeSpan.FromSeconds(5),
-                            "post-message-enrich",
-                            token) ||
+                    TimeSpan quiet = TimeSpan.FromSeconds(_workload.PostSyncEnrichmentQuietSeconds);
+                    if (!await WaitForStartupQuietAsync(quiet, "post-message-enrich", token) ||
                         !IsConnected ||
                         !Unison.Uwp.App.IsWindowVisible)
                     {
@@ -1665,12 +1671,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         await ResolveMissingNamesAsync();
                     }
 
-                    if (!await WaitForStartupQuietAsync(
-                            UseFrugalSyncBudget
-                                ? TimeSpan.FromSeconds(8)
-                                : TimeSpan.FromSeconds(4),
-                            "post-message-enrich-contacts",
-                            token) ||
+                    if (!await WaitForStartupQuietAsync(quiet, "post-message-enrich-contacts", token) ||
                         !IsConnected ||
                         !Unison.Uwp.App.IsWindowVisible)
                     {
@@ -1683,12 +1684,19 @@ namespace Unison.Uwp.Services.WhatsApp
                         await RefreshContactNamesAsync(includeGroups: false, force: false);
                     }
 
-                    TriggerBackgroundResolution();
+                    if (_workload.SerializePostSyncEnrichment)
+                    {
+                        await RunSerializedPostSyncEnrichmentAsync(quiet, token).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        TriggerBackgroundResolution();
+                    }
 
                     RuntimeDiagnosticsService.Instance.Write(
                         "startup",
                         "post-message-enrichment-complete",
-                        "reason=" + reason);
+                        "reason=" + reason + "; serial=" + _workload.SerializePostSyncEnrichment);
                 }
                 catch (TaskCanceledException)
                 {
@@ -1710,6 +1718,49 @@ namespace Unison.Uwp.Services.WhatsApp
                     cts.Dispose();
                 }
             });
+        }
+
+        /// <summary>
+        /// Low-memory path: one avatar pass, then group listing, each behind its own quiet gap.
+        /// Does not call <see cref="TriggerBackgroundResolution"/>, which would re-run names and
+        /// cascade another avatar schedule.
+        /// </summary>
+        private async Task RunSerializedPostSyncEnrichmentAsync(TimeSpan quiet, CancellationToken token)
+        {
+            if (!await WaitForStartupQuietAsync(quiet, "post-message-enrich-avatars", token) ||
+                !IsConnected ||
+                !Unison.Uwp.App.IsWindowVisible)
+            {
+                RaiseSyncStatus(null);
+                return;
+            }
+
+            string deferReason;
+            if (ShouldDeferProfilePictureFetch(out deferReason))
+            {
+                ScheduleDeferredProfilePictureResolution(deferReason);
+            }
+            else if (_contactService != null)
+            {
+                using (TraceStartupPhase("post-replay-avatars"))
+                {
+                    CancelDeferredProfilePictureResolution();
+                    await _contactService.RetrieveContactPicturesAsync(token).ConfigureAwait(false);
+                }
+            }
+
+            if (!await WaitForStartupQuietAsync(quiet, "post-message-enrich-groups", token) ||
+                !IsConnected ||
+                !Unison.Uwp.App.IsWindowVisible)
+            {
+                RaiseSyncStatus(null);
+                return;
+            }
+
+            RaiseSyncStatus(null);
+            RaiseReport(
+                () => OnGroupListingDue?.Invoke(this, EventArgs.Empty),
+                nameof(OnGroupListingDue));
         }
 
         private void ReleaseEnrichmentAfterHeavyHistory(string reason)
@@ -2144,122 +2195,30 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
+            // Sliced so a full reconcile (hundreds of chats after the first sync) does not hold
+            // the UI thread in one block; the store is sorted once, after the last slice.
             int updated = 0;
-            await RunOnUiThreadAsync(() =>
+            for (int start = 0; start < newestByCanonical.Count; start += PreviewReconcileUiSliceSize)
             {
-                for (int i = 0; i < newestByCanonical.Count; i++)
+                int sliceStart = start;
+                int sliceEnd = Math.Min(newestByCanonical.Count, start + PreviewReconcileUiSliceSize);
+                await RunOnUiThreadAsync(() =>
                 {
-                    string canonical = newestByCanonical[i].Item1;
-                    List<string> keys = newestByCanonical[i].Item2;
-                    List<HistoryMessage> page = newestByCanonical[i].Item3;
-
-                    // A legacy marker or bogus-timestamp row at the top must not hide the real tip:
-                    // walk the page down instead of giving up on the first candidate.
-                    ChatMessage mapped = null;
-                    if (page != null)
+                    for (int i = sliceStart; i < sliceEnd; i++)
                     {
-                        for (int p = page.Count - 1; p >= 0 && mapped == null; p--)
-                        {
-                            mapped = MapPreviewTipCandidate(page[p]);
-                        }
+                        updated += ApplyReconciledPreviewTip(
+                            newestByCanonical[i].Item1,
+                            newestByCanonical[i].Item2,
+                            newestByCanonical[i].Item3,
+                            tag);
                     }
+                }).ConfigureAwait(false);
+            }
 
-                    // Open-chat merge can show a live tip SQLite has not caught up with yet.
-                    ChatMessage memoryTip = FindNewestInMemoryForChat(canonical, keys);
-                    ChatMessage best = PickNewerPreviewSource(mapped, memoryTip);
-                    if (best == null)
-                    {
-                        continue;
-                    }
-
-                    bool isGroup = canonical.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
-                    ChatListStrip strip = ChatListStrip.FromMessage(
-                        best,
-                        isGroup,
-                        SelfListDisplayName(),
-                        GetCanonicalJid(best.ParticipantJid));
-
-                    foreach (var chat in GetChatRowsForCanonicalJid(canonical))
-                    {
-                        // Tip from DB/memory by TimestampUtc; swap when MessageId differs (or body).
-                        if (ChatPreviewTip.IsAlreadyShowing(chat, best, strip.Preview))
-                        {
-                            // Same tip body — still promote a bubble-resolved author onto the strip.
-                            if (isGroup)
-                            {
-                                LiveChatPreviewApplier.ApplyAuthorParts(
-                                    chat,
-                                    strip.ParticipantJid,
-                                    strip.SenderName,
-                                    strip.AuthorPrefix);
-                            }
-
-                            continue;
-                        }
-
-                        // force: tip was already chosen as newest by TimestampUtc (DB+RAM).
-                        // A strip poisoned by Unspecified→ToUniversalTime (+3h in Brazil) must
-                        // not win the stale gate and keep an older Last Message.
-                        bool applied = ApplyChatPreviewIfNewer(
-                            chat,
-                            strip.Preview,
-                            strip.Timestamp,
-                            true,
-                            strip.Kind,
-                            strip.AuthorPrefix,
-                            strip.MentionedJids,
-                            strip.IsFromMe,
-                            strip.SendState,
-                            strip.MessageId,
-                            strip.ParticipantJid,
-                            strip.SenderName);
-
-                        // Schema v4 upgrade: old preview rows have no LastMessageId. Stamp it from
-                        // history_message without a WhatsApp history resync when the tip already matches.
-                        if (!applied && ChatPreviewTip.ShouldStampMissingMessageId(chat, best))
-                        {
-                            chat.LastMessageId = best.Id;
-                            applied = true;
-                        }
-
-                        if (applied)
-                        {
-                            updated++;
-                            RuntimeDiagnosticsService.Instance.Write(
-                                "preview-tip",
-                                "tip-swapped",
-                                "reason=" + tag +
-                                "; jid=" + MaskJidForDiagnostics(chat.JID) +
-                                "; tipId=" + (best.Id ?? "-") +
-                                "; tipFromMe=" + best.IsFromMe +
-                                "; tipTs=" + ToComparableUtc(best.Timestamp).ToString("O"));
-                        }
-                        else
-                        {
-                            RuntimeDiagnosticsService.Instance.Write(
-                                "preview-tip",
-                                "kept-old-tip",
-                                "reason=" + tag +
-                                "; jid=" + MaskJidForDiagnostics(chat.JID) +
-                                "; stripTs=" + (chat.LastMessageTimestampUtc.HasValue
-                                    ? ToComparableUtc(chat.LastMessageTimestampUtc.Value).ToString("O")
-                                    : "-") +
-                                "; stripId=" + (chat.LastMessageId ?? "-") +
-                                "; stripFromMe=" + chat.LastMessageIsFromMe +
-                                "; tipTs=" + ToComparableUtc(best.Timestamp).ToString("O") +
-                                "; tipId=" + (best.Id ?? "-") +
-                                "; tipFromMe=" + best.IsFromMe +
-                                "; src=" + (ReferenceEquals(best, memoryTip) ? "mem" : "db") +
-                                "; dbRows=" + (page != null ? page.Count : 0));
-                        }
-                    }
-                }
-
-                if (updated > 0)
-                {
-                    SortChatsForDisplay();
-                }
-            }).ConfigureAwait(false);
+            if (updated > 0)
+            {
+                await RunOnUiThreadAsync(SortChatsForDisplay).ConfigureAwait(false);
+            }
 
             if (updated > 0)
             {
@@ -2267,6 +2226,113 @@ namespace Unison.Uwp.Services.WhatsApp
                 NoteFullHistoryCatchUpProgress("tip-swapped:" + updated);
                 SchedulePersist();
             }
+        }
+
+        private const int PreviewReconcileUiSliceSize = 24;
+
+        /// <summary>
+        /// UI thread. Applies the newest tip (SQLite page or memory) to every row of one chat.
+        /// Returns how many rows changed.
+        /// </summary>
+        private int ApplyReconciledPreviewTip(
+            string canonical,
+            List<string> keys,
+            List<HistoryMessage> page,
+            string tag)
+        {
+            ChatMessage stored = ChatPreviewTip.PickStoredTip(page, DateTime.UtcNow);
+            // Open-chat merge can show a live tip SQLite has not caught up with yet.
+            ChatMessage memoryTip = FindNewestInMemoryForChat(canonical, keys);
+            ChatMessage best = ChatPreviewTip.PickNewer(stored, memoryTip);
+            if (best == null)
+            {
+                return 0;
+            }
+
+            bool isGroup = canonical.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
+            ChatListStrip strip = ChatListStrip.FromMessage(
+                best,
+                isGroup,
+                SelfListDisplayName(),
+                GetCanonicalJid(best.ParticipantJid));
+
+            int updated = 0;
+            foreach (var chat in GetChatRowsForCanonicalJid(canonical))
+            {
+                // Tip from DB/memory by TimestampUtc; swap when MessageId differs (or body).
+                if (ChatPreviewTip.IsAlreadyShowing(chat, best, strip.Preview))
+                {
+                    // Same tip body — still promote a bubble-resolved author onto the strip.
+                    if (isGroup)
+                    {
+                        LiveChatPreviewApplier.ApplyAuthorParts(
+                            chat,
+                            strip.ParticipantJid,
+                            strip.SenderName,
+                            strip.AuthorPrefix);
+                    }
+
+                    continue;
+                }
+
+                // force: tip was already chosen as newest by TimestampUtc (DB+RAM).
+                // A strip poisoned by Unspecified→ToUniversalTime (+3h in Brazil) must
+                // not win the stale gate and keep an older Last Message.
+                bool applied = ApplyChatPreviewIfNewer(
+                    chat,
+                    strip.Preview,
+                    strip.Timestamp,
+                    true,
+                    strip.Kind,
+                    strip.AuthorPrefix,
+                    strip.MentionedJids,
+                    strip.IsFromMe,
+                    strip.SendState,
+                    strip.MessageId,
+                    strip.ParticipantJid,
+                    strip.SenderName);
+
+                // Schema v4 upgrade: old preview rows have no LastMessageId. Stamp it from
+                // history_message without a WhatsApp history resync when the tip already matches.
+                if (!applied && ChatPreviewTip.ShouldStampMissingMessageId(chat, best))
+                {
+                    chat.LastMessageId = best.Id;
+                    applied = true;
+                }
+
+                if (applied)
+                {
+                    updated++;
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "preview-tip",
+                        "tip-swapped",
+                        "reason=" + tag +
+                        "; jid=" + MaskJidForDiagnostics(chat.JID) +
+                        "; tipId=" + (best.Id ?? "-") +
+                        "; tipFromMe=" + best.IsFromMe +
+                        "; tipTs=" + ToComparableUtc(best.Timestamp).ToString("O"));
+                }
+                else
+                {
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "preview-tip",
+                        "kept-old-tip",
+                        "reason=" + tag +
+                        "; jid=" + MaskJidForDiagnostics(chat.JID) +
+                        "; stripTs=" + (chat.LastMessageTimestampUtc.HasValue
+                            ? ToComparableUtc(chat.LastMessageTimestampUtc.Value).ToString("O")
+                            : "-") +
+                        "; stripId=" + (chat.LastMessageId ?? "-") +
+                        "; stripFromMe=" + chat.LastMessageIsFromMe +
+                        "; tipTs=" + ToComparableUtc(best.Timestamp).ToString("O") +
+                        "; tipId=" + (best.Id ?? "-") +
+                        "; tipFromMe=" + best.IsFromMe +
+                        "; src=" + (ReferenceEquals(best, memoryTip) ? "mem" : "db") +
+                        "; dbRows=" + (page != null ? page.Count : 0));
+                }
+            }
+
+            return updated;
         }
 
         /// <summary>
@@ -2282,17 +2348,6 @@ namespace Unison.Uwp.Services.WhatsApp
         /// history_message row to a list-strip candidate, or null when it must never own the strip
         /// (old unflagged tombstone body, or a timestamp we do not trust).
         /// </summary>
-        private ChatMessage MapPreviewTipCandidate(HistoryMessage row)
-        {
-            if (row == null || !row.TimestampUtc.HasValue)
-            {
-                return null;
-            }
-
-            ChatMessage mapped = HistoryMessageMapper.ToChatMessage(row);
-            return ChatPreviewTip.IsReconcileCandidate(mapped, DateTime.UtcNow) ? mapped : null;
-        }
-
         private ChatMessage FindNewestInMemoryForChat(string canonical, List<string> keys)
         {
             var candidates = new List<ChatMessage>();
@@ -2353,9 +2408,6 @@ namespace Unison.Uwp.Services.WhatsApp
             return ChatPreviewTip.PickNewestReconcileCandidate(candidates, DateTime.UtcNow);
         }
 
-        private static ChatMessage PickNewerPreviewSource(ChatMessage sql, ChatMessage memory) =>
-            ChatPreviewTip.PickNewer(sql, memory);
-
         /// <summary>
         /// PN + LID (+ canonical) keys for SQLite history reads and avatar lookups. The same
         /// expansion <see cref="ChatPinStoreKeys"/> does for pins.
@@ -2402,7 +2454,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 // Give the compositor and input thread time to present an interactive chat list
                 // before doing optional repair and enrichment work - and no longer than that.
                 await WaitForStartupQuietAsync(
-                    UseFrugalSyncBudget ? TimeSpan.FromSeconds(6) : TimeSpan.FromMilliseconds(1800),
+                    TimeSpan.FromMilliseconds(CurrentSyncPacing.DeferredStartupQuietMs),
                     "deferred-startup",
                     CancellationToken.None);
 

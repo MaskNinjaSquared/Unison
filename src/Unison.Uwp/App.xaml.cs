@@ -319,6 +319,7 @@ namespace Unison.Uwp
                     sp.GetRequiredService<HistoryOnDemandRegistry>(),
                     sp.GetRequiredService<InitialSyncProgressState>(),
                     sp.GetRequiredService<SyncBudget>(),
+                    sp.GetRequiredService<SyncWorkloadStrategy>(),
                     sp.GetRequiredService<SelfProfileState>(),
                     sp.GetRequiredService<IPersonStore>(),
                     sp.GetRequiredService<IGroupRosterStore>(),
@@ -495,7 +496,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<AvatarFetcher>(),
                 sp.GetRequiredService<IUsyncGate>(),
                 sp.GetRequiredService<SyncStatusChannel>(),
-                sp.GetRequiredService<SyncWorkGate>()));
+                sp.GetRequiredService<SyncWorkGate>(),
+                sp.GetRequiredService<SyncWorkloadStrategy>()));
             services.AddSingleton<ILiveTilesService>(_ => LiveTilesService.Instance);
             services.AddSingleton<IShortcutService, ShortcutService>();
             services.AddSingleton<INotificationService>(sp =>

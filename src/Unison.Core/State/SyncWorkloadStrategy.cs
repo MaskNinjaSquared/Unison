@@ -3,8 +3,8 @@
 //
 // How heavy the first sync and its follow-up may be on this device. One subclass
 // per DeviceCategory so the numbers live with the tier, not in a switch at every
-// call site. Platform (Mobile vs desktop) is separate: Mobile alone decides
-// whether the chat list waits for IsCompleted before releasing rows.
+// call site. Whether the chat list waits for the first history sync is not a
+// tier decision: every platform holds it (see ChatListSyncHold).
 // =============================================================================
 using Unison.Core.Models;
 
@@ -37,6 +37,54 @@ namespace Unison.Core.State
 
         /// <summary>StorageQuotaMb declared to the phone in HistorySyncConfig.</summary>
         public abstract uint HistoryStorageQuotaMb { get; }
+
+        /// <summary>
+        /// After the first sync, run names → contacts → one avatar pass → groups one after
+        /// another with quiet gaps, instead of firing the background resolution cascade.
+        /// </summary>
+        public abstract bool SerializePostSyncEnrichment { get; }
+
+        /// <summary>Quiet gap between serial enrichment steps.</summary>
+        public abstract int PostSyncEnrichmentQuietSeconds { get; }
+
+        /// <summary>
+        /// Adjacent FULL_HISTORY_SYNC_ON_DEMAND pages after the first quiet lot. Zero means the
+        /// first lot is enough — no soft-reconnect cascade that would refill SQLite on a tiny
+        /// device after MaxMessagesPerConversation already capped each chunk.
+        /// </summary>
+        public abstract int MaxFullHistoryCatchUpRounds { get; }
+
+        /// <summary>
+        /// Quiet ms after a non-Full history chunk before the list treats sync as complete.
+        /// Longer on slow devices so a late next chunk is not mistaken for the end.
+        /// </summary>
+        public abstract int HistoryFinalizeQuietMs { get; }
+
+        /// <summary>Quiet ms after a Full history chunk before finalize (shorter than non-Full).</summary>
+        public abstract int HistoryFullFinalizeDelayMs { get; }
+
+        /// <summary>Per-group metadata queries in one fallback pass (groups the listing missed).</summary>
+        public abstract int GroupMetadataBatchSize { get; }
+
+        /// <summary>Pause between those metadata queries.</summary>
+        public abstract int GroupMetadataPauseMs { get; }
+
+        /// <summary>Member pictures fetched per roster batch when a group is open.</summary>
+        public abstract int GroupRosterBatchSize { get; }
+
+        /// <summary>Pause between member picture fetches in one batch.</summary>
+        public abstract int GroupRosterInterRequestDelayMs { get; }
+
+        /// <summary>Wait before the next roster batch of the same group.</summary>
+        public abstract int GroupRosterNextBatchDelaySeconds { get; }
+
+        /// <summary>Pacing while <see cref="SyncBudget.IsFrugal"/> is true.</summary>
+        protected abstract SyncPacing FrugalPacing { get; }
+
+        /// <summary>Pacing while the budget has headroom.</summary>
+        protected abstract SyncPacing GenerousPacing { get; }
+
+        public SyncPacing PacingFor(bool frugal) => frugal ? FrugalPacing : GenerousPacing;
 
         public static SyncWorkloadStrategy For(DeviceCategory category)
         {
@@ -78,6 +126,30 @@ namespace Unison.Core.State
         public override int AvatarFetchInterRequestDelayMs => 1200;
 
         public override uint HistoryStorageQuotaMb => 256;
+
+        public override bool SerializePostSyncEnrichment => true;
+
+        public override int PostSyncEnrichmentQuietSeconds => 12;
+
+        public override int MaxFullHistoryCatchUpRounds => 0;
+
+        public override int HistoryFinalizeQuietMs => 6000;
+
+        public override int HistoryFullFinalizeDelayMs => 2000;
+
+        public override int GroupMetadataBatchSize => 5;
+
+        public override int GroupMetadataPauseMs => 400;
+
+        public override int GroupRosterBatchSize => 4;
+
+        public override int GroupRosterInterRequestDelayMs => 1200;
+
+        public override int GroupRosterNextBatchDelaySeconds => 40;
+
+        protected override SyncPacing FrugalPacing { get; } = new SyncPacing(4000, 8000, 45, 3);
+
+        protected override SyncPacing GenerousPacing { get; } = new SyncPacing(1000, 1800, 35, 2);
     }
 
     /// <summary>1 GB class (~390 MB app limit): economical, not extreme.</summary>
@@ -106,6 +178,30 @@ namespace Unison.Core.State
         public override int AvatarFetchInterRequestDelayMs => 900;
 
         public override uint HistoryStorageQuotaMb => 1024;
+
+        public override bool SerializePostSyncEnrichment => true;
+
+        public override int PostSyncEnrichmentQuietSeconds => 8;
+
+        public override int MaxFullHistoryCatchUpRounds => 10;
+
+        public override int HistoryFinalizeQuietMs => 4500;
+
+        public override int HistoryFullFinalizeDelayMs => 1500;
+
+        public override int GroupMetadataBatchSize => 12;
+
+        public override int GroupMetadataPauseMs => 200;
+
+        public override int GroupRosterBatchSize => 8;
+
+        public override int GroupRosterInterRequestDelayMs => 900;
+
+        public override int GroupRosterNextBatchDelaySeconds => 30;
+
+        protected override SyncPacing FrugalPacing { get; } = new SyncPacing(3000, 6000, 45, 3);
+
+        protected override SyncPacing GenerousPacing { get; } = new SyncPacing(1000, 1800, 35, 2);
     }
 
     /// <summary>2 GB+ / desktop: current generous defaults.</summary>
@@ -134,5 +230,29 @@ namespace Unison.Core.State
         public override int AvatarFetchInterRequestDelayMs => 900;
 
         public override uint HistoryStorageQuotaMb => 10240;
+
+        public override bool SerializePostSyncEnrichment => false;
+
+        public override int PostSyncEnrichmentQuietSeconds => 5;
+
+        public override int MaxFullHistoryCatchUpRounds => 60;
+
+        public override int HistoryFinalizeQuietMs => 2800;
+
+        public override int HistoryFullFinalizeDelayMs => 900;
+
+        public override int GroupMetadataBatchSize => 25;
+
+        public override int GroupMetadataPauseMs => 120;
+
+        public override int GroupRosterBatchSize => 16;
+
+        public override int GroupRosterInterRequestDelayMs => 900;
+
+        public override int GroupRosterNextBatchDelaySeconds => 20;
+
+        protected override SyncPacing FrugalPacing { get; } = new SyncPacing(3000, 6000, 45, 3);
+
+        protected override SyncPacing GenerousPacing { get; } = new SyncPacing(1000, 1800, 35, 2);
     }
 }

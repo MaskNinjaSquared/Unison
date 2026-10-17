@@ -23,7 +23,7 @@ namespace Unison.Uwp.Services.WhatsApp
     {
         /// <summary>Breathing room the UI gets before enrichment starts, even on a fast device.</summary>
         private TimeSpan StartupQuietFloor =>
-            UseFrugalSyncBudget ? TimeSpan.FromSeconds(3) : TimeSpan.FromSeconds(1);
+            TimeSpan.FromMilliseconds(CurrentSyncPacing.StartupQuietFloorMs);
 
         private static readonly TimeSpan StartupQuietPollInterval = TimeSpan.FromMilliseconds(500);
 

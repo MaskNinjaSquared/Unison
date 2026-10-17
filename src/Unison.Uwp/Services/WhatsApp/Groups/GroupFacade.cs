@@ -32,8 +32,6 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
     public sealed class GroupFacade : IGroupService
     {
         private const string GroupServer = "@g.us";
-        private const int UnresolvedMetadataLimit = 25;
-        private static readonly TimeSpan UnresolvedMetadataPause = TimeSpan.FromMilliseconds(120);
 
         private readonly IWhatsAppService _client;
         private readonly IWhatsAppSessionProvider _sessions;
@@ -47,6 +45,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
         private readonly IUsyncGate _usyncGate;
         private readonly SyncStatusChannel _syncStatus;
         private readonly SyncWorkGate _syncWork;
+        private readonly SyncWorkloadStrategy _workload;
         private readonly GroupQueryWindow _queryWindow = new GroupQueryWindow();
 
         internal GroupFacade(
@@ -60,9 +59,11 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
             AvatarFetcher avatars,
             IUsyncGate usyncGate,
             SyncStatusChannel syncStatus,
-            SyncWorkGate syncWork)
+            SyncWorkGate syncWork,
+            SyncWorkloadStrategy workload)
         {
             _client = client ?? throw new ArgumentNullException(nameof(client));
+            _workload = workload ?? throw new ArgumentNullException(nameof(workload));
             _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
             _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
             _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
@@ -320,7 +321,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
             // so a listing that failed is the case it exists for.
             try
             {
-                await QueryUnresolvedGroupMetadataAsync(UnresolvedMetadataLimit);
+                await QueryUnresolvedGroupMetadataAsync(_workload.GroupMetadataBatchSize);
             }
             catch (Exception ex)
             {
@@ -402,7 +403,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
                     Debug.WriteLine("[GroupFacade] QueryGroupMetadataAsync failed for " + chat.JID + ": " + ex.Message);
                 }
 
-                await Task.Delay(UnresolvedMetadataPause);
+                await Task.Delay(Math.Max(0, _workload.GroupMetadataPauseMs));
             }
 
             _syncStatus.Raise(null);

@@ -153,7 +153,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 syncBudget,
                 workload ?? throw new ArgumentNullException(nameof(workload)),
                 initialSync);
-            _roster = new GroupRosterPolicy(groups, this, jids, ui, catalog, chats, syncWork, sessions);
+            _roster = new GroupRosterPolicy(groups, this, jids, ui, catalog, chats, syncWork, sessions, workload);
 
             // Both live as long as the app does, so there is nothing to unhook from.
             _whatsAppService.OnDisplayNamesUpdated += (s, e) =>

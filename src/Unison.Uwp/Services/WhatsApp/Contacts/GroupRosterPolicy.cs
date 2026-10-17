@@ -1,7 +1,8 @@
 // =============================================================================
 // GroupRosterPolicy
 //
-// Idle member-picture work: 16 GETs, then the next 16. Not a migration.
+// Idle member-picture work: one batch of GETs, then the next (batch size and
+// pauses come from SyncWorkloadStrategy; 16 on High). Not a migration.
 //
 // ChatAvatarPolicy already does this for chat-list rows. Group members were a
 // one-shot of 16 on open that never continued and never remembered a miss, so
@@ -25,11 +26,16 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 {
     internal sealed class GroupRosterPolicy
     {
-        private static readonly TimeSpan NextBatchDelay = TimeSpan.FromSeconds(20);
-        private static readonly TimeSpan InterRequestDelay = TimeSpan.FromMilliseconds(900);
         private static readonly TimeSpan NoPictureRetry = TimeSpan.FromDays(7);
         private static readonly TimeSpan FailureBackoff = TimeSpan.FromMinutes(30);
-        private const int BatchSize = 16;
+
+        private readonly SyncWorkloadStrategy _workload;
+
+        private TimeSpan NextBatchDelay => TimeSpan.FromSeconds(_workload.GroupRosterNextBatchDelaySeconds);
+
+        private TimeSpan InterRequestDelay => TimeSpan.FromMilliseconds(_workload.GroupRosterInterRequestDelayMs);
+
+        private int BatchSize => Math.Max(1, _workload.GroupRosterBatchSize);
 
         private readonly IWhatsAppSessionProvider _sessions;
         private readonly IChatStateStore _chatState;
@@ -56,8 +62,10 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             IChatCatalogPersistence catalog,
             IChatStateStore chatState,
             SyncWorkGate syncWork,
-            IWhatsAppSessionProvider sessions)
+            IWhatsAppSessionProvider sessions,
+            SyncWorkloadStrategy workload)
         {
+            _workload = workload ?? throw new ArgumentNullException(nameof(workload));
             _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
             _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
