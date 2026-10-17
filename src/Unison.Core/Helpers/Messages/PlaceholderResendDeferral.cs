@@ -11,7 +11,6 @@ namespace Unison.Core.Helpers
         public static bool IsDeferred(
             bool reconnectReplayActive,
             bool awaitingInitialSync,
-            bool historyBackfillActive,
             bool historyOnDemandInFlight,
             out string reason)
         {
@@ -24,12 +23,6 @@ namespace Unison.Core.Helpers
             if (awaitingInitialSync)
             {
                 reason = "awaiting-initial-sync";
-                return true;
-            }
-
-            if (historyBackfillActive)
-            {
-                reason = "history-backfill-active";
                 return true;
             }
 

@@ -252,7 +252,6 @@ namespace Unison.Uwp.Services.WhatsApp
             return PlaceholderResendDeferral.IsDeferred(
                 ShouldDeferReconnectReplayWork(),
                 _socket.IsAwaitingInitialSync,
-                _historyBackfillActive,
                 historyOnDemandInFlight,
                 out reason);
         }

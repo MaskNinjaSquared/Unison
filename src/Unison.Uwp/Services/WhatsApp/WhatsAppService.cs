@@ -878,8 +878,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private DateTime _lastFullHistoryRepairCompletedUtc = DateTime.MinValue;
         private TaskCompletionSource<bool> _userResyncHistoryTcs;
         private static readonly TimeSpan UserResyncHistoryWaitTimeout = TimeSpan.FromMinutes(3);
-        private readonly SemaphoreSlim _historyBackfillLock = new SemaphoreSlim(1, 1);
-        private volatile bool _historyBackfillActive = false;
         private readonly PendingMessageState _pendingMessageState = new PendingMessageState();
         private readonly GroupReceiptTally _groupReceipts = new GroupReceiptTally();
         private readonly GroupRecipientCountCache _groupRecipientCounts = new GroupRecipientCountCache();
@@ -2907,12 +2905,6 @@ namespace Unison.Uwp.Services.WhatsApp
             if (ShouldDeferReconnectReplayWork())
             {
                 reason = "reconnect-replay-active";
-                return true;
-            }
-
-            if (_historyBackfillActive)
-            {
-                reason = "history-backfill-active";
                 return true;
             }
 
