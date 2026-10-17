@@ -1175,50 +1175,5 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                 chat != null ? chat.GetAvatarUrl(preferHigh: false) : null,
                 chat != null ? Math.Max(0, chat.UnreadCount) : 0);
         }
-
-        public IncomingTimelineAcceptResult AcceptIncomingTimeline(
-            string chatJid,
-            ChatMessage message,
-            bool isGroup)
-        {
-            return _whatsAppService.AcceptIncomingTimeline(chatJid, message, isGroup);
-        }
-
-        public void QueueIncomingPersist(string chatJid, ChatMessage message)
-        {
-            if (string.IsNullOrWhiteSpace(chatJid) || message == null)
-            {
-                return;
-            }
-
-            _whatsAppService.QueueIncomingMessagePersist(chatJid, message);
-            _catalog.Schedule();
-        }
-
-        public Task ApplyIncomingRevocationAsync(
-            string chatJid,
-            string targetMessageId,
-            string envelopeMessageId = null)
-        {
-            return _whatsAppService.ApplyIncomingRevocationAsync(
-                chatJid,
-                targetMessageId,
-                envelopeMessageId);
-        }
-
-        public Task ApplyIncomingPinInChatAsync(
-            string chatJid,
-            string targetMessageId,
-            bool pin,
-            long senderTimestampMs,
-            uint durationSeconds = 0)
-        {
-            return _whatsAppService.ApplyIncomingPinInChatAsync(
-                chatJid,
-                targetMessageId,
-                pin,
-                senderTimestampMs,
-                durationSeconds);
-        }
     }
 }

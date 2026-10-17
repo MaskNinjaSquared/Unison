@@ -184,36 +184,6 @@ namespace Unison.Core.Contracts.WhatsApp
         void RequestAliasChatMerge(string lidJid, string pnJid);
 
         /// <summary>
-        /// Transitional host for <see cref="IMessageService.AcceptIncomingTimeline"/> —
-        /// mutates MessagesByChat + MessageIdIndex. Prefer the message façade.
-        /// </summary>
-        IncomingTimelineAcceptResult AcceptIncomingTimeline(
-            string chatJid,
-            ChatMessage message,
-            bool isGroup);
-
-        /// <summary>Queues one message into the debounced persist batch.</summary>
-        void QueueIncomingMessagePersist(string chatJid, ChatMessage message);
-
-        /// <summary>
-        /// Transitional host for <see cref="IMessageService.ApplyIncomingRevocationAsync"/>.
-        /// </summary>
-        Task ApplyIncomingRevocationAsync(
-            string chatJid,
-            string targetMessageId,
-            string envelopeMessageId = null);
-
-        /// <summary>
-        /// Transitional host for <see cref="IMessageService.ApplyIncomingPinInChatAsync"/>.
-        /// </summary>
-        Task ApplyIncomingPinInChatAsync(
-            string chatJid,
-            string targetMessageId,
-            bool pin,
-            long senderTimestampMs,
-            uint durationSeconds = 0);
-
-        /// <summary>
         /// Transitional host for <see cref="IChatService.RefreshAllChatPreviewsFromStoredAsync"/> —
         /// walks <c>MessagesByChat</c>. Prefer the chat façade.
         /// </summary>

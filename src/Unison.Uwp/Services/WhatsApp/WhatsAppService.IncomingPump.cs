@@ -566,7 +566,7 @@ namespace Unison.Uwp.Services.WhatsApp
             catch { return null; }
         }
 
-        public async Task ApplyIncomingRevocationAsync(string chatJid, string targetMessageId, string envelopeMessageId = null)
+        private async Task ApplyIncomingRevocationAsync(string chatJid, string targetMessageId, string envelopeMessageId = null)
         {
             string targetId = targetMessageId;
             if (string.IsNullOrWhiteSpace(chatJid) || string.IsNullOrWhiteSpace(targetId)) return;
@@ -1193,7 +1193,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 {
                     QueueMessageControlWork(
                         "message-revoke:" + e.MessageId,
-                        () => _messageService.ApplyIncomingRevocationAsync(jid, e.Message.ProtocolMessage.Key?.Id, e.MessageId));
+                        () => ApplyIncomingRevocationAsync(jid, e.Message.ProtocolMessage.Key?.Id, e.MessageId));
                     return;
                 }
 
@@ -1207,7 +1207,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     long senderTs = pinMessage?.SenderTimestampMs ?? 0;
                     QueueMessageControlWork(
                         "message-pin:" + e.MessageId,
-                        () => _messageService.ApplyIncomingPinInChatAsync(
+                        () => ApplyIncomingPinInChatAsync(
                             jid,
                             pinTargetId,
                             pin,
@@ -1442,7 +1442,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 ChatPreviewKind previewKind = ResolvePreviewKind(chatMessage, renderInfo);
 
                 SetIncomingMessagePumpStage("dedupe", e);
-                IncomingTimelineAcceptResult timeline = _messageService.AcceptIncomingTimeline(jid, chatMessage, isGroup);
+                IncomingTimelineAcceptResult timeline = AcceptIncomingTimeline(jid, chatMessage, isGroup);
 
                 if (timeline.Kind == IncomingTimelineAcceptKind.AliasConsolidated)
                 {
@@ -1505,7 +1505,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 {
                     if (timeline.ExistingChanged && timeline.Message != null)
                     {
-                        _messageService.QueueIncomingPersist(jid, timeline.Message);
+                        QueueIncomingPersist(jid, timeline.Message);
                         QueueChatMessagesChanged(jid);
                     }
                     if (timeline.Kind == IncomingTimelineAcceptKind.AliasLinkedDuplicate)
@@ -1570,7 +1570,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         listAuthorPrefix,
                         isGroup ? stripParticipantJid : null,
                         isGroup && !isActuallyFromMe ? senderName : null);
-                    _messageService.QueueIncomingPersist(jid, chatMessage);
+                    QueueIncomingPersist(jid, chatMessage);
 
                     if (IsActiveChatJid(jid))
                     {
@@ -1663,7 +1663,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 SetIncomingMessagePumpStage("persist-queue", e);
                 // Persistencia em lote: evita reler, serializar e reescrever o JSON
                 // inteiro para cada mensagem recebida.
-                _messageService.QueueIncomingPersist(jid, chatMessage);
+                QueueIncomingPersist(jid, chatMessage);
                 UnloadMessageCacheIfInactive(jid);
             }
             catch (Exception ex)
@@ -1679,7 +1679,7 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
 
-        public IncomingTimelineAcceptResult AcceptIncomingTimeline(
+        private IncomingTimelineAcceptResult AcceptIncomingTimeline(
             string chatJid,
             ChatMessage message,
             bool isGroup)
@@ -1693,10 +1693,17 @@ namespace Unison.Uwp.Services.WhatsApp
                 .Accept(chatJid, message, isGroup);
         }
 
-        public void QueueIncomingMessagePersist(string chatJid, ChatMessage message)
+        private void QueueIncomingPersist(string chatJid, ChatMessage message)
         {
+            if (string.IsNullOrWhiteSpace(chatJid) || message == null)
+            {
+                return;
+            }
+
             QueueOfflineReplayMessageForPersist(chatJid, message);
+            SchedulePersist();
         }
+
         /// <summary>
         /// Offline fast-path counterpart of the full duplicate enrichment: fill in a blank
         /// participant or sender name from the envelope without re-running render / UI work.
