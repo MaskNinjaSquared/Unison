@@ -300,6 +300,41 @@ namespace Unison.Core.State
         }
 
         /// <summary>
+        /// A copy of the conversation's timeline. When nothing is held under the address itself,
+        /// the first conversation whose canonical form matches is used, so a chat still kept under
+        /// its LID or phone alias is found either way. Empty when there is none.
+        /// </summary>
+        public List<ChatMessage> CopyConversation(string chatJid, Func<string, string> canonicalOf)
+        {
+            if (canonicalOf == null)
+            {
+                throw new ArgumentNullException(nameof(canonicalOf));
+            }
+
+            if (string.IsNullOrWhiteSpace(chatJid))
+            {
+                return new List<ChatMessage>();
+            }
+
+            string key = JidHelper.Normalize(chatJid);
+            List<ChatMessage> messages;
+            if (!TryGet(key, out messages) || messages == null)
+            {
+                string canonical = canonicalOf(key);
+                foreach (KeyValuePair<string, List<ChatMessage>> pair in Snapshot())
+                {
+                    if (string.Equals(canonicalOf(pair.Key), canonical, StringComparison.OrdinalIgnoreCase))
+                    {
+                        messages = pair.Value;
+                        break;
+                    }
+                }
+            }
+
+            return messages != null ? new List<ChatMessage>(messages) : new List<ChatMessage>();
+        }
+
+        /// <summary>
         /// Puts a message in time order, trims the window to <paramref name="capacity"/> and
         /// registers the id — in that order, so an old message trimmed straight away still counts
         /// as seen. UI thread, like every in-place edit.

@@ -376,6 +376,52 @@ public class ChatMessageCacheTests
     }
 
     [Fact]
+    public void Copying_a_conversation_returns_a_copy_of_its_timeline()
+    {
+        var cache = new ChatMessageCache();
+        List<ChatMessage> live = cache.GetOrAdd(Ana);
+        live.Add(At("A", 1));
+
+        List<ChatMessage> copy = cache.CopyConversation(Ana, key => key);
+
+        Assert.NotSame(live, copy);
+        Assert.Equal(new[] { "A" }, copy.Select(m => m.Id));
+    }
+
+    [Fact]
+    public void Copying_a_conversation_held_under_its_alias_finds_it_by_canonical_address()
+    {
+        var cache = new ChatMessageCache();
+        cache.GetOrAdd(AnaLid).Add(At("A", 1));
+
+        List<ChatMessage> copy = cache.CopyConversation(Ana, key => key == AnaLid ? Ana : key);
+
+        Assert.Equal(new[] { "A" }, copy.Select(m => m.Id));
+    }
+
+    [Fact]
+    public void Copying_prefers_the_exact_conversation_over_an_alias()
+    {
+        var cache = new ChatMessageCache();
+        cache.GetOrAdd(AnaLid).Add(At("L", 1));
+        cache.GetOrAdd(Ana).Add(At("P", 1));
+
+        List<ChatMessage> copy = cache.CopyConversation(Ana, key => Ana);
+
+        Assert.Equal(new[] { "P" }, copy.Select(m => m.Id));
+    }
+
+    [Fact]
+    public void Copying_an_unknown_or_blank_conversation_returns_an_empty_list()
+    {
+        var cache = new ChatMessageCache();
+        cache.GetOrAdd(AnaLid).Add(At("A", 1));
+
+        Assert.Empty(cache.CopyConversation(Ana, key => key));
+        Assert.Empty(cache.CopyConversation(" ", key => key));
+    }
+
+    [Fact]
     public void Upserting_replaces_by_id_adds_the_rest_and_keeps_time_order()
     {
         var cache = new ChatMessageCache();
