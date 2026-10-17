@@ -18,6 +18,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
+using Unison.Core.State;
 
 namespace Unison.Uwp.Services.WhatsApp.Contacts
 {
@@ -30,6 +31,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private const int BatchSize = 16;
 
         private readonly IWhatsAppService _whatsAppService;
+        private readonly IChatStateStore _chatState;
         private readonly IDispatcher _ui;
         private readonly IChatCatalogPersistence _catalog;
         private readonly IGroupService _groups;
@@ -50,10 +52,12 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             IContactService contacts,
             IJidResolver jids,
             IDispatcher ui,
-            IChatCatalogPersistence catalog)
+            IChatCatalogPersistence catalog,
+            IChatStateStore chatState)
         {
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
+            _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
             _groups = groups ?? throw new ArgumentNullException(nameof(groups));
             _contacts = contacts ?? throw new ArgumentNullException(nameof(contacts));
@@ -529,7 +533,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
         private ChatItem FindGroup(string groupJid)
         {
-            foreach (ChatItem chat in _whatsAppService.Chats)
+            foreach (ChatItem chat in _chatState.Chats)
             {
                 if (chat == null)
                 {

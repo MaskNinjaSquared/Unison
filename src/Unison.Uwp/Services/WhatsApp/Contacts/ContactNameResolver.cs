@@ -20,6 +20,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
+using Unison.Core.State;
 using Unison.Uwp.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp.Contacts
@@ -43,6 +44,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly ContactUsyncResolver _usync;
         private readonly IJidResolver _jids;
         private readonly PushNameLookup _pushNames;
+        private readonly IChatStateStore _chatState;
 
         private DateTime _lastRefreshUtc = DateTime.MinValue;
         private volatile bool _isRunning;
@@ -56,9 +58,11 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             PushNameLookup pushNames,
             IGroupService groups,
             IDispatcher ui,
-            IChatCatalogPersistence catalog)
+            IChatCatalogPersistence catalog,
+            IChatStateStore chatState)
         {
             _pushNames = pushNames ?? throw new ArgumentNullException(nameof(pushNames));
+            _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
@@ -123,7 +127,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 await _ui.RunAsync(() =>
                 {
                     var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                    foreach (ChatItem chat in _whatsAppService.Chats)
+                    foreach (ChatItem chat in _chatState.Chats)
                     {
                         if (chat == null || chat.IsGroup || string.IsNullOrEmpty(chat.JID))
                         {
@@ -205,7 +209,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             var list = new List<ChatItem>();
             await _ui.RunAsync(() =>
             {
-                foreach (var c in _whatsAppService.Chats) list.Add(c);
+                foreach (var c in _chatState.Chats) list.Add(c);
             });
 
             Debug.WriteLine($"[ContactNameResolver] ResolveMissing scanning {list.Count} chats...");

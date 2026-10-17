@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Threading;
 using System.Threading.Tasks;
 using Proto;
@@ -12,7 +11,6 @@ namespace Unison.Core.Contracts.WhatsApp
 {
     public interface IWhatsAppService
     {
-        ObservableCollection<ChatItem> Chats { get; }
         string CurrentConnectionStatus { get; }
         string CurrentUserName { get; set; }
         string CurrentUserAvatar { get; set; }

@@ -30,6 +30,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly IDispatcher _ui;
         private readonly IJidResolver _jids;
         private readonly DisplayNameTable _addressBookNames;
+        private readonly IChatStateStore _chatState;
 
         internal AddressBookOverlay(
             ILocalContactsService localContacts,
@@ -37,8 +38,10 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             IWhatsAppService whatsAppService,
             IJidResolver jids,
             IDispatcher ui,
-            DisplayNameTable addressBookNames)
+            DisplayNameTable addressBookNames,
+            IChatStateStore chatState)
         {
+            _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _localContacts = localContacts ?? throw new ArgumentNullException(nameof(localContacts));
             _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
@@ -206,7 +209,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             {
                 jids = new List<string>();
                 var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var chat in _whatsAppService.Chats)
+                foreach (var chat in _chatState.Chats)
                 {
                     if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
                     {

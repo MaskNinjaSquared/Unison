@@ -23,6 +23,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
+using Unison.Core.State;
 using Unison.Uwp.Services;
 
 namespace Unison.Uwp.Services.WhatsApp.Contacts
@@ -39,6 +40,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private const string GroupAvatarFallbackMissReason = "group-avatar-fallback-miss";
 
         private readonly IWhatsAppService _whatsAppService;
+        private readonly IChatStateStore _chatState;
         private readonly IDispatcher _ui;
         private readonly IChatCatalogPersistence _catalog;
         private readonly IJidResolver _jids;
@@ -51,8 +53,9 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly HashSet<string> _viewportPriority = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         internal ChatAvatarPolicy(IWhatsAppService whatsAppService, IJidResolver jids, ChatAvatarFetch fetch, IDispatcher ui,
-            IChatCatalogPersistence catalog)
+            IChatCatalogPersistence catalog, IChatStateStore chatState)
         {
+            _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
@@ -202,7 +205,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 // it from the UI thread - a visible row, a failed image, an alias discovery
                 // already marshalled - so reading it is safe on this path only.
                 if (!force && !firstVisibleRetryThisSession &&
-                    (!NeedsRefresh(chat, nowUtc, _whatsAppService.Chats) || IsBackoffActive(chat, nowUtc)))
+                    (!NeedsRefresh(chat, nowUtc, _chatState.Chats) || IsBackoffActive(chat, nowUtc)))
                 {
                     return;
                 }
@@ -282,7 +285,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         {
             List<ChatItem> snapshot = null;
             await _ui.RunAsync(
-                () => snapshot = _whatsAppService.Chats.Where(c => c != null).ToList());
+                () => snapshot = _chatState.Chats.Where(c => c != null).ToList());
             return snapshot ?? new List<ChatItem>();
         }
 

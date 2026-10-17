@@ -46,6 +46,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly JidAliasTable _aliases;
         private readonly DisplayNameTable _pushNames;
         private readonly DisplayNameTable _addressBookNames;
+        private readonly IChatStateStore _chatState;
 
         private readonly ContactDirectory _directory;
         private readonly AddressBookOverlay _addressBook;
@@ -88,7 +89,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             if (usyncGate == null) throw new ArgumentNullException(nameof(usyncGate));
             if (groups == null) throw new ArgumentNullException(nameof(groups));
             if (avatars == null) throw new ArgumentNullException(nameof(avatars));
-            if (chats == null) throw new ArgumentNullException(nameof(chats));
+            _chatState = chats ?? throw new ArgumentNullException(nameof(chats));
             if (avatarReport == null) throw new ArgumentNullException(nameof(avatarReport));
             if (avatarCache == null) throw new ArgumentNullException(nameof(avatarCache));
 
@@ -104,7 +105,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
             var labels = new ContactLabelSanitizer(selfMarkers);
             _directory = new ContactDirectory(sessions, lidMappings);
-            _addressBook = new AddressBookOverlay(localContacts, personStore, whatsAppService, jids, ui, addressBookNames);
+            _addressBook = new AddressBookOverlay(localContacts, personStore, whatsAppService, jids, ui, addressBookNames, chats);
             _usync = new ContactUsyncResolver(
                 whatsAppService,
                 _directory,
@@ -124,14 +125,16 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 new PushNameLookup(pushNames, aliases, labels),
                 groups,
                 ui,
-                catalog);
+                catalog,
+                chats);
             _avatars = new ChatAvatarPolicy(
                 whatsAppService,
                 jids,
                 new ChatAvatarFetch(whatsAppService, sessions, groups, jids, chats, avatarReport, avatars, avatarCache, ui, catalog),
                 ui,
-                catalog);
-            _roster = new GroupRosterPolicy(whatsAppService, groups, this, jids, ui, catalog);
+                catalog,
+                chats);
+            _roster = new GroupRosterPolicy(whatsAppService, groups, this, jids, ui, catalog, chats);
 
             // Both live as long as the app does, so there is nothing to unhook from.
             _whatsAppService.OnDisplayNamesUpdated += (s, e) =>
@@ -524,13 +527,13 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
         private void CollectWindowsContactExports(List<AppContactExport> into)
         {
-            if (into == null || _whatsAppService.Chats == null)
+            if (into == null)
             {
                 return;
             }
 
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (ChatItem chat in _whatsAppService.Chats)
+            foreach (ChatItem chat in _chatState.Chats)
             {
                 if (chat == null ||
                     chat.IsGroup ||
