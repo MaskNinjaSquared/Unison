@@ -18,6 +18,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using Unison.Core.Helpers;
+using Unison.Core.Models;
 
 namespace Unison.Core.State
 {
@@ -36,6 +37,7 @@ namespace Unison.Core.State
 
         private Func<string> _selfId;
         private Func<string> _selfLid;
+        private Func<string> _selfPhone;
 
         /// <summary>
         /// Raised when the map changed, which is what lets caches keyed by canonical address
@@ -54,10 +56,34 @@ namespace Unison.Core.State
         /// existing auth state, so a snapshot taken here would be a snapshot of null, and the
         /// self-poisoning guards below would quietly stop firing.
         /// </summary>
-        public void BindSelf(Func<string> selfId, Func<string> selfLid)
+        /// <param name="selfPhone">The account's phone digits, when known apart from its id. Optional.</param>
+        public void BindSelf(Func<string> selfId, Func<string> selfLid, Func<string> selfPhone = null)
         {
             _selfId = selfId;
             _selfLid = selfLid;
+            _selfPhone = selfPhone;
+        }
+
+        /// <summary>
+        /// The logged-in account's addresses, or null before pairing. Identity only: no name and
+        /// no picture, which belong to the profile rather than to the address table.
+        /// </summary>
+        public Profile Self
+        {
+            get
+            {
+                if (!HasSelf)
+                {
+                    return null;
+                }
+
+                return new Profile
+                {
+                    Id = SelfId,
+                    Lid = SelfLid,
+                    Phone = _selfPhone == null ? null : _selfPhone()
+                };
+            }
         }
 
         // ---------------------------------------------------------------------

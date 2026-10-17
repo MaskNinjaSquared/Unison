@@ -32,7 +32,10 @@ namespace Unison.Core.Contracts
         /// </summary>
         bool IsSelfLinked(string jid);
 
-        /// <summary>The logged-in account, or null before pairing.</summary>
+        /// <summary>
+        /// The logged-in account's addresses (<c>Id</c>, <c>Lid</c>, <c>Phone</c>), or null before
+        /// pairing. No name or picture: ask the profile service for those.
+        /// </summary>
         Profile Self { get; }
     }
 }
