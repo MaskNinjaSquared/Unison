@@ -7,8 +7,8 @@
 //
 // The push name, the "listed without a picture" check and the picture fetch
 // are done here. Filing the pair (socket registration, identity heal) and
-// merging the two chats still go through narrow primitives on the client,
-// which owns the auth state and the row surgery.
+// merging the two chats goes through ChatListAliasMerge; filing the pair still needs
+// the client for socket registration and identity healing.
 // What this class owns is everything that decides: which numbers to ask
 // about, the gate that keeps usync from competing with itself, and the plan.
 // =============================================================================
@@ -40,6 +40,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly AvatarFetcher _avatars;
         private readonly IDispatcher _ui;
         private readonly ChatNameRefresh _nameRefresh;
+        private readonly ChatListAliasMerge _aliasMerge;
 
         internal ContactUsyncResolver(
             IWhatsAppService client,
@@ -51,11 +52,13 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             IChatStateStore chats,
             AvatarFetcher avatars,
             IDispatcher ui,
-            ChatNameRefresh nameRefresh)
+            ChatNameRefresh nameRefresh,
+            ChatListAliasMerge aliasMerge)
         {
             _avatars = avatars ?? throw new ArgumentNullException(nameof(avatars));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _nameRefresh = nameRefresh ?? throw new ArgumentNullException(nameof(nameRefresh));
+            _aliasMerge = aliasMerge ?? throw new ArgumentNullException(nameof(aliasMerge));
             _client = client ?? throw new ArgumentNullException(nameof(client));
             _directory = directory ?? throw new ArgumentNullException(nameof(directory));
             _gate = gate ?? throw new ArgumentNullException(nameof(gate));
@@ -177,7 +180,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
             if (plan.MergeDuplicateChats)
             {
-                _ = _client.MergeDuplicateChatsAsync(lid, user);
+                _ = _aliasMerge.MergeAsync(lid, user);
             }
 
             // Not awaited: the picture fetch queues behind the same usync gate this pass is holding.

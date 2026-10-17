@@ -326,6 +326,13 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ChatRowIndex>(),
                 sp.GetRequiredService<JidAliasTable>(),
                 sp.GetRequiredService<ChatStateStore>().PushNames));
+            services.AddSingleton(sp => new ChatListAliasMerge(
+                sp.GetRequiredService<AttachedUiDispatcher>(),
+                sp.GetRequiredService<ChatStateStore>(),
+                sp.GetRequiredService<JidAliasTable>(),
+                sp.GetRequiredService<ChatListDeduper>()));
+            services.AddSingleton(sp => new UsyncAliasFiling(
+                sp.GetRequiredService<JidAliasTable>()));
             services.AddSingleton<IWhatsAppService>(
                 sp => WhatsAppService.Create(
                     sp.GetRequiredService<ChatStateStore>(),
@@ -353,7 +360,8 @@ namespace Unison.Uwp
                     sp.GetRequiredService<ChatPreviewReconciler>(),
                     sp.GetRequiredService<ChatNameRefresh>(),
                     sp.GetRequiredService<StoredChatPreviewRefresh>(),
-                    sp.GetRequiredService<ChatListDeduper>()));
+                    sp.GetRequiredService<ChatListDeduper>(),
+                    sp.GetRequiredService<UsyncAliasFiling>()));
             // The send flow lives on MessageFacade; the timeline caches and the socket it writes
             // through are still the client's, reached only through this narrow port.
             services.AddSingleton<IOutgoingMessageHost>(
@@ -480,7 +488,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<SyncBudget>(),
                 sp.GetRequiredService<SyncWorkloadStrategy>(),
                 sp.GetRequiredService<InitialSyncProgressState>(),
-                sp.GetRequiredService<ChatNameRefresh>()));
+                sp.GetRequiredService<ChatNameRefresh>(),
+                sp.GetRequiredService<ChatListAliasMerge>()));
             services.AddSingleton<IOfflineReplayHost>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IChatService>(sp => new ChatFacade(
@@ -498,7 +507,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IShortcutService>(),
                 sp.GetRequiredService<StoredChatPreviewRefresh>(),
                 sp.GetRequiredService<ChatListDeduper>(),
-                sp.GetRequiredService<IChatIdentityPersistence>()));
+                sp.GetRequiredService<IChatIdentityPersistence>(),
+                sp.GetRequiredService<ChatListAliasMerge>()));
             // After IChatService: the projection persists resolved strip rows so cold start keeps names.
             services.AddSingleton<IChatAuthorProjection>(sp => new ChatAuthorProjection(
                 sp.GetRequiredService<IChatStateStore>(),

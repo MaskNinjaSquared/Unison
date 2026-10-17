@@ -705,11 +705,12 @@ against `IJidResolver`), `IUsyncGate`, the session (`ContactDirectory.GetReadySe
 calls it instead of the client, and the number-search fallback (`SearchContactAsync`) now lives on
 the façade. `ResolveContactsAsync` and `SearchContactAsync` are gone from `IWhatsAppService`.
 
-What the client keeps is two narrow, façade-only primitives over what it still owns:
-`TryFileUsyncAlias` (accept, write both directions, register with the socket, heal our identity
-in the auth state) and `MergeDuplicateChatsAsync` (chat-row surgery). They go with the auth state —
-phase 4 — and with the row surgery. `FetchAvatarForResolvedContactAsync` was a third until the
-resolver took it: it fetches through the shared `AvatarFetcher` and stamps the row
+What the client keeps is one narrow, façade-only primitive over what it still owns:
+`TryFileUsyncAlias` — after `UsyncAliasFiling` accepts and writes both directions, register
+with the socket and heal our identity in the auth state. Chat-row surgery is
+`ChatListAliasMerge` on the chat façade / usync resolver (see phase 4).
+`FetchAvatarForResolvedContactAsync` was a second until the resolver took it: it fetches
+through the shared `AvatarFetcher` and stamps the row
 `UsyncContactCaches.FindListedChatWithoutAvatar` picks, the same row the fetch decision looked at.
 
 **Three primitives left once their tables were Core types.** The alias table (`JidAliasTable`) and
@@ -1392,6 +1393,20 @@ schedules the catalogue save, raises display-name listeners through `IContactSer
 asks `IChatIdentityPersistence` (the client) to write names and aliases immediately when
 rows merged. The member left `IWhatsAppService`; the client still runs the helper from its
 own alias and startup paths.
+
+**Alias-row merge is `ChatListAliasMerge`.** (Core, DI singleton over the UI dispatcher,
+`ChatStateStore`, `JidAliasTable` and `ChatListDeduper`.) When a LID and a phone already
+share a canonical id it runs ordinary dedupe; otherwise it folds the LID timeline into the
+phone row and drops the LID chat. `ChatFacade` owns the fire-and-forget entry used when a
+new list row arrives with an unresolved alias pair. `ContactUsyncResolver` calls the helper
+directly (not through `IChatService`) so DI does not cycle through `IContactService`.
+`MergeDuplicateChatsAsync` and `RequestAliasChatMerge` left `IWhatsAppService`.
+
+**Usync table filing is `UsyncAliasFiling`.** (Core, DI singleton over `JidAliasTable`.) It
+runs `AliasPairPolicy` and `AliasPairFiling.FileBothWays`, then returns the accepted pair.
+`TryFileUsyncAlias` stays on the client as a thin forward: after a successful file it
+registers the pair with the live socket and heals our own identity in the auth state — both
+need session and auth the Core type must not own.
 
 **Done when:** `.Connection.cs` + a small main file; no façade needs send/history/avatar/group/list methods on the client; leftover `IWhatsAppSocket` drop is [Migration](Migration) item 9, after this.
 

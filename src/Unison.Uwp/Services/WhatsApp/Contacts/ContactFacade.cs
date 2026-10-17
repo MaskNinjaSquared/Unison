@@ -87,7 +87,8 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             SyncBudget syncBudget,
             SyncWorkloadStrategy workload,
             InitialSyncProgressState initialSync,
-            ChatNameRefresh nameRefresh)
+            ChatNameRefresh nameRefresh,
+            ChatListAliasMerge aliasMerge)
         {
             _displayNames = displayNames ?? throw new ArgumentNullException(nameof(displayNames));
             _nameRefresh = nameRefresh ?? throw new ArgumentNullException(nameof(nameRefresh));
@@ -129,7 +130,8 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 chats,
                 avatars,
                 ui,
-                nameRefresh);
+                nameRefresh,
+                aliasMerge);
             _names = new ContactNameResolver(
                 whatsAppService,
                 _addressBook,

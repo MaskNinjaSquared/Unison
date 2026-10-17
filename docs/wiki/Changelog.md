@@ -1,6 +1,15 @@
 # Changelog
 
-Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, the product “What’s New” notes, the Socket Broker work, v6.9, and v6.8. It is not a substitute for git history.
+Newest first.
+
+## Alias merge and usync filing left the client
+
+Collapsing a LID chat into its phone row is `ChatListAliasMerge`. Filing an accepted usync
+pair into the alias table is `UsyncAliasFiling`. The chat façade and the usync resolver call
+the merge helper; the client only keeps `TryFileUsyncAlias` so it can register the pair with
+the live socket and heal our own identity afterward. `MergeDuplicateChatsAsync` and
+`RequestAliasChatMerge` left `IWhatsAppService`.
+ This is a wiki-facing merge of the Unison.Socket architecture PR, the product “What’s New” notes, the Socket Broker work, v6.9, and v6.8. It is not a substitute for git history.
 
 ---
 

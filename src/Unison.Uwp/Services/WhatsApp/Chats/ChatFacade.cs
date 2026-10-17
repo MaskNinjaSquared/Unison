@@ -65,6 +65,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
         private readonly StoredChatPreviewRefresh _storedPreviews;
         private readonly ChatListDeduper _deduper;
         private readonly IChatIdentityPersistence _identity;
+        private readonly ChatListAliasMerge _aliasMerge;
         private readonly OfflineReplayTips _offlineReplayTips;
 
         /// <summary>Short enough that the first recovered chat shows while a long replay continues.</summary>
@@ -85,7 +86,8 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             IShortcutService shortcuts,
             StoredChatPreviewRefresh storedPreviews,
             ChatListDeduper deduper,
-            IChatIdentityPersistence identity)
+            IChatIdentityPersistence identity,
+            ChatListAliasMerge aliasMerge)
         {
             if (offlineReplay == null)
             {
@@ -116,6 +118,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             _storedPreviews = storedPreviews ?? throw new ArgumentNullException(nameof(storedPreviews));
             _deduper = deduper ?? throw new ArgumentNullException(nameof(deduper));
             _identity = identity ?? throw new ArgumentNullException(nameof(identity));
+            _aliasMerge = aliasMerge ?? throw new ArgumentNullException(nameof(aliasMerge));
             _offlineReplayTips = new OfflineReplayTips(
                 _jids,
                 offlineReplay,
@@ -491,6 +494,16 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
                 $"[ChatFacade] Reconciled {result.Refreshed} chat previews from cached messages " +
                 $"(created={result.Created}, reason={reason})");
         }
+        public Task MergeDuplicateChatsAsync(string lidJid, string pnJid)
+        {
+            return _aliasMerge.MergeAsync(lidJid, pnJid);
+        }
+
+        public void RequestAliasChatMerge(string lidJid, string pnJid)
+        {
+            _ = _aliasMerge.MergeAsync(lidJid, pnJid);
+        }
+
         public void RequestChatListDedup(string reason)
         {
             _ = RunChatListDedupAsync(reason);
@@ -693,7 +706,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
 
                 if (!string.IsNullOrWhiteSpace(aliasLid) && !string.IsNullOrWhiteSpace(aliasPn))
                 {
-                    _appState.RequestAliasChatMerge(aliasLid, aliasPn);
+                    RequestAliasChatMerge(aliasLid, aliasPn);
                 }
 
                 if (PlaceholderChatLabel.IsPlaceholder(

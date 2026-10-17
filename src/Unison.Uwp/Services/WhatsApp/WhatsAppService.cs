@@ -688,6 +688,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly ChatNameRefresh _nameRefresh;
         private readonly StoredChatPreviewRefresh _storedPreviews;
         private readonly ChatListDeduper _deduper;
+        private readonly UsyncAliasFiling _usyncAliases;
 
         public DisplayNameTable ContactNames => _chatState.PushNames;
         public DisplayNameTable PhoneContactNamesByJid => _chatState.AddressBookNames;
@@ -753,8 +754,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private List<ChatItem> GetChatRowsForCanonicalJid(string jid) => _chatRows.FindConversation(jid);
 
 
-        void IWhatsAppService.RequestAliasChatMerge(string lidJid, string pnJid) =>
-            _ = CheckAndMergeDuplicateChatsAsync(lidJid, pnJid);
 
         /// <summary>
         /// Drops the row index. Called whenever the list changes or a JID stops resolving to what
@@ -1028,7 +1027,8 @@ namespace Unison.Uwp.Services.WhatsApp
             ChatPreviewReconciler previewReconciler,
             ChatNameRefresh nameRefresh,
             StoredChatPreviewRefresh storedPreviews,
-            ChatListDeduper deduper)
+            ChatListDeduper deduper,
+            UsyncAliasFiling usyncAliases)
         {
             if (chatState == null)
             {
@@ -1051,6 +1051,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _nameRefresh.Applied += OnChatNamesApplied;
             _storedPreviews = storedPreviews ?? throw new ArgumentNullException(nameof(storedPreviews));
             _deduper = deduper ?? throw new ArgumentNullException(nameof(deduper));
+            _usyncAliases = usyncAliases ?? throw new ArgumentNullException(nameof(usyncAliases));
             _chatRows = chatRows ?? throw new ArgumentNullException(nameof(chatRows));
             _activeChat = activeChat ?? throw new ArgumentNullException(nameof(activeChat));
             _activeChat.Changed += OnActiveChatChanged;
@@ -1131,11 +1132,12 @@ namespace Unison.Uwp.Services.WhatsApp
             ChatPreviewReconciler previewReconciler,
             ChatNameRefresh nameRefresh,
             StoredChatPreviewRefresh storedPreviews,
-            ChatListDeduper deduper)
+            ChatListDeduper deduper,
+            UsyncAliasFiling usyncAliases)
         {
             return _instance ?? (_instance = new WhatsAppService(
                 chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
-                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, previewReconciler, nameRefresh, storedPreviews, deduper));
+                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, previewReconciler, nameRefresh, storedPreviews, deduper, usyncAliases));
         }
 
         /// <summary>
@@ -4204,34 +4206,6 @@ namespace Unison.Uwp.Services.WhatsApp
         /// unread, preview, avatar). Without it the fold cannot tell they are one person, so
         /// only the messages move and the LID row goes.
         /// </remarks>
-        private async Task CheckAndMergeDuplicateChatsAsync(string lidJid, string pnJid)
-        {
-            if (string.IsNullOrEmpty(lidJid) || string.IsNullOrEmpty(pnJid)) return;
-            string normLidJid = NormalizeJid(lidJid);
-            string normPnJid = NormalizeJid(pnJid);
-
-            if (string.Equals(GetCanonicalJid(normLidJid), GetCanonicalJid(normPnJid), StringComparison.OrdinalIgnoreCase))
-            {
-                await DeduplicateChatsAsync("alias-merge");
-                return;
-            }
-
-            await _ui.RunAsync(() =>
-            {
-                var lidChat = Chats.FirstOrDefault(c => NormalizeJid(c.JID) == normLidJid);
-                var pnChat = Chats.FirstOrDefault(c => NormalizeJid(c.JID) == normPnJid);
-
-                if (lidChat != null && pnChat != null && lidChat != pnChat)
-                {
-                    Log($"[WhatsAppService] Merging duplicate chats: {normLidJid} -> {normPnJid}");
-                    
-                    MessagesByChat.MergeInto(normLidJid, normPnJid);
-
-                    // 2. Remove LID chat from UI
-                    Chats.Remove(lidChat);
-                }
-            });
-        }
 
         private string NormalizeJid(string jid)
         {
@@ -4401,23 +4375,17 @@ namespace Unison.Uwp.Services.WhatsApp
 
         public bool TryFileUsyncAlias(string userJid, string lidJid, out bool wasAlreadyAliased)
         {
-            string normalizedUser = NormalizeJid(userJid);
-            string normalizedLid = NormalizeJid(lidJid);
-            wasAlreadyAliased = !string.IsNullOrEmpty(normalizedLid) && JidAlias.ContainsKey(normalizedLid);
-            if (string.IsNullOrEmpty(normalizedUser) || string.IsNullOrEmpty(normalizedLid) ||
-                !AliasPairPolicy.TryAcceptPair(normalizedLid, normalizedUser, JidAlias, out string acceptedLid, out string acceptedPn))
+            UsyncAliasFilingResult result = _usyncAliases.TryFile(userJid, lidJid);
+            wasAlreadyAliased = result.WasAlreadyAliased;
+            if (!result.Filed)
             {
                 return false;
             }
 
-            AliasPairFiling.FileBothWays(JidAlias, acceptedLid, acceptedPn);
-            RegisterSocketAlias(normalizedUser, normalizedLid, "contact-usync");
-            HealOwnIdentity(normalizedUser, normalizedLid);
+            RegisterSocketAlias(result.AcceptedPn, result.AcceptedLid, "contact-usync");
+            HealOwnIdentity(result.AcceptedPn, result.AcceptedLid);
             return true;
         }
-
-        public Task MergeDuplicateChatsAsync(string lidJid, string pnJid) =>
-            CheckAndMergeDuplicateChatsAsync(NormalizeJid(lidJid), NormalizeJid(pnJid));
 
         /// <summary>
         /// Reconciles our own identity with what the server just said. A companion learns its LID

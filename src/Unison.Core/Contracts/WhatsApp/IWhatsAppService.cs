@@ -136,16 +136,8 @@ namespace Unison.Core.Contracts.WhatsApp
         /// before the write.
         /// </summary>
         bool TryFileUsyncAlias(string userJid, string lidJid, out bool wasAlreadyAliased);
-
-        /// <summary>Collapses the LID and phone rows of one person into one chat.</summary>
-        Task MergeDuplicateChatsAsync(string lidJid, string pnJid);
-
-
         /// <summary>Schedules another background resolution pass (names+avatars+groups) after a delay.</summary>
         void ScheduleDeferredAvatarResolution(string reason, TimeSpan? delay = null);
-
-        /// <summary>Schedules a PN/LID duplicate-row merge scan.</summary>
-        void RequestAliasChatMerge(string lidJid, string pnJid);
 
         /// <summary>
         /// Writes the account's chat-list pin to the in-memory rows and to the local mirror,
