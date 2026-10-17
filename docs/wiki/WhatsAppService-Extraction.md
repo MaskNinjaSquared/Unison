@@ -650,9 +650,14 @@ self-marker spoofs, and strips marker suffixes. **The self-marker rule is spoof 
 contact can set their push name to "(You)" and, without it, their messages render as the user's own.
 That had no test.
 
-`DisplayNameResolution` is the precedence between the survivors: what the app learned, then the
-device address book, then the contact's own push name, then the number. Only the third gets the `~`,
-and not in groups or above message bubbles.
+`DisplayNameResolution` is the precedence between the survivors: the device address book (the
+overlay, or a stored person whose `PersonSource` is `AddressBook`), then what the app learned, then
+the contact's own push name, then the number. The ranking is the `NameSource` enum, and
+`NameSourceRules.CanBeReplacedBy` is the single rule for both reading and writing:
+`Person.CanWriteName` converts both `PersonSource`s with `ToNameSource()` and asks it, so the store
+cannot keep a name the display would outrank. `PersonSource` stays the persisted value (INTEGER in
+SQLite; `DirectChat` says nothing about the name, so it maps to `Learned`). Only push names get the
+`~`, and not in groups or above message bubbles.
 
 Both take the shape this extraction keeps arriving at. The marker is localized, so recognising it
 stays in the UWP head behind `ISelfMarkerNaming`; the lookups stay too, because they warm a SQLite
