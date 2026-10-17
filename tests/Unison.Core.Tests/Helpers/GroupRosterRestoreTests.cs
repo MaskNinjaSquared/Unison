@@ -35,7 +35,7 @@ namespace Unison.Core.Tests.Helpers
             Assert.Equal(new[] { Group }, fixture.Announced);
             Assert.Equal(new[] { Group }, fixture.Store.Asked);
             Assert.True(fixture.Store.Initialized);
-            Assert.Equal(2, fixture.Host.UiPasses);
+            Assert.Equal(2, fixture.Ui.Passes);
         }
 
         [Fact]
@@ -49,7 +49,7 @@ namespace Unison.Core.Tests.Helpers
             await fixture.Restore.EnsureLoadedAsync(null);
 
             Assert.Empty(fixture.Store.Asked);
-            Assert.Equal(0, fixture.Host.UiPasses);
+            Assert.Equal(0, fixture.Ui.Passes);
         }
 
         [Fact]
@@ -77,7 +77,7 @@ namespace Unison.Core.Tests.Helpers
 
             Assert.False(chat.HasGroupMembers);
             Assert.Empty(fixture.Announced);
-            Assert.Equal(2, fixture.Host.UiPasses);
+            Assert.Equal(2, fixture.Ui.Passes);
         }
 
         [Fact]
@@ -101,10 +101,12 @@ namespace Unison.Core.Tests.Helpers
             {
                 Chats = new ChatStateStore(new InlineDispatcher());
                 Chats.GroupRosterChanged += (s, jid) => Announced.Add(jid);
-                Restore = new GroupRosterRestore(Host, Jids, Chats, Store);
+                Restore = new GroupRosterRestore(Host, Ui, Jids, Chats, Store);
             }
 
             public FakeGroupHost Host { get; } = new FakeGroupHost();
+
+            public CountingDispatcher Ui { get; } = new CountingDispatcher();
 
             public FakeJids Jids { get; } = new FakeJids();
 

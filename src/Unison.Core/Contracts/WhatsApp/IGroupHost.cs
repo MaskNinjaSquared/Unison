@@ -21,9 +21,6 @@ namespace Unison.Core.Contracts.WhatsApp
     /// </remarks>
     public interface IGroupHost
     {
-        /// <summary>Runs on the UI thread, or not at all when no dispatcher is attached yet.</summary>
-        Task RunOnUiThreadAsync(Action action);
-
         /// <summary>The label a member shows in the roster. Never null; falls back to the JID.</summary>
         string ResolveMemberDisplayName(string jid);
 

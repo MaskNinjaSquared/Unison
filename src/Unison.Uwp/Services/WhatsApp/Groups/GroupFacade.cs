@@ -36,6 +36,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
         private readonly IWhatsAppService _client;
         private readonly IWhatsAppSessionProvider _sessions;
         private readonly IGroupHost _host;
+        private readonly IDispatcher _ui;
         private readonly IChatStateStore _chats;
         private readonly IJidResolver _jids;
         private readonly GroupMetadataReader _reader;
@@ -60,7 +61,8 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
             IUsyncGate usyncGate,
             SyncStatusChannel syncStatus,
             SyncWorkGate syncWork,
-            SyncWorkloadStrategy workload)
+            SyncWorkloadStrategy workload,
+            IDispatcher ui)
         {
             _client = client ?? throw new ArgumentNullException(nameof(client));
             _workload = workload ?? throw new ArgumentNullException(nameof(workload));
@@ -68,6 +70,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
             _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
             _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
             _host = host ?? throw new ArgumentNullException(nameof(host));
+            _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _chats = chats ?? throw new ArgumentNullException(nameof(chats));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _apply = apply ?? throw new ArgumentNullException(nameof(apply));
@@ -154,7 +157,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
                 return;
             }
 
-            await _host.RunOnUiThreadAsync(() => chat.AvatarHighUrl = localUri);
+            await _ui.RunAsync(() => chat.AvatarHighUrl = localUri);
         }
 
         public async Task<GroupMemberAvatarFetchResult> FetchGroupMemberAvatarAsync(
@@ -343,7 +346,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
             }
 
             var unresolved = new List<ChatItem>();
-            await _host.RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 foreach (var chat in _chats.Chats)
                 {

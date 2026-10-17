@@ -1226,6 +1226,11 @@ Rename-able to `IWhatsAppConnection` / keep `IWhatsAppService` until the last ca
 
 Drop `RunOnUiThreadAsync` (`IDispatcher`) and `SchedulePersistPublic` (the writer persists). `App` lifecycle calls `IConnectionService`, not `App.GetWhatsAppService()`.
 
+**`RunOnUiThreadAsync` is gone.** The client calls its `AttachedUiDispatcher` directly, and
+`IGroupHost` no longer carries a UI hop: `GroupMetadataApply`, `GroupRosterRestore` and
+`GroupFacade` take `IDispatcher` in their constructors. The tests count hops on a
+`CountingDispatcher` instead of the fake host.
+
 **Step 1 is done: the app lifecycle goes through the façade.** `IConnectionService` gained
 `ResumeAsync`, `ReleaseMemoryAsync`, `TransferActiveSocketToBrokerAsync`, `PrepareForSuspendAsync`
 and `ShutdownAsync`. `ConnectionFacade` forwards them to the client the way it already forwarded

@@ -19,17 +19,20 @@ namespace Unison.Core.Helpers
         private const string GroupServer = "@g.us";
 
         private readonly IGroupHost _host;
+        private readonly IDispatcher _ui;
         private readonly IJidResolver _jids;
         private readonly IChatStateStore _chats;
         private readonly IGroupRosterStore _store;
 
         public GroupRosterRestore(
             IGroupHost host,
+            IDispatcher ui,
             IJidResolver jids,
             IChatStateStore chats,
             IGroupRosterStore store)
         {
             _host = host ?? throw new ArgumentNullException(nameof(host));
+            _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _chats = chats ?? throw new ArgumentNullException(nameof(chats));
             _store = store ?? throw new ArgumentNullException(nameof(store));
@@ -51,7 +54,7 @@ namespace Unison.Core.Helpers
 
             ChatItem target = null;
             bool needsLoad = false;
-            await _host.RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 target = _chats.Chats.FirstOrDefault(c =>
                     c != null &&
@@ -82,7 +85,7 @@ namespace Unison.Core.Helpers
                 return;
             }
 
-            await _host.RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 if (GroupRosterRules.ApplyRestored(target, hydrated))
                 {

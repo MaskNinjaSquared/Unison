@@ -57,7 +57,7 @@ namespace Unison.Core.Tests.Helpers
             await f.Apply.ApplyListingAsync(new Dictionary<string, GroupMetadataSnapshot>());
             await f.Apply.ApplyListingAsync(null);
 
-            Assert.Equal(0, f.Host.UiPasses);
+            Assert.Equal(0, f.Ui.Passes);
             Assert.Equal(0, f.Host.PersistRequests);
         }
 
@@ -81,7 +81,7 @@ namespace Unison.Core.Tests.Helpers
 
             Assert.Equal("Família", f.Host.CachedNames[Group]);
             Assert.Equal(new[] { Group }, f.Host.RowNameLookups);
-            Assert.Equal(1, f.Host.UiPasses);
+            Assert.Equal(1, f.Ui.Passes);
             Assert.Equal(1, f.Host.PersistRequests);
             Assert.True(chat.IsGroup);
             Assert.True(chat.IsAnnounceOnly);
@@ -320,10 +320,12 @@ namespace Unison.Core.Tests.Helpers
             {
                 Chats = new ChatStateStore(new InlineDispatcher());
                 Chats.GroupRosterChanged += (s, jid) => Announced.Add(jid);
-                Apply = new GroupMetadataApply(Host, Jids, Chats, () => Now);
+                Apply = new GroupMetadataApply(Host, Ui, Jids, Chats, () => Now);
             }
 
             public FakeGroupHost Host { get; } = new FakeGroupHost();
+
+            public CountingDispatcher Ui { get; } = new CountingDispatcher();
 
             public FakeJids Jids { get; } = new FakeJids();
 

@@ -23,17 +23,20 @@ namespace Unison.Core.Helpers
     public sealed class GroupMetadataApply
     {
         private readonly IGroupHost _host;
+        private readonly IDispatcher _ui;
         private readonly IJidResolver _jids;
         private readonly IChatStateStore _chats;
         private readonly Func<DateTime> _utcNow;
 
         public GroupMetadataApply(
             IGroupHost host,
+            IDispatcher ui,
             IJidResolver jids,
             IChatStateStore chats,
             Func<DateTime> utcNow = null)
         {
             _host = host ?? throw new ArgumentNullException(nameof(host));
+            _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _chats = chats ?? throw new ArgumentNullException(nameof(chats));
             _utcNow = utcNow ?? (() => DateTime.UtcNow);
@@ -60,7 +63,7 @@ namespace Unison.Core.Helpers
                 return;
             }
 
-            await _host.RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 foreach (var entry in listing.Values)
                 {
@@ -112,7 +115,7 @@ namespace Unison.Core.Helpers
             }
 
             string canonical = _jids.GetCanonicalJid(groupJid);
-            await _host.RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 ChatItem chat = _chats.Chats.FirstOrDefault(c =>
                     c != null &&

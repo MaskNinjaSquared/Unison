@@ -33,16 +33,7 @@ namespace Unison.Core.Tests.Helpers
         public List<KeyValuePair<string, List<PersonGroupMembership>>> SavedMemberships { get; } =
             new List<KeyValuePair<string, List<PersonGroupMembership>>>();
 
-        public int UiPasses { get; private set; }
-
         public int PersistRequests { get; private set; }
-
-        public Task RunOnUiThreadAsync(Action action)
-        {
-            UiPasses++;
-            action();
-            return Task.CompletedTask;
-        }
 
         public string ResolveMemberDisplayName(string jid)
         {
