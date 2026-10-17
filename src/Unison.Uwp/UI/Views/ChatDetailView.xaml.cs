@@ -1618,7 +1618,6 @@ namespace Unison.Uwp.UI.Views
                 return;
             }
 
-            var service = ChatsFacade;
             string requestedJid = Jids.GetCanonicalJid(chat.JID);
             Debug.WriteLine($"[ChatDetailView] Loading messages for {requestedJid}");
 
@@ -1679,124 +1678,7 @@ namespace Unison.Uwp.UI.Views
             }
             else
             {
-                // Last Message = newest by TimestampUtc (then MessageId), not "last bubble in the
-                // window". Arrival / DB order can be shuffled; bubble runs re-order for display.
-                ChatMessage lastMsg = null;
-                DateTime tipUtc = DateTime.MinValue;
-                for (int i = 0; i < visibleMessages.Count; i++)
-                {
-                    ChatMessage candidate = visibleMessages[i];
-                    if (candidate == null || candidate.Timestamp == DateTime.MinValue)
-                    {
-                        continue;
-                    }
-
-                    DateTime candidateUtc = WhatsAppMapper.ToUtc(candidate.Timestamp);
-                    if (lastMsg == null ||
-                        candidateUtc > tipUtc ||
-                        (candidateUtc == tipUtc &&
-                         string.CompareOrdinal(candidate.Id ?? string.Empty, lastMsg.Id ?? string.Empty) > 0))
-                    {
-                        lastMsg = candidate;
-                        tipUtc = candidateUtc;
-                    }
-                }
-
-                if (lastMsg == null)
-                {
-                    _ = service?.ReconcileChatPreviewsFromSqliteAsync(
-                        new[] { requestedJid },
-                        "chat-open-empty");
-                }
-                else
-                {
-                    bool isGroup = chat.IsGroup ||
-                        (chat.JID ?? string.Empty).EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
-                    string rawPreview = ChatPreviewNormalizer.FormatListPreview(lastMsg, isGroup);
-                    string stripParticipant = isGroup
-                        ? ParticipantStripIdentity.PreferForDisplay(
-                            lastMsg.ParticipantJid,
-                            Jids.GetCanonicalJid(lastMsg.ParticipantJid))
-                        : null;
-                    string authorPrefix = ChatPreviewNormalizer.FormatListAuthorPrefix(
-                        lastMsg,
-                        isGroup,
-                        _strings?.Get("Chat_SelfFallbackName", "You") ?? "You",
-                        stripParticipant);
-                    ChatPreviewNormalizer.Normalize(
-                        rawPreview,
-                        ChatPreviewNormalizer.InferKindFromMessage(lastMsg),
-                        out var previewKind,
-                        out var preview);
-
-                    DateTime currentUtc = chat.LastMessageTimestampUtc.HasValue
-                        ? WhatsAppMapper.ToUtc(chat.LastMessageTimestampUtc.Value)
-                        : DateTime.MinValue;
-
-                    MessageSendState loadedSendState =
-                        HistoryLiveMessageMapper.FromStatus(lastMsg.Status, lastMsg.IsFromMe);
-
-                    // Only advance by TimestampUtc, or refresh when MessageId / body / fromMe differ
-                    // at the same second. When MessageId differs, trust the visible tip even if the
-                    // strip timestamp was poisoned (Unspecified→ToUniversalTime / +3h).
-                    bool tipIdDiffers = !string.IsNullOrWhiteSpace(lastMsg.Id) &&
-                                        !string.Equals(chat.LastMessageId, lastMsg.Id, StringComparison.Ordinal);
-                    bool shouldApply =
-                        tipIdDiffers ||
-                        tipUtc > currentUtc ||
-                        (tipUtc == currentUtc &&
-                         currentUtc != DateTime.MinValue &&
-                         (!string.Equals(chat.LastMessage, preview, StringComparison.Ordinal) ||
-                          chat.LastMessageKind != previewKind ||
-                          !string.Equals(chat.LastMessageAuthor, authorPrefix, StringComparison.Ordinal) ||
-                          chat.LastMessageIsFromMe != lastMsg.IsFromMe ||
-                          chat.LastMessageSendState != loadedSendState)) ||
-                        (currentUtc == DateTime.MinValue && tipUtc != DateTime.MinValue);
-
-                    if (shouldApply)
-                    {
-                        chat.LastMessage = preview;
-                        chat.LastMessageAuthor = authorPrefix;
-                        chat.LastMessageKind = previewKind;
-                        chat.LastMessageMentionedJids = lastMsg.MentionedJids != null && lastMsg.MentionedJids.Count > 0
-                            ? new System.Collections.Generic.List<string>(lastMsg.MentionedJids)
-                            : null;
-                        chat.LastMessageIsFromMe = lastMsg.IsFromMe;
-                        chat.LastMessageSendState = loadedSendState;
-                        chat.LastMessageId = lastMsg.Id;
-                        chat.LastMessageTimestampUtc = tipUtc;
-                        chat.Timestamp = WhatsAppMapper.FormatTimestamp(
-                            lastMsg.Timestamp,
-                            LocalizedStrings.Get("Common_Yesterday", "Yesterday"));
-                        LiveChatPreviewApplier.ApplyAuthorParts(
-                            chat,
-                            stripParticipant,
-                            lastMsg.IsFromMe ? null : lastMsg.SenderName,
-                            authorPrefix);
-                        service?.PersistChatListRows(new[] { chat });
-                        Debug.WriteLine(
-                            "[ChatDetailView] List preview from newest tip id=" +
-                            (lastMsg.Id ?? "?") +
-                            " fromMe=" + lastMsg.IsFromMe +
-                            " ts=" + tipUtc.ToString("O"));
-                    }
-                    else if (isGroup &&
-                             !string.IsNullOrWhiteSpace(lastMsg.Id) &&
-                             string.Equals(chat.LastMessageId, lastMsg.Id, StringComparison.Ordinal))
-                    {
-                        // Same tip the bubble just named — promote author without moving the strip time.
-                        LiveChatPreviewApplier.ApplyAuthorParts(
-                            chat,
-                            stripParticipant,
-                            lastMsg.IsFromMe ? null : lastMsg.SenderName,
-                            authorPrefix);
-                        service?.PersistChatListRows(new[] { chat });
-                    }
-
-                    _ = service?.ReconcileChatPreviewsFromSqliteAsync(
-                        new[] { requestedJid },
-                        "chat-open");
-                }
+                ViewModel.SyncListStripFromTimeline(chat, requestedJid, visibleMessages);
             }
 
             if (chat.IsPersonal)
