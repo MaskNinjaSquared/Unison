@@ -4,6 +4,7 @@
 // The precedence between four sources that can all name the same person.
 // =============================================================================
 using Unison.Core.Helpers;
+using Unison.Core.Models;
 using Xunit;
 
 namespace Unison.Core.Tests.Helpers
@@ -20,11 +21,11 @@ namespace Unison.Core.Tests.Helpers
             string? jid = Ana,
             bool isGroup = false,
             bool isSender = false,
-            bool personSaved = false) =>
+            PersonSource personSource = PersonSource.Observed) =>
             new DisplayNameSources
             {
                 PersonName = person,
-                PersonNameIsSaved = personSaved,
+                PersonSource = personSource,
                 PhoneContactName = phone,
                 WhatsAppName = whatsApp,
                 CanonicalJid = jid,
@@ -38,9 +39,19 @@ namespace Unison.Core.Tests.Helpers
         public void A_stored_name_that_came_from_the_address_book_is_used_first()
         {
             string name = DisplayNameResolution.Resolve(
-                Sources(person: "Ana Paula", personSaved: true, phone: "Ana Trabalho", whatsApp: "aninha"));
+                Sources(person: "Ana Paula", personSource: PersonSource.AddressBook, phone: "Ana Trabalho", whatsApp: "aninha"));
 
             Assert.Equal("Ana Paula", name);
+        }
+
+        [Fact]
+        public void A_stored_name_of_unknown_origin_ranks_as_learned_not_saved()
+        {
+            // Rows from before the origin was recorded must not hide the address book.
+            string name = DisplayNameResolution.Resolve(
+                Sources(person: "aninha", personSource: PersonSource.Unknown, phone: "Ana Trabalho"));
+
+            Assert.Equal("Ana Trabalho", name);
         }
 
         [Fact]

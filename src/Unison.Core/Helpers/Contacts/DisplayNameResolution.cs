@@ -10,6 +10,7 @@
 // because they touch a SQLite cache and warm it as a side effect.
 // =============================================================================
 using System;
+using Unison.Core.Models;
 
 namespace Unison.Core.Helpers
 {
@@ -22,11 +23,8 @@ namespace Unison.Core.Helpers
         /// <summary>Learned and stored by this app over time.</summary>
         public string PersonName;
 
-        /// <summary>
-        /// True when <see cref="PersonName"/> was matched from the device address book. Anything
-        /// else the store learned (a push name, a participant label) ranks below the address book.
-        /// </summary>
-        public bool PersonNameIsSaved;
+        /// <summary>How the store learned <see cref="PersonName"/>; decides its rank.</summary>
+        public PersonSource PersonSource;
 
         /// <summary>From the device address book — the user's own words for this contact.</summary>
         public string PhoneContactName;
@@ -56,31 +54,36 @@ namespace Unison.Core.Helpers
 
         public static string Resolve(DisplayNameSources sources)
         {
-            bool hasPersonName = !string.IsNullOrWhiteSpace(sources.PersonName);
-            if (hasPersonName && sources.PersonNameIsSaved)
+            string name = null;
+            NameSource source = NameSource.Number;
+
+            // Ties go to the later candidate, so the stored name is offered after the overlay.
+            Offer(sources.PhoneContactName, NameSource.AddressBook, ref name, ref source);
+            Offer(sources.PersonName, sources.PersonSource.ToNameSource(), ref name, ref source);
+            Offer(sources.WhatsAppName, NameSource.PushName, ref name, ref source);
+
+            if (name == null)
             {
-                return sources.PersonName;
+                return UserPartOf(sources.CanonicalJid);
             }
 
-            if (!string.IsNullOrWhiteSpace(sources.PhoneContactName))
+            return source.IsChosenByContact()
+                ? FormatUnsavedContactName(name.Trim(), sources.IsGroup, sources.IsSenderContext)
+                : name;
+        }
+
+        private static void Offer(string candidate, NameSource candidateSource, ref string name, ref NameSource source)
+        {
+            if (string.IsNullOrWhiteSpace(candidate))
             {
-                return sources.PhoneContactName;
+                return;
             }
 
-            if (hasPersonName)
+            if (name == null || source.CanBeReplacedBy(candidateSource))
             {
-                return sources.PersonName;
+                name = candidate;
+                source = candidateSource;
             }
-
-            if (!string.IsNullOrWhiteSpace(sources.WhatsAppName))
-            {
-                return FormatUnsavedContactName(
-                    sources.WhatsAppName.Trim(),
-                    sources.IsGroup,
-                    sources.IsSenderContext);
-            }
-
-            return UserPartOf(sources.CanonicalJid);
         }
 
         private static string FormatUnsavedContactName(string name, bool isGroup, bool isSenderContext)

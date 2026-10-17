@@ -92,14 +92,14 @@ namespace Unison.Core.State
                 return ResolveSelf(canonical, normalized);
             }
 
-            bool personNameIsSaved;
-            string personName = FindPersonName(canonical, out personNameIsSaved);
+            PersonSource personSource;
+            string personName = FindPersonName(canonical, out personSource);
             if (string.IsNullOrWhiteSpace(personName))
             {
-                personName = FindPersonName(normalized, out personNameIsSaved);
+                personName = FindPersonName(normalized, out personSource);
             }
 
-            if (!string.IsNullOrWhiteSpace(personName) && personNameIsSaved)
+            if (!string.IsNullOrWhiteSpace(personName) && personSource.ToNameSource() == NameSource.AddressBook)
             {
                 return personName;
             }
@@ -117,7 +117,7 @@ namespace Unison.Core.State
             return DisplayNameResolution.Resolve(new DisplayNameSources
             {
                 PersonName = personName,
-                PersonNameIsSaved = personNameIsSaved,
+                PersonSource = personSource,
                 PhoneContactName = FindPhoneContactName(canonical, normalized),
                 WhatsAppName = _pushNames.FindBest(canonical, normalized),
                 CanonicalJid = canonical,
@@ -184,9 +184,9 @@ namespace Unison.Core.State
             return string.IsNullOrWhiteSpace(raw) ? null : Sanitize(raw, jid);
         }
 
-        private string FindPersonName(string jid, out bool isSaved)
+        private string FindPersonName(string jid, out PersonSource source)
         {
-            isSaved = false;
+            source = PersonSource.Unknown;
             if (string.IsNullOrWhiteSpace(jid))
             {
                 return null;
@@ -200,7 +200,7 @@ namespace Unison.Core.State
                     return null;
                 }
 
-                isSaved = person.Source == PersonSource.AddressBook;
+                source = person.Source;
                 return Sanitize(person.Name, jid);
             }
             catch
