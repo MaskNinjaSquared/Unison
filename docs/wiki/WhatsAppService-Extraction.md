@@ -1028,7 +1028,7 @@ chat-flag paths had each written out) and building a list strip from a message a
 (`ApplyMessageAsChatTip`, three copies across `.AppState.cs` and `.IncomingPump.cs`). The other three
 places that create a row stay separate: they differ in the name context and insert at the front.
 
-**Façades read shared state, not the client.** Six members left `IWhatsAppService` because the
+**Façades read shared state, not the client.** Seven members left `IWhatsAppService` because the
 façades now take the Core objects those members only forwarded to:
 
 - `Chats`: the contact helpers and `ChatFacade` take `IChatStateStore`, the same collection.
@@ -1042,6 +1042,9 @@ façades now take the Core objects those members only forwarded to:
   in place and invalidates the index by hand, and a second index would never hear about that.
 - `HasResolvedContactName`: replaced by `PushNameLookup` (Core, 4 tests). The client uses it too and
   passes its rejection log as the decision callback.
+- `SeedChatMessagesInMemoryAsync`: replaced by `IChatStateStore.AddMissingMessagesAsync` (2 tests).
+  It adds only what the timeline lacks, on the UI thread, and raises nothing, as before. One edge:
+  the store's dispatcher runs inline when there is no window, where the client's dropped the seed.
 
 The newest message time history freshness reads is `NewestStoredMessage.FindUtc` over the timeline
 snapshot and the list strip (cold start has tips but no timelines), each value through
