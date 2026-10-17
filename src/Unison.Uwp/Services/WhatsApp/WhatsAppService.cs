@@ -4309,8 +4309,9 @@ namespace Unison.Uwp.Services.WhatsApp
             SchedulePersist();
         }
 
-        private string TryGetPersonDisplayName(string jid)
+        private string TryGetPersonDisplayName(string jid, out bool isSaved)
         {
+            isSaved = false;
             if (string.IsNullOrWhiteSpace(jid))
             {
                 return null;
@@ -4324,6 +4325,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     return null;
                 }
 
+                isSaved = person.Source == PersonSource.AddressBook;
                 return SanitizeContactLabel(person.Name, jid);
             }
             catch

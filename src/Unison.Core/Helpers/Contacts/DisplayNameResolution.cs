@@ -22,6 +22,12 @@ namespace Unison.Core.Helpers
         /// <summary>Learned and stored by this app over time.</summary>
         public string PersonName;
 
+        /// <summary>
+        /// True when <see cref="PersonName"/> was matched from the device address book. Anything
+        /// else the store learned (a push name, a participant label) ranks below the address book.
+        /// </summary>
+        public bool PersonNameIsSaved;
+
         /// <summary>From the device address book — the user's own words for this contact.</summary>
         public string PhoneContactName;
 
@@ -50,7 +56,8 @@ namespace Unison.Core.Helpers
 
         public static string Resolve(DisplayNameSources sources)
         {
-            if (!string.IsNullOrWhiteSpace(sources.PersonName))
+            bool hasPersonName = !string.IsNullOrWhiteSpace(sources.PersonName);
+            if (hasPersonName && sources.PersonNameIsSaved)
             {
                 return sources.PersonName;
             }
@@ -58,6 +65,11 @@ namespace Unison.Core.Helpers
             if (!string.IsNullOrWhiteSpace(sources.PhoneContactName))
             {
                 return sources.PhoneContactName;
+            }
+
+            if (hasPersonName)
+            {
+                return sources.PersonName;
             }
 
             if (!string.IsNullOrWhiteSpace(sources.WhatsAppName))

@@ -19,10 +19,12 @@ namespace Unison.Core.Tests.Helpers
             string? whatsApp = null,
             string? jid = Ana,
             bool isGroup = false,
-            bool isSender = false) =>
+            bool isSender = false,
+            bool personSaved = false) =>
             new DisplayNameSources
             {
                 PersonName = person,
+                PersonNameIsSaved = personSaved,
                 PhoneContactName = phone,
                 WhatsAppName = whatsApp,
                 CanonicalJid = jid,
@@ -33,10 +35,28 @@ namespace Unison.Core.Tests.Helpers
         // --- Precedence --------------------------------------------------------
 
         [Fact]
-        public void What_the_app_already_learned_is_used_first()
+        public void A_stored_name_that_came_from_the_address_book_is_used_first()
         {
             string name = DisplayNameResolution.Resolve(
-                Sources(person: "Ana Paula", phone: "Ana Trabalho", whatsApp: "aninha"));
+                Sources(person: "Ana Paula", personSaved: true, phone: "Ana Trabalho", whatsApp: "aninha"));
+
+            Assert.Equal("Ana Paula", name);
+        }
+
+        [Fact]
+        public void The_address_book_beats_a_name_the_app_only_observed()
+        {
+            // A learned push name, or the number itself, must not hide the user's saved contact.
+            string name = DisplayNameResolution.Resolve(
+                Sources(person: "aninha", phone: "Ana Trabalho", whatsApp: "aninha"));
+
+            Assert.Equal("Ana Trabalho", name);
+        }
+
+        [Fact]
+        public void An_observed_name_still_beats_the_live_push_name()
+        {
+            string name = DisplayNameResolution.Resolve(Sources(person: "Ana Paula", whatsApp: "aninha"));
 
             Assert.Equal("Ana Paula", name);
         }

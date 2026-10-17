@@ -135,22 +135,32 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             // Person in-memory cache (SQLite-backed store) — same idea as Redis in front of Dynamo.
-            string personName = TryGetPersonDisplayName(canonical) ?? TryGetPersonDisplayName(normalized);
-            if (!string.IsNullOrWhiteSpace(personName))
+            bool personNameIsSaved;
+            string personName = TryGetPersonDisplayName(canonical, out personNameIsSaved);
+            if (string.IsNullOrWhiteSpace(personName))
+            {
+                personName = TryGetPersonDisplayName(normalized, out personNameIsSaved);
+            }
+
+            if (!string.IsNullOrWhiteSpace(personName) && personNameIsSaved)
             {
                 return personName;
             }
 
-            // Cold cache: warm from disk without blocking the UI name path.
-            _ = WarmPersonIntoCacheAsync(canonical);
-            if (!string.Equals(canonical, normalized, StringComparison.OrdinalIgnoreCase))
+            if (string.IsNullOrWhiteSpace(personName))
             {
-                _ = WarmPersonIntoCacheAsync(normalized);
+                // Cold cache: warm from disk without blocking the UI name path.
+                _ = WarmPersonIntoCacheAsync(canonical);
+                if (!string.Equals(canonical, normalized, StringComparison.OrdinalIgnoreCase))
+                {
+                    _ = WarmPersonIntoCacheAsync(normalized);
+                }
             }
 
             return DisplayNameResolution.Resolve(new DisplayNameSources
             {
                 PersonName = personName,
+                PersonNameIsSaved = personNameIsSaved,
                 PhoneContactName = FindPhoneContactName(canonical, normalized),
                 WhatsAppName = GetBestWhatsAppName(canonical, normalized),
                 CanonicalJid = canonical,
