@@ -58,7 +58,7 @@ namespace Unison.Core.Tests.Helpers
             await f.Apply.ApplyListingAsync(null);
 
             Assert.Equal(0, f.Ui.Passes);
-            Assert.Equal(0, f.Host.PersistRequests);
+            Assert.Equal(0, f.Catalog.Schedules);
         }
 
         [Fact]
@@ -82,7 +82,7 @@ namespace Unison.Core.Tests.Helpers
             Assert.Equal("Família", f.Host.CachedNames[Group]);
             Assert.Equal(new[] { Group }, f.Host.RowNameLookups);
             Assert.Equal(1, f.Ui.Passes);
-            Assert.Equal(1, f.Host.PersistRequests);
+            Assert.Equal(1, f.Catalog.Schedules);
             Assert.True(chat.IsGroup);
             Assert.True(chat.IsAnnounceOnly);
             Assert.Equal(GroupParticipantRole.Admin, chat.MyGroupRole);
@@ -167,7 +167,7 @@ namespace Unison.Core.Tests.Helpers
             Assert.Equal(GroupParticipantRole.SuperAdmin, chat.MyGroupRole);
             Assert.Equal(7, chat.GroupMemberCount);
             Assert.Single(chat.GroupMembers);
-            Assert.Equal(1, f.Host.PersistRequests);
+            Assert.Equal(1, f.Catalog.Schedules);
         }
 
         [Fact]
@@ -179,7 +179,7 @@ namespace Unison.Core.Tests.Helpers
             await f.Apply.ApplyMetadataAsync(Group, null);
             await f.Apply.ApplyMetadataAsync(" ", new GroupMetadataSnapshot());
 
-            Assert.Equal(0, f.Host.PersistRequests);
+            Assert.Equal(0, f.Catalog.Schedules);
         }
 
         // ---- roster ---------------------------------------------------------
@@ -320,12 +320,14 @@ namespace Unison.Core.Tests.Helpers
             {
                 Chats = new ChatStateStore(new InlineDispatcher());
                 Chats.GroupRosterChanged += (s, jid) => Announced.Add(jid);
-                Apply = new GroupMetadataApply(Host, Ui, Jids, Chats, () => Now);
+                Apply = new GroupMetadataApply(Host, Ui, Catalog, Jids, Chats, () => Now);
             }
 
             public FakeGroupHost Host { get; } = new FakeGroupHost();
 
             public CountingDispatcher Ui { get; } = new CountingDispatcher();
+
+            public FakeCatalog Catalog { get; } = new FakeCatalog();
 
             public FakeJids Jids { get; } = new FakeJids();
 

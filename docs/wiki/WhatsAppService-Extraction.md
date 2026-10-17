@@ -1229,7 +1229,9 @@ Drop `RunOnUiThreadAsync` (`IDispatcher`) and `SchedulePersistPublic` (the write
 **`RunOnUiThreadAsync` is gone.** The client calls its `AttachedUiDispatcher` directly, and
 `IGroupHost` no longer carries a UI hop: `GroupMetadataApply`, `GroupRosterRestore` and
 `GroupFacade` take `IDispatcher` in their constructors. The tests count hops on a
-`CountingDispatcher` instead of the fake host.
+`CountingDispatcher` instead of the fake host. The debounced save left the port the same way:
+`GroupMetadataApply` and `GroupFacade` call `IChatCatalogPersistence.Schedule`, like the other
+façades.
 
 **Step 1 is done: the app lifecycle goes through the façade.** `IConnectionService` gained
 `ResumeAsync`, `ReleaseMemoryAsync`, `TransferActiveSocketToBrokerAsync`, `PrepareForSuspendAsync`

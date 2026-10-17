@@ -35,8 +35,6 @@ namespace Unison.Uwp.Services.WhatsApp
         string IGroupHost.FindExistingAvatarUrl(string jid, string phoneNumber, string lid) =>
             FindExistingAvatarUrl(jid, phoneNumber, lid);
 
-        void IGroupHost.SchedulePersist() => SchedulePersist();
-
         void IGroupHost.SaveGroupRoster(string groupJid, List<GroupMember> snapshot)
         {
             if (snapshot == null || snapshot.Count == 0)

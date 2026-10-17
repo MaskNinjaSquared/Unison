@@ -37,6 +37,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
         private readonly IWhatsAppSessionProvider _sessions;
         private readonly IGroupHost _host;
         private readonly IDispatcher _ui;
+        private readonly IChatCatalogPersistence _catalog;
         private readonly IChatStateStore _chats;
         private readonly IJidResolver _jids;
         private readonly GroupMetadataReader _reader;
@@ -62,7 +63,8 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
             SyncStatusChannel syncStatus,
             SyncWorkGate syncWork,
             SyncWorkloadStrategy workload,
-            IDispatcher ui)
+            IDispatcher ui,
+            IChatCatalogPersistence catalog)
         {
             _client = client ?? throw new ArgumentNullException(nameof(client));
             _workload = workload ?? throw new ArgumentNullException(nameof(workload));
@@ -71,6 +73,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
             _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
             _host = host ?? throw new ArgumentNullException(nameof(host));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
+            _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _chats = chats ?? throw new ArgumentNullException(nameof(chats));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _apply = apply ?? throw new ArgumentNullException(nameof(apply));
@@ -414,7 +417,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
             if (resolved > 0)
             {
                 await _client.ApplyResolvedDisplayNamesToChatsAsync();
-                _host.SchedulePersist();
+                _catalog.Schedule();
             }
 
             Debug.WriteLine("[GroupFacade] Group metadata fallback: resolved " + resolved + "/" + attempts + " unresolved group names");

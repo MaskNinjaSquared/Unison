@@ -24,6 +24,7 @@ namespace Unison.Core.Helpers
     {
         private readonly IGroupHost _host;
         private readonly IDispatcher _ui;
+        private readonly IChatCatalogPersistence _catalog;
         private readonly IJidResolver _jids;
         private readonly IChatStateStore _chats;
         private readonly Func<DateTime> _utcNow;
@@ -31,12 +32,14 @@ namespace Unison.Core.Helpers
         public GroupMetadataApply(
             IGroupHost host,
             IDispatcher ui,
+            IChatCatalogPersistence catalog,
             IJidResolver jids,
             IChatStateStore chats,
             Func<DateTime> utcNow = null)
         {
             _host = host ?? throw new ArgumentNullException(nameof(host));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
+            _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _chats = chats ?? throw new ArgumentNullException(nameof(chats));
             _utcNow = utcNow ?? (() => DateTime.UtcNow);
@@ -99,7 +102,7 @@ namespace Unison.Core.Helpers
                     ApplyToRow(chat, entry);
                 }
 
-                _host.SchedulePersist();
+                _catalog.Schedule();
             });
         }
 
@@ -126,7 +129,7 @@ namespace Unison.Core.Helpers
                 }
 
                 ApplyToRow(chat, metadata);
-                _host.SchedulePersist();
+                _catalog.Schedule();
             });
         }
 

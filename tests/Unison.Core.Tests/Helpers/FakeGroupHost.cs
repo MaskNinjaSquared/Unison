@@ -33,8 +33,6 @@ namespace Unison.Core.Tests.Helpers
         public List<KeyValuePair<string, List<PersonGroupMembership>>> SavedMemberships { get; } =
             new List<KeyValuePair<string, List<PersonGroupMembership>>>();
 
-        public int PersistRequests { get; private set; }
-
         public string ResolveMemberDisplayName(string jid)
         {
             string name;
@@ -76,8 +74,6 @@ namespace Unison.Core.Tests.Helpers
             string url;
             return Avatars.TryGetValue(jid, out url) ? url : null;
         }
-
-        public void SchedulePersist() => PersistRequests++;
 
         public void SaveGroupRoster(string groupJid, List<GroupMember> snapshot) =>
             SavedRosters.Add(new KeyValuePair<string, List<GroupMember>>(groupJid, snapshot));

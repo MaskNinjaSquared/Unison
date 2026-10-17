@@ -494,6 +494,7 @@ namespace Unison.Uwp
                 new GroupMetadataApply(
                     sp.GetRequiredService<IGroupHost>(),
                     sp.GetRequiredService<AttachedUiDispatcher>(),
+                    sp.GetRequiredService<IChatCatalogPersistence>(),
                     sp.GetRequiredService<IJidResolver>(),
                     sp.GetRequiredService<IChatStateStore>()),
                 new GroupRosterRestore(
@@ -507,7 +508,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<SyncStatusChannel>(),
                 sp.GetRequiredService<SyncWorkGate>(),
                 sp.GetRequiredService<SyncWorkloadStrategy>(),
-                sp.GetRequiredService<AttachedUiDispatcher>()));
+                sp.GetRequiredService<AttachedUiDispatcher>(),
+                sp.GetRequiredService<IChatCatalogPersistence>()));
             services.AddSingleton<ILiveTilesService>(_ => LiveTilesService.Instance);
             services.AddSingleton<IShortcutService, ShortcutService>();
             services.AddSingleton<INotificationService>(sp =>

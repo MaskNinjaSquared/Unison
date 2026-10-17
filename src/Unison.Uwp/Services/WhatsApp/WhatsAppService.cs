@@ -1135,7 +1135,7 @@ namespace Unison.Uwp.Services.WhatsApp
             var jidResolver = new JidResolver(JidAlias);
             _jids = jidResolver;
             _groupMetadata = new GroupMetadataReader(jidResolver);
-            _groupApply = new GroupMetadataApply(this, _ui, jidResolver, _chatState);
+            _groupApply = new GroupMetadataApply(this, _ui, this, jidResolver, _chatState);
             _receipts = new ReceiptReader(jidResolver);
             _chatState.Chats.CollectionChanged += (s, e) => InvalidateChatRowIndex();
 

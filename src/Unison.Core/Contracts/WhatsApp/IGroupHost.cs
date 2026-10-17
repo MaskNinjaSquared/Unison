@@ -42,9 +42,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>An avatar already cached for this person on a 1:1 row, or null.</summary>
         string FindExistingAvatarUrl(string jid, string phoneNumber, string lid);
 
-        /// <summary>Asks for the debounced chat-list save.</summary>
-        void SchedulePersist();
-
         /// <summary>Writes a detached roster copy in the background. Does nothing before the store is attached.</summary>
         void SaveGroupRoster(string groupJid, List<GroupMember> snapshot);
 
