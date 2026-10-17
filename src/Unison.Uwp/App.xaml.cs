@@ -61,17 +61,14 @@ namespace Unison.Uwp
 
         public static bool IsWindowVisible { get; private set; } = true;
 
-        /// <summary>DI-resolved WhatsApp service (same instance as the legacy singleton).</summary>
         /// <summary>
-        /// The WhatsApp service, or null while the container is still being built. The service is
-        /// no longer able to conjure itself on demand, because its state now belongs to the
-        /// container, so an early caller is told there is nothing yet instead of being handed an
-        /// instance that shares nothing with the one the app will actually use.
+        /// The connection façade, or null while the container is still being built, so an early
+        /// lifecycle event is told there is nothing to act on yet.
         /// </summary>
-        internal static IWhatsAppService GetWhatsAppService()
+        internal static IConnectionService GetConnectionService()
         {
             var services = Services;
-            return services == null ? null : services.GetRequiredService<IWhatsAppService>();
+            return services == null ? null : services.GetRequiredService<IConnectionService>();
         }
 
         /// <summary>
@@ -158,10 +155,10 @@ namespace Unison.Uwp
                         {
                             // Memory pressure can arrive before the container is up, and there is
                             // nothing holding memory to release at that point anyway.
-                            var whatsApp = App.GetWhatsAppService();
-                            if (whatsApp != null)
+                            var connection = App.GetConnectionService();
+                            if (connection != null)
                             {
-                                await whatsApp.ReleaseMemoryAsync();
+                                await connection.ReleaseMemoryAsync();
                             }
 
                             if (nivel == Windows.System.AppMemoryUsageLevel.OverLimit)
@@ -799,7 +796,7 @@ namespace Unison.Uwp
 
             try
             {
-                await App.GetWhatsAppService().ResumeAsync();
+                await App.GetConnectionService().ResumeAsync();
             }
             catch (Exception ex)
             {
@@ -932,7 +929,7 @@ namespace Unison.Uwp
                     return;
                 }
 
-                bool transferred = await App.GetWhatsAppService().TransferActiveSocketToBrokerAsync("entered-background");
+                bool transferred = await App.GetConnectionService().TransferActiveSocketToBrokerAsync("entered-background");
                 RuntimeDiagnosticsService.Instance.Write(
                     "socket-broker",
                     "entered-background-result",
@@ -1006,7 +1003,7 @@ namespace Unison.Uwp
             RuntimeDiagnosticsService.Instance.Write("lifecycle", "suspending-start");
             try
             {
-                var whatsApp = App.GetWhatsAppService();
+                var connection = App.GetConnectionService();
                 string holdReason = ReasonToKeepSocketInProcess();
                 if (holdReason != null)
                 {
@@ -1017,17 +1014,17 @@ namespace Unison.Uwp
                 }
 
                 bool brokered = holdReason == null &&
-                                await whatsApp.TransferActiveSocketToBrokerAsync("suspending");
+                                await connection.TransferActiveSocketToBrokerAsync("suspending");
                 if (brokered)
                 {
-                    await whatsApp.PrepareForSuspendAsync();
+                    await connection.PrepareForSuspendAsync();
                     RuntimeDiagnosticsService.Instance.Write(
                         "lifecycle",
                         "suspending-broker-complete");
                 }
                 else
                 {
-                    await whatsApp.ShutdownAsync(persist: true);
+                    await connection.ShutdownAsync(persist: true);
                     RuntimeDiagnosticsService.Instance.Write(
                         "lifecycle",
                         "suspending-shutdown-complete");
@@ -1074,7 +1071,7 @@ namespace Unison.Uwp
                 RuntimeDiagnosticsService.Instance.Write(
                     "lifecycle",
                     "resuming-complete",
-                    "connected=" + App.GetWhatsAppService().IsConnected);
+                    "connected=" + App.GetConnectionService().IsConnected);
             }
             catch (Exception ex)
             {

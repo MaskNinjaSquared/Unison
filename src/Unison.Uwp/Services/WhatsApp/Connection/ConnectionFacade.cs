@@ -131,6 +131,38 @@ namespace Unison.Uwp.Services.WhatsApp.Connection
             _whatsApp?.StartDeferredStartupMaintenance();
         }
 
+        public Task ResumeAsync()
+        {
+            var whatsApp = _whatsApp;
+            return whatsApp == null ? Task.CompletedTask : whatsApp.ResumeAsync();
+        }
+
+        public Task ReleaseMemoryAsync()
+        {
+            var whatsApp = _whatsApp;
+            return whatsApp == null ? Task.CompletedTask : whatsApp.ReleaseMemoryAsync();
+        }
+
+        public Task<bool> TransferActiveSocketToBrokerAsync(string reason)
+        {
+            var whatsApp = _whatsApp;
+            return whatsApp == null
+                ? Task.FromResult(false)
+                : whatsApp.TransferActiveSocketToBrokerAsync(reason);
+        }
+
+        public Task PrepareForSuspendAsync()
+        {
+            var whatsApp = _whatsApp;
+            return whatsApp == null ? Task.CompletedTask : whatsApp.PrepareForSuspendAsync();
+        }
+
+        public Task ShutdownAsync(bool persist = true)
+        {
+            var whatsApp = _whatsApp;
+            return whatsApp == null ? Task.CompletedTask : whatsApp.ShutdownAsync(persist);
+        }
+
         public void AttachWhatsAppService(IWhatsAppService whatsApp)
         {
             if (ReferenceEquals(_whatsApp, whatsApp))
