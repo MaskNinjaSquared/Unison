@@ -71,6 +71,7 @@ namespace Unison.Uwp.Data
                 await EnsureFlagDeletedColumnAsync().ConfigureAwait(false);
                 await DropLegacyThumbnailColumnAsync().ConfigureAwait(false);
                 await EnsureIndexesAsync().ConfigureAwait(false);
+                await StaleOutgoingSweep.EnsureRanAsync(_connection).ConfigureAwait(false);
                 _initialized = true;
                 Debug.WriteLine("[HistoryMessageStore] Initialized schema=" + CurrentSchemaVersion + " at " + dbPath);
             }

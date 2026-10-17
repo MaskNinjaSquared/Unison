@@ -58,6 +58,7 @@ namespace Unison.Uwp.Data
                         "UPDATE history_chat_preview SET Status = ? WHERE DeletedAtUtc IS NOT NULL",
                         (int)ChatStatus.Deleted)
                     .ConfigureAwait(false);
+                await StaleOutgoingSweep.EnsureRanAsync(_connection).ConfigureAwait(false);
                 _initialized = true;
                 Debug.WriteLine("[HistoryChatPreviewStore] Initialized at " + dbPath);
             }

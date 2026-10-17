@@ -288,6 +288,7 @@
     <Compile Include="Data\ChatStore.cs" />
     <Compile Include="Data\HistoryMigrationStore.cs" />
     <Compile Include="Data\HistoryChatPreviewStore.cs" />
+    <Compile Include="Data\StaleOutgoingSweep.cs" />
     <Compile Include="Data\HistoryMessageStore.cs" />
     <Compile Include="Data\HistoryStatusStore.cs" />
     <Compile Include="Data\SqliteLidMappingStorage.cs" />
