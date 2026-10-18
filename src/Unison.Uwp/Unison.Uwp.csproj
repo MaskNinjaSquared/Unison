@@ -520,6 +520,9 @@
     <Compile Include="UI\Dialogs\ImageSendPreviewDialog.xaml.cs">
       <DependentUpon>ImageSendPreviewDialog.xaml</DependentUpon>
     </Compile>
+    <Compile Include="UI\Dialogs\DocumentSendPreviewDialog.xaml.cs">
+      <DependentUpon>DocumentSendPreviewDialog.xaml</DependentUpon>
+    </Compile>
     <Compile Include="UI\Dialogs\ReactionsDialog.xaml.cs">
       <DependentUpon>ReactionsDialog.xaml</DependentUpon>
     </Compile>
@@ -961,6 +964,10 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="UI\Dialogs\ImageSendPreviewDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Dialogs\DocumentSendPreviewDialog.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

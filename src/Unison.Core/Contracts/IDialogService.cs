@@ -61,6 +61,15 @@ namespace Unison.Core.Contracts
             string initialCaption = null);
 
         /// <summary>
+        /// Document send confirmation: file name row (chat-info Files layout) plus caption.
+        /// <see cref="ImageSendPreviewResult.Confirmed"/> is false when cancelled.
+        /// </summary>
+        Task<ImageSendPreviewResult> ShowDocumentSendPreviewAsync(
+            string fileName,
+            string infoText,
+            string initialCaption = null);
+
+        /// <summary>
         /// Fullscreen pairing QR preview (tap on login QR). Subscribes to
         /// <see cref="LoginViewModel.QrFullscreenDismissRequested"/> so the dialog closes when
         /// pairing succeeds. No-op if payload empty.

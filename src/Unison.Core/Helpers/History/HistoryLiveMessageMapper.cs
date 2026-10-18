@@ -76,6 +76,12 @@ namespace Unison.Core.Helpers
             {
                 body = message.Caption;
             }
+            else if (!revoked && kind == ChatPreviewKind.Document)
+            {
+                // File name lives on MediaFileName; do not persist the "[Document] name" preview
+                // tag as Body or a reload shows as plain text when Kind is mis-applied.
+                body = string.Empty;
+            }
 
             if (!revoked)
             {

@@ -1938,6 +1938,38 @@ namespace Unison.Core.ViewModels
             {
                 target.AudioUri = source.AudioUri;
             }
+
+            // Document (and kind in general): a sync reload used to leave Kind/Text while the
+            // live row already carried Document — the bubble stayed as plain text.
+            if (source.Kind != ChatMessageKind.Text || source.IsDocument)
+            {
+                target.Kind = source.Kind;
+            }
+
+            if (source.IsDocument || !string.IsNullOrWhiteSpace(source.DocumentUri))
+            {
+                if (!string.IsNullOrWhiteSpace(source.DocumentUri))
+                {
+                    target.DocumentUri = source.DocumentUri;
+                }
+
+                if (!string.IsNullOrWhiteSpace(source.DocumentFileName))
+                {
+                    target.DocumentFileName = source.DocumentFileName;
+                }
+
+                if (!string.IsNullOrWhiteSpace(source.DocumentMimeType))
+                {
+                    target.DocumentMimeType = source.DocumentMimeType;
+                }
+
+                if (source.DocumentFileLengthBytes > 0)
+                {
+                    target.DocumentFileLengthBytes = source.DocumentFileLengthBytes;
+                }
+
+                target.NotifyDocumentDownloadStateChanged();
+            }
         }
 
         /// <summary>
@@ -2326,6 +2358,22 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
+            string info = string.Format(
+                "{0} ({1} KB)",
+                picked.FileName ?? "document",
+                picked.Bytes.Length / 1024);
+            string seedCaption = string.IsNullOrWhiteSpace(MessageText) ? null : MessageText.Trim();
+            ImageSendPreviewResult preview = await _dialogs.ShowDocumentSendPreviewAsync(
+                picked.FileName,
+                info,
+                seedCaption);
+            if (preview == null || !preview.Confirmed || _activeChat == null)
+            {
+                LogSend("document-attach-cancelled");
+                return;
+            }
+
+            string caption = string.IsNullOrWhiteSpace(preview.Caption) ? null : preview.Caption.Trim();
             IsSending = true;
             MessageSent?.Invoke(this, EventArgs.Empty);
             LogSend("document-attach-start", "bytes=" + picked.Bytes.Length);
@@ -2335,7 +2383,14 @@ namespace Unison.Core.ViewModels
                     targetJid,
                     picked.Bytes,
                     picked.MimeType,
-                    picked.FileName);
+                    picked.FileName,
+                    caption);
+                if (!string.IsNullOrWhiteSpace(caption) &&
+                    string.Equals(MessageText?.Trim(), seedCaption, StringComparison.Ordinal))
+                {
+                    MessageText = string.Empty;
+                }
+
                 MessageSent?.Invoke(this, EventArgs.Empty);
                 LogSend("document-attach-ok");
             }

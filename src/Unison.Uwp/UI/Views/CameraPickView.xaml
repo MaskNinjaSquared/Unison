@@ -11,23 +11,51 @@
 
     <UserControl.Resources>
         <conv:BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <Style x:Key="CameraChromeIconButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="MinHeight" Value="0"/>
+            <Setter Property="Width" Value="40"/>
+            <Setter Property="Height" Value="40"/>
+            <Setter Property="UseSystemFocusVisuals" Value="False"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid Background="{TemplateBinding Background}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </UserControl.Resources>
 
-    <Grid Background="Black">
-        <!-- Live preview fills the chat area. -->
-        <CaptureElement x:Name="PreviewElement"
-                        Stretch="UniformToFill"
-                        HorizontalAlignment="Stretch"
-                        VerticalAlignment="Stretch"/>
+    <Grid x:Name="RootGrid"
+          Background="Black"
+          SizeChanged="RootGrid_SizeChanged">
 
-        <!-- Top chrome: back | flash (centered) | switch camera -->
+        <!-- Letterboxed preview: sized to the capture aspect ratio inside the available area. -->
+        <Grid x:Name="PreviewHost"
+              HorizontalAlignment="Center"
+              VerticalAlignment="Center"
+              Background="Black">
+            <CaptureElement x:Name="PreviewElement"
+                            Stretch="UniformToFill"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Stretch"/>
+        </Grid>
+
+        <!-- Transparent top chrome -->
         <Grid VerticalAlignment="Top"
               MinHeight="72"
               Padding="8,12,8,16"
+              Background="Transparent"
               Canvas.ZIndex="2">
-            <Grid.Background>
-                <SolidColorBrush Color="#99000000"/>
-            </Grid.Background>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
@@ -45,66 +73,66 @@
                     Content="&#xE72B;"
                     ToolTipService.ToolTip="Back"/>
 
-            <StackPanel Grid.Column="1"
-                        Orientation="Horizontal"
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        Visibility="{x:Bind ViewModel.IsFlashAvailable, Mode=OneWay, Converter={StaticResource BoolToVis}}">
-                <Button Command="{x:Bind ViewModel.FlashOffCommand, Mode=OneWay}"
-                        Style="{StaticResource CircleIconButtonStyle}"
-                        Width="40"
-                        Height="40"
-                        Margin="4,0"
-                        Background="#99000000"
-                        ToolTipService.ToolTip="Flash off">
-                    <FontIcon Glyph="&#xE420;"
-                              FontFamily="{StaticResource IconFont}"
-                              FontSize="18"
-                              Foreground="White"
-                              Opacity="1"/>
-                </Button>
-                <Button Command="{x:Bind ViewModel.FlashOnCommand, Mode=OneWay}"
-                        Style="{StaticResource CircleIconButtonStyle}"
-                        Width="40"
-                        Height="40"
-                        Margin="4,0"
-                        Background="#99000000"
-                        ToolTipService.ToolTip="Flash on">
-                    <FontIcon Glyph="&#xE41E;"
-                              FontFamily="{StaticResource IconFont}"
-                              FontSize="18"
-                              Foreground="White"
-                              Opacity="1"/>
-                </Button>
-            </StackPanel>
+            <!-- Pill with flash options (always visible; disabled when flash unsupported). -->
+            <Border Grid.Column="1"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    CornerRadius="20"
+                    Background="#99000000"
+                    Padding="6,2">
+                <StackPanel Orientation="Horizontal">
+                    <Button Command="{x:Bind ViewModel.FlashOffCommand, Mode=OneWay}"
+                            Style="{StaticResource CameraChromeIconButtonStyle}"
+                            IsEnabled="{x:Bind ViewModel.IsFlashAvailable, Mode=OneWay}"
+                            ToolTipService.ToolTip="Flash off">
+                        <FontIcon Glyph="&#xE420;"
+                                  FontFamily="{StaticResource IconFont}"
+                                  FontSize="18"
+                                  Foreground="White"/>
+                    </Button>
+                    <Button Command="{x:Bind ViewModel.FlashOnCommand, Mode=OneWay}"
+                            Style="{StaticResource CameraChromeIconButtonStyle}"
+                            IsEnabled="{x:Bind ViewModel.IsFlashAvailable, Mode=OneWay}"
+                            ToolTipService.ToolTip="Flash on">
+                        <FontIcon Glyph="&#xE41E;"
+                                  FontFamily="{StaticResource IconFont}"
+                                  FontSize="18"
+                                  Foreground="White"/>
+                    </Button>
+                </StackPanel>
+            </Border>
 
-            <Button Grid.Column="2"
-                    Command="{x:Bind ViewModel.SwitchCameraCommand, Mode=OneWay}"
-                    Style="{StaticResource CircleIconButtonStyle}"
-                    Width="40"
-                    Height="40"
+            <Border Grid.Column="2"
                     Margin="8,0,4,0"
                     VerticalAlignment="Center"
+                    Width="40"
+                    Height="40"
+                    CornerRadius="20"
                     Background="#99000000"
-                    Visibility="{x:Bind ViewModel.IsMultipleCameras, Mode=OneWay, Converter={StaticResource BoolToVis}}"
-                    ToolTipService.ToolTip="Switch camera">
-                <FontIcon Glyph="&#xE89E;"
-                          FontFamily="{StaticResource IconFont}"
-                          FontSize="18"
-                          Foreground="White"
-                          Opacity="1"/>
-            </Button>
+                    Visibility="{x:Bind ViewModel.IsMultipleCameras, Mode=OneWay, Converter={StaticResource BoolToVis}}">
+                <Button Command="{x:Bind ViewModel.SwitchCameraCommand, Mode=OneWay}"
+                        Style="{StaticResource CameraChromeIconButtonStyle}"
+                        Width="40"
+                        Height="40"
+                        ToolTipService.ToolTip="Switch camera">
+                    <FontIcon Glyph="&#xE89E;"
+                              FontFamily="{StaticResource IconFont}"
+                              FontSize="18"
+                              Foreground="White"/>
+                </Button>
+            </Border>
         </Grid>
 
-        <!-- Shutter: white ring, black alpha fill, opaque white camera glyph. -->
+        <!-- Shutter: smaller radius, thicker ring, right + vertically centered (Windows Camera). -->
         <Button x:Name="CaptureButton"
                 Command="{x:Bind ViewModel.CaptureCommand, Mode=OneWay}"
-                HorizontalAlignment="Center"
+                HorizontalAlignment="Right"
                 VerticalAlignment="Center"
-                Width="72"
-                Height="72"
+                Width="56"
+                Height="56"
+                Margin="0,0,20,0"
                 Padding="0"
-                BorderThickness="3"
+                BorderThickness="4"
                 BorderBrush="White"
                 Background="#99000000"
                 UseSystemFocusVisuals="False"
@@ -124,7 +152,7 @@
             </Button.Template>
             <FontIcon Glyph="&#xE722;"
                       FontFamily="{StaticResource IconFont}"
-                      FontSize="28"
+                      FontSize="22"
                       Foreground="White"
                       Opacity="1"/>
         </Button>

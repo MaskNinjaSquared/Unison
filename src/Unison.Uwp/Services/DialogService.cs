@@ -207,6 +207,42 @@ namespace Unison.Uwp.Services
             }
         }
 
+        public async Task<ImageSendPreviewResult> ShowDocumentSendPreviewAsync(
+            string fileName,
+            string infoText,
+            string initialCaption = null)
+        {
+            var cancelled = new ImageSendPreviewResult { Confirmed = false };
+            try
+            {
+                var dialog = new DocumentSendPreviewDialog();
+                dialog.SetPreview(fileName, infoText, initialCaption);
+                var result = await dialog.ShowAsync();
+                if (result != ContentDialogResult.Primary)
+                {
+                    return cancelled;
+                }
+
+                return new ImageSendPreviewResult
+                {
+                    Confirmed = true,
+                    Caption = dialog.Caption
+                };
+            }
+            catch (System.Runtime.InteropServices.COMException ex)
+                when (ex.Message.Contains("single ContentDialog") ||
+                      ex.HResult == unchecked((int)0x80070057))
+            {
+                System.Diagnostics.Debug.WriteLine("[DialogService] Another dialog is already open (document preview).");
+                return cancelled;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[DialogService] ShowDocumentSendPreviewAsync: " + ex.Message);
+                return cancelled;
+            }
+        }
+
         public async Task ShowWhatsAppSettingsAsync(SettingsViewModel settingsVm, bool openProfile = false)
         {
             if (settingsVm == null)

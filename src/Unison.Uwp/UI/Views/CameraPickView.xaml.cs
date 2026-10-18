@@ -29,6 +29,7 @@ namespace Unison.Uwp.UI.Views
         private IReadOnlyList<DeviceInformation> _cameras;
         private int _cameraIndex;
         private bool _isStarting;
+        private double _previewAspect = 3.0 / 4.0;
 
         public CameraPickView()
         {
@@ -203,6 +204,65 @@ namespace Unison.Uwp.UI.Views
             _mediaCapture = capture;
             PreviewElement.Source = capture;
             await capture.StartPreviewAsync();
+            UpdatePreviewAspectFromCapture();
+            LayoutPreviewHost();
+        }
+
+        private void RootGrid_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            LayoutPreviewHost();
+        }
+
+        private void UpdatePreviewAspectFromCapture()
+        {
+            if (_mediaCapture == null)
+            {
+                return;
+            }
+
+            try
+            {
+                var props = _mediaCapture.VideoDeviceController.GetMediaStreamProperties(
+                    MediaStreamType.VideoPreview) as VideoEncodingProperties;
+                if (props != null && props.Width > 0 && props.Height > 0)
+                {
+                    _previewAspect = (double)props.Width / props.Height;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[CameraPickView] Aspect: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Fits the preview grid inside the available area while keeping the capture aspect
+        /// (Windows Camera letterbox behaviour).
+        /// </summary>
+        private void LayoutPreviewHost()
+        {
+            if (PreviewHost == null || RootGrid == null)
+            {
+                return;
+            }
+
+            double availableWidth = RootGrid.ActualWidth;
+            double availableHeight = RootGrid.ActualHeight;
+            if (availableWidth <= 0 || availableHeight <= 0 || _previewAspect <= 0)
+            {
+                return;
+            }
+
+            double width = availableWidth;
+            double height = width / _previewAspect;
+            if (height > availableHeight)
+            {
+                height = availableHeight;
+                width = height * _previewAspect;
+            }
+
+            PreviewHost.Width = width;
+            PreviewHost.Height = height;
         }
 
         private async Task StopPreviewAsync()

@@ -49,6 +49,7 @@ namespace Unison.Core.ViewModels
                 () => CaptureRequested?.Invoke(this, EventArgs.Empty),
                 () => IsPreviewReady && !IsBusy);
 
+            // Buttons stay visible; IsEnabled / CanExecute go false when the device has no flash.
             FlashOnCommand = new RelayCommand(
                 () => SetFlash(true),
                 () => IsFlashAvailable && !IsBusy);
