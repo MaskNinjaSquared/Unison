@@ -61,7 +61,7 @@ namespace Unison.Uwp.UI.Views
 
         public event EventHandler CloseRequested;
 
-        public event EventHandler<PhotoCapturedEventArgs> PhotoCaptured;
+        public event EventHandler<CameraPhotoCapturedEventArgs> PhotoCaptured;
 
         private void AttachViewModel()
         {
@@ -96,7 +96,7 @@ namespace Unison.Uwp.UI.Views
             CloseRequested?.Invoke(this, EventArgs.Empty);
         }
 
-        private void ViewModel_PhotoCaptured(object sender, PhotoCapturedEventArgs e)
+        private void ViewModel_PhotoCaptured(object sender, CameraPhotoCapturedEventArgs e)
         {
             PhotoCaptured?.Invoke(this, e);
         }

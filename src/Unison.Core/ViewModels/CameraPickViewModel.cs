@@ -12,9 +12,13 @@ using Unison.Core.Helpers;
 namespace Unison.Core.ViewModels
 {
     /// <summary>JPEG bytes from a successful shutter press.</summary>
-    public sealed class PhotoCapturedEventArgs : EventArgs
+    /// <remarks>
+    /// Named apart from WinRT <c>Windows.Media.Capture.PhotoCapturedEventArgs</c> so UWP
+    /// views that import both namespaces stay unambiguous.
+    /// </remarks>
+    public sealed class CameraPhotoCapturedEventArgs : EventArgs
     {
-        public PhotoCapturedEventArgs(byte[] bytes)
+        public CameraPhotoCapturedEventArgs(byte[] bytes)
         {
             Bytes = bytes ?? throw new ArgumentNullException(nameof(bytes));
         }
@@ -67,7 +71,7 @@ namespace Unison.Core.ViewModels
         public event EventHandler SwitchCameraRequested;
 
         /// <summary>JPEG bytes ready for the existing image-send preview dialog.</summary>
-        public event EventHandler<PhotoCapturedEventArgs> PhotoCaptured;
+        public event EventHandler<CameraPhotoCapturedEventArgs> PhotoCaptured;
 
         public ICommand CloseCommand { get; }
 
@@ -166,7 +170,7 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
-            PhotoCaptured?.Invoke(this, new PhotoCapturedEventArgs(jpegBytes));
+            PhotoCaptured?.Invoke(this, new CameraPhotoCapturedEventArgs(jpegBytes));
         }
 
         private void SetFlash(bool on)

@@ -1549,7 +1549,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             TryCloseCameraPick();
         }
 
-        private async void CameraPickOverlay_PhotoCaptured(object sender, PhotoCapturedEventArgs e)
+        private async void CameraPickOverlay_PhotoCaptured(object sender, CameraPhotoCapturedEventArgs e)
         {
             TryCloseCameraPick();
             if (ViewModel == null || e?.Bytes == null)
