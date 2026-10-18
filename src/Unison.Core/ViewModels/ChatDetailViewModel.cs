@@ -206,9 +206,11 @@ namespace Unison.Core.ViewModels
                 () => _ = RunSafeAsync(AttachAudioAsync, "attach-audio"),
                 () => CanCompose);
 
-            // Camera / contact / location stay unavailable until each has a send route.
-            // Document attach is live: picker + MessageFacade → DocumentMessage.
-            AttachCameraCommand = new RelayCommand(() => { }, () => false);
+            // Contact / location stay unavailable until each has a send route.
+            // Camera opens the in-chat CameraPickView; document attach is live.
+            AttachCameraCommand = new RelayCommand(
+                () => CameraPickRequested?.Invoke(this, EventArgs.Empty),
+                () => CanCompose);
             AttachFileCommand = new RelayCommand(
                 () => _ = RunSafeAsync(AttachDocumentAsync, "attach-file"),
                 () => CanCompose);
@@ -451,6 +453,9 @@ namespace Unison.Core.ViewModels
         public event EventHandler BackRequested;
         public event EventHandler MessageSent;
 
+        /// <summary>Chat detail should show <c>CameraPickView</c> over the conversation.</summary>
+        public event EventHandler CameraPickRequested;
+
         /// <summary>Raised after pin/unpin succeeds (view refreshes pinned banner).</summary>
         public event EventHandler MessagePinnedChanged;
 
@@ -657,7 +662,7 @@ namespace Unison.Core.ViewModels
         /// <summary>Opens the music picker and sends the clip as a non-voice audio message.</summary>
         public ICommand AttachAudioCommand { get; }
 
-        /// <summary>Take a photo. Unavailable: there is no capture surface yet.</summary>
+        /// <summary>Opens the in-chat camera overlay (<see cref="CameraPickViewModel"/>).</summary>
         public ICommand AttachCameraCommand { get; }
 
         /// <summary>Opens the document picker and sends a DocumentMessage.</summary>
@@ -1993,6 +1998,7 @@ namespace Unison.Core.ViewModels
             RaiseSendMessageCanExecuteChanged();
             (AttachMediaCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (AttachAudioCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (AttachCameraCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (AttachFileCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (StartRecordingCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (CancelRecordingCommand as RelayCommand)?.RaiseCanExecuteChanged();
@@ -2212,6 +2218,28 @@ namespace Unison.Core.ViewModels
 
         private Task AttachDocumentAsync() =>
             AttachAsync(() => _filePicker.PickChatDocumentAsync(), SendPickedDocumentAsync, "document");
+
+        /// <summary>
+        /// Feeds a camera JPEG into the same image-send preview used by gallery attach.
+        /// Called by the chat detail view after <see cref="CameraPickViewModel.PhotoCaptured"/>.
+        /// </summary>
+        public Task AcceptCapturedPhotoAsync(byte[] jpegBytes)
+        {
+            if (jpegBytes == null || jpegBytes.Length == 0 || _activeChat == null)
+            {
+                return Task.CompletedTask;
+            }
+
+            return SendPickedImageAsync(
+                _activeChat.JID,
+                new PickedChatMedia
+                {
+                    Bytes = jpegBytes,
+                    MimeType = "image/jpeg",
+                    FileName = "camera.jpg",
+                    IsImage = true
+                });
+        }
 
         /// <summary>
         /// Picks a file of one kind and sends it, with the guards and the failure reporting that
