@@ -15,6 +15,11 @@ namespace Unison.Uwp.UI.Views
     /// In-chat camera overlay. Owns <see cref="MediaCapture"/> / <see cref="CaptureElement"/>;
     /// chrome and photo bytes go through <see cref="CameraPickViewModel"/>.
     /// </summary>
+    /// <remarks>
+    /// WinRT <c>IAsyncAction</c> / <c>IAsyncOperation</c> are awaited without
+    /// <c>ConfigureAwait</c> — that extension is for <see cref="Task"/> only (same as
+    /// <see cref="Services.AudioRecordingService"/>).
+    /// </remarks>
     public sealed partial class CameraPickView : UserControl
     {
         private static readonly object ClosedDataContext = new object();
@@ -103,12 +108,12 @@ namespace Unison.Uwp.UI.Views
 
         private async void ViewModel_CaptureRequested(object sender, EventArgs e)
         {
-            await CapturePhotoAsync().ConfigureAwait(true);
+            await CapturePhotoAsync();
         }
 
         private async void ViewModel_SwitchCameraRequested(object sender, EventArgs e)
         {
-            await SwitchCameraAsync().ConfigureAwait(true);
+            await SwitchCameraAsync();
         }
 
         private void ViewModel_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -131,7 +136,7 @@ namespace Unison.Uwp.UI.Views
             _viewModel.IsPreviewReady = false;
             try
             {
-                await EnsureCameraListAsync().ConfigureAwait(true);
+                await EnsureCameraListAsync();
                 if (_cameras == null || _cameras.Count == 0)
                 {
                     _viewModel.ReportDevices(0, false);
@@ -143,7 +148,7 @@ namespace Unison.Uwp.UI.Views
                     _cameraIndex = 0;
                 }
 
-                await InitializeCaptureAsync(_cameras[_cameraIndex].Id).ConfigureAwait(true);
+                await InitializeCaptureAsync(_cameras[_cameraIndex].Id);
                 _viewModel.ReportDevices(
                     _cameras.Count,
                     _mediaCapture != null &&
@@ -171,7 +176,7 @@ namespace Unison.Uwp.UI.Views
             }
 
             DeviceInformationCollection devices =
-                await DeviceInformation.FindAllAsync(DeviceClass.VideoCapture).ConfigureAwait(true);
+                await DeviceInformation.FindAllAsync(DeviceClass.VideoCapture);
             var list = new List<DeviceInformation>(devices.Count);
             for (int i = 0; i < devices.Count; i++)
             {
@@ -184,7 +189,7 @@ namespace Unison.Uwp.UI.Views
 
         private async Task InitializeCaptureAsync(string deviceId)
         {
-            await StopPreviewAsync().ConfigureAwait(true);
+            await StopPreviewAsync();
 
             var capture = new MediaCapture();
             var settings = new MediaCaptureInitializationSettings
@@ -194,10 +199,10 @@ namespace Unison.Uwp.UI.Views
                 PhotoCaptureSource = PhotoCaptureSource.VideoPreview
             };
 
-            await capture.InitializeAsync(settings).ConfigureAwait(true);
+            await capture.InitializeAsync(settings);
             _mediaCapture = capture;
             PreviewElement.Source = capture;
-            await capture.StartPreviewAsync().ConfigureAwait(true);
+            await capture.StartPreviewAsync();
         }
 
         private async Task StopPreviewAsync()
@@ -212,7 +217,7 @@ namespace Unison.Uwp.UI.Views
 
             try
             {
-                await capture.StopPreviewAsync().ConfigureAwait(true);
+                await capture.StopPreviewAsync();
             }
             catch (Exception ex)
             {
@@ -234,7 +239,7 @@ namespace Unison.Uwp.UI.Views
             try
             {
                 _cameraIndex = (_cameraIndex + 1) % _cameras.Count;
-                await InitializeCaptureAsync(_cameras[_cameraIndex].Id).ConfigureAwait(true);
+                await InitializeCaptureAsync(_cameras[_cameraIndex].Id);
                 _viewModel.ReportDevices(
                     _cameras.Count,
                     _mediaCapture != null &&
@@ -304,10 +309,10 @@ namespace Unison.Uwp.UI.Views
                 {
                     await _mediaCapture.CapturePhotoToStreamAsync(
                         ImageEncodingProperties.CreateJpeg(),
-                        stream).ConfigureAwait(true);
+                        stream);
 
                     stream.Seek(0);
-                    byte[] bytes = await ReadStreamBytesAsync(stream).ConfigureAwait(true);
+                    byte[] bytes = await ReadStreamBytesAsync(stream);
                     _viewModel.ReportPhoto(bytes);
                 }
             }
@@ -326,7 +331,7 @@ namespace Unison.Uwp.UI.Views
             using (var reader = new DataReader(stream.GetInputStreamAt(0)))
             {
                 uint size = (uint)stream.Size;
-                await reader.LoadAsync(size).ConfigureAwait(true);
+                await reader.LoadAsync(size);
                 byte[] bytes = new byte[size];
                 reader.ReadBytes(bytes);
                 return bytes;
