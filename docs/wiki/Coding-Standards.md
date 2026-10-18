@@ -62,7 +62,7 @@ Chat list rows are the exception: they bind `ChatItem` directly and read local s
 
 Do not `new ChatMessageViewModel(...)` from a view. Use the factory from DI.
 Before dropping a bubble from a collection, call `Detach()` (via `ChatDetailViewModel.ClearTimeline` / `RemoveTimelineAt`) so `Model.PropertyChanged` does not keep the VM alive.
-Open only a small UI window (`InitialUiMessageWindow` 50); SQLite open page is 100 (`MessageFacade.SqlOpenPageSize`). Grow via top-scroll when `CanLoadMore` (code-behind checks scroll offset ≈ 0, ViewModel owns load-more / paging). Cap with `MaxUiMessageWindow`.
+Open only a small UI window (`InitialUiMessageWindow` / `MaxUiMessageWindow` from `SyncWorkloadStrategy`: 30/80 on Unsupported+Low, 50/150 on High); SQLite open page is 100 (`MessageFacade.SqlOpenPageSize`). Grow via top-scroll when `CanLoadMore` (code-behind checks scroll offset ≈ 0, ViewModel owns load-more / paging).
 
 Whoever mutates `ChatDetailViewModel.Messages` is the ViewModel — merge, dedupe, ordered insert, group-JID stamp, preview fallback and trim are its methods (`MergeTimelineFromService`, `InsertTimelineMessage`, `ApplyPreviewFallback`, `StampGroupRemoteJid`). Code-behind may read the collection and drive scroll, run layout and the pinned banner, but must not insert or remove rows itself.
 

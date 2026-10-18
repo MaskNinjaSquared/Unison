@@ -98,6 +98,8 @@
                   ItemTemplate="{StaticResource ChatItemTemplate}"
                   ItemContainerStyle="{StaticResource WhatsAppChatListItemStyle}"
                   SelectionMode="Single"
+                  Loaded="ChatList_Loaded"
+                  Unloaded="ChatList_Unloaded"
                   SelectionChanged="ChatList_SelectionChanged"
                   ContainerContentChanging="ChatList_ContainerContentChanging"
                   ShowsScrollingPlaceholders="False"

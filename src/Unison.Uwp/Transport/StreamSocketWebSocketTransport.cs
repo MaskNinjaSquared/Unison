@@ -60,154 +60,445 @@ namespace Unison.Uwp.Transport
             if (uri == null) throw new ArgumentNullException(nameof(uri));
             ThrowIfDisposed();
 
-            BrokerInterprocessLease lease = await BrokerInterprocessLock.AcquireAsync(
-                "foreground:connect",
-                TimeSpan.FromSeconds(8),
-                CancellationToken.None);
-            if (lease == null)
+            // Absolute cold-start path (1.8 shape): TLS first, zero LocalFolder / broker work
+            // concurrent with ConnectAsync. W10M hung each previous gate in turn:
+            // EnsureReady (1.9.0) → AllSockets/lease (1.9.1) → OwnershipStore.LoadAsync (1.9.2)
+            // → parallel EnsureReady unregister+Register during TLS (1.9.3, never websocket-connected).
+            RuntimeDiagnosticsService.Instance.Write(
+                "transport",
+                "streamsocket-connect-prepare",
+                "host=" + uri.Host);
+
+            RuntimeDiagnosticsService.Instance.Write(
+                "transport",
+                "streamsocket-connect-start",
+                "host=" + uri.Host +
+                "; brokerReady=False" +
+                "; fastPath=True" +
+                "; lease=False" +
+                "; activitySockets=False" +
+                "; priorOwner=deferred");
+
+            _socketId = BrokerOwnershipStore.CreateSocketId();
+            _ownershipState = BrokerOwnershipStore.Create(
+                _socketId,
+                _generationId,
+                "foreground",
+                "connect-start");
+
+            _socket = new StreamSocket();
+            _socket.Control.KeepAlive = true;
+            _socket.Control.NoDelay = true;
+
+            RuntimeDiagnosticsService.Instance.Write(
+                "socket-broker",
+                "ownership-deferred",
+                "reason=tls-first-cold-start; connect-continues=True");
+
+            string service = uri.IsDefaultPort ? "443" : uri.Port.ToString();
+            RuntimeDiagnosticsService.Instance.Write(
+                "transport",
+                "streamsocket-tls-begin",
+                "host=" + uri.Host + "; service=" + service);
+
+            await ConnectTlsWithBudgetAsync(uri.Host, service, TimeSpan.FromSeconds(15));
+
+            RuntimeDiagnosticsService.Instance.Write(
+                "transport",
+                "streamsocket-tls-done",
+                "host=" + uri.Host);
+
+            await PerformWebSocketHandshakeAsync(uri, headers);
+            _connection = new RawWebSocketConnection(_socket);
+            _connected = true;
+            _ownedByBroker = false;
+            _ownershipState.Owner = "foreground";
+            _ownershipState.ReconnectRequired = false;
+            _ownershipState.LastReason = "transport-connected";
+            StartReceiveLoop();
+
+            RuntimeDiagnosticsService.Instance.Write(
+                "transport",
+                "streamsocket-websocket-connected",
+                "local=" +
+                FormatEndpoint(
+                    _socket.Information.LocalAddress,
+                    _socket.Information.LocalPort) +
+                "; remote=" +
+                FormatEndpoint(
+                    _socket.Information.RemoteAddress,
+                    _socket.Information.RemotePort) +
+                "; socketId=" + _socketId +
+                "; transferEnabled=False");
+
+            // Broker/LocalFolder only after the socket is live — never concurrent with TLS.
+            _ = ClearBrokerSessionArtifactsAsync();
+            _ = PersistOwnershipAfterConnectAsync();
+        }
+
+        private async Task ConnectTlsWithBudgetAsync(string host, string service, TimeSpan budget)
+        {
+            if (_socket == null)
             {
-                throw new TimeoutException(
-                    "Timed out waiting for Socket Broker ownership before connect");
+                throw new InvalidOperationException("StreamSocket was not created");
+            }
+
+            // 1.9.8: a dedicated Thread never logged tls-timeout, and AsTask(token) never
+            // completed, so the fallback never started. The health sampler's Timer does run
+            // on this device, so the budget uses that. WhenAny unblocks even if the WinRT
+            // operation ignores cancellation.
+            StreamSocket socket = _socket;
+            int budgetMs = (int)Math.Max(1000, budget.TotalMilliseconds);
+            var timedOut = new TaskCompletionSource<bool>();
+            Timer watchdog = new Timer(
+                _ =>
+                {
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "transport",
+                        "streamsocket-tls-timeout",
+                        "host=" + host +
+                        "; budgetMs=" + budgetMs +
+                        "; via=timer");
+                    try
+                    {
+                        socket.Dispose();
+                    }
+                    catch
+                    {
+                    }
+
+                    timedOut.TrySetResult(true);
+                },
+                null,
+                budgetMs,
+                Timeout.Infinite);
+
+            try
+            {
+                RuntimeDiagnosticsService.Instance.Write(
+                    "transport",
+                    "streamsocket-tls-watchdog-armed",
+                    "budgetMs=" + budgetMs);
+
+                RuntimeDiagnosticsService.Instance.Write(
+                    "transport",
+                    "streamsocket-tls-invoke",
+                    "host=" + host + "; service=" + service);
+
+                var action = socket.ConnectAsync(
+                    new HostName(host),
+                    service,
+                    SocketProtectionLevel.Tls12);
+
+                RuntimeDiagnosticsService.Instance.Write(
+                    "transport",
+                    "streamsocket-tls-action-created",
+                    "host=" + host);
+
+                Task connect = action.AsTask();
+                Task winner = await Task.WhenAny(connect, timedOut.Task).ConfigureAwait(false);
+                if (!ReferenceEquals(winner, connect))
+                {
+                    _socket = null;
+                    throw new TimeoutException(
+                        "StreamSocket TLS connect timed out after " + budgetMs + "ms");
+                }
+
+                await connect.ConfigureAwait(false);
+            }
+            catch
+            {
+                if (!ReferenceEquals(_socket, null))
+                {
+                    try
+                    {
+                        _socket.Dispose();
+                    }
+                    catch
+                    {
+                    }
+
+                    _socket = null;
+                }
+
+                throw;
+            }
+            finally
+            {
+                try
+                {
+                    watchdog.Dispose();
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        private static async Task ClearBrokerSessionArtifactsAsync()
+        {
+            try
+            {
+                await NoiseSessionStore.ClearAsync();
+                await BackgroundSignalSnapshotStore.ClearAsync();
+                await BackgroundDisplayNameStore.ClearAsync();
+                await BrokerFrameJournal.ClearAsync();
+                await BrokerLog.AppendAsync(
+                    "journal",
+                    "journal-cleared reason=fresh-connection; tlsFirst=True");
+            }
+            catch (Exception ex)
+            {
+                RuntimeDiagnosticsService.Instance.RecordException(
+                    "socket-broker",
+                    "session-artifacts-clear-failed",
+                    ex,
+                    "connect-continues=True");
+            }
+        }
+
+        private async Task PersistOwnershipAfterConnectAsync()
+        {
+            try
+            {
+                if (_ownershipState == null || !BrokerOwnershipStore.IsManagedSocketId(_socketId))
+                {
+                    return;
+                }
+
+                await BrokerOwnershipStore.SaveAsync(_ownershipState);
+            }
+            catch (Exception ex)
+            {
+                RuntimeDiagnosticsService.Instance.RecordException(
+                    "socket-broker",
+                    "ownership-save-deferred-failed",
+                    ex);
+            }
+        }
+
+        /// <summary>
+        /// Lock only when the broker may own a socket. WinRT CreateFileAsync/RenameAsync inside
+        /// the lock helper can hang past its loop deadline — wrap with WhenAny.
+        /// </summary>
+        private static async Task<BrokerInterprocessLease> TryAcquireConnectLeaseAsync(
+            bool brokerMayHold)
+        {
+            TimeSpan timeout = brokerMayHold
+                ? TimeSpan.FromSeconds(8)
+                : TimeSpan.FromMilliseconds(400);
+
+            Task<BrokerInterprocessLease> acquire = BrokerInterprocessLock.AcquireAsync(
+                "foreground:connect",
+                timeout,
+                CancellationToken.None);
+            // Hard ceiling slightly above the lock's own budget so a stuck LocalFolder I/O
+            // cannot block TLS forever (observed on Mobile after ownership-loaded).
+            TimeSpan hardCeiling = timeout + TimeSpan.FromMilliseconds(500);
+            Task winner = await Task.WhenAny(acquire, Task.Delay(hardCeiling));
+            if (!ReferenceEquals(winner, acquire))
+            {
+                RuntimeDiagnosticsService.Instance.Write(
+                    "socket-broker",
+                    "connect-lock-hard-timeout",
+                    "brokerMayHold=" + brokerMayHold +
+                    "; ceilingMs=" + (int)hardCeiling.TotalMilliseconds +
+                    "; proceedWithoutLease=True");
+                return null;
+            }
+
+            BrokerInterprocessLease lease = await acquire;
+            if (lease != null)
+            {
+                return lease;
+            }
+
+            RuntimeDiagnosticsService.Instance.Write(
+                "socket-broker",
+                brokerMayHold ? "connect-lock-timeout-contended" : "connect-lock-skip-fast",
+                "brokerMayHold=" + brokerMayHold +
+                "; timeoutMs=" + (int)timeout.TotalMilliseconds +
+                "; proceedWithoutLease=True");
+
+            // Contended or stuck lock must not abort connect: a fresh StreamSocket does not
+            // need the lease when we are not disposing a broker-held one. When brokerMayHold
+            // was true we still proceed — DisposeBrokerSocket is best-effort without the lease.
+            return null;
+        }
+
+        private static async Task<bool> TryEnsureBrokerReadyAsync(TimeSpan budget)
+        {
+            try
+            {
+                Task<bool> ensure = SocketBrokerCoordinator.Instance.EnsureReadyAsync();
+                Task winner = await Task.WhenAny(ensure, Task.Delay(budget));
+                if (!ReferenceEquals(winner, ensure))
+                {
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "socket-broker",
+                        "ensure-ready-timeout",
+                        "budgetMs=" + (int)budget.TotalMilliseconds +
+                        "; connect-continues=True");
+                    // Leave EnsureReady running; do not block TLS on a hung Register/RequestAccess.
+                    return false;
+                }
+
+                return await ensure;
+            }
+            catch (Exception ex)
+            {
+                RuntimeDiagnosticsService.Instance.RecordException(
+                    "socket-broker",
+                    "ensure-ready-failed",
+                    ex,
+                    "connect-continues=True");
+                return false;
+            }
+        }
+
+        private static bool IsBrokerHeldOwner(BrokerOwnershipState state)
+        {
+            if (state == null || string.IsNullOrWhiteSpace(state.Owner))
+            {
+                return false;
+            }
+
+            return string.Equals(state.Owner, "broker", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool HasManagedActivitySockets()
+        {
+            try
+            {
+                return SocketActivityInformation.AllSockets.Keys
+                    .Any(BrokerOwnershipStore.IsManagedSocketId);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// <see cref="SocketActivityInformation.AllSockets"/> has hung indefinitely on some
+        /// Windows 10 Mobile builds; never await it without a budget on the connect path.
+        /// </summary>
+        private static async Task<bool> HasManagedActivitySocketsBoundedAsync(TimeSpan budget)
+        {
+            try
+            {
+                Task<bool> probe = Task.Run(() => HasManagedActivitySockets());
+                Task winner = await Task.WhenAny(probe, Task.Delay(budget));
+                if (!ReferenceEquals(winner, probe))
+                {
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "socket-broker",
+                        "allsockets-probe-timeout",
+                        "budgetMs=" + (int)budget.TotalMilliseconds +
+                        "; assumeNone=True");
+                    return false;
+                }
+
+                return await probe;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Best-effort transferability. Failure leaves a foreground-only socket; suspend can
+        /// still shut down and reconnect, matching the 1.8 no-broker cold-start shape.
+        /// </summary>
+        private static async Task<bool> TryEnableTransferOwnershipAsync(StreamSocket socket)
+        {
+            if (socket == null)
+            {
+                return false;
             }
 
             try
             {
-                bool brokerReady = await SocketBrokerCoordinator.Instance.EnsureReadyAsync();
+                socket.EnableTransferOwnership(
+                    SocketBrokerCoordinator.Instance.TaskId,
+                    SocketActivityConnectedStandbyAction.Wake);
                 RuntimeDiagnosticsService.Instance.Write(
-                    "transport",
-                    "streamsocket-connect-start",
-                    "host=" + uri.Host + "; brokerReady=" + brokerReady);
-
-                if (!brokerReady)
-                {
-                    throw new InvalidOperationException(
-                        "SocketActivityTrigger background task is not available");
-                }
-
-                // A fresh connection invalidates any previously persisted broker Noise state.
-                await NoiseSessionStore.ClearAsync();
-                await BackgroundSignalSnapshotStore.ClearAsync();
-                await BackgroundDisplayNameStore.ClearAsync();
-
-                // A cold launch cannot reuse the Noise state of a socket left by a terminated
-                // process. Remove any stale broker ownership before creating a fresh session.
-                await SocketBrokerCoordinator.DisposeBrokerSocketAsync();
-                await BrokerFrameJournal.ClearAsync();
-                await BrokerLog.AppendAsync(
-                    "journal",
-                    "journal-cleared reason=fresh-connection");
-
-                _socketId = BrokerOwnershipStore.CreateSocketId();
-                _ownershipState = BrokerOwnershipStore.Create(
-                    _socketId,
-                    _generationId,
-                    "foreground",
-                    "connect-start");
-
-                _socket = new StreamSocket();
-                _socket.Control.KeepAlive = true;
-                _socket.Control.NoDelay = true;
-
-                if (brokerReady)
-                {
-                    try
-                    {
-                        _socket.EnableTransferOwnership(
-                            SocketBrokerCoordinator.Instance.TaskId,
-                            SocketActivityConnectedStandbyAction.Wake);
-                        RuntimeDiagnosticsService.Instance.Write(
-                            "socket-broker",
-                            "ownership-enabled",
-                            "mode=Wake");
-                    }
-                    catch (Exception missingTaskError)
-                        when (IsElementNotFound(missingTaskError))
-                    {
-                        RuntimeDiagnosticsService.Instance.RecordException(
-                            "socket-broker",
-                            "ownership-taskid-invalid",
-                            missingTaskError);
-
-                        bool recreated = await SocketBrokerCoordinator.Instance
-                            .RecreateRegistrationAsync(
-                                "enable-ownership-element-not-found");
-                        if (!recreated)
-                        {
-                            throw;
-                        }
-
-                        RuntimeDiagnosticsService.Instance.Write(
-                            "socket-broker",
-                            "ownership-enable-retry",
-                            "mode=Wake; taskId=" +
-                            SocketBrokerCoordinator.Instance.TaskId);
-                        try
-                        {
-                            _socket.EnableTransferOwnership(
-                                SocketBrokerCoordinator.Instance.TaskId,
-                                SocketActivityConnectedStandbyAction.Wake);
-                            RuntimeDiagnosticsService.Instance.Write(
-                                "socket-broker",
-                                "ownership-enabled",
-                                "mode=Wake; registrationRecreated=True");
-                        }
-                        catch (Exception retryError)
-                        {
-                            RuntimeDiagnosticsService.Instance.RecordException(
-                                "socket-broker",
-                                "ownership-enable-retry-failed",
-                                retryError);
-                            throw;
-                        }
-                    }
-                    catch (Exception wakeError)
-                    {
-                        RuntimeDiagnosticsService.Instance.RecordException(
-                            "socket-broker",
-                            "wake-enable-failed",
-                            wakeError);
-                        _socket.EnableTransferOwnership(
-                            SocketBrokerCoordinator.Instance.TaskId,
-                            SocketActivityConnectedStandbyAction.DoNotWake);
-                        RuntimeDiagnosticsService.Instance.Write(
-                            "socket-broker",
-                            "ownership-enabled",
-                            "mode=DoNotWake");
-                    }
-                }
-
-                string service = uri.IsDefaultPort ? "443" : uri.Port.ToString();
-                await _socket.ConnectAsync(
-                    new HostName(uri.Host),
-                    service,
-                    SocketProtectionLevel.Tls12);
-
-                await PerformWebSocketHandshakeAsync(uri, headers);
-                _connection = new RawWebSocketConnection(_socket);
-                _connected = true;
-                _ownedByBroker = false;
-                _ownershipState.Owner = "foreground";
-                _ownershipState.ReconnectRequired = false;
-                _ownershipState.LastReason = "transport-connected";
-                await BrokerOwnershipStore.SaveAsync(_ownershipState);
-                StartReceiveLoop();
-
-                RuntimeDiagnosticsService.Instance.Write(
-                    "transport",
-                    "streamsocket-websocket-connected",
-                    "local=" +
-                    FormatEndpoint(
-                        _socket.Information.LocalAddress,
-                        _socket.Information.LocalPort) +
-                    "; remote=" +
-                    FormatEndpoint(
-                        _socket.Information.RemoteAddress,
-                        _socket.Information.RemotePort) +
-                    "; socketId=" + _socketId);
+                    "socket-broker",
+                    "ownership-enabled",
+                    "mode=Wake");
+                return true;
             }
-            finally
+            catch (Exception missingTaskError)
+                when (IsElementNotFound(missingTaskError))
             {
-                await lease.ReleaseAsync();
+                RuntimeDiagnosticsService.Instance.RecordException(
+                    "socket-broker",
+                    "ownership-taskid-invalid",
+                    missingTaskError);
+
+                bool recreated = await SocketBrokerCoordinator.Instance
+                    .RecreateRegistrationAsync("enable-ownership-element-not-found");
+                if (!recreated)
+                {
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "socket-broker",
+                        "ownership-deferred",
+                        "reason=recreate-failed; connect-continues=True");
+                    return false;
+                }
+
+                RuntimeDiagnosticsService.Instance.Write(
+                    "socket-broker",
+                    "ownership-enable-retry",
+                    "mode=Wake; taskId=" + SocketBrokerCoordinator.Instance.TaskId);
+                try
+                {
+                    socket.EnableTransferOwnership(
+                        SocketBrokerCoordinator.Instance.TaskId,
+                        SocketActivityConnectedStandbyAction.Wake);
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "socket-broker",
+                        "ownership-enabled",
+                        "mode=Wake; registrationRecreated=True");
+                    return true;
+                }
+                catch (Exception retryError)
+                {
+                    RuntimeDiagnosticsService.Instance.RecordException(
+                        "socket-broker",
+                        "ownership-enable-retry-failed",
+                        retryError,
+                        "connect-continues=True");
+                    return false;
+                }
+            }
+            catch (Exception wakeError)
+            {
+                RuntimeDiagnosticsService.Instance.RecordException(
+                    "socket-broker",
+                    "wake-enable-failed",
+                    wakeError);
+                try
+                {
+                    socket.EnableTransferOwnership(
+                        SocketBrokerCoordinator.Instance.TaskId,
+                        SocketActivityConnectedStandbyAction.DoNotWake);
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "socket-broker",
+                        "ownership-enabled",
+                        "mode=DoNotWake");
+                    return true;
+                }
+                catch (Exception doNotWakeError)
+                {
+                    RuntimeDiagnosticsService.Instance.RecordException(
+                        "socket-broker",
+                        "ownership-enable-abandoned",
+                        doNotWakeError,
+                        "connect-continues=True");
+                    return false;
+                }
             }
         }
 

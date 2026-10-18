@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
     <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
@@ -376,7 +376,7 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
     <value>Enviar</value>
   </data>
   <data name="ChatDetail_SendImageCaption.PlaceholderText" xml:space="preserve">
-    <value>A�adir un pie de foto...</value>
+    <value>A�adir un pie de foto...</value>
   </data>  <data name="ChatDetail_SendImage.SecondaryButtonText" xml:space="preserve">
     <value>Cancelar</value>
   </data>
@@ -541,6 +541,33 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   </data>
   <data name="StatusList_Empty.Text" xml:space="preserve">
     <value>No hay actualizaciones de estado recientes</value>
+  </data>
+  <data name="StatusList_Recent" xml:space="preserve">
+    <value>Reciente</value>
+  </data>
+  <data name="StatusList_Viewed" xml:space="preserve">
+    <value>Visto</value>
+  </data>
+  <data name="StatusList_FilterHeader.Text" xml:space="preserve">
+    <value>Filtrar estado por</value>
+  </data>
+  <data name="StatusList_FilterAll.Text" xml:space="preserve">
+    <value>Todos</value>
+  </data>
+  <data name="StatusList_FilterRecent.Text" xml:space="preserve">
+    <value>Recientes</value>
+  </data>
+  <data name="StatusList_FilterViewed.Text" xml:space="preserve">
+    <value>Vistos</value>
+  </data>
+  <data name="StatusList_FilterLink.Text" xml:space="preserve">
+    <value>Filtrar Estado</value>
+  </data>
+  <data name="StatusDetail_EmptyTitle.Text" xml:space="preserve">
+    <value>Comparte actualizaciones de estado</value>
+  </data>
+  <data name="StatusDetail_EmptySubtitle.Text" xml:space="preserve">
+    <value>Comparte fotos, videos y textos que desaparecen después de 24 horas.</value>
   </data>
   <data name="Shell_Starred.Text" xml:space="preserve">
     <value>Mensajes destacados</value>
@@ -1195,7 +1222,10 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   <data name="ChatDetail_DocumentOpen.Label" xml:space="preserve">
     <value>Abrir documento</value>
   </data>
-  <data name="ChatDetail_DocumentSaveAs.Label" xml:space="preserve">
+    <data name="ChatDetail_AudioPlay.Label" xml:space="preserve">
+    <value>Reproducir audio</value>
+  </data>
+<data name="ChatDetail_DocumentSaveAs.Label" xml:space="preserve">
     <value>Guardar como…</value>
   </data>
   <data name="ChatDetail_Back.ToolTip" xml:space="preserve">

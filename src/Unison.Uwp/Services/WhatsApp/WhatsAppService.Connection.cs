@@ -1584,17 +1584,34 @@ namespace Unison.Uwp.Services.WhatsApp
                                   ((sync.Conversations?.Count ?? 0) > 0 ||
                                    sync.Pushnames?.Count > 0);
 
-                // SocketClient raises this event from its dedicated history pipeline,
-                // never from the UI thread. Wait for the current payload to be consumed
-                // before allowing the next large protobuf object into memory.
-                // Prefer MessageFacade so Person upserts run before core history apply.
-                if (_messageService != null)
+                // SocketClient raised this from a background pipeline. MessageWebSocket
+                // delivers on the UI thread; the transport hops off before this runs.
+                // Still wait for the chunk so the next protobuf is not parsed on top of it.
+                int conversations = sync?.Conversations?.Count ?? 0;
+                var started = System.Diagnostics.Stopwatch.StartNew();
+                RuntimeDiagnosticsService.Instance.Write(
+                    "history",
+                    "sync-apply-begin",
+                    "conversations=" + conversations +
+                    "; type=" + (sync?.SyncType.ToString() ?? "<none>"));
+                try
                 {
-                    _messageService.SyncMessageHistoryAsync(sync).GetAwaiter().GetResult();
+                    if (_messageService != null)
+                    {
+                        _messageService.SyncMessageHistoryAsync(sync).GetAwaiter().GetResult();
+                    }
+                    else
+                    {
+                        ProcessHistorySyncCoreAsync(sync).GetAwaiter().GetResult();
+                    }
                 }
-                else
+                finally
                 {
-                    ProcessHistorySyncCoreAsync(sync).GetAwaiter().GetResult();
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "history",
+                        "sync-apply-end",
+                        "conversations=" + conversations +
+                        "; elapsedMs=" + started.ElapsedMilliseconds);
                 }
                 EnableScheduledPersist("history sync received");
                 if (hasContent && !_historyIdentityRefreshTriggeredThisSession)
@@ -1683,10 +1700,24 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 if (firstRelease)
                 {
-                    PublishConnectionUpdate("synced");
-                    EnableScheduledPersist($"offline completion ({offlineCount} messages)");
-                    _ = TryConsumeMessageStoreForceHistoryRepairAsync($"offline-complete:{offlineCount}");
-                    SchedulePendingPlaceholderResendDrain($"offline-complete:{offlineCount}", maxRequests: 8);
+                    // Safety-timeout release can race a hung ConnectAsync; never mark synced
+                    // until Noise finished on the live socket.
+                    if (socket.IsConnected && socket.IsHandshakeComplete)
+                    {
+                        PublishConnectionUpdate("synced");
+                        EnableScheduledPersist($"offline completion ({offlineCount} messages)");
+                        _ = TryConsumeMessageStoreForceHistoryRepairAsync($"offline-complete:{offlineCount}");
+                        SchedulePendingPlaceholderResendDrain($"offline-complete:{offlineCount}", maxRequests: 8);
+                    }
+                    else
+                    {
+                        RuntimeDiagnosticsService.Instance.Write(
+                            "connection",
+                            "offline-replay-synced-skipped",
+                            "reason=not-connected; count=" + offlineCount +
+                            "; socketConnected=" + socket.IsConnected +
+                            "; handshake=" + socket.IsHandshakeComplete);
+                    }
                 }
 
                 // Soft-reconnect catch-up pages must re-evaluate / re-request FULL_HISTORY even

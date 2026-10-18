@@ -25,6 +25,7 @@ namespace Unison.Core.ViewModels
         private readonly IDialogService _dialogs;
         private readonly IUriLauncher _uriLauncher;
         private readonly IFilePicker _filePicker;
+        private readonly IAudioExportService _audioExport;
         private readonly ISessionLogger _sessionLogger;
         private readonly IRuntimeDiagnostics _diagnostics;
         private readonly IHistoryMessageStore _history;
@@ -44,6 +45,7 @@ namespace Unison.Core.ViewModels
             IDialogService dialogs = null,
             IUriLauncher uriLauncher = null,
             IFilePicker filePicker = null,
+            IAudioExportService audioExport = null,
             ISessionLogger sessionLogger = null,
             IRuntimeDiagnostics diagnostics = null,
             IHistoryMessageStore history = null)
@@ -54,6 +56,7 @@ namespace Unison.Core.ViewModels
             _dialogs = dialogs;
             _uriLauncher = uriLauncher;
             _filePicker = filePicker;
+            _audioExport = audioExport;
             _sessionLogger = sessionLogger;
             _diagnostics = diagnostics;
             _history = history;
@@ -93,6 +96,10 @@ namespace Unison.Core.ViewModels
             SaveDocumentAsCommand = new RelayCommand(
                 () => _ = SaveDocumentAsAsync(),
                 () => HasLocalDocument);
+
+            SaveAudioAsCommand = new RelayCommand(
+                () => _ = SaveAudioAsAsync(),
+                () => CanSaveAudioAs);
 
             ExportDocumentCommand = new RelayCommand(
                 () => _ = ExportDocumentAsync(),
@@ -281,6 +288,9 @@ namespace Unison.Core.ViewModels
         /// <summary>FileSavePicker for a cached document.</summary>
         public ICommand SaveDocumentAsCommand { get; }
 
+        /// <summary>Save downloaded audio as MP3 (overflow menu).</summary>
+        public ICommand SaveAudioAsCommand { get; }
+
         /// <summary>Download to cache if needed, then FileSavePicker to disk.</summary>
         public ICommand ExportDocumentCommand { get; }
 
@@ -461,7 +471,41 @@ namespace Unison.Core.ViewModels
             (_audioPlaybackStatus == AudioPlaybackStatus.Playing ||
              _audioPlaybackStatus == AudioPlaybackStatus.Paused);
 
-        /// <summary>Kind label without duration (duration lives in <see cref="AudioTimestampText"/>).</summary>
+        /// <summary>
+        /// "…" overflow (Save as…) while Ready and already downloaded — hidden while playing.
+        /// </summary>
+        public bool ShowAudioOverflowMenu =>
+            Model.IsAudio &&
+            HasLocalAudio &&
+            _audioPlaybackStatus == AudioPlaybackStatus.Ready;
+
+        /// <summary>Running/paused clock in the transport bar (replaces the overflow while active).</summary>
+        public bool ShowAudioBarTimestamp =>
+            Model.IsAudio &&
+            (_audioPlaybackStatus == AudioPlaybackStatus.Playing ||
+             _audioPlaybackStatus == AudioPlaybackStatus.Paused);
+
+        public bool CanSaveAudioAs => ShowAudioOverflowMenu && _audioExport != null;
+
+        /// <summary>Total duration in the bubble footer (next to the sound glyph).</summary>
+        public bool ShowAudioFooterDuration =>
+            Model.IsAudio && Model.AudioDurationSeconds > 0;
+
+        public string AudioFooterDurationText
+        {
+            get
+            {
+                if (!ShowAudioFooterDuration)
+                {
+                    return string.Empty;
+                }
+
+                uint seconds = Model.AudioDurationSeconds;
+                return string.Format("{0}:{1:00}", seconds / 60, seconds % 60);
+            }
+        }
+
+        /// <summary>Kind label without duration (duration lives in the footer / bar clock).</summary>
         public string AudioReadyLabelText =>
             Model.IsVoiceMessage
                 ? (_strings != null
@@ -471,7 +515,7 @@ namespace Unison.Core.ViewModels
                     ? _strings.Get("ChatDetail_Audio", "Audio")
                     : "Audio");
 
-        /// <summary>Right-side clock: total when Ready; current/frozen while Playing/Paused.</summary>
+        /// <summary>Bar clock while Playing/Paused (position). Ready uses the footer for total.</summary>
         public string AudioTimestampText
         {
             get
@@ -571,10 +615,15 @@ namespace Unison.Core.ViewModels
                 nameof(ShowAudioTransportBar),
                 nameof(ShowAudioReadyLabel),
                 nameof(ShowAudioSlider),
+                nameof(ShowAudioOverflowMenu),
+                nameof(ShowAudioBarTimestamp),
+                nameof(CanSaveAudioAs),
                 nameof(CanDownloadAudio),
                 nameof(AudioButtonText),
                 nameof(AudioReadyLabelText),
                 nameof(AudioTimestampText),
+                nameof(ShowAudioFooterDuration),
+                nameof(AudioFooterDurationText),
                 nameof(MediaBadgeDurationText),
                 nameof(AudioSliderMaximum),
                 nameof(AudioSliderValue));
@@ -591,7 +640,12 @@ namespace Unison.Core.ViewModels
                 nameof(AudioButtonText),
                 nameof(IsAudio),
                 nameof(ShowTextContent),
+                nameof(ShowAudioOverflowMenu),
+                nameof(CanSaveAudioAs),
+                nameof(ShowAudioFooterDuration),
+                nameof(AudioFooterDurationText),
                 nameof(MediaBadgeDurationText));
+            RaiseMediaCommandsChanged();
         }
 
         private void RaiseQuoteUiChanged()

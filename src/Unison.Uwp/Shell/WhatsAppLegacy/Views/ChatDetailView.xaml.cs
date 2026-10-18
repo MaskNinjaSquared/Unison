@@ -19,6 +19,7 @@ using Unison.Uwp.Services;
 using Unison.Uwp.Services.WhatsApp;
 using IChatDetailSurface = Unison.Uwp.UI.Views.IChatDetailSurface;
 using Unison.Uwp.UI.Controls;
+using Unison.Uwp.UI.Views;
 using Windows.Foundation;
 using Windows.Media;
 using Windows.Media.Core;
@@ -101,6 +102,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         private int _displayedPinnedIndex;
         private ChatMessage _playingAudioMessage;
         private ChatMessageViewModel _playingAudioVm;
+        /// <summary>Lazy camera overlay — not in XAML so Creators/Mobile chat open skips CaptureElement.</summary>
+        private CameraPickView _cameraPickOverlay;
         private MediaPlayer _audioMediaPlayer;
         private DispatcherTimer _audioPositionTimer;
         private DispatcherTimer _dateSeparatorTimer;
@@ -1526,7 +1529,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private void OpenCameraPick()
         {
-            if (CameraPickOverlay == null || CameraPickPresenter == null)
+            if (CameraPickPresenter == null)
             {
                 return;
             }
@@ -1535,13 +1538,26 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             TryCloseVideoViewer();
             TryCloseImageViewer();
 
+            CameraPickView overlay = EnsureCameraPickOverlay();
             var pickVm = new CameraPickViewModel();
-            CameraPickOverlay.CloseRequested -= CameraPickOverlay_CloseRequested;
-            CameraPickOverlay.PhotoCaptured -= CameraPickOverlay_PhotoCaptured;
-            CameraPickOverlay.ViewModel = pickVm;
-            CameraPickOverlay.CloseRequested += CameraPickOverlay_CloseRequested;
-            CameraPickOverlay.PhotoCaptured += CameraPickOverlay_PhotoCaptured;
+            overlay.CloseRequested -= CameraPickOverlay_CloseRequested;
+            overlay.PhotoCaptured -= CameraPickOverlay_PhotoCaptured;
+            overlay.ViewModel = pickVm;
+            overlay.CloseRequested += CameraPickOverlay_CloseRequested;
+            overlay.PhotoCaptured += CameraPickOverlay_PhotoCaptured;
             CameraPickPresenter.Visibility = Visibility.Visible;
+        }
+
+        private CameraPickView EnsureCameraPickOverlay()
+        {
+            if (_cameraPickOverlay != null)
+            {
+                return _cameraPickOverlay;
+            }
+
+            _cameraPickOverlay = new CameraPickView();
+            CameraPickPresenter.Content = _cameraPickOverlay;
+            return _cameraPickOverlay;
         }
 
         private void CameraPickOverlay_CloseRequested(object sender, EventArgs e)
@@ -1567,11 +1583,13 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return false;
             }
 
-            if (CameraPickOverlay != null)
+            if (_cameraPickOverlay != null)
             {
-                CameraPickOverlay.CloseRequested -= CameraPickOverlay_CloseRequested;
-                CameraPickOverlay.PhotoCaptured -= CameraPickOverlay_PhotoCaptured;
-                CameraPickOverlay.ViewModel = null;
+                _cameraPickOverlay.CloseRequested -= CameraPickOverlay_CloseRequested;
+                _cameraPickOverlay.PhotoCaptured -= CameraPickOverlay_PhotoCaptured;
+                _cameraPickOverlay.ViewModel = null;
+                CameraPickPresenter.Content = null;
+                _cameraPickOverlay = null;
             }
 
             CameraPickPresenter.Visibility = Visibility.Collapsed;
@@ -1613,6 +1631,11 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             e.Handled = true;
         }
 
+        public void OnDocumentOverflowClick(object sender, RoutedEventArgs e)
+        {
+            ShowDocumentReadyMenu(sender as FrameworkElement, default(Point));
+        }
+
         /// <summary>Ready-state context menu: Abrir / Salvar como.</summary>
         private void ShowDocumentReadyMenu(FrameworkElement anchor, Point position)
         {
@@ -1644,7 +1667,15 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
             try
             {
-                flyout.ShowAt(anchor, position);
+                // Overflow Click passes default Point — ShowAt(anchor) places under the "…" control.
+                if (position == default(Point))
+                {
+                    flyout.ShowAt(anchor);
+                }
+                else
+                {
+                    flyout.ShowAt(anchor, position);
+                }
             }
             catch
             {

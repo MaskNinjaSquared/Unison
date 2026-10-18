@@ -34,12 +34,15 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         public event EventHandler DebugRequested;
 
+        public event EventHandler SettingsRequested;
+
         public StatusView()
         {
             InitializeComponent();
             StatusListPart.SearchRequested += (s, e) => SearchRequested?.Invoke(this, e);
             StatusListPart.ProfileRequested += (s, e) => ProfileRequested?.Invoke(this, e);
             StatusListPart.DebugRequested += (s, e) => DebugRequested?.Invoke(this, e);
+            StatusListPart.SettingsRequested += (s, e) => SettingsRequested?.Invoke(this, e);
             NavigationCacheMode = NavigationCacheMode.Disabled;
             PaneSplitter.Width = ChatPaneLayoutConstants.SplitterWidth;
             Column0.MinWidth = ChatPaneLayoutConstants.MinListWidth;

@@ -213,7 +213,15 @@ namespace Unison.Uwp.Services
                     return;
                 }
 
-                int badgeValue = Math.Min(99, totalUnread);
+                // Desktop WinRT: values above 99 render as "99+".
+                // Mobile: the glyph badge cannot paint a superscript; shell/Live Tile text uses "99⁺".
+                // Passing 100+ still asks the OS for its overflow mark on Mobile.
+                int badgeValue = totalUnread;
+                if (SystemInfoProvider.DetectIsMobile() && totalUnread > 99)
+                {
+                    badgeValue = 100;
+                }
+
                 var badgeXml = BadgeUpdateManager.GetTemplateContent(BadgeTemplateType.BadgeNumber);
                 var badgeElement = badgeXml.SelectSingleNode("/badge") as XmlElement;
                 if (badgeElement == null)

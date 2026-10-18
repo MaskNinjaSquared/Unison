@@ -24,6 +24,9 @@ namespace Unison.Core.Contracts
 
         Task<IReadOnlyList<HistoryStatus>> GetActiveForAuthorAsync(string authorJid, int limit = 50);
 
+        /// <summary>Marks one Status item viewed on this device. No-op when already viewed.</summary>
+        Task<bool> MarkViewedAsync(string authorJid, string messageId);
+
         Task<int> DeleteExpiredAsync();
 
         Task ClearAsync(string reason = null);

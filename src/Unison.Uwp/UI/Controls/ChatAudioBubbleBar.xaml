@@ -7,7 +7,7 @@
     MinHeight="36"
     HorizontalAlignment="Stretch">
 
-    <!-- WhatsApp shell: transparent icon play/pause — Ready label ↔ slider — timestamp -->
+    <!-- WhatsApp / Legacy: play/pause — Ready label ↔ slider — overflow|running time -->
     <Grid MinWidth="0" HorizontalAlignment="Stretch">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto"/>
@@ -66,17 +66,32 @@
                     ValueChanged="PositionSlider_ValueChanged"/>
         </Grid>
 
-        <TextBlock x:Name="TimestampText"
-                   Grid.Column="2"
-                   Text="0:00"
-                   FontSize="12"
-                   FontFamily="{StaticResource MainFont}"
-                   VerticalAlignment="Center"
-                   MaxWidth="48"
-                   TextWrapping="NoWrap"
-                   TextTrimming="CharacterEllipsis"
-                   MaxLines="1"
-                   TextAlignment="Right"
-                   Foreground="{Binding GlyphForeground, ElementName=Root}"/>
+        <Grid Grid.Column="2" VerticalAlignment="Center" MinWidth="28" MinHeight="28">
+            <Button x:Name="MoreButton"
+                    Click="More_Click"
+                    Style="{StaticResource WhatsAppIconButtonStyle}"
+                    Padding="0"
+                    MinWidth="28" MinHeight="28"
+                    Visibility="Collapsed"
+                    AutomationProperties.Name="More">
+                <TextBlock Text="&#xE712;"
+                           FontFamily="{StaticResource IconFont}"
+                           FontSize="16"
+                           Foreground="{Binding GlyphForeground, ElementName=Root}"/>
+            </Button>
+            <TextBlock x:Name="TimestampText"
+                       Text="0:00"
+                       FontSize="12"
+                       FontFamily="{StaticResource MainFont}"
+                       VerticalAlignment="Center"
+                       HorizontalAlignment="Right"
+                       MaxWidth="48"
+                       TextWrapping="NoWrap"
+                       TextTrimming="CharacterEllipsis"
+                       MaxLines="1"
+                       TextAlignment="Right"
+                       Visibility="Collapsed"
+                       Foreground="{Binding GlyphForeground, ElementName=Root}"/>
+        </Grid>
     </Grid>
 </UserControl>

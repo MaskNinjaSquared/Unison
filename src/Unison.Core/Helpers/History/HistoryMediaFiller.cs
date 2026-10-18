@@ -48,9 +48,10 @@ namespace Unison.Core.Helpers
                 return;
             }
 
-            if (msg.VideoMessage != null)
+            // Baileys treats ptvMessage as videoMessage (same VideoMessage proto).
+            Proto.Message.Types.VideoMessage video = msg.VideoMessage ?? msg.PtvMessage;
+            if (video != null)
             {
-                var video = msg.VideoMessage;
                 target.MediaUrl = NullIfEmpty(video.Url);
                 target.MediaDirectPath = NullIfEmpty(video.DirectPath);
                 target.MediaKeyBase64 = ToBase64(video.MediaKey);

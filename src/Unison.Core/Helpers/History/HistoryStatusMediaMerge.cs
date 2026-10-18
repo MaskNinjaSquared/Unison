@@ -76,6 +76,12 @@ namespace Unison.Core.Helpers
                 incoming.SyncType = existing.SyncType;
             }
 
+            // Once viewed on this device, a re-ingest without the flag must not reset the ring.
+            if (existing.IsViewed)
+            {
+                incoming.IsViewed = true;
+            }
+
             return incoming;
         }
 

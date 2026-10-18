@@ -71,6 +71,8 @@ namespace Unison.Uwp.Services.WhatsApp.History
         private readonly InitialSyncProgressState _initialSync;
         private readonly SyncBudget _syncBudget;
         private readonly SyncWorkloadStrategy _workload;
+        private readonly IDisplayKeepAwakeService _displayKeepAwake;
+        private readonly ChatListInitialPaintGate _listPaintGate;
 
         /// <summary>
         /// Session-scoped: one toast after repeated background history lots. Not reset until
@@ -106,7 +108,9 @@ namespace Unison.Uwp.Services.WhatsApp.History
             IHistoryMessageStore messageHistoryStore = null,
             IHistoryStatusStore statusStore = null,
             INotificationService notifications = null,
-            IStringResources strings = null)
+            IStringResources strings = null,
+            IDisplayKeepAwakeService displayKeepAwake = null,
+            ChatListInitialPaintGate listPaintGate = null)
         {
             if (sessions == null)
             {
@@ -150,6 +154,8 @@ namespace Unison.Uwp.Services.WhatsApp.History
             _statusStore = statusStore;
             _notifications = notifications;
             _strings = strings;
+            _displayKeepAwake = displayKeepAwake;
+            _listPaintGate = listPaintGate;
 
             // Both live as long as the app does, so there is nothing to unhook from.
             _syncStatus.Changed += (s, status) =>
@@ -161,8 +167,11 @@ namespace Unison.Uwp.Services.WhatsApp.History
             _initialSync.Changed += (s, e) =>
             {
                 // Before the relay: the list reads IsAwaitingFirstHistorySync inside its handler.
+                // Release DisplayRequest immediately before clearing the hold so x:Load can run
+                // without keeping the screen forced on through the paint storm.
                 if (e != null && e.IsCompleted)
                 {
+                    _displayKeepAwake?.Release("before-list-xload");
                     _firstHistorySyncCompletedThisSession = true;
                     _awaitingFirstHistorySync = false;
                 }
@@ -278,7 +287,8 @@ namespace Unison.Uwp.Services.WhatsApp.History
         {
             string resetReason = reason ?? string.Empty;
             _firstHistorySyncCompletedThisSession = false;
-            _awaitingFirstHistorySync = true;
+            _listPaintGate?.Reset("session-reset:" + resetReason);
+            BeginFirstSyncListHold("session-reset:" + resetReason);
             if (_migrationStore != null)
             {
                 try
@@ -349,6 +359,12 @@ namespace Unison.Uwp.Services.WhatsApp.History
         {
             // Foreground already shows the catch-up banner; do not spend the one-toast budget.
             if (Unison.Uwp.App.IsWindowVisible)
+            {
+                return;
+            }
+
+            // First login / safe-mode catch-up: no toast popups while the list is still syncing.
+            if (_initialSync != null && _initialSync.IsActive)
             {
                 return;
             }
@@ -714,6 +730,13 @@ namespace Unison.Uwp.Services.WhatsApp.History
                 return;
             }
 
+            Debug.WriteLine("[HistoryFacade] Status persist count=" + rows.Count + " sync=" + (syncId ?? ""));
+            for (int i = 0; i < rows.Count && i < 12; i++)
+            {
+                Debug.WriteLine(
+                    "[HistoryFacade] Status row " + StatusItemDiagnostics.DescribeItem(rows[i], i));
+            }
+
             try
             {
                 await HistoryThumbnailMaterializer.MaterializeStatusThumbsAsync(
@@ -780,8 +803,18 @@ namespace Unison.Uwp.Services.WhatsApp.History
             int storedPreviews = await _chatPreviewStore.CountAsync().ConfigureAwait(false);
             if (storedPreviews == 0 && !_firstHistorySyncCompletedThisSession)
             {
-                _awaitingFirstHistorySync = true;
+                BeginFirstSyncListHold("sqlite-warm-empty");
             }
+        }
+
+        /// <summary>
+        /// List stays unmaterialized and the screen stays awake until quiet-finalize clears the hold.
+        /// </summary>
+        private void BeginFirstSyncListHold(string reason)
+        {
+            _awaitingFirstHistorySync = true;
+            _listPaintGate?.Arm(reason);
+            _displayKeepAwake?.Hold(reason);
         }
 
         private string CurrentSyncId()

@@ -51,6 +51,9 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
         private readonly SyncWorkloadStrategy _workload;
         private readonly GroupQueryWindow _queryWindow = new GroupQueryWindow();
 
+        /// <summary>0 free / 1 busy — overlapping listings each burn a 60s IQ and starve chat open.</summary>
+        private int _listingInFlight;
+
         internal GroupFacade(
             IWhatsAppService client,
             IWhatsAppSessionProvider sessions,
@@ -306,40 +309,57 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
                 return;
             }
 
-            // Armed on the way out, and only when the listing answered. A timeout is exactly when
-            // the groups are still nameless, and it must not buy itself the reuse window.
+            if (Interlocked.CompareExchange(ref _listingInFlight, 1, 0) != 0)
+            {
+                Debug.WriteLine("[GroupFacade] QueryAllGroupsAsync skipped (listing already in flight)");
+                return;
+            }
+
+            // Armed on the way out: full reuse when the listing answered; short failure backoff
+            // when it timed out, so callers cannot stack another 60s IQ on top of a dead one.
             bool listingAnswered = false;
             try
             {
-                Debug.WriteLine("[GroupFacade] Fetching all participating groups...");
-                var response = await socket.QueryParticipatingGroupsAsync();
-                if (response != null)
+                try
                 {
-                    listingAnswered = true;
-                    var groupNodes = response.FindAllDescendants("group");
-                    Debug.WriteLine("[GroupFacade] QueryAllGroupsAsync found " + groupNodes.Count + " group nodes.");
-                    await _apply.ApplyListingAsync(_reader.ReadListing(groupNodes));
+                    Debug.WriteLine("[GroupFacade] Fetching all participating groups...");
+                    var response = await socket.QueryParticipatingGroupsAsync();
+                    if (response != null)
+                    {
+                        listingAnswered = true;
+                        var groupNodes = response.FindAllDescendants("group");
+                        Debug.WriteLine("[GroupFacade] QueryAllGroupsAsync found " + groupNodes.Count + " group nodes.");
+                        await _apply.ApplyListingAsync(_reader.ReadListing(groupNodes));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[GroupFacade] Group query failed: " + ex.Message);
+                }
+
+                // Outside the try above. The per-group fallback names the groups the listing missed,
+                // so a listing that failed is the case it exists for.
+                try
+                {
+                    await QueryUnresolvedGroupMetadataAsync(_workload.GroupMetadataBatchSize);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[GroupFacade] Group metadata fallback failed: " + ex.Message);
+                }
+
+                if (listingAnswered)
+                {
+                    _queryWindow.Arm(DateTime.UtcNow);
+                }
+                else
+                {
+                    _queryWindow.ArmFailure(DateTime.UtcNow);
                 }
             }
-            catch (Exception ex)
+            finally
             {
-                Debug.WriteLine("[GroupFacade] Group query failed: " + ex.Message);
-            }
-
-            // Outside the try above. The per-group fallback names the groups the listing missed,
-            // so a listing that failed is the case it exists for.
-            try
-            {
-                await QueryUnresolvedGroupMetadataAsync(_workload.GroupMetadataBatchSize);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[GroupFacade] Group metadata fallback failed: " + ex.Message);
-            }
-
-            if (listingAnswered)
-            {
-                _queryWindow.Arm(DateTime.UtcNow);
+                Interlocked.Exchange(ref _listingInFlight, 0);
             }
         }
 

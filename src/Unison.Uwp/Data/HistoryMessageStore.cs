@@ -264,7 +264,7 @@ namespace Unison.Uwp.Data
             List<HistoryMessageRow> rows;
             if (beforeUtc.HasValue)
             {
-                DateTime before = beforeUtc.Value;
+                DateTime before = HistorySqlCursor.ForQuery(beforeUtc.Value);
                 string beforeId = beforeMessageId ?? string.Empty;
                 rows = await _connection.QueryAsync<HistoryMessageRow>(
                     TimelineSelectSql +
@@ -331,7 +331,7 @@ namespace Unison.Uwp.Data
 
             if (beforeUtc.HasValue)
             {
-                DateTime before = beforeUtc.Value;
+                DateTime before = HistorySqlCursor.ForQuery(beforeUtc.Value);
                 string beforeId = beforeMessageId ?? string.Empty;
                 sql.Append(" AND (TimestampUtc < ? OR (TimestampUtc = ? AND MessageId < ?))");
                 args.Add(before);

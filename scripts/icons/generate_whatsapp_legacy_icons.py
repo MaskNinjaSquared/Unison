@@ -14,6 +14,9 @@ Codepoints (Private Use Area):
   EB0A  pause      (media-pause.png)
   EB0B  download   (media-download.png)
   EB0C  stop       (media-stop.png)
+  EB0D  flash      (cam-flash.png)          flash on
+  EB0E  flashoff   (cam-flash-off.png)      flash off
+  EB0F  flashauto  (cam-flash-auto.png)     flash auto (reserved; not on chrome yet)
 
 Ink is read from alpha only (source colour is ignored; XAML sets Foreground).
 Each glyph is cropped to its own ink and fitted into the same square box,
@@ -56,6 +59,9 @@ GLYPHS = [
     ("pause", 0xEB0A, "media-pause.png", 0.88),
     ("download", 0xEB0B, "media-download.png", 0.90),
     ("stop", 0xEB0C, "media-stop.png", 0.80),
+    ("flash", 0xEB0D, "cam-flash.png", 0.90),
+    ("flashoff", 0xEB0E, "cam-flash-off.png", 0.90),
+    ("flashauto", 0xEB0F, "cam-flash-auto.png", 0.90),
 ]
 
 

@@ -65,7 +65,12 @@ namespace Unison.Uwp.Services
                     return;
                 }
 
-                int badgeValue = Math.Min(99, totalUnread);
+                int badgeValue = totalUnread;
+                if (SystemInfoProvider.DetectIsMobile() && totalUnread > 99)
+                {
+                    badgeValue = 100;
+                }
+
                 XmlDocument badgeXml = BadgeUpdateManager.GetTemplateContent(BadgeTemplateType.BadgeNumber);
                 var badgeElement = badgeXml.SelectSingleNode("/badge") as XmlElement;
                 if (badgeElement == null)

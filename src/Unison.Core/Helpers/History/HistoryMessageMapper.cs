@@ -55,6 +55,7 @@ namespace Unison.Core.Helpers
             }
 
             ApplyReactions(message, row);
+            message.EnsureKindFromLegacyFlags();
             return message;
         }
 
@@ -506,6 +507,23 @@ namespace Unison.Core.Helpers
                 if (target.DocumentFileLengthBytes == 0)
                 {
                     target.DocumentFileLengthBytes = source.DocumentFileLengthBytes;
+                }
+
+                if (target.Kind == ChatMessageKind.Text)
+                {
+                    target.Kind = ChatMessageKind.Document;
+                }
+
+                target.NotifyDocumentDownloadStateChanged();
+            }
+
+            if (string.IsNullOrWhiteSpace(target.DocumentUri) &&
+                !string.IsNullOrWhiteSpace(source.DocumentUri))
+            {
+                target.DocumentUri = source.DocumentUri;
+                if (target.Kind == ChatMessageKind.Text)
+                {
+                    target.Kind = ChatMessageKind.Document;
                 }
 
                 target.NotifyDocumentDownloadStateChanged();

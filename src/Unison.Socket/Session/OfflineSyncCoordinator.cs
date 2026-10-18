@@ -146,9 +146,19 @@ namespace Unison.Socket.Session
 
             // Timeout must still tell the host the replay window is over. Without this,
             // the chat-list header stays on "Updating..." forever (it only clears on "synced").
+            // But BeginBuffering runs *before* TLS — if connect is still hung, claiming
+            // pending-notifications would publish a false "synced" with socket=False.
             if (string.Equals(reason, "timed out", StringComparison.Ordinal) &&
                 !ReceivedPendingNotifications)
             {
+                if (!_connection.IsConnected)
+                {
+                    _log.Warn(
+                        "[Offline] Safety timeout before connect completed; " +
+                        "not claiming pending notifications");
+                    return;
+                }
+
                 ReceivedPendingNotifications = true;
                 _log.Info("[Offline] Safety timeout: treating pending notifications as received");
                 await _events.EmitAsync(

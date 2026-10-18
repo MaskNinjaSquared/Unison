@@ -36,12 +36,26 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
-        public void A_listing_that_did_not_answer_leaves_the_window_open()
+        public void A_listing_that_did_not_answer_gets_a_short_failure_backoff_not_full_reuse()
         {
-            // Arming happens only after a listing comes back. A timeout must not buy silence.
             var window = new GroupQueryWindow();
+            window.ArmFailure(Now);
 
-            Assert.False(window.ShouldSkip(force: false, Now.AddSeconds(30)));
+            Assert.True(window.ShouldSkip(force: false, Now.AddSeconds(44)));
+            Assert.False(window.ShouldSkip(force: false, Now.AddSeconds(45)));
+            // Full reuse is only after Arm (answered listing), not after a timeout.
+            Assert.False(window.ShouldSkip(force: false, Now.AddMinutes(1)));
+        }
+
+        [Fact]
+        public void Failure_backoff_does_not_shorten_an_answered_reuse_window()
+        {
+            var window = new GroupQueryWindow();
+            window.Arm(Now);
+            window.ArmFailure(Now.AddSeconds(10));
+
+            Assert.True(window.ShouldSkip(force: false, Now.AddSeconds(119)));
+            Assert.False(window.ShouldSkip(force: false, Now.AddMinutes(2)));
         }
 
         [Fact]

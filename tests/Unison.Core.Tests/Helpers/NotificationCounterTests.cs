@@ -21,6 +21,11 @@ namespace Unison.Core.Tests.Helpers
             Assert.Equal(2, NotificationCounter.CountChatsWithNotification(chats));
             Assert.Equal("(2)", NotificationCounter.FormatBadge(2));
             Assert.Equal(string.Empty, NotificationCounter.FormatBadge(0));
+            Assert.Equal("(99)", NotificationCounter.FormatBadge(99));
+            Assert.Equal("(99" + NotificationCounter.SuperscriptPlus + ")", NotificationCounter.FormatBadge(100));
+            Assert.Equal("(99" + NotificationCounter.SuperscriptPlus + ")", NotificationCounter.FormatBadge(250));
+            Assert.Equal("99", NotificationCounter.FormatOverflowCount(99));
+            Assert.Equal("99" + NotificationCounter.SuperscriptPlus, NotificationCounter.FormatOverflowCount(100));
         }
 
         [Fact]

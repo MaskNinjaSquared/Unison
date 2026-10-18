@@ -20,6 +20,7 @@
                         <Setter Target="PauseButton.Background" Value="{ThemeResource ChatDetailReceivedMediaButtonBackgroundBrush}"/>
                         <Setter Target="PlayButton.Foreground" Value="{ThemeResource ChatDetailReceivedMediaButtonGlyphBrush}"/>
                         <Setter Target="PauseButton.Foreground" Value="{ThemeResource ChatDetailReceivedMediaButtonGlyphBrush}"/>
+                        <Setter Target="MoreButton.Foreground" Value="{ThemeResource ChatDetailReceivedTextBrush}"/>
                         <Setter Target="ReadyLabel.Foreground" Value="{ThemeResource ChatDetailReceivedTextBrush}"/>
                         <Setter Target="TimestampText.Foreground" Value="{ThemeResource ChatDetailReceivedTextBrush}"/>
                         <Setter Target="PositionSlider.Foreground" Value="{ThemeResource ChatDetailReceivedAudioSliderFillBrush}"/>
@@ -31,6 +32,7 @@
                         <Setter Target="PauseButton.Background" Value="{ThemeResource ChatDetailSentMediaButtonBackgroundBrush}"/>
                         <Setter Target="PlayButton.Foreground" Value="{ThemeResource ChatDetailSentMediaButtonGlyphBrush}"/>
                         <Setter Target="PauseButton.Foreground" Value="{ThemeResource ChatDetailSentMediaButtonGlyphBrush}"/>
+                        <Setter Target="MoreButton.Foreground" Value="{ThemeResource ChatDetailSentTextBrush}"/>
                         <Setter Target="ReadyLabel.Foreground" Value="{ThemeResource ChatDetailSentTextBrush}"/>
                         <Setter Target="TimestampText.Foreground" Value="{ThemeResource ChatDetailSentTextBrush}"/>
                         <Setter Target="PositionSlider.Foreground" Value="{ThemeResource ChatDetailSentAudioSliderFillBrush}"/>
@@ -95,17 +97,33 @@
                     ValueChanged="PositionSlider_ValueChanged"/>
         </Grid>
 
-        <TextBlock x:Name="TimestampText"
-                   Grid.Column="2"
-                   Text="0:00"
-                   FontSize="12"
-                   FontFamily="{StaticResource MainFont}"
-                   VerticalAlignment="Center"
-                   MaxWidth="48"
-                   TextWrapping="NoWrap"
-                   TextTrimming="CharacterEllipsis"
-                   MaxLines="1"
-                   TextAlignment="Right"
-                   Foreground="{ThemeResource ChatDetailReceivedTextBrush}"/>
+        <Grid Grid.Column="2" VerticalAlignment="Center" MinWidth="28" MinHeight="28">
+            <Button x:Name="MoreButton"
+                    Click="More_Click"
+                    Style="{StaticResource WhatsAppIconButtonStyle}"
+                    Padding="0"
+                    MinWidth="28" MinHeight="28"
+                    Foreground="{ThemeResource ChatDetailReceivedTextBrush}"
+                    Visibility="Collapsed"
+                    AutomationProperties.Name="More">
+                <TextBlock Text="&#xE712;"
+                           FontFamily="{StaticResource IconFont}"
+                           FontSize="16"
+                           Foreground="{Binding Foreground, ElementName=MoreButton}"/>
+            </Button>
+            <TextBlock x:Name="TimestampText"
+                       Text="0:00"
+                       FontSize="12"
+                       FontFamily="{StaticResource MainFont}"
+                       VerticalAlignment="Center"
+                       HorizontalAlignment="Right"
+                       MaxWidth="48"
+                       TextWrapping="NoWrap"
+                       TextTrimming="CharacterEllipsis"
+                       MaxLines="1"
+                       TextAlignment="Right"
+                       Visibility="Collapsed"
+                       Foreground="{ThemeResource ChatDetailReceivedTextBrush}"/>
+        </Grid>
     </Grid>
 </UserControl>

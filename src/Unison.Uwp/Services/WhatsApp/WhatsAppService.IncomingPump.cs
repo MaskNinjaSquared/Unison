@@ -1049,8 +1049,22 @@ namespace Unison.Uwp.Services.WhatsApp
                 e.Message);
             if (row == null)
             {
+                string gaps = StatusItemDiagnostics.DescribeProtoGaps(e.Message);
+                Debug.WriteLine(
+                    "[WhatsAppService] Live status dropped id=" + e.MessageId +
+                    "; author=" + author + "; " + gaps);
+                RuntimeDiagnosticsService.Instance.Write(
+                    "status",
+                    "live-dropped",
+                    "id=" + e.MessageId + "; author=" + author + "; " + gaps);
                 return;
             }
+
+            RuntimeDiagnosticsService.Instance.Write(
+                "status",
+                "live-built",
+                StatusItemDiagnostics.DescribeItem(row) + "; " +
+                StatusItemDiagnostics.DescribeProtoGaps(e.Message));
 
             RaiseReport(
                 () => OnLiveStatusReceived?.Invoke(this, row),
@@ -1375,11 +1389,16 @@ namespace Unison.Uwp.Services.WhatsApp
                 bool isActuallyFromMe = sender.IsFromMe;
                 
                 // Decided once, here, so the badge and the toast cannot disagree about whether the
-                // user is looking at this conversation.
+                // user is looking at this conversation. Initial sync / offline drain never pop
+                // message toasts (unread still updates).
+                bool quietForSync =
+                    (_initialSync != null && _initialSync.IsActive) ||
+                    (_socket != null && _socket.IsAwaitingInitialSync);
                 IncomingAttention attention = IncomingAttention.For(
                     isActuallyFromMe,
                     IsActiveChatJid(jid),
-                    Unison.Uwp.App.IsWindowVisible);
+                    Unison.Uwp.App.IsWindowVisible,
+                    suppressToastForSync: quietForSync);
 
                 // List preview body is unprefixed; group author is applied via LastMessageAuthor.
                 // Strip identity prefers PN when known; FormatListAuthorPrefix falls back to the

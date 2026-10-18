@@ -306,8 +306,10 @@ namespace Unison.Core.ViewModels
         }
 
         /// <summary>
-        /// WhatsApp Legacy: narrow window showing conversation/status detail fullscreen —
-        /// shell pivot / brand chrome should hide until the user leaves the detail.
+        /// WhatsApp Legacy Minimal / narrow: detail fullscreen (chat or status) —
+        /// shell brand + pivot headers should hide until the user leaves the detail.
+        /// Status detail still renders inside the pivot <c>StatusView</c>; the shell keeps
+        /// the pivot body visible and only collapses headers (see ShellView.ApplyShellChrome).
         /// </summary>
         public bool HidesLegacyShellChrome =>
             IsNarrowWindow &&
@@ -344,10 +346,17 @@ namespace Unison.Core.ViewModels
         /// </summary>
         public void SelectStatusDetail(bool open)
         {
+            bool wasOpen = _statusDetailOpen;
             _statusDetailOpen = open;
             if (IsNarrowWindow)
             {
                 ChatPane = open ? PaneNarrowDetail : PaneNarrowList;
+            }
+
+            if (wasOpen != open)
+            {
+                OnPropertyChanged(nameof(HasOpenStatusDetail));
+                OnPropertyChanged(nameof(HidesLegacyShellChrome));
             }
 
             RaiseSystemBackButtonChanged();
@@ -356,14 +365,26 @@ namespace Unison.Core.ViewModels
         /// <summary>Entering Status shell page: default to list (or WideBoth).</summary>
         public void EnterStatusSurface()
         {
-            _statusDetailOpen = false;
+            if (_statusDetailOpen)
+            {
+                _statusDetailOpen = false;
+                OnPropertyChanged(nameof(HasOpenStatusDetail));
+                OnPropertyChanged(nameof(HidesLegacyShellChrome));
+            }
+
             SyncStatusPane();
         }
 
         /// <summary>Leaving Status: restore chat list/detail pane rules.</summary>
         public void LeaveStatusSurface()
         {
-            _statusDetailOpen = false;
+            if (_statusDetailOpen)
+            {
+                _statusDetailOpen = false;
+                OnPropertyChanged(nameof(HasOpenStatusDetail));
+                OnPropertyChanged(nameof(HidesLegacyShellChrome));
+            }
+
             // ActiveSection may still be Status during NavigatedFrom — do not call SyncChatPane.
             if (IsNarrowWindow)
             {

@@ -100,14 +100,17 @@ namespace Unison.Core.Helpers
                 };
             }
 
-            if (unwrapped.VideoMessage != null)
+            // Baileys: ptvMessage is a VideoMessage (circle / status video note).
+            Proto.Message.Types.VideoMessage video =
+                unwrapped.VideoMessage ?? unwrapped.PtvMessage;
+            if (video != null)
             {
                 return new MessageRenderInfo
                 {
-                    Content = MediaPreviewTag.ForVideo(unwrapped.VideoMessage.Caption),
+                    Content = MediaPreviewTag.ForVideo(video.Caption),
                     IsVideo = true,
-                    Caption = unwrapped.VideoMessage.Caption ?? string.Empty,
-                    VideoMessage = unwrapped.VideoMessage
+                    Caption = video.Caption ?? string.Empty,
+                    VideoMessage = video
                 };
             }
 

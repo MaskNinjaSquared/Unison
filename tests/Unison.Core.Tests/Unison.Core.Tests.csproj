@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Unison.Core\Unison.Core.csproj" />
+    <ProjectReference Include="..\..\src\Unison.Socket\Unison.Socket.csproj" />
   </ItemGroup>
 
 </Project>

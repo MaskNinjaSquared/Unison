@@ -213,9 +213,12 @@ namespace Unison.Uwp.UI.Controls
             var content = new Grid { Width = diameter, Height = diameter };
             content.Children.Add(_legacyRingEllipse);
             content.Children.Add(_whatsAppGlyph);
+            // MediaHitTargetButtonStyle: no rectangular PointerOver paint over the ring.
             _whatsAppButton = new Button
             {
-                Style = TryStyle("TransparentMediaButtonStyle") ?? TryStyle("WhatsAppIconButtonStyle"),
+                Style = TryStyle("MediaHitTargetButtonStyle")
+                    ?? TryStyle("TransparentMediaButtonStyle")
+                    ?? TryStyle("WhatsAppIconButtonStyle"),
                 Width = diameter,
                 Height = diameter,
                 MinWidth = diameter,

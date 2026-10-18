@@ -3,7 +3,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!--
       Merged AFTER Themes/WhatsApp/Theme.xaml so ThemeDictionaries win over WhatsApp greys.
-      Icon glyphs live in LegacyIconFont (WhatsAppLegacyIcons.ttf): EB01–EB0C.
+      Icon glyphs live in LegacyIconFont (WhatsAppLegacyIcons.ttf): EB01–EB0F.
     -->
     <BitmapImage x:Key="AvatarContactFallbackImage"
                  UriSource="ms-appx:///Assets/WhatsAppLegacy/default-contact-icon.png"/>
@@ -21,6 +21,9 @@
     <x:String x:Key="LegacyGlyphPause">&#xEB0A;</x:String>
     <x:String x:Key="LegacyGlyphDownload">&#xEB0B;</x:String>
     <x:String x:Key="LegacyGlyphStop">&#xEB0C;</x:String>
+    <x:String x:Key="LegacyGlyphFlash">&#xEB0D;</x:String>
+    <x:String x:Key="LegacyGlyphFlashOff">&#xEB0E;</x:String>
+    <x:String x:Key="LegacyGlyphFlashAuto">&#xEB0F;</x:String>
     <!-- Every LegacyIconFont glyph is centred in its em, so one size per surface keeps them uniform. -->
     <x:Double x:Key="LegacyAppBarGlyphSize">24</x:Double>
     <!-- Compact strip +6 for a 3px air gap above and below the 40px ring (was 48). -->
@@ -67,7 +70,7 @@
             <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush" Color="#FFFFFFFF"/>
             <!-- Accent #00656A: splitter / unread / composer -->
             <SolidColorBrush x:Key="ChatPaneSplitterBackgroundBrush" Color="#FF00656A"/>
-            <SolidColorBrush x:Key="ChatPaneSplitterGripBrush" Color="#FF00656A"/>
+            <SolidColorBrush x:Key="ChatPaneSplitterGripBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="ChatListUnreadBadgeBrush" Color="#FF00656A"/>
             <SolidColorBrush x:Key="ChatListSyncStatusBrush" Color="#FF00656A"/>
             <SolidColorBrush x:Key="ChatDetailAccentBrush" Color="#FF00656A"/>
@@ -122,7 +125,7 @@
             <SolidColorBrush x:Key="ComboBoxDropDownBackground" Color="#FF000000"/>
             <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatPaneSplitterBackgroundBrush" Color="#FF00656A"/>
-            <SolidColorBrush x:Key="ChatPaneSplitterGripBrush" Color="#FF00656A"/>
+            <SolidColorBrush x:Key="ChatPaneSplitterGripBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="ChatListUnreadBadgeBrush" Color="#FF00656A"/>
             <SolidColorBrush x:Key="ChatListSyncStatusBrush" Color="#FF00656A"/>
             <SolidColorBrush x:Key="ChatDetailAccentBrush" Color="#FF00656A"/>
@@ -178,7 +181,7 @@
             <SolidColorBrush x:Key="ComboBoxDropDownBackground" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="ChatPaneSplitterBackgroundBrush" Color="#FF00656A"/>
-            <SolidColorBrush x:Key="ChatPaneSplitterGripBrush" Color="#FF00656A"/>
+            <SolidColorBrush x:Key="ChatPaneSplitterGripBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatListUnreadBadgeBrush" Color="#FF00656A"/>
             <SolidColorBrush x:Key="ChatListSyncStatusBrush" Color="#FF00656A"/>
             <SolidColorBrush x:Key="ChatDetailAccentBrush" Color="#FF00656A"/>

@@ -284,6 +284,10 @@ namespace Unison.Uwp
                 () => ((WhatsAppService)sp.GetRequiredService<IWhatsAppService>()).Socket?.IsAwaitingInitialSync ?? false));
             // The client publishes first-sync progress; HistoryFacade and the budget read it.
             services.AddSingleton<InitialSyncProgressState>();
+            // Enrichment waits until the chat list finishes its first post-sync paint.
+            services.AddSingleton<ChatListInitialPaintGate>();
+            // Hold DisplayRequest for the first-sync list hold; HistoryFacade calls Hold/Release.
+            services.AddSingleton<IDisplayKeepAwakeService, DisplayKeepAwakeService>();
             services.AddSingleton<SelfProfileState>();
             // Memory tier once: drives history caps, list release, avatars and the phone's quota ask.
             services.AddSingleton(sp =>
@@ -361,7 +365,8 @@ namespace Unison.Uwp
                     sp.GetRequiredService<ChatNameRefresh>(),
                     sp.GetRequiredService<StoredChatPreviewRefresh>(),
                     sp.GetRequiredService<ChatListDeduper>(),
-                    sp.GetRequiredService<UsyncAliasFiling>()));
+                    sp.GetRequiredService<UsyncAliasFiling>(),
+                    sp.GetRequiredService<ChatListInitialPaintGate>()));
             // The send flow lives on MessageFacade; the timeline caches and the socket it writes
             // through are still the client's, reached only through this narrow port.
             services.AddSingleton<IOutgoingMessageHost>(
@@ -413,14 +418,17 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IHistoryMessageStore>(),
                 sp.GetRequiredService<IHistoryStatusStore>(),
                 sp.GetRequiredService<INotificationService>(),
-                sp.GetRequiredService<IStringResources>()));
+                sp.GetRequiredService<IStringResources>(),
+                sp.GetRequiredService<IDisplayKeepAwakeService>(),
+                sp.GetRequiredService<ChatListInitialPaintGate>()));
             services.AddSingleton<IHistoryService>(sp => sp.GetRequiredService<HistoryFacade>());
 
             services.AddSingleton(sp => new StatusFacade(
                 sp.GetRequiredService<IHistoryStatusStore>(),
                 sp.GetRequiredService<IPersonStore>(),
                 sp.GetRequiredService<IMessageService>(),
-                sp.GetRequiredService<IWhatsAppService>()));
+                sp.GetRequiredService<IWhatsAppService>(),
+                sp.GetRequiredService<IRuntimeDiagnostics>()));
             services.AddSingleton<IStatusService>(sp => sp.GetRequiredService<StatusFacade>());
 
             services.AddSingleton<IMediaDownloadHost>(
@@ -590,6 +598,7 @@ namespace Unison.Uwp
             services.AddSingleton<IBackgroundAccessPrompt, BackgroundAccessPrompt>();
             services.AddSingleton<IUriLauncher, UriLauncherService>();
             services.AddSingleton<IFilePicker, FilePickerService>();
+            services.AddSingleton<IAudioExportService, AudioExportService>();
             services.AddSingleton<IShareService, ShareService>();
             services.AddSingleton<IAudioRecordingService, AudioRecordingService>();
             services.AddSingleton<IUiSoundService, UiSoundService>();
@@ -651,6 +660,7 @@ namespace Unison.Uwp
             Services.GetRequiredService<IProfileService>();
             Services.GetRequiredService<IHistoryService>();
             Services.GetRequiredService<IStatusService>();
+            // Display keep-awake is owned by HistoryFacade Hold/Release (constructed above).
             // Rewrites group author strips as names resolve, list open or not.
             Services.GetRequiredService<IChatAuthorProjection>().Start();
 #if DEBUG

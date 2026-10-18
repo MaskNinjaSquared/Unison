@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -859,6 +859,33 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
   <data name="StatusList_Empty.Text" xml:space="preserve">
     <value>Nessun aggiornamento di stato recente</value>
   </data>
+  <data name="StatusList_Recent" xml:space="preserve">
+    <value>Recente</value>
+  </data>
+  <data name="StatusList_Viewed" xml:space="preserve">
+    <value>Visualizzato</value>
+  </data>
+  <data name="StatusList_FilterHeader.Text" xml:space="preserve">
+    <value>Filtra stato per</value>
+  </data>
+  <data name="StatusList_FilterAll.Text" xml:space="preserve">
+    <value>Tutti</value>
+  </data>
+  <data name="StatusList_FilterRecent.Text" xml:space="preserve">
+    <value>Recenti</value>
+  </data>
+  <data name="StatusList_FilterViewed.Text" xml:space="preserve">
+    <value>Visti</value>
+  </data>
+  <data name="StatusList_FilterLink.Text" xml:space="preserve">
+    <value>Filtra Stato</value>
+  </data>
+  <data name="StatusDetail_EmptyTitle.Text" xml:space="preserve">
+    <value>Condividi aggiornamenti di stato</value>
+  </data>
+  <data name="StatusDetail_EmptySubtitle.Text" xml:space="preserve">
+    <value>Condividi foto, video e testi che scompaiono dopo 24 ore.</value>
+  </data>
   <data name="Start_Description.Text" xml:space="preserve">
     <value>Un modo semplice, affidabile e privato per usare WhatsApp sul computer.</value>
   </data>
@@ -1254,7 +1281,10 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
   <data name="ChatDetail_DocumentOpen.Label" xml:space="preserve">
     <value>Apri documento</value>
   </data>
-  <data name="ChatDetail_DocumentSaveAs.Label" xml:space="preserve">
+    <data name="ChatDetail_AudioPlay.Label" xml:space="preserve">
+    <value>Riproduci audio</value>
+  </data>
+<data name="ChatDetail_DocumentSaveAs.Label" xml:space="preserve">
     <value>Salva come…</value>
   </data>
   <data name="ChatDetail_Back.ToolTip" xml:space="preserve">

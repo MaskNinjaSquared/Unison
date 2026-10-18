@@ -11,8 +11,10 @@ namespace Unison.Core.Models
         private string _jid;
         private string _displayName;
         private string _avatarUrl;
+        private string _viewStateCaption;
         private DateTime? _latestTimestampUtc;
         private int _itemCount;
+        private StatusViewState _viewState;
 
         public string Jid
         {
@@ -31,6 +33,28 @@ namespace Unison.Core.Models
             get => _avatarUrl;
             set => Set(ref _avatarUrl, value);
         }
+
+        /// <summary><see cref="StatusViewState.Recent"/> or <see cref="StatusViewState.Viewed"/>.</summary>
+        public StatusViewState ViewState
+        {
+            get => _viewState;
+            set
+            {
+                if (Set(ref _viewState, value))
+                {
+                    OnPropertyChanged(nameof(IsRecent));
+                }
+            }
+        }
+
+        /// <summary>Localized "Recent" / "Viewed" line under the name.</summary>
+        public string ViewStateCaption
+        {
+            get => _viewStateCaption;
+            set => Set(ref _viewStateCaption, value);
+        }
+
+        public bool IsRecent => ViewState == StatusViewState.Recent;
 
         public DateTime? LatestTimestampUtc
         {

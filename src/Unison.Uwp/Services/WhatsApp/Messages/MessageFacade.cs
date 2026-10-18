@@ -330,18 +330,12 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
 
         /// <summary>
         /// Every SQLite key a chat can be stored under: the JID itself, its canonical form, and the
-        /// LID/PN alias. History rows land under whichever one the chunk carried.
+        /// LID/PN alias (both lookup directions). History rows land under whichever the chunk used —
+        /// self-chat especially splits across PN and LID.
         /// </summary>
         private List<string> ResolveChatKeys(string jid)
         {
-            string alias = null;
-            string norm = JidHelper.Normalize(jid);
-            if (!string.IsNullOrWhiteSpace(norm))
-            {
-                _jids.TryGetAlias(norm, out alias);
-            }
-
-            return new List<string>(ChatPinStoreKeys.For(jid, _jids.GetCanonicalJid(jid), alias));
+            return new List<string>(ChatPinStoreKeys.For(jid, _jids));
         }
 
         public async Task<List<ChatMessage>> LoadChatMediaIndexAsync(string jid, int limit = 400)
@@ -1052,6 +1046,10 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                 ? chat.IsMutedLocally
                 : (_chatStore?.TryGetCached(chatJid)?.IsMutedLocally ?? false);
 
+            // Belt with the pump: safe-mode history catch-up must not toast either.
+            bool quietForSync = _history != null && _history.IsInitialSyncSafeMode;
+            bool hideToast = suppressToast || quietForSync;
+
             string name = chatName;
             if (string.IsNullOrWhiteSpace(name) && chat != null)
             {
@@ -1065,7 +1063,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                 preview,
                 isGroup,
                 isMuted,
-                suppressToast,
+                hideToast,
                 totalUnread,
                 chat != null ? chat.GetAvatarUrl(preferHigh: false) : null,
                 chat != null ? Math.Max(0, chat.UnreadCount) : 0);

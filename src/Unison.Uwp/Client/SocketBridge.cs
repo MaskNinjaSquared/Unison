@@ -33,6 +33,7 @@ using Unison.Background;
 using Unison.Baileys.Client;
 using Unison.Baileys.Crypto;
 using Unison.Baileys.Protocol;
+using Unison.Core.Contracts;
 using Unison.Core.Models;
 using Unison.Socket.Abstractions;
 using Unison.Socket.AppState;
@@ -80,7 +81,21 @@ namespace Unison.Uwp.Client
         private readonly SignalHandler _signal;
         private readonly LidMappingStore _lidMappings;
         private readonly IEncryptedMediaDownloader _downloader;
-        private readonly SocketConfig _config = new SocketConfig();
+        private readonly SocketConfig _config = CreateSocketConfig();
+
+        /// <summary>
+        /// Match legacy SocketClient headers. MessageWebSocket on Mobile without a browser
+        /// User-Agent has been observed to abort during Noise (1.9.6: receive failure ~10s).
+        /// </summary>
+        private static SocketConfig CreateSocketConfig()
+        {
+            return new SocketConfig
+            {
+                UserAgent =
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+                    "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+            };
+        }
         private readonly ISocketLog _log;
         private readonly object _gate = new object();
 
@@ -138,7 +153,21 @@ namespace Unison.Uwp.Client
             _reuseLoadedKeyState = sharedKeyStore != null && reuseLoadedKeyState;
             _signal = new SignalHandler(_authState, _keyStore);
             _lidMappings = new LidMappingStore(new SqliteLidMappingStorage());
-            _log = new DelegateSocketLog(line => Diag.W("[Bridge] " + line));
+            _log = new DelegateSocketLog(line =>
+            {
+                Diag.W("[Bridge] " + line);
+                // Group relay details must reach Runtime Health even when SessionLogger diag is off.
+                if (!string.IsNullOrEmpty(line) &&
+                    line.IndexOf("[Send] Group", StringComparison.Ordinal) >= 0)
+                {
+                    RuntimeDiagnosticsService.Instance.Write("send", "group-relay", line);
+                }
+                else if (!string.IsNullOrEmpty(line) &&
+                         line.IndexOf("Distributed the sender key", StringComparison.Ordinal) >= 0)
+                {
+                    RuntimeDiagnosticsService.Instance.Write("send", "group-skdm", line);
+                }
+            });
             _downloader = new HttpEncryptedMediaDownloader(_log);
             _events = new WaEventBuffer(_log);
 
@@ -445,7 +474,70 @@ namespace Unison.Uwp.Client
                 Disconnect();
             }
 
-            var transport = new WaTransportAdapter(new StreamSocketWebSocketTransport());
+            Raise(OnConnectionUpdate, "connecting");
+
+            // Windows 10 Mobile (Creators Update) keeps the 1.8 connect: MessageWebSocket only.
+            // Socket Activity, EnableTransferOwnership and StreamSocket TLS have hung on that
+            // build. Desktop still opens the broker-capable StreamSocket and falls back.
+            bool mobile = IsWindowsMobileDevice();
+            RuntimeDiagnosticsService.Instance.Write(
+                "transport",
+                "socket-bridge-connect-order",
+                mobile
+                    ? "mobile=True; primary=MessageWebSocket-classic; fallback=none"
+                    : "mobile=False; primary=StreamSocket-RFC6455-broker; fallback=MessageWebSocket-classic");
+
+            if (mobile)
+            {
+                await ConnectWithTransportAsync(new MessageWebSocketTransport())
+                    .ConfigureAwait(false);
+            }
+            else
+            {
+                try
+                {
+                    await ConnectWithTransportAsync(new StreamSocketWebSocketTransport())
+                        .ConfigureAwait(false);
+                }
+                catch (Exception streamFailure)
+                {
+                    RuntimeDiagnosticsService.Instance.RecordException(
+                        "transport",
+                        "streamsocket-connect-failed-fallback-classic",
+                        streamFailure);
+                    Disconnect();
+                    await ConnectWithTransportAsync(new MessageWebSocketTransport())
+                        .ConfigureAwait(false);
+                }
+            }
+
+            _handshakeComplete = true;
+            Raise(OnConnectionUpdate, "connected");
+        }
+
+        private static bool IsWindowsMobileDevice()
+        {
+            try
+            {
+                return string.Equals(
+                    Windows.System.Profile.AnalyticsInfo.VersionInfo.DeviceFamily,
+                    "Windows.Mobile",
+                    StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private async Task ConnectWithTransportAsync(IWhatsAppTransport innerTransport)
+        {
+            if (innerTransport == null)
+            {
+                throw new ArgumentNullException(nameof(innerTransport));
+            }
+
+            var transport = new WaTransportAdapter(innerTransport);
             var session = new WhatsAppSession(transport, _authState, _config, _log, events: _events);
 
             var messages = BuildMessageModule(session);
@@ -481,12 +573,12 @@ namespace Unison.Uwp.Client
                 offline.BeginBuffering();
             }
 
-            Raise(OnConnectionUpdate, "connecting");
+            RuntimeDiagnosticsService.Instance.Write(
+                "transport",
+                "socket-bridge-transport",
+                "name=" + (innerTransport.Name ?? "<none>"));
 
             await session.ConnectAsync().ConfigureAwait(false);
-
-            _handshakeComplete = true;
-            Raise(OnConnectionUpdate, "connected");
         }
 
         /// <summary>

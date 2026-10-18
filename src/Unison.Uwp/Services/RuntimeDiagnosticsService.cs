@@ -504,7 +504,12 @@ namespace Unison.Uwp.Services
                     MemoryManager.AppMemoryUsage / (1024UL * 1024UL),
                     MemoryManager.AppMemoryUsageLimit / (1024UL * 1024UL),
                     MemoryManager.AppMemoryUsageLevel,
-                    DeviceCategories.FromAppMemoryLimit(MemoryManager.AppMemoryUsageLimit));
+                    DeviceCategories.CapForMobile(
+                        DeviceCategories.FromAppMemoryLimit(MemoryManager.AppMemoryUsageLimit),
+                        string.Equals(
+                            Windows.System.Profile.AnalyticsInfo.VersionInfo.DeviceFamily,
+                            "Windows.Mobile",
+                            StringComparison.OrdinalIgnoreCase)));
             }
             catch (Exception ex)
             {

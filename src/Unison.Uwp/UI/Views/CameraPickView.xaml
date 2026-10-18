@@ -73,33 +73,23 @@
                     Content="&#xE72B;"
                     ToolTipService.ToolTip="Back"/>
 
-            <!-- Pill with flash options (always visible; disabled when flash unsupported). -->
+            <!-- Single flash affordance; disabled until flash mode is wired. -->
             <Border Grid.Column="1"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
-                    CornerRadius="20"
+                    CornerRadius="15"
+                    MaxHeight="30"
                     Background="#99000000"
                     Padding="6,2">
-                <StackPanel Orientation="Horizontal">
-                    <Button Command="{x:Bind ViewModel.FlashOffCommand, Mode=OneWay}"
-                            Style="{StaticResource CameraChromeIconButtonStyle}"
-                            IsEnabled="{x:Bind ViewModel.IsFlashAvailable, Mode=OneWay}"
-                            ToolTipService.ToolTip="Flash off">
-                        <FontIcon Glyph="&#xE420;"
-                                  FontFamily="{StaticResource IconFont}"
-                                  FontSize="18"
-                                  Foreground="White"/>
-                    </Button>
-                    <Button Command="{x:Bind ViewModel.FlashOnCommand, Mode=OneWay}"
-                            Style="{StaticResource CameraChromeIconButtonStyle}"
-                            IsEnabled="{x:Bind ViewModel.IsFlashAvailable, Mode=OneWay}"
-                            ToolTipService.ToolTip="Flash on">
-                        <FontIcon Glyph="&#xE41E;"
-                                  FontFamily="{StaticResource IconFont}"
-                                  FontSize="18"
-                                  Foreground="White"/>
-                    </Button>
-                </StackPanel>
+                <Button Style="{StaticResource CameraChromeIconButtonStyle}"
+                        IsEnabled="False"
+                        ToolTipService.ToolTip="Ativar Flash">
+                    <FontIcon Glyph="&#xEB0E;"
+                              FontFamily="{StaticResource LegacyIconFont}"
+                              FontSize="18"
+                              Foreground="White"
+                              Opacity="0.55"/>
+                </Button>
             </Border>
 
             <Border Grid.Column="2"

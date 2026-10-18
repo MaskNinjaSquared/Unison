@@ -17,6 +17,15 @@ namespace Unison.Core.State
         /// <summary>Newest bodies kept per conversation when a history chunk is written.</summary>
         public abstract int MaxMessagesPerConversation { get; }
 
+        /// <summary>
+        /// Bubble VMs materialized when a chat opens. Former Mobile (30) vs desktop (50) split,
+        /// keyed by memory tier instead of DeviceFamily.
+        /// </summary>
+        public abstract int InitialUiMessageWindow { get; }
+
+        /// <summary>Hard cap on timeline VMs while the chat is open (trim after live sync / load-more).</summary>
+        public abstract int MaxUiMessageWindow { get; }
+
         /// <summary>How many history rows one SQLite transaction may write.</summary>
         public abstract int HistoryPersistSubBatchSize { get; }
 
@@ -113,6 +122,10 @@ namespace Unison.Core.State
 
         public override int MaxMessagesPerConversation => 50;
 
+        public override int InitialUiMessageWindow => 30;
+
+        public override int MaxUiMessageWindow => 80;
+
         public override int HistoryPersistSubBatchSize => 80;
 
         public override bool MaterializeHistoryThumbsDuringSync => false;
@@ -165,6 +178,11 @@ namespace Unison.Core.State
 
         public override int MaxMessagesPerConversation => 120;
 
+        // Same open-chat window the Mobile SKU used — Low is the 1 GB / capped-Mobile tier.
+        public override int InitialUiMessageWindow => 30;
+
+        public override int MaxUiMessageWindow => 80;
+
         public override int HistoryPersistSubBatchSize => 150;
 
         public override bool MaterializeHistoryThumbsDuringSync => true;
@@ -183,7 +201,10 @@ namespace Unison.Core.State
 
         public override int PostSyncEnrichmentQuietSeconds => 8;
 
-        public override int MaxFullHistoryCatchUpRounds => 10;
+        // First quiet lot is enough on 1 GB / Mobile — adjacent FULL_HISTORY pages after
+        // InitialBootstrap were killing Creators (enrich + next lot in parallel). High keeps
+        // pagination; Unsupported already used zero.
+        public override int MaxFullHistoryCatchUpRounds => 0;
 
         public override int HistoryFinalizeQuietMs => 4500;
 
@@ -216,6 +237,11 @@ namespace Unison.Core.State
         public override DeviceCategory Category => DeviceCategory.High;
 
         public override int MaxMessagesPerConversation => 250;
+
+        // Former desktop window — High has the RAM headroom for it.
+        public override int InitialUiMessageWindow => 50;
+
+        public override int MaxUiMessageWindow => 150;
 
         public override int HistoryPersistSubBatchSize => 500;
 

@@ -9,7 +9,7 @@ using Windows.UI.Xaml.Media;
 namespace Unison.Uwp.UI.Controls
 {
     /// <summary>
-    /// WhatsApp-shell voice transport: transparent icon play/pause, label ↔ slider, timestamp.
+    /// WhatsApp-shell voice transport: transparent icon play/pause, label ↔ slider, overflow|timestamp.
     /// </summary>
     public sealed partial class ChatAudioBubbleBar : UserControl
     {
@@ -32,7 +32,9 @@ namespace Unison.Uwp.UI.Controls
                 ReadyLabel,
                 PositionSlider,
                 TimestampText,
-                OnPlayPause);
+                MoreButton,
+                OnPlayPause,
+                OnMore);
             DataContextChanged += ChatAudioBubbleBar_DataContextChanged;
             Unloaded += ChatAudioBubbleBar_Unloaded;
             Loaded += ChatAudioBubbleBar_Loaded;
@@ -59,17 +61,27 @@ namespace Unison.Uwp.UI.Controls
 
         private void ChatAudioBubbleBar_Loaded(object sender, RoutedEventArgs e)
         {
-            ApplyLegacyMediaGlyphs();
+            ApplyLegacyChrome();
             _presenter.Attach(DataContext as ChatMessageViewModel);
             _presenter.ApplyState(animate: false);
         }
 
-        /// <summary>When the Legacy ring is on, swap Segoe play/pause for the Legacy icon font.</summary>
-        private void ApplyLegacyMediaGlyphs()
+        /// <summary>
+        /// Legacy: circular hit target (no square hover) + Legacy icon font for play/pause.
+        /// </summary>
+        private void ApplyLegacyChrome()
         {
             if (!UseRing)
             {
                 return;
+            }
+
+            Style hitStyle = TryStyle("MediaHitTargetButtonStyle");
+            if (hitStyle != null)
+            {
+                PlayButton.Style = hitStyle;
+                PauseButton.Style = hitStyle;
+                MoreButton.Style = hitStyle;
             }
 
             FontFamily family = LegacyMediaGlyphs.IconFont;
@@ -80,6 +92,14 @@ namespace Unison.Uwp.UI.Controls
 
             ApplyGlyph(PlayButton, LegacyMediaGlyphs.Play, family);
             ApplyGlyph(PauseButton, LegacyMediaGlyphs.Pause, family);
+        }
+
+        private static Style TryStyle(string key)
+        {
+            object styleObj;
+            return Application.Current.Resources.TryGetValue(key, out styleObj)
+                ? styleObj as Style
+                : null;
         }
 
         private static void ApplyGlyph(Button button, string glyph, FontFamily family)
@@ -111,6 +131,11 @@ namespace Unison.Uwp.UI.Controls
             _presenter.OnPlayPauseClick();
         }
 
+        private void More_Click(object sender, RoutedEventArgs e)
+        {
+            _presenter.OnMoreClick();
+        }
+
         private void PositionSlider_PointerPressed(object sender, Windows.UI.Xaml.Input.PointerRoutedEventArgs e)
         {
             _presenter.OnSliderPointerPressed();
@@ -134,6 +159,11 @@ namespace Unison.Uwp.UI.Controls
         private void OnPlayPause()
         {
             FindChatDetail()?.OnAudioPlayButtonClick(this, new RoutedEventArgs());
+        }
+
+        private void OnMore()
+        {
+            ChatAudioOverflowMenu.Show(MoreButton, DataContext as ChatMessageViewModel, OnPlayPause);
         }
 
         private static IChatDetailSurface FindChatDetail(DependencyObject start)

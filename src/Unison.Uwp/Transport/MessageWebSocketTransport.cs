@@ -1,10 +1,14 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Runtime.InteropServices.WindowsRuntime;
+using System.Threading;
 using System.Threading.Tasks;
 using Windows.Networking.Sockets;
 using Windows.Storage.Streams;
-
+using Windows.Web;
 using Unison.Core.Contracts;
+using Unison.Uwp.Services;
 
 namespace Unison.Uwp.Transport
 {
@@ -13,7 +17,10 @@ namespace Unison.Uwp.Transport
         private MessageWebSocket _socket;
         private DataWriter _writer;
         private bool _connected;
+        private int _connectCompleted;
+        private TaskCompletionSource<bool> _connectAborted;
         private readonly System.Threading.SemaphoreSlim _sendLock = new System.Threading.SemaphoreSlim(1, 1);
+        private readonly System.Threading.SemaphoreSlim _receiveOrder = new System.Threading.SemaphoreSlim(1, 1);
 
         public string Name => "MessageWebSocket-classic";
         public bool IsConnected => _connected;
@@ -25,20 +32,90 @@ namespace Unison.Uwp.Transport
 
         public async Task ConnectAsync(Uri uri, IDictionary<string, string> headers)
         {
+            if (uri == null) throw new ArgumentNullException(nameof(uri));
+
             _socket = new MessageWebSocket();
             _socket.Control.MessageType = SocketMessageType.Binary;
-            if (headers != null)
+            // Default is small on some Mobile builds; Noise + offline frames can exceed it.
+            try
             {
-                foreach (var pair in headers)
+                _socket.Control.MaxMessageSize = 4 * 1024 * 1024;
+            }
+            catch
+            {
+            }
+
+            ApplyRequestHeaders(headers);
+            _socket.MessageReceived += OnMessageReceived;
+            _socket.Closed += OnClosed;
+
+            RuntimeDiagnosticsService.Instance.Write(
+                "transport",
+                "messagewebsocket-connect-begin",
+                "host=" + uri.Host);
+
+            // Same WinRT call as 1.8. On Creators Update the abort arrives on this callback
+            // while ConnectAsync stays pending (1.9.9). Resume inline on that callback.
+            // RunContinuationsAsynchronously posted the resume onto a thread that does not
+            // run while the WinRT connect is outstanding, so connecting stayed true.
+            var aborted = new TaskCompletionSource<bool>();
+            _connectAborted = aborted;
+            Task connect = _socket.ConnectAsync(uri).AsTask();
+            Task winner = await Task.WhenAny(connect, aborted.Task).ConfigureAwait(false);
+            RuntimeDiagnosticsService.Instance.Write(
+                "transport",
+                "messagewebsocket-connect-released",
+                "winner=" + (ReferenceEquals(winner, connect) ? "connect" : "abort"));
+            if (!ReferenceEquals(winner, connect))
+            {
+                throw new IOException(
+                    "MessageWebSocket connection aborted before connect completed");
+            }
+
+            await connect.ConfigureAwait(false);
+            Interlocked.Exchange(ref _connectCompleted, 1);
+            _writer = new DataWriter(_socket.OutputStream);
+            _connected = true;
+
+            RuntimeDiagnosticsService.Instance.Write(
+                "transport",
+                "messagewebsocket-connected",
+                "host=" + uri.Host);
+        }
+
+        private void ApplyRequestHeaders(IDictionary<string, string> headers)
+        {
+            if (_socket == null)
+            {
+                return;
+            }
+
+            // Restricted headers throw on SetRequestHeader — apply one-by-one.
+            if (headers == null)
+            {
+                return;
+            }
+
+            foreach (var pair in headers)
+            {
+                if (string.IsNullOrWhiteSpace(pair.Key) || pair.Value == null)
+                {
+                    continue;
+                }
+
+                try
                 {
                     _socket.SetRequestHeader(pair.Key, pair.Value);
                 }
+                catch (Exception ex)
+                {
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "transport",
+                        "messagewebsocket-header-skipped",
+                        "name=" + pair.Key +
+                        "; error=" + ex.GetType().Name);
+                }
             }
-            _socket.MessageReceived += OnMessageReceived;
-            _socket.Closed += OnClosed;
-            await _socket.ConnectAsync(uri);
-            _writer = new DataWriter(_socket.OutputStream);
-            _connected = true;
         }
 
         public async Task SendAsync(byte[] data)
@@ -85,17 +162,69 @@ namespace Unison.Uwp.Transport
                 byte[] bytes;
                 using (var reader = args.GetDataReader())
                 {
-                    bytes = new byte[reader.UnconsumedBufferLength];
+                    uint length = reader.UnconsumedBufferLength;
+                    if (length == 0)
+                    {
+                        return;
+                    }
+
+                    bytes = new byte[length];
                     reader.ReadBytes(bytes);
                 }
-                await RaiseMessageReceivedAsync(bytes);
+
+                // MessageReceived runs on the UI thread. History apply then blocks that
+                // thread with GetResult (1.8 kept this on a background pipeline). Copy the
+                // bytes here, return, and process one frame at a time off the UI thread.
+                byte[] payload = bytes;
+                _ = Task.Run(async () =>
+                {
+                    await _receiveOrder.WaitAsync();
+                    try
+                    {
+                        await RaiseMessageReceivedAsync(payload);
+                    }
+                    catch (Exception ex)
+                    {
+                        RuntimeDiagnosticsService.Instance.RecordException(
+                            "transport",
+                            "messagewebsocket-frame-failed",
+                            ex,
+                            "bytes=" + payload.Length);
+                    }
+                    finally
+                    {
+                        _receiveOrder.Release();
+                    }
+                });
             }
             catch (Exception ex)
             {
+                // GetDataReader throws when the TCP connection was aborted (often without Closed).
+                WebErrorStatus status = WebErrorStatus.Unknown;
+                try
+                {
+                    status = WebSocketError.GetStatus(ex.HResult);
+                }
+                catch
+                {
+                }
+
+                RuntimeDiagnosticsService.Instance.RecordException(
+                    "transport",
+                    "messagewebsocket-receive-failed",
+                    ex,
+                    "webStatus=" + status +
+                    "; hresult=0x" + ex.HResult.ToString("X8") +
+                    "; connectCompleted=" + (Interlocked.CompareExchange(ref _connectCompleted, 0, 0) != 0));
+
+                // Always dispose: if abort arrives before ConnectAsync returns, leaving the
+                // socket alive leaves session.ConnectAsync hung forever (1.9.7).
+                _connected = false;
+                AbortSocket("receive-aborted:" + status);
                 Closed?.Invoke(this, new TransportClosedEventArgs
                 {
                     Code = 1006,
-                    Reason = "MessageWebSocket receive failure",
+                    Reason = "MessageWebSocket receive failure: " + status,
                     Error = ex
                 });
             }
@@ -104,11 +233,53 @@ namespace Unison.Uwp.Transport
         private void OnClosed(IWebSocket sender, WebSocketClosedEventArgs args)
         {
             _connected = false;
+            if (Interlocked.CompareExchange(ref _connectCompleted, 0, 0) == 0)
+            {
+                _connectAborted?.TrySetResult(true);
+            }
+
             Closed?.Invoke(this, new TransportClosedEventArgs
             {
                 Code = args.Code,
                 Reason = args.Reason
             });
+        }
+
+        private void AbortSocket(string reason)
+        {
+            MessageWebSocket socket = _socket;
+            if (socket == null)
+            {
+                return;
+            }
+
+            _connectAborted?.TrySetResult(true);
+            RuntimeDiagnosticsService.Instance.Write(
+                "transport",
+                "messagewebsocket-abort",
+                "reason=" + (reason ?? string.Empty));
+
+            try
+            {
+                socket.MessageReceived -= OnMessageReceived;
+                socket.Closed -= OnClosed;
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                socket.Dispose();
+            }
+            catch
+            {
+            }
+
+            if (ReferenceEquals(_socket, socket))
+            {
+                _socket = null;
+            }
         }
 
         private async Task RaiseMessageReceivedAsync(byte[] data)

@@ -188,9 +188,12 @@ namespace Unison.Core.ViewModels
 
             _participantContext = new ParticipantResolutionContext(jids, contactService, chatState, personStore);
 
-            // Same UI window as desktop — Mobile used to use 30/80 for memory; keep PC limits for tests.
-            InitialUiMessageWindow = 50;
-            MaxUiMessageWindow = 150;
+            // Open-chat bubble budget follows memory tier (not DeviceFamily): Unsupported/Low keep
+            // the old Mobile 30/80 window; High keeps the desktop 50/150.
+            SyncWorkloadStrategy uiWindow = SyncWorkloadStrategy.For(
+                _systemInfo != null ? _systemInfo.GetDeviceCategory() : DeviceCategory.High);
+            InitialUiMessageWindow = uiWindow.InitialUiMessageWindow;
+            MaxUiMessageWindow = uiWindow.MaxUiMessageWindow;
 
             Messages = new ObservableCollection<ChatMessageViewModel>();
 
@@ -322,6 +325,7 @@ namespace Unison.Core.ViewModels
         /// <summary>Wrap a domain message for the timeline (view load/sync paths).</summary>
         public ChatMessageViewModel CreateMessageVm(ChatMessage message)
         {
+            message?.EnsureKindFromLegacyFlags();
             var vm = _messageFactory.Create(message);
             if (vm != null)
             {
@@ -1489,6 +1493,55 @@ namespace Unison.Core.ViewModels
         }
 
         /// <summary>
+        /// Inserts chronological older rows that are not already on screen. Returns how many
+        /// bubble VMs were prepended.
+        /// </summary>
+        private int PrependOlderPage(IList<ChatMessage> older, string chatJid)
+        {
+            if (older == null || older.Count == 0)
+            {
+                return 0;
+            }
+
+            RemovePreviewFallbackMessages();
+            StampGroupRemoteJid(older, chatJid);
+
+            var existingIds = new HashSet<string>(
+                Messages.Where(m => m?.Id != null).Select(m => m.Id),
+                StringComparer.Ordinal);
+
+            int prepended = 0;
+            for (int i = 0; i < older.Count; i++)
+            {
+                ChatMessage msg = older[i];
+                if (msg == null)
+                {
+                    continue;
+                }
+
+                if (!string.IsNullOrEmpty(msg.Id) && existingIds.Contains(msg.Id))
+                {
+                    continue;
+                }
+
+                InsertTimelineMessage(msg);
+                if (!string.IsNullOrEmpty(msg.Id))
+                {
+                    existingIds.Add(msg.Id);
+                }
+
+                prepended++;
+            }
+
+            if (prepended > 0)
+            {
+                TrimTimelineNewestToMax(MaxUiMessageWindow);
+            }
+
+            return prepended;
+        }
+
+        /// <summary>
         /// Prepends an older page into the UI window (factory VMs). View calls this when scroll is near top
         /// and <see cref="CanLoadMore"/> is true; scroll offset adjustment stays in code-behind.
         /// </summary>
@@ -1506,7 +1559,7 @@ namespace Unison.Core.ViewModels
             {
                 string chatJid = _activeChat.JID;
                 ChatMessageViewModel oldestVm = Messages.Count > 0 ? Messages[0] : null;
-                var older = await _messageService.LoadMoreMessagesAsync(
+                List<ChatMessage> older = await _messageService.LoadMoreMessagesAsync(
                     chatJid,
                     oldestVm?.Timestamp,
                     oldestVm?.Id);
@@ -1519,41 +1572,40 @@ namespace Unison.Core.ViewModels
 
                 if (older != null && older.Count > 0)
                 {
-                    _emptyLoadAttempts = 0;
-                    RemovePreviewFallbackMessages();
-                    StampGroupRemoteJid(older, chatJid);
+                    int prepended = PrependOlderPage(older, chatJid);
 
-                    var existingIds = new HashSet<string>(
-                        Messages.Where(m => m?.Id != null).Select(m => m.Id),
-                        StringComparer.Ordinal);
-
-                    int prepended = 0;
-                    for (int i = 0; i < older.Count; i++)
+                    // Self-chat / dual-key overlap: SQLite can return a page already on screen.
+                    // Advance past that tip once so scroll-up is not stuck with prepended=0.
+                    if (TimelineLoadMorePage.IsDuplicateOnlyPage(older.Count, prepended))
                     {
-                        var msg = older[i];
-                        if (msg == null)
+                        ChatMessage tip = TimelineLoadMorePage.OldestTip(older);
+                        if (tip != null)
                         {
-                            continue;
-                        }
+                            older = await _messageService.LoadMoreMessagesAsync(
+                                chatJid,
+                                tip.Timestamp,
+                                tip.Id);
 
-                        if (!string.IsNullOrEmpty(msg.Id) && existingIds.Contains(msg.Id))
-                        {
-                            continue;
-                        }
+                            if (_activeChat == null ||
+                                !string.Equals(_activeChat.JID, chatJid, StringComparison.OrdinalIgnoreCase))
+                            {
+                                return result;
+                            }
 
-                        InsertTimelineMessage(msg);
-                        if (!string.IsNullOrEmpty(msg.Id))
-                        {
-                            existingIds.Add(msg.Id);
+                            if (older != null && older.Count > 0)
+                            {
+                                prepended = PrependOlderPage(older, chatJid);
+                            }
                         }
-
-                        prepended++;
                     }
 
-                    TrimTimelineNewestToMax(MaxUiMessageWindow);
-                    result.PrependedCount = prepended;
-                    OnPropertyChanged(nameof(CanLoadMore));
-                    return result;
+                    if (prepended > 0)
+                    {
+                        _emptyLoadAttempts = 0;
+                        result.PrependedCount = prepended;
+                        OnPropertyChanged(nameof(CanLoadMore));
+                        return result;
+                    }
                 }
 
                 bool requestedOnDemand =
@@ -1946,7 +1998,10 @@ namespace Unison.Core.ViewModels
                 target.Kind = source.Kind;
             }
 
-            if (source.IsDocument || !string.IsNullOrWhiteSpace(source.DocumentUri))
+            if (source.IsDocument ||
+                !string.IsNullOrWhiteSpace(source.DocumentUri) ||
+                !string.IsNullOrWhiteSpace(source.DocumentFileName) ||
+                !string.IsNullOrWhiteSpace(source.DocumentMediaKeyBase64))
             {
                 if (!string.IsNullOrWhiteSpace(source.DocumentUri))
                 {
@@ -1963,13 +2018,25 @@ namespace Unison.Core.ViewModels
                     target.DocumentMimeType = source.DocumentMimeType;
                 }
 
+                if (!string.IsNullOrWhiteSpace(source.DocumentMediaKeyBase64))
+                {
+                    target.DocumentMediaKeyBase64 = source.DocumentMediaKeyBase64;
+                }
+
                 if (source.DocumentFileLengthBytes > 0)
                 {
                     target.DocumentFileLengthBytes = source.DocumentFileLengthBytes;
                 }
 
+                if (target.Kind == ChatMessageKind.Text)
+                {
+                    target.Kind = ChatMessageKind.Document;
+                }
+
                 target.NotifyDocumentDownloadStateChanged();
             }
+
+            target.EnsureKindFromLegacyFlags();
         }
 
         /// <summary>
@@ -2222,6 +2289,7 @@ namespace Unison.Core.ViewModels
             {
                 await _messageService.SendTextMessageAsync(jid, text);
                 MessageSent?.Invoke(this, EventArgs.Empty);
+                _uiSounds?.PlayMessageSent();
                 LogSend("text-ok", "jid=" + jid);
             }
             catch (UnisonUserException ex)
@@ -2330,6 +2398,7 @@ namespace Unison.Core.ViewModels
                     durationSeconds: 0,
                     isVoiceMessage: false);
                 MessageSent?.Invoke(this, EventArgs.Empty);
+                _uiSounds?.PlayMessageSent();
                 LogSend("audio-attach-ok");
             }
             catch (UnisonUserException ex)
@@ -2392,6 +2461,7 @@ namespace Unison.Core.ViewModels
                 }
 
                 MessageSent?.Invoke(this, EventArgs.Empty);
+                _uiSounds?.PlayMessageSent();
                 LogSend("document-attach-ok");
             }
             catch (UnisonUserException ex)
@@ -2445,6 +2515,7 @@ namespace Unison.Core.ViewModels
                 }
 
                 MessageSent?.Invoke(this, EventArgs.Empty);
+                _uiSounds?.PlayMessageSent();
                 LogSend("image-attach-ok");
             }
             catch (UnisonUserException ex)
@@ -2587,6 +2658,7 @@ namespace Unison.Core.ViewModels
                     recording.DurationSeconds,
                     recording.IsVoiceNote);
                 MessageSent?.Invoke(this, EventArgs.Empty);
+                _uiSounds?.PlayMessageSent();
                 LogSend("voice-send-ok");
             }
             catch (UnisonUserException ex)

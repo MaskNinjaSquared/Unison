@@ -27,7 +27,14 @@ namespace Unison.Core.Helpers
 
         /// <param name="isChatOpen">The conversation is the one the detail view has open.</param>
         /// <param name="isWindowVisible">The app's window is on screen.</param>
-        public static IncomingAttention For(bool isFromMe, bool isChatOpen, bool isWindowVisible)
+        /// <param name="suppressToastForSync">
+        /// Initial sync / offline drain is in flight — unread still updates, but no toast popup.
+        /// </param>
+        public static IncomingAttention For(
+            bool isFromMe,
+            bool isChatOpen,
+            bool isWindowVisible,
+            bool suppressToastForSync = false)
         {
             if (isFromMe)
             {
@@ -36,8 +43,9 @@ namespace Unison.Core.Helpers
 
             // Open behind a minimised app is not on screen. This is the whole point of the type.
             bool onScreen = isChatOpen && isWindowVisible;
+            bool suppressToast = onScreen || suppressToastForSync;
 
-            return new IncomingAttention(!onScreen, onScreen);
+            return new IncomingAttention(!onScreen, suppressToast);
         }
     }
 }

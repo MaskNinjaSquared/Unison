@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using Microsoft.Extensions.DependencyInjection;
+using Unison.Core.Contracts;
 using Unison.Core.Models;
 using Unison.Core.ViewModels;
 using Windows.UI.Xaml;
@@ -38,6 +39,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         public event EventHandler DebugRequested;
 
+        public event EventHandler SettingsRequested;
+
         public StatusListView()
         {
             if (App.Services != null)
@@ -50,6 +53,50 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             InitializeComponent();
             Loaded += StatusListView_Loaded;
             Unloaded += StatusListView_Unloaded;
+            ApplyFilterLabel();
+        }
+
+        private void ApplyFilterLabel()
+        {
+            if (FilterLabel == null)
+            {
+                return;
+            }
+
+            var strings = App.Services?.GetService<IStringResources>();
+            FilterLabel.Text = strings?.Get("StatusList_FilterLink.Text", "Filter Status")
+                ?? "Filter Status";
+        }
+
+        /// <summary>
+        /// Stock MenuFlyout only — same Creators Update constraint as Legacy ChatList.
+        /// </summary>
+        private void FilterButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (FilterButton == null || ViewModel?.FilterStatusCommand == null)
+            {
+                return;
+            }
+
+            var strings = App.Services?.GetService<IStringResources>();
+            var flyout = new MenuFlyout();
+            flyout.Items.Add(CreateFilterItem(
+                strings?.Get("StatusList_FilterAll.Text", "All") ?? "All", 0));
+            flyout.Items.Add(CreateFilterItem(
+                strings?.Get("StatusList_FilterRecent.Text", "Recent") ?? "Recent", 1));
+            flyout.Items.Add(CreateFilterItem(
+                strings?.Get("StatusList_FilterViewed.Text", "Viewed") ?? "Viewed", 2));
+            flyout.ShowAt(FilterButton);
+        }
+
+        private MenuFlyoutItem CreateFilterItem(string text, int filter)
+        {
+            return new MenuFlyoutItem
+            {
+                Text = text,
+                Command = ViewModel.FilterStatusCommand,
+                CommandParameter = filter
+            };
         }
 
         private void StatusCommandBar_Loaded(object sender, RoutedEventArgs e)
@@ -65,6 +112,9 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private void DebugAppBar_Click(object sender, RoutedEventArgs e) =>
             DebugRequested?.Invoke(this, EventArgs.Empty);
+
+        private void SettingsAppBar_Click(object sender, RoutedEventArgs e) =>
+            SettingsRequested?.Invoke(this, EventArgs.Empty);
 
         private void StatusListView_Loaded(object sender, RoutedEventArgs e)
         {
@@ -175,6 +225,16 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
             var author = AuthorList.SelectedItem as StatusAuthorItem;
             if (author == null)
+            {
+                return;
+            }
+
+            // Same author re-selected (list reload / delayed SelectionChanged) — do not reopen.
+            if (ViewModel.SelectedAuthor != null &&
+                string.Equals(
+                    ViewModel.SelectedAuthor.Jid,
+                    author.Jid,
+                    System.StringComparison.OrdinalIgnoreCase))
             {
                 return;
             }

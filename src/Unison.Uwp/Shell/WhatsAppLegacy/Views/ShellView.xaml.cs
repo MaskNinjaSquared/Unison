@@ -239,6 +239,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             }
 
             if (e.PropertyName == nameof(ShellViewModel.HidesLegacyShellChrome) ||
+                e.PropertyName == nameof(ShellViewModel.HasOpenStatusDetail) ||
                 e.PropertyName == nameof(ShellViewModel.ChatPane) ||
                 e.PropertyName == nameof(ShellViewModel.IsNarrowWindow) ||
                 e.PropertyName == nameof(ShellViewModel.ShowSystemBackButton) ||
@@ -267,8 +268,18 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             {
                 BrandHeader.Visibility = Visibility.Collapsed;
                 SearchHeader.Visibility = Visibility.Collapsed;
-                SectionPivot.Visibility = Visibility.Collapsed;
-                SetPivotHeadersVisible(true);
+                // Chat detail lives in DetailHost — collapse the whole pivot.
+                // Status detail lives inside StatusView in the pivot — keep the body, hide tabs.
+                if (_shell.HasOpenStatusDetail)
+                {
+                    SectionPivot.Visibility = Visibility.Visible;
+                    SetPivotHeadersVisible(false);
+                }
+                else
+                {
+                    SectionPivot.Visibility = Visibility.Collapsed;
+                    SetPivotHeadersVisible(true);
+                }
             }
             else if (_overlayOpen)
             {
@@ -713,6 +724,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 placeholder.SearchRequested += List_SearchRequested;
                 placeholder.ProfileRequested += List_ProfileRequested;
                 placeholder.DebugRequested += List_DebugRequested;
+                placeholder.SettingsRequested += List_SettingsRequested;
             }
             else if (content is StatusView status)
             {
@@ -720,6 +732,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 status.SearchRequested += List_SearchRequested;
                 status.ProfileRequested += List_ProfileRequested;
                 status.DebugRequested += List_DebugRequested;
+                status.SettingsRequested += List_SettingsRequested;
             }
 
             if (_hookedList != null)
@@ -751,6 +764,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 _hookedPlaceholder.SearchRequested -= List_SearchRequested;
                 _hookedPlaceholder.ProfileRequested -= List_ProfileRequested;
                 _hookedPlaceholder.DebugRequested -= List_DebugRequested;
+                _hookedPlaceholder.SettingsRequested -= List_SettingsRequested;
                 _hookedPlaceholder = null;
             }
 
@@ -759,6 +773,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 _hookedStatusBar.SearchRequested -= List_SearchRequested;
                 _hookedStatusBar.ProfileRequested -= List_ProfileRequested;
                 _hookedStatusBar.DebugRequested -= List_DebugRequested;
+                _hookedStatusBar.SettingsRequested -= List_SettingsRequested;
                 _hookedStatusBar = null;
             }
 
@@ -1200,14 +1215,54 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private void SetPivotHeadersVisible(bool visible)
         {
-            var header = FindChild<PivotHeaderPanel>(SectionPivot);
-            if (header != null)
+            ApplyPivotHeaderVisibility(SectionPivot, visible);
+            if (visible)
             {
-                header.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+                // 10px each side of the header strip only. The section content stays full width.
+                InsetPivotHeaders(SectionPivot);
+            }
+        }
+
+        /// <summary>
+        /// Collapse the pivot tab strip (and its clipper) so Minimal status/chat chrome
+        /// does not leave an empty header band above the content.
+        /// </summary>
+        private static void ApplyPivotHeaderVisibility(DependencyObject root, bool visible)
+        {
+            if (root == null)
+            {
+                return;
             }
 
-            // 10px each side of the header strip only. The section content stays full width.
-            InsetPivotHeaders(SectionPivot);
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                DependencyObject child = VisualTreeHelper.GetChild(root, i);
+                var panel = child as PivotHeaderPanel;
+                if (panel != null)
+                {
+                    panel.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+                    panel.Height = visible ? double.NaN : 0;
+                    panel.Opacity = visible ? 1 : 0;
+                    panel.IsHitTestVisible = visible;
+                    if (!visible)
+                    {
+                        panel.Margin = new Thickness(0);
+                    }
+                }
+
+                var element = child as FrameworkElement;
+                if (element != null &&
+                    (string.Equals(element.Name, "HeaderClipper", StringComparison.Ordinal) ||
+                     string.Equals(element.Name, "StaticHeader", StringComparison.Ordinal) ||
+                     string.Equals(element.Name, "Header", StringComparison.Ordinal)))
+                {
+                    element.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+                    element.Height = visible ? double.NaN : 0;
+                }
+
+                ApplyPivotHeaderVisibility(child, visible);
+            }
         }
 
         private static void InsetPivotHeaders(DependencyObject root)

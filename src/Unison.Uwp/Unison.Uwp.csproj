@@ -188,6 +188,7 @@
     <Compile Include="Services\SystemInfoProvider.cs" />
     <Compile Include="Services\StatusBarService.cs" />
     <Compile Include="Services\LocationKeepAliveService.cs" />
+    <Compile Include="Services\DisplayKeepAwakeService.cs" />
     <Compile Include="Services\ShellThemeService.cs" />
     <Compile Include="Services\AppLanguageService.cs" />
     <Compile Include="Services\Themes\IShellNavigationStrategy.cs" />
@@ -258,6 +259,8 @@
     <Compile Include="Services\AppLifecycleService.cs" />
     <Compile Include="Services\UriLauncherService.cs" />
     <Compile Include="Services\FilePickerService.cs" />
+    <Compile Include="Services\AudioExportService.cs" />
+    <Compile Include="UI\Controls\ChatAudioOverflowMenu.cs" />
     <Compile Include="Services\ShareService.cs" />
     <Compile Include="Services\AudioRecordingService.cs" />
     <Compile Include="Services\UiSoundService.cs" />
@@ -456,6 +459,9 @@
     <Compile Include="UI\Controls\ChatAvatarControl.xaml.cs">
       <DependentUpon>ChatAvatarControl.xaml</DependentUpon>
     </Compile>
+    <Compile Include="UI\Controls\StatusListAvatarControl.xaml.cs">
+      <DependentUpon>StatusListAvatarControl.xaml</DependentUpon>
+    </Compile>
     <Compile Include="UI\Controls\ChatDateSeparator.xaml.cs">
       <DependentUpon>ChatDateSeparator.xaml</DependentUpon>
     </Compile>
@@ -562,6 +568,7 @@
     <Content Include="Assets\WhatsAppLegacy\Icons\composer-attach.png" />
     <Content Include="Assets\WhatsAppLegacy\Icons\composer-mic.png" />
     <Content Include="Assets\WhatsAppLegacy\Icons\composer-send.png" />
+    <Content Include="Assets\Sounds\message_sent.mp3" />
     <Content Include="Assets\Sounds\voice_note_start.wav" />
     <Content Include="Assets\Sounds\voice_note_stop.wav" />
     <Content Include="Assets\Sounds\voice_note_error.wav" />
@@ -708,6 +715,10 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="UI\Controls\ChatAvatarControl.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Controls\StatusListAvatarControl.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

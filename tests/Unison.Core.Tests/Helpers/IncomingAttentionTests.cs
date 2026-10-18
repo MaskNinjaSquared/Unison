@@ -85,4 +85,30 @@ public class IncomingAttentionTests
         Assert.True(result.CountsAsUnread);
         Assert.False(result.SuppressToast);
     }
+
+    [Fact]
+    public void Initial_sync_suppresses_toast_but_still_counts_unread_when_not_on_screen()
+    {
+        IncomingAttention result = IncomingAttention.For(
+            isFromMe: false,
+            isChatOpen: false,
+            isWindowVisible: false,
+            suppressToastForSync: true);
+
+        Assert.True(result.CountsAsUnread);
+        Assert.True(result.SuppressToast);
+    }
+
+    [Fact]
+    public void Initial_sync_does_not_unsuppress_an_on_screen_message()
+    {
+        IncomingAttention result = IncomingAttention.For(
+            isFromMe: false,
+            isChatOpen: true,
+            isWindowVisible: true,
+            suppressToastForSync: true);
+
+        Assert.False(result.CountsAsUnread);
+        Assert.True(result.SuppressToast);
+    }
 }

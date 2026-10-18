@@ -448,6 +448,8 @@ namespace Unison.Uwp.Services.WhatsApp
         private CancellationTokenSource _postMessageEnrichmentCts;
         private int _postMessageEnrichmentStarted;
         private int _enrichmentAwaitingHeavyHistory;
+        private int _enrichmentAwaitingListPaint;
+        private ChatListInitialPaintGate _listPaintGate;
         private readonly SyncStatusChannel _syncStatus;
 
         // Offline messages are intentionally kept off the UI thread while a large replay
@@ -994,9 +996,16 @@ namespace Unison.Uwp.Services.WhatsApp
                 "active=" + active +
                 "; processed=" + Math.Max(0, processed) +
                 "; total=" + Math.Max(0, total) +
-                "; stage=" + (stage ?? string.Empty));
+                "; stage=" + (stage ?? string.Empty) +
+                "; gcMb=" + (GC.GetTotalMemory(false) / (1024 * 1024)));
 
             _initialSync.Publish(active, completed, processed, total, stage);
+
+            // Crash window: force disk so the completed line survives if the list materialize kills us.
+            if (completed)
+            {
+                _ = RuntimeDiagnosticsService.Instance.FlushAsync("history:initial-sync-complete");
+            }
         }
 
         public event EventHandler<BinaryNode> OnLinkCodeCompanionReg;
@@ -1029,7 +1038,8 @@ namespace Unison.Uwp.Services.WhatsApp
             ChatNameRefresh nameRefresh,
             StoredChatPreviewRefresh storedPreviews,
             ChatListDeduper deduper,
-            UsyncAliasFiling usyncAliases)
+            UsyncAliasFiling usyncAliases,
+            ChatListInitialPaintGate listPaintGate = null)
         {
             if (chatState == null)
             {
@@ -1053,6 +1063,8 @@ namespace Unison.Uwp.Services.WhatsApp
             _storedPreviews = storedPreviews ?? throw new ArgumentNullException(nameof(storedPreviews));
             _deduper = deduper ?? throw new ArgumentNullException(nameof(deduper));
             _usyncAliases = usyncAliases ?? throw new ArgumentNullException(nameof(usyncAliases));
+            _listPaintGate = listPaintGate ?? new ChatListInitialPaintGate();
+            _listPaintGate.Released += OnChatListInitialPaintReleased;
             _chatRows = chatRows ?? throw new ArgumentNullException(nameof(chatRows));
             _activeChat = activeChat ?? throw new ArgumentNullException(nameof(activeChat));
             _activeChat.Changed += OnActiveChatChanged;
@@ -1134,11 +1146,12 @@ namespace Unison.Uwp.Services.WhatsApp
             ChatNameRefresh nameRefresh,
             StoredChatPreviewRefresh storedPreviews,
             ChatListDeduper deduper,
-            UsyncAliasFiling usyncAliases)
+            UsyncAliasFiling usyncAliases,
+            ChatListInitialPaintGate listPaintGate = null)
         {
             return _instance ?? (_instance = new WhatsAppService(
                 chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
-                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, previewReconciler, nameRefresh, storedPreviews, deduper, usyncAliases));
+                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, previewReconciler, nameRefresh, storedPreviews, deduper, usyncAliases, listPaintGate));
         }
 
         /// <summary>
@@ -1505,22 +1518,33 @@ namespace Unison.Uwp.Services.WhatsApp
 
                     // Always realign list Last Message from SQLite after offline drain settles —
                     // memory MessagesByChat is often empty for chats the user never opened.
-                    try
+                    // Defer while the first list paint is still releasing rows (Mobile crash window).
+                    if (_listPaintGate != null && !_listPaintGate.IsReleased)
                     {
-                        token.ThrowIfCancellationRequested();
-                        await ReconcileChatPreviewsFromSqliteAsync(null, "post-replay")
-                            .ConfigureAwait(false);
+                        RuntimeDiagnosticsService.Instance.Write(
+                            "preview-tip",
+                            "reconcile-deferred-list-paint",
+                            "reason=post-replay");
                     }
-                    catch (OperationCanceledException)
+                    else
                     {
-                        RaiseSyncStatus(null);
-                        return;
-                    }
-                    catch (Exception exReconcile)
-                    {
-                        Debug.WriteLine(
-                            "[WhatsAppService] Post-replay preview reconcile failed: " +
-                            exReconcile.Message);
+                        try
+                        {
+                            token.ThrowIfCancellationRequested();
+                            await ReconcileChatPreviewsFromSqliteAsync(null, "post-replay")
+                                .ConfigureAwait(false);
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            RaiseSyncStatus(null);
+                            return;
+                        }
+                        catch (Exception exReconcile)
+                        {
+                            Debug.WriteLine(
+                                "[WhatsAppService] Post-replay preview reconcile failed: " +
+                                exReconcile.Message);
+                        }
                     }
 
                     // Extra in-memory repair only for large desktop drains (already warmed timelines).
@@ -1585,7 +1609,30 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
+            if (_listPaintGate != null && !_listPaintGate.IsReleased)
+            {
+                Interlocked.Exchange(ref _enrichmentAwaitingListPaint, 1);
+                Debug.WriteLine(
+                    "[WhatsAppService] Post-message enrichment deferred until chat list paint (" +
+                    reason + ")");
+                RuntimeDiagnosticsService.Instance.Write(
+                    "startup",
+                    "post-message-enrichment-deferred-list-paint",
+                    "reason=" + (reason ?? string.Empty));
+                return;
+            }
+
             SchedulePostMessageEnrichment(reason);
+        }
+
+        private void OnChatListInitialPaintReleased(object sender, EventArgs e)
+        {
+            if (Interlocked.Exchange(ref _enrichmentAwaitingListPaint, 0) != 1)
+            {
+                return;
+            }
+
+            TrySchedulePostMessageEnrichment("list-paint-released");
         }
 
         private void SchedulePostMessageEnrichment(string reason)
@@ -1728,8 +1775,24 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private void ReleaseEnrichmentAfterHeavyHistory(string reason)
         {
+            // Keep names/avatars/groups deferred while catch-up still wants adjacent lots —
+            // starting enrich on the first InitialBootstrap chunk (1.8.3-era gap that High
+            // workload made fatal on Mobile) races the next FULL_HISTORY page.
+            if (IsHistoryCatchUpActive() && CatchUpContinueMaxRounds > 0)
+            {
+                Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 1);
+                Debug.WriteLine(
+                    "[WhatsAppService] Post-message enrichment still deferred (catch-up active, " +
+                    reason + ")");
+                RuntimeDiagnosticsService.Instance.Write(
+                    "startup",
+                    "post-message-enrichment-deferred",
+                    "reason=" + (reason ?? string.Empty) + "; catchUp=True");
+                return;
+            }
+
             Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 0);
-            SchedulePostMessageEnrichment("heavy-history:" + reason);
+            TrySchedulePostMessageEnrichment("heavy-history:" + reason);
         }
 
         private static ChatPreviewKind ResolvePreviewKind(ChatMessage message, MessageRenderInfo renderInfo)
@@ -1869,6 +1932,9 @@ namespace Unison.Uwp.Services.WhatsApp
 
             int count = Math.Max(0, conversationCount);
             int processed = Math.Max(_sqliteHistoryConversationsAccumulated, 0);
+            // Cancel any quiet-finalize armed by a prior empty Status chunk so Bootstrap's
+            // apply owns the next sqlite-finalized (otherwise Continue fires on processed=0).
+            Interlocked.Increment(ref _sqliteHistoryFinalizeGeneration);
             PublishInitialSyncProgress(
                 true,
                 false,
@@ -1915,6 +1981,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         "[WhatsAppService] SQLite quiet lot handed to catch-up continue: requestId=" +
                         (lotRequestId ?? "<none>") +
                         ", signals=" + lotProgressSignals +
+                        ", processed=" + processed +
                         ", banner=" + (IsHistoryCatchUpBannerActive));
                     RuntimeDiagnosticsService.Instance.Write(
                         "history",
@@ -1924,12 +1991,24 @@ namespace Unison.Uwp.Services.WhatsApp
                         "; delayMs=" + delayMs +
                         "; processed=" + processed);
 
-                    DecideCatchUpAfterIdleBatch(
-                        lotRequestId,
-                        lotAckAccepted,
-                        lotProgressSignals,
-                        "sqlite-lot-quiet:" + (lotTrigger ?? string.Empty),
-                        delayMs);
+                    // Empty StatusV3 quiet must not solicit the next FULL_HISTORY page.
+                    if (processed <= 0)
+                    {
+                        RuntimeDiagnosticsService.Instance.Write(
+                            "history",
+                            "catch-up-sqlite-lot-quiet-skip-empty",
+                            "requestId=" + (lotRequestId ?? string.Empty));
+                        FinishHistoryCatchUpContinue("sqlite-empty-lot", releaseEnrichment: true);
+                    }
+                    else
+                    {
+                        DecideCatchUpAfterIdleBatch(
+                            lotRequestId,
+                            lotAckAccepted,
+                            lotProgressSignals,
+                            "sqlite-lot-quiet:" + (lotTrigger ?? string.Empty),
+                            delayMs);
+                    }
                 }
                 else
                 {
@@ -1939,15 +2018,27 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 // After history quiet: re-read newest history_message per visible chat so the
                 // list strip matches SQLite even when preview rows lagged or skipped fromMe.
-                try
+                // Skip while the list is still materializing — ChatListViewModel + post-replay
+                // already reconcile; doubling tip-swaps on Mobile overlapped the paint storm.
+                if (_listPaintGate != null && !_listPaintGate.IsReleased)
                 {
-                    await ReconcileChatPreviewsFromSqliteAsync(null, "history-quiet")
-                        .ConfigureAwait(false);
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "preview-tip",
+                        "reconcile-deferred-list-paint",
+                        "reason=history-quiet");
                 }
-                catch (Exception exReconcile)
+                else
                 {
-                    Debug.WriteLine(
-                        "[WhatsAppService] Post-sync preview reconcile failed: " + exReconcile.Message);
+                    try
+                    {
+                        await ReconcileChatPreviewsFromSqliteAsync(null, "history-quiet")
+                            .ConfigureAwait(false);
+                    }
+                    catch (Exception exReconcile)
+                    {
+                        Debug.WriteLine(
+                            "[WhatsAppService] Post-sync preview reconcile failed: " + exReconcile.Message);
+                    }
                 }
             }
             catch (Exception ex)

@@ -21,13 +21,16 @@ namespace Unison.Uwp.Services
 
         private static DeviceCategory DetectDeviceCategory()
         {
+            bool mobile = DetectIsMobile();
             try
             {
-                return DeviceCategories.FromAppMemoryLimit(MemoryManager.AppMemoryUsageLimit);
+                return DeviceCategories.CapForMobile(
+                    DeviceCategories.FromAppMemoryLimit(MemoryManager.AppMemoryUsageLimit),
+                    mobile);
             }
             catch
             {
-                return DetectIsMobile() ? DeviceCategory.Low : DeviceCategory.High;
+                return mobile ? DeviceCategory.Low : DeviceCategory.High;
             }
         }
 

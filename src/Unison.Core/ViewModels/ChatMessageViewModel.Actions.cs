@@ -534,6 +534,51 @@ namespace Unison.Core.ViewModels
             }
         }
 
+        /// <summary>
+        /// Save as… for downloaded audio: Ogg/Opus → MP3 via <see cref="IAudioExportService"/>.
+        /// </summary>
+        public async Task SaveAudioAsAsync()
+        {
+            if (!Model.IsAudio || !HasLocalAudio || _audioExport == null)
+            {
+                return;
+            }
+
+            LogMedia("audio-saveas-click");
+            string uri = Model.AudioUri;
+            if (string.IsNullOrWhiteSpace(uri))
+            {
+                LogMedia("audio-saveas-skip", "no-local-uri");
+                await ShowErrorSafeAsync(
+                    "ChatDetail_DocumentSaveFailed",
+                    "Could not save this file.");
+                return;
+            }
+
+            string suggested = Model.IsVoiceMessage
+                ? (_strings?.Get("ChatList_PreviewVoice", "Voice message") ?? "Voice message")
+                : (_strings?.Get("ChatDetail_Audio", "Audio") ?? "Audio");
+
+            try
+            {
+                string path = await _audioExport.SaveAsMp3Async(uri, suggested);
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    LogMedia("audio-saveas-cancel");
+                    return;
+                }
+
+                LogMedia("audio-saveas-ok", "path=" + path);
+            }
+            catch (Exception ex)
+            {
+                LogMediaError("audio-saveas-fail", ex);
+                await ShowErrorSafeAsync(
+                    "ChatDetail_DocumentSaveFailed",
+                    "Could not save this file.");
+            }
+        }
+
         /// <summary>Pin/unpin this message in its chat (uses <see cref="ChatMessage.RemoteJid"/>).</summary>
         public async Task SetPinnedAsync(bool pin, uint durationSeconds = 604800)
         {
@@ -656,6 +701,7 @@ namespace Unison.Core.ViewModels
             (DownloadDocumentCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (OpenDocumentCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (SaveDocumentAsCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (SaveAudioAsCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (ExportDocumentCommand as RelayCommand)?.RaiseCanExecuteChanged();
         }
     }

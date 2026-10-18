@@ -22,6 +22,7 @@ using Unison.Baileys.Client;
 using Unison.Baileys.Protocol;
 using Unison.Socket.Abstractions;
 using Unison.Socket.Events;
+using Unison.Socket.WABinary;
 
 namespace Unison.Socket.Session
 {
@@ -101,7 +102,9 @@ namespace Unison.Socket.Session
             var lid = node.GetAttribute("lid");
             if (!string.IsNullOrEmpty(lid) && _auth.Me != null)
             {
-                _auth.Me.Lid = lid;
+                // Success often returns a bare LID; keep the companion device from Me.Id so
+                // group sender keys are filed under the same device the server stamps on us.
+                _auth.Me.Lid = JidUtils.TransferDevice(_auth.Me.Id, lid);
                 await _events.EmitAsync(WaEventKind.CredsUpdate, _auth).ConfigureAwait(false);
             }
 

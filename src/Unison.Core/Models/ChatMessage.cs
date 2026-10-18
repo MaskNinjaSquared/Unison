@@ -27,7 +27,10 @@ namespace Unison.Core.Models
             {
                 _content = value;
                 OnPropertyChanged();
-                OnPropertyChanged(nameof(DocumentDisplayName));
+                Raise(
+                    nameof(DocumentDisplayName),
+                    nameof(IsDocument),
+                    nameof(ShowTextContent));
             }
         }
 
@@ -249,13 +252,21 @@ namespace Unison.Core.Models
         }
 
         /// <summary>
-        /// Fills <see cref="Kind"/> from legacy boolean flags after JSON load
-        /// (rows persisted before Kind existed).
+        /// Fills <see cref="Kind"/> from legacy boolean flags / document fields after JSON load
+        /// (rows persisted before Kind existed, or outgoing rows that kept Text while the
+        /// document URI / file name were already set).
         /// </summary>
         public void EnsureKindFromLegacyFlags()
         {
             if (_kind != ChatMessageKind.Text)
             {
+                return;
+            }
+
+            if (IsDocument)
+            {
+                // IsDocument can be true from URI / key / preview tag while Kind is still Text.
+                Kind = ChatMessageKind.Document;
                 return;
             }
 
@@ -271,8 +282,22 @@ namespace Unison.Core.Models
                 return;
             }
 
-            _kind = inferred;
-            SyncLegacyFlagsFromKind();
+            Kind = inferred;
+        }
+
+        /// <summary>
+        /// Local URI or protocol media key — enough to treat the row as a document even when
+        /// <see cref="Kind"/> was left as Text. File name alone is not included (preview fallback).
+        /// </summary>
+        [JsonIgnore]
+        public bool HasDocumentPayload =>
+            !string.IsNullOrWhiteSpace(_documentUri) ||
+            !string.IsNullOrWhiteSpace(DocumentMediaKeyBase64);
+
+        private static bool HasDocumentPreviewTag(string content)
+        {
+            return !string.IsNullOrWhiteSpace(content) &&
+                   content.IndexOf("[Document]", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private void SyncLegacyFlagsFromKind()
@@ -345,9 +370,17 @@ namespace Unison.Core.Models
         [JsonIgnore]
         public bool IsSticker => _kind == ChatMessageKind.Sticker;
 
-        /// <summary>Protocol document / file message.</summary>
+        /// <summary>
+        /// Protocol document / file message. Also true when a local URI, media key, or
+        /// <c>[Document]</c> preview tag is present but <see cref="Kind"/> was left as Text —
+        /// otherwise the bubble never loads document chrome. File name alone is not enough
+        /// (preview-fallback rows set a name while intentionally staying Text).
+        /// </summary>
         [JsonIgnore]
-        public bool IsDocument => _kind == ChatMessageKind.Document;
+        public bool IsDocument =>
+            _kind == ChatMessageKind.Document ||
+            HasDocumentPayload ||
+            HasDocumentPreviewTag(Content);
 
         private bool _isStickerFailed;
         /// <summary>Sticker media could not be loaded — bubble shows "!Sticker Error".</summary>
@@ -547,8 +580,10 @@ namespace Unison.Core.Models
             get => _documentUri;
             set
             {
+                if (string.Equals(_documentUri, value, StringComparison.Ordinal)) return;
                 _documentUri = value;
                 OnPropertyChanged();
+                Raise(nameof(HasDocumentPayload), nameof(IsDocument), nameof(ShowTextContent));
                 OnPropertyChanged(nameof(HasLocalDocument));
                 NotifyDocumentDownloadStateChanged();
             }

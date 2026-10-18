@@ -15,6 +15,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         public event EventHandler DebugRequested;
 
+        public event EventHandler SettingsRequested;
+
         public LegacyPivotPlaceholderView()
         {
             InitializeComponent();
@@ -22,6 +24,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             SectionBar.SearchRequested += (s, e) => SearchRequested?.Invoke(this, e);
             SectionBar.ProfileRequested += (s, e) => ProfileRequested?.Invoke(this, e);
             SectionBar.DebugRequested += (s, e) => DebugRequested?.Invoke(this, e);
+            SectionBar.SettingsRequested += (s, e) => SettingsRequested?.Invoke(this, e);
         }
 
         public Task InitAsync(string section)

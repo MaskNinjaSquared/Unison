@@ -75,6 +75,7 @@ namespace Unison.Core.Helpers
             string caption)
         {
             ChatMessage message = FromStamp(stamp);
+            // Preview tag for the chat list; bubble body is hidden when IsDocument (ShowTextContent).
             message.Content = MediaPreviewTag.ForDocument(fileName);
             message.Kind = ChatMessageKind.Document;
             message.DocumentUri = localUri;

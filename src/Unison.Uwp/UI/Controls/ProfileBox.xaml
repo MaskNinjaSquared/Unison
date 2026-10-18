@@ -8,7 +8,6 @@
     mc:Ignorable="d"
     d:DesignHeight="72"
     d:DesignWidth="400"
-    MaxWidth="800"
     HorizontalAlignment="Stretch">
 
     <!-- Whole row is a button: icon | title / value. Parent sets x:Uid → {uid}.Title. -->

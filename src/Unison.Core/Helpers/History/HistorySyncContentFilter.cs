@@ -508,6 +508,8 @@ namespace Unison.Core.Helpers
                 return null;
             }
 
+            // Baileys normalizeMessageContent future-proof wrappers, plus DeviceSentMessage
+            // (self-echo) and Status mention shells that wrap the real image/video payload.
             return current.DeviceSentMessage?.Message
                 ?? current.EphemeralMessage?.Message
                 ?? current.ViewOnceMessage?.Message
@@ -517,7 +519,10 @@ namespace Unison.Core.Helpers
                 ?? current.EditedMessage?.Message
                 ?? current.AssociatedChildMessage?.Message
                 ?? current.GroupStatusMessage?.Message
-                ?? current.GroupStatusMessageV2?.Message;
+                ?? current.GroupStatusMessageV2?.Message
+                ?? current.StatusMentionMessage?.Message
+                ?? current.GroupStatusMentionMessage?.Message
+                ?? current.GroupMentionedMessage?.Message;
         }
 
         /// <summary>

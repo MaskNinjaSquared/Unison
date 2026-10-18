@@ -53,6 +53,9 @@ namespace Unison.Core.Models
 
         public bool IsVoiceNote { get; set; }
 
+        /// <summary>True after this item was shown in the Status viewer on this device.</summary>
+        public bool IsViewed { get; set; }
+
         public DateTime? TimestampUtc { get; set; }
 
         public DateTime? ExpiresAtUtc { get; set; }

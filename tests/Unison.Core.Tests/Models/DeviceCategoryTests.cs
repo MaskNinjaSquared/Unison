@@ -40,5 +40,30 @@ namespace Unison.Core.Tests.Models
         {
             Assert.Equal(DeviceCategory.High, DeviceCategories.FromAppMemoryLimit(ulong.MaxValue));
         }
+
+        [Fact]
+        public void Mobile_with_a_2GB_limit_is_capped_to_low()
+        {
+            // 900 MB app limit is High by floor, but Creators Mobile cannot survive the High
+            // FULL_HISTORY cascade — same class of phone that worked on 1.8.3.
+            DeviceCategory raw = DeviceCategories.FromAppMemoryLimit(900UL * MB);
+            Assert.Equal(DeviceCategory.High, raw);
+            Assert.Equal(DeviceCategory.Low, DeviceCategories.CapForMobile(raw, isMobile: true));
+        }
+
+        [Fact]
+        public void Desktop_keeps_high_when_the_limit_is_high()
+        {
+            DeviceCategory raw = DeviceCategories.FromAppMemoryLimit(900UL * MB);
+            Assert.Equal(DeviceCategory.High, DeviceCategories.CapForMobile(raw, isMobile: false));
+        }
+
+        [Fact]
+        public void Mobile_cap_does_not_raise_unsupported()
+        {
+            Assert.Equal(
+                DeviceCategory.Unsupported,
+                DeviceCategories.CapForMobile(DeviceCategory.Unsupported, isMobile: true));
+        }
     }
 }

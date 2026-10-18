@@ -8,7 +8,7 @@ using Windows.UI.Xaml.Controls;
 namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 {
     /// <summary>
-    /// Bottom bar for Legacy pivots that only open search chrome, plus profile and debug.
+    /// Bottom bar for Legacy pivots that only open search chrome, plus profile, debug, and settings.
     /// </summary>
     public sealed partial class LegacySectionAppBar : UserControl
     {
@@ -19,6 +19,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         public event EventHandler ProfileRequested;
 
         public event EventHandler DebugRequested;
+
+        public event EventHandler SettingsRequested;
 
         public LegacySectionAppBar()
         {
@@ -72,6 +74,11 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         private void Debug_Click(object sender, RoutedEventArgs e)
         {
             DebugRequested?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void Settings_Click(object sender, RoutedEventArgs e)
+        {
+            SettingsRequested?.Invoke(this, EventArgs.Empty);
         }
 
         private void Bar_Loaded(object sender, RoutedEventArgs e)

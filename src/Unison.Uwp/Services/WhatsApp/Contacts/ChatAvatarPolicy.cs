@@ -55,6 +55,9 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         /// <summary>JIDs realized on screen; background batches pull these first.</summary>
         private readonly HashSet<string> _viewportPriority = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        /// <summary>Post-safe-mode avatar request counter for crash breadcrumbs.</summary>
+        private int _postSyncAvatarRequests;
+
         internal ChatAvatarPolicy(
             IDeferredAvatarResolution deferredAvatars,
             IJidResolver jids,
@@ -201,6 +204,29 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             if (chat == null || string.IsNullOrWhiteSpace(chat.JID) || !_sessions.IsTransportReady)
             {
                 return;
+            }
+
+            // First post-safe-mode avatar requests often land right when the ListView materializes.
+            int avatarReq = Interlocked.Increment(ref _postSyncAvatarRequests);
+            if (avatarReq <= 5 || (avatarReq % 25) == 0)
+            {
+                try
+                {
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "chat-list-lifecycle",
+                        "avatar-request",
+                        "n=" + avatarReq +
+                        "; force=" + force +
+                        "; missing=" + string.IsNullOrWhiteSpace(chat.GetAvatarUrl(preferHigh: false)) +
+                        "; gcMb=" + (GC.GetTotalMemory(false) / (1024 * 1024)));
+                    if (avatarReq <= 3)
+                    {
+                        _ = RuntimeDiagnosticsService.Instance.FlushAsync("chat-list:avatar-request");
+                    }
+                }
+                catch
+                {
+                }
             }
 
             DateTime nowUtc = DateTime.UtcNow;

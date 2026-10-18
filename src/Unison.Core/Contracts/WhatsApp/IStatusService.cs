@@ -26,5 +26,10 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <see cref="IMessageService"/> (same keys as chat media). Returns a local URI or null.
         /// </summary>
         Task<string> EnsureMediaAsync(HistoryStatus status);
+
+        /// <summary>
+        /// Records that this Status item was shown in the viewer (local <see cref="StatusViewState"/>).
+        /// </summary>
+        Task MarkViewedAsync(string authorJid, string messageId);
     }
 }

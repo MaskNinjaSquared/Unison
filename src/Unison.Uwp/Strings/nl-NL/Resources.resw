@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -600,6 +600,33 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   </data>
   <data name="StatusList_Empty.Text" xml:space="preserve">
     <value>Geen recente statusupdates</value>
+  </data>
+  <data name="StatusList_Recent" xml:space="preserve">
+    <value>Recent</value>
+  </data>
+  <data name="StatusList_Viewed" xml:space="preserve">
+    <value>Bekeken</value>
+  </data>
+  <data name="StatusList_FilterHeader.Text" xml:space="preserve">
+    <value>Status filteren op</value>
+  </data>
+  <data name="StatusList_FilterAll.Text" xml:space="preserve">
+    <value>Alles</value>
+  </data>
+  <data name="StatusList_FilterRecent.Text" xml:space="preserve">
+    <value>Recent</value>
+  </data>
+  <data name="StatusList_FilterViewed.Text" xml:space="preserve">
+    <value>Bekeken</value>
+  </data>
+  <data name="StatusList_FilterLink.Text" xml:space="preserve">
+    <value>Status filteren</value>
+  </data>
+  <data name="StatusDetail_EmptyTitle.Text" xml:space="preserve">
+    <value>Deel statusupdates</value>
+  </data>
+  <data name="StatusDetail_EmptySubtitle.Text" xml:space="preserve">
+    <value>Deel foto's, video's en tekst die na 24 uur verdwijnen.</value>
   </data>
   <data name="Shell_Starred.Text" xml:space="preserve">
     <value>Berichten met ster</value>
@@ -1254,7 +1281,10 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   <data name="ChatDetail_DocumentOpen.Label" xml:space="preserve">
     <value>Document openen</value>
   </data>
-  <data name="ChatDetail_DocumentSaveAs.Label" xml:space="preserve">
+    <data name="ChatDetail_AudioPlay.Label" xml:space="preserve">
+    <value>Audio afspelen</value>
+  </data>
+<data name="ChatDetail_DocumentSaveAs.Label" xml:space="preserve">
     <value>Opslaan als…</value>
   </data>
   <data name="ChatDetail_Back.ToolTip" xml:space="preserve">

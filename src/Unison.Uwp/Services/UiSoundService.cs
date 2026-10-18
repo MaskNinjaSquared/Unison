@@ -7,10 +7,13 @@ using Windows.Storage;
 
 namespace Unison.Uwp.Services
 {
-    /// <summary>Plays packaged WAV cues; failures are swallowed so UI never depends on audio.</summary>
+    /// <summary>Plays packaged sound cues; failures are swallowed so UI never depends on audio.</summary>
     public sealed class UiSoundService : IUiSoundService
     {
         private MediaPlayer _player;
+
+        /// <summary>Unigram <c>Assets/Audio/sent.mp3</c> — short cue after a successful send.</summary>
+        public void PlayMessageSent() => Play("ms-appx:///Assets/Sounds/message_sent.mp3");
 
         public void PlayVoiceNoteStart() => Play("ms-appx:///Assets/Sounds/voice_note_start.wav");
 

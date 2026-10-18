@@ -10,6 +10,7 @@ using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Media;
+using Unison.Uwp.Services;
 using Unison.Uwp.UI.Templates;
 
 namespace Unison.Uwp.UI.Views
@@ -60,6 +61,7 @@ namespace Unison.Uwp.UI.Views
         /// reported to the shell as if the user had clicked.
         /// </summary>
         private bool _suppressSelectionChanged;
+        private int _containerChangingCount;
 
         public ChatListView()
         {
@@ -211,6 +213,34 @@ namespace Unison.Uwp.UI.Views
         // Rows
         // ---------------------------------------------------------------------
 
+        /// <summary>x:Load just created the ListView after first-sync hold released.</summary>
+        private void ChatList_Loaded(object sender, RoutedEventArgs e)
+        {
+            int items = 0;
+            try
+            {
+                items = ChatList?.Items?.Count ?? 0;
+            }
+            catch
+            {
+            }
+
+            TraceListUi(
+                "listview-loaded",
+                "items=" + items +
+                "; visibleVm=" + (ViewModel?.VisibleChats?.Count ?? 0) +
+                "; materialized=" + (ViewModel?.IsChatListMaterialized ?? false),
+                flush: true);
+        }
+
+        private void ChatList_Unloaded(object sender, RoutedEventArgs e)
+        {
+            TraceListUi(
+                "listview-unloaded",
+                "visibleVm=" + (ViewModel?.VisibleChats?.Count ?? 0),
+                flush: true);
+        }
+
         private void ChatList_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
         {
             if (args == null || args.InRecycleQueue || args.Item == null)
@@ -218,9 +248,51 @@ namespace Unison.Uwp.UI.Views
                 return;
             }
 
+            _containerChangingCount++;
+            if (_containerChangingCount <= 5 || (_containerChangingCount % 25) == 0)
+            {
+                TraceListUi(
+                    "container-changing",
+                    "n=" + _containerChangingCount +
+                    "; phase=" + args.Phase +
+                    "; visibleVm=" + (ViewModel?.VisibleChats?.Count ?? 0),
+                    flush: _containerChangingCount <= 3);
+            }
+
             // On demand, and only for rows that actually reached the screen. Fetching every
             // avatar up front cost hundreds of requests for rows nobody scrolled to.
-            ViewModel?.OnRowRealized(args.Item as ChatItem);
+            try
+            {
+                ViewModel?.OnRowRealized(args.Item as ChatItem);
+            }
+            catch (Exception ex)
+            {
+                RuntimeDiagnosticsService.Instance.RecordException(
+                    "chat-list-ui",
+                    "row-realized-failed",
+                    ex,
+                    "n=" + _containerChangingCount);
+                _ = RuntimeDiagnosticsService.Instance.FlushAsync("chat-list-ui:row-realized-failed");
+            }
+        }
+
+        private static void TraceListUi(string eventName, string details, bool flush)
+        {
+            try
+            {
+                string mem = "gcMb=" + (GC.GetTotalMemory(false) / (1024 * 1024));
+                RuntimeDiagnosticsService.Instance.Write(
+                    "chat-list-ui",
+                    eventName,
+                    string.IsNullOrWhiteSpace(details) ? mem : details + "; " + mem);
+                if (flush)
+                {
+                    _ = RuntimeDiagnosticsService.Instance.FlushAsync("chat-list-ui:" + eventName);
+                }
+            }
+            catch
+            {
+            }
         }
 
         /// <summary>Context flyout on a row: pin the conversation as a Start tile.</summary>

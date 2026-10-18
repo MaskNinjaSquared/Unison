@@ -12,12 +12,43 @@
 
     <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
+        <!-- Filter right as a text link (same pattern as Legacy ChatList). -->
+        <Grid Grid.Row="0"
+              MinHeight="36"
+              Padding="0,4"
+              Background="Transparent">
+            <HyperlinkButton x:Name="FilterButton"
+                             Style="{StaticResource LegacyHyperlinkButtonStyle}"
+                             Margin="0,0,10,0"
+                             HorizontalAlignment="Right"
+                             VerticalAlignment="Center"
+                             Click="FilterButton_Click"
+                             AutomationProperties.Name="Filter status">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <FontIcon Glyph="&#xEA01;"
+                              FontFamily="{StaticResource UnisonIconFont}"
+                              FontSize="11"
+                              Foreground="{ThemeResource SystemControlForegroundAccentBrush}"
+                              VerticalAlignment="Center"/>
+                    <TextBlock x:Name="FilterLabel"
+                               Text="Filter Status"
+                               Margin="5,0,0,0"
+                               FontSize="12"
+                               FontFamily="{StaticResource MainFont}"
+                               Foreground="{ThemeResource SystemControlForegroundAccentBrush}"
+                               TextDecorations="Underline"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+            </HyperlinkButton>
+        </Grid>
+
         <ListView x:Name="AuthorList"
-                  Grid.Row="0"
+                  Grid.Row="1"
                   ItemsSource="{x:Bind ViewModel.Authors, Mode=OneWay}"
                   ItemContainerStyle="{StaticResource WhatsAppChatListItemStyle}"
                   SelectionMode="Single"
@@ -26,27 +57,35 @@
                 <DataTemplate x:DataType="models:StatusAuthorItem">
                     <Grid Height="72" Padding="12,0">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="56"/>
+                            <ColumnDefinition Width="64"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
-                        <controls:ChatAvatarControl Width="48" Height="48"
-                                                    Size="48"
-                                                    ShowBorder="True"
-                                                    HorizontalAlignment="Left"
-                                                    VerticalAlignment="Center"
-                                                    AvatarUrl="{x:Bind AvatarUrl, Mode=OneWay}"/>
+                        <controls:StatusListAvatarControl Width="56" Height="56"
+                                                          Size="56"
+                                                          HorizontalAlignment="Left"
+                                                          VerticalAlignment="Center"
+                                                          AvatarUrl="{x:Bind AvatarUrl, Mode=OneWay}"
+                                                          ViewState="{x:Bind ViewState, Mode=OneWay}"/>
 
-                        <TextBlock Grid.Column="1"
-                                   Text="{x:Bind DisplayName, Mode=OneWay}"
-                                   FontSize="18"
-                                   FontFamily="{StaticResource MainFontSemibold}"
-                                   FontWeight="SemiBold"
-                                   VerticalAlignment="Center"
-                                   Margin="12,0,12,0"
-                                   TextWrapping="NoWrap"
-                                   TextTrimming="CharacterEllipsis"/>
+                        <StackPanel Grid.Column="1"
+                                    VerticalAlignment="Center"
+                                    Margin="12,0,12,0">
+                            <TextBlock Text="{x:Bind DisplayName, Mode=OneWay}"
+                                       FontSize="18"
+                                       FontFamily="{StaticResource MainFontSemibold}"
+                                       FontWeight="SemiBold"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Text="{x:Bind ViewStateCaption, Mode=OneWay}"
+                                       FontSize="13"
+                                       Opacity="0.75"
+                                       Margin="0,2,0,0"
+                                       FontFamily="{StaticResource MainFont}"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
 
                         <TextBlock Grid.Column="2"
                                    Text="{x:Bind LatestTimestampUtc, Mode=OneWay, Converter={StaticResource RelativeTimestampConverter}}"
@@ -59,7 +98,7 @@
             </ListView.ItemTemplate>
         </ListView>
 
-        <TextBlock Grid.Row="0"
+        <TextBlock Grid.Row="1"
                    x:Uid="StatusList_Empty"
                    Text="No recent status updates"
                    HorizontalAlignment="Center"
@@ -69,7 +108,7 @@
                    FontFamily="{StaticResource MainFont}"
                    Visibility="{x:Bind ViewModel.IsEmpty, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
 
-        <Grid Grid.Row="0"
+        <Grid Grid.Row="1"
               Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
               Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
@@ -84,7 +123,7 @@
             </StackPanel>
         </Grid>
 
-        <Grid Grid.Row="1"
+        <Grid Grid.Row="2"
               MinHeight="{StaticResource LegacyCommandBarCompactHeight}"
               Background="{ThemeResource LegacyCommandBarBackgroundBrush}">
         <CommandBar x:Name="StatusCommandBar"
@@ -127,6 +166,13 @@
                               Click="DebugAppBar_Click">
                     <AppBarButton.Icon>
                         <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xEBE8;"/>
+                    </AppBarButton.Icon>
+                </AppBarButton>
+                <AppBarButton x:Uid="Shell_LegacyMenu_Settings"
+                              Label="Settings"
+                              Click="SettingsAppBar_Click">
+                    <AppBarButton.Icon>
+                        <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE713;"/>
                     </AppBarButton.Icon>
                 </AppBarButton>
             </CommandBar.SecondaryCommands>

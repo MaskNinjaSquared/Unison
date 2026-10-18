@@ -171,6 +171,22 @@ public class MessageRenderReaderTests
     }
 
     [Fact]
+    public void A_ptv_video_note_is_read_as_a_video_like_baileys()
+    {
+        // Baileys maps ptvMessage onto the same VideoMessage shape (status / circle clips).
+        MessageRenderInfo info = MessageRenderReader.Read(new Proto.Message
+        {
+            PtvMessage = new Proto.Message.Types.VideoMessage { Caption = "note", Seconds = 7 }
+        });
+
+        Assert.True(info.IsVideo);
+        Assert.Equal("note", info.Caption);
+        Assert.NotNull(info.VideoMessage);
+        Assert.Equal(7u, info.VideoMessage.Seconds);
+        Assert.Equal(ChatPreviewKind.Video, info.PreviewKind);
+    }
+
+    [Fact]
     public void A_document_is_read_as_a_document()
     {
         MessageRenderInfo info = MessageRenderReader.Read(new Proto.Message

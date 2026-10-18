@@ -19,9 +19,8 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- The avatar centers in whatever width the host gives, capped at 800px. -->
+        <!-- Avatar stays centered; name/status rows stretch with the host. -->
         <Grid Grid.Row="0"
-              MaxWidth="800"
               HorizontalAlignment="Stretch"
               Margin="0,16,0,0">
             <Grid Width="120"
@@ -37,7 +36,6 @@
         </Grid>
 
         <Grid Grid.Row="1"
-              MaxWidth="800"
               HorizontalAlignment="Stretch"
               Margin="0,20,0,0">
             <Grid.RowDefinitions>

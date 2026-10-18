@@ -33,12 +33,44 @@
                        TextTrimming="CharacterEllipsis"
                        MaxLines="1"/>
 
-            <Button x:Name="MenuButton"
-                    Grid.Column="1"
-                    Click="MenuButton_Click"
-                    Style="{StaticResource ModernIconButtonStyle}">
-                <FontIcon Glyph="&#xE712;" FontFamily="{StaticResource IconFont}" FontSize="18"/>
-            </Button>
+            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <Button x:Name="FilterButton"
+                        Style="{StaticResource ModernIconButtonStyle}"
+                        Margin="0,0,4,0"
+                        AutomationProperties.Name="Filter status">
+                    <FontIcon Glyph="&#xEA01;"
+                              FontFamily="{StaticResource UnisonIconFont}"
+                              FontSize="18"
+                              Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
+                    <Button.Flyout>
+                        <MenuFlyout MenuFlyoutPresenterStyle="{StaticResource ModernMenuFlyoutStyle}">
+                            <MenuFlyoutItem x:Uid="StatusList_FilterHeader"
+                                            Text="Filter status by"
+                                            Style="{StaticResource ModernMenuFlyoutHeaderStyle}"/>
+                            <MenuFlyoutItem x:Uid="StatusList_FilterAll"
+                                            Text="All"
+                                            Command="{x:Bind ViewModel.FilterStatusCommand}"
+                                            CommandParameter="0"
+                                            Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
+                            <MenuFlyoutItem x:Uid="StatusList_FilterRecent"
+                                            Text="Recent"
+                                            Command="{x:Bind ViewModel.FilterStatusCommand}"
+                                            CommandParameter="1"
+                                            Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
+                            <MenuFlyoutItem x:Uid="StatusList_FilterViewed"
+                                            Text="Viewed"
+                                            Command="{x:Bind ViewModel.FilterStatusCommand}"
+                                            CommandParameter="2"
+                                            Style="{StaticResource ModernMenuFlyoutItemStyle}"/>
+                        </MenuFlyout>
+                    </Button.Flyout>
+                </Button>
+                <Button x:Name="MenuButton"
+                        Click="MenuButton_Click"
+                        Style="{StaticResource ModernIconButtonStyle}">
+                    <FontIcon Glyph="&#xE712;" FontFamily="{StaticResource IconFont}" FontSize="18"/>
+                </Button>
+            </StackPanel>
         </Grid>
 
         <ListView x:Name="AuthorList"
@@ -51,27 +83,35 @@
                 <DataTemplate x:DataType="models:StatusAuthorItem">
                     <Grid Height="72" Padding="12,0">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="56"/>
+                            <ColumnDefinition Width="64"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
-                        <controls:ChatAvatarControl Width="48" Height="48"
-                                                    Size="48"
-                                                    ShowBorder="True"
-                                                    HorizontalAlignment="Left"
-                                                    VerticalAlignment="Center"
-                                                    AvatarUrl="{x:Bind AvatarUrl, Mode=OneWay}"/>
+                        <controls:StatusListAvatarControl Width="56" Height="56"
+                                                          Size="56"
+                                                          HorizontalAlignment="Left"
+                                                          VerticalAlignment="Center"
+                                                          AvatarUrl="{x:Bind AvatarUrl, Mode=OneWay}"
+                                                          ViewState="{x:Bind ViewState, Mode=OneWay}"/>
 
-                        <TextBlock Grid.Column="1"
-                                   Text="{x:Bind DisplayName, Mode=OneWay}"
-                                   FontSize="18"
-                                   FontFamily="{StaticResource MainFontSemibold}"
-                                   FontWeight="SemiBold"
-                                   VerticalAlignment="Center"
-                                   Margin="12,0,12,0"
-                                   TextWrapping="NoWrap"
-                                   TextTrimming="CharacterEllipsis"/>
+                        <StackPanel Grid.Column="1"
+                                    VerticalAlignment="Center"
+                                    Margin="12,0,12,0">
+                            <TextBlock Text="{x:Bind DisplayName, Mode=OneWay}"
+                                       FontSize="18"
+                                       FontFamily="{StaticResource MainFontSemibold}"
+                                       FontWeight="SemiBold"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Text="{x:Bind ViewStateCaption, Mode=OneWay}"
+                                       FontSize="13"
+                                       Opacity="0.75"
+                                       Margin="0,2,0,0"
+                                       FontFamily="{StaticResource MainFont}"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
 
                         <TextBlock Grid.Column="2"
                                    Text="{x:Bind LatestTimestampUtc, Mode=OneWay, Converter={StaticResource RelativeTimestampConverter}}"

@@ -38,29 +38,30 @@ namespace Unison.Core.ViewModels
         private bool _isFlashAvailable;
         private bool _isBusy;
         private bool _isPreviewReady;
+        private bool _isCancelled;
 
         public CameraPickViewModel()
         {
             CloseCommand = new RelayCommand(
                 () => CloseRequested?.Invoke(this, EventArgs.Empty),
-                () => !IsBusy);
+                () => !IsBusy && !IsCancelled);
 
             CaptureCommand = new RelayCommand(
                 () => CaptureRequested?.Invoke(this, EventArgs.Empty),
-                () => IsPreviewReady && !IsBusy);
+                () => IsPreviewReady && !IsBusy && !IsCancelled);
 
             // Buttons stay visible; IsEnabled / CanExecute go false when the device has no flash.
             FlashOnCommand = new RelayCommand(
                 () => SetFlash(true),
-                () => IsFlashAvailable && !IsBusy);
+                () => IsFlashAvailable && !IsBusy && !IsCancelled);
 
             FlashOffCommand = new RelayCommand(
                 () => SetFlash(false),
-                () => IsFlashAvailable && !IsBusy);
+                () => IsFlashAvailable && !IsBusy && !IsCancelled);
 
             SwitchCameraCommand = new RelayCommand(
                 () => SwitchCameraRequested?.Invoke(this, EventArgs.Empty),
-                () => IsMultipleCameras && !IsBusy);
+                () => IsMultipleCameras && !IsBusy && !IsCancelled);
         }
 
         public event EventHandler CloseRequested;
@@ -146,9 +147,20 @@ namespace Unison.Core.ViewModels
             }
         }
 
+        /// <summary>
+        /// True after <see cref="Cancel"/> — suspend / minimize / explicit close.
+        /// A late <see cref="ReportPhoto"/> is ignored so the image-send path never opens.
+        /// </summary>
+        public bool IsCancelled => _isCancelled;
+
         /// <summary>Called by the view after <c>DeviceInformation.FindAllAsync(VideoCapture)</c>.</summary>
         public void ReportDevices(int cameraCount, bool flashSupported)
         {
+            if (IsCancelled)
+            {
+                return;
+            }
+
             IsMultipleCameras = cameraCount > 1;
             IsFlashAvailable = flashSupported;
             if (!flashSupported)
@@ -160,13 +172,36 @@ namespace Unison.Core.ViewModels
         /// <summary>Applies the desired flash flag after the view writes it to MediaCapture.</summary>
         public void ReportFlashApplied(bool isOn)
         {
+            if (IsCancelled)
+            {
+                return;
+            }
+
             IsFlashOn = isOn;
+        }
+
+        /// <summary>
+        /// App went to background or was suspended: drop any in-flight capture and ask the
+        /// view to tear the overlay down. Idempotent.
+        /// </summary>
+        public void Cancel()
+        {
+            if (_isCancelled)
+            {
+                return;
+            }
+
+            _isCancelled = true;
+            IsBusy = false;
+            IsPreviewReady = false;
+            RaiseAllCommands();
+            CloseRequested?.Invoke(this, EventArgs.Empty);
         }
 
         /// <summary>Hands JPEG bytes to subscribers (chat detail → image send preview).</summary>
         public void ReportPhoto(byte[] jpegBytes)
         {
-            if (jpegBytes == null || jpegBytes.Length == 0)
+            if (IsCancelled || jpegBytes == null || jpegBytes.Length == 0)
             {
                 return;
             }

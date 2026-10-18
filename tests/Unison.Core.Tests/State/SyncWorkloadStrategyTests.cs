@@ -41,8 +41,10 @@ namespace Unison.Core.Tests.State
             Assert.True(low.MaxMessagesPerConversation < high.MaxMessagesPerConversation);
             Assert.True(low.MaterializeHistoryThumbsDuringSync);
             Assert.Equal(2, low.AvatarFetchBatchSize);
-            Assert.True(low.MaxFullHistoryCatchUpRounds > unsupported.MaxFullHistoryCatchUpRounds);
-            Assert.True(low.MaxFullHistoryCatchUpRounds < high.MaxFullHistoryCatchUpRounds);
+            // Low / Mobile: first quiet lot only (same as Unsupported) — adjacent pages OOMed Creators.
+            Assert.Equal(0, low.MaxFullHistoryCatchUpRounds);
+            Assert.Equal(0, unsupported.MaxFullHistoryCatchUpRounds);
+            Assert.True(high.MaxFullHistoryCatchUpRounds > 0);
             Assert.True(low.HistoryFinalizeQuietMs < unsupported.HistoryFinalizeQuietMs);
             Assert.True(low.HistoryFinalizeQuietMs > high.HistoryFinalizeQuietMs);
         }
@@ -126,10 +128,27 @@ namespace Unison.Core.Tests.State
         }
 
         [Fact]
-        public void Unsupported_skips_adjacent_full_history_pages()
+        public void Unsupported_and_Low_skip_adjacent_full_history_pages()
         {
             // Cap 0: first quiet lot finishes with FinishMaxContinues — no soft-reconnect cascade.
             Assert.Equal(0, UnsupportedSyncWorkload.Instance.MaxFullHistoryCatchUpRounds);
+            Assert.Equal(0, LowSyncWorkload.Instance.MaxFullHistoryCatchUpRounds);
+        }
+
+        [Fact]
+        public void Open_chat_window_uses_former_Mobile_sizes_on_Unsupported_and_Low()
+        {
+            Assert.Equal(30, UnsupportedSyncWorkload.Instance.InitialUiMessageWindow);
+            Assert.Equal(80, UnsupportedSyncWorkload.Instance.MaxUiMessageWindow);
+            Assert.Equal(30, LowSyncWorkload.Instance.InitialUiMessageWindow);
+            Assert.Equal(80, LowSyncWorkload.Instance.MaxUiMessageWindow);
+        }
+
+        [Fact]
+        public void Open_chat_window_uses_former_desktop_sizes_on_High()
+        {
+            Assert.Equal(50, HighSyncWorkload.Instance.InitialUiMessageWindow);
+            Assert.Equal(150, HighSyncWorkload.Instance.MaxUiMessageWindow);
         }
     }
 }

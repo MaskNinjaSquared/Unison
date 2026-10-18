@@ -50,7 +50,14 @@ namespace Unison.Socket.Signal
 
             var myUser = JidUtils.GetUser(myJid);
             var myLidUser = JidUtils.GetUser(myLid);
+            // Companion Me.Id must carry a device. If it was stored bare, fall back to Me.Lid's
+            // device — otherwise myDevice==0 and we skip the phone (device 0) as "ourselves",
+            // never sending it the group sender key.
             var myDevice = JidUtils.GetDevice(myJid);
+            if (myDevice == 0)
+            {
+                myDevice = JidUtils.GetDevice(myLid);
+            }
 
             foreach (var entry in result.List)
             {
@@ -77,9 +84,10 @@ namespace Unison.Socket.Signal
                     }
 
                     // Skip the device we are sending from, but keep our other devices: they need
-                    // their own copy of everything we send.
+                    // their own copy of everything we send. When we still cannot name our device
+                    // (both JIDs bare), never treat device 0 as "us" — that is the phone.
                     var isMe = user == myUser || user == myLidUser;
-                    if (isMe && device.Id == myDevice)
+                    if (isMe && myDevice > 0 && device.Id == myDevice)
                     {
                         continue;
                     }

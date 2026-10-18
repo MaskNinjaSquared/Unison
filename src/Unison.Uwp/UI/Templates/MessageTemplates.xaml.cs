@@ -85,6 +85,11 @@ namespace Unison.Uwp.UI.Templates
             FindChatDetail(sender)?.OnDocumentReadyHolding(sender, e);
         }
 
+        private void DocumentOverflow_Click(object sender, RoutedEventArgs e)
+        {
+            FindChatDetail(sender)?.OnDocumentOverflowClick(sender, e);
+        }
+
         private static IChatDetailSurface FindChatDetail(object sender)
         {
             var current = sender as DependencyObject;

@@ -1034,11 +1034,10 @@
                                Visibility="Collapsed"
                                Canvas.ZIndex="101"/>
 
-        <!-- In-chat camera pick (hosted in a ContentPresenter over the conversation) -->
+        <!-- Camera pick is created on demand — eager CameraPickView (CaptureElement) on every
+             chat open OOMs Creators / Mobile. -->
         <ContentPresenter x:Name="CameraPickPresenter"
                           Visibility="Collapsed"
-                          Canvas.ZIndex="102">
-            <views:CameraPickView x:Name="CameraPickOverlay"/>
-        </ContentPresenter>
+                          Canvas.ZIndex="102"/>
     </Grid>
 </UserControl>

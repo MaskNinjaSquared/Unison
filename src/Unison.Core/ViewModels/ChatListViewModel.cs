@@ -69,10 +69,24 @@ namespace Unison.Core.ViewModels
         private readonly IRuntimeDiagnostics _diagnostics;
         private readonly ILocalSettings _localSettings;
         private readonly SyncWorkloadStrategy _workload;
+        private readonly ChatListInitialPaintGate _listPaintGate;
+
+        /// <summary>
+        /// JID labels already asked of the contact service during search. The strip's mention
+        /// fallback and the nameless-row fallback both go through <see cref="IContactService.ResolveDisplayName"/>,
+        /// which reads the address book, the person cache and the push-name table. One answer
+        /// per JID is enough until names are published again.
+        /// </summary>
+        private readonly Dictionary<string, string> _searchNameCache =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         private CancellationTokenSource _refreshCts;
         private CancellationTokenSource _refreshContinueCts;
         private string _lastSyncBannerLog;
+
+        /// <summary>Breadcrumbs for Mobile post-sync ListView materialize crashes (flushed to disk).</summary>
+        private int _postSyncReleaseTicks;
+        private int _postSyncRowRealized;
 
         private string _searchQuery;
         private ChatListFilter _activeFilter = ChatListFilter.All;
@@ -170,7 +184,8 @@ namespace Unison.Core.ViewModels
             ISessionLogger sessionLogger = null,
             IRuntimeDiagnostics diagnostics = null,
             ILocalSettings localSettings = null,
-            SyncWorkloadStrategy workload = null)
+            SyncWorkloadStrategy workload = null,
+            ChatListInitialPaintGate listPaintGate = null)
         {
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _chatService = chatService;
@@ -178,6 +193,7 @@ namespace Unison.Core.ViewModels
             _diagnostics = diagnostics;
             _localSettings = localSettings;
             _workload = workload ?? HighSyncWorkload.Instance;
+            _listPaintGate = listPaintGate;
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _messageService = messageService ?? throw new ArgumentNullException(nameof(messageService));
             _contactService = contactService ?? throw new ArgumentNullException(nameof(contactService));
@@ -492,6 +508,7 @@ namespace Unison.Core.ViewModels
 
             IsLoadingOverlayVisible = _chatState.Chats.Count == 0;
 
+            TraceListLifecycle("attach", BuildListSnapshot());
             RaiseChatListMaterialized();
 
             // First history sync only: keep the list unmaterialized until the persist
@@ -508,6 +525,10 @@ namespace Unison.Core.ViewModels
                     _history.InitialSyncProcessedConversations,
                     _history.InitialSyncTotalConversations,
                     _chatState.Chats.Count);
+            }
+            else
+            {
+                NotifyListPaintReleased("attach-not-held");
             }
 
             _ = PresentFromConnectionStatusAsync(_connection.CurrentStatus);
@@ -663,6 +684,15 @@ namespace Unison.Core.ViewModels
             if (chat == null || _batchRendering || IsInSafeMode)
             {
                 return;
+            }
+
+            _postSyncRowRealized++;
+            if (_postSyncRowRealized <= 3 || (_postSyncRowRealized % 25) == 0)
+            {
+                TraceListLifecycle(
+                    "row-realized",
+                    BuildListSnapshot("n=" + _postSyncRowRealized),
+                    flush: _postSyncRowRealized <= 3 || (_postSyncRowRealized % 50) == 0);
             }
 
             _contactService.RequestAvatarRefresh(chat);
@@ -1062,6 +1092,50 @@ namespace Unison.Core.ViewModels
             _diagnostics?.Write("chat-list", "sync-banner", line);
         }
 
+        /// <summary>
+        /// Crash-window breadcrumb: write + flush so Mobile can keep the last steps if the
+        /// process is killed after the list materializes.
+        /// </summary>
+        private void TraceListLifecycle(string eventName, string details = null, bool flush = true)
+        {
+            if (_diagnostics == null)
+            {
+                return;
+            }
+
+            try
+            {
+                string mem = "gcMb=" + (GC.GetTotalMemory(false) / (1024 * 1024));
+                string line = string.IsNullOrWhiteSpace(details) ? mem : details + "; " + mem;
+                _diagnostics.Write("chat-list-lifecycle", eventName, line);
+                if (flush)
+                {
+                    _ = _diagnostics.FlushAsync("chat-list:" + eventName);
+                }
+            }
+            catch
+            {
+                // Diagnostics must never interfere with the list.
+            }
+        }
+
+        private string BuildListSnapshot(string extra = null)
+        {
+            string line =
+                "held=" + IsListHeldForSync +
+                "; safe=" + IsInSafeMode +
+                "; materialized=" + IsChatListMaterialized +
+                "; batch=" + _batchRendering +
+                "; batchDone=" + _batchCompleted +
+                "; visible=" + VisibleChats.Count +
+                "; store=" + (_chatState?.Chats?.Count ?? 0) +
+                "; target=" + _batchVisibleTarget +
+                "; processed=" + _batchProcessed +
+                "; total=" + _batchTotal +
+                "; hydratePending=" + HasPendingPreviewHydrate();
+            return string.IsNullOrWhiteSpace(extra) ? line : line + "; " + extra;
+        }
+
         private void ShowLoadingOverlay(string text)
         {
             LoadingOverlayText = text;
@@ -1235,10 +1309,26 @@ namespace Unison.Core.ViewModels
 
             await _dispatcher.RunAsync(() =>
             {
+                TraceListLifecycle(
+                    e.IsCompleted ? "initial-sync-completed-enter" : "initial-sync-progress",
+                    BuildListSnapshot(
+                        "active=" + e.IsActive +
+                        "; completed=" + e.IsCompleted +
+                        "; stage=" + (e.Stage ?? string.Empty) +
+                        "; eProcessed=" + e.ProcessedConversations +
+                        "; eTotal=" + e.TotalConversations +
+                        "; eVisibleTarget=" + e.VisibleChatTarget),
+                    flush: e.IsCompleted);
+
                 // Safe mode gates the menu actions, and it flips with this event.
                 RaiseMenuCommandsCanExecuteChanged();
                 // HistoryFacade clears the first-sync flag before relaying a completed event.
+                // This flips IsChatListMaterialized → x:Load creates the ListView.
                 RaiseChatListMaterialized();
+                if (e.IsCompleted)
+                {
+                    TraceListLifecycle("list-materialized-after-completed", BuildListSnapshot());
+                }
 
                 if (!e.IsCompleted)
                 {
@@ -1255,22 +1345,31 @@ namespace Unison.Core.ViewModels
                     return;
                 }
 
-                // Persist quiet-finalize: on the first sync, this is where rows are released.
+                // Persist quiet-finalize: release rows against the store we actually have —
+                // e.VisibleChatTarget tracks sync conversation count (can be 400) and must not
+                // become the UI release ceiling while hydrate is still filling the store.
+                int storeCount = _chatState.Chats.Count;
                 BeginBatchRendering(
                     e.ProcessedConversations,
                     e.TotalConversations,
-                    Math.Max(e.VisibleChatTarget, _chatState.Chats.Count));
+                    Math.Max(BatchSize, storeCount));
 
                 // SQLite previews may still be merging into the list after the chunk is marked
                 // complete — keep the syncing banner until that queue drains.
                 if (!HasPendingPreviewHydrate())
                 {
                     _batchCompleted = true;
+                    TraceListLifecycle("batch-marked-complete-no-hydrate", BuildListSnapshot());
                     ScheduleFullSqlitePreviewReconcile();
+                }
+                else
+                {
+                    TraceListLifecycle("batch-wait-hydrate", BuildListSnapshot());
                 }
 
                 UpdateBatchProgressText();
                 EnsureBatchLoop();
+                TraceListLifecycle("initial-sync-completed-exit", BuildListSnapshot());
             });
         }
 
@@ -1336,6 +1435,7 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
+            TraceListLifecycle("schedule-full-preview-reconcile", BuildListSnapshot(), flush: true);
             _ = RunMessagePreviewReconcileAsync(BeginMessagePreviewReconcile(), full: true);
         }
 
@@ -1427,16 +1527,34 @@ namespace Unison.Core.ViewModels
                 jids = queued;
             }
 
+            TraceListLifecycle(
+                "preview-reconcile-enter",
+                BuildListSnapshot("full=" + full + "; jids=" + (jids?.Count ?? 0)),
+                flush: full);
+
             try
             {
                 await _chatService
                     .ReconcileChatPreviewsFromSqliteAsync(jids, full ? "list-full" : "list-chunk")
                     .ConfigureAwait(false);
+                TraceListLifecycle(
+                    "preview-reconcile-exit",
+                    BuildListSnapshot("full=" + full),
+                    flush: full);
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine(
                     "[ChatListViewModel] Message preview reconcile failed: " + ex.Message);
+                _diagnostics?.RecordException(
+                    "chat-list-lifecycle",
+                    "preview-reconcile-failed",
+                    ex,
+                    BuildListSnapshot("full=" + full));
+                if (_diagnostics != null)
+                {
+                    _ = _diagnostics.FlushAsync("chat-list:preview-reconcile-failed");
+                }
             }
         }
 
@@ -1569,7 +1687,12 @@ namespace Unison.Core.ViewModels
             if (!IsInSafeMode)
             {
                 _batchCompleted = true;
+                TraceListLifecycle("hydrate-drained-batch-complete", BuildListSnapshot());
                 ScheduleFullSqlitePreviewReconcile();
+            }
+            else
+            {
+                TraceListLifecycle("hydrate-drained-still-safe", BuildListSnapshot());
             }
 
             UpdateBatchProgressText();
@@ -1827,7 +1950,12 @@ namespace Unison.Core.ViewModels
         {
             // Group author strips are recomposed by IChatAuthorProjection (app-lifetime, fires even
             // when this list is not on screen). Here we only re-render the visible rows.
-            await _dispatcher.RunAsync(ScheduleRefreshVisibleChats);
+            // Drop the search cache on the UI thread, the same thread that reads it.
+            await _dispatcher.RunAsync(() =>
+            {
+                _searchNameCache.Clear();
+                ScheduleRefreshVisibleChats();
+            });
         }
 
         private async void ChatState_ChatsChanged(object sender, NotifyCollectionChangedEventArgs args)
@@ -1946,6 +2074,9 @@ namespace Unison.Core.ViewModels
 
             if (e.PropertyName == nameof(ChatItem.Name) ||
                 e.PropertyName == nameof(ChatItem.LastMessage) ||
+                e.PropertyName == nameof(ChatItem.LastMessageAuthor) ||
+                e.PropertyName == nameof(ChatItem.LastMessageSenderName) ||
+                e.PropertyName == nameof(ChatItem.MentionLookup) ||
                 e.PropertyName == nameof(ChatItem.Timestamp))
             {
                 _ = _dispatcher.RunAsync(ScheduleRefreshVisibleChats);
@@ -1988,6 +2119,12 @@ namespace Unison.Core.ViewModels
             {
                 return;
             }
+
+            int visibleBefore = VisibleChats.Count;
+            TraceListLifecycle(
+                "refresh-visible-enter",
+                BuildListSnapshot("before=" + visibleBefore),
+                flush: true);
 
             _visibleOrderDirty = false;
             ApplyLocalChatFieldsToScopedChats();
@@ -2065,6 +2202,16 @@ namespace Unison.Core.ViewModels
             }
 
             RestoreSelection();
+
+            TraceListLifecycle(
+                "refresh-visible-exit",
+                BuildListSnapshot(
+                    "before=" + visibleBefore +
+                    "; source=" + source.Count +
+                    "; mutations=" + mutations +
+                    "; incomplete=" + incomplete +
+                    "; budget=" + moveBudget),
+                flush: true);
 
             if (incomplete)
             {
@@ -2194,34 +2341,33 @@ namespace Unison.Core.ViewModels
 
         private bool MatchesQuery(ChatItem chat, string query)
         {
-            if (chat == null)
+            return ChatListQuery.Matches(
+                chat,
+                query,
+                () => CachedSearchName(chat?.JID, "search"),
+                jid => CachedSearchName(jid, "mention"));
+        }
+
+        /// <summary>
+        /// One resolved label per JID and call-site context. Cleared when contact names are
+        /// published, so a later address-book or push name is not stuck behind the first answer.
+        /// </summary>
+        private string CachedSearchName(string jid, string context)
+        {
+            if (string.IsNullOrWhiteSpace(jid))
             {
-                return false;
+                return string.Empty;
             }
 
-            if (!string.IsNullOrEmpty(chat.Name) &&
-                chat.Name.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0)
+            string key = (context ?? string.Empty) + "\n" + jid;
+            if (_searchNameCache.TryGetValue(key, out string cached))
             {
-                return true;
+                return cached;
             }
 
-            if (!string.IsNullOrEmpty(chat.LastMessage) &&
-                chat.LastMessage.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return true;
-            }
-
-            if (!string.IsNullOrEmpty(chat.JID) &&
-                chat.JID.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return true;
-            }
-
-            // A row with no name of its own can still be searchable: the display name may come
-            // from the address book or from a group's metadata.
-            string resolved = _contactService.ResolveDisplayName(chat.JID, "search");
-            return !string.IsNullOrEmpty(resolved) &&
-                   resolved.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0;
+            string resolved = _contactService.ResolveDisplayName(jid, context) ?? string.Empty;
+            _searchNameCache[key] = resolved;
+            return resolved;
         }
 
 
@@ -2407,7 +2553,12 @@ namespace Unison.Core.ViewModels
 
         private void RaiseChatListMaterialized()
         {
+            bool materialized = IsChatListMaterialized;
             RaiseProperties(nameof(IsChatListMaterialized));
+            TraceListLifecycle(
+                "raise-materialized",
+                BuildListSnapshot("notify=" + materialized),
+                flush: materialized);
         }
 
         // ---------------------------------------------------------------------
@@ -2447,6 +2598,10 @@ namespace Unison.Core.ViewModels
 
             IsLoadingOverlayVisible = VisibleChats.Count == 0;
             UpdateBatchProgressText();
+            TraceListLifecycle(
+                "begin-batch",
+                BuildListSnapshot("fresh=" + fresh + "; argTarget=" + visibleTarget),
+                flush: true);
             EnsureBatchLoop();
         }
 
@@ -2471,6 +2626,7 @@ namespace Unison.Core.ViewModels
             }
 
             _batchLoopRunning = true;
+            TraceListLifecycle("batch-loop-start", BuildListSnapshot());
             _ = RunBatchLoopAsync();
         }
 
@@ -2484,10 +2640,19 @@ namespace Unison.Core.ViewModels
                     await Task.Delay(BatchInterval).ConfigureAwait(false);
                     await _dispatcher.RunAsync(ReleaseNextBatch);
                 }
+
+                TraceListLifecycle(
+                    "batch-loop-exit",
+                    BuildListSnapshot("stillBatch=" + _batchRendering + "; held=" + IsListHeldForSync));
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine("[ChatListViewModel] Batch render loop failed: " + ex.Message);
+                _diagnostics?.RecordException("chat-list-lifecycle", "batch-loop-failed", ex, BuildListSnapshot());
+                if (_diagnostics != null)
+                {
+                    _ = _diagnostics.FlushAsync("chat-list:batch-loop-failed");
+                }
             }
             finally
             {
@@ -2506,6 +2671,17 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
+            _postSyncReleaseTicks++;
+            int tick = _postSyncReleaseTicks;
+            bool logTick = tick <= 3 || (tick % 5) == 0 || _batchCompleted;
+            if (logTick)
+            {
+                TraceListLifecycle(
+                    "release-tick-enter",
+                    BuildListSnapshot("tick=" + tick),
+                    flush: tick <= 2 || _batchCompleted);
+            }
+
             // Pin/mute live in ChatStore, not history_chat_preview. Apply before sorting so
             // pinned rows are not released mid-list and only "jump up" after opening a chat.
             ApplyLocalChatFieldsToScopedChats();
@@ -2515,6 +2691,21 @@ namespace Unison.Core.ViewModels
             {
                 // Tips keep updating while the list is already full; still keep pin order.
                 ReorderVisibleChatsInPlace();
+                // Hydrate can stall with pending=True forever; once every scoped row is on
+                // screen after the hold, open the enrich gate and finish the batch next tick.
+                if (!IsListHeldForSync && !IsInSafeMode)
+                {
+                    if (!HasPendingPreviewHydrate())
+                    {
+                        _batchCompleted = true;
+                        TraceListLifecycle("batch-complete-visible-caught-up", BuildListSnapshot());
+                    }
+                    else
+                    {
+                        NotifyListPaintReleased("visible-caught-up-hydrate-pending");
+                    }
+                }
+
                 return;
             }
 
@@ -2574,6 +2765,19 @@ namespace Unison.Core.ViewModels
                 ReorderVisibleChatsInPlace();
             }
 
+            if (logTick)
+            {
+                TraceListLifecycle(
+                    "release-tick-exit",
+                    BuildListSnapshot(
+                        "tick=" + tick +
+                        "; added=" + added +
+                        "; desired=" + desiredCount +
+                        "; scoped=" + scopedCount +
+                        "; ms=" + budget.ElapsedMilliseconds),
+                    flush: tick <= 2 || _batchCompleted);
+            }
+
             if (!_batchCompleted)
             {
                 if (added > 0)
@@ -2590,12 +2794,19 @@ namespace Unison.Core.ViewModels
                 .Count();
             if (VisibleChats.Count < uniqueSourceCount)
             {
+                TraceListLifecycle(
+                    "release-awaiting-full",
+                    BuildListSnapshot(
+                        "unique=" + uniqueSourceCount + "; visible=" + VisibleChats.Count),
+                    flush: true);
                 return;
             }
 
+            TraceListLifecycle("batch-complete-before-refresh", BuildListSnapshot(), flush: true);
             _batchRendering = false;
             _batchCompleted = false;
             RefreshVisibleChats();
+            TraceListLifecycle("batch-complete-after-refresh", BuildListSnapshot(), flush: true);
 
             // Safe mode can outlive the batch loop, and the full refresh above is gated on it. The
             // in-place reorder is not, so a pin that arrived late still reaches the top.
@@ -2605,6 +2816,19 @@ namespace Unison.Core.ViewModels
             }
             _ = PresentSyncStatusAsync(null, visible: false, source: "IHistoryService:batch-complete");
             IsLoadingOverlayVisible = false;
+            TraceListLifecycle("batch-complete-done", BuildListSnapshot(), flush: true);
+            NotifyListPaintReleased("batch-complete-done");
+        }
+
+        private void NotifyListPaintReleased(string reason)
+        {
+            if (_listPaintGate == null)
+            {
+                return;
+            }
+
+            TraceListLifecycle("list-paint-gate-release", BuildListSnapshot("reason=" + reason), flush: true);
+            _listPaintGate.MarkReleased(reason);
         }
 
         /// <summary>

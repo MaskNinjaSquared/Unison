@@ -32,10 +32,38 @@ namespace Unison.Core.Helpers
             return count;
         }
 
+        /// <summary>
+        /// Superscript plus (U+207A / AltGr+), Unigram Mobile style for overflow past 99.
+        /// </summary>
+        public const char SuperscriptPlus = '\u207A';
+
         /// <summary>Parenthetical for the header, or empty when nothing is unread.</summary>
         public static string FormatBadge(int count)
         {
-            return count > 0 ? "(" + count + ")" : string.Empty;
+            if (count <= 0)
+            {
+                return string.Empty;
+            }
+
+            // Mobile / Unigram: "99⁺" with a raised plus — not a leading "+99".
+            return count > 99
+                ? "(99" + SuperscriptPlus + ")"
+                : "(" + count + ")";
+        }
+
+        /// <summary>
+        /// Compact overflow for Live Tile / toast captions: "99⁺" when count &gt; 99.
+        /// </summary>
+        public static string FormatOverflowCount(int count)
+        {
+            if (count <= 0)
+            {
+                return string.Empty;
+            }
+
+            return count > 99
+                ? "99" + SuperscriptPlus
+                : count.ToString();
         }
     }
 

@@ -537,12 +537,17 @@ namespace Unison.Baileys.Client
             byte[] cipherKey;
             DeriveSenderMessageCipherMaterial(messageKeySeed, out iv, out cipherKey);
 
-            byte[] ciphertext = CryptoUtils.AesCbcEncrypt(plaintext, cipherKey, iv);
+            // Same Signal pad as 1:1 EncryptMessage / libsignal GroupCipher. Without it the
+            // handset unpads the trailing protobuf byte as pad length and the skmsg is garbage.
+            byte[] paddedPlaintext = PadRandomMax16(plaintext);
+            byte[] ciphertext = CryptoUtils.AesCbcEncrypt(paddedPlaintext, cipherKey, iv);
             byte[] serialized = BuildSenderKeyMessageBytes(state.KeyId, iteration, ciphertext, state.SigningPrivateKey);
 
             state.Iteration = iteration + 1;
             state.ChainKey = AdvanceSenderChainKey(currentChainKey);
-            PersistSenderKeyState(groupJid, normalizedSender, state, "outgoing group send");
+            // Never .Wait() on the keystore here: a prior queued persist for the same key can
+            // leave the send path blocked forever (UI freeze on the second group send).
+            PersistSenderKeyState(groupJid, normalizedSender, state, "outgoing group send", waitForDisk: false);
 
             return new GroupEncryptResult
             {
@@ -1073,9 +1078,9 @@ namespace Unison.Baileys.Client
                 byte[] cipherKey;
                 DeriveSenderMessageCipherMaterial(messageKeySeed, out iv, out cipherKey);
 
-                // Decrypt ciphertext using AES-CBC
+                // Decrypt ciphertext using AES-CBC, then peel Signal pad (padRandomMax16).
                 byte[] ciphertext = skMsg.Ciphertext.ToByteArray();
-                byte[] plaintext = CryptoUtils.AesCbcDecrypt(ciphertext, cipherKey, iv);
+                byte[] plaintext = UnpadRandomMax16(CryptoUtils.AesCbcDecrypt(ciphertext, cipherKey, iv));
 
                 // Update stored state: advance chain one more step for next message
                 state.Iteration = targetIteration + 1;
@@ -2275,6 +2280,26 @@ namespace Unison.Baileys.Client
             for (int i = 0; i < padLen - 1; i++)
                 result[data.Length + i] = noise[i + 1];
             result[result.Length - 1] = (byte)padLen;
+            return result;
+        }
+
+        /// <summary>Inverse of <see cref="PadRandomMax16"/> — last byte is the pad length (1-16).</summary>
+        private static byte[] UnpadRandomMax16(byte[] data)
+        {
+            if (data == null || data.Length == 0)
+            {
+                return data;
+            }
+
+            int padLen = data[data.Length - 1] & 0xFF;
+            if (padLen < 1 || padLen > 16 || padLen > data.Length)
+            {
+                // Legacy skmsg without Signal pad (PKCS7-only era): keep bytes as-is.
+                return data;
+            }
+
+            var result = new byte[data.Length - padLen];
+            Array.Copy(data, result, result.Length);
             return result;
         }
 

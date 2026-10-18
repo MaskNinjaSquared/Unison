@@ -275,6 +275,9 @@
                                 GlyphForeground="{ThemeResource ChatDetailSentBubbleButtonBrush}"
                                 HorizontalAlignment="Stretch"/>
                         </Grid>
+                        <!-- x:Load (not Visibility): Collapsed still builds MenuFlyout chrome for
+                             every bubble — on Mobile Creators that OOMs when opening a chat.
+                             IsDocument must be true on first bind (EnsureKind / DocumentUri). -->
                         <Grid x:Name="SentDocumentHost"
                               x:Load="{x:Bind IsDocument, Mode=OneWay}"
                               HorizontalAlignment="Stretch"
@@ -312,8 +315,12 @@
                                                MaxWidth="180"/>
                                 </StackPanel>
                             </Button>
-                            <Grid Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0"
-                                  Visibility="{x:Bind ShowDocumentDownloadIcon, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <!-- x:Load: Collapsed still builds ChatMediaCircleButtonHost per bubble. -->
+                            <Grid x:Name="SentDocumentDownloadHost"
+                                  Grid.Column="1"
+                                  VerticalAlignment="Center"
+                                  Margin="8,0,0,0"
+                                  x:Load="{x:Bind ShowDocumentDownloadIcon, Mode=OneWay}">
                                 <Grid HorizontalAlignment="Left" VerticalAlignment="Center">
                                     <controls:ChatMediaCircleButtonHost
                                             IsFromMe="True"
@@ -333,43 +340,26 @@
                                                Visibility="{x:Bind ShowDocumentUnavailableGlyph, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                                 </Grid>
                             </Grid>
-                            <!-- Overflow "…" after download: open local file / Save as… (Button+MenuFlyout — fully
-                                 custom-templated, avoids CommandBar/AppBarButton's implicit WinUI2 default
-                                 template, which every bubble instantiates even while Collapsed). -->
-                            <Button Grid.Column="1"
+                            <!-- Overflow "…" — no Button.Flyout here: MenuFlyout+Modern styles per
+                                 document bubble OOMs Creators/Mobile when the chat opens. Menu is
+                                 built on Click (same path as long-press). -->
+                            <Button x:Name="SentDocumentOverflowButton"
+                                    Grid.Column="1"
                                     Style="{StaticResource WhatsAppIconButtonStyle}"
                                     Width="32" Height="32"
                                     Padding="0"
                                     Foreground="{ThemeResource ChatDetailSentTextBrush}"
-                                    Visibility="{x:Bind ShowDocumentReadyChrome, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    x:Load="{x:Bind ShowDocumentReadyChrome, Mode=OneWay}"
+                                    Click="DocumentOverflow_Click">
                                 <TextBlock Text="&#xE712;" FontFamily="{StaticResource IconFont}" FontSize="16"/>
-                                <Button.Flyout>
-                                    <MenuFlyout MenuFlyoutPresenterStyle="{StaticResource ModernMenuFlyoutStyle}">
-                                        <MenuFlyoutItem x:Uid="ChatDetail_DocumentOpen"
-                                                        Text="Open document"
-                                                        Style="{StaticResource ModernMenuFlyoutItemStyle}"
-                                                        Command="{x:Bind OpenDocumentCommand, Mode=OneWay}">
-                                            <MenuFlyoutItem.Icon>
-                                                <FontIcon Glyph="&#xE8E5;" FontFamily="{StaticResource IconFont}"/>
-                                            </MenuFlyoutItem.Icon>
-                                        </MenuFlyoutItem>
-                                        <MenuFlyoutItem x:Uid="ChatDetail_DocumentSaveAs"
-                                                        Text="Save as…"
-                                                        Style="{StaticResource ModernMenuFlyoutItemStyle}"
-                                                        Command="{x:Bind SaveDocumentAsCommand, Mode=OneWay}">
-                                            <MenuFlyoutItem.Icon>
-                                                <FontIcon Glyph="&#xE792;" FontFamily="{StaticResource IconFont}"/>
-                                            </MenuFlyoutItem.Icon>
-                                        </MenuFlyoutItem>
-                                    </MenuFlyout>
-                                </Button.Flyout>
                             </Button>
-                            <ProgressRing Grid.Column="1"
+                            <ProgressRing x:Name="SentDocumentProgress"
+                                          Grid.Column="1"
                                           Width="22" Height="22"
                                           Margin="8,0,0,0"
-                                          IsActive="{x:Bind IsDocumentDownloading, Mode=OneWay}"
+                                          IsActive="True"
                                           VerticalAlignment="Center"
-                                          Visibility="{x:Bind IsDocumentDownloading, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                          x:Load="{x:Bind IsDocumentDownloading, Mode=OneWay}"/>
                         </Grid>
                         <RichTextBlock x:Name="SentBodyText"
                                        helpers:CommentRichService.Text="{x:Bind Content, Mode=OneWay}"
@@ -434,6 +424,20 @@
                                            Foreground="{ThemeResource ChatDetailSentMetaBrush}"
                                            VerticalAlignment="Center"
                                            Visibility="{x:Bind IsSticker, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                <!-- Audio: sound glyph + total duration (moved out of the transport bar). -->
+                                <TextBlock Text="&#xE8D6;"
+                                           FontFamily="{StaticResource IconFont}"
+                                           FontSize="12"
+                                           Foreground="{ThemeResource ChatDetailSentMetaBrush}"
+                                           VerticalAlignment="Center"
+                                           Visibility="{x:Bind IsAudio, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                <TextBlock Text="{x:Bind AudioFooterDurationText, Mode=OneWay}"
+                                           FontSize="11"
+                                           FontFamily="{StaticResource MainFont}"
+                                           Foreground="{ThemeResource ChatDetailSentMetaBrush}"
+                                           VerticalAlignment="Center"
+                                           Margin="4,0,0,0"
+                                           Visibility="{x:Bind ShowAudioFooterDuration, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                                 <TextBlock Text="{x:Bind VideoFooterDurationText, Mode=OneWay}"
                                            FontSize="11"
                                            FontFamily="{StaticResource MainFont}"
@@ -837,8 +841,12 @@
                                                MaxWidth="180"/>
                                 </StackPanel>
                             </Button>
-                            <Grid Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0"
-                                  Visibility="{x:Bind ShowDocumentDownloadIcon, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <!-- x:Load: Collapsed still builds ChatMediaCircleButtonHost per bubble. -->
+                            <Grid x:Name="ReceivedDocumentDownloadHost"
+                                  Grid.Column="1"
+                                  VerticalAlignment="Center"
+                                  Margin="8,0,0,0"
+                                  x:Load="{x:Bind ShowDocumentDownloadIcon, Mode=OneWay}">
                                 <Grid HorizontalAlignment="Left" VerticalAlignment="Center">
                                     <controls:ChatMediaCircleButtonHost
                                             IsFromMe="False"
@@ -858,43 +866,26 @@
                                                Visibility="{x:Bind ShowDocumentUnavailableGlyph, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                                 </Grid>
                             </Grid>
-                            <!-- Overflow "…" after download: open local file / Save as… (Button+MenuFlyout — fully
-                                 custom-templated, avoids CommandBar/AppBarButton's implicit WinUI2 default
-                                 template, which every bubble instantiates even while Collapsed). -->
-                            <Button Grid.Column="1"
+                            <!-- Overflow "…" — no Button.Flyout here: MenuFlyout+Modern styles per
+                                 document bubble OOMs Creators/Mobile when the chat opens. Menu is
+                                 built on Click (same path as long-press). -->
+                            <Button x:Name="ReceivedDocumentOverflowButton"
+                                    Grid.Column="1"
                                     Style="{StaticResource WhatsAppIconButtonStyle}"
                                     Width="32" Height="32"
                                     Padding="0"
                                     Foreground="{ThemeResource ChatDetailReceivedTextBrush}"
-                                    Visibility="{x:Bind ShowDocumentReadyChrome, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    x:Load="{x:Bind ShowDocumentReadyChrome, Mode=OneWay}"
+                                    Click="DocumentOverflow_Click">
                                 <TextBlock Text="&#xE712;" FontFamily="{StaticResource IconFont}" FontSize="16"/>
-                                <Button.Flyout>
-                                    <MenuFlyout MenuFlyoutPresenterStyle="{StaticResource ModernMenuFlyoutStyle}">
-                                        <MenuFlyoutItem x:Uid="ChatDetail_DocumentOpen"
-                                                        Text="Open document"
-                                                        Style="{StaticResource ModernMenuFlyoutItemStyle}"
-                                                        Command="{x:Bind OpenDocumentCommand, Mode=OneWay}">
-                                            <MenuFlyoutItem.Icon>
-                                                <FontIcon Glyph="&#xE8E5;" FontFamily="{StaticResource IconFont}"/>
-                                            </MenuFlyoutItem.Icon>
-                                        </MenuFlyoutItem>
-                                        <MenuFlyoutItem x:Uid="ChatDetail_DocumentSaveAs"
-                                                        Text="Save as…"
-                                                        Style="{StaticResource ModernMenuFlyoutItemStyle}"
-                                                        Command="{x:Bind SaveDocumentAsCommand, Mode=OneWay}">
-                                            <MenuFlyoutItem.Icon>
-                                                <FontIcon Glyph="&#xE792;" FontFamily="{StaticResource IconFont}"/>
-                                            </MenuFlyoutItem.Icon>
-                                        </MenuFlyoutItem>
-                                    </MenuFlyout>
-                                </Button.Flyout>
                             </Button>
-                            <ProgressRing Grid.Column="1"
+                            <ProgressRing x:Name="ReceivedDocumentProgress"
+                                          Grid.Column="1"
                                           Width="22" Height="22"
                                           Margin="8,0,0,0"
-                                          IsActive="{x:Bind IsDocumentDownloading, Mode=OneWay}"
+                                          IsActive="True"
                                           VerticalAlignment="Center"
-                                          Visibility="{x:Bind IsDocumentDownloading, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                          x:Load="{x:Bind IsDocumentDownloading, Mode=OneWay}"/>
                         </Grid>
                         <RichTextBlock x:Name="ReceivedBodyText"
                                        helpers:CommentRichService.Text="{x:Bind Content, Mode=OneWay}"
@@ -960,6 +951,20 @@
                                            Foreground="{ThemeResource ChatDetailReceivedMetaBrush}"
                                            VerticalAlignment="Center"
                                            Visibility="{x:Bind IsSticker, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                <!-- Audio: sound glyph + total duration (moved out of the transport bar). -->
+                                <TextBlock Text="&#xE8D6;"
+                                           FontFamily="{StaticResource IconFont}"
+                                           FontSize="12"
+                                           Foreground="{ThemeResource ChatDetailReceivedMetaBrush}"
+                                           VerticalAlignment="Center"
+                                           Visibility="{x:Bind IsAudio, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                <TextBlock Text="{x:Bind AudioFooterDurationText, Mode=OneWay}"
+                                           FontSize="11"
+                                           FontFamily="{StaticResource MainFont}"
+                                           Foreground="{ThemeResource ChatDetailReceivedMetaBrush}"
+                                           VerticalAlignment="Center"
+                                           Margin="4,0,0,0"
+                                           Visibility="{x:Bind ShowAudioFooterDuration, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                                 <TextBlock Text="{x:Bind VideoFooterDurationText, Mode=OneWay}"
                                            FontSize="11"
                                            FontFamily="{StaticResource MainFont}"

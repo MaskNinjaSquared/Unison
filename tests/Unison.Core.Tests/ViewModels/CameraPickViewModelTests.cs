@@ -41,5 +41,38 @@ namespace Unison.Core.Tests.ViewModels
 
             Assert.Same(jpeg, seen);
         }
+
+        [Fact]
+        public void Cancel_closes_and_drops_a_late_photo()
+        {
+            var vm = new CameraPickViewModel();
+            vm.IsPreviewReady = true;
+            bool closed = false;
+            byte[] seen = null;
+            vm.CloseRequested += (_, __) => closed = true;
+            vm.PhotoCaptured += (_, e) => seen = e.Bytes;
+
+            vm.Cancel();
+            vm.ReportPhoto(new byte[] { 9, 9 });
+
+            Assert.True(closed);
+            Assert.True(vm.IsCancelled);
+            Assert.False(vm.IsPreviewReady);
+            Assert.Null(seen);
+            Assert.False(vm.CaptureCommand.CanExecute(null));
+        }
+
+        [Fact]
+        public void Cancel_is_idempotent()
+        {
+            var vm = new CameraPickViewModel();
+            int closes = 0;
+            vm.CloseRequested += (_, __) => closes++;
+
+            vm.Cancel();
+            vm.Cancel();
+
+            Assert.Equal(1, closes);
+        }
     }
 }

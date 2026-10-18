@@ -2,10 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Unison.Core.ViewModels;
+using Windows.ApplicationModel;
 using Windows.Devices.Enumeration;
 using Windows.Media.Capture;
 using Windows.Media.MediaProperties;
 using Windows.Storage.Streams;
+using Windows.UI.Core;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 
@@ -19,6 +21,8 @@ namespace Unison.Uwp.UI.Views
     /// WinRT <c>IAsyncAction</c> / <c>IAsyncOperation</c> are awaited without
     /// <c>ConfigureAwait</c> — that extension is for <see cref="Task"/> only (same as
     /// <see cref="Services.AudioRecordingService"/>).
+    /// Suspend / minimize / hide notify <see cref="CameraPickViewModel.Cancel"/> so a late
+    /// shutter never opens the image-send path.
     /// </remarks>
     public sealed partial class CameraPickView : UserControl
     {
@@ -29,12 +33,14 @@ namespace Unison.Uwp.UI.Views
         private IReadOnlyList<DeviceInformation> _cameras;
         private int _cameraIndex;
         private bool _isStarting;
+        private bool _lifecycleHooked;
         private double _previewAspect = 3.0 / 4.0;
 
         public CameraPickView()
         {
             InitializeComponent();
             DataContext = ClosedDataContext;
+            Loaded += CameraPickView_Loaded;
             Unloaded += CameraPickView_Unloaded;
         }
 
@@ -56,6 +62,7 @@ namespace Unison.Uwp.UI.Views
                 if (_viewModel != null)
                 {
                     AttachViewModel();
+                    AttachLifecycleWatch();
                     _ = StartPreviewAsync();
                 }
                 else
@@ -92,9 +99,84 @@ namespace Unison.Uwp.UI.Views
             _viewModel.PhotoCaptured -= ViewModel_PhotoCaptured;
         }
 
+        private void CameraPickView_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (_viewModel != null)
+            {
+                AttachLifecycleWatch();
+            }
+        }
+
         private void CameraPickView_Unloaded(object sender, RoutedEventArgs e)
         {
+            DetachLifecycleWatch();
             ViewModel = null;
+        }
+
+        private void AttachLifecycleWatch()
+        {
+            if (_lifecycleHooked)
+            {
+                return;
+            }
+
+            Application.Current.EnteredBackground += App_EnteredBackground;
+            Application.Current.Suspending += App_Suspending;
+            CoreWindow core = Window.Current?.CoreWindow;
+            if (core != null)
+            {
+                core.VisibilityChanged += CoreWindow_VisibilityChanged;
+            }
+
+            _lifecycleHooked = true;
+        }
+
+        private void DetachLifecycleWatch()
+        {
+            if (!_lifecycleHooked)
+            {
+                return;
+            }
+
+            Application.Current.EnteredBackground -= App_EnteredBackground;
+            Application.Current.Suspending -= App_Suspending;
+            CoreWindow core = Window.Current?.CoreWindow;
+            if (core != null)
+            {
+                core.VisibilityChanged -= CoreWindow_VisibilityChanged;
+            }
+
+            _lifecycleHooked = false;
+        }
+
+        private void App_EnteredBackground(object sender, EnteredBackgroundEventArgs e)
+        {
+            CancelForBackground("entered-background");
+        }
+
+        private void App_Suspending(object sender, SuspendingEventArgs e)
+        {
+            CancelForBackground("suspending");
+        }
+
+        private void CoreWindow_VisibilityChanged(CoreWindow sender, VisibilityChangedEventArgs args)
+        {
+            if (!args.Visible)
+            {
+                CancelForBackground("window-hidden");
+            }
+        }
+
+        private void CancelForBackground(string reason)
+        {
+            CameraPickViewModel vm = _viewModel;
+            if (vm == null || vm.IsCancelled)
+            {
+                return;
+            }
+
+            System.Diagnostics.Debug.WriteLine("[CameraPickView] Cancel: " + reason);
+            vm.Cancel();
         }
 
         private void ViewModel_CloseRequested(object sender, EventArgs e)
@@ -127,20 +209,21 @@ namespace Unison.Uwp.UI.Views
 
         private async Task StartPreviewAsync()
         {
-            if (_viewModel == null || _isStarting)
+            CameraPickViewModel vm = _viewModel;
+            if (vm == null || _isStarting)
             {
                 return;
             }
 
             _isStarting = true;
-            _viewModel.IsBusy = true;
-            _viewModel.IsPreviewReady = false;
+            vm.IsBusy = true;
+            vm.IsPreviewReady = false;
             try
             {
                 await EnsureCameraListAsync();
                 if (_cameras == null || _cameras.Count == 0)
                 {
-                    _viewModel.ReportDevices(0, false);
+                    vm.ReportDevices(0, false);
                     return;
                 }
 
@@ -150,21 +233,34 @@ namespace Unison.Uwp.UI.Views
                 }
 
                 await InitializeCaptureAsync(_cameras[_cameraIndex].Id);
-                _viewModel.ReportDevices(
+                // Closed while starting (Unloaded / ViewModel = null) — skip chrome updates.
+                if (!ReferenceEquals(_viewModel, vm))
+                {
+                    return;
+                }
+
+                vm.ReportDevices(
                     _cameras.Count,
                     _mediaCapture != null &&
                     _mediaCapture.VideoDeviceController.FlashControl.Supported);
                 ApplyFlash();
-                _viewModel.IsPreviewReady = _mediaCapture != null;
+                vm.IsPreviewReady = _mediaCapture != null;
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine("[CameraPickView] StartPreview: " + ex.Message);
-                _viewModel.IsPreviewReady = false;
+                if (ReferenceEquals(_viewModel, vm))
+                {
+                    vm.IsPreviewReady = false;
+                }
             }
             finally
             {
-                _viewModel.IsBusy = false;
+                if (ReferenceEquals(_viewModel, vm))
+                {
+                    vm.IsBusy = false;
+                }
+
                 _isStarting = false;
             }
         }
@@ -289,23 +385,29 @@ namespace Unison.Uwp.UI.Views
 
         private async Task SwitchCameraAsync()
         {
-            if (_viewModel == null || _cameras == null || _cameras.Count < 2)
+            CameraPickViewModel vm = _viewModel;
+            if (vm == null || _cameras == null || _cameras.Count < 2)
             {
                 return;
             }
 
-            _viewModel.IsBusy = true;
-            _viewModel.IsPreviewReady = false;
+            vm.IsBusy = true;
+            vm.IsPreviewReady = false;
             try
             {
                 _cameraIndex = (_cameraIndex + 1) % _cameras.Count;
                 await InitializeCaptureAsync(_cameras[_cameraIndex].Id);
-                _viewModel.ReportDevices(
+                if (!ReferenceEquals(_viewModel, vm))
+                {
+                    return;
+                }
+
+                vm.ReportDevices(
                     _cameras.Count,
                     _mediaCapture != null &&
                     _mediaCapture.VideoDeviceController.FlashControl.Supported);
                 ApplyFlash();
-                _viewModel.IsPreviewReady = _mediaCapture != null;
+                vm.IsPreviewReady = _mediaCapture != null;
             }
             catch (Exception ex)
             {
@@ -313,7 +415,10 @@ namespace Unison.Uwp.UI.Views
             }
             finally
             {
-                _viewModel.IsBusy = false;
+                if (ReferenceEquals(_viewModel, vm))
+                {
+                    vm.IsBusy = false;
+                }
             }
         }
 
@@ -356,24 +461,38 @@ namespace Unison.Uwp.UI.Views
 
         private async Task CapturePhotoAsync()
         {
-            if (_mediaCapture == null || _viewModel == null)
+            // Hold a local ref: ReportPhoto → PhotoCaptured closes the overlay and sets
+            // ViewModel = null before this method's finally runs.
+            CameraPickViewModel vm = _viewModel;
+            MediaCapture capture = _mediaCapture;
+            if (capture == null || vm == null)
             {
                 return;
             }
 
-            _viewModel.IsBusy = true;
+            vm.IsBusy = true;
             try
             {
+                if (vm.IsCancelled)
+                {
+                    return;
+                }
+
                 ApplyFlash();
                 using (var stream = new InMemoryRandomAccessStream())
                 {
-                    await _mediaCapture.CapturePhotoToStreamAsync(
+                    await capture.CapturePhotoToStreamAsync(
                         ImageEncodingProperties.CreateJpeg(),
                         stream);
 
+                    if (vm.IsCancelled)
+                    {
+                        return;
+                    }
+
                     stream.Seek(0);
                     byte[] bytes = await ReadStreamBytesAsync(stream);
-                    _viewModel.ReportPhoto(bytes);
+                    vm.ReportPhoto(bytes);
                 }
             }
             catch (Exception ex)
@@ -382,7 +501,11 @@ namespace Unison.Uwp.UI.Views
             }
             finally
             {
-                _viewModel.IsBusy = false;
+                // Only clear busy if this VM is still bound (close already tore it down).
+                if (ReferenceEquals(_viewModel, vm))
+                {
+                    vm.IsBusy = false;
+                }
             }
         }
 
