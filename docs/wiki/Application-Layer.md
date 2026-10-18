@@ -148,9 +148,10 @@ Group author photos are **not** resolved by the bubble. `ChatDetailViewModel.App
 | `SendMessageCommand` | Text |
 | `AttachMediaCommand` | Image picker → preview dialog → `SendImageAsync` |
 | `AttachAudioCommand` | Audio file → `SendAudioMessageAsync` |
+| `AttachCameraCommand` | Opens `CameraPickView` overlay → JPEG bytes → same image-send preview |
 | `AttachFileCommand` | Document picker (PDF / office / archive / text) → `SendDocumentAsync` |
 | `StartRecordingCommand` / `Cancel` / `Send` | Mic session → voice note (`IsVoiceNote`) |
-| Camera / Contact / Location | Commands exist, `CanExecute = false` (no send path yet) |
+| Contact / Location | Commands exist, `CanExecute = false` (no send path yet) |
 
 `IAudioRecordingService` is a **singleton** (one capture at a time). `StartAsync()` returns `IAudioRecordingSession`. Elapsed is `UtcNow - StartedAtUtc` while active; the VM ticks ~250 ms for `RecordingElapsedText`.
 

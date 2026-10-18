@@ -1033,5 +1033,12 @@
         <views:VideoViewerView x:Name="VideoViewerOverlay"
                                Visibility="Collapsed"
                                Canvas.ZIndex="101"/>
+
+        <!-- In-chat camera pick (hosted in a ContentPresenter over the conversation) -->
+        <ContentPresenter x:Name="CameraPickPresenter"
+                          Visibility="Collapsed"
+                          Canvas.ZIndex="102">
+            <views:CameraPickView x:Name="CameraPickOverlay"/>
+        </ContentPresenter>
     </Grid>
 </UserControl>

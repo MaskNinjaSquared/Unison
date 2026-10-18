@@ -2,6 +2,15 @@
 
 Newest first.
 
+## In-chat camera pick
+
+`AttachCameraCommand` shows `CameraPickView` over the conversation
+(`ContentPresenter` on each chat-detail shell). Chrome: back, flash on/off,
+switch camera when `IsMultipleCameras` (WinRT video devices). Shutter JPEG bytes
+go through `CameraPickViewModel.PhotoCaptured` into the existing image-send
+preview. Webcam capability added to the package.
+
+
 ## Composer can send documents
 
 `AttachFileCommand` opens a document-only picker (`OutgoingDocumentKinds`: PDF, office,

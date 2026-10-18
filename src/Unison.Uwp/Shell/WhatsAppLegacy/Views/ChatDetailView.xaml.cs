@@ -395,6 +395,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             ViewModel.MessageSent += ViewModel_MessageSent;
             ViewModel.MessagePinnedChanged += ViewModel_MessagePinnedChanged;
             ViewModel.PresenceAnimationRequested += ViewModel_PresenceAnimationRequested;
+            ViewModel.CameraPickRequested += ViewModel_CameraPickRequested;
             ViewModel.PropertyChanged += ViewModel_PropertyChanged;
         }
 
@@ -410,6 +411,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             ViewModel.MessageSent -= ViewModel_MessageSent;
             ViewModel.MessagePinnedChanged -= ViewModel_MessagePinnedChanged;
             ViewModel.PresenceAnimationRequested -= ViewModel_PresenceAnimationRequested;
+            ViewModel.CameraPickRequested -= ViewModel_CameraPickRequested;
             ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
         }
 
@@ -974,7 +976,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         /// <summary>Closes fullscreen media or the info pane; returns true if consumed.</summary>
         public bool TryConsumeBack()
         {
-            if (TryCloseVideoViewer() || TryCloseImageViewer())
+            if (TryCloseCameraPick() || TryCloseVideoViewer() || TryCloseImageViewer())
             {
                 return true;
             }
@@ -1517,6 +1519,65 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             return true;
         }
 
+        private void ViewModel_CameraPickRequested(object sender, EventArgs e)
+        {
+            OpenCameraPick();
+        }
+
+        private void OpenCameraPick()
+        {
+            if (CameraPickOverlay == null || CameraPickPresenter == null)
+            {
+                return;
+            }
+
+            SetAttachMenuOpen(false);
+            TryCloseVideoViewer();
+            TryCloseImageViewer();
+
+            var pickVm = new CameraPickViewModel();
+            CameraPickOverlay.CloseRequested -= CameraPickOverlay_CloseRequested;
+            CameraPickOverlay.PhotoCaptured -= CameraPickOverlay_PhotoCaptured;
+            CameraPickOverlay.ViewModel = pickVm;
+            CameraPickOverlay.CloseRequested += CameraPickOverlay_CloseRequested;
+            CameraPickOverlay.PhotoCaptured += CameraPickOverlay_PhotoCaptured;
+            CameraPickPresenter.Visibility = Visibility.Visible;
+        }
+
+        private void CameraPickOverlay_CloseRequested(object sender, EventArgs e)
+        {
+            TryCloseCameraPick();
+        }
+
+        private async void CameraPickOverlay_PhotoCaptured(object sender, PhotoCapturedEventArgs e)
+        {
+            TryCloseCameraPick();
+            if (ViewModel == null || e?.Bytes == null)
+            {
+                return;
+            }
+
+            await ViewModel.AcceptCapturedPhotoAsync(e.Bytes);
+        }
+
+        private bool TryCloseCameraPick()
+        {
+            if (CameraPickPresenter == null || CameraPickPresenter.Visibility != Visibility.Visible)
+            {
+                return false;
+            }
+
+            if (CameraPickOverlay != null)
+            {
+                CameraPickOverlay.CloseRequested -= CameraPickOverlay_CloseRequested;
+                CameraPickOverlay.PhotoCaptured -= CameraPickOverlay_PhotoCaptured;
+                CameraPickOverlay.ViewModel = null;
+            }
+
+            CameraPickPresenter.Visibility = Visibility.Collapsed;
+            return true;
+        }
+
         /// <summary>Opens Imgur-style fullscreen video; stops bubble audio first.</summary>
         public async void OnVideoOpenButtonClick(object sender, RoutedEventArgs e)
         {
@@ -1711,6 +1772,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
             // After the same-chat return: the list re-reports the open chat after every reorder,
             // and that must not close a picture the user is looking at.
+            TryCloseCameraPick();
             TryCloseVideoViewer();
             TryCloseImageViewer();
 

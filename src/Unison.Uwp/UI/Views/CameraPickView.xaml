@@ -1,0 +1,132 @@
+<UserControl
+    x:Class="Unison.Uwp.UI.Views.CameraPickView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:conv="using:Unison.Uwp.UI.Converters"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    d:DesignHeight="800"
+    d:DesignWidth="480">
+
+    <UserControl.Resources>
+        <conv:BooleanToVisibilityConverter x:Key="BoolToVis"/>
+    </UserControl.Resources>
+
+    <Grid Background="Black">
+        <!-- Live preview fills the chat area. -->
+        <CaptureElement x:Name="PreviewElement"
+                        Stretch="UniformToFill"
+                        HorizontalAlignment="Stretch"
+                        VerticalAlignment="Stretch"/>
+
+        <!-- Top chrome: back | flash (centered) | switch camera -->
+        <Grid VerticalAlignment="Top"
+              MinHeight="72"
+              Padding="8,12,8,16"
+              Canvas.ZIndex="2">
+            <Grid.Background>
+                <SolidColorBrush Color="#99000000"/>
+            </Grid.Background>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <Button x:Name="BackButton"
+                    Grid.Column="0"
+                    Command="{x:Bind ViewModel.CloseCommand, Mode=OneWay}"
+                    Style="{StaticResource CircleIconButtonStyle}"
+                    Width="34"
+                    Height="34"
+                    Margin="4,0,8,0"
+                    VerticalAlignment="Center"
+                    Content="&#xE72B;"
+                    ToolTipService.ToolTip="Back"/>
+
+            <StackPanel Grid.Column="1"
+                        Orientation="Horizontal"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Visibility="{x:Bind ViewModel.IsFlashAvailable, Mode=OneWay, Converter={StaticResource BoolToVis}}">
+                <Button Command="{x:Bind ViewModel.FlashOffCommand, Mode=OneWay}"
+                        Style="{StaticResource CircleIconButtonStyle}"
+                        Width="40"
+                        Height="40"
+                        Margin="4,0"
+                        Background="#99000000"
+                        ToolTipService.ToolTip="Flash off">
+                    <FontIcon Glyph="&#xE420;"
+                              FontFamily="{StaticResource IconFont}"
+                              FontSize="18"
+                              Foreground="White"
+                              Opacity="1"/>
+                </Button>
+                <Button Command="{x:Bind ViewModel.FlashOnCommand, Mode=OneWay}"
+                        Style="{StaticResource CircleIconButtonStyle}"
+                        Width="40"
+                        Height="40"
+                        Margin="4,0"
+                        Background="#99000000"
+                        ToolTipService.ToolTip="Flash on">
+                    <FontIcon Glyph="&#xE41E;"
+                              FontFamily="{StaticResource IconFont}"
+                              FontSize="18"
+                              Foreground="White"
+                              Opacity="1"/>
+                </Button>
+            </StackPanel>
+
+            <Button Grid.Column="2"
+                    Command="{x:Bind ViewModel.SwitchCameraCommand, Mode=OneWay}"
+                    Style="{StaticResource CircleIconButtonStyle}"
+                    Width="40"
+                    Height="40"
+                    Margin="8,0,4,0"
+                    VerticalAlignment="Center"
+                    Background="#99000000"
+                    Visibility="{x:Bind ViewModel.IsMultipleCameras, Mode=OneWay, Converter={StaticResource BoolToVis}}"
+                    ToolTipService.ToolTip="Switch camera">
+                <FontIcon Glyph="&#xE89E;"
+                          FontFamily="{StaticResource IconFont}"
+                          FontSize="18"
+                          Foreground="White"
+                          Opacity="1"/>
+            </Button>
+        </Grid>
+
+        <!-- Shutter: white ring, black alpha fill, opaque white camera glyph. -->
+        <Button x:Name="CaptureButton"
+                Command="{x:Bind ViewModel.CaptureCommand, Mode=OneWay}"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Width="72"
+                Height="72"
+                Padding="0"
+                BorderThickness="3"
+                BorderBrush="White"
+                Background="#99000000"
+                UseSystemFocusVisuals="False"
+                Canvas.ZIndex="2"
+                ToolTipService.ToolTip="Take photo">
+            <Button.Template>
+                <ControlTemplate TargetType="Button">
+                    <Grid>
+                        <Ellipse x:Name="Ring"
+                                 Stroke="{TemplateBinding BorderBrush}"
+                                 StrokeThickness="{TemplateBinding BorderThickness}"
+                                 Fill="{TemplateBinding Background}"/>
+                        <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"/>
+                    </Grid>
+                </ControlTemplate>
+            </Button.Template>
+            <FontIcon Glyph="&#xE722;"
+                      FontFamily="{StaticResource IconFont}"
+                      FontSize="28"
+                      Foreground="White"
+                      Opacity="1"/>
+        </Button>
+    </Grid>
+</UserControl>

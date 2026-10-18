@@ -419,6 +419,9 @@
     <Compile Include="UI\Views\ImageViewerView.xaml.cs">
       <DependentUpon>ImageViewerView.xaml</DependentUpon>
     </Compile>
+    <Compile Include="UI\Views\CameraPickView.xaml.cs">
+      <DependentUpon>CameraPickView.xaml</DependentUpon>
+    </Compile>
     <Compile Include="UI\Views\VideoViewerView.xaml.cs">
       <DependentUpon>VideoViewerView.xaml</DependentUpon>
     </Compile>
@@ -938,6 +941,10 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="UI\Views\ImageViewerView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Views\CameraPickView.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
