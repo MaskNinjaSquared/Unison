@@ -24,6 +24,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
+using Unison.Core.State;
 using Unison.Core.Constants;
 using Unison.Socket.Signal;
 using Unison.Uwp.Services.Socket;
@@ -37,14 +38,24 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
     {
         private readonly IPersonStore _personStore;
         private readonly IWhatsAppService _whatsAppService;
+        private readonly IDispatcher _ui;
+        private readonly IChatCatalogPersistence _catalog;
         private readonly IJidResolver _jids;
         private readonly ILocalContactsService _localContacts;
         private readonly ILocalSettings _localSettings;
+        private readonly JidAliasTable _aliases;
+        private readonly DisplayNameTable _pushNames;
+        private readonly DisplayNameTable _addressBookNames;
+        private readonly IChatStateStore _chatState;
+        private readonly ContactDisplayNames _displayNames;
+        private readonly ChatNameRefresh _nameRefresh;
 
         private readonly ContactDirectory _directory;
         private readonly AddressBookOverlay _addressBook;
+        private readonly ContactUsyncResolver _usync;
         private readonly ContactNameResolver _names;
         private readonly ChatAvatarPolicy _avatars;
+        private readonly IAvatarCache _avatarCache;
         private readonly GroupRosterPolicy _roster;
         private DateTime _lastWindowsPublishUtc = DateTime.MinValue;
         private int _lastWindowsPublishCount;
@@ -57,23 +68,101 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             IWhatsAppService whatsAppService,
             LidMappingStore lidMappings,
             ILocalSettings localSettings,
-            IJidResolver jids)
+            IJidResolver jids,
+            IUsyncGate usyncGate,
+            IGroupService groups,
+            AvatarFetcher avatars,
+            IChatStateStore chats,
+            IAvatarReport avatarReport,
+            IAvatarCache avatarCache,
+            JidAliasTable aliases,
+            DisplayNameTable pushNames,
+            DisplayNameTable addressBookNames,
+            ISelfMarkerNaming selfMarkers,
+            IDispatcher ui,
+            IChatCatalogPersistence catalog,
+            SyncStatusChannel syncStatus,
+            SyncWorkGate syncWork,
+            ContactDisplayNames displayNames,
+            SyncBudget syncBudget,
+            SyncWorkloadStrategy workload,
+            InitialSyncProgressState initialSync,
+            ChatNameRefresh nameRefresh,
+            ChatListAliasMerge aliasMerge,
+            IDeferredAvatarResolution deferredAvatars,
+            IUsyncAliasHost usyncAliases)
         {
+            _displayNames = displayNames ?? throw new ArgumentNullException(nameof(displayNames));
+            _nameRefresh = nameRefresh ?? throw new ArgumentNullException(nameof(nameRefresh));
+            if (selfMarkers == null) throw new ArgumentNullException(nameof(selfMarkers));
+            if (syncStatus == null) throw new ArgumentNullException(nameof(syncStatus));
+            if (syncWork == null) throw new ArgumentNullException(nameof(syncWork));
+            _ui = ui ?? throw new ArgumentNullException(nameof(ui));
+            _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             if (sessions == null) throw new ArgumentNullException(nameof(sessions));
             if (localContacts == null) throw new ArgumentNullException(nameof(localContacts));
             if (lidMappings == null) throw new ArgumentNullException(nameof(lidMappings));
+            if (usyncGate == null) throw new ArgumentNullException(nameof(usyncGate));
+            if (groups == null) throw new ArgumentNullException(nameof(groups));
+            if (avatars == null) throw new ArgumentNullException(nameof(avatars));
+            _chatState = chats ?? throw new ArgumentNullException(nameof(chats));
+            if (avatarReport == null) throw new ArgumentNullException(nameof(avatarReport));
+            if (avatarCache == null) throw new ArgumentNullException(nameof(avatarCache));
 
             _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
             _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
+            _avatarCache = avatarCache;
             _localContacts = localContacts;
             _localSettings = localSettings ?? throw new ArgumentNullException(nameof(localSettings));
+            _aliases = aliases ?? throw new ArgumentNullException(nameof(aliases));
+            _pushNames = pushNames ?? throw new ArgumentNullException(nameof(pushNames));
+            _addressBookNames = addressBookNames ?? throw new ArgumentNullException(nameof(addressBookNames));
 
+            var labels = new ContactLabelSanitizer(selfMarkers);
             _directory = new ContactDirectory(sessions, lidMappings);
-            _addressBook = new AddressBookOverlay(localContacts, personStore, whatsAppService, jids);
-            _names = new ContactNameResolver(whatsAppService, _addressBook, _directory, jids);
-            _avatars = new ChatAvatarPolicy(whatsAppService, jids);
-            _roster = new GroupRosterPolicy(whatsAppService, this, jids);
+            _addressBook = new AddressBookOverlay(localContacts, personStore, jids, ui, addressBookNames, chats);
+            _usync = new ContactUsyncResolver(
+                usyncAliases ?? throw new ArgumentNullException(nameof(usyncAliases)),
+                _directory,
+                usyncGate,
+                jids,
+                pushNames,
+                labels,
+                chats,
+                avatars,
+                ui,
+                nameRefresh,
+                aliasMerge);
+            _names = new ContactNameResolver(
+                whatsAppService,
+                _addressBook,
+                _directory,
+                _usync,
+                jids,
+                new PushNameLookup(pushNames, aliases, labels),
+                groups,
+                ui,
+                catalog,
+                chats,
+                syncStatus,
+                syncWork,
+                sessions,
+                nameRefresh);
+            _avatars = new ChatAvatarPolicy(
+                deferredAvatars ?? throw new ArgumentNullException(nameof(deferredAvatars)),
+                jids,
+                new ChatAvatarFetch(sessions, groups, jids, chats, avatarReport, avatars, avatarCache, ui, catalog),
+                ui,
+                catalog,
+                chats,
+                syncStatus,
+                syncWork,
+                sessions,
+                syncBudget,
+                workload ?? throw new ArgumentNullException(nameof(workload)),
+                initialSync);
+            _roster = new GroupRosterPolicy(groups, this, jids, ui, catalog, chats, syncWork, sessions, workload);
 
             // Both live as long as the app does, so there is nothing to unhook from.
             _whatsAppService.OnDisplayNamesUpdated += (s, e) =>
@@ -89,6 +178,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             };
             _whatsAppService.OnAvatarCached += Client_OnAvatarCached;
             _whatsAppService.OnJidAliasResolved += Client_OnJidAliasResolved;
+            _whatsAppService.OnAvatarRetryDue += Client_OnAvatarRetryDue;
         }
 
         /// <summary>
@@ -111,26 +201,38 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             ClearAvatarAttempted(_jids.GetCanonicalJid(e.PhoneJid));
         }
 
+        /// <summary>
+        /// Forced past the backoff: the failure it would honour was recorded under the half of the
+        /// identity that could not answer. Runs on the UI thread the client raised it on, which
+        /// <see cref="ChatAvatarPolicy.RequestRefresh"/> needs to read the live list.
+        /// </summary>
+        private void Client_OnAvatarRetryDue(object sender, AvatarRetryDueEventArgs e)
+        {
+            foreach (ChatItem chat in e.Chats)
+            {
+                RequestAvatarRefresh(chat, force: true);
+            }
+        }
+
         public event EventHandler DisplayNamesUpdated;
 
-        /// <summary>
-        /// Still answered by the client: the name caches are filled while decrypting messages and
-        /// applying history, so moving the lookup here before those move would only add a hop.
-        /// </summary>
+        public void NotifyDisplayNamesUpdated() => DisplayNamesUpdated?.Invoke(this, EventArgs.Empty);
+
         public string ResolveDisplayName(string jid, string context)
         {
-            return _whatsAppService.ResolveDisplayName(jid, context);
+            return _displayNames.Resolve(jid, context);
         }
 
         /// <summary>
         /// Handed out read-only. The overlay is rebuilt wholesale by the address-book pass, and a
         /// caller that could write to it would be writing into state the next pass discards.
         /// </summary>
-        public IReadOnlyDictionary<string, string> PhoneContactNamesByJid =>
-            _whatsAppService.PhoneContactNamesByJid ?? EmptyPhoneNames;
+        public IReadOnlyDictionary<string, string> PhoneContactNamesByJid => _addressBookNames;
 
-        private static readonly IReadOnlyDictionary<string, string> EmptyPhoneNames =
-            new Dictionary<string, string>(0);
+        public Task HydrateCachedAvatarUrisAsync(string reason)
+        {
+            return _avatars.HydrateCachedAsync(reason);
+        }
 
         public void MarkAvatarImageLoadFailed(ChatItem chat, string reason)
         {
@@ -139,7 +241,17 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 return;
             }
 
-            _whatsAppService.MarkAvatarImageLoadFailed(chat, reason);
+            _avatarCache.DeleteIfCached(chat.AvatarUrl);
+
+            // A broken local URI used to stay, and the 30-minute backoff then hid the picture
+            // for the rest of the session. Clear it and ask again at once, including the PN/LID alias.
+            chat.AvatarUrl = null;
+            chat.AvatarFetchedAtUtc = null;
+            chat.AvatarFetchFailedAtUtc = null;
+            chat.AvatarFetchFailureReason = string.IsNullOrWhiteSpace(reason) ? "ui-image-failed" : reason;
+            Debug.WriteLine($"[ContactFacade] UI avatar image load failed for {chat.JID}: {chat.AvatarFetchFailureReason}");
+            RequestAvatarRefresh(chat, force: true);
+            _catalog.Schedule();
         }
 
         public bool IsContactRefreshRunning => _names.IsRunning;
@@ -168,8 +280,27 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                     return null;
 
                 default:
-                    return await _whatsAppService.SearchContactAsync(phoneNumber).ConfigureAwait(false);
+                    return await SearchKnownContactsAsync(phoneNumber).ConfigureAwait(false);
             }
+        }
+
+        /// <summary>
+        /// The older path: a usync pass, then a prefix match over what it filed (an alias pair or a
+        /// push name, so the match walks those two tables). Whatever the user typed is reduced to
+        /// digits first; anything else in the string can only make the match miss.
+        /// </summary>
+        private async Task<string> SearchKnownContactsAsync(string phoneNumber)
+        {
+            string digits = PhoneNumberHelper.NormalizePhoneDigits(phoneNumber);
+            if (string.IsNullOrEmpty(digits))
+            {
+                return null;
+            }
+
+            await _usync.ResolveAsync(new[] { digits }).ConfigureAwait(false);
+            string jid = KnownJidByPhoneDigits.Find(digits, _aliases, _pushNames.Keys);
+            Debug.WriteLine("[ContactFacade] Known-contact search for " + digits + ": " + (jid ?? "none"));
+            return jid;
         }
 
         public string TryResolvePhone(string jid, string phoneDigits = null)
@@ -330,31 +461,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
         private IEnumerable<string> EnumerateLookupJids(string jid)
         {
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            Action<string> add = raw =>
-            {
-                if (string.IsNullOrWhiteSpace(raw))
-                {
-                    return;
-                }
-
-                string normalized = JidHelper.Normalize(raw);
-                if (string.IsNullOrEmpty(normalized) || !seen.Add(normalized))
-                {
-                    return;
-                }
-            };
-
-            add(jid);
-            string canonical = _jids.GetCanonicalJid(jid);
-            add(canonical);
-            string alias;
-            if (!string.IsNullOrWhiteSpace(canonical) && _jids.TryGetAlias(canonical, out alias))
-            {
-                add(alias);
-            }
-
-            return seen;
+            return ChatPinStoreKeys.For(jid, _jids);
         }
 
         private Person TryPerson(string jid)
@@ -428,7 +535,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             try
             {
                 var exports = new List<AppContactExport>();
-                await _whatsAppService.RunOnUiThreadAsync(() => CollectWindowsContactExports(exports))
+                await _ui.RunAsync(() => CollectWindowsContactExports(exports))
                     .ConfigureAwait(false);
                 await _localContacts.PublishAppContactsAsync(exports).ConfigureAwait(false);
                 _lastWindowsPublishUtc = DateTime.UtcNow;
@@ -446,13 +553,13 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
         private void CollectWindowsContactExports(List<AppContactExport> into)
         {
-            if (into == null || _whatsAppService.Chats == null)
+            if (into == null)
             {
                 return;
             }
 
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (ChatItem chat in _whatsAppService.Chats)
+            foreach (ChatItem chat in _chatState.Chats)
             {
                 if (chat == null ||
                     chat.IsGroup ||
@@ -498,6 +605,15 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         public Task RefreshPhoneContactOverlayAsync(bool force)
         {
             return _addressBook.RefreshAsync(force);
+        }
+
+        public async Task RefreshChatListAddressBookNamesAsync()
+        {
+            int mapped = await _addressBook.RefreshChatListAsync().ConfigureAwait(false);
+            if (mapped > 0)
+            {
+                await _nameRefresh.ApplyAsync().ConfigureAwait(false);
+            }
         }
 
         public Task ResolveMissingNamesAsync()

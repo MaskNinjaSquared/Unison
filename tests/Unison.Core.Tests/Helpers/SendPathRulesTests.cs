@@ -142,4 +142,67 @@ namespace Unison.Core.Tests.Helpers
             Assert.True(MediaFileExtensions.IsAlreadyPlayableAudio("RECORDING.M4A"));
         }
     }
+
+    public class OutgoingTextSendRetryTests
+    {
+        [Fact]
+        public void The_first_attempt_waits_longer_for_a_reconnect_than_the_second()
+        {
+            Assert.Equal(TimeSpan.FromMilliseconds(35000), OutgoingTextSendRetry.ConnectTimeout(1));
+            Assert.Equal(TimeSpan.FromMilliseconds(25000), OutgoingTextSendRetry.ConnectTimeout(2));
+            Assert.Equal(TimeSpan.FromSeconds(15), OutgoingTextSendRetry.WriteTimeout);
+            Assert.Equal(2, OutgoingTextSendRetry.MaxAttempts);
+        }
+
+        [Fact]
+        public void A_socket_that_is_not_ready_is_retried_once_without_being_torn_down()
+        {
+            OutgoingTextSendStep step = OutgoingTextSendRetry.After(1, OutgoingSendAttemptOutcome.SocketNotReady);
+
+            Assert.True(step.Retry);
+            Assert.False(step.InvalidateSocket);
+            Assert.Equal(TimeSpan.FromMilliseconds(500), step.RetryDelay);
+        }
+
+        [Fact]
+        public void A_broken_pipe_on_the_first_try_drops_the_socket_and_tries_once_more()
+        {
+            OutgoingTextSendStep step = OutgoingTextSendRetry.After(1, OutgoingSendAttemptOutcome.TransportFailure);
+
+            Assert.True(step.Retry);
+            Assert.True(step.InvalidateSocket);
+            Assert.Equal(TimeSpan.FromMilliseconds(500), step.RetryDelay);
+        }
+
+        [Fact]
+        public void A_message_the_server_refused_stops_immediately_and_keeps_the_connection()
+        {
+            OutgoingTextSendStep step = OutgoingTextSendRetry.After(1, OutgoingSendAttemptOutcome.MessageRefused);
+
+            Assert.False(step.Retry);
+            Assert.False(step.InvalidateSocket);
+        }
+
+        [Fact]
+        public void An_accepted_message_is_not_sent_again()
+        {
+            OutgoingTextSendStep step = OutgoingTextSendRetry.After(1, OutgoingSendAttemptOutcome.Accepted);
+
+            Assert.False(step.Retry);
+            Assert.False(step.InvalidateSocket);
+        }
+
+        [Theory]
+        [InlineData(OutgoingSendAttemptOutcome.SocketNotReady, false)]
+        [InlineData(OutgoingSendAttemptOutcome.TransportFailure, true)]
+        [InlineData(OutgoingSendAttemptOutcome.MessageRefused, false)]
+        public void The_second_attempt_is_the_last_one(OutgoingSendAttemptOutcome outcome, bool invalidate)
+        {
+            OutgoingTextSendStep step = OutgoingTextSendRetry.After(2, outcome);
+
+            Assert.False(step.Retry);
+            Assert.Equal(invalidate, step.InvalidateSocket);
+            Assert.Equal(TimeSpan.Zero, step.RetryDelay);
+        }
+    }
 }

@@ -9,8 +9,13 @@
     d:DesignWidth="48"
     IsTabStop="False">
 
-    <!-- Fallback circle + contact/group glyph under optional photo overlay. -->
+    <!-- Fallback circle + contact/group glyph under optional photo overlay.
+         The plate stays solid. A placeholder bitmap can be transparent and must
+         not replace this fill, or the list shows through the circle. -->
     <Grid x:Name="RootGrid" Width="48" Height="48">
+        <Ellipse x:Name="FallbackPlate"
+                 Width="48" Height="48"
+                 Fill="{ThemeResource AvatarFallbackBackgroundBrush}"/>
         <Ellipse x:Name="FallbackEllipse"
                  Width="48" Height="48"
                  Fill="{ThemeResource AvatarFallbackBackgroundBrush}"/>

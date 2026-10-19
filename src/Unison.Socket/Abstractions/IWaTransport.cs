@@ -15,6 +15,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Unison.Baileys.Protocol;
 
 namespace Unison.Socket.Abstractions
 {
@@ -25,6 +26,15 @@ namespace Unison.Socket.Abstractions
 
         /// <summary>Frame replayed by the background broker rather than read live off the wire.</summary>
         public bool IsBrokerReplay { get; set; }
+
+        /// <summary>
+        /// Frames the broker already decrypted while it held the socket, in arrival order. When
+        /// set, <see cref="Data"/> is not Noise input: the frames are dispatched as they are and
+        /// <see cref="PostNoiseState"/> replaces the receiver's state after the last of them.
+        /// </summary>
+        public IList<byte[]> DecodedFrames { get; set; }
+
+        public NoiseSessionState PostNoiseState { get; set; }
     }
 
     /// <summary>Why the transport went away. <see cref="Error"/> is null on a clean close.</summary>

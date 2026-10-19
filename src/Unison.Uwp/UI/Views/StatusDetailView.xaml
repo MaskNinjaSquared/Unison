@@ -11,7 +11,30 @@
 
     <Grid Background="{ThemeResource WhatsAppBackgroundBrush}">
         <Grid x:Name="EmptyState"
-              Visibility="{x:Bind ViewModel.HasOpenAuthor, Mode=OneWay, Converter={StaticResource InvertedBooleanToVisibilityConverter}}"/>
+              VerticalAlignment="Center"
+              HorizontalAlignment="Center"
+              MaxWidth="420"
+              Padding="32,24"
+              Visibility="{x:Bind ViewModel.HasOpenAuthor, Mode=OneWay, Converter={StaticResource InvertedBooleanToVisibilityConverter}}">
+            <StackPanel>
+                <TextBlock x:Uid="StatusDetail_EmptyTitle"
+                           Text="Share status updates"
+                           FontSize="28"
+                           FontWeight="SemiBold"
+                           FontFamily="{StaticResource MainFontSemibold}"
+                           Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                           TextAlignment="Center"
+                           TextWrapping="Wrap"/>
+                <TextBlock x:Uid="StatusDetail_EmptySubtitle"
+                           Text="Share photos, videos and text that disappear after 24 hours."
+                           FontSize="14"
+                           Margin="0,12,0,0"
+                           FontFamily="{StaticResource MainFont}"
+                           Foreground="{ThemeResource WhatsAppTextMediumBrush}"
+                           TextAlignment="Center"
+                           TextWrapping="Wrap"/>
+            </StackPanel>
+        </Grid>
 
         <Grid x:Name="ViewerRoot"
               Background="Black"
@@ -95,23 +118,11 @@
                     </Grid.ColumnDefinitions>
 
                     <Button Command="{x:Bind ViewModel.CloseCommand, Mode=OneWay}"
+                            Style="{StaticResource CircleIconButtonStyle}"
                             Width="34" Height="34"
                             Margin="4,0,8,0"
                             VerticalAlignment="Top"
-                            Background="Transparent"
-                            BorderThickness="0"
-                            Padding="0">
-                        <Grid Width="34" Height="34">
-                            <Ellipse Fill="#E6232424"/>
-                            <TextBlock Text="&#xE72B;"
-                                       FontFamily="{StaticResource IconFont}"
-                                       FontSize="14"
-                                       FontWeight="SemiBold"
-                                       Foreground="WhiteSmoke"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"/>
-                        </Grid>
-                    </Button>
+                            Content="&#xE72B;"/>
 
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                         <TextBlock Text="{x:Bind ViewModel.AuthorName, Mode=OneWay}"

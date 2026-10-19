@@ -7,7 +7,7 @@ namespace Unison.Core.Models
     /// </summary>
     /// <remarks>
     /// Property setters mark the field as known. A stub created only to remember a mute must not
-    /// answer "not pinned" when <c>ApplyTo</c> reads it — that was wiping favourites mid-sync.
+    /// answer "not pinned" when <c>ApplyTo</c> reads it — that was wiping chat-list pins mid-sync.
     /// </remarks>
     public sealed class ChatLocalState
     {

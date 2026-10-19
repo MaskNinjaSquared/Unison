@@ -76,6 +76,10 @@ namespace Unison.Uwp.Data.Entities
 
         public string MediaLocalUri { get; set; }
 
+        /// <summary>Cache cleanup removed the local file. The message row stays.</summary>
+        [Column("flag_deleted")]
+        public bool FlagDeleted { get; set; }
+
         public string MediaPosterUri { get; set; }
 
         /// <summary>Comma-separated mentioned JIDs.</summary>

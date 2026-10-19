@@ -71,13 +71,15 @@
                                 Click="HamburgerButton_Click">
                             <TextBlock Text="&#xE700;" FontFamily="{StaticResource IconFont}" FontSize="18"/>
                         </Button>
-                        <Image Source="ms-appx:///Assets/WhatsAppLogo.png"
-                               Width="24" Height="24"
+                        <Image x:Name="SidebarBrandIcon"
+                               Source="ms-appx:///Assets/Square44x44Logo.altform-unplated_targetsize-48.png"
+                               Width="18" Height="18"
                                VerticalAlignment="Center"
-                               Margin="4,0,0,0"/>
-                        <TextBlock Text="WhatsApp"
+                               Margin="5,0,0,0"/>
+                        <TextBlock x:Name="SidebarBrandText"
+                                   Text="Unison"
                                    VerticalAlignment="Center"
-                                   Margin="10,0,0,0"
+                                   Margin="10,2,0,0"
                                    FontSize="13"
                                    Foreground="{ThemeResource WhatsAppTextHighBrush}"
                                    FontFamily="{StaticResource MainFontSemibold}"/>
@@ -104,12 +106,10 @@
                             </Grid>
                         </ListViewItem>
 
-                        <ListViewItem Tag="calls" IsEnabled="False" Foreground="{ThemeResource WhatsAppTextLowBrush}">
+                        <ListViewItem Tag="calls">
                             <StackPanel Orientation="Horizontal" Padding="12,0">
-                                <TextBlock Text="&#xE717;" FontFamily="{StaticResource IconFont}" FontSize="20" VerticalAlignment="Center" Width="24"
-                                           Foreground="{ThemeResource WhatsAppTextLowBrush}"/>
-                                <TextBlock x:Uid="Shell_Calls" Text="Calls" Margin="16,0,0,0" FontSize="14" VerticalAlignment="Center"
-                                           Foreground="{ThemeResource WhatsAppTextLowBrush}"/>
+                                <TextBlock Text="&#xE717;" FontFamily="{StaticResource IconFont}" FontSize="20" VerticalAlignment="Center" Width="24"/>
+                                <TextBlock x:Uid="Shell_Calls" Text="Calls" Margin="16,0,0,0" FontSize="14" VerticalAlignment="Center"/>
                             </StackPanel>
                         </ListViewItem>
 
@@ -122,12 +122,10 @@
                             </Grid>
                         </ListViewItem>
 
-                        <ListViewItem Tag="starred" IsEnabled="False" Foreground="{ThemeResource WhatsAppTextLowBrush}">
+                        <ListViewItem Tag="favorites">
                             <StackPanel Orientation="Horizontal" Padding="12,0">
-                                <TextBlock Text="&#xE734;" FontFamily="{StaticResource IconFont}" FontSize="20" VerticalAlignment="Center" Width="24"
-                                           Foreground="{ThemeResource WhatsAppTextLowBrush}"/>
-                                <TextBlock x:Uid="Shell_Starred" Text="Starred messages" Margin="16,0,0,0" FontSize="14" VerticalAlignment="Center"
-                                           Foreground="{ThemeResource WhatsAppTextLowBrush}"/>
+                                <TextBlock Text="&#xE735;" FontFamily="{StaticResource IconFont}" FontSize="20" VerticalAlignment="Center" Width="24"/>
+                                <TextBlock x:Uid="Shell_Favorites" Text="Favorites" Margin="16,0,0,0" FontSize="14" VerticalAlignment="Center"/>
                             </StackPanel>
                         </ListViewItem>
 
@@ -172,7 +170,15 @@
                             </ListViewItem>
                         </ListView>
 
-                        <Grid x:Name="ProfileNavRow" Padding="8,8,12,8" Margin="4,2" Height="44">
+                        <Button Command="{Binding OpenProfileSettingsCommand}"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Stretch"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Padding="10,0"
+                                Margin="4,2"
+                                MinHeight="40">
+                        <Grid x:Name="ProfileNavRow" Height="40">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
@@ -205,6 +211,7 @@
                                        TextTrimming="CharacterEllipsis"
                                        MaxLines="1"/>
                         </Grid>
+                        </Button>
                     </StackPanel>
                 </Grid>
             </SplitView.Pane>

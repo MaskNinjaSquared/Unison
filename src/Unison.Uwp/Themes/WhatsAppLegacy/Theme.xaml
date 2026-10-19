@@ -1,0 +1,13 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+      WhatsApp Legacy: WhatsApp controls/styles, then Chrome overrides (black/white + avatars),
+      then Legacy control templates (CommandBar / search).
+    -->
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="ms-appx:///Themes/WhatsApp/Theme.xaml" />
+        <ResourceDictionary Source="ms-appx:///Themes/WhatsAppLegacy/Chrome.xaml" />
+        <ResourceDictionary Source="ms-appx:///Themes/WhatsAppLegacy/Controls.xaml" />
+    </ResourceDictionary.MergedDictionaries>
+</ResourceDictionary>

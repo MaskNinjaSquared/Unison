@@ -132,6 +132,16 @@ namespace Unison.Uwp.UI.Views
                 return;
             }
 
+            // Same author re-selected (list reload / delayed SelectionChanged) — do not reopen.
+            if (ViewModel.SelectedAuthor != null &&
+                string.Equals(
+                    ViewModel.SelectedAuthor.Jid,
+                    author.Jid,
+                    System.StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
             ViewModel.SelectedAuthor = author;
             AuthorSelected?.Invoke(this, new StatusAuthorSelectedEventArgs(author));
         }

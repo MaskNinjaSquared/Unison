@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Threading.Tasks;
 using Unison.Core.Contracts;
+using Unison.Core.Helpers;
 using Unison.Core.Models;
 
 namespace Unison.Core.State
@@ -23,14 +24,11 @@ namespace Unison.Core.State
         private readonly IDispatcher _dispatcher;
         private readonly object _gate = new object();
 
-        private readonly Dictionary<string, List<ChatMessage>> _messagesByChat =
-            new Dictionary<string, List<ChatMessage>>(StringComparer.OrdinalIgnoreCase);
+        private readonly ChatMessageCache _messagesByChat = new ChatMessageCache();
 
-        private readonly Dictionary<string, string> _pushNames =
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        private readonly DisplayNameTable _pushNames = new DisplayNameTable();
 
-        private readonly Dictionary<string, string> _addressBookNames =
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        private readonly DisplayNameTable _addressBookNames = new DisplayNameTable();
 
         public ChatStateStore(IDispatcher dispatcher)
         {
@@ -44,9 +42,41 @@ namespace Unison.Core.State
 
         public ObservableCollection<ChatItem> Chats { get; } = new ObservableCollection<ChatItem>();
 
+        private volatile bool _isLoadingPersistedChats;
+
+        public bool IsLoadingPersistedChats => _isLoadingPersistedChats;
+
+        /// <summary>Marks the startup read of saved rows; dispose when it ends, failed or not.</summary>
+        public IDisposable BeginPersistedChatsLoad()
+        {
+            _isLoadingPersistedChats = true;
+            return new PersistedChatsLoad(this);
+        }
+
+        private sealed class PersistedChatsLoad : IDisposable
+        {
+            private ChatStateStore _owner;
+
+            public PersistedChatsLoad(ChatStateStore owner)
+            {
+                _owner = owner;
+            }
+
+            public void Dispose()
+            {
+                if (_owner != null)
+                {
+                    _owner._isLoadingPersistedChats = false;
+                    _owner = null;
+                }
+            }
+        }
+
         public event EventHandler<string> MessagesChanged;
 
         public event EventHandler DisplayNamesChanged;
+
+        public event EventHandler<string> GroupRosterChanged;
 
         // ---------------------------------------------------------------------
         // Migration seams
@@ -59,14 +89,15 @@ namespace Unison.Core.State
         //
         // The point of the exercise is already served: the state lives here, so a
         // view model can be pointed at this store without waiting for the class
-        // that used to own it. These four members disappear with the last direct
-        // access - they are not part of IChatStateStore for that reason.
+        // that used to own it. MessagesByChat disappears with the last direct access
+        // - it is not part of IChatStateStore for that reason, and WhatsAppService is
+        // its only reader. The two name tables lock on their own and are not transitional.
         //
-        // One caveat while they exist. A writer coming through here does not take
-        // the lock, so the snapshot the read methods return is protected by thread
-        // affinity rather than by _gate: WhatsAppService mutates on the UI thread,
-        // and so do the view models that read. Reading these collections from a
-        // background thread is only safe once the writes come through this class.
+        // One caveat while MessagesByChat exists. It locks which conversations exist,
+        // but the lists inside are edited in place without _gate, so the snapshot the
+        // read methods return is protected by thread affinity: WhatsAppService mutates
+        // on the UI thread, and so do the view models that read. Reading a message list
+        // from a background thread is only safe once the writes come through this class.
         //
         // Keys are OrdinalIgnoreCase. MessageIdIndex already was, and JidHelper leaves
         // mixed-case @g.us alone — with Ordinal those two disagreed, so a group whose
@@ -74,38 +105,35 @@ namespace Unison.Core.State
         // from the message list.
         // ---------------------------------------------------------------------
 
-        /// <summary>Transitional. Prefer <see cref="GetMessages"/> and <see cref="UpsertMessagesAsync"/>.</summary>
-        public Dictionary<string, List<ChatMessage>> MessagesByChat
+        /// <summary>
+        /// Transitional. Prefer <see cref="GetMessages"/> and <see cref="UpsertMessagesAsync"/>. Which
+        /// conversations exist is locked; the lists inside are still edited in place on the UI thread.
+        /// </summary>
+        public ChatMessageCache MessagesByChat
         {
             get { return _messagesByChat; }
         }
 
-        /// <summary>Transitional. Names the network told us about.</summary>
-        public Dictionary<string, string> PushNames
+        /// <summary>Names the network told us about. Locks on its own, so any thread may use it.</summary>
+        public DisplayNameTable PushNames
         {
             get { return _pushNames; }
         }
 
-        /// <summary>Transitional. Names from the device address book.</summary>
-        public Dictionary<string, string> AddressBookNames
+        /// <summary>Names from the device address book. Locks on its own, so any thread may use it.</summary>
+        public DisplayNameTable AddressBookNames
         {
             get { return _addressBookNames; }
         }
 
-        /// <summary>
-        /// Transitional: lets a direct writer announce what it changed, so subscribers see the
-        /// same events they will see once every write goes through this class.
-        /// </summary>
-        public void NotifyChangedExternally(string chatJid)
+        public void NotifyMessagesChanged(string chatJid)
         {
-            if (string.IsNullOrEmpty(chatJid))
+            if (string.IsNullOrWhiteSpace(chatJid))
             {
-                RaiseDisplayNamesChanged();
+                return;
             }
-            else
-            {
-                RaiseMessagesChanged(chatJid);
-            }
+
+            RaiseMessagesChanged(chatJid);
         }
 
         public ChatItem FindChat(string jid)
@@ -136,9 +164,17 @@ namespace Unison.Core.State
             lock (_gate)
             {
                 List<ChatMessage> messages;
-                return _messagesByChat.TryGetValue(chatJid, out messages)
+                return _messagesByChat.TryGet(chatJid, out messages) && messages != null
                     ? messages.ToArray()
                     : new ChatMessage[0];
+            }
+        }
+
+        public List<ChatMessage> GetConversationMessages(string chatJid, Func<string, string> canonicalOf)
+        {
+            lock (_gate)
+            {
+                return _messagesByChat.CopyConversation(chatJid, canonicalOf);
             }
         }
 
@@ -151,8 +187,7 @@ namespace Unison.Core.State
 
             lock (_gate)
             {
-                List<ChatMessage> messages;
-                return _messagesByChat.TryGetValue(chatJid, out messages) ? messages.Count : 0;
+                return _messagesByChat.CountFor(chatJid);
             }
         }
 
@@ -222,41 +257,10 @@ namespace Unison.Core.State
                 return Task.FromResult(true);
             }
 
-            var changed = false;
-
+            bool changed;
             lock (_gate)
             {
-                List<ChatMessage> list;
-                if (!_messagesByChat.TryGetValue(chatJid, out list))
-                {
-                    list = new List<ChatMessage>();
-                    _messagesByChat[chatJid] = list;
-                }
-
-                foreach (var message in messages)
-                {
-                    if (message == null)
-                    {
-                        continue;
-                    }
-
-                    var index = IndexOfMessage(list, message.Id);
-                    if (index >= 0)
-                    {
-                        list[index] = message;
-                    }
-                    else
-                    {
-                        list.Add(message);
-                    }
-
-                    changed = true;
-                }
-
-                if (changed)
-                {
-                    list.Sort(CompareByTimestamp);
-                }
+                changed = _messagesByChat.Upsert(chatJid, messages);
             }
 
             if (changed)
@@ -267,6 +271,37 @@ namespace Unison.Core.State
             return Task.FromResult(true);
         }
 
+        public Task AddMissingMessagesAsync(string chatJid, IEnumerable<ChatMessage> messages)
+        {
+            if (string.IsNullOrWhiteSpace(chatJid) || messages == null)
+            {
+                return Task.FromResult(true);
+            }
+
+            var incoming = new List<ChatMessage>();
+            foreach (ChatMessage message in messages)
+            {
+                if (message != null)
+                {
+                    incoming.Add(message);
+                }
+            }
+
+            if (incoming.Count == 0)
+            {
+                return Task.FromResult(true);
+            }
+
+            string key = JidHelper.Normalize(chatJid);
+            return _dispatcher.RunAsync(() =>
+            {
+                lock (_gate)
+                {
+                    _messagesByChat.AddMissing(key, incoming);
+                }
+            });
+        }
+
         public Task RemoveMessageAsync(string chatJid, string messageId)
         {
             if (string.IsNullOrEmpty(chatJid) || string.IsNullOrEmpty(messageId))
@@ -274,20 +309,10 @@ namespace Unison.Core.State
                 return Task.FromResult(true);
             }
 
-            var changed = false;
-
+            bool changed;
             lock (_gate)
             {
-                List<ChatMessage> list;
-                if (_messagesByChat.TryGetValue(chatJid, out list))
-                {
-                    var index = IndexOfMessage(list, messageId);
-                    if (index >= 0)
-                    {
-                        list.RemoveAt(index);
-                        changed = true;
-                    }
-                }
+                changed = _messagesByChat.RemoveMessage(chatJid, messageId);
             }
 
             if (changed)
@@ -305,18 +330,15 @@ namespace Unison.Core.State
                 return null;
             }
 
-            lock (_gate)
+            string name;
+            if (_addressBookNames.TryGetValue(jid, out name) && !string.IsNullOrWhiteSpace(name))
             {
-                string name;
-                if (_addressBookNames.TryGetValue(jid, out name) && !string.IsNullOrWhiteSpace(name))
-                {
-                    return name;
-                }
+                return name;
+            }
 
-                if (_pushNames.TryGetValue(jid, out name) && !string.IsNullOrWhiteSpace(name))
-                {
-                    return name;
-                }
+            if (_pushNames.TryGetValue(jid, out name) && !string.IsNullOrWhiteSpace(name))
+            {
+                return name;
             }
 
             return null;
@@ -337,20 +359,35 @@ namespace Unison.Core.State
             RaiseDisplayNamesChanged();
         }
 
+        public void NotifyGroupRosterChanged(string groupJid)
+        {
+            if (string.IsNullOrWhiteSpace(groupJid))
+            {
+                return;
+            }
+
+            var handler = GroupRosterChanged;
+            if (handler != null)
+            {
+                handler(this, groupJid);
+            }
+        }
+
         public Task ClearAsync()
         {
             lock (_gate)
             {
                 _messagesByChat.Clear();
-                _pushNames.Clear();
-                _addressBookNames.Clear();
             }
+
+            _pushNames.Clear();
+            _addressBookNames.Clear();
 
             return _dispatcher.RunAsync(() => Chats.Clear());
         }
 
         private Task MergeNamesAsync(
-            Dictionary<string, string> target,
+            DisplayNameTable target,
             IEnumerable<KeyValuePair<string, string>> namesByJid)
         {
             if (namesByJid == null)
@@ -360,23 +397,15 @@ namespace Unison.Core.State
 
             var changed = false;
 
-            lock (_gate)
+            foreach (var pair in namesByJid)
             {
-                foreach (var pair in namesByJid)
+                if (string.IsNullOrEmpty(pair.Key) || string.IsNullOrWhiteSpace(pair.Value))
                 {
-                    if (string.IsNullOrEmpty(pair.Key) || string.IsNullOrWhiteSpace(pair.Value))
-                    {
-                        continue;
-                    }
+                    continue;
+                }
 
-                    string current;
-                    if (target.TryGetValue(pair.Key, out current) &&
-                        string.Equals(current, pair.Value, StringComparison.Ordinal))
-                    {
-                        continue;
-                    }
-
-                    target[pair.Key] = pair.Value;
+                if (target.Set(pair.Key, pair.Value))
+                {
                     changed = true;
                 }
             }
@@ -405,29 +434,6 @@ namespace Unison.Core.State
             {
                 handler(this, chatJid);
             }
-        }
-
-        private static int IndexOfMessage(List<ChatMessage> list, string id)
-        {
-            if (string.IsNullOrEmpty(id))
-            {
-                return -1;
-            }
-
-            for (var i = 0; i < list.Count; i++)
-            {
-                if (string.Equals(list[i].Id, id, StringComparison.Ordinal))
-                {
-                    return i;
-                }
-            }
-
-            return -1;
-        }
-
-        private static int CompareByTimestamp(ChatMessage left, ChatMessage right)
-        {
-            return left.Timestamp.CompareTo(right.Timestamp);
         }
 
         /// <summary>

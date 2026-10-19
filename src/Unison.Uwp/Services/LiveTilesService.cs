@@ -4,6 +4,7 @@ using Windows.Data.Xml.Dom;
 using Windows.UI.Notifications;
 using Unison.Core.Constants;
 using Unison.Core.Contracts;
+using Unison.Core.Helpers;
 using Unison.Uwp.Helpers;
 
 namespace Unison.Uwp.Services
@@ -76,8 +77,10 @@ namespace Unison.Uwp.Services
             try
             {
                 string launch = BuildLaunchArgument(chatJid);
+                // Mobile / Unigram: overflow past 99 as "99⁺" (superscript plus), not a raw digit run.
+                string countLabel = NotificationCounter.FormatOverflowCount(totalUnread);
                 string unreadText = totalUnread > 0
-                    ? totalUnread + (totalUnread == 1 ? " unread message" : " unread messages")
+                    ? countLabel + (totalUnread == 1 ? " unread message" : " unread messages")
                     : "New message";
 
                 string xml =
@@ -108,6 +111,7 @@ namespace Unison.Uwp.Services
                 };
 
                 TileUpdateManager.CreateTileUpdaterForApplication().Update(notification);
+                StartTileMirror.UpdateTile(document, notification.ExpirationTime);
             }
             catch
             {
@@ -119,6 +123,9 @@ namespace Unison.Uwp.Services
             try
             {
                 TileUpdateManager.CreateTileUpdaterForApplication().Clear();
+                BadgeUpdateManager.CreateBadgeUpdaterForApplication().Clear();
+                StartTileMirror.ClearTile();
+                StartTileMirror.ClearBadge();
             }
             catch
             {

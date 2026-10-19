@@ -3,6 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Unison.Uwp.UI.Controls"
+    xmlns:reply="using:Unison.Uwp.UI.Controls.Reply"
     xmlns:helpers="using:Unison.Uwp.UI.Helpers"
     xmlns:views="using:Unison.Uwp.UI.Views"
     xmlns:toolkit="using:Microsoft.Toolkit.Uwp.UI.Controls"
@@ -145,8 +146,10 @@
                 </VisualState>
                 <VisualState x:Name="InfoFullScreen">
                     <VisualState.Setters>
-                        <Setter Target="ChatColumn.Width" Value="0"/>
-                        <Setter Target="InfoColumn.Width" Value="*"/>
+                        <!-- Chat stays at full width under the info cover. Collapsing it to 0
+                             unrealizes the message list, and close then pays to build it again. -->
+                        <Setter Target="ChatColumn.Width" Value="*"/>
+                        <Setter Target="InfoColumn.Width" Value="0"/>
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
@@ -617,10 +620,8 @@
                 </ListView.ItemContainerStyle>
                 <ListView.ItemsPanel>
                     <ItemsPanelTemplate>
-                        <!-- Prefer KeepItemsInView as a first pass; ChatDetailView still restores
-                             scroll explicitly after load-more because variable bubble heights and
-                             near-zero offsets make the panel alone unreliable. -->
-                        <ItemsStackPanel ItemsUpdatingScrollMode="KeepItemsInView"/>
+                        <!-- Sole owner of the viewport position when older rows are prepended. -->
+                        <ItemsStackPanel ItemsUpdatingScrollMode="KeepLastItemInView"/>
                     </ItemsPanelTemplate>
                 </ListView.ItemsPanel>
             </ListView>
@@ -663,12 +664,36 @@
                     Tapped="AttachMenuScrim_Tapped"
                     Visibility="Collapsed"/>
 
+            <!--
+                Sits over the conversation while the reply bar is open. A tap here
+                closes the quote. The bar itself stays in the row below, so the
+                composer and its close button still hit.
+            -->
+            <Border Grid.Row="0"
+                    Grid.RowSpan="3"
+                    Canvas.ZIndex="4"
+                    Background="Transparent"
+                    Tapped="ReplyScrim_Tapped"
+                    Visibility="{Binding IsReplyBarOpen, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+
             <!-- Composer / recording / attach bars share row 3 (hidden when group announce-lock) -->
             <Grid Grid.Row="3"
                   Canvas.ZIndex="4"
                   Background="{ThemeResource ChatDetailInputBarBackgroundBrush}"
                   Visibility="{Binding IsGroupLockedForMessages, Converter={StaticResource InvertedBooleanToVisibilityConverter}}">
-                <Border Height="1"
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <reply:ReplyComposeBar Grid.Row="0"
+                                       Visibility="{Binding IsReplyBarOpen, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                <controls:MentionSuggestList Grid.Row="1"
+                                             ItemClick="MentionSuggestList_ItemClick"
+                                             SelectedIndex="{Binding MentionSelectedIndex, Mode=OneWay}"
+                                             Visibility="{Binding IsMentionMenuOpen, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                <Border Grid.Row="2"
+                        Height="1"
                         VerticalAlignment="Top"
                         Background="{ThemeResource ChatDetailInputBarTopBorderBrush}"
                         IsHitTestVisible="False"/>
@@ -678,7 +703,7 @@
                     composer down for the attachment bar without fighting the recording binding
                     on the two panels inside - which is the whole reason it exists.
                 -->
-                <Grid x:Name="ComposerHost">
+                <Grid x:Name="ComposerHost" Grid.Row="2">
 
                 <!-- Normal input bar (hidden while recording) -->
                 <Grid Padding="12"
@@ -792,6 +817,7 @@
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                              ScrollViewer.HorizontalScrollMode="Disabled"
                              SizeChanged="MessageInput_SizeChanged"
+                             SelectionChanged="MessageInput_SelectionChanged"
                              KeyDown="MessageInput_KeyDown"/>
 
                     <Button x:Name="MicButton" Grid.Column="2"
@@ -1049,5 +1075,11 @@
         <views:VideoViewerView x:Name="VideoViewerOverlay"
                                Visibility="Collapsed"
                                Canvas.ZIndex="101"/>
+
+        <!-- Camera pick is created on demand — eager CameraPickView (CaptureElement) on every
+             chat open OOMs Creators / Mobile. -->
+        <ContentPresenter x:Name="CameraPickPresenter"
+                          Visibility="Collapsed"
+                          Canvas.ZIndex="102"/>
     </Grid>
 </UserControl>

@@ -1,18 +1,16 @@
 using System;
 using System.ComponentModel;
-using Unison.Core.Models;
 using Unison.Core.ViewModels;
 using Unison.Uwp.UI.Views;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Controls.Primitives;
 using Windows.UI.Xaml.Media;
 using Windows.UI.Xaml.Media.Animation;
 
 namespace Unison.Uwp.UI.Controls
 {
     /// <summary>
-    /// Shared play/pause ↔ label/slider ↔ timestamp state for shell-specific audio bars.
+    /// Shared play/pause ↔ label/slider ↔ overflow|timestamp state for shell-specific audio bars.
     /// </summary>
     internal sealed class ChatAudioTransportPresenter
     {
@@ -22,7 +20,9 @@ namespace Unison.Uwp.UI.Controls
         private readonly TextBlock _readyLabel;
         private readonly Slider _positionSlider;
         private readonly TextBlock _timestampText;
+        private readonly Button _moreButton;
         private readonly Action _onPlayPause;
+        private readonly Action _onMore;
 
         private ChatMessageViewModel _vm;
         private bool _sliderDragging;
@@ -37,7 +37,9 @@ namespace Unison.Uwp.UI.Controls
             TextBlock readyLabel,
             Slider positionSlider,
             TextBlock timestampText,
-            Action onPlayPause)
+            Button moreButton,
+            Action onPlayPause,
+            Action onMore)
         {
             _owner = owner ?? throw new ArgumentNullException(nameof(owner));
             _playButton = playButton ?? throw new ArgumentNullException(nameof(playButton));
@@ -45,7 +47,9 @@ namespace Unison.Uwp.UI.Controls
             _readyLabel = readyLabel ?? throw new ArgumentNullException(nameof(readyLabel));
             _positionSlider = positionSlider ?? throw new ArgumentNullException(nameof(positionSlider));
             _timestampText = timestampText ?? throw new ArgumentNullException(nameof(timestampText));
+            _moreButton = moreButton ?? throw new ArgumentNullException(nameof(moreButton));
             _onPlayPause = onPlayPause ?? throw new ArgumentNullException(nameof(onPlayPause));
+            _onMore = onMore ?? throw new ArgumentNullException(nameof(onMore));
         }
 
         public void Attach(ChatMessageViewModel vm)
@@ -91,9 +95,13 @@ namespace Unison.Uwp.UI.Controls
             bool showPlay = vm.ShowAudioPlayButton;
             bool showPause = vm.ShowAudioPauseButton;
             bool showSlider = vm.ShowAudioSlider;
+            bool showMore = vm.ShowAudioOverflowMenu;
+            bool showBarTime = vm.ShowAudioBarTimestamp;
 
             _playButton.Visibility = showPlay ? Visibility.Visible : Visibility.Collapsed;
             _pauseButton.Visibility = showPause ? Visibility.Visible : Visibility.Collapsed;
+            _moreButton.Visibility = showMore ? Visibility.Visible : Visibility.Collapsed;
+            _timestampText.Visibility = showBarTime ? Visibility.Visible : Visibility.Collapsed;
             _readyLabel.Text = vm.AudioReadyLabelText ?? string.Empty;
             _timestampText.Text = vm.AudioTimestampText ?? "0:00";
 
@@ -132,6 +140,11 @@ namespace Unison.Uwp.UI.Controls
             _onPlayPause();
         }
 
+        public void OnMoreClick()
+        {
+            _onMore();
+        }
+
         public void OnSliderPointerPressed()
         {
             _sliderDragging = true;
@@ -161,9 +174,12 @@ namespace Unison.Uwp.UI.Controls
             if (e.PropertyName == nameof(ChatMessageViewModel.AudioPlaybackStatus) ||
                 e.PropertyName == nameof(ChatMessageViewModel.ShowAudioPlayButton) ||
                 e.PropertyName == nameof(ChatMessageViewModel.ShowAudioPauseButton) ||
+                e.PropertyName == nameof(ChatMessageViewModel.ShowAudioOverflowMenu) ||
+                e.PropertyName == nameof(ChatMessageViewModel.ShowAudioBarTimestamp) ||
                 e.PropertyName == nameof(ChatMessageViewModel.AudioReadyLabelText) ||
                 e.PropertyName == nameof(ChatMessageViewModel.AudioTimestampText) ||
-                e.PropertyName == nameof(ChatMessageViewModel.AudioSliderMaximum))
+                e.PropertyName == nameof(ChatMessageViewModel.AudioSliderMaximum) ||
+                e.PropertyName == nameof(ChatMessageViewModel.HasLocalAudio))
             {
                 ApplyState(animate: e.PropertyName == nameof(ChatMessageViewModel.AudioPlaybackStatus));
             }

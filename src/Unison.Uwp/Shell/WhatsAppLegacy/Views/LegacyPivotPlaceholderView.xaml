@@ -1,0 +1,24 @@
+<Page
+    x:Class="Unison.Uwp.Shell.WhatsAppLegacy.Views.LegacyPivotPlaceholderView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Unison.Uwp.UI.Controls"
+    xmlns:local="using:Unison.Uwp.Shell.WhatsAppLegacy.Views"
+    Background="Black">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <controls:FavoritesEmptyControl x:Name="FavoritesEmpty"
+                                        Visibility="Collapsed"/>
+        <controls:CallsEmptyControl x:Name="CallsEmpty"
+                                    Visibility="Collapsed"/>
+
+        <local:LegacySectionAppBar x:Name="SectionBar"
+                                   Grid.Row="1"
+                                   Visibility="Collapsed"/>
+    </Grid>
+</Page>

@@ -24,6 +24,14 @@ namespace Unison.Core.Models
         public string MessageId { get; set; }
 
         /// <summary>
+        /// Group tip sender for ChatAuthorProjection (prefer PN when the envelope had participantAlt).
+        /// </summary>
+        public string ParticipantJid { get; set; }
+
+        /// <summary>Best name known for <see cref="ParticipantJid"/> when the tip was built.</summary>
+        public string SenderName { get; set; }
+
+        /// <summary>
         /// How many unread increments to apply. Live uses 0 or 1; offline replay uses the
         /// delta recorded at drain time (never re-ask IncomingAttention on apply).
         /// </summary>

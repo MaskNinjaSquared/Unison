@@ -21,6 +21,7 @@ namespace Unison.Core.ViewModels
 
         private readonly IStatusService _status;
         private readonly IDispatcher _dispatcher;
+        private readonly IRuntimeDiagnostics _diagnostics;
 
         private IReadOnlyList<HistoryStatus> _items = Array.Empty<HistoryStatus>();
         private int _index;
@@ -37,11 +38,16 @@ namespace Unison.Core.ViewModels
         private CancellationTokenSource _timerCts;
         private int _openGeneration;
         private DateTime _itemShownUtc;
+        private string _openingAuthorJid;
 
-        public StatusDetailViewModel(IStatusService status, IDispatcher dispatcher)
+        public StatusDetailViewModel(
+            IStatusService status,
+            IDispatcher dispatcher,
+            IRuntimeDiagnostics diagnostics = null)
         {
             _status = status ?? throw new ArgumentNullException(nameof(status));
             _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
+            _diagnostics = diagnostics;
             CloseCommand = new RelayCommand(Close);
             NextCommand = new RelayCommand(GoNext);
             PreviousCommand = new RelayCommand(GoPrevious);
@@ -116,15 +122,34 @@ namespace Unison.Core.ViewModels
 
         public async Task OpenAuthorAsync(string authorJid, string displayName)
         {
+            // SelectionChanged / list reload often re-raises the same author while EnsureMedia
+            // is in flight. Bumping generation there cancelled show before any media log.
+            if (IsSameAuthorOpen(authorJid))
+            {
+                LogStatus(
+                    "open-skip-same",
+                    "author=" + (authorJid ?? "-") +
+                    "; opening=" + (_openingAuthorJid ?? "-") +
+                    "; items=" + _items.Count);
+                return;
+            }
+
             StopTimer();
             _openGeneration++;
             int generation = _openGeneration;
             _authorJid = authorJid;
+            _openingAuthorJid = authorJid;
             AuthorName = displayName ?? string.Empty;
             HasOpenAuthor = !string.IsNullOrWhiteSpace(authorJid);
 
+            LogStatus(
+                "open-start",
+                "author=" + (authorJid ?? "-") + "; name=" + (displayName ?? "-") +
+                "; gen=" + generation);
+
             if (!HasOpenAuthor)
             {
+                _openingAuthorJid = null;
                 ResetVisual();
                 return;
             }
@@ -134,26 +159,87 @@ namespace Unison.Core.ViewModels
             {
                 items = await _status.GetActiveForAuthorAsync(authorJid).ConfigureAwait(false);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                LogStatus("open-load-fail", "author=" + authorJid + "; err=" + ex.Message);
                 items = Array.Empty<HistoryStatus>();
             }
 
             if (generation != _openGeneration)
             {
+                LogStatus("open-stale", "author=" + authorJid + "; gen=" + generation);
                 return;
             }
 
-            _items = items ?? Array.Empty<HistoryStatus>();
+            // ObservableCollection + bound props must be touched on the UI dispatcher.
+            await _dispatcher.RunAsync(() =>
+            {
+                if (generation != _openGeneration)
+                {
+                    return;
+                }
+
+                _items = items ?? Array.Empty<HistoryStatus>();
+                LogStatus(
+                    "open-loaded",
+                    "author=" + authorJid + "; count=" + _items.Count + "; gen=" + generation);
+                for (int i = 0; i < _items.Count; i++)
+                {
+                    LogStatus("open-item", StatusItemDiagnostics.DescribeItem(_items[i], i));
+                }
+
+                if (_items.Count == 0)
+                {
+                    return;
+                }
+
+                RebuildSegments(_items.Count);
+                _index = 0;
+            }).ConfigureAwait(false);
+
+            if (generation != _openGeneration)
+            {
+                LogStatus("open-stale", "author=" + authorJid + "; gen=" + generation + "; after-ui");
+                return;
+            }
+
             if (_items.Count == 0)
             {
-                Close();
+                _openingAuthorJid = null;
+                Close("empty-items");
                 return;
             }
 
-            RebuildSegments(_items.Count);
-            _index = 0;
-            await ShowCurrentAsync(generation).ConfigureAwait(false);
+            try
+            {
+                await ShowCurrentAsync(generation).ConfigureAwait(false);
+            }
+            finally
+            {
+                if (generation == _openGeneration &&
+                    string.Equals(_openingAuthorJid, authorJid, StringComparison.OrdinalIgnoreCase))
+                {
+                    _openingAuthorJid = null;
+                }
+            }
+        }
+
+        private bool IsSameAuthorOpen(string authorJid)
+        {
+            if (string.IsNullOrWhiteSpace(authorJid))
+            {
+                return false;
+            }
+
+            if (!string.IsNullOrWhiteSpace(_openingAuthorJid) &&
+                string.Equals(_openingAuthorJid, authorJid, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            return HasOpenAuthor &&
+                   _items.Count > 0 &&
+                   string.Equals(_authorJid, authorJid, StringComparison.OrdinalIgnoreCase);
         }
 
         public Task ClearAsync()
@@ -161,6 +247,7 @@ namespace Unison.Core.ViewModels
             StopTimer();
             _openGeneration++;
             _authorJid = null;
+            _openingAuthorJid = null;
             _items = Array.Empty<HistoryStatus>();
             HasOpenAuthor = false;
             ResetVisual();
@@ -168,11 +255,20 @@ namespace Unison.Core.ViewModels
             return Task.CompletedTask;
         }
 
-        public void Close()
+        public void Close() => Close("user");
+
+        private void Close(string reason)
         {
+            LogStatus(
+                "close",
+                "reason=" + (reason ?? "-") +
+                "; author=" + (_authorJid ?? "-") +
+                "; index=" + _index +
+                "; count=" + (_items?.Count ?? 0));
             StopTimer();
             _openGeneration++;
             _authorJid = null;
+            _openingAuthorJid = null;
             _items = Array.Empty<HistoryStatus>();
             HasOpenAuthor = false;
             ResetVisual();
@@ -189,7 +285,7 @@ namespace Unison.Core.ViewModels
 
             if (_index >= _items.Count - 1)
             {
-                Close();
+                Close("last-item");
                 return;
             }
 
@@ -227,6 +323,9 @@ namespace Unison.Core.ViewModels
             _waitingForNaturalDuration = false;
             // W10M often reports 0 / tiny NaturalDuration for broken or still-opening streams.
             double duration = seconds >= 1d ? seconds : PhotoDisplaySeconds;
+            LogStatus(
+                "video-natural-dur",
+                "raw=" + seconds.ToString("0.###") + "; used=" + duration.ToString("0.###"));
             StartTimer(TimeSpan.FromSeconds(duration));
         }
 
@@ -238,19 +337,24 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
+            double shownFor = (DateTime.UtcNow - _itemShownUtc).TotalSeconds;
+
             // Spurious MediaEnded on open (unsupported codec / zero-length) used to Close() instantly.
             if (_waitingForNaturalDuration)
             {
                 _waitingForNaturalDuration = false;
+                LogStatus("video-ended-early", "shownFor=" + shownFor.ToString("0.###") + "; fallback=photo");
                 StartTimer(TimeSpan.FromSeconds(PhotoDisplaySeconds));
                 return;
             }
 
-            if ((DateTime.UtcNow - _itemShownUtc).TotalSeconds < 0.75)
+            if (shownFor < 0.75)
             {
+                LogStatus("video-ended-ignored", "shownFor=" + shownFor.ToString("0.###"));
                 return;
             }
 
+            LogStatus("video-ended", "shownFor=" + shownFor.ToString("0.###") + "; index=" + _index);
             GoNext();
         }
 
@@ -265,19 +369,46 @@ namespace Unison.Core.ViewModels
             _waitingForNaturalDuration = false;
             if (generation != _openGeneration || _index < 0 || _index >= _items.Count)
             {
+                LogStatus(
+                    "show-aborted",
+                    "gen=" + generation +
+                    "; current=" + _openGeneration +
+                    "; index=" + _index +
+                    "; count=" + _items.Count);
                 return;
             }
 
             HistoryStatus item = _items[_index];
-            UpdateSegmentFills();
-            TimestampUtc = item.TimestampUtc;
-            Caption = item.Body;
             bool isVideo = item.Kind == ChatPreviewKind.Video;
             bool isImage = item.Kind == ChatPreviewKind.Image || item.Kind == ChatPreviewKind.Sticker;
-            IsVideo = false;
-            IsImage = false;
-            MediaUri = null;
-            IsLoading = isVideo || isImage;
+
+            await _dispatcher.RunAsync(() =>
+            {
+                if (generation != _openGeneration)
+                {
+                    return;
+                }
+
+                UpdateSegmentFills();
+                TimestampUtc = item.TimestampUtc;
+                Caption = item.Body;
+                IsVideo = false;
+                IsImage = false;
+                MediaUri = null;
+                IsLoading = isVideo || isImage;
+            }).ConfigureAwait(false);
+
+            if (generation != _openGeneration)
+            {
+                LogStatus("show-aborted", "gen=" + generation + "; after-prep");
+                return;
+            }
+
+            LogStatus(
+                "show",
+                StatusItemDiagnostics.DescribeItem(item, _index) +
+                "; wantVideo=" + isVideo +
+                "; wantImage=" + isImage);
 
             string uri = null;
             if (isVideo || isImage)
@@ -286,39 +417,84 @@ namespace Unison.Core.ViewModels
                 {
                     uri = await _status.EnsureMediaAsync(item).ConfigureAwait(false);
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
+                    LogStatus("ensure-media-fail", "id=" + item.MessageId + "; err=" + ex.Message);
                     uri = null;
                 }
             }
 
             if (generation != _openGeneration)
             {
+                LogStatus(
+                    "show-aborted",
+                    "gen=" + generation + "; after-media; id=" + item.MessageId);
                 return;
             }
 
-            IsLoading = false;
-            MediaUri = uri;
-            IsVideo = isVideo && !string.IsNullOrWhiteSpace(uri);
-            IsImage = isImage && !string.IsNullOrWhiteSpace(uri) && !IsVideo;
-            _itemShownUtc = DateTime.UtcNow;
+            string displayUri = StatusMediaDisplay.ResolveUri(uri, item);
+            bool showVideo = StatusMediaDisplay.ShowAsVideo(item.Kind, displayUri);
+            bool showImage = StatusMediaDisplay.ShowAsImage(item.Kind, displayUri);
 
-            if (IsVideo)
+            await _dispatcher.RunAsync(() =>
             {
-                // Proto seconds &lt; 1 are treated as unknown (often bad/zero-ish payloads).
-                if (item.MediaDurationSeconds >= 1)
+                if (generation != _openGeneration)
                 {
-                    StartTimer(TimeSpan.FromSeconds(item.MediaDurationSeconds));
+                    return;
+                }
+
+                IsLoading = false;
+                MediaUri = displayUri;
+                IsVideo = showVideo;
+                IsImage = showImage;
+                _itemShownUtc = DateTime.UtcNow;
+
+                if (showVideo)
+                {
+                    // Proto seconds &lt; 1 are treated as unknown (often bad/zero-ish payloads).
+                    // Always start a photo-length fallback so a dead MediaOpened cannot freeze at 0.
+                    if (item.MediaDurationSeconds >= 1)
+                    {
+                        StartTimer(TimeSpan.FromSeconds(item.MediaDurationSeconds));
+                    }
+                    else
+                    {
+                        _waitingForNaturalDuration = true;
+                        StartTimer(TimeSpan.FromSeconds(PhotoDisplaySeconds));
+                        LogStatus("show-dur-fallback", "id=" + item.MessageId + "; protoDur=0");
+                    }
                 }
                 else
                 {
-                    _waitingForNaturalDuration = true;
+                    // Photo, sticker, text, thumb fallback, or failed media — always a readable beat.
+                    StartTimer(TimeSpan.FromSeconds(PhotoDisplaySeconds));
                 }
-            }
-            else
+            }).ConfigureAwait(false);
+
+            LogStatus(
+                "show-resolved",
+                "id=" + item.MessageId +
+                "; displayUri=" + (displayUri ?? "-") +
+                "; isVideo=" + showVideo +
+                "; isImage=" + showImage +
+                "; durSec=" + item.MediaDurationSeconds);
+
+            if (!item.IsViewed)
             {
-                // Photo, sticker, text, or failed media — always give a readable beat.
-                StartTimer(TimeSpan.FromSeconds(PhotoDisplaySeconds));
+                item.IsViewed = true;
+                _ = MarkViewedSafeAsync(item.AuthorJid, item.MessageId);
+            }
+        }
+
+        private async Task MarkViewedSafeAsync(string authorJid, string messageId)
+        {
+            try
+            {
+                await _status.MarkViewedAsync(authorJid, messageId).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                LogStatus("mark-viewed-fail", "id=" + messageId + "; err=" + ex.Message);
             }
         }
 
@@ -441,6 +617,11 @@ namespace Unison.Core.ViewModels
             IsImage = false;
             IsLoading = false;
             _waitingForNaturalDuration = false;
+        }
+
+        private void LogStatus(string eventName, string details)
+        {
+            _diagnostics?.Write("status", eventName, details);
         }
     }
 }

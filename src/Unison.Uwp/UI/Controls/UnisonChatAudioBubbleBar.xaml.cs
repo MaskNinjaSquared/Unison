@@ -9,7 +9,7 @@ using Windows.UI.Xaml.Media;
 namespace Unison.Uwp.UI.Controls
 {
     /// <summary>
-    /// Unison-shell voice transport: round brand play/pause, label ↔ slider, timestamp.
+    /// Unison-shell voice transport: round brand play/pause, label ↔ slider, overflow|timestamp.
     /// </summary>
     public sealed partial class UnisonChatAudioBubbleBar : UserControl
     {
@@ -32,7 +32,9 @@ namespace Unison.Uwp.UI.Controls
                 ReadyLabel,
                 PositionSlider,
                 TimestampText,
-                OnPlayPause);
+                MoreButton,
+                OnPlayPause,
+                OnMore);
             DataContextChanged += UnisonChatAudioBubbleBar_DataContextChanged;
             Unloaded += UnisonChatAudioBubbleBar_Unloaded;
             Loaded += UnisonChatAudioBubbleBar_Loaded;
@@ -79,6 +81,11 @@ namespace Unison.Uwp.UI.Controls
             _presenter.OnPlayPauseClick();
         }
 
+        private void More_Click(object sender, RoutedEventArgs e)
+        {
+            _presenter.OnMoreClick();
+        }
+
         private void PositionSlider_PointerPressed(object sender, Windows.UI.Xaml.Input.PointerRoutedEventArgs e)
         {
             _presenter.OnSliderPointerPressed();
@@ -102,6 +109,11 @@ namespace Unison.Uwp.UI.Controls
         private void OnPlayPause()
         {
             FindChatDetail()?.OnAudioPlayButtonClick(this, new RoutedEventArgs());
+        }
+
+        private void OnMore()
+        {
+            ChatAudioOverflowMenu.Show(MoreButton, DataContext as ChatMessageViewModel, OnPlayPause);
         }
 
         private IChatDetailSurface FindChatDetail()

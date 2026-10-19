@@ -2,7 +2,7 @@
 
 When Unison is suspended or the screen is off, WhatsApp traffic still has to arrive. Windows offers `SocketActivityTrigger`: the app **transfers ownership** of a connected `StreamSocket` to an out-of-process task. That task is `Unison.Background`.
 
-The **session/protocol stack** now lives in `Unison.Socket`. The **raw TCP socket** does not. Framing, Noise checkpoint, journal, and toasts remain in the broker + UWP transport. Handing that socket to the new stack is the next migration step.
+The **session/protocol stack** now lives in `Unison.Socket`. The **raw TCP socket** does not. Framing, Noise checkpoint, journal, and toasts remain in the broker + UWP transport. The session lends that socket through `ConnectionHandler` (warm transfer and reclaim); cold restore after process termination is the remaining step.
 
 ## Project constraints
 
@@ -57,23 +57,25 @@ It does **not** run a handshake, does **not** send application IQs, and does **n
 - Removes the old in-process activity task / socket id from v6.7.2
 - `DisposeBrokerSocketAsync` cancels I/O and clears ownership
 
-On suspend, `App` asks the socket to transfer. **`SocketBridge.TransferSocketToBrokerAsync` returns `false`**, which the caller already treats as “keep the socket in-process”.
+On suspend, `App` asks the socket to transfer; on resume it reclaims. Any failure answers `false`, which the caller treats as “keep the socket in-process” (or, on resume, “connect fresh”).
 
-## What is stubbed on the new stack
+Exception: with `LocationKeepAliveEnabled` on, `App` never asks for the transfer (entered-background or suspending), as in 1.8. The broker sends no `w:p` keep-alive, so the server drops a brokered session and the user sees “Unison desconectado”; ExtendedExecution keeps the process and its keep-alive running instead. If the app is suspended anyway, the socket is shut down and reconnects on resume.
 
-Documented in `SocketBridge`:
+The same hold applies while the first sync after login is still arriving (`IHistoryService.IsInitialSyncSafeMode`, from the first SQLite history chunk until the quiet finalize). Handing the socket to the broker mid-sync risks the same keep-alive drop with half the history persisted. The rule is `BrokerHandoffHold` (Core); the journal records `reason=initial-sync` on `entered-background-result` and `suspending-transfer-skipped`. Without background mode, a suspend during the first sync therefore shuts the socket down and the sync resumes after reconnect.
 
-> Handing the raw socket to a background task needs the transport itself, which the session owns and does not lend out.
+## Handoff on the new stack
 
-| API | Current behavior |
+| API | Behavior |
 |---|---|
-| `TransferSocketToBrokerAsync` | Always `false` |
-| `ReclaimSocketFromBrokerAsync` | Always `false` |
-| `IsSocketOwnedByBroker` | Always `false` |
+| `SocketBridge.TransferSocketToBrokerAsync` | `ConnectionHandler.TransferToBrokerAsync`: stops the keep-alive, holds the send gate, lets the transport quiesce, then saves the Signal preview snapshot (best effort) and the Noise checkpoint before `TransferOwnership`. `true` only when ownership moved |
+| `SocketBridge.ReclaimSocketFromBrokerAsync` | `ConnectionHandler.ReclaimFromBrokerAsync`: the transport re-attaches and drains the journal through the receive path, then the keep-alive restarts and the checkpoint is cleared |
+| `SocketBridge.IsSocketOwnedByBroker` | The transport's ownership flag |
 
-The UWP transport **still implements** `EnableTransferOwnership`, `TransferOwnership`, `AttachExistingBrokerSocketAsync`, journal drain, and Noise checkpoint. Cold restore (`TryRestoreBrokerSessionAsync`) exists only on the **uncompiled** legacy `SocketClient.cs`. The bridge always opens a new `StreamSocketWebSocketTransport`.
+Why the keep-alive stops: the transport keeps reporting itself connected while the broker holds the socket, so a running keep-alive would see silence, end the session and close the broker's socket.
 
-Until that handoff is wired, background delivery depends on the process staying alive enough for the in-process connection, or on a future change that lets `WhatsAppSession` lend (or recreate from checkpoint) the transport.
+Replay: `WaTransportAdapter` unpacks UBD3 batches into `DecodedFrames` + `PostNoiseState`; `ConnectionHandler` dispatches the frames and imports the post-state after the whole batch. Raw UBJ2 frames go through the normal Noise decode. A replay that fails throws, so the journal keeps it.
+
+**Not wired: cold restore.** If the process was terminated while the broker held the socket, the next `StreamSocketWebSocketTransport.ConnectAsync` disposes that socket and clears the journal and checkpoints. The broker never acknowledges what it reads, so the server redelivers those messages to the new connection. Adopting the socket instead needs `ConnectionHandler` to resume from a saved Noise state without a handshake; `TryRestoreBrokerSessionAsync` exists only on the uncompiled legacy `SocketClient.cs`.
 
 ## Auth the task can see
 

@@ -12,8 +12,11 @@ namespace Unison.Core.Factories
         private readonly IDialogService _dialogs;
         private readonly IUriLauncher _uriLauncher;
         private readonly IFilePicker _filePicker;
+        private readonly IAudioExportService _audioExport;
         private readonly ISessionLogger _sessionLogger;
         private readonly IRuntimeDiagnostics _diagnostics;
+        private readonly IHistoryMessageStore _history;
+        private readonly ICopyService _copy;
 
         public ChatMessageVmFactory(
             IStringResources strings = null,
@@ -21,16 +24,22 @@ namespace Unison.Core.Factories
             IDialogService dialogs = null,
             IUriLauncher uriLauncher = null,
             IFilePicker filePicker = null,
+            IAudioExportService audioExport = null,
             ISessionLogger sessionLogger = null,
-            IRuntimeDiagnostics diagnostics = null)
+            IRuntimeDiagnostics diagnostics = null,
+            IHistoryMessageStore history = null,
+            ICopyService copy = null)
         {
             _strings = strings;
             _messages = messages;
             _dialogs = dialogs;
             _uriLauncher = uriLauncher;
             _filePicker = filePicker;
+            _audioExport = audioExport;
             _sessionLogger = sessionLogger;
             _diagnostics = diagnostics;
+            _history = history;
+            _copy = copy;
         }
 
         public ChatMessageViewModel Create(ChatMessage model) =>
@@ -41,7 +50,10 @@ namespace Unison.Core.Factories
                 _dialogs,
                 _uriLauncher,
                 _filePicker,
+                _audioExport,
                 _sessionLogger,
-                _diagnostics);
+                _diagnostics,
+                _history,
+                _copy);
     }
 }

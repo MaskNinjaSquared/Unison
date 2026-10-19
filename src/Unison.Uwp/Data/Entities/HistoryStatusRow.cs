@@ -49,6 +49,8 @@ namespace Unison.Uwp.Data.Entities
 
         public bool IsVoiceNote { get; set; }
 
+        public bool IsViewed { get; set; }
+
         [Indexed]
         public DateTime? TimestampUtc { get; set; }
 

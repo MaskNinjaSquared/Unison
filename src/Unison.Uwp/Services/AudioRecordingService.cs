@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Unison.Core.Contracts;
 using Unison.Core.Models;
 using Unison.Uwp.Client;
+using Windows.Devices.Enumeration;
 using Windows.Media.Capture;
 using Windows.Media.MediaProperties;
 using Windows.Storage;
@@ -33,6 +34,42 @@ namespace Unison.Uwp.Services
         public IAudioRecordingSession Current =>
             _current != null && _current.IsActive ? _current : null;
 
+        public async Task<bool> EnsureMicrophoneAccessAsync()
+        {
+            await _gate.WaitAsync().ConfigureAwait(true);
+            try
+            {
+                DeviceAccessInformation access =
+                    DeviceAccessInformation.CreateFromDeviceClass(DeviceClass.AudioCapture);
+                DeviceAccessStatus status = access.CurrentStatus;
+                if (status == DeviceAccessStatus.DeniedByUser ||
+                    status == DeviceAccessStatus.DeniedBySystem)
+                {
+                    return false;
+                }
+
+                if (status == DeviceAccessStatus.Allowed)
+                {
+                    return true;
+                }
+
+                return await PromptMicrophoneAccessAsync().ConfigureAwait(true);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[AudioRecordingService] Microphone access: " + ex.Message);
+                return false;
+            }
+            finally
+            {
+                _gate.Release();
+            }
+        }
+
         public async Task<IAudioRecordingSession> StartAsync()
         {
             await _gate.WaitAsync().ConfigureAwait(true);
@@ -41,12 +78,7 @@ namespace Unison.Uwp.Services
                 await DiscardUnlockedAsync().ConfigureAwait(true);
 
                 _capture = new MediaCapture();
-                var settings = new MediaCaptureInitializationSettings
-                {
-                    StreamingCaptureMode = StreamingCaptureMode.Audio,
-                    MediaCategory = MediaCategory.Speech
-                };
-                await _capture.InitializeAsync(settings);
+                await _capture.InitializeAsync(CreateAudioOnlySettings());
 
                 var folder = ApplicationData.Current.TemporaryFolder;
                 _file = await folder.CreateFileAsync(
@@ -163,6 +195,33 @@ namespace Unison.Uwp.Services
             {
                 _gate.Release();
             }
+        }
+
+        private static async Task<bool> PromptMicrophoneAccessAsync()
+        {
+            var capture = new MediaCapture();
+            try
+            {
+                await capture.InitializeAsync(CreateAudioOnlySettings());
+                return true;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return false;
+            }
+            finally
+            {
+                try { capture.Dispose(); } catch { }
+            }
+        }
+
+        private static MediaCaptureInitializationSettings CreateAudioOnlySettings()
+        {
+            return new MediaCaptureInitializationSettings
+            {
+                StreamingCaptureMode = StreamingCaptureMode.Audio,
+                MediaCategory = MediaCategory.Speech
+            };
         }
 
         /// <summary>

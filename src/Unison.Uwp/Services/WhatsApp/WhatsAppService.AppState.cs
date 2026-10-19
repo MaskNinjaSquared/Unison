@@ -50,6 +50,30 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         /// <summary>
+        /// Every row for <paramref name="canonical"/>, adding one at the end when the account
+        /// speaks about a chat the list does not hold yet. UI thread only.
+        /// </summary>
+        private List<ChatItem> GetOrAddChatRowsForAppState(string canonical, out ChatItem created)
+        {
+            created = null;
+            List<ChatItem> rows = GetChatRowsForCanonicalJid(canonical);
+            if (rows.Count > 0)
+            {
+                return rows;
+            }
+
+            created = new ChatItem
+            {
+                JID = canonical,
+                Name = ResolveDisplayName(canonical),
+                Kind = ResolveChatKind(canonical)
+            };
+            Chats.Add(created);
+            rows.Add(created);
+            return rows;
+        }
+
+        /// <summary>
         /// A group was created or renamed while we were connected. The subject is the group's
         /// only name, so it goes in the same cache a resolved contact name would.
         /// </summary>
@@ -111,19 +135,11 @@ namespace Unison.Uwp.Services.WhatsApp
 
             List<ChatItem> dirty = null;
             int resolved = 0;
-            await RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
-                var rows = GetChatRowsForCanonicalJid(canonical);
-                if (rows.Count == 0)
+                var rows = GetOrAddChatRowsForAppState(canonical, out ChatItem created);
+                if (created != null)
                 {
-                    var created = new ChatItem
-                    {
-                        JID = canonical,
-                        Name = ResolveDisplayName(canonical),
-                        Kind = ResolveChatKind(canonical)
-                    };
-                    Chats.Add(created);
-                    rows.Add(created);
                     dirty = new List<ChatItem> { created };
                 }
 
@@ -182,11 +198,8 @@ namespace Unison.Uwp.Services.WhatsApp
         /// straight back; a delete that leaves the tail behind is undone by the next history chunk.
         /// Hence both: a tombstone on the preview and a real delete of the messages.
         /// </remarks>
-        /// <inheritdoc />
-        public Task ApplyChatDeletionAsync(string jid)
-        {
-            return ApplyAppStateDeleteChatAsync(jid);
-        }
+        Task IAppStateLocalHost.ApplyChatDeletionAsync(string jid) =>
+            ApplyAppStateDeleteChatAsync(jid);
 
         internal async Task ApplyAppStateDeleteChatAsync(string jid)
         {
@@ -198,7 +211,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             List<string> keys = ExpandHistoryChatKeys(canonical);
 
-            await RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 // Both rows, for the same reason the storage side already expands the key:
                 // the conversation is listed under PN and under LID, and removing one left
@@ -212,13 +225,9 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
                 MessagesByChat.Remove(canonical);
-                _messageIdIndex.RemoveChat(canonical);
                 ForgetMissingMessagesForChat(canonical);
-                _historyOnDemandMarkerByChat.Remove(canonical);
-                _historyOnDemandLastRequestIdByChat.Remove(canonical);
-                _historyOnDemandAttemptsByChat.Remove(canonical);
-                _historyOnDemandRejectedUntilUtcByChat.Remove(canonical);
-                _activeChatReconcileCooldownByChat.Remove(canonical);
+                _historyRequests.ForgetChat(canonical);
+                _missing.Cooldowns.Remove(canonical);
             });
 
             await ForgetChatInStorageAsync(canonical, keys).ConfigureAwait(false);
@@ -283,7 +292,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 // thread, and Chats is bound to the list: enumerating it while the UI adds a
                 // row throws, and the catch below would turn that into a silently skipped save.
                 List<ChatItem> snapshot = null;
-                await RunOnUiThreadAsync(() => snapshot = Chats.Where(c => c != null).ToList());
+                await _ui.RunAsync(() => snapshot = Chats.Where(c => c != null).ToList());
                 await PersistChatCatalogAsync(snapshot ?? new List<ChatItem>()).ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -301,21 +310,14 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             bool removed = false;
-            await RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
-                if (!MessagesByChat.TryGetValue(canonical, out var messages) || messages == null || messages.Count == 0)
+                if (!MessagesByChat.TryGet(canonical, out var messages) ||
+                    messages == null ||
+                    !MessagesByChat.RemoveMessage(canonical, messageId))
                 {
                     return;
                 }
-
-                var message = messages.FirstOrDefault(m => string.Equals(m?.Id, messageId, StringComparison.Ordinal));
-                if (message == null)
-                {
-                    return;
-                }
-
-                messages.Remove(message);
-                _messageIdIndex.Remove(canonical, messageId);
 
                 // Every row sharing this identity, not just the first: a conversation is
                 // listed under both PN and LID, and correcting one left the other showing a
@@ -331,17 +333,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     if (latest != null)
                     {
                         bool isGroup = JidHelper.IsGroupJid(canonical) || chat.IsGroup;
-                        ApplyChatPreviewIfNewer(
-                            chat,
-                            ChatPreviewNormalizer.FormatListPreview(latest, isGroup),
-                            latest.Timestamp,
-                            true,
-                            ChatPreviewNormalizer.InferKindFromMessage(latest),
-                            ChatPreviewNormalizer.FormatListAuthorPrefix(latest, isGroup, SelfListDisplayName()),
-                            latest.MentionedJids,
-                            latest.IsFromMe,
-                            HistoryLiveMessageMapper.FromStatus(latest.Status, latest.IsFromMe),
-                            latest.Id);
+                        ApplyMessageAsChatTip(chat, latest, isGroup, force: true);
                     }
                     else
                     {
@@ -375,7 +367,7 @@ namespace Unison.Uwp.Services.WhatsApp
             return removed;
         }
 
-        public Task ApplyChatPinAsync(string jid, bool pinned)
+        Task IAppStateLocalHost.ApplyChatPinAsync(string jid, bool pinned)
         {
             return ApplyAppStateChatFlagsAsync(
                 jid,
@@ -407,20 +399,9 @@ namespace Unison.Uwp.Services.WhatsApp
             };
 
             List<ChatItem> touched = null;
-            await RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
-                var rows = GetChatRowsForCanonicalJid(canonical);
-                if (rows.Count == 0)
-                {
-                    var created = new ChatItem
-                    {
-                        JID = canonical,
-                        Name = ResolveDisplayName(canonical),
-                        Kind = ResolveChatKind(canonical)
-                    };
-                    Chats.Add(created);
-                    rows.Add(created);
-                }
+                var rows = GetOrAddChatRowsForAppState(canonical, out _);
 
                 long nowUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
@@ -434,7 +415,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 SortChatsForDisplay();
             });
 
-            if (touched != null && _chatStore != null && change.TouchesAnything)
+            if (touched != null && change.TouchesAnything)
             {
                 foreach (var chat in touched)
                 {
@@ -445,8 +426,21 @@ namespace Unison.Uwp.Services.WhatsApp
                         // happened to be stale on was overwritten.
                         if (change.Pinned.HasValue)
                         {
-                            await _chatStore.SetChatPinnedAsync(chat.JID, change.Pinned.Value)
-                                .ConfigureAwait(false);
+                            // pin_v1 indexes one address; history/list rows often use the other.
+                            string alias = null;
+                            string normalizedRow = JidHelper.Normalize(chat.JID);
+                            if (!string.IsNullOrWhiteSpace(normalizedRow))
+                            {
+                                JidAlias.TryGetValue(normalizedRow, out alias);
+                            }
+                            IReadOnlyList<string> pinKeys = ChatPinStoreKeys.Merge(
+                                ChatPinStoreKeys.For(chat.JID, GetCanonicalJid(chat.JID), alias),
+                                ChatPinStoreKeys.For(jid, GetCanonicalJid(jid), null));
+                            for (int i = 0; i < pinKeys.Count; i++)
+                            {
+                                await _chatStore.SetChatPinnedAsync(pinKeys[i], change.Pinned.Value)
+                                    .ConfigureAwait(false);
+                            }
                         }
 
                         if (change.AppliesMute)

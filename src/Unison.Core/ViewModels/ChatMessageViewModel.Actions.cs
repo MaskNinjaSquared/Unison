@@ -112,7 +112,7 @@ namespace Unison.Core.ViewModels
                 return null;
             }
 
-            // .webp without a system codec: WhatsAppService.EnsureImageAvailableAsync converts to PNG.
+            // .webp without a system codec: the download converts it to PNG.
             // Do not auto-run this from the bubble ctor — that spiked Mobile memory on long timelines.
             bool needsWebPRepair = !string.IsNullOrWhiteSpace(Model.ImageUri)
                 && Model.ImageUri.EndsWith(".webp", StringComparison.OrdinalIgnoreCase);
@@ -365,9 +365,53 @@ namespace Unison.Core.ViewModels
             }
         }
 
+        /// <summary>
+        /// True when cache cleanup already removed this file. Shows the error dialog.
+        /// </summary>
+        public async Task<bool> NotifyIfMediaDeletedAsync()
+        {
+            if (_history == null ||
+                string.IsNullOrWhiteSpace(Model.RemoteJid) ||
+                string.IsNullOrWhiteSpace(Model.Id))
+            {
+                return false;
+            }
+
+            bool deleted;
+            try
+            {
+                deleted = await _history.IsMediaDeletedAsync(Model.RemoteJid, Model.Id);
+            }
+            catch (Exception ex)
+            {
+                LogMedia("media-deleted-check-failed", ex.Message);
+                return false;
+            }
+
+            if (!deleted)
+            {
+                return false;
+            }
+
+            if (_dialogs != null)
+            {
+                await _dialogs.ShowMessageAsync(
+                    Text("MediaDeleted.Title", "Erro"),
+                    Text("MediaDeleted.Message", "Arquivo Apagado no Dispositivo"),
+                    Text("MediaDeleted.Close", "OK"));
+            }
+
+            return true;
+        }
+
         public async Task DocumentPrimaryAsync()
         {
             if (!Model.IsDocument)
+            {
+                return;
+            }
+
+            if (await NotifyIfMediaDeletedAsync())
             {
                 return;
             }
@@ -384,6 +428,11 @@ namespace Unison.Core.ViewModels
         public async Task OpenDocumentAsync()
         {
             if (!Model.IsDocument)
+            {
+                return;
+            }
+
+            if (await NotifyIfMediaDeletedAsync())
             {
                 return;
             }
@@ -485,6 +534,51 @@ namespace Unison.Core.ViewModels
             }
         }
 
+        /// <summary>
+        /// Save as… for downloaded audio: Ogg/Opus → MP3 via <see cref="IAudioExportService"/>.
+        /// </summary>
+        public async Task SaveAudioAsAsync()
+        {
+            if (!Model.IsAudio || !HasLocalAudio || _audioExport == null)
+            {
+                return;
+            }
+
+            LogMedia("audio-saveas-click");
+            string uri = Model.AudioUri;
+            if (string.IsNullOrWhiteSpace(uri))
+            {
+                LogMedia("audio-saveas-skip", "no-local-uri");
+                await ShowErrorSafeAsync(
+                    "ChatDetail_DocumentSaveFailed",
+                    "Could not save this file.");
+                return;
+            }
+
+            string suggested = Model.IsVoiceMessage
+                ? (_strings?.Get("ChatList_PreviewVoice", "Voice message") ?? "Voice message")
+                : (_strings?.Get("ChatDetail_Audio", "Audio") ?? "Audio");
+
+            try
+            {
+                string path = await _audioExport.SaveAsMp3Async(uri, suggested);
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    LogMedia("audio-saveas-cancel");
+                    return;
+                }
+
+                LogMedia("audio-saveas-ok", "path=" + path);
+            }
+            catch (Exception ex)
+            {
+                LogMediaError("audio-saveas-fail", ex);
+                await ShowErrorSafeAsync(
+                    "ChatDetail_DocumentSaveFailed",
+                    "Could not save this file.");
+            }
+        }
+
         /// <summary>Pin/unpin this message in its chat (uses <see cref="ChatMessage.RemoteJid"/>).</summary>
         public async Task SetPinnedAsync(bool pin, uint durationSeconds = 604800)
         {
@@ -538,6 +632,11 @@ namespace Unison.Core.ViewModels
             catch
             {
             }
+        }
+
+        private string Text(string key, string fallback)
+        {
+            return _strings == null ? fallback : _strings.Get(key, fallback);
         }
 
         private void LogMedia(string eventName, string details = null)
@@ -602,6 +701,7 @@ namespace Unison.Core.ViewModels
             (DownloadDocumentCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (OpenDocumentCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (SaveDocumentAsCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (SaveAudioAsCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (ExportDocumentCommand as RelayCommand)?.RaiseCanExecuteChanged();
         }
     }

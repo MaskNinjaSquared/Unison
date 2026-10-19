@@ -11,6 +11,7 @@ namespace Unison.Uwp.UI.Controls
     {
         private bool _shellResolved;
         private bool _useUnison;
+        private bool _useLegacy;
 
         public MessageBubbleChromeHost()
         {
@@ -93,12 +94,18 @@ namespace Unison.Uwp.UI.Controls
                 return;
             }
 
+            _useLegacy = ShellUi.IsWhatsAppLegacy;
             _useUnison = ShellUi.IsUnison;
             _shellResolved = true;
         }
 
         private void ApplyShellVisibility()
         {
+            if (LegacyChrome != null)
+            {
+                LegacyChrome.Visibility = _useLegacy ? Visibility.Visible : Visibility.Collapsed;
+            }
+
             if (UnisonChrome != null)
             {
                 UnisonChrome.Visibility = _useUnison ? Visibility.Visible : Visibility.Collapsed;
@@ -106,7 +113,7 @@ namespace Unison.Uwp.UI.Controls
 
             if (WhatsAppChrome != null)
             {
-                WhatsAppChrome.Visibility = _useUnison ? Visibility.Collapsed : Visibility.Visible;
+                WhatsAppChrome.Visibility = _useLegacy || _useUnison ? Visibility.Collapsed : Visibility.Visible;
             }
         }
 
@@ -123,6 +130,13 @@ namespace Unison.Uwp.UI.Controls
                 // Received: first of run (top tips). Sent: last of run (bottom tip).
                 UnisonChrome.ShowTail = fromMe ? runEnd : runStart;
                 UnisonChrome.IsGroupChat = isGroup;
+            }
+
+            if (LegacyChrome != null)
+            {
+                LegacyChrome.IsFromMe = fromMe;
+                LegacyChrome.ShowTail = fromMe ? runEnd : runStart;
+                LegacyChrome.IsGroupChat = isGroup;
             }
 
             if (WhatsAppChrome != null)

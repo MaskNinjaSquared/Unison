@@ -16,6 +16,13 @@ namespace Unison.Core.ViewModels
         /// <summary>How long we wait for OnQRCodeReceived after ConnectAsync.</summary>
         private const int QrWaitTimeoutMs = 45000;
 
+        /// <summary>
+        /// Creators Update aborts MessageWebSocket before the QR stanza (~12s, 0x80072EFE).
+        /// A linked account reconnects; an unregistered pairing does not, so the first abort
+        /// became a dead error on the QR screen. Retry the connect before showing that.
+        /// </summary>
+        private const int PairingConnectAttempts = 3;
+
         private readonly IConnectionService _connection;
         private readonly IDispatcher _dispatcher;
         private readonly ISessionLogger _sessionLogger;
@@ -397,7 +404,35 @@ namespace Unison.Core.ViewModels
                     "reclaim do socket tambem e tipico.");
 
                 StatusText = Loc("Login_StatusConnecting", "Connecting to WhatsApp…");
-                await _connection.StartPairingAsync();
+                Exception connectFailure = null;
+                for (int attempt = 1; attempt <= PairingConnectAttempts; attempt++)
+                {
+                    try
+                    {
+                        _sessionLogger.WriteAlways(
+                            "[Pairing] StartPairing attempt " + attempt + "/" + PairingConnectAttempts);
+                        await _connection.StartPairingAsync();
+                        connectFailure = null;
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        connectFailure = ex;
+                        _sessionLogger.WriteErrorAlways(
+                            "[Pairing] StartPairing attempt " + attempt + " failed",
+                            ex);
+                        if (attempt < PairingConnectAttempts)
+                        {
+                            await Task.Delay(1500);
+                        }
+                    }
+                }
+
+                if (connectFailure != null)
+                {
+                    throw connectFailure;
+                }
+
                 _sessionLogger.WriteAlways(
                     "[Pairing] StartPairing returned; status=" +
                     (_connection.CurrentStatus ?? "(null)"));

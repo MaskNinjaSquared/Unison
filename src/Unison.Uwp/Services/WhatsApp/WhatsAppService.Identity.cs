@@ -42,20 +42,6 @@ namespace Unison.Uwp.Services.WhatsApp
 {
     public partial class WhatsAppService
     {
-
-        /// <summary>True when a JID already has a resolved display name in the local name cache.</summary>
-        public bool HasResolvedContactName(string jid) => !string.IsNullOrWhiteSpace(GetBestWhatsAppName(jid, GetCanonicalJid(jid)));
-
-        /// <summary>Re-applies <see cref="ResolveDisplayName"/> to each chat's Name where it changed.</summary>
-        public Task ApplyResolvedDisplayNamesToChatsAsync() => ApplyResolvedNamesToChatsAsync();
-
-        /// <summary>Raises <see cref="OnDisplayNamesUpdated"/>, and the store's equivalent.</summary>
-        public void RaiseDisplayNamesUpdated()
-        {
-            OnDisplayNamesUpdated?.Invoke(this, EventArgs.Empty);
-            _chatState.NotifyChangedExternally(null);
-        }
-
         private void RegisterSocketAlias(string jidA, string jidB, string source)
         {
             _socket?.RegisterJidAlias(jidA, jidB, source);
@@ -72,7 +58,7 @@ namespace Unison.Uwp.Services.WhatsApp
             try
             {
                 List<string> chatJids = null;
-                await RunOnUiThreadAsync(() =>
+                await _ui.RunAsync(() =>
                     {
                         chatJids = Chats
                             .Where(c => c != null && !string.IsNullOrWhiteSpace(c.JID))
@@ -101,64 +87,28 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             try
             {
-                List<ChatItem> chatSnapshot = null;
+                ChatCatalogSnapshot catalog = null;
                 Dictionary<string, string> contactSnapshot = null;
                 Dictionary<string, string> phoneSnapshot = null;
                 Dictionary<string, string> aliasSnapshot = null;
 
-                await RunOnUiThreadAsync(() =>
+                await _ui.RunAsync(() =>
                     {
-                        chatSnapshot = Chats
-                            .Where(c => c != null && !string.IsNullOrWhiteSpace(c.JID))
-                            .Select(c => new ChatItem
-                            {
-                                Id = c.Id,
-                                JID = NormalizeJid(c.JID),
-                                Name = c.Name,
-                                LastMessage = c.LastMessage,
-                                LastMessageAuthor = c.LastMessageAuthor,
-                                LastMessageKind = c.LastMessageKind,
-                                LastMessageIsFromMe = c.LastMessageIsFromMe,
-                                LastMessageSendState = c.LastMessageSendState,
-                                Timestamp = c.Timestamp,
-                                LastMessageTimestampUtc = c.LastMessageTimestampUtc,
-                                UnreadCount = c.UnreadCount,
-                                AvatarUrl = c.AvatarUrl,
-                                AvatarHighUrl = c.AvatarHighUrl,
-                                AvatarFetchedAtUtc = c.AvatarFetchedAtUtc,
-                                AvatarFetchFailedAtUtc = c.AvatarFetchFailedAtUtc,
-                                AvatarFetchFailureReason = c.AvatarFetchFailureReason,
-                                Kind = c.Kind,
-                                IsArchived = c.IsArchived,
-                                IsChatPinned = c.IsChatPinned,
-                                MutedUntil = c.MutedUntil,
-                                GroupMemberCount = c.GroupMemberCount,
-                                MyGroupRole = c.MyGroupRole,
-                                IsAnnounceOnly = c.IsAnnounceOnly,
-                                GroupMembers = CloneGroupMembers(c.GroupMembers)
-                            })
-                            .ToList();
-
-                        contactSnapshot = new Dictionary<string, string>(ContactNames, StringComparer.OrdinalIgnoreCase);
-                        phoneSnapshot = new Dictionary<string, string>(PhoneContactNamesByJid, StringComparer.OrdinalIgnoreCase);
+                        catalog = ChatCatalogSnapshot.Take(Chats);
+                        contactSnapshot = ContactNames.Snapshot();
+                        phoneSnapshot = PhoneContactNamesByJid.Snapshot();
                         aliasSnapshot = JidAlias.Snapshot();
                     });
 
-                if (chatSnapshot == null || chatSnapshot.Count == 0)
+                if (catalog == null || catalog.ChatJids.Count == 0)
                 {
                     return;
                 }
 
-                var chatJids = chatSnapshot
-                    .Select(c => NormalizeJid(c.JID))
-                    .Where(j => !string.IsNullOrWhiteSpace(j))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToList();
-
-                await PersistChatCatalogAsync(chatSnapshot);
-                await _messageStore.SaveContactNamesAsync(contactSnapshot ?? new Dictionary<string, string>(), chatJids);
-                await _messageStore.SavePhoneContactNamesAsync(phoneSnapshot ?? new Dictionary<string, string>(), chatJids);
-                await _messageStore.SaveJidAliasesAsync(aliasSnapshot ?? new Dictionary<string, string>(), chatJids);
+                await PersistChatCatalogAsync(catalog);
+                await _messageStore.SaveContactNamesAsync(contactSnapshot ?? new Dictionary<string, string>(), catalog.ChatJids);
+                await _messageStore.SavePhoneContactNamesAsync(phoneSnapshot ?? new Dictionary<string, string>(), catalog.ChatJids);
+                await _messageStore.SaveJidAliasesAsync(aliasSnapshot ?? new Dictionary<string, string>(), catalog.ChatJids);
                 Debug.WriteLine($"[WhatsAppService] Persisted chat identity state immediately ({reason})");
             }
             catch (Exception ex)
@@ -167,76 +117,8 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        public string ResolveDisplayName(string jid, string context = null)
-        {
-            if (string.IsNullOrEmpty(jid)) return "";
-
-            string normalized = NormalizeJid(jid);
-            string canonical = GetCanonicalJid(normalized);
-            bool isGroup = canonical.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
-
-            // Self naming uses explicit "(You)" marker with graceful fallback.
-            if (IsSelfLinkedJid(canonical) || IsSelfLinkedJid(normalized))
-            {
-                return ResolveSelfDisplayName(canonical, normalized, context);
-            }
-
-            // Person in-memory cache (SQLite-backed store) — same idea as Redis in front of Dynamo.
-            string personName = TryGetPersonDisplayName(canonical) ?? TryGetPersonDisplayName(normalized);
-            if (!string.IsNullOrWhiteSpace(personName))
-            {
-                return personName;
-            }
-
-            // Cold cache: warm from disk without blocking the UI name path.
-            if (_personStore != null)
-            {
-                _ = WarmPersonIntoCacheAsync(canonical);
-                if (!string.Equals(canonical, normalized, StringComparison.OrdinalIgnoreCase))
-                {
-                    _ = WarmPersonIntoCacheAsync(normalized);
-                }
-            }
-
-            return DisplayNameResolution.Resolve(new DisplayNameSources
-            {
-                PersonName = personName,
-                PhoneContactName = FindPhoneContactName(canonical, normalized),
-                WhatsAppName = GetBestWhatsAppName(canonical, normalized),
-                CanonicalJid = canonical,
-                IsGroup = isGroup,
-                IsSenderContext = string.Equals(context, "sender", StringComparison.OrdinalIgnoreCase)
-            });
-        }
-
-        /// <summary>
-        /// The address book's name for either form of the address, once sanitized. Both forms
-        /// are tried because a contact saved under a phone number has to be found from a LID.
-        /// </summary>
-        private string FindPhoneContactName(string canonical, string normalized)
-        {
-            string fromCanonical = LookupSanitizedPhoneContactName(canonical);
-            if (!string.IsNullOrWhiteSpace(fromCanonical))
-            {
-                return fromCanonical;
-            }
-
-            return string.Equals(canonical, normalized, StringComparison.OrdinalIgnoreCase)
-                ? null
-                : LookupSanitizedPhoneContactName(normalized);
-        }
-
-        private string LookupSanitizedPhoneContactName(string jid)
-        {
-            if (string.IsNullOrWhiteSpace(jid) ||
-                !PhoneContactNamesByJid.TryGetValue(jid, out var raw) ||
-                string.IsNullOrWhiteSpace(raw))
-            {
-                return null;
-            }
-
-            return SanitizeContactLabel(raw, jid);
-        }
+        public string ResolveDisplayName(string jid, string context = null) =>
+            _displayNames.Resolve(jid, context);
 
         private async Task PersistPersonNameAsync(string jid, string displayName)
         {
@@ -256,43 +138,11 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        private string GetBestWhatsAppName(params string[] jids)
-        {
-            var candidates = ExpandNameLookupCandidates(jids);
-            foreach (var candidate in candidates)
-            {
-                var name = GetWhatsAppNameFromCache(candidate);
-                if (!string.IsNullOrWhiteSpace(name))
-                {
-                    return name;
-                }
-            }
-
-            return null;
-        }
+        private string GetBestWhatsAppName(params string[] jids) => _displayNames.FindBestPushName(jids);
 
         public string GetCanonicalJid(string jid) => JidAlias.GetCanonicalJid(jid);
 
         private string GetCanonicalSelfPnJid() => JidAlias.GetCanonicalSelfPnJid();
-
-        private bool TryGetCanonicalNonSelfDirectJid(string jid, out string canonical)
-        {
-            canonical = null;
-            string normalized = NormalizeJid(jid);
-            if (string.IsNullOrWhiteSpace(normalized) || normalized.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-
-            string resolved = GetCanonicalJid(normalized);
-            if (string.IsNullOrWhiteSpace(resolved) || IsSelfLinkedJid(resolved) || IsSelfLinkedJid(normalized))
-            {
-                return false;
-            }
-
-            canonical = resolved;
-            return true;
-        }
 
         private async Task MergeTransientDirectChatIntoCanonicalAsync(string transientJid, string canonicalJid, string reason)
         {
@@ -308,26 +158,13 @@ namespace Unison.Uwp.Services.WhatsApp
             bool merged = false;
             List<ChatMessage> canonicalSnapshot = null;
 
-            await RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
-                if (MessagesByChat.TryGetValue(normalizedTransient, out var transientMessages) && transientMessages != null)
+                if (MessagesByChat.MergeInto(normalizedTransient, normalizedCanonical))
                 {
-                    if (!MessagesByChat.TryGetValue(normalizedCanonical, out var canonicalMessages) || canonicalMessages == null)
-                    {
-                        canonicalMessages = new List<ChatMessage>();
-                        MessagesByChat[normalizedCanonical] = canonicalMessages;
-                    }
-
-                    TransientChatMerge.AppendMissingMessages(
-                        canonicalMessages,
-                        transientMessages.ToList(),
-                        GetOrBuildMessageIdIndex(normalizedCanonical));
-
-                    MessagesByChat.Remove(normalizedTransient);
-                    _messageIdIndex.RemoveChat(normalizedTransient);
                     ForgetMissingMessagesForChat(normalizedTransient);
                     merged = true;
-                    canonicalSnapshot = canonicalMessages.ToList();
+                    canonicalSnapshot = MessagesByChat[normalizedCanonical].ToList();
                 }
 
                 var transientChat = Chats.FirstOrDefault(c => NormalizeJid(c.JID) == normalizedTransient);
@@ -357,22 +194,14 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 if (ContactNames.TryGetValue(normalizedTransient, out var transientName))
                 {
-                    if (!ContactNames.ContainsKey(normalizedCanonical))
-                    {
-                        ContactNames[normalizedCanonical] = transientName;
-                    }
-
+                    ContactNames.TryAdd(normalizedCanonical, transientName);
                     ContactNames.Remove(normalizedTransient);
                     merged = true;
                 }
 
                 if (PhoneContactNamesByJid.TryGetValue(normalizedTransient, out var transientPhoneName))
                 {
-                    if (!PhoneContactNamesByJid.ContainsKey(normalizedCanonical))
-                    {
-                        PhoneContactNamesByJid[normalizedCanonical] = transientPhoneName;
-                    }
-
+                    PhoneContactNamesByJid.TryAdd(normalizedCanonical, transientPhoneName);
                     PhoneContactNamesByJid.Remove(normalizedTransient);
                     merged = true;
                 }
@@ -494,9 +323,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return false;
             }
 
-            bool changed = !JidAlias.TryGetValue(lid, out var existingPn) || NormalizeJid(existingPn) != pn;
-            JidAlias[lid] = pn;
-            JidAlias[pn] = lid;
+            bool changed = AliasPairFiling.FileBothWays(JidAlias, lid, pn);
             RegisterSocketAlias(lid, pn, source);
 
             if (!changed)
@@ -510,11 +337,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 () => OnJidAliasResolved?.Invoke(this, new JidAliasResolvedEventArgs(pn, lid)),
                 nameof(OnJidAliasResolved));
 
-            lock (_aliasFollowUpGate)
-            {
-                _pendingAliasAvatarJids.Add(pn);
-            }
-
+            _aliasFollowUps.NoteAvatarTarget(pn);
             return true;
         }
 
@@ -523,11 +346,11 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         private void ScheduleAliasFollowUp(string source)
         {
-            CancellationToken token;
-            lock (_aliasFollowUpGate)
-            {
-                _pendingAliasFollowUpSource = source;
+            _aliasFollowUps.Request(source);
 
+            CancellationToken token;
+            lock (_aliasFollowUpTimerGate)
+            {
                 if (_aliasFollowUpCts != null)
                 {
                     _aliasFollowUpCts.Cancel();
@@ -560,38 +383,35 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         private async Task RunAliasFollowUpAsync()
         {
-            if (Interlocked.Exchange(ref _aliasFollowUpRunning, 1) == 1)
+            if (!_aliasFollowUps.TryBegin(out var batch))
             {
                 // A pass is already writing the file and walking the list. Whatever arrived in the
                 // meantime is still pending and will be picked up by the next timer.
-                ScheduleAliasFollowUp(_pendingAliasFollowUpSource);
+                ScheduleAliasFollowUp(_aliasFollowUps.PendingSource);
                 return;
             }
 
-            string source;
-            List<string> avatarTargets;
-            lock (_aliasFollowUpGate)
-            {
-                source = _pendingAliasFollowUpSource ?? "alias";
-                avatarTargets = _pendingAliasAvatarJids.ToList();
-                _pendingAliasAvatarJids.Clear();
-            }
-
+            string source = batch.Source;
             try
             {
                 await PersistJidAliasesAsync("alias:" + source);
 
-                if (avatarTargets.Count > 0)
+                if (batch.AvatarTargets.Count > 0)
                 {
-                    await RunOnUiThreadAsync(() =>
+                    await _ui.RunAsync(() =>
                     {
-                        foreach (var pn in avatarTargets)
+                        var rows = new List<ChatItem>();
+                        foreach (var pn in batch.AvatarTargets)
                         {
-                            foreach (var chat in GetChatRowsForCanonicalJid(pn)
-                                         .Where(c => string.IsNullOrWhiteSpace(c.AvatarUrl)))
-                            {
-                                RequestAvatarRefresh(chat, force: true);
-                            }
+                            rows.AddRange(GetChatRowsForCanonicalJid(pn)
+                                .Where(c => string.IsNullOrWhiteSpace(c.AvatarUrl)));
+                        }
+
+                        if (rows.Count > 0)
+                        {
+                            RaiseReport(
+                                () => OnAvatarRetryDue?.Invoke(this, new AvatarRetryDueEventArgs(rows)),
+                                nameof(OnAvatarRetryDue));
                         }
                     });
                 }
@@ -609,410 +429,18 @@ namespace Unison.Uwp.Services.WhatsApp
             catch (Exception ex)
             {
                 Debug.WriteLine("[WhatsAppService] Alias follow-up failed: " + ex.Message);
+                _aliasFollowUps.Restore(batch);
             }
             finally
             {
-                Interlocked.Exchange(ref _aliasFollowUpRunning, 0);
+                _aliasFollowUps.End();
             }
         }
 
         /// <summary>Delegates to <see cref="IContactService"/> (owns cooldown/dedup policy); this class only supplies the client primitives.</summary>
-        public Task RefreshContactNamesAsync(bool includeGroups = false, bool force = false)
+        private Task RefreshContactNamesAsync(bool includeGroups = false, bool force = false)
         {
             return _contactService?.RefreshContactNamesAsync(includeGroups, force) ?? Task.CompletedTask;
-        }
-    
-        public async Task ResolveContactsAsync(string[] jids, bool allowBatchFallback = true)
-        {
-            if (jids == null || jids.Length == 0) return;
-            if (_socket == null || !_socket.IsHandshakeComplete)
-            {
-                Debug.WriteLine("[WhatsAppService] ResolveContactsAsync skipped (handshake not complete)");
-                return;
-            }
-
-            var bridge = _socket as SocketBridge;
-            var session = bridge != null ? bridge.Session : null;
-            if (session != null && session.Connection.IsConnected)
-            {
-                await ResolveContactsViaSocketAsync(jids).ConfigureAwait(false);
-                return;
-            }
-
-            string[] fallbackJids = null;
-            IDisposable usyncLease = null;
-            try
-            {
-                usyncLease = await _usyncGate.AcquireAsync().ConfigureAwait(false);
-
-                // Socket may drop while waiting for the usync gate during sync.
-                if (_socket == null || !_socket.IsHandshakeComplete)
-                {
-                    Debug.WriteLine("[WhatsAppService] ResolveContactsAsync skipped after lock (socket not ready)");
-                    return;
-                }
-
-                Debug.WriteLine($"[WhatsAppService] ResolveContactsAsync: querying {jids.Length} contacts...");
-                // Keep the background direct-contact refresh on the narrow phone-based query.
-                // The broader JID-based metadata probe can expose richer metadata, but in the
-                // current companion session it times out even one-at-a-time and is not viable
-                // as an automatic background refresh.
-                var queryProtocols = new List<BinaryNode>
-                {
-                    new BinaryNode("contact", null)
-                };
-
-                // Build user nodes - for the background refresh, use phone-based lookup to keep
-                // the query fast and reliable. Higher-fidelity name sources come from history
-                // pushnames, notify attributes, and explicit profile-style probes.
-                var userNodes = new List<BinaryNode>();
-                foreach (var jid in jids)
-                {
-                    if (string.IsNullOrWhiteSpace(jid))
-                    {
-                        continue;
-                    }
-
-                    ContactLookupNumber lookup = ContactLookupNumber.For(
-                        jid,
-                        GetCanonicalJid(jid),
-                        _authState?.Me?.Id);
-                    if (!lookup.IsUsable)
-                    {
-                        Debug.WriteLine(
-                            $"[WhatsAppService] ResolveContactsAsync: skipping {jid} ({lookup.Skip})");
-                        continue;
-                    }
-
-                    var children = new List<BinaryNode>
-                    {
-                        new BinaryNode("contact", null, lookup.Number)
-                    };
-                    userNodes.Add(new BinaryNode("user", null, children));
-                }
-
-                if (userNodes.Count == 0)
-                {
-                    Debug.WriteLine("[WhatsAppService] ResolveContactsAsync: no supported direct-contact JIDs remained after filtering.");
-                    return;
-                }
-
-                var socket = _socket;
-                if (socket == null || !socket.IsHandshakeComplete)
-                {
-                    Debug.WriteLine("[WhatsAppService] ResolveContactsAsync aborted (socket lost before usync)");
-                    return;
-                }
-
-                int timeoutMs = userNodes.Count > 1 ? 15000 : 8000;
-                var response = await socket.QueryUsyncAsync(userNodes, "interactive", "query", queryProtocols, timeoutMs);
-                if (response == null) return;
-
-                Debug.WriteLine($"[WhatsAppService] usync response: {response.Tag}");
-                var usyncNode = response.GetChild("usync");
-                var listNode = usyncNode?.GetChild("list");
-                if (listNode?.Children == null)
-                {
-                    Debug.WriteLine($"[WhatsAppService] usync response missing list/children node: {response}");
-                    if (usyncNode != null)
-                    {
-                        var errorNode = usyncNode.GetChild("error");
-                        if (errorNode != null) Debug.WriteLine($"[WhatsAppService] usync server error: {errorNode}");
-                    }
-
-                    if (allowBatchFallback && userNodes.Count > 1)
-                    {
-                        Debug.WriteLine($"[WhatsAppService] ResolveContactsAsync batch rejected; retrying individually for {userNodes.Count} JIDs.");
-                        fallbackJids = jids
-                            .Where(j => !string.IsNullOrWhiteSpace(j))
-                            .Distinct(StringComparer.OrdinalIgnoreCase)
-                            .ToArray();
-                    }
-                    return;
-                }
-
-                bool cacheUpdated = false;
-                foreach (var userNode in listNode.Children)
-                {
-                    if (userNode == null) continue;
-
-                    string userJid = userNode.Attrs != null && userNode.Attrs.TryGetValue("jid", out var j) ? j : null;
-                    if (string.IsNullOrEmpty(userJid)) continue;
-
-                    string normalizedUser = NormalizeJid(userJid);
-
-                    // Debug log all children tags for deeper inspection
-                    if (userNode.Children != null && userNode.Children.Count > 0)
-                    {
-                        var childTags = string.Join(", ", userNode.Children.Where(c => c != null).Select(c => c.Tag));
-                        Debug.WriteLine($"[WhatsAppService] user node {userJid} children: [{childTags}]");
-                    }
-                    else
-                    {
-                        Debug.WriteLine($"[WhatsAppService] user node {userJid} children: []");
-                    }
-
-                    // 1. Process LID/PN mapping
-                    var lidNode = userNode.GetChild("lid");
-                    if (lidNode != null)
-                    {
-                        string targetJid = lidNode.Attrs != null && lidNode.Attrs.TryGetValue("val", out var v) ? v : null;
-                        if (!string.IsNullOrEmpty(targetJid))
-                        {
-                            if (!targetJid.Contains("@"))
-                            {
-                                targetJid += userJid.EndsWith("@lid") ? "@s.whatsapp.net" : "@lid";
-                            }
-
-                            string normalizedTarget = NormalizeJid(targetJid);
-                            if (!AliasPairPolicy.TryAcceptPair(normalizedUser, normalizedTarget, JidAlias, out string usyncLid, out string usyncPn))
-                            {
-                                Debug.WriteLine($"[WhatsAppService] Refused usync alias {normalizedUser} -> {normalizedTarget}");
-                                continue;
-                            }
-
-                            JidAlias[usyncLid] = usyncPn;
-                            JidAlias[usyncPn] = usyncLid;
-                            RegisterSocketAlias(normalizedUser, normalizedTarget, "contact-usync");
-                            cacheUpdated = true;
-
-                            // Identity Healing: Check if this LID belongs to US
-                            string meLid = _authState?.Me?.Lid;
-                            string normalizedMeLid = string.IsNullOrEmpty(meLid) ? null : NormalizeJid(meLid);
-                            SelfIdentityHealingAction heal = SelfIdentityHealingDecision.Decide(
-                                normalizedUser,
-                                normalizedTarget,
-                                _authState?.Me?.Id,
-                                normalizedMeLid);
-                            if (heal == SelfIdentityHealingAction.HealMeId)
-                            {
-                                Log($"[WhatsAppService] IDENTITY HEALING (USync): Me.Lid ({meLid}) belongs to PN {normalizedTarget}, but current Me.Id is {_authState.Me.Id}. Fixing...");
-                                _authState.Me.Id = normalizedTarget;
-                                _ = PersistAuthStateAsync(null, "usync-identity-heal");
-                            }
-                            else if (heal == SelfIdentityHealingAction.PurgeForeignMapping)
-                            {
-                                Log($"[WhatsAppService] IDENTITY CORRUPTION DETECTED (USync): Me.Id ({normalizedUser}) is mapped to foreign LID {normalizedTarget}. PURGING...");
-                                _authState.Me.Id = meLid;
-                                JidAlias.Remove(normalizedUser);
-                                _ = PersistAuthStateAsync(null, "usync-identity-purge");
-                            }
-                        }
-                    }
-
-                    // 2. Process Contact Name
-                    var contactNode = userNode.GetChild("contact");
-                    if (contactNode != null)
-                    {
-                        string pushName = contactNode.Attrs != null && contactNode.Attrs.TryGetValue("notify", out var n) ? n : null;
-                        if (string.IsNullOrEmpty(pushName))
-                        {
-                            pushName = contactNode.Attrs.TryGetValue("name", out var nm) ? nm : null;
-                        }
-                        if (string.IsNullOrEmpty(pushName))
-                        {
-                            pushName = contactNode.GetContentString();
-                            if (!string.IsNullOrEmpty(pushName)) Debug.WriteLine($"[WhatsAppService] Found name in text content for {userJid}: {pushName}");
-                        }
-
-                        // Process picture (Avatar) ID if the server included it inline.
-                        var pictureNode = userNode.GetChild("picture");
-                        if (pictureNode != null)
-                        {
-                            var pictureId = pictureNode.Attrs.TryGetValue("id", out var pid) ? pid : null;
-                            if (!string.IsNullOrEmpty(pictureId))
-                            {
-                                Debug.WriteLine($"[WhatsAppService] usync avatar ID found for {userJid}: {pictureId}");
-                                
-                                // Fire and forget avatar URL fetch
-                                _ = Task.Run(async () =>
-                                {
-                                    var url = await GetProfilePictureAsync(userJid);
-                                    if (!string.IsNullOrEmpty(url))
-                                    {
-                                        await RunOnUiThreadAsync(() =>
-                                        {
-                                            var chat = Chats.FirstOrDefault(c => NormalizeJid(c.JID) == normalizedUser);
-                                            if (chat != null)
-                                            {
-                                                chat.AvatarUrl = url;
-                                                chat.AvatarFetchedAtUtc = DateTime.UtcNow;
-                                                chat.AvatarFetchFailedAtUtc = null;
-                                                chat.AvatarFetchFailureReason = null;
-                                                Debug.WriteLine($"[WhatsAppService] Updated AvatarUrl for {userJid}");
-                                            }
-                                        });
-                                    }
-                                });
-                            }
-                        }
-
-                        // Process LID mapping for canonicalization
-                        var mappedLidNode = userNode.GetChild("lid");
-                        if (mappedLidNode != null)
-                        {
-                            var targetLid = mappedLidNode.Attrs.TryGetValue("jid", out var lj) ? lj : null;
-                            if (!string.IsNullOrEmpty(targetLid))
-                            {
-                                string normalizedLid = NormalizeJid(targetLid);
-                                if (!JidAlias.ContainsKey(normalizedLid) &&
-                                    AliasPairPolicy.TryAcceptPair(normalizedLid, normalizedUser, JidAlias, out string mappedLid, out string mappedPn))
-                                {
-                                    JidAlias[mappedLid] = mappedPn;
-                                    JidAlias[mappedPn] = mappedLid;
-                                    RegisterSocketAlias(normalizedLid, normalizedUser, "contact-usync-mapped-lid");
-                                    Debug.WriteLine($"[WhatsAppService] usync mapping found: {normalizedLid} -> {normalizedUser}");
-                                    
-                                    // Proactively merge chats if both exist
-                                    _ = CheckAndMergeDuplicateChatsAsync(normalizedLid, normalizedUser);
-                                }
-                            }
-                        }
-
-                        pushName = SanitizeContactLabel(pushName, normalizedUser);
-                        if (!string.IsNullOrEmpty(pushName))
-                        {
-                            ContactNames[normalizedUser] = pushName;
-                            cacheUpdated = true;
-                            Debug.WriteLine($"[WhatsAppService] usync name resolved: {userJid} -> {pushName}");
-
-                            // Do not rely on inline usync picture nodes for direct contacts.
-                            // If the chat still has no avatar, fetch it through the dedicated
-                            // profile-picture IQ path once we know the JID is valid.
-                            var chatNeedingAvatar = Chats.FirstOrDefault(c => NormalizeJid(c.JID) == normalizedUser && string.IsNullOrEmpty(c.AvatarUrl));
-                            if (chatNeedingAvatar != null && !JidHelper.IsGroupJid(normalizedUser))
-                            {
-                                _ = Task.Run(async () =>
-                                {
-                                    var url = await GetProfilePictureAsync(userJid);
-                                    if (!string.IsNullOrEmpty(url))
-                                    {
-                                        await RunOnUiThreadAsync(() =>
-                                        {
-                                            var chat = Chats.FirstOrDefault(c => NormalizeJid(c.JID) == normalizedUser);
-                                            if (chat != null && string.IsNullOrEmpty(chat.AvatarUrl))
-                                            {
-                                                chat.AvatarUrl = url;
-                                                chat.AvatarFetchedAtUtc = DateTime.UtcNow;
-                                                chat.AvatarFetchFailedAtUtc = null;
-                                                chat.AvatarFetchFailureReason = null;
-                                                Debug.WriteLine($"[WhatsAppService] Updated AvatarUrl for {userJid} via profile-picture IQ");
-                                            }
-                                        });
-                                    }
-                                });
-                            }
-                        }
-                        else
-                        {
-                            // Log attributes if name not found
-                            var attrList = contactNode.Attrs != null
-                                ? string.Join(", ", contactNode.Attrs.Select(kv => $"{kv.Key}={kv.Value}"))
-                                : string.Empty;
-                            int contentLen = (contactNode.Content is byte[] b) ? b.Length : (contactNode.Content is string s ? s.Length : 0);
-                            Debug.WriteLine($"[WhatsAppService] usync contact node for {userJid} exists but has no name. Attrs: [{attrList}], ContentLen: {contentLen}");
-                        }
-                    }
-                    else
-                    {
-                        Debug.WriteLine($"[WhatsAppService] usync response for {userJid} is MISSING the 'contact' node.");
-                    }
-                }
-
-                if (cacheUpdated)
-                {
-                    await ApplyResolvedNamesToChatsAsync();
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WhatsAppService] ResolveContactsAsync failed: {ex}");
-                try
-                {
-                    RuntimeDiagnosticsService.Instance.RecordException(
-                        "contacts",
-                        "resolve-contacts-failed",
-                        ex,
-                        "count=" + jids.Length + "; batchFallback=" + allowBatchFallback);
-                }
-                catch
-                {
-                }
-
-                if (allowBatchFallback && jids.Length > 1)
-                {
-                    fallbackJids = jids
-                        .Where(j => !string.IsNullOrWhiteSpace(j))
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .ToArray();
-                }
-            }
-            finally
-            {
-                usyncLease?.Dispose();
-            }
-
-            if (fallbackJids == null || fallbackJids.Length == 0)
-            {
-                return;
-            }
-
-            foreach (var originalJid in fallbackJids)
-            {
-                try
-                {
-                    await ResolveContactsAsync(new[] { originalJid }, allowBatchFallback: false);
-                }
-                catch (Exception exOne)
-                {
-                    Debug.WriteLine($"[WhatsAppService] ResolveContactsAsync single fallback failed for {originalJid}: {exOne.Message}");
-                }
-            }
-        }
-
-        public async Task<string> SearchContactAsync(string phoneNumber)
-        {
-            if (string.IsNullOrEmpty(phoneNumber)) return null;
-
-            // Whatever the user typed into the phone field, reduced to the digits a JID starts
-            // with — the matching below is a prefix test against stored JIDs, so anything else
-            // in the string can only make it miss.
-            string cleaned = PhoneNumberHelper.NormalizePhoneDigits(phoneNumber);
-            if (string.IsNullOrEmpty(cleaned)) return null;
-
-            Debug.WriteLine($"[WhatsAppService] SearchContactAsync: Searching for {cleaned}...");
-            
-            // Trigger resolution (ResolveContactsAsync handles phone nodes if no @ is present)
-            await ResolveContactsAsync(new string[] { cleaned });
-
-            // Check if we found a mapping or a name for this
-            // USync adds the resolved JID as an alias or key in ContactNames
-            // Let's find any JID that contains this phone number
-            string foundJid = null;
-            
-            // Check JidAlias first (USync often returns LID <-> JID)
-            foreach (var alias in JidAlias)
-            {
-                if (alias.Key.StartsWith(cleaned)) { foundJid = alias.Key; break; }
-                if (alias.Value.StartsWith(cleaned)) { foundJid = alias.Value; break; }
-            }
-
-            if (foundJid == null)
-            {
-                foreach (var name in ContactNames)
-                {
-                    if (name.Key.StartsWith(cleaned)) { foundJid = name.Key; break; }
-                }
-            }
-
-            if (foundJid != null)
-            {
-                Debug.WriteLine($"[WhatsAppService] SearchContactAsync: Found {foundJid} for {cleaned}");
-                return foundJid;
-            }
-
-            Debug.WriteLine($"[WhatsAppService] SearchContactAsync: No contact found for {cleaned}");
-            return null;
         }
     }
 }

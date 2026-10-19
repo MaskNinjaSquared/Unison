@@ -1,6 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10" xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest" xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10" IgnorableNamespaces="uap mp">
-  <Identity Name="Unison.UWPApp" Publisher="CN=UniDev" Version="1.7.38.0" />
+  <Identity Name="Unison.UWPApp" Publisher="CN=UniDev" Version="2.0.0.0" />
   <mp:PhoneIdentity PhoneProductId="a1b2c3d4-e5f6-7890-abcd-ef1234567890" PhonePublisherId="00000000-0000-0000-0000-000000000000" />
   <Properties>
     <DisplayName>Unison</DisplayName>
@@ -42,6 +42,9 @@
         </uap:InitialRotationPreference>
       </uap:VisualElements>
       <Extensions>
+        <uap:Extension Category="windows.protocol">
+          <uap:Protocol Name="ms-ipmessaging" />
+        </uap:Extension>
         <Extension Category="windows.backgroundTasks" EntryPoint="Unison.Background.WhatsAppSocketActivityTask">
           <BackgroundTasks>
             <Task Type="systemEvent" />
@@ -58,6 +61,8 @@
     <uap:Capability Name="voipCall" />
     <!-- ExtendedExecutionReason.LocationTracking keep-alive (Unogram): position unused. -->
     <DeviceCapability Name="microphone" />
+    <!-- In-chat CameraPickView (MediaCapture / CaptureElement). -->
+    <DeviceCapability Name="webcam" />
     <DeviceCapability Name="location" />
   </Capabilities>
 </Package>

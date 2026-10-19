@@ -14,6 +14,8 @@ namespace Unison.Uwp.UI.Controls
     public sealed partial class ChatMediaCircleButtonHost : UserControl
     {
         private bool _built;
+        private bool _legacyRing;
+        private Ellipse _legacyRingEllipse;
         private UnisonMediaCircleButton _unisonButton;
         private Button _whatsAppButton;
         private TextBlock _whatsAppGlyph;
@@ -127,6 +129,12 @@ namespace Unison.Uwp.UI.Controls
                 return;
             }
 
+            if (ShellUi.IsWhatsAppLegacy)
+            {
+                BuildLegacyRingButton();
+                return;
+            }
+
             FontFamily iconFont = (FontFamily)Application.Current.Resources["IconFont"];
             if (UseOverlayChrome)
             {
@@ -179,6 +187,63 @@ namespace Unison.Uwp.UI.Controls
             Root.Children.Add(_whatsAppButton);
         }
 
+        /// <summary>2px ring, transparent fill, the glyph. Same idea as the Legacy app-bar buttons.</summary>
+        private void BuildLegacyRingButton()
+        {
+            _legacyRing = true;
+            double diameter = UseOverlayChrome ? 56 : 36;
+            FontFamily iconFont = LegacyMediaGlyphs.IconFont
+                ?? (FontFamily)Application.Current.Resources["IconFont"];
+            Brush ink = LegacyInkBrush();
+            _whatsAppGlyph = new TextBlock
+            {
+                FontFamily = iconFont,
+                FontSize = UseOverlayChrome ? 22 : 16,
+                TextLineBounds = TextLineBounds.Tight,
+                Foreground = ink,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            _legacyRingEllipse = new Ellipse
+            {
+                Stroke = ink,
+                StrokeThickness = 2,
+                Fill = new SolidColorBrush(Colors.Transparent)
+            };
+            var content = new Grid { Width = diameter, Height = diameter };
+            content.Children.Add(_legacyRingEllipse);
+            content.Children.Add(_whatsAppGlyph);
+            // MediaHitTargetButtonStyle: no rectangular PointerOver paint over the ring.
+            _whatsAppButton = new Button
+            {
+                Style = TryStyle("MediaHitTargetButtonStyle")
+                    ?? TryStyle("TransparentMediaButtonStyle")
+                    ?? TryStyle("WhatsAppIconButtonStyle"),
+                Width = diameter,
+                Height = diameter,
+                MinWidth = diameter,
+                MinHeight = diameter,
+                Padding = new Thickness(0),
+                Background = new SolidColorBrush(Colors.Transparent),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Content = content
+            };
+            Root.Children.Add(_whatsAppButton);
+        }
+
+        private static Brush TryBrush(string key)
+        {
+            object brush;
+            return Application.Current.Resources.TryGetValue(key, out brush) ? brush as Brush : null;
+        }
+
+        /// <summary>White on the dark Legacy page, black on the light one. Same brush as the app-bar ring.</summary>
+        private static Brush LegacyInkBrush()
+        {
+            return TryBrush("LegacyAppBarRingBrush") ?? new SolidColorBrush(Colors.White);
+        }
+
         private void SyncChildren()
         {
             if (_unisonButton != null)
@@ -193,8 +258,18 @@ namespace Unison.Uwp.UI.Controls
 
             if (_whatsAppButton != null)
             {
-                _whatsAppGlyph.Text = Glyph ?? "\uE896";
-                if (GlyphForeground != null)
+                string glyph = Glyph ?? "\uE896";
+                _whatsAppGlyph.Text = _legacyRing ? LegacyMediaGlyphs.Resolve(glyph) : glyph;
+                if (_legacyRing)
+                {
+                    Brush ink = LegacyInkBrush();
+                    _whatsAppGlyph.Foreground = ink;
+                    if (_legacyRingEllipse != null)
+                    {
+                        _legacyRingEllipse.Stroke = ink;
+                    }
+                }
+                else if (GlyphForeground != null)
                 {
                     _whatsAppGlyph.Foreground = GlyphForeground;
                 }

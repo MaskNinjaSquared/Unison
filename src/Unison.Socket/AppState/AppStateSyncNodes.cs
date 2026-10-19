@@ -47,7 +47,11 @@ namespace Unison.Socket.AppState
         /// Asks for everything after the versions we hold. A collection at version zero also asks
         /// for a snapshot, which is the only way to bootstrap without replaying every patch ever.
         /// </summary>
-        public static BinaryNode BuildQuery(IDictionary<string, long> versions)
+        /// <param name="forceSnapshot">
+        /// Ask for a snapshot even when the local version is non-zero. Used after a local wipe so
+        /// pin/mute mutations are reported again despite LT-hash already being current.
+        /// </param>
+        public static BinaryNode BuildQuery(IDictionary<string, long> versions, bool forceSnapshot = false)
         {
             var collections = new List<BinaryNode>();
 
@@ -57,7 +61,7 @@ namespace Unison.Socket.AppState
                 {
                     { "name", pair.Key },
                     { "version", pair.Value.ToString() },
-                    { "return_snapshot", (pair.Value == 0).ToString().ToLowerInvariant() }
+                    { "return_snapshot", (forceSnapshot || pair.Value == 0).ToString().ToLowerInvariant() }
                 }));
             }
 

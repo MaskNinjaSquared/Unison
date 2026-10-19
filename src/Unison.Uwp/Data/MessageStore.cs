@@ -1126,10 +1126,14 @@ namespace Unison.Uwp.Data
                     }
 
                     bool isGroup = JidHelper.IsGroupJid(jid);
+                    string stripParticipant = isGroup
+                        ? ParticipantStripIdentity.PreferForDisplay(latest.ParticipantJid)
+                        : null;
                     string author = ChatPreviewNormalizer.FormatListAuthorPrefix(
                         latest,
                         isGroup,
-                        LocalizedStrings.Get("Chat_SelfFallbackName", "You"));
+                        LocalizedStrings.Get("Chat_SelfFallbackName", "You"),
+                        stripParticipant);
                     string preview = ChatPreviewNormalizer.FormatListPreview(latest, isGroup);
                     if (string.IsNullOrWhiteSpace(preview))
                     {
@@ -1148,6 +1152,8 @@ namespace Unison.Uwp.Data
                         Name = jid.Split('@')[0],
                         LastMessage = cleanPreview,
                         LastMessageAuthor = author,
+                        LastMessageParticipantJid = stripParticipant,
+                        LastMessageSenderName = isGroup && !latest.IsFromMe ? latest.SenderName : null,
                         LastMessageKind = kind,
                         Timestamp = latest.Timestamp.ToString("g"),
                         LastMessageTimestampUtc = Unison.Core.Mappers.WhatsAppMapper.ToUtc(latest.Timestamp),

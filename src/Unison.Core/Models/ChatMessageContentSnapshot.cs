@@ -29,6 +29,9 @@ namespace Unison.Core.Models
         public string QuotedMessageId { get; set; }
         public List<string> MentionedJids { get; set; }
 
+        /// <summary>ContextInfo.nonJidMentions.</summary>
+        public bool MentionAll { get; set; }
+
         /// <summary>ContextInfo.isForwarded when the message was forwarded in WhatsApp.</summary>
         public bool IsForwarded { get; set; }
     }

@@ -194,7 +194,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         RuntimeDiagnosticsService.Instance.Write(
                             "messages",
                             "incoming-pump-health-restart",
-                            "stage=" + _incomingMessagePumpStage);
+                            "stage=" + _incoming.Stage);
                         ResetIncomingMessagePump("health-stall", requeueCurrent: true);
                         RestartIncomingMessagePumpIfNeeded();
                     }
@@ -558,7 +558,6 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             Log("[WhatsAppService] Hardening session wipe...");
             var keyStore = _socket?.KeyStore;
-            _debugSendService?.Stop("clear-session");
 
             // Block “Unison desconectado” before tearing the socket down — otherwise the
             // background broker sees close while AuthStore still says Registered+MeId.
@@ -659,18 +658,11 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             // 7. Clear in-memory state
-            await RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 Chats.Clear();
                 MessagesByChat.Clear();
-                _messageIdIndex.Clear();
-                lock (_historyOnDemandLock)
-                {
-                    _historyOnDemandMarkerByChat.Clear();
-                    _historyOnDemandInFlight.Clear();
-                    _historyOnDemandRequestById.Clear();
-                    _historyOnDemandLastRequestIdByChat.Clear();
-                }
+                _historyRequests.ClearRequests();
                 ContactNames.Clear();
                 PhoneContactNamesByJid.Clear();
                 JidAlias.Clear();
@@ -691,7 +683,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private async Task RaiseSessionClearedAsync(bool startPairing)
         {
             var args = new SessionClearedEventArgs(startPairing);
-            await RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 try
                 {
@@ -1120,7 +1112,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 StopConnectionHealthMonitor("connect-replace-socket");
                 if (_socket != null)
                 {
-                    _debugSendService?.Stop("reconnect");
                     var previousSocket = _socket;
                     _socket = null;
                     previousSocket.Disconnect();
@@ -1154,7 +1145,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     return;
                 }
 
-                _deferReconnectWorkUntilReplayDrain = auth.Registered;
+                _syncWork.SetReplayDrainPending(auth.Registered);
                 Interlocked.Exchange(ref _offlineReplayReleased, 0);
                 if (!_fatalSessionEnded)
                 {
@@ -1170,20 +1161,11 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
                 Debug.WriteLine($"[WhatsAppService] ConnectAsync using AuthState (ObjID: {auth.GetHashCode()}), Registered: {auth.Registered}, Me: {auth.Me?.Id}");
-                _fullHistoryOnDemandRequestedThisSession = false;
-                _fullHistoryOnDemandRequestId = null;
-                _fullHistoryRepairRequestId = null;
+                _historyRequests.ReleaseFull();
                 _lastHistorySyncReceivedUtc = DateTime.MinValue;
                 _lastHistorySyncTypeReceived = null;
-                lock (_historyOnDemandLock)
-                {
-                    _historyOnDemandMarkerByChat.Clear();
-                    _historyOnDemandInFlight.Clear();
-                    _historyOnDemandRequestById.Clear();
-                    _historyOnDemandLastRequestIdByChat.Clear();
-                    _historyOnDemandAttemptsByChat.Clear();
-                    _historyOnDemandRejectedUntilUtcByChat.Clear();
-                }
+                _historyRequests.ClearRequests();
+                _historyRequests.ClearBackoff();
                 
                 bool reuseLoadedKeyState = _sharedKeyStore != null &&
                                            (auth.Sessions.Count > 0 || auth.PreKeys.Count > 0);
@@ -1563,7 +1545,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         // Proactively update any matching chat on the captured UI
                         // dispatcher. Enumerating and mutating bound chat rows from the
                         // socket thread caused RPC_E_WRONG_THREAD after reconnect.
-                        _ = RunOnUiThreadAsync(() =>
+                        _ = _ui.RunAsync(() =>
                         {
                             // Matched on the normalized address and stopped at the first hit.
                             // A contact is listed under both PN and LID, so a notify arriving
@@ -1602,17 +1584,34 @@ namespace Unison.Uwp.Services.WhatsApp
                                   ((sync.Conversations?.Count ?? 0) > 0 ||
                                    sync.Pushnames?.Count > 0);
 
-                // SocketClient raises this event from its dedicated history pipeline,
-                // never from the UI thread. Wait for the current payload to be consumed
-                // before allowing the next large protobuf object into memory.
-                // Prefer MessageFacade so Person upserts run before core history apply.
-                if (_messageService != null)
+                // SocketClient raised this from a background pipeline. MessageWebSocket
+                // delivers on the UI thread; the transport hops off before this runs.
+                // Still wait for the chunk so the next protobuf is not parsed on top of it.
+                int conversations = sync?.Conversations?.Count ?? 0;
+                var started = System.Diagnostics.Stopwatch.StartNew();
+                RuntimeDiagnosticsService.Instance.Write(
+                    "history",
+                    "sync-apply-begin",
+                    "conversations=" + conversations +
+                    "; type=" + (sync?.SyncType.ToString() ?? "<none>"));
+                try
                 {
-                    _messageService.SyncMessageHistoryAsync(sync).GetAwaiter().GetResult();
+                    if (_messageService != null)
+                    {
+                        _messageService.SyncMessageHistoryAsync(sync).GetAwaiter().GetResult();
+                    }
+                    else
+                    {
+                        ProcessHistorySyncCoreAsync(sync).GetAwaiter().GetResult();
+                    }
                 }
-                else
+                finally
                 {
-                    ProcessHistorySyncCoreAsync(sync).GetAwaiter().GetResult();
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "history",
+                        "sync-apply-end",
+                        "conversations=" + conversations +
+                        "; elapsedMs=" + started.ElapsedMilliseconds);
                 }
                 EnableScheduledPersist("history sync received");
                 if (hasContent && !_historyIdentityRefreshTriggeredThisSession)
@@ -1678,7 +1677,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     "connection",
                     "offline-replay-release",
                     "count=" + offlineCount + "; first=" + firstRelease);
-                _deferReconnectWorkUntilReplayDrain = false;
+                _syncWork.SetReplayDrainPending(false);
                 try
                 {
                     await FlushOfflineReplayMessagesAsync($"offline-complete:{offlineCount}");
@@ -1701,17 +1700,29 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 if (firstRelease)
                 {
-                    PublishConnectionUpdate("synced");
-                    EnableScheduledPersist($"offline completion ({offlineCount} messages)");
-                    _ = TryConsumeMessageStoreForceHistoryRepairAsync($"offline-complete:{offlineCount}");
-                    SchedulePendingPlaceholderResendDrain($"offline-complete:{offlineCount}", maxRequests: 8);
+                    // Safety-timeout release can race a hung ConnectAsync; never mark synced
+                    // until Noise finished on the live socket.
+                    if (socket.IsConnected && socket.IsHandshakeComplete)
+                    {
+                        PublishConnectionUpdate("synced");
+                        EnableScheduledPersist($"offline completion ({offlineCount} messages)");
+                        _ = TryConsumeMessageStoreForceHistoryRepairAsync($"offline-complete:{offlineCount}");
+                        SchedulePendingPlaceholderResendDrain($"offline-complete:{offlineCount}", maxRequests: 8);
+                    }
+                    else
+                    {
+                        RuntimeDiagnosticsService.Instance.Write(
+                            "connection",
+                            "offline-replay-synced-skipped",
+                            "reason=not-connected; count=" + offlineCount +
+                            "; socketConnected=" + socket.IsConnected +
+                            "; handshake=" + socket.IsHandshakeComplete);
+                    }
                 }
 
                 // Soft-reconnect catch-up pages must re-evaluate / re-request FULL_HISTORY even
                 // when this is not the first offline release of the process.
-                bool catchUpActive =
-                    Volatile.Read(ref _historyCatchUpBannerActive) == 1 ||
-                    _catchUpContinueRound > 0;
+                bool catchUpActive = IsHistoryCatchUpActive();
                 if (firstRelease || catchUpActive)
                 {
                     LogHistoryFreshnessAfterOfflineDrain(offlineCount);
@@ -1724,7 +1735,6 @@ namespace Unison.Uwp.Services.WhatsApp
             // clears the flag and its own app state module runs the resync, so there is nothing
             // for the service to coordinate.
 
-            _debugSendService?.Start();
             try
             {
                 if (ShouldRefuseConnectBecauseSessionDied())
@@ -1919,7 +1929,6 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             _suppressReconnect = true;
             StopConnectionHealthMonitor("disconnect");
-            _debugSendService?.Stop("disconnect");
             var socket = _socket;
             _socket = null;
             if (socket != null)
@@ -1962,7 +1971,6 @@ namespace Unison.Uwp.Services.WhatsApp
             _postReplayMaintenanceCts?.Dispose();
             _postReplayMaintenanceCts = null;
             CancelDeferredProfilePictureResolution();
-            _debugSendService?.Stop("shutdown");
 
             lock (_persistLock)
             {

@@ -47,6 +47,9 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         void SetActiveChatJid(string jid);
 
+        /// <summary>User action: makes sure a chat row exists for <paramref name="jid"/> (new-chat flow).</summary>
+        void StartNewChat(string jid);
+
         /// <summary>
         /// Zeroes the unread count locally, on every row that is the same conversation. PN and LID
         /// aliases can briefly produce more than one row, and a leftover alias is enough to put the
@@ -82,12 +85,15 @@ namespace Unison.Core.Contracts.WhatsApp
             LiveIncomingChatListApplyRequest request);
 
         /// <summary>
-        /// Offline replay batch: apply tip + UnreadDelta already decided at record time.
-        /// Does not re-evaluate IncomingAttention.
+        /// Folds one replayed message into its chat's tip. Unread is decided here, once; the
+        /// first tip arms a short timer that flushes the tips onto the list.
         /// </summary>
-        Task ApplyOfflineReplayChatSummariesAsync(
-            IReadOnlyList<OfflineReplayChatSummary> summaries,
-            string reason);
+        void RecordOfflineReplayTip(OfflineReplayTipRequest request);
+
+        /// <summary>
+        /// Applies every waiting offline replay tip to the list. A failure puts them back and rethrows.
+        /// </summary>
+        Task FlushOfflineReplayTipsAsync(string reason);
 
         /// <summary>Updates list rows for one chat tip (duplicate/revoke/replay refresh).</summary>
         Task RefreshChatPreviewAsync(
@@ -96,12 +102,21 @@ namespace Unison.Core.Contracts.WhatsApp
             DateTime timestamp,
             bool isFromMe,
             ChatPreviewKind? kindHint = null,
-            string authorPrefix = null);
+            string authorPrefix = null,
+            string participantJid = null,
+            string senderName = null);
 
         /// <summary>Re-tips every open row from the in-memory message cache.</summary>
         Task RefreshAllChatPreviewsFromStoredAsync(string reason);
 
         /// <summary>Creates missing rows and re-tips/reorders from the in-memory message cache.</summary>
         Task ReconcileChatListFromStoredAsync(string reason);
+
+        /// <summary>
+        /// Collapses rows that are the same person and re-keys in-memory timelines to the
+        /// canonical address. Fire-and-forget from the list; the fold itself is awaited by
+        /// callers that need the list settled first.
+        /// </summary>
+        void RequestChatListDedup(string reason);
     }
 }

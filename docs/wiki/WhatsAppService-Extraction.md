@@ -36,7 +36,7 @@ No behaviour change for users. Prep so later diffs are one cluster, not a 16k-li
 
 | File | Cluster |
 |---|---|
-| `WhatsAppService.cs` | Fields, properties, ctor/`Create`/`Attach*`, send, history SQLite notify, leftovers |
+| `WhatsAppService.cs` | Fields, properties, ctor/`Create`/`Attach*`, pin-in-chat send, history SQLite notify, leftovers |
 | `WhatsAppService.Connection.cs` | Connect / resume / pairing / reconnect / suspend / broker transfer |
 | `WhatsAppService.Media.cs` | On-demand decrypt + cache (`Ensure*AvailableAsync`) |
 | `WhatsAppService.Groups.cs` | w:g2 metadata, members, send permissions |
@@ -46,6 +46,7 @@ No behaviour change for users. Prep so later diffs are one cluster, not a 16k-li
 | `WhatsAppService.Persistence.cs` | chats.json debounce, load persisted UI, suspend tail |
 | `WhatsAppService.Receipts.cs` | Receipt nodes → send state |
 | `WhatsAppService.IncomingPump.cs` | Decrypted-message queue, placeholders, offline replay summaries |
+| `WhatsAppService.OutgoingHost.cs` | Explicit `IOutgoingMessageHost`: the caches and socket the send flows on `MessageFacade` reach (3.4) |
 
 `IWhatsAppService` is unchanged as the façade-facing surface (minus the deleted history body). Do not grow it for UI; add members on the façade that owns the subject ([Coding standards](Coding-Standards) §6).
 
@@ -59,7 +60,7 @@ No logic moved. The UI stopped naming the client; every member below is still im
 | Was on `IWhatsAppService` | New owner |
 |---|---|
 | `Chats` | `IChatStateStore.Chats` |
-| `GetCanonicalJid`, `JidAlias` | `IJidResolver` (phase A; table still on the concrete client until 3.7) |
+| `GetCanonicalJid`, `JidAlias` | `IJidResolver` (phase A). Table is `JidAliasTable` since 3.7a |
 | `ResolveDisplayName`, `PhoneContactNamesByJid`, `MarkAvatarImageLoadFailed` | `IContactService` |
 | `RefreshGroupSendPermissionsAsync`, `EnsureGroupRosterLoadedFromStoreAsync`, `EnsureHighQualityGroupAvatarAsync` | new `IGroupService` / `GroupFacade` |
 | `ClearUnreadForChatAsync`, `SetActiveChatJid`, `GetTotalUnreadCount`, `PersistChatListRowsPublic`, `ReconcileChatPreviewsFromSqliteAsync` | `IChatService` |
@@ -101,6 +102,7 @@ raises and the façade subscribes to in its own constructor.
 | `OnBackgroundHistorySyncBounced` | `HistoryFacade` | `AttachHistoryService` (gone) |
 | `OnAvatarCached` | `ContactFacade` | part of `AttachContactService` |
 | `OnJidAliasResolved` | `ContactFacade` | part of `AttachContactService` |
+| `OnAvatarRetryDue` | `ContactFacade` | the alias follow-up's `RequestAvatarRefresh` forward |
 
 That let the push-in doors close on the contracts too. `NotifyStreamError`,
 `NotifySuspectedInvalidSession`, `TryIngestLiveAsync`, `NoteBackgroundHistorySyncBounce` and
@@ -125,10 +127,35 @@ here. They do not invert, because those calls are not reports:
   with client state; roster replace and group membership persist both sit inside the group-metadata
   apply. Moving them *is* 3.2 / 3.8 / 3.9.
 
-`AttachContactService` survives too, reduced from nine call sites to the two deferred-startup
-maintenance ones (`RefreshPhoneContactOverlayAsync`, `RetrieveContactPicturesAsync`) plus the
-`IWhatsAppService` pass-throughs. Those are orchestration: the client sequences them and depends on
-the order.
+`AttachContactService` survives too. A second pass took out what was still a report:
+
+- The alias follow-up used to call `RequestAvatarRefresh(chat, force: true)` per row through a
+  client forward. It now collects the rows still without an avatar on the UI thread and raises
+  `OnAvatarRetryDue` once, on that same thread; `ContactFacade` forces the refresh. Nothing after it
+  in the follow-up waits on the fetch (dedup and `NotifyDisplayNamesChanged` only read rows). A
+  subscriber that throws no longer aborts the follow-up and restores the batch: `RaiseReport` logs it
+  and dedup still runs.
+- `FetchProfilePicturesAsync` / `RetrieveContactPicturesCoreAsync` are gone. They were the
+  "no façade attached" fallback of the background pass, and they only forwarded back to
+  `_contactService?.RetrieveContactPicturesAsync`, so with no façade they did nothing.
+
+What is left on `_contactService` is awaited and ordered by the client, so it is orchestration:
+
+- `HydrateCachedAvatarUrisAsync` — awaited three times (deferred startup early and late, persisted
+  UI load); the faces must be bound before the dedup / preview reconcile that follows.
+- `RefreshPhoneContactOverlayAsync(force: true)` in deferred startup — awaited, then
+  `ApplyResolvedNamesToChatsAsync` and `SchedulePersist` read what it filled.
+- `ResolveMissingNamesAsync` — awaited in the post-message enrichment and the background pass
+  before the next step. The third caller (deferred startup) is fire-and-forget, but an event for it
+  alone would leave the same forward in place for the other two.
+- `RefreshContactNamesAsync` — awaited in the post-message enrichment before
+  `TriggerBackgroundResolution`.
+- `RetrieveContactPicturesAsync(token)` in `TriggerBackgroundResolution` — awaited between the
+  names step and `OnGroupListingDue` so the listing does not compete with the picture batch for the
+  socket, and `token` is `_resolutionCts`, which `ShutdownAsync` cancels (phase 4). Raising it as an
+  event would make the pass finish early and let the group listing overlap it; the pass and its defer
+  checks (`ShouldDeferProfilePictureFetch`, `CancelDeferredProfilePictureResolution`) read private
+  client state. It moves with the pass, not before it.
 
 ---
 
@@ -136,22 +163,41 @@ the order.
 
 ### Facades still depend on the client
 
-`ContactFacade`, `MessageFacade`, `ChatFacade`, `GroupFacade`, `HistoryFacade`, `ProfileFacade`, `StatusFacade`, `ConnectionFacade` take `IWhatsAppService` (or `AttachWhatsAppService`). Policy is already on the façade; **primitives** (fetch avatar, send bytes, persist, canonical JID) still run inside the client.
+`ContactFacade`, `MessageFacade`, `GroupFacade`, `HistoryFacade`, `ProfileFacade`, `StatusFacade`, `ConnectionFacade` take `IWhatsAppService` (or `AttachWhatsAppService`). **`ChatFacade` no longer does** — it reaches local pin/delete through `IAppStateLocalHost` and tip reconcile through `ChatPreviewReconciler` / `IOfflineReplayHost`. Policy is already on the façades; **primitives** (fetch a chat avatar, send bytes, persist, canonical JID) still run inside the client for the others. Group send-permission refresh and roster restore are the exception: they run in Core, and nothing in them calls back into the client. The full-size group picture and member pictures are fetched by `GroupFacade`.
 
-Helpers under `Contacts/` (`ContactNameResolver`, `ChatAvatarPolicy`, `GroupRosterPolicy`, `AddressBookOverlay`) are the largest non-UI consumers of client members (`RunOnUiThreadAsync`, `SchedulePersistPublic`, `RaiseSyncStatus`, `FetchAndApplyAvatarAsync`, `FetchGroupMemberAvatarAsync`, `IsTransportReady`, …). Extracting avatars/names is mostly moving those primitives so the helpers stop needing the god client.
+Helpers under `Contacts/` (`ContactNameResolver`, `ChatAvatarPolicy`, `GroupRosterPolicy`, `AddressBookOverlay`) are the largest non-UI consumers of client members (`RaiseSyncStatus`, `FetchAndApplyAvatarAsync`, `IsTransportReady`, …). Extracting avatars/names is mostly moving those primitives so the helpers stop needing the god client.
+
+Two primitives already left the contract:
+
+- **UI thread.** `AttachedUiDispatcher` (UWP, `IDispatcher`) is a singleton the client, `ChatFacade`, `ContactFacade` and the contact helpers take in their constructors. `App` attaches the root frame's `CoreDispatcher` to it; `AttachUiDispatcher` and `IWhatsAppService.RunOnUiThreadAsync` are gone.
+- **Catalog save.** `IChatCatalogPersistence` (`Schedule`, `PersistRows`) replaces `SchedulePersistPublic` / `PersistChatListRowsPublic`. It is a narrow port the client implements: the debounce timer stays in the client because `ShutdownAsync` (phase 4) resets it.
 
 ### DI still injects façades *into* the client
 
-After `BuildServiceProvider`, `App.ConfigureServices` does:
+The stores (`IPersonStore`, `IChatStore`, `IGroupRosterStore`) are constructor parameters of the client now. After `BuildServiceProvider`, `App.ConfigureServices` still does:
 
-- `AttachMessageService` / `AttachContactService`
-- `AttachPersonStore` / `AttachChatStore` / `AttachGroupRosterStore`
+- `AttachMessageService` / `AttachChatService` / `AttachContactService`
+
+`AttachDebugSendService` is gone (phase 4): `App` starts `IDebugSendService` once in Debug builds.
+The watcher already skipped requests while the transport was not ready, so the five start/stop
+calls in `.Connection.cs` were redundant. In Debug it now polls the request file while disconnected
+too; requests still wait for the transport.
+
+`AttachContactService` is down to the awaited steps listed under
+[What phase 2 could not do](#what-phase-2-could-not-do): avatar hydrate, the address-book overlay,
+the two name passes and the picture batch. The alias avatar retry is an event (`OnAvatarRetryDue`).
+
+`AttachGroupService` is gone: its only use was the last step of the background resolution pass.
+The client now raises `OnGroupListingDue` there, and `GroupFacade` shows the Groups status, runs the
+listing and clears the status itself. The rest of that pass (`TriggerBackgroundResolution`, the
+post-message enrichment, the deferred picture retry) stays in the client: `ShutdownAsync` cancels it
+(phase 4) and its defer checks read the client's history and replay state.
 
 That is the wrong direction: live ingest (status, names) **starts** in `WhatsAppService` and calls up. Phase 2 inverted the reportable half of it (client publishes; façade subscribes); the rest is blocked on phase 3 and is described below.
 
 ### What still holds the client
 
-`App.xaml.cs` for lifecycle (`ResumeAsync`, `TransferActiveSocketToBrokerAsync`, `PrepareForSuspendAsync`, `ShutdownAsync`, `ReleaseMemoryAsync`, `IsConnected`, `AttachUiDispatcher`), the façades and their policy helpers, and `RuntimeDiagnosticsService` for health snapshots.
+The façades and their policy helpers, and `RuntimeDiagnosticsService` for health snapshots. `App.xaml.cs` no longer does: its lifecycle calls (`ResumeAsync`, `TransferActiveSocketToBrokerAsync`, `PrepareForSuspendAsync`, `ShutdownAsync`, `ReleaseMemoryAsync`, `IsConnected`) go through `IConnectionService` (phase 4, first step).
 
 Raw `IWhatsAppService` **events** are façade-only; ViewModels should not subscribe there.
 
@@ -171,20 +217,20 @@ Self-contained first. List/persist last.
 | 3.1b | Avatar fetch (done) | `AvatarFetcher`, behind `IUsyncGate` |
 | 3.1c | Avatar apply to the row (done) | `ChatAvatarOutcome` (Core); fallback + fetch stay in the client |
 | 3.2a | Group protocol reading (done) | `GroupMetadataReader` |
-| 3.2b | Group apply + roster persist | `GroupFacade`, after 3.6 / 3.7 / 3.9 |
+| 3.2b | Group apply + roster persist | **Done.** Listing, unresolved-metadata fallback, metadata apply, roster restore, the full-size group picture and member pictures run from `GroupFacade` |
 | 3.3a | Media cache + file naming (done) | `IMediaCache` / `MediaCacheService`, `MediaFileExtensions` |
 | 3.3b | Derived renditions — transcode / poster / WebP (done) | `MediaDerivationService` |
-| 3.3c | Download reading (done) | `MediaDownloadPlan` (Core). Orchestration stays — see below |
-| 3.4 | Send (main file) | `MessageFacade` over use cases; client only “send this node” |
+| 3.3c | Download reading and fetch (done) | `MediaDownloadPlan` (Core); orchestration and HTTP fetch on `MessageFacade`. Only the quiet save stays on the client — see below |
+| 3.4 | Send (main file) | **Text, image and audio orchestration on `MessageFacade` (done)** via `OutgoingTextSend` / `OutgoingMediaSend` (Core) over `IOutgoingMessageHost`. Client keeps the timeline caches, outbox and socket behind that port — see below |
 | 3.5a | Receipt reading (done) | `ReceiptReader` |
 | 3.5b | Receipt aggregation state (done) | `GroupReceiptTally` (Core) |
-| 3.6 | Names / usync (`.Identity.cs`) | `ContactFacade` / `ContactDirectory`. **Name rules out — see below.** usync + merge remain |
+| 3.6 | Names / usync (`.Identity.cs`) | `ContactFacade` / `ContactUsyncResolver`. **Rules and usync orchestration out — see below.** Push name, avatar check and number match on the façade; table filing is `UsyncAliasFiling`, chat merge is `ChatListAliasMerge`; the client keeps only `TryFileUsyncAlias` (socket + identity heal) |
 | 3.7a | Alias LID/PN + canonical (done) | `JidAliasTable` (Core), read through `IJidResolver` |
 | 3.7b | Converge onto `LidMappingStore` | Blocked: that store is async, canonicalization is not. See below |
 | 3.8 | `.AppState.cs` | **Rewritten — the premise was stale.** See below |
 | 3.9a | List display order (done) | `ChatDisplayOrder` (Core) |
-| 3.9b | `.Persistence.cs` + preview reconcile + the appliers from 3.8 | `ChatFacade` + `ChatStateStore` + `IChatStore` / `IMessageStore`. Close the transitional public dictionaries on `ChatStateStore`. **Persistence rules out; appliers remain — see below** |
-| 3.10 | `.IncomingPump.cs` | Decode/dispatch stays with connection. **Rules closed.** **Notify + timeline accept + persist enqueue + revoke + pin-in-chat on MessageFacade.** **Live + offline list apply + tip refresh/reconcile on ChatFacade.** Pump keeps queue/locks, alias-consolidate orchestration, offline summary *record* |
+| 3.9b | `.Persistence.cs` + preview reconcile + the appliers from 3.8 | `ChatFacade` + `ChatStateStore` + `IChatStore` / `IMessageStore`. Close the transitional public dictionaries on `ChatStateStore`. **Persistence rules out; appliers remain — see below.** **Name maps closed (`DisplayNameTable`). `MessagesByChat` is `ChatMessageCache` (conversation set locked) and owns every edit to the per-chat lists — merge, key canonicalization, insert, trim, add-missing (with a limit), insert-if-absent, window rebuild, upsert, remove, id index; the client only reads them. `NotifyChangedExternally` closed; `MessagesByChat` has one reader left (the client).** **Repeated list-strip assembly is `ChatListStrip`. Phone-digit lookup is `KnownJidByPhoneDigits`. Delete/persist I/O stays** |
+| 3.10 | `.IncomingPump.cs` | Decode/dispatch stays with connection. **Rules closed.** **Notify + timeline accept + persist enqueue + revoke + pin-in-chat on MessageFacade.** **Live + offline list apply + tip refresh/reconcile on ChatFacade.** **Resend row transitions on `MissingMessageLedger`.** **Queue lanes, generation and stage on `IncomingMessageQueue<T>`.** **Offline replay tips on ChatFacade.** **Timeline accept (alias move / duplicate / insert) on `IncomingTimeline`.** **Resend wait / send / answer window on `PlaceholderResendDispatch`.** Pump keeps the drain loop and the go/no-go before a resend |
 
 **3.1a is done.** The avatar half of `MediaCache` is `IAvatarCache` / `AvatarCacheService`: `TryGet`,
 `SaveAsync`, `DeleteIfCached`. It took `BuildSafeAvatarFileName`, `TryGetCachedAvatarUri`,
@@ -207,9 +253,9 @@ can be called from a background batch, a row scrolling into view, or the group i
 of them agreeing about threads. `FetchBestProfilePictureResultAsync`, `GetProfilePictureAsync` and the
 high-resolution loop are gone from the client; `GetProfilePictureUrlAsync` is a one-line forward.
 
-Candidates are passed in rather than resolved inside, for two reasons: the PN/LID table is still the
-client's until 3.7, and injecting `IJidResolver` here would close a DI cycle (`IJidResolver`
-eagerly resolves `IWhatsAppService`, which now takes the fetcher).
+Candidates are passed in rather than resolved inside. The table itself moved in 3.7a, but injecting
+`IJidResolver` here would still close a DI cycle (`IJidResolver` eagerly resolves `IWhatsAppService`,
+which takes the fetcher). Callers build the list with `ChatPinStoreKeys`.
 
 What is left of avatars in the client is the **apply**, and it is deliberately parked: it writes
 `ChatItem` rows on the UI thread and calls `SchedulePersist` (3.9), and the group-avatar fallback is
@@ -221,19 +267,19 @@ into plain objects — subject, announce-only, member count, participant drafts,
 list algebra the roster merge needs (`RosterJidSetsEqual`, `MergeInPlace`) and the placeholder-name
 test. It holds no socket, no chat state and no dispatcher, so it is the first piece of the group
 cluster that can be checked without watching rows change. `GroupListingEntry` and `GroupMemberDraft`
-moved with it.
+moved with it; 3.2b replaced both with `GroupMetadataSnapshot` in Core and took the list algebra
+along.
 
 It takes **two functions** rather than `IJidResolver`: canonical JID, and "is this the logged-in
-account". The second one reads the PN/LID alias table, which is still the client's until 3.7 — a
-participant row can carry a device-suffixed PN whose base LID is the account's real identity, and
-`IsSelfLinkedJid` is the only place that knows it. Reimplementing that in the reader would have been
-a silent behaviour change in the role the composer trusts for announce-only groups. At 3.7 both
-functions collapse into the resolver.
+account". The second one reads the PN/LID alias table. Reimplementing that in the reader would have been
+a silent behaviour change in the role the composer trusts for announce-only groups. 3.7a collapsed
+both functions into `IJidResolver`, which the reader takes now.
 
 The rest of `.Groups.cs` is apply and orchestration, and it is blocked on three other steps, not on
 itself: it walks `Chats` on the UI thread and calls `SchedulePersist` (3.9), writes `ContactNames`
 and calls `ResolveDisplayName` (3.6), and canonicalises through the client's alias table (3.7). Move
-it when those land, not before.
+it when those land, not before. 3.2b did it without waiting, by reaching the 3.6 / 3.9b primitives
+through a port rather than moving them — see its section below.
 
 **3.3a is done: storage left, downloading stayed.** `IMediaCache` / `MediaCacheService` owns
 `LocalFolder/MediaCache/{Images,Audio,Documents,Video,VideoPosters}`; `MediaFileExtensions` (Core,
@@ -247,9 +293,13 @@ write is skipped, while documents, posters and transcodes are things we produced
 
 Two follow-ups, both real:
 
-- The same folder boilerplate is still duplicated in `OggOpusToWavConverter`,
-  `OggOpusHandlerService` and `HistoryThumbnailMaterializer`. They should take `IMediaCache`. Left
-  out of 3.3a deliberately — the audio path is the fragile one on Mobile and deserves its own change.
+- The same folder boilerplate is still duplicated in `OggOpusToWavConverter` and
+  `OggOpusHandlerService`. They should take `IMediaCache`. Left out of 3.3a deliberately — the audio
+  path is the fragile one on Mobile and deserves its own change.
+- `HistoryThumbnailMaterializer` reads the folder path and the URI from `MediaCacheService`
+  (`LocalFolderPath`, `UriFor`) but keeps writing with `System.IO`. It does **not** take
+  `IMediaCache`: it writes a whole history lot of thumbs on a worker thread while the sync awaits it,
+  and `SaveAsync` costs several StorageFile round trips per file on Mobile.
 - ~~`TryTranscodeOggOpusToM4aAsync` still opens the Audio folder itself.~~ Resolved in 3.3b.
 
 **3.3b is done: the second renditions left.** `MediaDerivationService` owns the four things that
@@ -280,8 +330,20 @@ the cache before taking the download lock and again after waiting on it, and onl
 video poster. Two taps on the same uncached video, and the one that waited returned a row with no
 thumbnail. Both paths now go through `EnsureVideoPosterAsync`.
 
-What is still in the client is `EnsureWebPDisplayUriAsync` and `EnsurePlayableAudioUriAsync`. Those
-read and write `ChatMessage` and persist it, so they follow message state rather than media.
+What is still in the client is the call that writes the repaired URI back onto the message and
+persists it. Building the PNG sibling and the playable M4A/WAV now runs in `MediaDerivationService`
+(`RepairWebPForDisplayAsync`, `EnsurePlayableAsync`). `WebPDisplayName` keeps a repair from nesting
+`_display` on a file that is already the sibling. The four on-demand downloads themselves now run
+from `MessageFacade`, and they share `MediaDownloadGate` with the live image and sticker hydrate
+so a phone still fetches one file at a time. The same gate covers an image or a sticker that arrives
+on its own: that download left the incoming pump and runs from `MessageFacade` too.
+
+The blob fetch no longer goes through the client either. `MediaAvailability` takes
+`IEncryptedMediaDownloader` (plain HTTP against the CDN, registered once in the container), so
+`IMediaDownloadHost` is down to the quiet save, the timeline nudge and `HasLiveSocket`. Those stay
+until the persist queue leaves the client. Preparing a voice note the user just sent for playback
+moved from the client's `IOutgoingMessageHost.PrepareLocalPlayback` to the façade, which calls
+`MediaAvailability` after the send returns; the client's duplicate playable-audio path is gone.
 
 **3.7a is done, and it did not fold into `LidMappingStore`.** The plan above said to merge the
 session alias map into `LidMappingStore`, whose own header says it exists to replace exactly that.
@@ -303,7 +365,9 @@ read it — `GetCanonicalJid`, `IsSelfLinked`, `IsSelfJid`, `IsLidLike`, `GetCan
 moved verbatim. The client keeps its private methods as one-line forwards, so no call site changed.
 `JidResolver` now reads the table directly rather than wrapping the client, and `IJidResolver` gained
 `IsSelfLinked` — which let `GroupMetadataReader` drop the two delegates 3.2a gave it and take the
-resolver, closing that note.
+resolver, closing that note. `TryGetAlias` normalizes before the lookup, matching `GetCanonicalJid`,
+so a device suffix cannot miss a pair. History, avatars and contact phone lookup expand keys through
+`ChatPinStoreKeys` instead of three private copies of the same list.
 
 The table learns the logged-in account through `BindSelf`, two functions rather than two strings.
 The account's own LID arrives after pairing and is written in place on the existing auth state, so a
@@ -473,12 +537,123 @@ four separate field-writes scattered through one method, which is exactly how th
 
 **What is left is no longer shaped like these.** 3.4 (send), 3.6 (names / usync) and 3.10
 (`IncomingPump`) are not extractions of a rule from a method — they are moves of whole responsibilities
-onto façades, with the socket and the UI thread on both sides. 3.2b still waits on 3.6; 3.3c is a
+onto façades, with the socket and the UI thread on both sides. 3.3c is a
 façade move too. The test suite does not reach any of them, because they are all in the UWP head.
 
 **None of this has been run.** Every slice from the pending message queue onward is compile-checked
 and test-covered and has not been on a device. That debt keeps growing and is the next thing to spend
 time on, ahead of any further extraction.
+
+### 3.9b continued — the timeline leaves the client in steps
+
+What still keeps phase 4 waiting is that the client edits each conversation's message list in place.
+`ChatMessageCache` takes those edits over one kind at a time; the client keeps the id index, the
+missing-message ledger and the UI thread until the timeline has a single owner.
+
+*Alias merge:* folding an alias timeline into its conversation was written four times (transient
+DM merge, LID→PN duplicate merge, duplicate-row dedupe, cache-key normalisation). It is
+`ChatMessageCache.MergeInto` now, behind the client's `MergeTimelineInto`. The copies had drifted;
+two differences were fixed rather than kept. Only the cache-key pass sorted after merging, so the
+other three left alias messages at the end out of time order while later inserts binary-search a list
+they assume is sorted. And two copies appended id-less messages unconditionally, duplicating any the
+target already held. Only the transient merge forgets the alias's missing-message rows, as before.
+
+*Id index:* `MessageIdIndex` moved from a client field onto `ChatMessageCache.Ids`. Every place the
+client removed or cleared a timeline already dropped its ids by hand, and replacing one rebuilt
+them; `Remove`, `Clear`, `Set` and `MergeInto` do that themselves now, and `KnownIds` builds the set
+lazily from the timeline. Direct list edits (insert, trim, page load) still register or rebuild.
+
+*Initial load window — fifth sighting, fixed:* `LoadInitialMessagesAsync` still carried its own copy of
+the window rule, with both defects `ActiveChatMessageWindow` had already had fixed: raw `DateTime`
+ordering (live `Utc` rows against SQLite `Unspecified` ones, off by the local offset) and id-less
+messages grouped on a fresh `Guid`. It sorts through `ChatMessageOrder` and trims through
+`ActiveChatMessageWindow.TrimInPlace` now.
+
+*Insert and trim:* `ChatMessageCache.Insert` (sorted insert, trim, register — the order the client
+used, so an old message trimmed at once still counts as seen) and `.Trim` (window plus id rebuild).
+The outgoing accept and the pinned-target insert call `Insert`; `TrimInMemoryMessageWindow` forwards
+to `Trim`, which `IncomingTimeline` still reaches through its callback.
+
+*Add missing:* `ChatMessageCache.AddMissing` appends what the timeline lacks (by id, by reference when
+id-less), sorts, rebuilds the index and returns what entered. It dedupes against the list, not the
+index, as both copies did. `SeedChatMessagesInMemoryAsync` and the insert loop of
+`LoadMoreMessagesAsync` call it (the load-more filter and capacity `Take` stay in the client). The
+seed copy appended id-less rows every time — now the same reference rule as `MergeInto`.
+`RegisterMessageId` is gone. The client no longer edits a timeline list directly; the reaction and
+pin paths only read it.
+
+*Preview reconcile — the tip choice left:* `ChatPreviewTip.PickStoredTip` walks a stored page down
+to its newest row that may go on the strip (the walk that was inline, plus the client's
+`MapPreviewTipCandidate`), and the client compares it with the memory tip through `PickNewer`
+directly.
+
+*Preview reconcile — the pass left:* `ChatPreviewReconciler` (UWP, DI singleton over
+`IHistoryMessageStore`, `JidAliasTable`, `ChatStateStore`, `ChatRowIndex` and the dispatcher) owns
+the SQLite read, the memory lookup and the per-row apply, on the UI thread in slices of 24 chats
+with one sort at the end, and returns how many rows changed. The client's
+`ReconcileChatPreviewsFromSqliteAsync` is a forward that notes catch-up progress and schedules the
+catalog save when something changed; `ChatFacade` still reaches it through the client for that
+reason.
+
+### 3.4 — send moved to `MessageFacade`
+
+The flow left the client whole, and it lives in Core, so the suite reaches it now. `OutgoingTextSend`
+owns validation, the canonical chat, the id, the optimistic bubble, the bounded retry
+(`OutgoingTextSendRetry`), settlement (`OutgoingSendSettlement` + `SelfChatStatusPolicy`) and the
+order of every side effect. `OutgoingMediaSend` does the same for image and audio, including the
+`_out` cache write through `IMediaCache`. `OutgoingChatMessage` is the one place that says what an
+outgoing bubble looks like.
+
+What they reach through is `IOutgoingMessageHost`, a narrow Core port the client implements
+**explicitly** (`WhatsAppService.OutgoingHost.cs`), registered in `App.ConfigureServices` as a cast of
+the client the way `BridgeSessionProvider` already is. It is not on `IWhatsAppService`, which lost
+`SendTextMessageAsync`, `SendImageAsync` and `SendAudioMessageAsync`. `DebugSendService` sends
+through `IMessageService` like the chat page does.
+
+The host keeps what the client still owns: the in-memory timeline (pending receipts, ordered insert,
+trim, id index), the local-send chat-row preview, the outbox and batched flush, the socket and its
+invalidation, the send counters for the health snapshot, and `OnError`. A transport attempt hands
+back the socket it used, so dropping it after a failure cannot kill a newer connection.
+
+Behaviour is kept as it was, two quirks included and pinned by tests: an image is filed under the
+**normalized** JID while text and audio use the canonical one, and plain audio previews as a voice
+note. Two deliberate differences: image and audio now apply any receipt that arrived before the bubble
+existed (text always did), and an empty image is rejected before reconnecting rather than after.
+
+Later, media stopped throwing on a failed send. `OutgoingMediaSend` picks the id up front (the
+same generator as text) and passes it down through `IOutgoingMessageHost` and
+`IWhatsAppSocket.SendImageMessageAsync` / `SendAudioMessageAsync` (`explicitMessageId`), so the
+cached `_out` file and a pending bubble exist before the upload. A refused upload or a failed
+reconnect settles the bubble as failed and calls `OnError`; there is still no retry. The bridge's
+failed status now carries that id, so the list preview turns red too.
+
+### 3.2b — group apply and roster out; the query passes stay
+
+**Rules.** `GroupRosterRules` (Core) holds the decisions a roster goes through: the detached copy
+written to the store, rebuilding rows from the store with a name for members persisted before one was
+known, putting a restored roster on a row (never over one that is already there — a live reply that
+landed during the read is fresher), matching a wire participant to the member it already was across
+LID / PN / bare phone, the person keys groups-in-common is written under, and the same-JID-set test
+plus in-place merge that keep the Members list from relaying out (moved from `GroupMetadataReader`).
+
+**Apply.** `GroupMetadataApply` (Core) puts a reply on the rows: the subject into the name cache
+under the placeholder and blacklist rules, the synced label onto the row, announce-only, the
+account's role, the member count, and the roster replace-or-merge followed by the roster and
+membership saves and `NotifyGroupRosterChanged`. A listing is still one UI pass for the whole
+account, then one `SchedulePersist`. The reader now hands it `GroupMetadataSnapshot` /
+`GroupMemberDraft` (Core models) — `ReadListing` for the listing, `ReadMetadata` for one group.
+
+**Restore.** `GroupRosterRestore` (Core) reads `IGroupRosterStore`, finds the canonical row in
+`IChatStateStore.Chats` and fills it if it is still empty.
+
+**Names.** Both flows label members and rows through `IGroupNaming` (formerly `IGroupHost`), which was once implemented by
+the client and is now `GroupNaming` (Core) over `ContactDisplayNames`, `ISelfMarkerNaming` and
+`IStringResources`. The UI hop, the saves, the row and avatar lookups and the subject cache left
+the port one at a time; see phase 4 below.
+
+**Owners.** `GroupMetadataApply` is stateless. `GroupFacade` holds the one that serves the listing, the send-permission refresh and the unresolved pass, plus `GroupQueryWindow` so those callers share the two minutes. The client keeps a second applier for the receipt path, which still applies a metadata reply it fetched itself. The full-size group picture is fetched by the façade.
+
+**What stays:** the usync gate. Member pictures ask through it the same way a 1:1 picture does, and `GroupFacade` takes that lease itself. A miss is still remembered and a transient failure still returns the member to the queue (`GroupMemberAvatarAttempt`).
 
 ### 3.6 — the name rules are out; usync is not
 
@@ -491,9 +666,14 @@ self-marker spoofs, and strips marker suffixes. **The self-marker rule is spoof 
 contact can set their push name to "(You)" and, without it, their messages render as the user's own.
 That had no test.
 
-`DisplayNameResolution` is the precedence between the survivors: what the app learned, then the
-device address book, then the contact's own push name, then the number. Only the third gets the `~`,
-and not in groups or above message bubbles.
+`DisplayNameResolution` is the precedence between the survivors: the device address book (the
+overlay, or a stored person whose `PersonSource` is `AddressBook`), then what the app learned, then
+the contact's own push name, then the number. The ranking is the `NameSource` enum, and
+`NameSourceRules.CanBeReplacedBy` is the single rule for both reading and writing:
+`Person.CanWriteName` converts both `PersonSource`s with `ToNameSource()` and asks it, so the store
+cannot keep a name the display would outrank. `PersonSource` stays the persisted value (INTEGER in
+SQLite; `DirectChat` says nothing about the name, so it maps to `Learned`). Only push names get the
+`~`, and not in groups or above message bubbles.
 
 Both take the shape this extraction keeps arriving at. The marker is localized, so recognising it
 stays in the UWP head behind `ISelfMarkerNaming`; the lookups stay too, because they warm a SQLite
@@ -507,9 +687,50 @@ number-as-name but not for a self-marker, so a contact pushing "(You)" could be 
 canonical row during a merge even though the sanitizer blocks that everywhere else. The orchestration
 stays; only the decision left.
 
-What remains in `.Identity.cs` is the larger half and is not this shape: `ResolveContactsAsync` and
-`RefreshContactNamesAsync` (usync over the socket, ~380 lines) and the alias follow-up scheduling.
-Those are 3.6's move onto `ContactFacade`, not a rule to lift out of a method.
+What remains in `.Identity.cs` is the larger half and is not this shape: the alias follow-up
+pass itself (its bookkeeping is `AliasFollowUpQueue`, see the pure-rule nibble below) and what `ResolveContactsViaSocketAsync` does with an answer (alias, identity heal,
+duplicate-chat merge, avatar fetch). Those are 3.6's move onto `ContactFacade`, not a rule to lift
+out of a method.
+
+**The apply decision left the method.** `ResolvedContactApplyPlan` answers, for one usync
+contact, whether to file the alias, merge the two chats (only the first time that LID is seen),
+store the push name, and fetch an avatar (only when a listed chat has none). Writing the alias,
+healing identity, merging and the picture round-trip stay on the client — those caches have not
+moved.
+
+**The usync orchestration moved to the façade.** `ContactUsyncResolver` (in `Contacts/`, built by
+`ContactFacade`) now owns everything that decides: which numbers to ask about (`ContactLookupNumber`
+against `IJidResolver`), `IUsyncGate`, the session (`ContactDirectory.GetReadySession`), the
+`ResolveContactNamesUseCase` call and the per-contact `ResolvedContactApplyPlan`. `ContactNameResolver`
+calls it instead of the client, and the number-search fallback (`SearchContactAsync`) now lives on
+the façade. `ResolveContactsAsync` and `SearchContactAsync` are gone from `IWhatsAppService`.
+
+What the client keeps is one narrow, façade-only primitive over what it still owns:
+`TryFileUsyncAlias` — after `UsyncAliasFiling` accepts and writes both directions, register
+with the socket and heal our identity in the auth state. Chat-row surgery is
+`ChatListAliasMerge` on the chat façade / usync resolver (see phase 4).
+`FetchAvatarForResolvedContactAsync` was a second until the resolver took it: it fetches
+through the shared `AvatarFetcher` and stamps the row
+`UsyncContactCaches.FindListedChatWithoutAvatar` picks, the same row the fetch decision looked at.
+
+**Three primitives left once their tables were Core types.** The alias table (`JidAliasTable`) and
+the push names (`DisplayNameTable`) are DI singletons shared with the client, so `ContactFacade`
+takes them directly, plus `ISelfMarkerNaming` (now registered). `StoreUsyncPushName` and
+`HasListedChatWithoutAvatar` are `UsyncContactCaches` (Core, 9 tests), called by
+`ContactUsyncResolver` against the push-name table and `IChatStateStore.Chats`; the number-search
+fallback calls `KnownJidByPhoneDigits` over the two tables itself. All three are gone from
+`IWhatsAppService`. The push name is still written with `Set` and raises no names-changed event of its
+own; the pass raises it once through `ApplyResolvedDisplayNamesToChatsAsync`, as before. One
+difference: a rejected usync name is now logged as one line with its rejection reason, instead of the
+client's per-reason wording, which stays on the client's other sanitize calls.
+
+**The hand-built usync query is gone.** `ResolveContactsAsync` had two bodies: the live one over
+`ResolveContactNamesUseCase`, and ~300 lines that built the `<usync>` node by hand. The second ran only
+when the bridge reported a completed handshake on a disconnected session — and it sent through that
+same connection, so it could only fail. It is deleted, with `allowBatchFallback` (its retry flag) and
+`IWhatsAppSocket.QueryUsyncAsync` (its only caller). The live path now picks numbers through
+`ContactLookupNumber`, which gained `UnmappedLid`: a LID with no known phone pair used to be read as
+digits and queried as a number that belongs to nobody.
 
 **Two more rules left before the façade move.** `MeaningfulChatLabel` (with `GroupIdPlaceholder`)
 is the single "is this label recognisable?" answer — UWP's `IsMeaningfulChatLabel` and history's
@@ -729,17 +950,262 @@ persist enqueue is `QueueIncomingPersist`. Revoke is `IMessageService.ApplyIncom
 Inbound pin-in-chat is `IMessageService.ApplyIncomingPinInChatAsync` (host still owns pin state /
 SQLite). Tip refresh / bulk re-tip / in-memory list reconcile is `IChatService.RefreshChatPreviewAsync` /
 `RefreshAllChatPreviewsFromStoredAsync` / `ReconcileChatListFromStoredAsync` (bulk paths still walk
-host `MessagesByChat`). Pump still owns alias-consolidate side-effects, offline summary
-*recording*, placeholder/missing ledger and the queue itself.
+host `MessagesByChat`). Pump still owns the drain loop and the go/no-go before a resend; the wait, send and
+answer window are `PlaceholderResendDispatch`. Which way an
+arriving message lands (alias move, duplicate, insert) is `IncomingTimeline`. Offline replay tips (record, unread, throttle, flush) are `ChatFacade`'s. The missing-message
+ledger owns the row transitions under the same lock; `IncomingMessageQueue<T>` owns the
+lanes, generation, stage and timeout retry list.
 
 ### Pure-rule nibble (ongoing, before façade moves)
 
 When a method is still too large to move whole, lift the pure decision first: write tests that
 match today’s client code, add a Core helper, forward with a one-liner, commit extract then wire.
-Recent lifts from `WhatsAppService` / façades include catch-up continue + freshness stale,
+Recent lifts from `WhatsAppService` / façades include diagnostic JID masking, unix milliseconds,
+self push-name capture, MessageKey alt-JID scan, outgoing message ids (`OutgoingMessageId`),
+whether a text send may still promote a pending bubble (`OutgoingSendSettlement`), which duplicate
+chat row a local send repositions (`DuplicateChatRowPick`), the text fallback for a fatal stream
+code (`FatalStreamCodeText`), which log lines a replay may drop (`ReplayDiagnosticNoise`), the text-send retry (`OutgoingTextSendRetry`:
+two attempts, invalidate only on a broken pipe, stop on a refusal), catch-up continue + freshness stale,
 placeholder recovery trigger, explicit logout stream codes, list enrichment phases, user-JID
-shape, on-demand sync type, group avatar fallback, relink disconnect reasons, WebP cache URI,
-and web-message status map. Orchestration stays behind the forward.
+shape, on-demand sync type, group avatar fallback, the parent and community addresses that fallback
+asks (`GroupAvatarFallbackJids`), relink disconnect reasons, WebP cache URI,
+web-message status map, the open chat's in-memory window (`ActiveChatMessageWindow`) and the
+dedupe pass's survivor order and row merge (`DuplicateChatRowMerge`). Orchestration stays behind the forward.
+
+The last two each carried a defect of a shape already recorded here. The window chose its newest
+messages with `OrderByDescending` on the raw `DateTime` — the fourth sighting of the un-normalised
+comparison — and its `GroupBy` keyed id-less messages on a fresh `Guid`, so a pinned message with no
+id was kept twice. The dedupe merge was written twice, once per branch, and the PN/LID branch copied
+the text and the clock but not `LastPreview` or `LastMessageId`: the half-preview `TransientChatMerge`
+already documents. Both branches now go through one `Absorb`. The rest of the per-group work — moving
+messages between keys, carrying the push name, filing the alias — moved to `DuplicateChatFold` once
+the timeline had a Core owner (see below). The client keeps the UI thread, the list removals and the
+events.
+
+The sender written on a `WebMessageInfo` is `WebMessageParticipant` (key participant, then
+envelope participant, then the alt-JID scan; never a group or broadcast address). The resend path
+and the history store both read it now; `HistorySyncContentFilter.ResolveParticipant` keeps its
+own gates (group only, never own, never the chat). Fixed on the way: the history store did not
+scan alt JIDs, so a group message carrying its sender only there had one live and none in SQLite.
+Edge kept, not endorsed: the scan skips only field 4, so a direct envelope with no participant
+answers its own `remoteJid` (the history gate drops it; the resend path passes it on).
+`ResolveHistorySenderName` left with it: it had no caller.
+
+Writing an accepted pair is `AliasPairFiling` (19 tests). It was three hand copies: the live path
+(`TryRecordAliasMapping`) and the usync answer (`TryFileUsyncAlias`) file both ways and report news
+from the LID side only; the duplicate-row merge in `DeduplicateChatsAsync` files the LID side and
+leaves the phone side alone when it already points at an `@lid`, because two rows looking alike is
+our inference and the server's pairing outranks it. The two self-pair writes in `.Connection.cs`
+stay as they are (phase 4).
+
+Reading one contact out of an app-state snapshot, history chunk or participant list is
+`ContactUpdateFiling` (15 tests). `ApplyContactUpdatesAsync` now just loops: the `Id` fills whichever
+half (LID or phone) the update left out, a pair is reported whenever both halves are known (named or
+not), the name is `Name` else `Notify`, and a named contact is filed under its `Id` plus each other half
+that differs. The client's private `IsLidJid` went with it. Fixed right after the move: the LID test
+read the raw text, so a padded `"x@lid "` was taken for a phone (now `JidHelper.IsLidJid`, which trims),
+and a whitespace-only `Name` blocked the `Notify` fallback and left the contact unnamed.
+
+Folding every non-canonical message-cache key into its conversation is
+`ChatMessageCache.CanonicalizeKeys` (5 tests). `DeduplicateChatsAsync` walked `ChatJids()` and called
+`MergeInto` per key by hand; it now passes `GetCanonicalJid` and takes the count back. A blank
+canonical form leaves the key alone, and an alias holding no list is not counted, as before.
+
+*The store's own message writes:* `ChatStateStore.UpsertMessagesAsync` and `RemoveMessageAsync` edited
+the lists by hand, bypassing the cache — no id index, and a raw `DateTime` sort (the sixth sighting).
+They go through `ChatMessageCache.Upsert` / `.RemoveMessage` now, which sort through `ChatMessageOrder`
+and keep `Ids` in step. Neither has a caller yet; they are what a façade will write through.
+
+*Transitional seams closed:* `NotifyChangedExternally` is gone. Its two callers wanted two different
+things behind one null check — the client's message-change relay now calls the new
+`IChatStateStore.NotifyMessagesChanged`, and `RaiseDisplayNamesUpdated` calls the existing
+`NotifyDisplayNamesChanged`. `HistoryFacade` reads the timeline through `GetMessages` (a snapshot
+rather than the live list it used to hand to an async request) and takes `IChatStateStore`.
+`MessagesByChat` is the last transitional member, and the client is its only reader.
+
+*The last three hand edits:*
+- `LoadInitialMessagesAsync` built the window itself: pending-persist messages overlaid by the held ones (held wins by id, id-less kept from both), sorted, trimmed, `Set`. That is `ChatMessageCache.RebuildWindow`. Pending state is applied by the client to the list it hands back, as before.
+- The load-more filter (skip known ids, `Take` the room left) is `AddMissing(chat, page, maxToAdd)`. The limit counts only messages that actually enter, so duplicates inside one page no longer use up room.
+- The pinned-target insert ("unless the id is already held") is `InsertIfAbsent`.
+
+What the client still does with a timeline is read it: find a message by id, count, take the newest, and hand the list to the reaction mapper.
+
+Filtering a candidate for the account's own name is `SelfNameCandidate` (marker through
+`ISelfMarkerNaming`, as `ContactLabelSanitizer` does). Fixed on the way: the self path compared the
+candidate with the JID user part as an exact string, so `+55 11 99999-0001` passed as a name — and
+`ResolveEstablishedSelfName` trusted it — while contacts already rejected it by digits with
+`ContactLabelSanitizer.IsPhoneEcho`. Both paths now use that test.
+
+Receipts and pins for a message not in memory are held by `PendingMessageState` (`Unison.Core/State`)
+and applied once when the message next loads; the chat's status policy comes in as a function. The
+client lost two dictionaries, the pin state class and the store method.
+
+The group recipient-count cache is `GroupRecipientCountCache` (`Unison.Core/State`, 9 tests): the
+member count a group receipt has to reach, kept per group for 30 minutes. It was the last thing under
+`_messageStateLock`, so the lock left with it. The metadata query and the send-permission refresh it
+triggers stay in the client. Edge kept, not endorsed: nothing expires an entry early, so a member who
+joins or leaves inside the window is not counted until it lapses.
+
+An app-state pin wrote the row's keys and then the wire address's keys, and the two are usually the
+same conversation, so most keys were upserted twice. `ChatPinStoreKeys.Merge` (4 tests) joins them
+without repeats and the client writes the merged list once. Two client-only dedupes went with it, no
+rule involved: the app-state find-or-add row (`GetOrAddChatRowsForAppState`, which the read-state and
+chat-flag paths had each written out) and building a list strip from a message and applying it
+(`ApplyMessageAsChatTip`, three copies across `.AppState.cs` and `.IncomingPump.cs`). The other three
+places that create a row stay separate: they differ in the name context and insert at the front.
+
+**Façades read shared state, not the client.** Seven members left `IWhatsAppService` because the
+façades now take the Core objects those members only forwarded to:
+
+- `Chats`: the contact helpers and `ChatFacade` take `IChatStateStore`, the same collection.
+- `PhoneContactNamesByJid`: `ContactFacade` and `AddressBookOverlay` get `ChatStateStore.AddressBookNames`.
+- `GetTotalUnreadCount`: `ChatFacade` tallies over `IChatStateStore.Chats`.
+- `GetLiveMessages`: replaced by `IChatStateStore.GetConversationMessages`, over
+  `ChatMessageCache.CopyConversation` (4 tests). It tries the exact address first, then the first
+  conversation with the same canonical form.
+- `GetChatRowsForCanonicalJid`: `ChatRowIndex` is a DI singleton shared by the client and
+  `ChatFacade`, with `FindConversation` (2 tests). It has to be one instance: the client re-keys rows
+  in place and invalidates the index by hand, and a second index would never hear about that.
+- `HasResolvedContactName`: replaced by `PushNameLookup` (Core, 4 tests). The client uses it too and
+  passes its rejection log as the decision callback.
+- `SeedChatMessagesInMemoryAsync`: replaced by `IChatStateStore.AddMissingMessagesAsync` (2 tests).
+  It adds only what the timeline lacks, on the UI thread, and raises nothing, as before. One edge:
+  the store's dispatcher runs inline when there is no window, where the client's dropped the seed.
+
+The newest message time history freshness reads is `NewestStoredMessage.FindUtc` over the timeline
+snapshot and the list strip (cold start has tips but no timelines), each value through
+`ChatMessageOrder.ToComparableUtc`. The client passes `MessagesByChat` and `Chats` and its filters.
+
+What a catalog save takes on the UI thread is `ChatCatalogSnapshot` (7 tests): the
+`history_chat_preview` rows, mapped there through `HistoryChatPreviewApplier.FromChatItem`, and each
+listed address once for the contact, phone-name and alias tables. `PersistDataAsync`,
+`PersistCriticalSuspendStateAsync` and `PersistChatIdentityStateAsync` all take it. The first two
+used to copy the live `ChatItem` references and map them after leaving the UI thread. The identity
+save, which runs after every dedupe and transient merge, hand-built a `ChatItem` per row and left out
+`LastMessageId`, the mentions, the group sender and every status but archived. The store keeps those
+fields when the tip has not moved, but a row the identity save inserted, or whose newer tip it wrote
+first, went to disk without them. It also copied every group roster for a mapping that never reads it.
+
+What a burst of new alias pairs leaves owed is `AliasFollowUpQueue` (`Unison.Core/State`, 9 tests),
+the same seam as `PersistScheduler`: it holds the avatar targets (each once, in order) and the latest
+source, takes them all when a pass begins and refuses a second pass while one runs. The host keeps
+the 750 ms debounce. The client lost three fields: the running flag, which sat outside the lock that
+guarded the rest, and the source, which the re-arm path read without that lock. Fixed on the way: a
+pass that threw had already cleared its targets, so those rows kept a missing picture until the next
+pair for the same contact. They are restored now, without an automatic retry, as with the catalog save.
+
+The dedupe pass's per-group loop is `DuplicateChatFold` (`Unison.Core/State`, 12 tests). Every
+collaborator was already a Core table — `ChatMessageCache`, `DisplayNameTable`, `JidAliasTable` —
+so the loop moved whole; it edits rows in place and reports the ones to remove, and
+`DeduplicateChatsAsync` removes them, invalidates the row index and canonicalizes cache keys as
+before. Fixed in the move: each row's newest message was measured *after* the secondary's messages
+had moved under the survivor, so the secondary always read as empty (the old comment admitted it)
+and an unstamped preview that was newer could never win. Both sides are measured first now. Left
+as it was, not endorsed: with fewer than two rows the client rewrites the lone row's address to its
+canonical form, which a list of two or more never does for its non-duplicate rows.
+
+Writing resolved names onto the list is `ResolvedNameApply` (10 tests). `ChatNameReplacement` had
+already taken the "should this title change" question; the loop that asked it was still written out
+in `ApplyResolvedNamesToChatsAsync` and `NormalizePersistedChatNamesAsync`. The pass takes the name
+lookup and the meaningful-label check as functions, renames members only when asked, and returns how
+many labels changed. The startup pass still logs each title and saves; the live pass still raises
+the names-changed event. A member keeps the weaker rule it had: any non-blank name that differs is
+written, with no check that it is recognisable.
+
+**Another sweep of the main file.** Reading a partial `ChatUpdate` (does it speak about pin or mute,
+and the legacy shape that carried only a sort key or a deadline) is `AppStatePinMapping.FromChatUpdate`
+/ `AppStateMuteMapping.FromChatUpdate`. When a pin-in-chat starts and expires is `MessagePinWindow`;
+a local pin with no duration no longer expires the moment it is made. The repair of rows an old build
+left showing "[Message Deleted]" is `LegacyDeletedPreview`, and its blank-out goes through
+`ChatPreviewTip.Clear`, which also drops the stale `LastMessageId`. The canonical row index is
+`ChatRowIndex` (`Unison.Core/State`): built on demand, published only when nothing invalidated it during
+the build, copies handed out. Moving our message's status forward across every timeline holding it is
+`ChatMessageCache.ApplyOutgoingStatus`. The badge total is `ChatUnreadTally.TotalAcrossConversations`.
+The self base-name precedence (phone contact, WhatsApp cache, credentials, current name, number) and
+the "established self name" gate are `SelfDisplayNameResolution`.
+
+The reconcile pass's tip choice is `ChatPreviewTip.IsReconcileCandidate` / `PickNewestReconcileCandidate`.
+A revoked message stays the tip on every path, as on the phone. A revoke is the `IsRevoked` flag
+(`ChatMessage` and `history_message`) with an empty body; nothing below the UI writes or matches
+"[Message Deleted]" any more. The list strip reads it as `ChatPreviewKind.Revoked` and the bubble as
+`IsRevoked`, and both show the localized label. The marker string survives only to read data from older
+builds: an unflagged marker body is never a tip, and `RepairLegacyDeletedPreviewsAsync` fixes a strip
+still holding it once, because nothing writes it again.
+
+Two edits that bypassed the cache are gone: the revoke apply removed the old synthetic envelope row with
+`List.Remove` (the id stayed in the index), and the app-state delete wrote the remove-plus-forget pair by
+hand. Both use `ChatMessageCache.RemoveMessage`; the revoke target is found with `AliasLinkedMessageFind`.
+
+**Fixed in the same sweep:** `CheckAndMergeDuplicateChatsAsync` only moved messages and removed the LID
+row, so a contact paired by usync or by a new chat lost the LID row's pin, mute, unread count, newer
+preview and picture. When the pair is filed (both callers file it first) it now runs the dedupe pass,
+which folds through `DuplicateChatFold` and persists identity. The bare message move stays for a pair
+the table does not know.
+
+### History on demand — the bookkeeping left first
+
+The on-demand history cluster (per-chat `HISTORY_SYNC_ON_DEMAND`, the paginated
+`FULL_HISTORY_SYNC_ON_DEMAND` catch-up, its watchdog and timeouts) is headed for `HistoryFacade`,
+but it reaches the socket, the reconnect path, the catch-up banner and the enrichment gate, so it
+moves in slices. **Slice 1 is done:** `HistoryOnDemandRegistry` (`Unison.Core/State`, 33 tests) owns
+what was asked and is still owed — six collections, three full-history fields and a nested state
+class that four partials reached into, some of them (`AppState`, the frugal-budget and enrichment
+reads, the avatar-fetch deferral) outside the lock. The "forget this request" rule was written out
+three times (the shared helper, an inline copy in the timeout, the stale-flags branch); it is one
+method now, and the 479 / three-minute backoff moved with the ack.
+
+Behaviour kept, two edges recorded rather than endorsed: a failed chat send keeps its anchor, so the
+same page is not retried until the next connect; deleting a chat leaves a request already out to be
+answered or time out. Deliberate differences: claiming the full catch-up is atomic (it was a
+check-then-set on a volatile flag); a failure before an id is registered no longer drops the
+*previous* request's entry; the quiet-SQLite hand-off finds the pending full request the same way
+progress stamping does (full id, then repair id); the per-chat attempt counter is gone (written,
+never read); and the banner is ended outside the lock instead of inside it.
+
+**Slice 2 is done:** `HistoryCatchUpContinuation` (`Unison.Core/State`, 10 tests) owns where the
+paginated catch-up stands between lots — round, stagnant count, tip watermark — and answers both
+"what next" questions: after a quiet lot (wrapping `HistoryCatchUpContinueDecision`) and after an
+offline drain with a fresh tip (continue, retry once more, or finish). The "catch-up is active" rule
+(banner up *or* a round in progress) was written out five times across two partials; it is
+`IsHistoryCatchUpActive()` over the type now. Quiet lots and empty drains still share one stagnant
+count, as before. Deliberate difference: the three fields were plain, unlocked fields read and
+written from the watchdog, the SQLite finalizer and the offline-drain callback; each decision now
+reads and updates them under one lock, and `catch-up-finish` logs the values it reset rather than
+re-reading them.
+
+**Slice 3 is in steps.** *Chat page request:* `HistoryOnDemandDispatch` (`Unison.Core/State`)
+sends the per-chat `HISTORY_SYNC_ON_DEMAND` over `IHistoryOnDemandSocket`, which the client
+implements explicitly (the `PlaceholderResendDispatch` pattern). Anchor, gate, register, send and
+give-the-slot-back-on-throw are one tested method; the client only hands it the timeline.
+`UnixTime.ToMilliseconds` replaced the client's private copy. *Full-history request:* the same
+type claims, registers and sends `FULL_HISTORY_SYNC_ON_DEMAND` and answers with a
+`HistoryFullRequestOutcome`; on `Sent` the client still logs, raises the banner and the bounce
+event. Deliberate difference: an exception in that post-send work used to release the claim of a
+request that had already gone out; it now propagates instead of pretending the send failed.
+
+*Catch-up watchdog:* `HistoryCatchUpWatchdog` (`Unison.Core/State`) owns the poll loop, the idle and
+age clocks and the clear at the abort window, with the clock and delay injectable so the loop is
+tested without waiting. It answers how the watch ended — cleared between polls, cleared by someone
+else at the abort tick, or idle and cleared by the watch — and only the last one hands the lot to
+`DecideCatchUpAfterIdleBatch`. The client keeps the `Task.Run`, the journal lines and the decision.
+
+*Per-chat ask moved to `HistoryFacade`.* `HistoryOnDemandRegistry` is one DI singleton, shared by
+the client (acks, timeouts, load-more) and the façade. `EnsureChatPageAsync` /
+`IsChatPagePending` read the timeline from `ChatStateStore` and send through the same dispatch;
+`MessageFacade` forwards there. `EnsureHistoryOnDemandAsync` and `IsHistoryOnDemandPending` left
+`IWhatsAppService`. Load-more still asks from the client, because it carries the trigger reason
+the façade does not.
+
+*Accepted-request timeout:* `HistoryOnDemandTimeout` (`Unison.Core/State`) arms once per request,
+picks the chat or full-history window, waits (delay injectable) and expires the request only if it
+is still current, handing back the expired copy — null when the phone answered in time. The client
+keeps the `Task.Run`, the timeout log, the `catch-up-hard-timeout` journal line and the hand-off
+to `DecideCatchUpAfterIdleBatch`.
+
+**Slice 3 is closed.** What stays in the client — `DecideCatchUpAfterIdleBatch`,
+`RequestAdjacentFullHistoryCatchUpAsync` and the two soft-reconnect fallbacks — has no rule left in
+it; it reads `_suppressReconnect`, the auth state, the live transport and the enrichment gate, and
+falls back to a reconnect. That is connection lifecycle and moves with phase 4.
 
 ### Phase 4 — What remains is connection
 
@@ -757,6 +1223,230 @@ Rename-able to `IWhatsAppConnection` / keep `IWhatsAppService` until the last ca
 
 Drop `RunOnUiThreadAsync` (`IDispatcher`) and `SchedulePersistPublic` (the writer persists). `App` lifecycle calls `IConnectionService`, not `App.GetWhatsAppService()`.
 
+**`RunOnUiThreadAsync` is gone.** The client calls its `AttachedUiDispatcher` directly, and
+`IGroupHost` no longer carries a UI hop: `GroupMetadataApply`, `GroupRosterRestore` and
+`GroupFacade` take `IDispatcher` in their constructors. The tests count hops on a
+`CountingDispatcher` instead of the fake host. The debounced save left the port the same way:
+`GroupMetadataApply` and `GroupFacade` call `IChatCatalogPersistence.Schedule`, like the other
+façades. The roster and membership saves left too: `GroupRosterWriter` (Core) owns
+`IGroupRosterStore` and `IPersonStore` and writes in the background, so a failed save is logged
+and never reaches the UI pass. `FindGroupRowName` and `CacheGroupSubject` went next: the applier reads
+the group's rows from `ChatRowIndex` and writes the subject into the push-name `DisplayNameTable`
+(`ContactNames`) itself. So did `HasMeaningfulGroupLabel`, which only combined that cache with the label rule. The 1:1 avatar lookup is `ChatRowAvatarLookup` (Core), which tries the member's JID, phone and LID on `ChatRowIndex`. The name rules went last: `GroupNaming` (Core) implements the port over `ContactDisplayNames`, so the client no longer implements `IGroupHost` and `WhatsAppService.GroupHost.cs` is gone. The client builds its own `GroupNaming` for the receipt-path applier, the way it already builds `JidResolver`. With nothing of the client left behind it, the port was renamed `IGroupNaming`.
+
+**Step 1 is done: the app lifecycle goes through the façade.** `IConnectionService` gained
+`ResumeAsync`, `ReleaseMemoryAsync`, `TransferActiveSocketToBrokerAsync`, `PrepareForSuspendAsync`
+and `ShutdownAsync`. `ConnectionFacade` forwards them to the client the way it already forwarded
+startup. Before the client is attached, it answers as if nothing were there: the broker transfer
+answers false and the rest do nothing. `App.GetWhatsAppService()` is gone; `App` resolves
+`IConnectionService`. The client's reconnect, resume and broker logic did not change.
+
+**The open conversation is shared state.** `ActiveChat` (`Unison.Core/State`, DI singleton over
+`JidAliasTable.GetCanonicalJid`) holds the conversation the user has open by its canonical
+address. `ChatFacade.SetActiveChatJid` opens it there; `IWhatsAppService.SetActiveChatJid` is
+gone, and so is the unused `IsChatCurrentlyOpen`. The client reads `ActiveChat` wherever it read
+its own field (unread counts, timeline refreshes, the status banner, memory release) and
+subscribes to `Changed` for the two side effects it kept: dropping the previous conversation's
+messages from memory and clearing the list banner when a conversation opens. Both still run on
+the caller's thread, after the new conversation is already open, as before.
+
+**The sync line is shared state too.** `SyncStatusChannel` (`Unison.Core/State`, DI singleton over
+`ActiveChat` and the `ShowSyncStatus` setting) owns the one status line the chat list shows and
+the rules that were inside the client: a clear during history catch-up puts "Synchronizing
+history…" back, list enrichment phases stay off an open conversation, and with the setting off
+every status leaves as a clear. `GroupFacade`, `HistoryFacade`, `ContactNameResolver`,
+`ChatAvatarPolicy` and `SettingsViewModel` raise on it directly; `HistoryFacade` relays its
+`Changed` as `SyncStatusChanged`. `IWhatsAppService.RaiseSyncStatus` and `OnSyncStatus` are gone,
+and `SettingsViewModel` no longer takes the client. The client keeps when history catch-up begins
+and ends — that follows its FULL_HISTORY request — and only latches the banner on the channel.
+
+**"Should enrichment wait?" is asked of `SyncWorkGate`.** `SyncWorkGate` (`Unison.Core/State`, DI
+singleton over `HistoryOnDemandRegistry` and a lazy read of the socket's `IsAwaitingInitialSync`)
+answers `IsReplayDrainActive` and `ShouldDeferAvatarFetch`. The replay-drain flag lives there now;
+`.Connection.cs` still decides when it is set (auth loaded and registered) and cleared (offline
+replay released) and only reports it. `GroupFacade`, `ContactNameResolver`, `ChatAvatarPolicy` and
+`GroupRosterPolicy` ask the gate; both members left `IWhatsAppService`. The client's
+`_historyBackfillActive` went with it: nothing ever set it, so it and the matching
+`PlaceholderResendDeferral` argument were removed.
+
+**Round trips through the façades are gone.** The incoming pump called `IMessageService`
+(`AcceptIncomingTimeline`, `QueueIncomingPersist`, `ApplyIncomingRevocationAsync`,
+`ApplyIncomingPinInChatAsync`) and `IChatService` (the offline-drain repair) only for
+`MessageFacade` / `ChatFacade` to call straight back into the client. The pump now calls its own
+methods; the members left both `IMessageService` and `IWhatsAppService`. `HistoryFacade` completes
+on-demand chats on `HistoryOnDemandRegistry` itself, so `CompleteHistoryOnDemandForChats` left the
+contract too. What the pump still asks of the façades (`ApplyLiveIncomingChatListAsync`, the
+offline tips, reactions, notifications, media hydration) is real façade work.
+
+**Names are answered by `ContactDisplayNames`.** (`Unison.Core/State`, DI singleton over
+`JidAliasTable`, the push-name and address-book `DisplayNameTable`s, `IPersonStore` and
+`ISelfMarkerNaming`.) It holds the lookups that feed `DisplayNameResolution` and the self-name
+rule that were in `.Identity.cs`. The client binds it once, like `JidAliasTable.BindSelf`, with
+the account's id, LID, credentials name, current name and phone, plus its label-decision log.
+`ContactFacade.ResolveDisplayName` answers from it; the client's own `ResolveDisplayName` delegates
+to it for its internal callers. `IWhatsAppService.ResolveDisplayName` is gone, and `ChatFacade`
+names rows through `IContactService` only. Writing names (push names, the person store, the
+overlay) did not move.
+
+**Identity and transport readiness no longer go through the client.** `JidAliasTable.BindSelf`
+takes the account's phone too and the table answers `Self` (`Id`, `Lid`, `Phone`; null before
+pairing). `JidResolver` reads it there and lost its `IWhatsAppService` parameter;
+`IJidResolver.Self` is identity only, and the profile (name, picture) stays with
+`ProfileFacade`. `IWhatsAppSessionProvider.IsTransportReady` asks the current socket whether the
+handshake finished, the same test the client made; `ProfileFacade`, `DebugSendService`,
+`ContactNameResolver`, `ChatAvatarPolicy` and `GroupRosterPolicy` ask it, and the member left
+`IWhatsAppService`. `AddressBookOverlay`, `ChatAvatarFetch` and `GroupRosterPolicy` no longer take
+the client at all.
+
+**The sync budget and first-sync progress are shared state.** `InitialSyncProgressState`
+(`Unison.Core/State`, DI singleton) holds whether the first sync is active and its counters, and
+raises `Changed`; the client still decides when it starts and ends and calls `Publish` from
+`PublishInitialSyncProgress`, which keeps the diagnostics line. `SyncBudget` (DI singleton over the
+chat store, that state, `SyncWorkGate`, `HistoryOnDemandRegistry`, a memory-headroom `Func` and the
+Mobile flag) answers `IsFrugal`; the rule itself is the pure `SyncBudget.PreferFrugal`, tested.
+`HistoryFacade` and `ChatAvatarPolicy` read both directly. `IsInitialSyncSafeMode`,
+`PreferFrugalSyncBudget`, the two counters and `OnInitialSyncProgress` left `IWhatsAppService`.
+
+**Presence and the verbose switch no longer go through the client.** `MessageFacade` subscribes to
+presence on `IWhatsAppSessionProvider.Socket` when it is connected, the same test the client
+made; `PresenceSubscribeAsync` left `IWhatsAppService`. The verbose trace switch is a persisted
+setting, not connection state: `VerboseLog` (static, `Unison.Uwp/Services`) holds it, loads it and
+persists it, `WhatsAppService.Log` reads it, and `RuntimeDiagnosticsService` sets it directly.
+`VerboseLogging` and `SetVerboseLogging` left the contract.
+
+**The account's own profile is shared state.** `SelfProfileState` (`Unison.Core/State`, DI
+singleton, tested) holds the name and picture the app shows for the logged-in account, applies
+the rule that the account's own phone digits are never kept as a name, and builds the `Profile`
+snapshot, falling back to the credentials name and picture. The client binds it once with a
+reader over its auth state, the phone-echo rule and how a new picture is persisted; it still writes
+the name when a push name or the credentials arrive, and restores the saved picture without
+saving it again. `ProfileFacade` reads and writes it directly and relays its `Changed`.
+`CurrentUserName`, `CurrentUserAvatar`, `CurrentProfile` and `OnUserProfileChanged` left
+`IWhatsAppService`.
+
+**Two small leftovers moved.** Whether the saved chat rows are still being read back at startup
+is the chat list's own state: `IChatStateStore.IsLoadingPersistedChats`, set by the client around
+the read through `ChatStateStore.BeginPersistedChatsLoad()` (disposed even when the read fails).
+`HistoryFacade` reads it there. The health journal samples the client through
+`IRuntimeSnapshotSource` (Core), a narrow port the client implements explicitly like
+`IOutgoingMessageHost`; `RuntimeDiagnosticsService.AttachSnapshotSource` replaced
+`AttachWhatsAppService`. `IsLoadingPersistedChats` and `GetRuntimeDiagnosticsSnapshot` left the
+contract.
+
+**Message pins are sent by the façade.** `MessageFacade.SetMessagePinnedAsync` reconnects,
+builds the key, sends on `IWhatsAppSessionProvider.Socket` and works out the pin window; then it
+hands the local half to the client, the same split as chat pins. `IWhatsAppService.SetMessagePinnedAsync`
+became `ApplyMessagePinAsync` (timeline, pending pin, SQLite and replay queue; no wire).
+
+**Sync workload is a strategy per memory tier.** `SyncWorkloadStrategy` (`Unsupported` /
+`Low` / `High`, from `DeviceCategory`) owns message caps, SQLite sub-batch size, whether history
+thumbs materialize during sync, chat-list release size, avatar batch size and the
+`HistorySyncConfig` storage quota, plus catch-up rounds, the finalize quiet window, group
+metadata/roster batches and `SyncPacing` (frugal and generous values; `SyncBudget` picks which).
+Unsupported is always frugal in `SyncBudget`.
+
+**The first history sync holds the list on every platform.** `ChatListSyncHold` answers from
+`IHistoryService.IsAwaitingFirstHistorySync` alone. While it holds, the chat `ListView` is not
+created (`x:Load` on `ChatListViewModel.IsChatListMaterialized`), the per-chunk preview reconcile is
+skipped and row property changes do not post refreshes; the completed event releases the list and
+runs one full reconcile, which applies its tips to the UI thread in slices. Later syncs release
+progressively.
+
+**Renaming rows after names arrive is `ChatNameRefresh`.** (`Unison.Core`, DI singleton over the UI
+dispatcher, `IChatStateStore`, `ContactDisplayNames` and `ISelfMarkerNaming`.) It runs
+`ResolvedNameApply` over the rows in one UI pass and raises `Applied` inside that pass. `GroupFacade`,
+`ContactFacade`, `ContactNameResolver` and `ContactUsyncResolver` call it directly, and
+`ApplyResolvedDisplayNamesToChatsAsync` left `IWhatsAppService`. The client still runs it from its own
+paths, and on `Applied` writes the diagnostics line and raises `OnDisplayNamesUpdated`, which
+`ContactFacade` relays as `DisplayNamesUpdated`.
+
+**Clearing unread is the chat façade's.** `ChatFacade.ClearUnreadForChatAsync` zeroes every row of
+the conversation on the UI thread (`ChatUnreadTally.Clear`, tested), updates the badge and the
+shortcut, and saves only the rows that changed through `IChatCatalogPersistence.PersistRows`.
+It takes `IShortcutService` by constructor instead of reaching `App.Services`, and the member left
+`IWhatsAppService`.
+
+**A new chat row is the chat façade's too.** `StartNewChat` moved from `IMessageService` to
+`IChatService`: `ChatFacade` inserts the row on the UI thread, names it through `IContactService`,
+sets its kind from `IJidResolver.IsSelfLinked` and asks for a dedup pass through
+`IChatService.RequestChatListDedup` (`ChatListDeduper`). `ChatListViewModel` and the legacy
+`ShellView` call the chat façade; the member left `IMessageService` and `IWhatsAppService`.
+
+**A stored tip reaches the strip through `ChatMessageTipApply`.** (Core.) It is the glue the
+client called `ApplyMessageAsChatTip`: `ChatListStrip.FromMessage` plus
+`LiveChatPreviewApplier.ApplyIfNewer`, with the yesterday label and the self name passed in.
+The client method is a thin forward.
+
+**Bulk in-memory preview refresh is `StoredChatPreviewRefresh`.** (Core, DI singleton over the UI
+dispatcher, `ChatStateStore`, `IJidResolver`, `ContactDisplayNames`, `ISelfMarkerNaming` and
+`IStringResources`.) `RefreshAsync` re-tips every row from `MessagesByChat`; `ReconcileAsync`
+also creates missing rows, clears placeholder direct names and sorts the list. `ChatFacade`
+owns both members on `IChatService`; the client calls the helper after a large offline drain.
+`RefreshAllChatPreviewsFromStoredAsync` and `ReconcileChatListFromStoredAsync` left
+`IWhatsAppService`.
+
+**Chat-list dedupe is `ChatListDeduper`.** (Core, DI singleton over the UI dispatcher,
+`ChatStateStore`, `ChatRowIndex`, `JidAliasTable` and the push-name table.) It runs
+`DuplicateChatFold`, removes the folded rows, re-keys `MessagesByChat` and invalidates the
+row index in one UI pass. `IChatService.RequestChatListDedup` lives on `ChatFacade`, which
+schedules the catalogue save, raises display-name listeners through `IContactService` and
+asks `IChatIdentityPersistence` (the client) to write names and aliases immediately when
+rows merged. The member left `IWhatsAppService`; the client still runs the helper from its
+own alias and startup paths.
+
+**Alias-row merge is `ChatListAliasMerge`.** (Core, DI singleton over the UI dispatcher,
+`ChatStateStore`, `JidAliasTable` and `ChatListDeduper`.) When a LID and a phone already
+share a canonical id it runs ordinary dedupe; otherwise it folds the LID timeline into the
+phone row and drops the LID chat. `ChatFacade` owns the fire-and-forget entry used when a
+new list row arrives with an unresolved alias pair. `ContactUsyncResolver` calls the helper
+directly (not through `IChatService`) so DI does not cycle through `IContactService`.
+`MergeDuplicateChatsAsync` and `RequestAliasChatMerge` left `IWhatsAppService`.
+
+**Usync table filing is `UsyncAliasFiling`.** (Core, DI singleton over `JidAliasTable`.) It
+runs `AliasPairPolicy` and `AliasPairFiling.FileBothWays`, then returns the accepted pair.
+`TryFileUsyncAlias` is `IUsyncAliasHost` on the client: after a successful
+`UsyncAliasFiling` it registers the pair with the live socket and heals our own identity
+in the auth state — both need session and auth the Core type must not own.
+
+**Opening a chat merges SQLite and the live overlay in Core.** `OpenChatMessageMerge` is the
+id-prefer-live merge `MessageFacade` used to inline twice (open page and sync reload). Live
+still wins on collision and keeps SQLite media keys / quote / reactions when blank. The RAM
+overlay itself stays on the client through `IOutgoingMessageHost.LoadLiveOverlayAsync`
+(rebuild window, apply held receipts, queue dirty rows); `LoadMessagesForChatAsync` left
+`IWhatsAppService`. UI keeps calling `IMessageService.LoadMessagesForChatAsync`.
+
+**SQLite tip reconcile is the chat façade's.** `ChatFacade.ReconcileChatPreviewsFromSqliteAsync`
+runs `ChatPreviewReconciler`, then notes catch-up progress and schedules persist through
+`IOfflineReplayHost` — the same side effects the client attached. The member left
+`IWhatsAppService`; the client still runs the helper on its own startup and catch-up paths.
+
+**Deferred avatar enrichment is a narrow port.** `IDeferredAvatarResolution` is what
+`ChatAvatarPolicy` needs to ask for another background pass without naming the whole client.
+The timer and `TriggerBackgroundResolution` stay on the client (`ShutdownAsync` cancels them).
+`ScheduleDeferredAvatarResolution` left `IWhatsAppService`.
+
+**Local pin/delete halves are `IAppStateLocalHost`.** Chat pin, chat delete and message pin
+write the rows and the durable mirror through that port. `ChatFacade` no longer takes
+`IWhatsAppService` at all; `MessageFacade` still does for events and `EnsureConnectedAsync`.
+`ApplyChatPinAsync`, `ApplyChatDeletionAsync` and `ApplyMessagePinAsync` left `IWhatsAppService`.
+
+**Conversation resync primitives are `IConversationResyncHost`.** Cache wipe, app-state flag
+re-report and the no-socket full resync fallback leave `IWhatsAppService`. `HistoryFacade`
+owns the UI path and reaches those three through the host; ViewModels still call
+`IHistoryService` / `IMessageService.ResyncConversationsAsync`.
+
+**SQLite history notifies are `IHistorySyncHost`.** Chunk started/applied, LID mapping
+filing and `RequestFullHistoryOnDemandAsync` leave `IWhatsAppService`. `HistoryFacade`
+still takes the client for events and `EnsureConnectedAsync`.
+
+**Usync socket filing is `IUsyncAliasHost`.** `TryFileUsyncAlias` left `IWhatsAppService`.
+`ContactUsyncResolver` takes that port only (no more `IWhatsAppService`); table write stays
+`UsyncAliasFiling`, socket register + identity heal stay on the client behind the host.
+
+**Startup UI load is `IStartupUiHost`.** `LoadPersistedUiStateAsync` and
+`StartDeferredStartupMaintenance` leave `IWhatsAppService`. `ConnectionFacade` takes the
+host and still attaches the client for events and the rest of lifecycle.
+
 **Done when:** `.Connection.cs` + a small main file; no façade needs send/history/avatar/group/list methods on the client; leftover `IWhatsAppSocket` drop is [Migration](Migration) item 9, after this.
 
 ---
@@ -766,7 +1456,7 @@ Drop `RunOnUiThreadAsync` (`IDispatcher`) and `SchedulePersistPublic` (the write
 1. **UI-thread mutations of `Chats`.** Off-thread `ObservableCollection` writes crash the list. Use `IChatStateStore` APIs that marshal.
 2. **`GetCanonicalJid` everywhere.** Wrapper first (phase 1), table move later (3.7).
 3. **Do not register** resurrected `MessageService` / `ContactService` / `ConnectionService` / `ProfileService` under `Services/WhatsApp/` — deleted on purpose; live types are `*Facade`.
-4. **Broker transfer** still returns false on `SocketBridge`. Unrelated to this extraction; see [Background broker](Background-Broker).
+4. **Broker transfer** is wired on `SocketBridge` (warm transfer and reclaim; no cold restore). Unrelated to this extraction; see [Background broker](Background-Broker).
 
 ---
 

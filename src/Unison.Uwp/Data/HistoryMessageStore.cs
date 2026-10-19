@@ -21,7 +21,7 @@ namespace Unison.Uwp.Data
     {
         private static readonly string DatabaseFileName = "unison.db";
 
-        public const int CurrentSchemaVersion = 7;
+        public const int CurrentSchemaVersion = 8;
 
         /// <summary>
         /// Timeline open / load-more: protocol thumbs live on disk (<c>MediaLocalUri</c> / poster).
@@ -68,8 +68,10 @@ namespace Unison.Uwp.Data
                 _connection = new SQLiteAsyncConnection(dbPath);
                 await _connection.CreateTableAsync<HistoryMessageRow>().ConfigureAwait(false);
                 await _connection.CreateTableAsync<HistoryMessageReactionRow>().ConfigureAwait(false);
+                await EnsureFlagDeletedColumnAsync().ConfigureAwait(false);
                 await DropLegacyThumbnailColumnAsync().ConfigureAwait(false);
                 await EnsureIndexesAsync().ConfigureAwait(false);
+                await StaleOutgoingSweep.EnsureRanAsync(_connection).ConfigureAwait(false);
                 _initialized = true;
                 Debug.WriteLine("[HistoryMessageStore] Initialized schema=" + CurrentSchemaVersion + " at " + dbPath);
             }
@@ -262,7 +264,7 @@ namespace Unison.Uwp.Data
             List<HistoryMessageRow> rows;
             if (beforeUtc.HasValue)
             {
-                DateTime before = beforeUtc.Value;
+                DateTime before = HistorySqlCursor.ForQuery(beforeUtc.Value);
                 string beforeId = beforeMessageId ?? string.Empty;
                 rows = await _connection.QueryAsync<HistoryMessageRow>(
                     TimelineSelectSql +
@@ -329,7 +331,7 @@ namespace Unison.Uwp.Data
 
             if (beforeUtc.HasValue)
             {
-                DateTime before = beforeUtc.Value;
+                DateTime before = HistorySqlCursor.ForQuery(beforeUtc.Value);
                 string beforeId = beforeMessageId ?? string.Empty;
                 sql.Append(" AND (TimestampUtc < ? OR (TimestampUtc = ? AND MessageId < ?))");
                 args.Add(before);
@@ -1032,6 +1034,11 @@ namespace Unison.Uwp.Data
                         row.IsRevoked = true;
                     }
 
+                    if (existing.FlagDeleted)
+                    {
+                        row.FlagDeleted = true;
+                    }
+
                     // Pin/unpin is authoritative only via WritePins (or an upsert that already
                     // carries IsPinned=true). History/live body rewrites must not clear a pin
                     // the strip/banner already persisted — same idea as IsRevoked.
@@ -1221,6 +1228,96 @@ namespace Unison.Uwp.Data
             }
         }
 
+        public async Task<IReadOnlyList<CachedMediaEntry>> ListCachedMediaAsync()
+        {
+            await InitializeAsync().ConfigureAwait(false);
+            List<HistoryMessageRow> rows = await _connection.QueryAsync<HistoryMessageRow>(
+                "SELECT ChatJid, MessageId, MediaLocalUri, MediaPosterUri FROM history_message " +
+                "WHERE IFNULL(flag_deleted, 0) = 0 AND (" +
+                "(MediaLocalUri IS NOT NULL AND MediaLocalUri != '') OR " +
+                "(MediaPosterUri IS NOT NULL AND MediaPosterUri != ''))").ConfigureAwait(false);
+            var list = new List<CachedMediaEntry>(rows.Count);
+            for (int i = 0; i < rows.Count; i++)
+            {
+                list.Add(new CachedMediaEntry
+                {
+                    ChatJid = rows[i].ChatJid,
+                    MessageId = rows[i].MessageId,
+                    LocalUri = rows[i].MediaLocalUri,
+                    PosterUri = rows[i].MediaPosterUri
+                });
+            }
+
+            return list;
+        }
+
+        public async Task MarkMediaDeletedAsync(IReadOnlyList<CachedMediaEntry> entries)
+        {
+            if (entries == null || entries.Count == 0)
+            {
+                return;
+            }
+
+            await InitializeAsync().ConfigureAwait(false);
+            await _writeLock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                await _connection.RunInTransactionAsync(conn =>
+                {
+                    for (int i = 0; i < entries.Count; i++)
+                    {
+                        CachedMediaEntry entry = entries[i];
+                        if (entry == null ||
+                            string.IsNullOrWhiteSpace(entry.ChatJid) ||
+                            string.IsNullOrWhiteSpace(entry.MessageId))
+                        {
+                            continue;
+                        }
+
+                        conn.Execute(
+                            "UPDATE history_message SET flag_deleted = 1 WHERE ChatJid = ? AND MessageId = ?",
+                            entry.ChatJid,
+                            entry.MessageId);
+                    }
+                }).ConfigureAwait(false);
+            }
+            finally
+            {
+                _writeLock.Release();
+            }
+        }
+
+        public async Task<bool> IsMediaDeletedAsync(string chatJid, string messageId)
+        {
+            if (string.IsNullOrWhiteSpace(chatJid) || string.IsNullOrWhiteSpace(messageId))
+            {
+                return false;
+            }
+
+            await InitializeAsync().ConfigureAwait(false);
+            int flag = await _connection.ExecuteScalarAsync<int>(
+                "SELECT IFNULL(flag_deleted, 0) FROM history_message WHERE ChatJid = ? AND MessageId = ? LIMIT 1",
+                chatJid,
+                messageId).ConfigureAwait(false);
+            return flag != 0;
+        }
+
+        // .NET Native strips metadata from private row types ("Required Public" in Default.rd.xml),
+        // so column detection must not map PRAGMA rows; an existing column is the expected outcome.
+        private async Task EnsureFlagDeletedColumnAsync()
+        {
+            try
+            {
+                await _connection.ExecuteAsync(
+                    "ALTER TABLE history_message ADD COLUMN flag_deleted INTEGER NOT NULL DEFAULT 0").ConfigureAwait(false);
+            }
+            catch (SQLiteException ex) when (
+                ex.Message != null &&
+                ex.Message.IndexOf("duplicate column name", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+            }
+        }
+
         private static HistoryMessageRow ToRow(HistoryMessage model)
         {
             return new HistoryMessageRow
@@ -1255,6 +1352,7 @@ namespace Unison.Uwp.Data
                 QuotedBody = model.QuotedBody,
                 QuotedKind = (int)model.QuotedKind,
                 MediaLocalUri = model.MediaLocalUri,
+                FlagDeleted = model.FlagDeleted,
                 MediaPosterUri = model.MediaPosterUri,
                 MentionedJids = JoinMentionedJids(model.MentionedJids),
                 TimestampUtc = model.TimestampUtc,

@@ -11,6 +11,7 @@ namespace Unison.Core.Models
         Sticker = 3,
         Voice = 4,
         Document = 5,
-        Reaction = 6
+        Reaction = 6,
+        Revoked = 7
     }
 }

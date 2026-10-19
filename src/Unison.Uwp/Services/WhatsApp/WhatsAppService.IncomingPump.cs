@@ -43,15 +43,8 @@ namespace Unison.Uwp.Services.WhatsApp
     public partial class WhatsAppService
     {
 
-        private HashSet<string> GetOrBuildMessageIdIndex(string chatJid)
-        {
-            string normJid = NormalizeJid(chatJid);
-            return _messageIdIndex.GetOrBuild(normJid, () =>
-            {
-                List<ChatMessage> list;
-                return MessagesByChat.TryGetValue(normJid, out list) ? list : null;
-            });
-        }
+        private HashSet<string> GetOrBuildMessageIdIndex(string chatJid) =>
+            MessagesByChat.KnownIds(chatJid);
 
         private bool HasMessageId(string chatJid, string messageId)
         {
@@ -65,61 +58,20 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private IReadOnlyList<string> GetAliasLinkedDirectChatJids(string chatJid)
         {
-            var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var candidate in ExpandNameLookupCandidates(chatJid))
-            {
-                string normalized = NormalizeJid(candidate);
-                if (string.IsNullOrWhiteSpace(normalized) || normalized.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                candidates.Add(normalized);
-                candidates.Add(GetCanonicalJid(normalized));
-            }
-
-            return candidates
-                .Where(c => !string.IsNullOrWhiteSpace(c))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
+            return AliasLinkedDirectChats.Collect(
+                ExpandNameLookupCandidates(chatJid),
+                NormalizeJid,
+                GetCanonicalJid);
         }
 
         private bool TryFindAliasLinkedMessage(string chatJid, string messageId, out string existingChatJid, out ChatMessage existingMessage)
         {
-            existingChatJid = null;
-            existingMessage = null;
-            if (string.IsNullOrWhiteSpace(chatJid) || string.IsNullOrWhiteSpace(messageId))
-            {
-                return false;
-            }
-
-            foreach (var candidate in GetAliasLinkedDirectChatJids(chatJid))
-            {
-                if (!MessagesByChat.TryGetValue(candidate, out var messages) || messages == null)
-                {
-                    continue;
-                }
-
-                var match = messages.FirstOrDefault(m => string.Equals(m?.Id, messageId, StringComparison.Ordinal));
-                if (match != null)
-                {
-                    existingChatJid = candidate;
-                    existingMessage = match;
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        private void RegisterMessageId(string chatJid, string messageId)
-        {
-            if (string.IsNullOrEmpty(chatJid) || string.IsNullOrEmpty(messageId))
-            {
-                return;
-            }
-
-            GetOrBuildMessageIdIndex(chatJid).Add(messageId);
+            return AliasLinkedMessageFind.TryFind(
+                MessagesByChat,
+                GetAliasLinkedDirectChatJids(chatJid),
+                messageId,
+                out existingChatJid,
+                out existingMessage);
         }
 
         /// <summary>
@@ -144,81 +96,14 @@ namespace Unison.Uwp.Services.WhatsApp
             return false;
         }
 
-        private bool TryConsolidateAliasDuplicateMessage(string targetChatJid, string sourceChatJid, string messageId, out ChatMessage consolidatedMessage)
-        {
-            consolidatedMessage = null;
-            string normalizedTarget = NormalizeJid(targetChatJid);
-            string normalizedSource = NormalizeJid(sourceChatJid);
-            if (string.IsNullOrWhiteSpace(normalizedTarget) ||
-                string.IsNullOrWhiteSpace(normalizedSource) ||
-                string.IsNullOrWhiteSpace(messageId) ||
-                string.Equals(normalizedTarget, normalizedSource, StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-
-            if (!MessagesByChat.TryGetValue(normalizedSource, out var sourceMessages) || sourceMessages == null)
-            {
-                return false;
-            }
-
-            var existingMessage = sourceMessages.FirstOrDefault(m => string.Equals(m?.Id, messageId, StringComparison.Ordinal));
-            if (existingMessage == null)
-            {
-                return false;
-            }
-
-            consolidatedMessage = existingMessage;
-            if (!MessagesByChat.TryGetValue(normalizedTarget, out var targetMessages) || targetMessages == null)
-            {
-                targetMessages = new List<ChatMessage>();
-                MessagesByChat[normalizedTarget] = targetMessages;
-            }
-
-            if (!HasMessageId(normalizedTarget, messageId))
-            {
-                ChatMessageOrder.InsertSorted(targetMessages, existingMessage);
-                RegisterMessageId(normalizedTarget, messageId);
-            }
-
-            sourceMessages.Remove(existingMessage);
-            _messageIdIndex.Remove(normalizedSource, messageId);
-
-            return true;
-        }
-
         private void RegisterMissingMessage(string chatJid, string participant, string messageId, bool isFromMe, DateTime timestamp, string reason)
         {
             string normJid = NormalizeJid(chatJid);
+            _missing.Note(normJid, messageId, participant, isFromMe, timestamp, reason, DateTime.UtcNow);
+
             if (string.IsNullOrWhiteSpace(normJid) || string.IsNullOrWhiteSpace(messageId))
             {
                 return;
-            }
-
-            lock (_missingMessageLock)
-            {
-                if (!_pendingMissingMessagesByChat.TryGetValue(normJid, out var byMessageId))
-                {
-                    byMessageId = new Dictionary<string, MissingMessageCandidate>(StringComparer.Ordinal);
-                    _pendingMissingMessagesByChat[normJid] = byMessageId;
-                }
-
-                if (!byMessageId.TryGetValue(messageId, out var candidate))
-                {
-                    candidate = new MissingMessageCandidate
-                    {
-                        ChatJid = normJid,
-                        MessageId = messageId,
-                        FirstSeenUtc = DateTime.UtcNow
-                    };
-                    byMessageId[messageId] = candidate;
-                }
-
-                candidate.Participant = participant;
-                candidate.IsFromMe = isFromMe;
-                candidate.MessageTimestamp = timestamp;
-                candidate.Reason = reason;
-                candidate.LastSeenUtc = DateTime.UtcNow;
             }
 
             if (!ShouldDeferReconnectReplayWork())
@@ -230,43 +115,18 @@ namespace Unison.Uwp.Services.WhatsApp
         private void ResolveMissingMessage(string chatJid, string messageId, string source)
         {
             string normJid = NormalizeJid(chatJid);
+            MissingMessageRemoval removal = _missing.Resolve(normJid, messageId);
             if (string.IsNullOrWhiteSpace(normJid) || string.IsNullOrWhiteSpace(messageId))
             {
                 return;
             }
 
-            CancellationTokenSource scheduledCts = null;
-            string pendingRequestId = null;
-
-            lock (_missingMessageLock)
-            {
-                if (_pendingMissingMessagesByChat.TryGetValue(normJid, out var byMessageId))
-                {
-                    if (byMessageId.TryGetValue(messageId, out var candidate))
-                    {
-                        scheduledCts = candidate.PlaceholderScheduleCts;
-                        pendingRequestId = candidate.LastPlaceholderRequestId;
-                    }
-
-                    byMessageId.Remove(messageId);
-                    if (byMessageId.Count == 0)
-                    {
-                        _pendingMissingMessagesByChat.Remove(normJid);
-                    }
-                }
-
-                if (!string.IsNullOrWhiteSpace(pendingRequestId))
-                {
-                    _placeholderResendRequestsByStanzaId.Remove(pendingRequestId);
-                }
-            }
-
-            if (scheduledCts != null)
+            if (removal.ScheduledResend != null)
             {
                 try
                 {
-                    scheduledCts.Cancel();
-                    scheduledCts.Dispose();
+                    removal.ScheduledResend.Cancel();
+                    removal.ScheduledResend.Dispose();
                     if (!ShouldDeferReconnectReplayWork())
                     {
                         Debug.WriteLine($"[WhatsAppService] placeholder resend cancelled for {messageId} in {normJid} ({source})");
@@ -288,7 +148,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         /// <remarks>
         /// Two callers used to do this by removing the key inline — on the UI thread, outside
-        /// <c>_missingMessageLock</c>, while the pump reads and writes the same dictionary from a
+        /// <c>_missing.Gate</c>, while the pump reads and writes the same dictionary from a
         /// background thread. That is a plain `Dictionary` being mutated from two threads at once.
         /// They also dropped the candidates without cancelling their scheduled resends, so a timer
         /// stayed alive to ask the server for a message belonging to a deleted conversation.
@@ -301,25 +161,10 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            List<MissingMessageCandidate> dropped = null;
-            lock (_missingMessageLock)
+            List<MissingMessageCandidate> dropped = new List<MissingMessageCandidate>(_missing.ForgetChat(normJid));
+            if (dropped.Count == 0)
             {
-                Dictionary<string, MissingMessageCandidate> byMessageId;
-                if (!_pendingMissingMessagesByChat.TryGetValue(normJid, out byMessageId))
-                {
-                    return;
-                }
-
-                dropped = byMessageId.Values.ToList();
-                _pendingMissingMessagesByChat.Remove(normJid);
-
-                foreach (var candidate in dropped)
-                {
-                    if (candidate != null && !string.IsNullOrWhiteSpace(candidate.LastPlaceholderRequestId))
-                    {
-                        _placeholderResendRequestsByStanzaId.Remove(candidate.LastPlaceholderRequestId);
-                    }
-                }
+                return;
             }
 
             foreach (var candidate in dropped)
@@ -350,10 +195,9 @@ namespace Unison.Uwp.Services.WhatsApp
                 return false;
             }
 
-            lock (_missingMessageLock)
+            lock (_missing.Gate)
             {
-                return _pendingMissingMessagesByChat.TryGetValue(normJid, out var byMessageId) &&
-                       byMessageId.TryGetValue(messageId, out candidate);
+                return _missing.TryGet(normJid, messageId, out candidate);
             }
         }
 
@@ -378,197 +222,38 @@ namespace Unison.Uwp.Services.WhatsApp
                 return Task.FromResult(false);
             }
 
-            DateTime utcNow = DateTime.UtcNow;
-            CancellationTokenSource scheduleCts = null;
-            lock (_missingMessageLock)
-            {
-                if (candidate.PlaceholderRequestCount >= 2 ||
-                    candidate.PlaceholderRequestInFlight ||
-                    candidate.PlaceholderScheduleCts != null)
-                {
-                    return Task.FromResult(false);
-                }
-
-                if (candidate.LastPlaceholderRequestUtc != DateTime.MinValue &&
-                    utcNow - candidate.LastPlaceholderRequestUtc < PlaceholderResendResponseTimeout)
-                {
-                    return Task.FromResult(false);
-                }
-
-                scheduleCts = new CancellationTokenSource();
-                candidate.PlaceholderScheduleCts = scheduleCts;
-                candidate.PlaceholderScheduledForUtc = utcNow.Add(PlaceholderResendDispatchDelay);
-            }
-
-            Debug.WriteLine($"[WhatsAppService] placeholder resend scheduled for {candidate.MessageId} in {candidate.ChatJid} (trigger={trigger}, dueInMs={(int)PlaceholderResendDispatchDelay.TotalMilliseconds})");
-
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await Task.Delay(PlaceholderResendDispatchDelay, scheduleCts.Token);
-                }
-                catch (TaskCanceledException)
-                {
-                    Debug.WriteLine($"[WhatsAppService] placeholder resend cancelled before send for {messageId} in {chatJid} (trigger={trigger})");
-                    return;
-                }
-
-                MissingMessageCandidate currentCandidate;
-                lock (_missingMessageLock)
-                {
-                    if (!TryGetMissingMessage(chatJid, messageId, out currentCandidate) ||
-                        currentCandidate.PlaceholderScheduleCts != scheduleCts)
-                    {
-                        return;
-                    }
-
-                    currentCandidate.PlaceholderScheduleCts = null;
-                    currentCandidate.PlaceholderScheduledForUtc = DateTime.MinValue;
-                    currentCandidate.PlaceholderRequestInFlight = true;
-                }
-
-                string stanzaId = null;
-                try
-                {
-                    var key = new Proto.MessageKey
-                    {
-                        RemoteJid = currentCandidate.ChatJid,
-                        Id = currentCandidate.MessageId,
-                        FromMe = currentCandidate.IsFromMe,
-                        Participant = currentCandidate.Participant ?? string.Empty
-                    };
-
-                    stanzaId = _socket.GenerateMessageId();
-                    lock (_missingMessageLock)
-                    {
-                        if (!TryGetMissingMessage(chatJid, messageId, out currentCandidate))
-                        {
-                            return;
-                        }
-
-                        currentCandidate.LastPlaceholderRequestUtc = DateTime.UtcNow;
-                        currentCandidate.PlaceholderRequestCount++;
-                        currentCandidate.LastPlaceholderRequestId = stanzaId;
-                        _placeholderResendRequestsByStanzaId[stanzaId] = new PlaceholderResendRequestState
-                        {
-                            ChatJid = currentCandidate.ChatJid,
-                            MessageId = currentCandidate.MessageId,
-                            RequestedAtUtc = DateTime.UtcNow,
-                            Trigger = trigger
-                        };
-                    }
-
-                    string sentStanzaId = await _socket.RequestPlaceholderResendAsync(key, stanzaId);
-                    if (!string.Equals(sentStanzaId, stanzaId, StringComparison.Ordinal))
-                    {
-                        Debug.WriteLine($"[WhatsAppService] PLACEHOLDER_MESSAGE_RESEND stanza id changed unexpectedly: tracked={stanzaId}, sent={sentStanzaId}");
-                    }
-
-                    Debug.WriteLine($"[WhatsAppService] placeholder resend sent for {messageId} in {chatJid} (trigger={trigger}, stanzaId={stanzaId})");
-
-                    _ = Task.Run(async () =>
-                    {
-                        await Task.Delay(PlaceholderResendResponseTimeout);
-
-                        PlaceholderResendRequestState timedOutState = null;
-                        lock (_missingMessageLock)
-                        {
-                            if (_placeholderResendRequestsByStanzaId.TryGetValue(stanzaId, out timedOutState))
-                            {
-                                _placeholderResendRequestsByStanzaId.Remove(stanzaId);
-                                if (TryGetMissingMessage(timedOutState.ChatJid, timedOutState.MessageId, out var timedOutCandidate) &&
-                                    string.Equals(timedOutCandidate.LastPlaceholderRequestId, stanzaId, StringComparison.Ordinal))
-                                {
-                                    timedOutCandidate.PlaceholderRequestInFlight = false;
-                                }
-                            }
-                        }
-
-                        if (timedOutState != null)
-                        {
-                            string timeoutKind = timedOutState.AckAccepted ? $"accepted/no-payload, ackAt={timedOutState.AckAcceptedUtc:O}" : "no-ack";
-                            Debug.WriteLine($"[WhatsAppService] placeholder resend timed out for {timedOutState.MessageId} in {timedOutState.ChatJid} (stanzaId={stanzaId}, {timeoutKind})");
-                        }
-                    });
-                }
-                catch (Exception ex)
-                {
-                    lock (_missingMessageLock)
-                    {
-                        if (!string.IsNullOrWhiteSpace(stanzaId))
-                        {
-                            _placeholderResendRequestsByStanzaId.Remove(stanzaId);
-                        }
-                        if (TryGetMissingMessage(chatJid, messageId, out currentCandidate))
-                        {
-                            currentCandidate.PlaceholderRequestInFlight = false;
-                            if (string.Equals(currentCandidate.LastPlaceholderRequestId, stanzaId, StringComparison.Ordinal))
-                            {
-                                currentCandidate.LastPlaceholderRequestId = null;
-                                currentCandidate.PlaceholderRequestCount = Math.Max(0, currentCandidate.PlaceholderRequestCount - 1);
-                            }
-                        }
-                    }
-
-                    Debug.WriteLine($"[WhatsAppService] PLACEHOLDER_MESSAGE_RESEND send failed for {messageId} in {chatJid}: {ex.Message}");
-                }
-                finally
-                {
-                    scheduleCts.Dispose();
-                }
-            });
-
-            return Task.FromResult(true);
+            Task dispatched = PlaceholderResends.TryDispatch(candidate, chatJid, messageId, trigger);
+            return Task.FromResult(dispatched != null);
         }
+
+        private PlaceholderResendDispatch PlaceholderResends =>
+            _placeholderResends ??= new PlaceholderResendDispatch(
+                _missing,
+                this,
+                line => Debug.WriteLine("[WhatsAppService] " + line),
+                PlaceholderResendDispatchDelay,
+                PlaceholderResendResponseTimeout);
+
+        string IPlaceholderResendSocket.GenerateMessageId() => _socket.GenerateMessageId();
+
+        Task<string> IPlaceholderResendSocket.RequestPlaceholderResendAsync(Proto.MessageKey key, string stanzaId) =>
+            _socket.RequestPlaceholderResendAsync(key, stanzaId);
 
         private bool ShouldDeferPlaceholderResend(string trigger, out string reason)
         {
-            reason = null;
-
             if (_socket == null || !_socket.IsHandshakeComplete)
             {
+                reason = null;
                 return false;
             }
 
-            if (ShouldDeferReconnectReplayWork())
-            {
-                reason = "reconnect-replay-active";
-                return true;
-            }
+            bool historyOnDemandInFlight = _historyRequests.ChatsInFlight > 0;
 
-            if (_socket.IsAwaitingInitialSync)
-            {
-                reason = "awaiting-initial-sync";
-                return true;
-            }
-
-                if (_historyBackfillActive)
-                {
-                    reason = "history-backfill-active";
-                    return true;
-                }
-
-            lock (_historyOnDemandLock)
-            {
-                if (_historyOnDemandInFlight.Count > 0)
-                {
-                    reason = "history-on-demand-in-flight";
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        private static bool IsPeerOrSelfMissingMessage(MissingMessageCandidate candidate)
-        {
-            if (candidate == null)
-            {
-                return false;
-            }
-
-            return MissingMessagePriority.IsPeerOrSelf(candidate.IsFromMe, candidate.ChatJid);
+            return PlaceholderResendDeferral.IsDeferred(
+                ShouldDeferReconnectReplayWork(),
+                _socket.IsAwaitingInitialSync,
+                historyOnDemandInFlight,
+                out reason);
         }
 
         private static string DescribeMissingMessageCandidate(MissingMessageCandidate candidate)
@@ -596,39 +281,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             List<MissingMessageCandidate> pending;
             int totalEligible;
-            lock (_missingMessageLock)
-            {
-                pending = _pendingMissingMessagesByChat
-                    .Values
-                    .SelectMany(byMessageId => byMessageId.Values)
-                    .Where(candidate =>
-                        candidate != null &&
-                        !candidate.PlaceholderRequestInFlight &&
-                        candidate.PlaceholderScheduleCts == null &&
-                        candidate.PlaceholderRequestCount < 2)
-                    .Select(candidate => new MissingMessageCandidate
-                    {
-                        ChatJid = candidate.ChatJid,
-                        Participant = candidate.Participant,
-                        MessageId = candidate.MessageId,
-                        IsFromMe = candidate.IsFromMe,
-                        MessageTimestamp = candidate.MessageTimestamp,
-                        Reason = candidate.Reason,
-                        FirstSeenUtc = candidate.FirstSeenUtc,
-                        LastSeenUtc = candidate.LastSeenUtc,
-                        PlaceholderRequestCount = candidate.PlaceholderRequestCount
-                    })
-                    .OrderBy(candidate => candidate.PlaceholderRequestCount)
-                    .ThenByDescending(IsPeerOrSelfMissingMessage)
-                    .ThenByDescending(candidate => ChatMessageOrder.ToComparableUtc(candidate.MessageTimestamp))
-                    .ThenByDescending(candidate => candidate.LastSeenUtc)
-                    .ToList();
-
-                totalEligible = pending.Count;
-                pending = pending
-                    .Take(maxRequests)
-                    .ToList();
-            }
+            pending = _missing.SelectForDrain(maxRequests, out totalEligible);
 
             if (pending.Count == 0)
             {
@@ -691,23 +344,12 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             DateTime utcNow = DateTime.UtcNow;
-            lock (_missingMessageLock)
+            if (!_missing.TryBeginReconcile(normJid, utcNow, ActiveChatReconcileCooldown))
             {
-                if (_activeChatReconcileCooldownByChat.TryGetValue(normJid, out var cooldownUntil) &&
-                    cooldownUntil > utcNow)
-                {
-                    return false;
-                }
-                _activeChatReconcileCooldownByChat[normJid] = utcNow.Add(ActiveChatReconcileCooldown);
+                return false;
             }
 
-            List<string> pendingIds;
-            lock (_missingMessageLock)
-            {
-                pendingIds = _pendingMissingMessagesByChat.TryGetValue(normJid, out var byMessageId)
-                    ? byMessageId.Keys.Take(maxRequests).ToList()
-                    : new List<string>();
-            }
+            List<string> pendingIds = _missing.CopyPendingIds(normJid, maxRequests);
 
             if (pendingIds.Count == 0)
             {
@@ -791,7 +433,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             var message = item.Value;
                             ChatPreviewKind kind = ChatPreviewNormalizer.InferKindFromMessage(message);
                             string preview = message?.Content;
-                            if (string.IsNullOrWhiteSpace(preview))
+                            if (string.IsNullOrWhiteSpace(preview) && kind != ChatPreviewKind.Revoked)
                             {
                                 // The kind already knows what arrived. Deciding it again from
                                 // IsImage alone labelled every video, sticker and voice note
@@ -799,17 +441,26 @@ namespace Unison.Uwp.Services.WhatsApp
                                 preview = MediaPreviewTag.ForKind(kind) ?? "[Message]";
                             }
 
+                            bool isGroupMsg = JidHelper.IsGroupJid(item.Key);
+                            string stripParticipant = isGroupMsg
+                                ? ParticipantStripIdentity.PreferForDisplay(
+                                    message?.ParticipantJid,
+                                    GetCanonicalJid(message?.ParticipantJid))
+                                : null;
                             await RefreshChatPreviewViaFacadeAsync(
                                 item.Key,
                                 preview,
                                 message?.Timestamp ?? DateTime.MinValue,
-                                JidHelper.IsGroupJid(item.Key),
+                                isGroupMsg,
                                 message?.IsFromMe == true,
                                 kind,
                                 ChatPreviewNormalizer.FormatListAuthorPrefix(
                                     message,
-                                    JidHelper.IsGroupJid(item.Key),
-                                    SelfListDisplayName()));
+                                    isGroupMsg,
+                                    SelfListDisplayName(),
+                                    stripParticipant),
+                                stripParticipant,
+                                isGroupMsg && message?.IsFromMe != true ? message?.SenderName : null);
                         }
 
                         RuntimeDiagnosticsService.Instance.Write(
@@ -855,7 +506,8 @@ namespace Unison.Uwp.Services.WhatsApp
             out string quotedMessageId,
             out ChatPreviewKind quotedKind,
             out List<string> mentionedJids,
-            out bool isForwarded)
+            out bool isForwarded,
+            out bool mentionAll)
         {
             QuotedContext context = QuotedContext.Read(msg);
 
@@ -865,6 +517,7 @@ namespace Unison.Uwp.Services.WhatsApp
             quotedKind = context.QuotedKind;
             mentionedJids = context.MentionedJids;
             isForwarded = context.IsForwarded;
+            mentionAll = context.MentionAll;
 
             // Naming the author is the one part that is not in the envelope: it needs the account,
             // the alias table and the directory, which is why the reading above stops here.
@@ -915,12 +568,15 @@ namespace Unison.Uwp.Services.WhatsApp
             catch { return null; }
         }
 
-        public async Task ApplyIncomingRevocationAsync(string chatJid, string targetMessageId, string envelopeMessageId = null)
+        private async Task ApplyIncomingRevocationAsync(string chatJid, string targetMessageId, string envelopeMessageId = null)
         {
             string targetId = targetMessageId;
             if (string.IsNullOrWhiteSpace(chatJid) || string.IsNullOrWhiteSpace(targetId)) return;
 
             string canonical = GetCanonicalJid(chatJid);
+            List<string> aliasKeys = MessagesByChat.ChatJids()
+                .Where(key => string.Equals(GetCanonicalJid(key), canonical, StringComparison.OrdinalIgnoreCase))
+                .ToList();
 
             // Older builds stored the revoke envelope itself as a fresh
             // "[Message Deleted]" item. Remove that synthetic row when the same
@@ -928,11 +584,9 @@ namespace Unison.Uwp.Services.WhatsApp
             if (!string.IsNullOrWhiteSpace(envelopeMessageId) &&
                 !string.Equals(envelopeMessageId, targetId, StringComparison.Ordinal))
             {
-                foreach (var pair in MessagesByChat.ToList())
+                foreach (string key in aliasKeys)
                 {
-                    if (!string.Equals(GetCanonicalJid(pair.Key), canonical, StringComparison.OrdinalIgnoreCase)) continue;
-                    var synthetic = pair.Value?.FirstOrDefault(m => string.Equals(m?.Id, envelopeMessageId, StringComparison.Ordinal));
-                    if (synthetic != null) pair.Value.Remove(synthetic);
+                    MessagesByChat.RemoveMessage(key, envelopeMessageId);
                 }
                 if (_messageStore != null)
                 {
@@ -940,13 +594,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
             }
 
-            ChatMessage target = null;
-            foreach (var pair in MessagesByChat.ToList())
-            {
-                if (!string.Equals(GetCanonicalJid(pair.Key), canonical, StringComparison.OrdinalIgnoreCase)) continue;
-                target = pair.Value?.FirstOrDefault(m => string.Equals(m?.Id, targetId, StringComparison.Ordinal));
-                if (target != null) break;
-            }
+            AliasLinkedMessageFind.TryFind(MessagesByChat, aliasKeys, targetId, out _, out ChatMessage target);
 
             // If the chat is not resident, read the retained local window once. A revoke is
             // an update to an existing message; it must never be inserted as a new "current" item.
@@ -971,7 +619,7 @@ namespace Unison.Uwp.Services.WhatsApp
             await SaveMessageAsync(canonical, target);
 
             if (IsActiveChatJid(canonical)) QueueChatMessagesChanged(canonical);
-            var latest = MessagesByChat.TryGetValue(canonical, out var canonicalMessages)
+            var latest = MessagesByChat.TryGet(canonical, out var canonicalMessages)
                 ? ChatPreviewTip.PickLatest(canonicalMessages)
                 : null;
             if (latest != null && string.Equals(latest.Id, target.Id, StringComparison.Ordinal))
@@ -986,7 +634,12 @@ namespace Unison.Uwp.Services.WhatsApp
                     ChatPreviewNormalizer.FormatListAuthorPrefix(
                         target,
                         JidHelper.IsGroupJid(canonical),
-                        SelfListDisplayName()));
+                        SelfListDisplayName(),
+                        GetCanonicalJid(target.ParticipantJid)),
+                    ParticipantStripIdentity.PreferForDisplay(
+                        target.ParticipantJid,
+                        GetCanonicalJid(target.ParticipantJid)),
+                    target.IsFromMe ? null : target.SenderName);
             }
         }
 
@@ -1012,30 +665,9 @@ namespace Unison.Uwp.Services.WhatsApp
 
             Debug.WriteLine($"[WhatsAppService] PeerDataOperationResponse received: stanzaId={response.StanzaId}, requestType={response.PeerDataOperationRequestType}, resultCount={response.PeerDataOperationResult?.Count ?? 0}");
 
-            PlaceholderResendRequestState requestState = null;
-            lock (_missingMessageLock)
-            {
-                if (!string.IsNullOrWhiteSpace(response.StanzaId))
-                {
-                    _placeholderResendRequestsByStanzaId.TryGetValue(response.StanzaId, out requestState);
-                    _placeholderResendRequestsByStanzaId.Remove(response.StanzaId);
-                    if (requestState != null &&
-                        TryGetMissingMessage(requestState.ChatJid, requestState.MessageId, out var candidate) &&
-                        string.Equals(candidate.LastPlaceholderRequestId, response.StanzaId, StringComparison.Ordinal))
-                    {
-                        candidate.PlaceholderRequestInFlight = false;
-                    }
-                }
-            }
+            PlaceholderResendRequestState requestState = _missing.TakePeerResponse(response.StanzaId);
 
-            HistoryOnDemandRequestState historyRequestState = null;
-            lock (_historyOnDemandLock)
-            {
-                if (!string.IsNullOrWhiteSpace(response.StanzaId))
-                {
-                    _historyOnDemandRequestById.TryGetValue(response.StanzaId, out historyRequestState);
-                }
-            }
+            HistoryOnDemandRequest historyRequestState = _historyRequests.Find(response.StanzaId);
 
             foreach (var result in response.PeerDataOperationResult ?? Enumerable.Empty<Proto.Message.Types.PeerDataOperationRequestResponseMessage.Types.PeerDataOperationResult>())
             {
@@ -1074,7 +706,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 (response.PeerDataOperationRequestType == Proto.Message.Types.PeerDataOperationRequestType.FullHistorySyncOnDemand ||
                  response.PeerDataOperationRequestType == Proto.Message.Types.PeerDataOperationRequestType.HistorySyncOnDemand))
             {
-                Debug.WriteLine($"[WhatsAppService] PeerDataOperationResponse completed without immediate history payload: requestType={historyRequestState.RequestType}, stanzaId={response.StanzaId}, chat={historyRequestState.ChatJid ?? "<full-history>"}, baseline={historyRequestState.BaselineMessageCount}, trigger={historyRequestState.TriggerReason ?? "unspecified"}");
+                Debug.WriteLine($"[WhatsAppService] PeerDataOperationResponse completed without immediate history payload: requestType={historyRequestState.TypeName}, stanzaId={response.StanzaId}, chat={historyRequestState.ChatJid ?? "<full-history>"}, baseline={historyRequestState.BaselineMessageCount}, trigger={historyRequestState.TriggerReason ?? "unspecified"}");
             }
         }
 
@@ -1089,35 +721,16 @@ namespace Unison.Uwp.Services.WhatsApp
             node.Attrs.TryGetValue("id", out var ackId);
             node.Attrs.TryGetValue("error", out var ackError);
 
-            if (!string.Equals(ackClass, "message", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(ackId))
+            bool rejected;
+            if (!PlaceholderResendAck.TryRead(ackClass, ackId, ackError, out rejected))
             {
                 return;
             }
 
-            PlaceholderResendRequestState requestState = null;
-            bool rejected = !string.IsNullOrWhiteSpace(ackError);
-
-            lock (_missingMessageLock)
+            PlaceholderResendRequestState requestState;
+            if (!_missing.TryApplyAck(ackId, rejected, DateTime.UtcNow, out requestState))
             {
-                if (!_placeholderResendRequestsByStanzaId.TryGetValue(ackId, out requestState))
-                {
-                    return;
-                }
-
-                if (rejected)
-                {
-                    _placeholderResendRequestsByStanzaId.Remove(ackId);
-                    if (TryGetMissingMessage(requestState.ChatJid, requestState.MessageId, out var candidate) &&
-                        string.Equals(candidate.LastPlaceholderRequestId, ackId, StringComparison.Ordinal))
-                    {
-                        candidate.PlaceholderRequestInFlight = false;
-                    }
-                }
-                else
-                {
-                    requestState.AckAccepted = true;
-                    requestState.AckAcceptedUtc = DateTime.UtcNow;
-                }
+                return;
             }
 
             if (requestState == null)
@@ -1162,7 +775,7 @@ namespace Unison.Uwp.Services.WhatsApp
             EnqueueDecryptedMessage(new DecryptedMessageEventArgs
             {
                 FromJid = remoteJid,
-                Participant = ResolveHistoryParticipantJid(webMessage),
+                Participant = WebMessageParticipant.Resolve(webMessage),
                 MessageId = webMessage.Key?.Id,
                 Message = webMessage.Message,
                 Timestamp = webMessage.MessageTimestamp > 0
@@ -1184,37 +797,19 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            lock (_incomingMessageQueueLock)
-            {
-                if (message.IsOffline)
-                {
-                    _offlineIncomingMessageQueue.Enqueue(message);
-                }
-                else
-                {
-                    _liveIncomingMessageQueue.Enqueue(message);
-                }
-            }
-
+            _incoming.Enqueue(message);
             RestartIncomingMessagePumpIfNeeded();
         }
 
         private void RestartIncomingMessagePumpIfNeeded()
         {
             int generation;
-            lock (_incomingMessageQueueLock)
+            if (!_incoming.TryStart(
+                    started => Task.Run(() => ProcessIncomingMessageQueueAsync(started)),
+                    DateTime.UtcNow,
+                    out generation))
             {
-                if (_incomingMessagePumpRunning ||
-                    (_liveIncomingMessageQueue.Count == 0 && _offlineIncomingMessageQueue.Count == 0))
-                {
-                    return;
-                }
-
-                _incomingMessagePumpRunning = true;
-                generation = _incomingMessagePumpGeneration;
-                _incomingMessagePumpStage = "starting";
-                _incomingMessagePumpStageUtcTicks = DateTime.UtcNow.Ticks;
-                _incomingMessagePumpTask = Task.Run(() => ProcessIncomingMessageQueueAsync(generation));
+                return;
             }
 
             RuntimeDiagnosticsService.Instance.Write(
@@ -1225,12 +820,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private void SetIncomingMessagePumpStage(string stage, Client.DecryptedMessageEventArgs message = null)
         {
-            lock (_incomingMessageQueueLock)
-            {
-                _incomingMessagePumpStage = string.IsNullOrWhiteSpace(stage) ? "unknown" : stage;
-                _incomingMessagePumpCurrent = message ?? _incomingMessagePumpCurrent;
-                _incomingMessagePumpStageUtcTicks = DateTime.UtcNow.Ticks;
-            }
+            _incoming.SetStage(stage, message, DateTime.UtcNow);
         }
 
         /// <summary>
@@ -1258,7 +848,7 @@ namespace Unison.Uwp.Services.WhatsApp
             if (plan.HasSticker)
             {
                 ObserveIncomingWork(
-                    HydrateStickerForMessageAsync(chatMessage, plan.Sticker, messageId, jid),
+                    _messageService.HydrateIncomingStickerAsync(chatMessage, plan.Sticker, messageId, jid),
                     "hydrate-sticker",
                     messageId);
             }
@@ -1266,7 +856,7 @@ namespace Unison.Uwp.Services.WhatsApp
             if (plan.HasImage)
             {
                 ObserveIncomingWork(
-                    HydrateImageForMessageAsync(chatMessage, plan.Image, messageId, jid),
+                    _messageService.HydrateIncomingImageAsync(chatMessage, plan.Image, messageId, jid),
                     "hydrate-image",
                     messageId);
             }
@@ -1292,100 +882,30 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private void ResetIncomingMessagePump(string reason, bool requeueCurrent)
         {
-            int generation;
-            int liveDepth;
-            int offlineDepth;
-            lock (_incomingMessageQueueLock)
-            {
-                var current = _incomingMessagePumpCurrent;
-                _incomingMessagePumpGeneration++;
-                generation = _incomingMessagePumpGeneration;
-
-                if (requeueCurrent && current != null)
-                {
-                    if (current.IsOffline)
-                    {
-                        _offlineIncomingMessageQueue.Enqueue(current);
-                    }
-                    else
-                    {
-                        _liveIncomingMessageQueue.Enqueue(current);
-                    }
-                }
-
-                _incomingMessagePumpCurrent = null;
-                _incomingMessagePumpRunning = false;
-                _incomingMessagePumpTask = Task.CompletedTask;
-                _incomingMessagePumpStage = "reset:" + reason;
-                _incomingMessagePumpStageUtcTicks = DateTime.UtcNow.Ticks;
-                liveDepth = _liveIncomingMessageQueue.Count;
-                offlineDepth = _offlineIncomingMessageQueue.Count;
-            }
+            IncomingQueueReset reset = _incoming.Reset(reason, requeueCurrent, DateTime.UtcNow);
 
             RuntimeDiagnosticsService.Instance.Write(
                 "messages",
                 "incoming-pump-reset",
-                "reason=" + reason + "; generation=" + generation +
-                "; requeued=" + requeueCurrent + "; qLive=" + liveDepth + "; qOffline=" + offlineDepth);
+                "reason=" + reason + "; generation=" + reset.Generation +
+                "; requeued=" + requeueCurrent + "; qLive=" + reset.LiveDepth + "; qOffline=" + reset.OfflineDepth);
         }
 
         private bool IsIncomingMessagePumpStalled(TimeSpan limit)
         {
-            lock (_incomingMessageQueueLock)
-            {
-                if (!_incomingMessagePumpRunning || _incomingMessagePumpStageUtcTicks <= 0)
-                {
-                    return false;
-                }
-
-                bool hasWork = _incomingMessagePumpCurrent != null ||
-                               _liveIncomingMessageQueue.Count > 0 ||
-                               _offlineIncomingMessageQueue.Count > 0;
-                if (!hasWork)
-                {
-                    return false;
-                }
-
-                var stageUtc = new DateTime(_incomingMessagePumpStageUtcTicks, DateTimeKind.Utc);
-                return DateTime.UtcNow - stageUtc > limit;
-            }
+            return _incoming.IsStalled(limit, DateTime.UtcNow);
         }
 
         private async Task ProcessIncomingMessageQueueAsync(int generation)
         {
             while (true)
             {
-                Client.DecryptedMessageEventArgs next = null;
-                lock (_incomingMessageQueueLock)
+                // Offline replay records are timestamp-guarded, so serving live traffic
+                // first cannot let them overwrite a newer preview.
+                Client.DecryptedMessageEventArgs next;
+                if (!_incoming.TryTakeNext(generation, DateTime.UtcNow, out next))
                 {
-                    if (generation != _incomingMessagePumpGeneration)
-                    {
-                        return;
-                    }
-
-                    // Always service real-time traffic first. Offline replay records are
-                    // timestamp-guarded, so processing them later cannot overwrite a
-                    // newer preview.
-                    if (_liveIncomingMessageQueue.Count > 0)
-                    {
-                        next = _liveIncomingMessageQueue.Dequeue();
-                    }
-                    else if (_offlineIncomingMessageQueue.Count > 0)
-                    {
-                        next = _offlineIncomingMessageQueue.Dequeue();
-                    }
-                    else
-                    {
-                        _incomingMessagePumpCurrent = null;
-                        _incomingMessagePumpRunning = false;
-                        _incomingMessagePumpStage = "idle";
-                        _incomingMessagePumpStageUtcTicks = DateTime.UtcNow.Ticks;
-                        return;
-                    }
-
-                    _incomingMessagePumpCurrent = next;
-                    _incomingMessagePumpStage = "handle";
-                    _incomingMessagePumpStageUtcTicks = DateTime.UtcNow.Ticks;
+                    return;
                 }
 
                 try
@@ -1400,7 +920,7 @@ namespace Unison.Uwp.Services.WhatsApp
                                 "messages",
                                 "incoming-message-timeout",
                                 "id=" + (next.MessageId ?? "<none>") +
-                                "; stage=" + _incomingMessagePumpStage +
+                                "; stage=" + _incoming.Stage +
                                 "; timeoutMs=" + LiveIncomingMessageTimeoutMs);
 
                             _ = handleTask.ContinueWith(
@@ -1417,18 +937,7 @@ namespace Unison.Uwp.Services.WhatsApp
                                 },
                                 TaskScheduler.Default);
 
-                            bool requeueTimedOutMessage = true;
-                            lock (_incomingMessageQueueLock)
-                            {
-                                if (!string.IsNullOrWhiteSpace(next.MessageId))
-                                {
-                                    // Requeue once. If the same message blocks again,
-                                    // skip that one item so the rest of the conversation
-                                    // and all other chats can continue updating.
-                                    requeueTimedOutMessage = _incomingMessageTimeoutIds.Add(next.MessageId);
-                                }
-                            }
-
+                            bool requeueTimedOutMessage = _incoming.ShouldRetryTimedOut(next);
                             ResetIncomingMessagePump(
                                 requeueTimedOutMessage ? "message-timeout-retry" : "message-timeout-skip",
                                 requeueCurrent: requeueTimedOutMessage);
@@ -1438,13 +947,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
 
                     await handleTask;
-                    if (!string.IsNullOrWhiteSpace(next.MessageId))
-                    {
-                        lock (_incomingMessageQueueLock)
-                        {
-                            _incomingMessageTimeoutIds.Remove(next.MessageId);
-                        }
-                    }
+                    _incoming.ForgetTimeout(next);
                     Interlocked.Increment(ref _diagnosticsAppliedMessageCount);
                     Interlocked.Exchange(ref _diagnosticsLastAppliedMessageUtcTicks, DateTime.UtcNow.Ticks);
                 }
@@ -1457,32 +960,18 @@ namespace Unison.Uwp.Services.WhatsApp
                         ex,
                         "offline=" + (next != null && next.IsOffline) +
                         "; id=" + (next?.MessageId ?? "<none>") +
-                        "; stage=" + _incomingMessagePumpStage);
+                        "; stage=" + _incoming.Stage);
                 }
                 finally
                 {
-                    lock (_incomingMessageQueueLock)
-                    {
-                        if (generation == _incomingMessagePumpGeneration &&
-                            ReferenceEquals(_incomingMessagePumpCurrent, next))
-                        {
-                            _incomingMessagePumpCurrent = null;
-                            _incomingMessagePumpStage = "next";
-                            _incomingMessagePumpStageUtcTicks = DateTime.UtcNow.Ticks;
-                        }
-                    }
+                    _incoming.Finish(generation, next, DateTime.UtcNow);
                 }
             }
         }
 
         private async Task WaitForIncomingMessageQueueDrainAsync(int timeoutMs)
         {
-            Task pump;
-            lock (_incomingMessageQueueLock)
-            {
-                pump = _incomingMessagePumpTask ?? Task.CompletedTask;
-            }
-
+            Task pump = _incoming.PumpTask;
             if (pump.IsCompleted)
             {
                 return;
@@ -1562,8 +1051,22 @@ namespace Unison.Uwp.Services.WhatsApp
                 e.Message);
             if (row == null)
             {
+                string gaps = StatusItemDiagnostics.DescribeProtoGaps(e.Message);
+                Debug.WriteLine(
+                    "[WhatsAppService] Live status dropped id=" + e.MessageId +
+                    "; author=" + author + "; " + gaps);
+                RuntimeDiagnosticsService.Instance.Write(
+                    "status",
+                    "live-dropped",
+                    "id=" + e.MessageId + "; author=" + author + "; " + gaps);
                 return;
             }
+
+            RuntimeDiagnosticsService.Instance.Write(
+                "status",
+                "live-built",
+                StatusItemDiagnostics.DescribeItem(row) + "; " +
+                StatusItemDiagnostics.DescribeProtoGaps(e.Message));
 
             RaiseReport(
                 () => OnLiveStatusReceived?.Invoke(this, row),
@@ -1706,7 +1209,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 {
                     QueueMessageControlWork(
                         "message-revoke:" + e.MessageId,
-                        () => _messageService.ApplyIncomingRevocationAsync(jid, e.Message.ProtocolMessage.Key?.Id, e.MessageId));
+                        () => ApplyIncomingRevocationAsync(jid, e.Message.ProtocolMessage.Key?.Id, e.MessageId));
                     return;
                 }
 
@@ -1720,7 +1223,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     long senderTs = pinMessage?.SenderTimestampMs ?? 0;
                     QueueMessageControlWork(
                         "message-pin:" + e.MessageId,
-                        () => _messageService.ApplyIncomingPinInChatAsync(
+                        () => ApplyIncomingPinInChatAsync(
                             jid,
                             pinTargetId,
                             pin,
@@ -1739,10 +1242,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             ? GetResolvedName(!string.IsNullOrEmpty(reactionParticipant) ? reactionParticipant : jid)
                             : GetResolvedName(jid));
 
-                    if (!MessagesByChat.ContainsKey(jid))
-                    {
-                        MessagesByChat[jid] = new List<ChatMessage>();
-                    }
+                    var reactionTimeline = MessagesByChat.GetOrAdd(jid);
 
                     var reactionContext = new ChatMessageMapContext
                     {
@@ -1756,7 +1256,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     };
 
                     ChatMessage reactionParent;
-                    if (_messageService.TryHandleReaction(e.Message, reactionContext, MessagesByChat[jid], out reactionParent))
+                    if (_messageService.TryHandleReaction(e.Message, reactionContext, reactionTimeline, out reactionParent))
                     {
                         SetIncomingMessagePumpStage("reaction", e);
                         if (reactionParent != null)
@@ -1854,7 +1354,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
                     else if (accept == PushNameAccept.Accept)
                     {
-                        ContactNames[senderJid] = sanitized;
+                        ContactNames.Set(senderJid, sanitized);
                         RememberPersonName(senderJid, sanitized);
                         if (!e.IsOffline)
                         {
@@ -1864,29 +1364,47 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
                 // Resolve sender name and true 'IsFromMe' status.
+                // Envelope participant is often a LID; participantAlt carries the phone. The bubble
+                // walks aliases/roster later — the strip tip must prefer the phone up front or
+                // ChatAuthorProjection never finds the name keyed under the PN.
                 string participantJid = NormalizeJid(e.Participant);
+                string participantAltJid = NormalizeJid(e.ParticipantAlt);
+                string stripParticipantJid = ParticipantStripIdentity.PreferForDisplay(
+                    participantJid,
+                    participantAltJid);
+                string resolvedParticipantName =
+                    (!string.IsNullOrEmpty(stripParticipantJid)
+                        ? GetResolvedName(stripParticipantJid)
+                        : null)
+                    ?? (!string.IsNullOrEmpty(participantJid)
+                        ? GetResolvedName(participantJid)
+                        : null);
                 IncomingSenderResolution sender = IncomingSenderResolver.Resolve(
                     isGroup,
                     e.IsFromMe,
                     _authState?.Me?.Name,
                     SelfListDisplayName(),
-                    string.IsNullOrEmpty(participantJid) ? null : GetResolvedName(participantJid),
+                    resolvedParticipantName,
                     GetResolvedName(jid),
-                    !string.IsNullOrEmpty(participantJid));
+                    !string.IsNullOrEmpty(participantJid) || !string.IsNullOrEmpty(stripParticipantJid));
                 string senderName = sender.SenderName;
                 bool isActuallyFromMe = sender.IsFromMe;
                 
                 // Decided once, here, so the badge and the toast cannot disagree about whether the
-                // user is looking at this conversation.
+                // user is looking at this conversation. Initial sync / offline drain never pop
+                // message toasts (unread still updates).
+                bool quietForSync =
+                    (_initialSync != null && _initialSync.IsActive) ||
+                    (_socket != null && _socket.IsAwaitingInitialSync);
                 IncomingAttention attention = IncomingAttention.For(
                     isActuallyFromMe,
                     IsActiveChatJid(jid),
-                    Unison.Uwp.App.IsWindowVisible);
+                    Unison.Uwp.App.IsWindowVisible,
+                    suppressToastForSync: quietForSync);
 
                 // List preview body is unprefixed; group author is applied via LastMessageAuthor.
-                // ParticipantJid is required when SenderName is still empty — otherwise the strip
-                // has nothing to fall back to and the live path draws a blank while history draws
-                // the short LID/phone label for the same message.
+                // Strip identity prefers PN when known; FormatListAuthorPrefix falls back to the
+                // phone digits rather than printing a LID.
                 string displayContent = content;
                 string listAuthorPrefix = isGroup
                     ? ChatPreviewNormalizer.FormatListAuthorPrefix(
@@ -1897,12 +1415,13 @@ namespace Unison.Uwp.Services.WhatsApp
                             ParticipantJid = participantJid
                         },
                         true,
-                        SelfListDisplayName())
+                        SelfListDisplayName(),
+                        stripParticipantJid)
                     : string.Empty;
 
                 SetIncomingMessagePumpStage("model", e);
                 // Domain ChatMessage via the MessageFacade (Kind resolved in mapper).
-                ApplyContextInfoExtras(e.Message, out string quotedText, out string quotedSender, out string quotedParticipantJid, out string quotedMessageId, out var quotedKind, out var mentionedJids, out bool isForwarded);
+                ApplyContextInfoExtras(e.Message, out string quotedText, out string quotedSender, out string quotedParticipantJid, out string quotedMessageId, out var quotedKind, out var mentionedJids, out bool isForwarded, out bool mentionAll);
 
                 if (_messageService == null)
                 {
@@ -1935,7 +1454,8 @@ namespace Unison.Uwp.Services.WhatsApp
                         quotedSender,
                         quotedParticipantJid,
                         quotedMessageId,
-                        mentionedJids));
+                        mentionedJids,
+                        mentionAll));
 
                 IncomingMediaMetadata.Apply(chatMessage, renderInfo);
 
@@ -1944,7 +1464,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 ChatPreviewKind previewKind = ResolvePreviewKind(chatMessage, renderInfo);
 
                 SetIncomingMessagePumpStage("dedupe", e);
-                IncomingTimelineAcceptResult timeline = _messageService.AcceptIncomingTimeline(jid, chatMessage, isGroup);
+                IncomingTimelineAcceptResult timeline = AcceptIncomingTimeline(jid, chatMessage, isGroup);
 
                 if (timeline.Kind == IncomingTimelineAcceptKind.AliasConsolidated)
                 {
@@ -1975,7 +1495,9 @@ namespace Unison.Uwp.Services.WhatsApp
                                 isGroup,
                                 isActuallyFromMe,
                                 previewKind,
-                                listAuthorPrefix));
+                                listAuthorPrefix,
+                                isGroup ? stripParticipantJid : null,
+                                isGroup && !isActuallyFromMe ? senderName : null));
                     }
                     else
                     {
@@ -1989,7 +1511,9 @@ namespace Unison.Uwp.Services.WhatsApp
                             countUnread: false,
                             previewKind,
                             chatMessage.Status,
-                            listAuthorPrefix);
+                            listAuthorPrefix,
+                            isGroup ? stripParticipantJid : null,
+                            isGroup && !isActuallyFromMe ? senderName : null);
                     }
                     if (!e.IsOffline)
                     {
@@ -2003,7 +1527,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 {
                     if (timeline.ExistingChanged && timeline.Message != null)
                     {
-                        _messageService.QueueIncomingPersist(jid, timeline.Message);
+                        QueueIncomingPersist(jid, timeline.Message);
                         QueueChatMessagesChanged(jid);
                     }
                     if (timeline.Kind == IncomingTimelineAcceptKind.AliasLinkedDuplicate)
@@ -2022,7 +1546,9 @@ namespace Unison.Uwp.Services.WhatsApp
                                 isGroup,
                                 isActuallyFromMe,
                                 previewKind,
-                                listAuthorPrefix));
+                                listAuthorPrefix,
+                                isGroup ? stripParticipantJid : null,
+                                isGroup && !isActuallyFromMe ? senderName : null));
                     }
                     else
                     {
@@ -2036,7 +1562,9 @@ namespace Unison.Uwp.Services.WhatsApp
                             countUnread: false,
                             previewKind,
                             chatMessage.Status,
-                            listAuthorPrefix);
+                            listAuthorPrefix,
+                            isGroup ? stripParticipantJid : null,
+                            isGroup && !isActuallyFromMe ? senderName : null);
                     }
                     if (!e.IsOffline)
                     {
@@ -2048,7 +1576,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 ResolveMissingMessage(jid, chatMessage.Id, "live-arrival");
                 if (!e.IsOffline)
                 {
-                    Log($"[WhatsAppService] Added message to chat {jid}. Total messages in memory: {MessagesByChat[jid].Count}");
+                    Log($"[WhatsAppService] Added message to chat {jid}. Total messages in memory: {MessagesByChat.CountFor(jid)}");
                 }
                 if (e.IsOffline)
                 {
@@ -2061,8 +1589,10 @@ namespace Unison.Uwp.Services.WhatsApp
                         countUnread: true,
                         previewKind,
                         chatMessage.Status,
-                        listAuthorPrefix);
-                    _messageService.QueueIncomingPersist(jid, chatMessage);
+                        listAuthorPrefix,
+                        isGroup ? stripParticipantJid : null,
+                        isGroup && !isActuallyFromMe ? senderName : null);
+                    QueueIncomingPersist(jid, chatMessage);
 
                     if (IsActiveChatJid(jid))
                     {
@@ -2120,6 +1650,8 @@ namespace Unison.Uwp.Services.WhatsApp
                         IsFromMe = chatMessage.IsFromMe,
                         SendState = HistoryLiveMessageMapper.FromStatus(chatMessage.Status, chatMessage.IsFromMe),
                         MessageId = chatMessage.Id,
+                        ParticipantJid = isGroup ? stripParticipantJid : null,
+                        SenderName = isGroup && !isActuallyFromMe ? senderName : null,
                         UnreadDelta = attention.CountsAsUnread ? 1 : 0,
                         CountsAsUnread = attention.CountsAsUnread,
                         IsGroup = isGroup,
@@ -2153,7 +1685,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 SetIncomingMessagePumpStage("persist-queue", e);
                 // Persistencia em lote: evita reler, serializar e reescrever o JSON
                 // inteiro para cada mensagem recebida.
-                _messageService.QueueIncomingPersist(jid, chatMessage);
+                QueueIncomingPersist(jid, chatMessage);
                 UnloadMessageCacheIfInactive(jid);
             }
             catch (Exception ex)
@@ -2163,95 +1695,37 @@ namespace Unison.Uwp.Services.WhatsApp
                     "messages",
                     "handle-decrypted-failed",
                     ex,
-                    "id=" + (e?.MessageId ?? "<none>") + "; stage=" + _incomingMessagePumpStage);
+                    "id=" + (e?.MessageId ?? "<none>") + "; stage=" + _incoming.Stage);
                 throw;
             }
         }
 
 
-        public IncomingTimelineAcceptResult AcceptIncomingTimeline(
+        private IncomingTimelineAcceptResult AcceptIncomingTimeline(
             string chatJid,
             ChatMessage message,
             bool isGroup)
         {
-            var result = new IncomingTimelineAcceptResult
-            {
-                Kind = IncomingTimelineAcceptKind.Inserted,
-                Message = message
-            };
+            return new IncomingTimeline(
+                    MessagesByChat,
+                    MessagesByChat.Ids,
+                    GetAliasLinkedDirectChatJids,
+                    NormalizeJid,
+                    TrimInMemoryMessageWindow)
+                .Accept(chatJid, message, isGroup);
+        }
 
+        private void QueueIncomingPersist(string chatJid, ChatMessage message)
+        {
             if (string.IsNullOrWhiteSpace(chatJid) || message == null)
             {
-                return result;
+                return;
             }
 
-            string jid = NormalizeJid(chatJid) ?? chatJid;
-            if (!MessagesByChat.ContainsKey(jid))
-            {
-                MessagesByChat[jid] = new List<ChatMessage>();
-            }
-
-            string duplicateChatJid = null;
-            ChatMessage duplicateMessage = null;
-            bool hasAliasLinkedDuplicate = !isGroup &&
-                !string.IsNullOrEmpty(message.Id) &&
-                TryFindAliasLinkedMessage(jid, message.Id, out duplicateChatJid, out duplicateMessage);
-
-            ChatMessage consolidatedMessage;
-            if (!string.IsNullOrEmpty(message.Id) &&
-                hasAliasLinkedDuplicate &&
-                !string.Equals(NormalizeJid(duplicateChatJid), jid, StringComparison.OrdinalIgnoreCase) &&
-                TryConsolidateAliasDuplicateMessage(jid, duplicateChatJid, message.Id, out consolidatedMessage))
-            {
-                result.Kind = IncomingTimelineAcceptKind.AliasConsolidated;
-                result.AliasSourceChatJid = NormalizeJid(duplicateChatJid);
-                result.ConsolidatedMessage = consolidatedMessage;
-                result.Message = consolidatedMessage ?? message;
-                return result;
-            }
-
-            if ((!string.IsNullOrEmpty(message.Id) && HasMessageId(jid, message.Id)) ||
-                (!string.IsNullOrEmpty(message.Id) &&
-                 MessagesByChat[jid].Any(m => string.Equals(m?.Id, message.Id, StringComparison.Ordinal))) ||
-                hasAliasLinkedDuplicate)
-            {
-                var existingMessage = MessagesByChat[jid].FirstOrDefault(
-                    m => string.Equals(m?.Id, message.Id, StringComparison.Ordinal));
-                bool existingChanged = false;
-                if (existingMessage != null)
-                {
-                    DuplicateArrivalPatch patch = DuplicateArrivalEnrichment.Compute(
-                        existingMessage.Status,
-                        message.Status,
-                        message.IsFromMe,
-                        existingMessage.ParticipantJid,
-                        message.ParticipantJid,
-                        existingMessage.SenderName,
-                        message.SenderName);
-                    existingChanged = DuplicateArrivalEnrichment.Apply(existingMessage, patch);
-                }
-
-                result.Kind = hasAliasLinkedDuplicate && existingMessage == null
-                    ? IncomingTimelineAcceptKind.AliasLinkedDuplicate
-                    : IncomingTimelineAcceptKind.DuplicateSameChat;
-                result.Message = existingMessage ?? message;
-                result.ExistingChanged = existingChanged;
-                result.AliasSourceChatJid = duplicateChatJid;
-                return result;
-            }
-
-            ChatMessageOrder.InsertSorted(MessagesByChat[jid], message);
-            TrimInMemoryMessageWindow(jid);
-            RegisterMessageId(jid, message.Id);
-            result.Kind = IncomingTimelineAcceptKind.Inserted;
-            result.Message = message;
-            return result;
-        }
-
-        public void QueueIncomingMessagePersist(string chatJid, ChatMessage message)
-        {
             QueueOfflineReplayMessageForPersist(chatJid, message);
+            SchedulePersist();
         }
+
         /// <summary>
         /// Offline fast-path counterpart of the full duplicate enrichment: fill in a blank
         /// participant or sender name from the envelope without re-running render / UI work.
@@ -2267,7 +1741,7 @@ namespace Unison.Uwp.Services.WhatsApp
             ChatMessage existing = null;
             string persistJid = chatJid;
 
-            if (MessagesByChat.TryGetValue(chatJid, out var list) && list != null)
+            if (MessagesByChat.TryGet(chatJid, out var list) && list != null)
             {
                 existing = list.FirstOrDefault(
                     m => m != null && string.Equals(m.Id, e.MessageId, StringComparison.Ordinal));
@@ -2310,140 +1784,58 @@ namespace Unison.Uwp.Services.WhatsApp
             bool countUnread,
             ChatPreviewKind kind = ChatPreviewKind.Text,
             string status = null,
-            string authorPrefix = null)
+            string authorPrefix = null,
+            string participantJid = null,
+            string senderName = null)
         {
-            string canonical = GetCanonicalJid(NormalizeJid(jid));
-            if (string.IsNullOrWhiteSpace(canonical))
+            if (_chatService == null)
             {
+                Debug.WriteLine("[WhatsAppService] Offline replay tip dropped: ChatFacade not attached.");
                 return;
             }
 
-            // Same rule as the live path: decide unread once here. The apply pass must not
-            // re-ask attention, or opening/closing the chat mid-drain drops the badge.
-            bool incrementUnread = countUnread &&
-                IncomingAttention.For(
-                    isFromMe,
-                    IsActiveChatJid(canonical),
-                    Unison.Uwp.App.IsWindowVisible).CountsAsUnread;
-
-            lock (_offlineReplayUiLock)
+            _chatService.RecordOfflineReplayTip(new OfflineReplayTipRequest
             {
-                if (!_offlineReplayUiSummaries.TryGetValue(canonical, out var summary))
-                {
-                    summary = OfflineReplaySummaryMerge.Create(canonical, isGroup);
-                    _offlineReplayUiSummaries[canonical] = summary;
-                }
-
-                OfflineReplaySummaryMerge.Record(
-                    summary,
-                    preview,
-                    timestamp,
-                    isGroup,
-                    isFromMe,
-                    kind,
-                    status,
-                    authorPrefix,
-                    incrementUnread,
-                    DateTime.UtcNow);
-
-                // Throttle instead of debounce: show the first recovered conversation
-                // within ~180 ms even while a long replay continues. Further messages
-                // schedule the next small UI batch after the current timer is consumed.
-                if (_offlineReplayUiTimer == null)
-                {
-                    _offlineReplayUiTimer = new System.Threading.Timer(async _ =>
-                    {
-                        try
-                        {
-                            await ApplyOfflineReplayChatSummariesAsync("replay-progressive");
-                        }
-                        catch (Exception ex)
-                        {
-                            RuntimeDiagnosticsService.Instance.RecordException(
-                                "messages",
-                                "offline-summary-apply-failed",
-                                ex,
-                                "reason=replay-progressive");
-                        }
-                    }, null, (int)OfflineReplayUiDebounce.TotalMilliseconds, Timeout.Infinite);
-                }
-            }
+                Jid = jid,
+                Preview = preview,
+                Timestamp = timestamp,
+                IsGroup = isGroup,
+                IsFromMe = isFromMe,
+                CountUnread = countUnread,
+                Kind = kind,
+                Status = status,
+                AuthorPrefix = authorPrefix,
+                ParticipantJid = participantJid,
+                SenderName = senderName
+            });
         }
 
-        private async Task ApplyOfflineReplayChatSummariesAsync(string reason)
+        private Task ApplyOfflineReplayChatSummariesAsync(string reason)
         {
-            await _offlineReplayUiApplyLock.WaitAsync();
-            Dictionary<string, OfflineReplayChatSummary> snapshot = null;
-            try
+            if (_chatService == null)
             {
-                lock (_offlineReplayUiLock)
-                {
-                    if (_offlineReplayUiSummaries.Count == 0)
-                    {
-                        return;
-                    }
-
-                    snapshot = _offlineReplayUiSummaries.ToDictionary(
-                        pair => pair.Key,
-                        pair => new OfflineReplayChatSummary
-                        {
-                            Jid = pair.Value.Jid,
-                            Preview = pair.Value.Preview,
-                            Timestamp = pair.Value.Timestamp,
-                            IsGroup = pair.Value.IsGroup,
-                            IsFromMe = pair.Value.IsFromMe,
-                            UnreadDelta = pair.Value.UnreadDelta,
-                            Kind = pair.Value.Kind,
-                            Status = pair.Value.Status,
-                            AuthorPrefix = pair.Value.AuthorPrefix
-                        },
-                        StringComparer.OrdinalIgnoreCase);
-
-                    _offlineReplayUiSummaries.Clear();
-                    _offlineReplayUiTimer?.Dispose();
-                    _offlineReplayUiTimer = null;
-                }
-
-                if (_chatService == null)
-                {
-                    Debug.WriteLine("[WhatsAppService] Offline summary apply skipped: ChatFacade not attached.");
-                    return;
-                }
-
-                List<OfflineReplayChatSummary> batch = snapshot.Values.ToList();
-                await _chatService.ApplyOfflineReplayChatSummariesAsync(batch, reason)
-                    .ConfigureAwait(false);
-
-                NoteFullHistoryCatchUpProgress(
-                    "offline-summary:" + reason +
-                    ":chats=" + batch.Count);
-
-                SchedulePersist();
+                Debug.WriteLine("[WhatsAppService] Offline summary apply skipped: ChatFacade not attached.");
+                return Task.CompletedTask;
             }
-            catch
-            {
-                if (snapshot != null)
-                {
-                    lock (_offlineReplayUiLock)
-                    {
-                        foreach (var pair in snapshot)
-                        {
-                            if (!_offlineReplayUiSummaries.TryGetValue(pair.Key, out var current))
-                            {
-                                _offlineReplayUiSummaries[pair.Key] = pair.Value;
-                                continue;
-                            }
 
-                            OfflineReplaySummaryMerge.Reapply(current, pair.Value);
-                        }
-                    }
-                }
-                throw;
-            }
-            finally
-            {
-                _offlineReplayUiApplyLock.Release();
-            }
+            return _chatService.FlushOfflineReplayTipsAsync(reason);
+        }
+
+        bool IOfflineReplayHost.IsActiveChat(string canonicalJid) => IsActiveChatJid(canonicalJid);
+
+        bool IOfflineReplayHost.IsWindowVisible => Unison.Uwp.App.IsWindowVisible;
+
+        void IOfflineReplayHost.NoteCatchUpProgress(string reason) => NoteFullHistoryCatchUpProgress(reason);
+
+        void IOfflineReplayHost.SchedulePersist() => SchedulePersist();
+
+        void IOfflineReplayHost.ReportFlushFailure(string reason, Exception error)
+        {
+            RuntimeDiagnosticsService.Instance.RecordException(
+                "messages",
+                "offline-summary-apply-failed",
+                error,
+                "reason=" + reason);
         }
         private void MarkOfflineReplayChatDirty(string jid) => _pendingMessages.MarkDirty(jid);
 
@@ -2454,7 +1846,9 @@ namespace Unison.Uwp.Services.WhatsApp
             bool isGroup,
             bool isFromMe,
             ChatPreviewKind? kindHint = null,
-            string authorPrefix = null)
+            string authorPrefix = null,
+            string participantJid = null,
+            string senderName = null)
         {
             if (_chatService != null)
             {
@@ -2464,7 +1858,9 @@ namespace Unison.Uwp.Services.WhatsApp
                     timestamp,
                     isFromMe,
                     kindHint,
-                    authorPrefix);
+                    authorPrefix,
+                    participantJid,
+                    senderName);
             }
 
             return RefreshChatPreviewFromReplayAsync(
@@ -2474,7 +1870,9 @@ namespace Unison.Uwp.Services.WhatsApp
                 isGroup,
                 isFromMe,
                 kindHint,
-                authorPrefix);
+                authorPrefix,
+                participantJid,
+                senderName);
         }
         private async Task RefreshChatPreviewFromReplayAsync(
             string jid,
@@ -2483,14 +1881,16 @@ namespace Unison.Uwp.Services.WhatsApp
             bool isGroup,
             bool isFromMe,
             ChatPreviewKind? kindHint = null,
-            string authorPrefix = null)
+            string authorPrefix = null,
+            string participantJid = null,
+            string senderName = null)
         {
             if (string.IsNullOrWhiteSpace(jid))
             {
                 return;
             }
 
-            await RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
                 {
                     var rows = GetChatRowsForCanonicalJid(jid);
                     if (rows.Count == 0)
@@ -2510,7 +1910,10 @@ namespace Unison.Uwp.Services.WhatsApp
                             authorPrefix,
                             null,
                             isFromMe,
-                            isFromMe ? MessageSendState.Sent : MessageSendState.NotApplicable))
+                            isFromMe ? MessageSendState.Sent : MessageSendState.NotApplicable,
+                            messageId: null,
+                            participantJid,
+                            senderName))
                         {
                             preferred = preferred ?? row;
                         }
@@ -2518,148 +1921,12 @@ namespace Unison.Uwp.Services.WhatsApp
 
                     if (preferred != null)
                     {
-                        int index = Chats.IndexOf(preferred);
-                        if (index > 0)
-                        {
-                            Chats.Move(index, 0);
-                        }
+                        ChatDisplayOrder.Reposition(Chats, preferred);
                     }
 
                     Log($"[WhatsAppService] Replay preview refresh applied for {jid} at {timestamp:O}");
                 });
         }
 
-        /// <summary>
-        /// Refreshes all chat previews from stored messages in a single UI dispatch.
-        /// Called once after the offline batch drain completes, instead of per-message
-        /// UI dispatches during the drain.
-        /// </summary>
-        public Task RefreshAllChatPreviewsFromStoredAsync(string reason) =>
-            RefreshAllChatPreviewsFromStoredCoreAsync(reason);
-
-        private async Task RefreshAllChatPreviewsFromStoredCoreAsync(string reason)
-        {
-            await RunOnUiThreadAsync(() =>
-            {
-                int updated = 0;
-                foreach (var chat in Chats)
-                {
-                    string canonicalJid = GetCanonicalJid(chat.JID);
-                    if (!MessagesByChat.TryGetValue(canonicalJid, out var messages) || messages == null || messages.Count == 0)
-                    {
-                        continue;
-                    }
-
-                    var latest = ChatPreviewTip.PickLatest(
-                        messages.Where(m => m != null && IsValidMessageTimestamp(m.Timestamp)).ToList());
-                    if (latest == null)
-                    {
-                        continue;
-                    }
-
-                    bool isGroup = canonicalJid.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
-                    string preview = ChatPreviewNormalizer.FormatListPreview(latest, isGroup);
-                    string author = ChatPreviewNormalizer.FormatListAuthorPrefix(latest, isGroup, SelfListDisplayName());
-
-                    if (ApplyChatPreviewIfNewer(
-                        chat,
-                        preview,
-                        latest.Timestamp,
-                        false,
-                        ChatPreviewNormalizer.InferKindFromMessage(latest),
-                        author,
-                        latest.MentionedJids,
-                        latest.IsFromMe,
-                        HistoryLiveMessageMapper.FromStatus(latest.Status, latest.IsFromMe),
-                        latest.Id))
-                    {
-                        updated++;
-                    }
-                }
-
-                Debug.WriteLine($"[WhatsAppService] Bulk preview refresh ({reason}): updated {updated} chat previews");
-            });
-        }
-
-        public Task ReconcileChatListFromStoredAsync(string reason) =>
-            ReconcileChatListFromStoredMessagesAsync(reason);
-
-        private async Task ReconcileChatListFromStoredMessagesAsync(string reason)
-        {
-            await RunOnUiThreadAsync(() =>
-            {
-                int refreshed = 0;
-                int created = 0;
-                var latestByChat = new List<Tuple<ChatItem, DateTime>>();
-
-                foreach (var kvp in MessagesByChat)
-                {
-                    string canonicalJid = GetCanonicalJid(kvp.Key);
-                    if (string.IsNullOrWhiteSpace(canonicalJid) || kvp.Value == null || kvp.Value.Count == 0)
-                    {
-                        continue;
-                    }
-
-                    var latest = ChatPreviewTip.PickLatest(
-                        kvp.Value.Where(m => m != null && IsValidMessageTimestamp(m.Timestamp)).ToList());
-                    if (latest == null)
-                    {
-                        continue;
-                    }
-
-                    var chat = Chats.FirstOrDefault(c =>
-                        string.Equals(GetCanonicalJid(c.JID), canonicalJid, StringComparison.OrdinalIgnoreCase));
-                    if (chat == null)
-                    {
-                        chat = new ChatItem
-                        {
-                            JID = canonicalJid,
-                            Name = ResolveDisplayName(canonicalJid, "chat"),
-                            Kind = ResolveChatKind(canonicalJid)
-                        };
-                        Chats.Add(chat);
-                        created++;
-                    }
-
-                    string preview = latest.Content ?? string.Empty;
-                    ApplyChatPreviewIfNewer(
-                        chat,
-                        preview,
-                        latest.Timestamp,
-                        false,
-                        ChatPreviewNormalizer.InferKindFromMessage(latest),
-                        ChatPreviewNormalizer.FormatListAuthorPrefix(latest, JidHelper.IsGroupJid(canonicalJid), SelfListDisplayName()),
-                        latest.MentionedJids,
-                        latest.IsFromMe,
-                        HistoryLiveMessageMapper.FromStatus(latest.Status, latest.IsFromMe),
-                        latest.Id);
-                    ApplyChatKind(chat);
-
-                    if (!chat.IsGroup && PlaceholderChatLabel.IsPlaceholder(chat.Name, canonicalJid, IsSelfMarkerLabel(chat.Name)))
-                    {
-                        chat.Name = ResolveDisplayName(canonicalJid, "chat");
-                    }
-
-                    DateTime effectivePreviewTimestamp = chat.LastMessageTimestampUtc.HasValue
-                        ? ToComparableUtc(chat.LastMessageTimestampUtc.Value)
-                        : ToComparableUtc(latest.Timestamp);
-                    latestByChat.Add(Tuple.Create(chat, effectivePreviewTimestamp));
-                    refreshed++;
-                }
-
-                int targetIndex = 0;
-                foreach (var entry in latestByChat.OrderByDescending(t => t.Item2))
-                {
-                    int currentIndex = Chats.IndexOf(entry.Item1);
-                    if (currentIndex >= 0 && currentIndex != targetIndex)
-                    {
-                        Chats.Move(currentIndex, targetIndex);
-                    }
-                    targetIndex++;
-                }
-
-                Log($"[WhatsAppService] Reconciled {refreshed} chat previews from cached messages (created={created}, reason={reason})");
-            });
-        }
     }
 }

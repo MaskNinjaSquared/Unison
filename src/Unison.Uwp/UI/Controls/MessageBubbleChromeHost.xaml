@@ -13,5 +13,6 @@
     <Grid>
         <controls:MessageBubbleChrome x:Name="WhatsAppChrome" Visibility="Collapsed"/>
         <controls:UnisonMessageBubbleChrome x:Name="UnisonChrome" Visibility="Collapsed"/>
+        <controls:LegacyMessageBubbleChrome x:Name="LegacyChrome" Visibility="Collapsed"/>
     </Grid>
 </UserControl>

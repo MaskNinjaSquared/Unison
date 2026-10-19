@@ -1,0 +1,42 @@
+<UserControl
+    x:Class="Unison.Uwp.UI.Controls.MentionSuggestList"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Unison.Uwp.UI.Controls">
+
+    <ListView x:Name="Rows"
+              MaxHeight="240"
+              ItemsSource="{Binding MentionChoices}"
+              IsItemClickEnabled="True"
+              SelectionMode="Single"
+              ItemClick="Rows_ItemClick"
+              Background="{ThemeResource ChatDetailInputBarBackgroundBrush}"
+              BorderBrush="{ThemeResource ChatDetailInputBarTopBorderBrush}"
+              BorderThickness="0,1,0,0">
+        <ListView.ItemTemplate>
+            <DataTemplate>
+                <Grid Height="52" Padding="12,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <controls:ChatAvatarControl VerticalAlignment="Center"
+                                                AvatarUrl="{Binding AvatarUrl}"
+                                                IsGroup="{Binding IsAll}"
+                                                Size="36"/>
+                    <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Name}"
+                                   FontFamily="{StaticResource MainFontSemibold}"
+                                   FontSize="16"
+                                   TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Text="{Binding Detail}"
+                                   FontFamily="{StaticResource MainFont}"
+                                   FontSize="13"
+                                   Opacity="0.7"
+                                   TextTrimming="CharacterEllipsis"/>
+                    </StackPanel>
+                </Grid>
+            </DataTemplate>
+        </ListView.ItemTemplate>
+    </ListView>
+</UserControl>

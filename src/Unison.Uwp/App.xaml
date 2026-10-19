@@ -44,11 +44,14 @@
             <!-- Custom Fonts -->
             <FontFamily x:Key="MainFont">ms-appx:///Assets/Fonts/SegUIVar-Regular.ttf#Segoe UI Variable</FontFamily>
             <FontFamily x:Key="MainFontRegularDisplay">ms-appx:///Assets/Fonts/SegUIVar-Regular.ttf#Segoe UI Variable</FontFamily>
+            <FontFamily x:Key="MainFontLight">ms-appx:///Assets/Fonts/SegUIVar-Light_Text.ttf#Segoe UI Variable Light</FontFamily>
             <FontFamily x:Key="MainFontBold">ms-appx:///Assets/Fonts/SegUIVar-Bold_Text.ttf#Segoe UI Variable Bold</FontFamily>
             <FontFamily x:Key="MainFontSemibold">ms-appx:///Assets/Fonts/SegUIVar-Semibold_Text.ttf#Segoe UI Variable Semibold</FontFamily>
             <FontFamily x:Key="IconFont">ms-appx:///Assets/Fonts/SegoeIcons.ttf#Segoe Fluent Icons</FontFamily>
             <!-- Custom PathIcon geometries (filter EA01, new-chat EA02, check EA03, double-check EA04). Regen: scripts/icons/generate-unison-icons.ps1 -->
             <FontFamily x:Key="UnisonIconFont">ms-appx:///Assets/Fonts/UnisonIcons.ttf#UnisonIcons</FontFamily>
+            <!-- WhatsApp Legacy WP8 icons: EB01 search, EB02 add, EB03 attach, EB04 send, EB05 mic. Regen: scripts/icons/generate-whatsapp-legacy-icons.ps1 -->
+            <FontFamily x:Key="LegacyIconFont">ms-appx:///Assets/Fonts/WhatsAppLegacyIcons.ttf#WhatsAppLegacyIcons</FontFamily>
 
             <!-- Branding Colors -->
             <SolidColorBrush x:Key="UnisonGreenBrush" Color="#FF20C064"/>

@@ -152,6 +152,25 @@ namespace Unison.Core.Tests.Helpers
         // --- Reposition ------------------------------------------------------
 
         [Fact]
+        public void Reposition_keeps_an_unpinned_tip_below_pinned_rows()
+        {
+            // Live tip refresh used to Move(index, 0) and shoved unpinned chats above pins.
+            var pinned = Chat("pinned", Utc(1), pinned: true, pinnedAt: 100);
+            var bumped = Chat("live", Utc(5));
+            var chats = new ObservableCollection<ChatItem>
+            {
+                pinned,
+                Chat("other", Utc(10)),
+                bumped
+            };
+
+            bumped.LastMessageTimestampUtc = Utc(20);
+            ChatDisplayOrder.Reposition(chats, bumped);
+
+            Assert.Equal(new[] { "pinned", "live", "other" }, Names(chats));
+        }
+
+        [Fact]
         public void Reposition_moves_a_freshly_bumped_chat_to_the_top()
         {
             var bumped = Chat("c", Utc(1));

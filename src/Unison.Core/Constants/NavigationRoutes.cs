@@ -18,6 +18,8 @@ namespace Unison.Core.Constants
         public const string Chats = "chats";
         public const string Archived = "archived";
         public const string Status = "status";
+        public const string Calls = "calls";
+        public const string Favorites = "favorites";
         public const string Settings = "settings";
         public const string Debug = "debug";
 
@@ -32,6 +34,8 @@ namespace Unison.Core.Constants
                 case NavigationDestination.Chats: return Chats;
                 case NavigationDestination.Archived: return Archived;
                 case NavigationDestination.Status: return Status;
+                case NavigationDestination.Calls: return Calls;
+                case NavigationDestination.Favorites: return Favorites;
                 case NavigationDestination.Settings: return Settings;
                 case NavigationDestination.Debug: return Debug;
                 default: return null;
@@ -86,6 +90,18 @@ namespace Unison.Core.Constants
             if (string.Equals(key, Status, StringComparison.OrdinalIgnoreCase))
             {
                 destination = NavigationDestination.Status;
+                return true;
+            }
+
+            if (string.Equals(key, Calls, StringComparison.OrdinalIgnoreCase))
+            {
+                destination = NavigationDestination.Calls;
+                return true;
+            }
+
+            if (string.Equals(key, Favorites, StringComparison.OrdinalIgnoreCase))
+            {
+                destination = NavigationDestination.Favorites;
                 return true;
             }
 

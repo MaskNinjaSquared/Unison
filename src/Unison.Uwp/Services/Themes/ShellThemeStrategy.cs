@@ -21,6 +21,12 @@ namespace Unison.Uwp.Services.Themes
         /// </summary>
         public virtual bool UsesMobileStatusBarProgress => false;
 
+        /// <summary>Sidebar brand. Unison shell shows Unison; WhatsApp shell shows WhatsApp Uwp.</summary>
+        public virtual string ShellBrandName => "Unison";
+
+        public virtual string ShellBrandIcon =>
+            "ms-appx:///Assets/Square44x44Logo.altform-unplated_targetsize-48.png";
+
         /// <summary>PC caption / title-bar colors.</summary>
         public virtual void SetTitleBar()
         {
@@ -67,6 +73,10 @@ namespace Unison.Uwp.Services.Themes
                     return typeof(UI.Views.ArchivedChatsView);
                 case NavigationDestination.Status:
                     return typeof(UI.Views.StatusView);
+                case NavigationDestination.Calls:
+                    return typeof(UI.Views.CallsView);
+                case NavigationDestination.Favorites:
+                    return typeof(UI.Views.FavoritesView);
                 case NavigationDestination.Debug:
                     return typeof(UI.Views.DebugView);
                 case NavigationDestination.Settings:
@@ -84,7 +94,7 @@ namespace Unison.Uwp.Services.Themes
         /// Opens settings for this shell. Unison/WhatsApp both navigate to their
         /// <c>Shell/*/Views/SettingsView</c> today; WhatsApp may switch to a dialog later.
         /// </summary>
-        public abstract void OpenSettings(Frame shellFrame);
+        public abstract void OpenSettings(Frame shellFrame, bool openProfile = false);
 
         /// <summary>True when <paramref name="content"/> is this shell's settings surface.</summary>
         public abstract bool IsSettingsPage(object content);
@@ -113,6 +123,18 @@ namespace Unison.Uwp.Services.Themes
             if (content is UI.Views.StatusView)
             {
                 destination = NavigationDestination.Status;
+                return true;
+            }
+
+            if (content is UI.Views.CallsView)
+            {
+                destination = NavigationDestination.Calls;
+                return true;
+            }
+
+            if (content is UI.Views.FavoritesView)
+            {
+                destination = NavigationDestination.Favorites;
                 return true;
             }
 

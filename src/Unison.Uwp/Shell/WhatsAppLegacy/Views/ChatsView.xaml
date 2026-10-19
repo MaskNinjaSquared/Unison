@@ -1,0 +1,12 @@
+<Page
+    x:Class="Unison.Uwp.Shell.WhatsAppLegacy.Views.ChatsView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Unison.Uwp.Shell.WhatsAppLegacy.Views"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+    <!-- List-only: chat detail is hosted by ShellView.DetailHost when a chat is open. -->
+    <local:ChatListView x:Name="ChatListPart"
+                        MenuClicked="ChatListPart_MenuClicked"
+                        ChatSelected="ChatListPart_ChatSelected"/>
+</Page>

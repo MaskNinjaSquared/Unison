@@ -32,6 +32,8 @@ namespace Unison.Uwp.UI.Helpers
                     return LocalizedStrings.Get("ChatList_PreviewDocument");
                 case ChatPreviewKind.Reaction:
                     return LocalizedStrings.Get("ChatList_PreviewReaction");
+                case ChatPreviewKind.Revoked:
+                    return LocalizedStrings.Get("ChatList_PreviewDeleted");
                 default:
                     return string.Empty;
             }

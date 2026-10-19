@@ -34,6 +34,8 @@ using Unison.Core.Constants;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.State;
+using Unison.Uwp.Services;
+using Unison.Uwp.Services.WhatsApp.Chats;
 using Unison.Uwp.Services.WhatsApp.Contacts;
 using Unison.Uwp.Services.WhatsApp.Groups;
 using Unison.Uwp.Services.WhatsApp.Messages;
@@ -43,7 +45,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService
+    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IMediaDownloadHost, IAvatarReport, IOfflineReplayHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IDeferredAvatarResolution, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IUsyncAliasHost, IStartupUiHost
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -72,44 +74,7 @@ namespace Unison.Uwp.Services.WhatsApp
             handler(this, args);
         }
 
-        // Controls verbose debug output - can be toggled from Debug menu.
-        // Padrao alterado para FALSE: sao ~280 pontos de log (122 so no SignalHandler,
-        // 57 no MessageStore) executados nos caminhos mais quentes -- descriptografia
-        // e sincronizacao de historico. Ligado, isso deixa o app lento no Lumia.
-        private static bool _verboseLogging = false;
-        private static bool _loggingSettingsInitialized;
         private static volatile bool _suppressReplayDiagnostics;
-        private static readonly string[] ReplayDiagnosticPrefixes =
-        {
-            "[Noise] Encrypted ",
-            "[Noise] Decrypted ",
-            "[Noise] Encoded frame:",
-            "[Noise] Received ",
-            "[Noise] Decoded frame:",
-            "[Noise] Waiting for more data,",
-            "[Socket] Decrypted Signal payload:",
-            "[Socket] Unpadded payload:",
-            "[Signal] Processing skmsg ",
-            "[Signal] Processing pkmsg ",
-            "[Signal] Processing msg ",
-            "[Signal] No SenderKey found ",
-            "[Signal] Invalid SenderKeyState ",
-            "[Signal] SenderKey keyId mismatch:",
-            "[Signal] SenderKey: too many iterations ahead",
-            "[Signal] SenderKey decryption failed:",
-            "[Signal] Successfully decrypted payload ",
-            "[Signal] SenderKey old-iteration replay path:",
-            "[Signal] SenderKey cache hit ",
-            "[Signal] SenderKey cache miss ",
-            "[Signal] Direct skipped-key cache hit ",
-            "[Signal] Direct skipped-key cache miss ",
-            "[Signal] Direct skipped-key cache stored "
-        };
-        public static bool VerboseLogging
-        {
-            get => _verboseLogging;
-            set => SetVerboseLogging(value, "property");
-        }
 
         public static bool SuppressReplayDiagnostics => _suppressReplayDiagnostics;
         
@@ -140,12 +105,12 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         /// <summary>
-        /// Logs a message to the debug output if VerboseLogging is enabled.
+        /// Logs a message to the debug output if <see cref="VerboseLog"/> is on.
         /// </summary>
         [Conditional("DEBUG")]
         public static void Log(string message)
         {
-            if (VerboseLogging && !ShouldSuppressReplayDiagnostic(message))
+            if (VerboseLog.IsEnabled && !ShouldSuppressReplayDiagnostic(message))
             {
                 Debug.WriteLine(message);
             }
@@ -164,24 +129,11 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private static bool ShouldSuppressReplayDiagnostic(string message)
         {
-            if (!_suppressReplayDiagnostics || string.IsNullOrEmpty(message))
-            {
-                return false;
-            }
-
-            for (int i = 0; i < ReplayDiagnosticPrefixes.Length; i++)
-            {
-                if (message.StartsWith(ReplayDiagnosticPrefixes[i], StringComparison.Ordinal))
-                {
-                    return true;
-                }
-            }
-
-            return false;
+            return _suppressReplayDiagnostics && ReplayDiagnosticNoise.Matches(message);
         }
 
         /// <summary>
-        /// Loads persisted verbose logging setting and reports startup state.
+        /// Routes protocol diagnostics through <see cref="Log"/> and loads the verbose switch.
         /// Safe to call multiple times.
         /// </summary>
         public static void InitializeLoggingSettings()
@@ -190,59 +142,7 @@ namespace Unison.Uwp.Services.WhatsApp
             // foreground, keep routing its optional diagnostics through the existing
             // Unison verbosity gate.
             ProtocolRuntimeLog.Sink = message => Log(message);
-
-            if (_loggingSettingsInitialized)
-            {
-                return;
-            }
-
-            try
-            {
-                var settings = LocalSettingsAccess.Current;
-                bool hasSaved = settings.ContainsKey(LocalSettingsConstants.VerboseLoggingEnabled);
-                _verboseLogging = settings.Get<bool>(LocalSettingsConstants.VerboseLoggingEnabled);
-
-                if (!hasSaved)
-                {
-                    settings.Set(LocalSettingsConstants.VerboseLoggingEnabled, _verboseLogging);
-                }
-
-                Debug.WriteLine($"[Logging] Startup verbose logging state: {(_verboseLogging ? "ON" : "OFF")} (persisted={hasSaved})");
-                _loggingSettingsInitialized = true;
-            }
-            catch (Exception ex)
-            {
-                _verboseLogging = true;
-                Debug.WriteLine($"[Logging] Failed to load verbose logging setting; defaulting ON. Error: {ex.Message}");
-                _loggingSettingsInitialized = true;
-            }
-        }
-
-        /// <summary>
-        /// Sets and persists verbose logging state, with explicit transition logging.
-        /// </summary>
-        public static void SetVerboseLogging(bool enabled, string source = "unknown")
-        {
-            bool previous = _verboseLogging;
-            _verboseLogging = enabled;
-
-            try
-            {
-                LocalSettingsAccess.Current.Set(LocalSettingsConstants.VerboseLoggingEnabled, enabled);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[Logging] Failed to persist verbose logging setting: {ex.Message}");
-            }
-
-            if (previous != enabled)
-            {
-                Debug.WriteLine($"[Logging] Verbose logging changed: {(previous ? "ON" : "OFF")} -> {(enabled ? "ON" : "OFF")} (source={source})");
-            }
-            else
-            {
-                Debug.WriteLine($"[Logging] Verbose logging unchanged: {(enabled ? "ON" : "OFF")} (source={source})");
-            }
+            VerboseLog.Initialize();
         }
 
         private IWhatsAppSocket _socket;
@@ -250,29 +150,26 @@ namespace Unison.Uwp.Services.WhatsApp
         private IMessageStore _messageStore = new MessageStore();
         private readonly IHistoryMessageStore _historyMessages;
         private readonly IHistoryChatPreviewStore _chatPreviews;
-        private readonly IAvatarCache _avatarCache;
         private readonly IUsyncGate _usyncGate;
         private readonly AvatarFetcher _avatarFetcher;
         private readonly IMediaCache _mediaCache;
-        private readonly MediaDerivationService _mediaDerivation;
         private readonly ReceiptReader _receipts;
 
-        /// <summary>
-        /// Built here rather than injected: it needs canonical JIDs and self-recognition, and both
-        /// still read tables this class owns until phase 3.7. Taking them as functions keeps the
-        /// reader itself free of the client.
-        /// </summary>
+        /// <summary>Reads group listings through the alias table. Built after <see cref="JidAlias"/>.</summary>
         private readonly GroupMetadataReader _groupMetadata;
+
+        /// <summary>The alias table as the Core rules read it. Built after <see cref="JidAlias"/>.</summary>
+        private readonly IJidResolver _jids;
+
+        /// <summary>Puts listing and metadata replies onto the rows for this client's own query passes.</summary>
+        private readonly GroupMetadataApply _groupApply;
         private IMessageService _messageService;
         private IChatService _chatService;
         private IContactService _contactService;
-        private IPersonStore _personStore;
-        private IGroupRosterStore _groupRosterStore;
-        private IChatStore _chatStore;
-        private ISystemInfoProvider _systemInfo;
-        private IDebugSendService _debugSendService;
-        private bool _isWindowsMobile;
-        private SemaphoreSlim _mediaDownloadLock;
+        private readonly IPersonStore _personStore;
+        private readonly IGroupRosterStore _groupRosterStore;
+        private readonly IChatStore _chatStore;
+        private readonly bool _isWindowsMobile;
 
         /// <summary>Wired from App DI so history sync goes through MessageFacade (Person upsert + domain mapping).</summary>
         public void AttachMessageService(IMessageService messageService)
@@ -289,134 +186,22 @@ namespace Unison.Uwp.Services.WhatsApp
         /// <summary>
         /// Wired from App DI so the legacy <see cref="IWhatsAppService"/> contact members still
         /// resolve. Only pass-throughs are left here — the notifications this used to push at the
-        /// facade are events now (see <see cref="OnAvatarCached"/>, <see cref="OnJidAliasResolved"/>).
+        /// facade are events now (see <see cref="OnAvatarCached"/>, <see cref="OnJidAliasResolved"/>,
+        /// <see cref="OnAvatarRetryDue"/>).
         /// </summary>
         public void AttachContactService(IContactService contactService)
         {
             _contactService = contactService;
         }
 
-        /// <summary>
-        /// Wired from App DI for Mobile / desktop branching (Imgur ISystemInfoProvider).
-        /// </summary>
-        /// <summary>Dev-only tooling, only ever attached under DEBUG builds (see App.xaml.cs).</summary>
-        public void AttachDebugSendService(IDebugSendService debugSendService)
-        {
-            _debugSendService = debugSendService;
-        }
+        private bool IsWindowsMobile => _isWindowsMobile;
 
-        public void AttachSystemInfoProvider(ISystemInfoProvider systemInfo)
-        {
-            _systemInfo = systemInfo;
-            _isWindowsMobile = systemInfo != null && systemInfo.IsMobile();
-            EnsureMediaDownloadLock();
-            Debug.WriteLine(
-                "[WhatsAppService] Sync budget=" +
-                (PreferFrugalSyncBudget ? "frugal" : "generous") +
-                ", mobile=" + _isWindowsMobile +
-                ", memory=" + Windows.System.MemoryManager.AppMemoryUsageLevel);
-        }
+        internal bool UsesSingleMediaDownloadSlot => IsWindowsMobile;
 
-        /// <summary>
-        /// Wired from App DI so display-name resolution can read Person (in-memory cache / SQLite).
-        /// </summary>
-        public void AttachPersonStore(IPersonStore personStore)
-        {
-            _personStore = personStore;
-            if (_personStore != null)
-            {
-                _ = WarmPersonStoreAsync();
-            }
-        }
+        /// <summary>Startup and enrichment timings; the rule is <see cref="SyncBudget"/>.</summary>
+        private bool UseFrugalSyncBudget => _syncBudget.IsFrugal;
 
-        /// <summary>
-        /// Wired from App DI so group Members lists survive restart (SQLite roster cache).
-        /// </summary>
-        public void AttachGroupRosterStore(IGroupRosterStore groupRosterStore)
-        {
-            _groupRosterStore = groupRosterStore;
-            if (_groupRosterStore != null)
-            {
-                _ = WarmGroupRosterStoreAsync();
-            }
-        }
-
-        /// <summary>
-        /// Wired from App DI for local chat status / live-tile pin in SQLite.
-        /// </summary>
-        public void AttachChatStore(IChatStore chatStore)
-        {
-            _chatStore = chatStore;
-            if (_chatStore != null)
-            {
-                _ = WarmChatStoreAsync();
-            }
-        }
-
-        /// <summary>Cached after <see cref="AttachSystemInfoProvider"/>; falls back until DI wires up.</summary>
-        private bool IsWindowsMobile
-        {
-            get
-            {
-                if (_systemInfo != null)
-                {
-                    return _isWindowsMobile;
-                }
-
-                return SystemInfoProvider.DetectIsMobile();
-            }
-        }
-
-        /// <summary>
-        /// Frugal when memory is not Low, or on Mobile while the catalog/sync is heavy.
-        /// Strong devices with Low memory stay generous (the old “desktop timings” path).
-        /// </summary>
-        public bool PreferFrugalSyncBudget
-        {
-            get
-            {
-                Windows.System.AppMemoryUsageLevel level =
-                    Windows.System.MemoryManager.AppMemoryUsageLevel;
-                if (level != Windows.System.AppMemoryUsageLevel.Low)
-                {
-                    return true;
-                }
-
-                if (!IsWindowsMobile)
-                {
-                    return false;
-                }
-
-                return Chats.Count >= 80
-                    || _initialSyncSafeModeActive
-                    || IsReplayDrainActive
-                    || (_fullHistoryOnDemandRequestedThisSession &&
-                        !string.IsNullOrWhiteSpace(_fullHistoryOnDemandRequestId));
-            }
-        }
-
-        /// <summary>Alias used by startup/enrichment timings.</summary>
-        private bool UseFrugalSyncBudget => PreferFrugalSyncBudget;
-
-        private void EnsureMediaDownloadLock()
-        {
-            if (_mediaDownloadLock != null)
-            {
-                return;
-            }
-
-            int slots = IsWindowsMobile ? 1 : 3;
-            _mediaDownloadLock = new SemaphoreSlim(slots, slots);
-        }
-
-        private SemaphoreSlim MediaDownloadLock
-        {
-            get
-            {
-                EnsureMediaDownloadLock();
-                return _mediaDownloadLock;
-            }
-        }
+        private SyncPacing CurrentSyncPacing => _workload.PacingFor(UseFrugalSyncBudget);
 
         private async Task WarmPersonStoreAsync()
         {
@@ -465,10 +250,10 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 _messageStore?.ClearMemoryCache();
 
-                await RunOnUiThreadAsync(() =>
+                await _ui.RunAsync(() =>
                 {
-                    var active = _activeChatJid;
-                    var keys = MessagesByChat.Keys.ToList();
+                    var active = _activeChat.Jid;
+                    var keys = MessagesByChat.ChatJids();
                     foreach (var key in keys)
                     {
                         if (!string.IsNullOrWhiteSpace(active) &&
@@ -478,7 +263,6 @@ namespace Unison.Uwp.Services.WhatsApp
                         }
 
                         MessagesByChat.Remove(key);
-                        _messageIdIndex.RemoveChat(key);
                     }
                 });
 
@@ -490,11 +274,10 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        public void SetActiveChatJid(string jid)
+        private void OnActiveChatChanged(object sender, ActiveChatChangedEventArgs e)
         {
-            string previous = _activeChatJid;
-            string next = string.IsNullOrWhiteSpace(jid) ? null : GetCanonicalJid(jid);
-            _activeChatJid = next;
+            string previous = e.Previous;
+            string next = e.Current;
 
             if (!string.IsNullOrWhiteSpace(previous) &&
                 !string.Equals(previous, next, StringComparison.OrdinalIgnoreCase))
@@ -509,92 +292,18 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        /// <summary>Forwards presence subscribe to the active socket when connected.</summary>
-        public Task PresenceSubscribeAsync(string jid)
-        {
-            var socket = _socket;
-            if (string.IsNullOrWhiteSpace(jid) || socket == null || !socket.IsConnected)
-            {
-                return Task.CompletedTask;
-            }
 
-            return socket.PresenceSubscribeAsync(jid);
-        }
+        private bool IsActiveChatJid(string jid) => _activeChat.IsOpen(jid);
 
-        public async Task ClearUnreadForChatAsync(string jid)
-        {
-            string canonical = GetCanonicalJid(jid);
-            if (string.IsNullOrWhiteSpace(canonical))
-            {
-                return;
-            }
-
-            // Same idea as Unigram's ViewMessages path: update memory immediately, and only touch
-            // disk for the rows that actually changed. A full SchedulePersist here rewrote every
-            // chat preview plus three JSON maps - fine on SSD, several seconds on Mobile eMMC.
-            List<ChatItem> dirty = null;
-            await RunOnUiThreadAsync(() =>
-            {
-                foreach (var row in GetChatRowsForCanonicalJid(canonical))
-                {
-                    if (row == null || row.UnreadCount <= 0)
-                    {
-                        continue;
-                    }
-
-                    if (dirty == null)
-                    {
-                        dirty = new List<ChatItem>();
-                    }
-
-                    dirty.Add(row);
-                    row.UnreadCount = 0;
-                }
-            });
-
-            if (dirty == null || dirty.Count == 0)
-            {
-                return;
-            }
-
-            NotificationService.Instance.UpdateBadge(GetTotalUnreadCount());
-            try
-            {
-                App.Services?.GetService<IShortcutService>()?.UpdateChatUnread(canonical, 0);
-            }
-            catch
-            {
-            }
-
-            _ = PersistChatCatalogSliceAsync(dirty);
-        }
-
-        private bool IsActiveChatJid(string jid)
-        {
-            if (string.IsNullOrWhiteSpace(jid) || string.IsNullOrWhiteSpace(_activeChatJid))
-            {
-                return false;
-            }
-
-            return string.Equals(GetCanonicalJid(jid), _activeChatJid, StringComparison.OrdinalIgnoreCase);
-        }
-
-        public bool IsChatCurrentlyOpen(string jid)
-        {
-            return IsActiveChatJid(jid);
-        }
-
-        public int GetTotalUnreadCount()
+        private int GetTotalUnreadCount()
         {
             try
             {
-                return Chats
-                    .Where(c => c != null)
-                    .GroupBy(c => GetCanonicalJid(c.JID), StringComparer.OrdinalIgnoreCase)
-                    .Sum(group => group.Max(c => Math.Max(0, c.UnreadCount)));
+                return ChatUnreadTally.TotalAcrossConversations(Chats, GetCanonicalJid);
             }
-            catch
+            catch (Exception ex)
             {
+                Debug.WriteLine("[WhatsAppService] Unread total failed: " + ex.Message);
                 return 0;
             }
         }
@@ -612,54 +321,12 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 MessagesByChat.Remove(jid);
             }
-            _messageIdIndex.RemoveChat(normalized);
         }
 
-        private void TrimInMemoryMessageWindow(string jid)
-        {
-            if (string.IsNullOrWhiteSpace(jid))
-            {
-                return;
-            }
-
-            string normalized = NormalizeJid(jid);
-            if (!MessagesByChat.TryGetValue(normalized, out var messages) || messages == null)
-            {
-                return;
-            }
-
-            if (messages.Count > MaxActiveChatMessagesInMemory)
-            {
-                DateTime nowUtc = DateTime.UtcNow;
-                var pinned = messages
-                    .Where(m => m != null && m.IsPinned &&
-                                (!m.PinExpiresAtUtc.HasValue || m.PinExpiresAtUtc.Value > nowUtc))
-                    .OrderBy(m => m.Timestamp)
-                    .ToList();
-                var pinnedIds = new HashSet<string>(
-                    pinned.Where(m => !string.IsNullOrWhiteSpace(m.Id)).Select(m => m.Id),
-                    StringComparer.Ordinal);
-                int regularCapacity = Math.Max(0, MaxActiveChatMessagesInMemory - pinned.Count);
-                var recentRegular = messages
-                    .Where(m => m != null && (string.IsNullOrWhiteSpace(m.Id) || !pinnedIds.Contains(m.Id)))
-                    .OrderByDescending(m => m.Timestamp)
-                    .Take(regularCapacity)
-                    .ToList();
-                messages.Clear();
-                messages.AddRange(pinned.Concat(recentRegular)
-                    .GroupBy(m => m.Id ?? Guid.NewGuid().ToString(), StringComparer.Ordinal)
-                    .Select(g => g.First())
-                    .OrderBy(m => m.Timestamp));
-            }
-
-            _messageIdIndex.Rebuild(normalized, messages);
-        }
+        private void TrimInMemoryMessageWindow(string jid) =>
+            MessagesByChat.Trim(jid, MaxActiveChatMessagesInMemory, DateTime.UtcNow);
         private AuthState _authState;
 
-        /// <summary>
-        /// Phone-code pairing lives on ConnectionFacade / WhatsAppSession, not here.
-        /// </summary>
-        public IPairingService Pairing => null;
         private bool _isReconnecting = false;
         private bool _isConnecting = false;
         private volatile bool _suppressReconnect = false;
@@ -701,31 +368,20 @@ namespace Unison.Uwp.Services.WhatsApp
         private FileKeyStore _sharedKeyStore;
         private int _forceFreshConnectOnResume;
         private int _deferredStartupMaintenanceStarted;
-        private volatile bool _isLoadingPersistedChats;
-        public bool IsLoadingPersistedChats => _isLoadingPersistedChats;
         private readonly SemaphoreSlim _connectLock = new SemaphoreSlim(1, 1);
         private readonly SemaphoreSlim _resumeConnectionLock = new SemaphoreSlim(1, 1);
 
         // SocketClient must not wait for UI, storage or avatar work while it is reading
         // WhatsApp stanzas. Live messages use a priority queue so they can jump ahead
         // of a large offline/history replay without breaking the ordered decrypt path.
-        private readonly object _incomingMessageQueueLock = new object();
-        private readonly Queue<Client.DecryptedMessageEventArgs> _liveIncomingMessageQueue =
-            new Queue<Client.DecryptedMessageEventArgs>();
-        private readonly Queue<Client.DecryptedMessageEventArgs> _offlineIncomingMessageQueue =
-            new Queue<Client.DecryptedMessageEventArgs>();
-        private bool _incomingMessagePumpRunning;
-        private Task _incomingMessagePumpTask = Task.CompletedTask;
-        private int _incomingMessagePumpGeneration;
-        private Client.DecryptedMessageEventArgs _incomingMessagePumpCurrent;
-        private readonly HashSet<string> _incomingMessageTimeoutIds =
-            new HashSet<string>(StringComparer.Ordinal);
+        private readonly IncomingMessageQueue<Client.DecryptedMessageEventArgs> _incoming =
+            new IncomingMessageQueue<Client.DecryptedMessageEventArgs>(
+                message => message.IsOffline,
+                message => message.MessageId);
         private readonly object _messageControlQueueLock = new object();
         private Task _messageControlQueueTail = Task.CompletedTask;
-        private string _incomingMessagePumpStage = "idle";
-        private long _incomingMessagePumpStageUtcTicks;
         private const int LiveIncomingMessageTimeoutMs = 12000;
-        private CoreDispatcher _uiDispatcher;
+        private readonly AttachedUiDispatcher _ui;
         private readonly ChatStateStore _chatState;
 
         // Refactor Phase A: always-on counters. They are intentionally independent
@@ -750,21 +406,16 @@ namespace Unison.Uwp.Services.WhatsApp
         /// apart from a pairing that never got one, which need different things said to them.
         /// </summary>
         private volatile bool _qrDeliveredThisConnection = false;
-        private volatile bool _deferReconnectWorkUntilReplayDrain = false;
+        private readonly SyncWorkGate _syncWork;
         private int _offlineReplayReleased;
         private CancellationTokenSource _resolutionCts;
         private CancellationTokenSource _deferredProfilePictureResolutionCts;
         private DateTime _lastFreshnessReconnectFallbackUtc = DateTime.MinValue;
         private volatile bool _freshnessReconnectFallbackInProgress = false;
-        /// <summary>Newest tip watermark when the last catch-up continue was decided.</summary>
-        private DateTime _catchUpWatermarkUtc = DateTime.MinValue;
-        private int _catchUpContinueRound;
-        private int _catchUpStagnantCycles;
+        private readonly HistoryCatchUpContinuation _catchUp = new HistoryCatchUpContinuation();
         private DateTime _lastCatchUpContinueUtc = DateTime.MinValue;
         // Default retry delay for the deferred background-resolution pass (names+avatars+groups).
         private static readonly TimeSpan AvatarFetchNextBatchDelay = TimeSpan.FromSeconds(20);
-        // Also used by ContactService (duplicated) when composing an avatar-miss failure reason.
-        private const string GroupAvatarFallbackMissReason = "group-avatar-fallback-miss";
         private DateTime _replayDrainCompletedUtc = DateTime.MinValue;
         private DateTime _lastPostReplayLiveActivityUtc = DateTime.MinValue;
         private static readonly TimeSpan[] PostReplayAppStateFollowUpDelays =
@@ -797,25 +448,21 @@ namespace Unison.Uwp.Services.WhatsApp
         private CancellationTokenSource _postMessageEnrichmentCts;
         private int _postMessageEnrichmentStarted;
         private int _enrichmentAwaitingHeavyHistory;
-        private int _historyCatchUpBannerActive;
+        private int _enrichmentAwaitingListPaint;
+        private ChatListInitialPaintGate _listPaintGate;
+        private readonly SyncStatusChannel _syncStatus;
 
         // Offline messages are intentionally kept off the UI thread while a large replay
         // is draining. Keep a compact per-chat summary so the chat list can still be
         // updated after the in-memory message cache is released for inactive chats.
-        private readonly object _offlineReplayUiLock = new object();
-        private readonly SemaphoreSlim _offlineReplayUiApplyLock = new SemaphoreSlim(1, 1);
-        private readonly Dictionary<string, OfflineReplayChatSummary> _offlineReplayUiSummaries =
-            new Dictionary<string, OfflineReplayChatSummary>(StringComparer.OrdinalIgnoreCase);
-        private System.Threading.Timer _offlineReplayUiTimer;
-        private static readonly TimeSpan OfflineReplayUiDebounce = TimeSpan.FromMilliseconds(180);
-
         // Somente a conversa aberta deve manter uma janela grande de mensagens em RAM.
         // O historico completo continua no MessageStore.
-        private volatile string _activeChatJid;
+        private readonly ActiveChat _activeChat;
         private const int MaxActiveChatMessagesInMemory = 300;
-        private volatile bool _initialSyncSafeModeActive;
-        private int _initialSyncProcessedConversations;
-        private int _initialSyncTotalConversations;
+        private readonly InitialSyncProgressState _initialSync;
+        private readonly SyncBudget _syncBudget;
+        private readonly SyncWorkloadStrategy _workload;
+        private readonly SelfProfileState _selfProfile;
 
         /// <summary>
         /// SQLite history arrives in several chunks. We accumulate conversation counts and only
@@ -824,42 +471,16 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         private int _sqliteHistoryConversationsAccumulated;
         private int _sqliteHistoryFinalizeGeneration;
-        private const int SqliteHistoryFinalizeQuietMs = 2800;
-        private const int SqliteHistoryFullFinalizeDelayMs = 900;
+        private int SqliteHistoryFinalizeQuietMs =>
+            Math.Max(200, _workload.HistoryFinalizeQuietMs);
 
-        public bool IsInitialSyncSafeMode => _initialSyncSafeModeActive;
-        public int InitialSyncProcessedConversations => _initialSyncProcessedConversations;
-        public int InitialSyncTotalConversations => _initialSyncTotalConversations;
+        private int SqliteHistoryFullFinalizeDelayMs =>
+            Math.Max(200, _workload.HistoryFullFinalizeDelayMs);
 
         /// <summary>UWP transport only; prefer <see cref="IWhatsAppService"/> APIs from outside this assembly.</summary>
         internal IWhatsAppSocket Socket => _socket;
-        /// <summary>Session keys; prefer <see cref="IWhatsAppService.CurrentProfile"/> externally.</summary>
+        /// <summary>Session keys; the profile the app shows is <see cref="SelfProfileState"/>.</summary>
         internal AuthState AuthState => _authState;
-
-        public void AttachUiDispatcher(CoreDispatcher dispatcher)
-        {
-            if (dispatcher != null)
-            {
-                _uiDispatcher = dispatcher;
-            }
-        }
-
-        private CoreDispatcher GetUiDispatcher()
-        {
-            if (_uiDispatcher != null)
-            {
-                return _uiDispatcher;
-            }
-
-            try
-            {
-                return CoreApplication.MainView?.CoreWindow?.Dispatcher;
-            }
-            catch
-            {
-                return null;
-            }
-        }
 
         public bool IsConnected =>
             _socket != null &&
@@ -870,58 +491,27 @@ namespace Unison.Uwp.Services.WhatsApp
             _socket != null &&
             _socket.IsHandshakeComplete;
 
-        /// <summary>True while a reconnect/history replay drain is in progress; satellites should back off.</summary>
-        public bool IsReplayDrainActive => ShouldDeferReconnectReplayWork();
+        private bool IsReplayDrainActive => ShouldDeferReconnectReplayWork();
 
-        Task IWhatsAppService.RunOnUiThreadAsync(Action action) => RunOnUiThreadAsync(action);
+        private void RaiseSyncStatus(string status) => _syncStatus.Raise(status);
 
-        /// <summary>
-        /// Publishes a transient status string through <see cref="OnSyncStatus"/>.
-        /// List enrichment phases (settling / names / avatars / groups) are suppressed while a
-        /// conversation is open so Mobile StatusBar does not paint over chat detail.
-        /// </summary>
-        /// <summary>
-        /// Publishes a transient status string through <see cref="OnSyncStatus"/>.
-        /// While a FULL_HISTORY catch-up banner is latched, clears are swallowed so enrichment
-        /// phases cannot hide "Synchronizing history…".
-        /// </summary>
-        public void RaiseSyncStatus(string status)
-        {
-            if (string.IsNullOrEmpty(status))
-            {
-                if (Volatile.Read(ref _historyCatchUpBannerActive) == 1)
-                {
-                    OnSyncStatus?.Invoke(this, SyncPhaseStatus.Format(SyncPhaseStatus.HistoryCatchUp));
-                    return;
-                }
+        private void PublishSyncStatus(string status) => _syncStatus.Publish(status);
 
-                OnSyncStatus?.Invoke(this, null);
-                return;
-            }
-
-            if (!string.IsNullOrWhiteSpace(_activeChatJid) &&
-                IsListEnrichmentPhase(status))
-            {
-                return;
-            }
-
-            OnSyncStatus?.Invoke(this, status);
-        }
+        private bool IsHistoryCatchUpBannerActive => _syncStatus.IsHistoryCatchUpShown;
 
         private void BeginHistoryCatchUpBanner(string reason)
         {
-            Interlocked.Exchange(ref _historyCatchUpBannerActive, 1);
+            _syncStatus.BeginHistoryCatchUp();
             NoteFullHistoryCatchUpProgress("banner-begin:" + (reason ?? string.Empty));
             RuntimeDiagnosticsService.Instance.Write(
                 "history",
                 "catch-up-banner-begin",
                 "reason=" + (reason ?? string.Empty));
-            OnSyncStatus?.Invoke(this, SyncPhaseStatus.Format(SyncPhaseStatus.HistoryCatchUp));
         }
 
         private void EndHistoryCatchUpBanner(string reason)
         {
-            if (Interlocked.Exchange(ref _historyCatchUpBannerActive, 0) == 0)
+            if (!_syncStatus.EndHistoryCatchUp())
             {
                 return;
             }
@@ -930,50 +520,30 @@ namespace Unison.Uwp.Services.WhatsApp
                 "history",
                 "catch-up-banner-end",
                 "reason=" + (reason ?? string.Empty));
-            OnSyncStatus?.Invoke(this, null);
+
+            // The post-sync enrichment that would rename the list gives up when the window is
+            // hidden or the socket dropped; names learned from the sync itself need neither.
+            _ = ApplyResolvedNamesToChatsAsync();
         }
 
         /// <summary>
         /// Stamps progress on the in-flight FULL_HISTORY catch-up so the idle watchdog does not
-        /// abort while tips/chunks are still arriving on Mobile.
+        /// abort while tips/chunks are still arriving on Mobile. ACK/banner only refresh the idle
+        /// clock; they must not bump <see cref="HistoryOnDemandRequest.ProgressSignalCount"/>.
         /// </summary>
         private void NoteFullHistoryCatchUpProgress(string reason)
         {
-            if (Volatile.Read(ref _historyCatchUpBannerActive) == 0 &&
-                !_fullHistoryOnDemandRequestedThisSession &&
-                string.IsNullOrWhiteSpace(_fullHistoryOnDemandRequestId))
+            if (!IsHistoryCatchUpBannerActive &&
+                !_historyRequests.IsFullClaimed &&
+                string.IsNullOrWhiteSpace(_historyRequests.FullRequestId))
             {
                 return;
             }
 
-            DateTime nowUtc = DateTime.UtcNow;
-            string requestId;
-            int signalCount;
-            lock (_historyOnDemandLock)
+            bool countsAsLot = HistoryCatchUpProgressSignal.CountsAsLotProgress(reason);
+            if (!_historyRequests.NoteFullProgress(reason, countsAsLot, DateTime.UtcNow, out string requestId, out int signalCount))
             {
-                requestId = _fullHistoryOnDemandRequestId;
-                HistoryOnDemandRequestState state = null;
-                if (!string.IsNullOrWhiteSpace(requestId))
-                {
-                    _historyOnDemandRequestById.TryGetValue(requestId, out state);
-                }
-
-                if (state == null && !string.IsNullOrWhiteSpace(_fullHistoryRepairRequestId))
-                {
-                    requestId = _fullHistoryRepairRequestId;
-                    _historyOnDemandRequestById.TryGetValue(requestId, out state);
-                }
-
-                if (state == null ||
-                    !string.Equals(state.RequestType, "FullHistorySyncOnDemand", StringComparison.Ordinal))
-                {
-                    return;
-                }
-
-                state.LastProgressUtc = nowUtc;
-                state.LastProgressReason = reason ?? string.Empty;
-                state.ProgressSignalCount++;
-                signalCount = state.ProgressSignalCount;
+                return;
             }
 
             RuntimeDiagnosticsService.Instance.Write(
@@ -981,21 +551,25 @@ namespace Unison.Uwp.Services.WhatsApp
                 "catch-up-progress",
                 "requestId=" + (requestId ?? "<none>") +
                 "; signal=" + signalCount +
+                "; lotProgress=" + countsAsLot +
                 "; reason=" + (reason ?? string.Empty));
         }
 
-        private static bool IsListEnrichmentPhase(string status) =>
-            ListEnrichmentPhase.Matches(status);
+        void IDeferredAvatarResolution.Schedule(string reason, TimeSpan? delay) =>
+            ScheduleDeferredProfilePictureResolution(reason, delay);
 
-        bool IWhatsAppService.ShouldDeferAvatarFetch(out string reason) => ShouldDeferProfilePictureFetch(out reason);
+        private Task HydrateCachedAvatarsFromContactAsync(string reason)
+        {
+            if (_contactService == null)
+            {
+                Debug.WriteLine("[WhatsAppService] Avatar hydrate skipped (" + reason + "): contact facade missing");
+                return Task.CompletedTask;
+            }
 
-        void IWhatsAppService.ScheduleDeferredAvatarResolution(string reason, TimeSpan? delay) => ScheduleDeferredProfilePictureResolution(reason, delay);
+            return _contactService.HydrateCachedAvatarUrisAsync(reason);
+        }
 
-        void IWhatsAppService.CancelDeferredAvatarResolution() => CancelDeferredProfilePictureResolution();
-
-        Task IWhatsAppService.HydrateCachedAvatarUrisAsync(string reason) => HydrateCachedAvatarUrisAsync(reason);
-
-        public RuntimeDiagnosticsSnapshot GetRuntimeDiagnosticsSnapshot()
+        RuntimeDiagnosticsSnapshot IRuntimeSnapshotSource.CaptureRuntimeSnapshot()
         {
             var snapshot = new RuntimeDiagnosticsSnapshot
             {
@@ -1004,13 +578,10 @@ namespace Unison.Uwp.Services.WhatsApp
                 IsServiceConnected = IsConnected,
                 IsConnecting = _isConnecting,
                 SuppressReconnect = _suppressReconnect || _fatalSessionEnded,
-                HistorySyncProcessing = _initialSyncSafeModeActive ||
-                                        Volatile.Read(ref _historyCatchUpBannerActive) == 1 ||
-                                        _fullHistoryOnDemandRequestedThisSession,
-                HistoryCatchUpBannerActive = Volatile.Read(ref _historyCatchUpBannerActive) == 1,
-                FullHistoryOnDemandPending = _fullHistoryOnDemandRequestedThisSession ||
-                                             !string.IsNullOrWhiteSpace(_fullHistoryOnDemandRequestId),
-                FullHistoryOnDemandRequestId = _fullHistoryOnDemandRequestId,
+                HistorySyncProcessing = _initialSync.IsActive ||
+                                        IsHistoryCatchUpBannerActive ||
+                                        _historyRequests.IsFullClaimed,
+                HistoryCatchUpBannerActive = IsHistoryCatchUpBannerActive,
                 FullHistoryTriggerReason = null,
                 FullHistoryAckAccepted = false,
                 FullHistoryProgressSignalCount = 0,
@@ -1020,8 +591,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 LastHistorySyncReceivedUtc = _lastHistorySyncReceivedUtc,
                 LastHistorySyncType = _lastHistorySyncTypeReceived?.ToString(),
                 SqliteHistoryConversationsAccumulated = _sqliteHistoryConversationsAccumulated,
-                InitialSyncProcessedConversations = _initialSyncProcessedConversations,
-                InitialSyncTotalConversations = _initialSyncTotalConversations,
+                InitialSyncProcessedConversations = _initialSync.ProcessedConversations,
+                InitialSyncTotalConversations = _initialSync.TotalConversations,
                 DecryptedEventCount = Interlocked.Read(ref _diagnosticsDecryptedEventCount),
                 AppliedMessageCount = Interlocked.Read(ref _diagnosticsAppliedMessageCount),
                 SendAttemptCount = Interlocked.Read(ref _diagnosticsSendAttemptCount),
@@ -1049,16 +620,14 @@ namespace Unison.Uwp.Services.WhatsApp
                 snapshot.IsReconnecting = _isReconnecting;
             }
 
-            lock (_incomingMessageQueueLock)
-            {
-                snapshot.LiveIncomingQueueDepth = _liveIncomingMessageQueue.Count;
-                snapshot.OfflineIncomingQueueDepth = _offlineIncomingMessageQueue.Count;
-                snapshot.IncomingPumpRunning = _incomingMessagePumpRunning;
-                snapshot.IncomingPumpGeneration = _incomingMessagePumpGeneration;
-                snapshot.IncomingPumpStage = _incomingMessagePumpStage;
-                snapshot.IncomingPumpMessageId = _incomingMessagePumpCurrent?.MessageId;
-                snapshot.IncomingPumpStageUtc = DiagnosticsDateTime(_incomingMessagePumpStageUtcTicks);
-            }
+            IncomingQueueSnapshot incoming = _incoming.Snapshot();
+            snapshot.LiveIncomingQueueDepth = incoming.LiveDepth;
+            snapshot.OfflineIncomingQueueDepth = incoming.OfflineDepth;
+            snapshot.IncomingPumpRunning = incoming.Running;
+            snapshot.IncomingPumpGeneration = incoming.Generation;
+            snapshot.IncomingPumpStage = incoming.Stage;
+            snapshot.IncomingPumpMessageId = incoming.CurrentMessageId;
+            snapshot.IncomingPumpStageUtc = DiagnosticsDateTime(incoming.StageUtcTicks);
 
             snapshot.PersistPending = _persistScheduler.IsPending;
 
@@ -1083,7 +652,7 @@ namespace Unison.Uwp.Services.WhatsApp
             try
             {
                 snapshot.LoadedChatCount = Chats.Count;
-                snapshot.LoadedMessageCount = MessagesByChat.Values.Where(list => list != null).Sum(list => list.Count);
+                snapshot.LoadedMessageCount = MessagesByChat.TotalMessageCount();
             }
             catch
             {
@@ -1091,22 +660,16 @@ namespace Unison.Uwp.Services.WhatsApp
                 // must never interfere with the current UI/protocol paths.
             }
 
-            lock (_historyOnDemandLock)
+            _historyRequests.ReadFullDiagnostics(out bool fullPending, out string fullId, out HistoryOnDemandRequest fullState);
+            snapshot.FullHistoryOnDemandPending = fullPending;
+            snapshot.FullHistoryOnDemandRequestId = fullId;
+            if (fullState != null)
             {
-                string fullId = _fullHistoryOnDemandRequestId;
-                snapshot.FullHistoryOnDemandPending =
-                    _fullHistoryOnDemandRequestedThisSession || !string.IsNullOrWhiteSpace(fullId);
-                snapshot.FullHistoryOnDemandRequestId = fullId;
-                if (!string.IsNullOrWhiteSpace(fullId) &&
-                    _historyOnDemandRequestById.TryGetValue(fullId, out HistoryOnDemandRequestState fullState) &&
-                    fullState != null)
-                {
-                    snapshot.FullHistoryTriggerReason = fullState.TriggerReason ?? fullState.Marker;
-                    snapshot.FullHistoryAckAccepted = fullState.AckAccepted;
-                    snapshot.FullHistoryProgressSignalCount = fullState.ProgressSignalCount;
-                    snapshot.FullHistoryLastProgressReason = fullState.LastProgressReason;
-                    snapshot.FullHistoryLastProgressUtc = fullState.LastProgressUtc;
-                }
+                snapshot.FullHistoryTriggerReason = fullState.TriggerReason ?? fullState.Marker;
+                snapshot.FullHistoryAckAccepted = fullState.AckAccepted;
+                snapshot.FullHistoryProgressSignalCount = fullState.ProgressSignalCount;
+                snapshot.FullHistoryLastProgressReason = fullState.LastProgressReason;
+                snapshot.FullHistoryLastProgressUtc = fullState.LastProgressUtc;
             }
 
             return snapshot;
@@ -1114,56 +677,24 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private static DateTime DiagnosticsDateTime(long ticks)
         {
-            return ticks <= 0 ? DateTime.MinValue : new DateTime(ticks, DateTimeKind.Utc);
+            return DiagnosticUtcTicks.ToDateTime(ticks);
         }
 
         // The chat list and the per-chat messages now live in ChatStateStore. These properties
         // hand out the very same instances, so existing code keeps working unchanged while new
         // consumers can read the store directly instead of coming through this class.
         public ObservableCollection<ChatItem> Chats => _chatState.Chats;
-        public Dictionary<string, List<ChatMessage>> MessagesByChat => _chatState.MessagesByChat;
+        public ChatMessageCache MessagesByChat => _chatState.MessagesByChat;
 
-        /// <summary>
-        /// Canonical address to the rows that carry it. Null means "not built"; see
-        /// <see cref="GetChatRowsForCanonicalJid"/>.
-        /// </summary>
-        private Dictionary<string, List<ChatItem>> _chatRowsByCanonical;
-        private int _chatRowIndexVersion;
+        private readonly ChatRowIndex _chatRows;
+        private readonly ChatPreviewReconciler _previewReconciler;
+        private readonly ChatNameRefresh _nameRefresh;
+        private readonly StoredChatPreviewRefresh _storedPreviews;
+        private readonly ChatListDeduper _deduper;
+        private readonly UsyncAliasFiling _usyncAliases;
 
-        bool IWhatsAppService.VerboseLogging => VerboseLogging;
-
-        void IWhatsAppService.SetVerboseLogging(bool enabled, string source) => SetVerboseLogging(enabled, source);
-
-        public List<ChatMessage> GetLiveMessages(string jid)
-        {
-            if (string.IsNullOrWhiteSpace(jid))
-                return new List<ChatMessage>();
-
-            string key = NormalizeJid(jid);
-            List<ChatMessage> list;
-            if (!MessagesByChat.TryGetValue(key, out list) || list == null)
-            {
-                foreach (var kvp in MessagesByChat)
-                {
-                    if (string.Equals(GetCanonicalJid(kvp.Key), GetCanonicalJid(key), StringComparison.OrdinalIgnoreCase))
-                    {
-                        list = kvp.Value;
-                        break;
-                    }
-                }
-            }
-
-            return list != null ? new List<ChatMessage>(list) : new List<ChatMessage>();
-        }
-
-        public Task SendImageAsync(string jid, byte[] imageBytes, string caption)
-            => SendImageMessageAsync(jid, imageBytes, caption);
-        public Dictionary<string, string> ContactNames => _chatState.PushNames;
-        public Dictionary<string, string> PhoneContactNamesByJid => _chatState.AddressBookNames;
-        /// <summary>How long a group listing stays good enough to serve the next caller.</summary>
-        private static readonly TimeSpan GroupQueryReuseWindow = TimeSpan.FromMinutes(2);
-
-        private DateTime _lastGroupQueryUtc = DateTime.MinValue;
+        public DisplayNameTable ContactNames => _chatState.PushNames;
+        public DisplayNameTable PhoneContactNamesByJid => _chatState.AddressBookNames;
 
         public JidAliasTable JidAlias { get; }
 
@@ -1173,32 +704,9 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         private static readonly TimeSpan AliasFollowUpDebounce = TimeSpan.FromMilliseconds(750);
 
-        private readonly object _aliasFollowUpGate = new object();
-        private readonly HashSet<string> _pendingAliasAvatarJids =
-            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        private string _pendingAliasFollowUpSource;
+        private readonly AliasFollowUpQueue _aliasFollowUps = new AliasFollowUpQueue();
+        private readonly object _aliasFollowUpTimerGate = new object();
         private CancellationTokenSource _aliasFollowUpCts;
-        private int _aliasFollowUpRunning;
-        private sealed class HistoryOnDemandRequestState
-        {
-            public string RequestId { get; set; }
-            public string RequestType { get; set; }
-            public string ChatJid { get; set; }
-            public string Marker { get; set; }
-            public DateTime RequestedAtUtc { get; set; }
-            public int BaselineMessageCount { get; set; }
-            public bool AckAccepted { get; set; }
-            public DateTime AckAcceptedUtc { get; set; }
-            public bool TimeoutTaskStarted { get; set; }
-            public string TriggerReason { get; set; }
-
-            /// <summary>Last tip/chunk/offline signal while waiting for FULL_HISTORY catch-up.</summary>
-            public DateTime LastProgressUtc { get; set; }
-
-            public string LastProgressReason { get; set; }
-
-            public int ProgressSignalCount { get; set; }
-        }
         private sealed class HistoryBackfillCandidate
         {
             public string Jid { get; set; }
@@ -1209,83 +717,25 @@ namespace Unison.Uwp.Services.WhatsApp
             public DateTime LastMessageTimestamp { get; set; }
             public string SelectionReason { get; set; }
         }
-        private sealed class MissingMessageCandidate
-        {
-            public string ChatJid { get; set; }
-            public string Participant { get; set; }
-            public string MessageId { get; set; }
-            public bool IsFromMe { get; set; }
-            public DateTime MessageTimestamp { get; set; }
-            public string Reason { get; set; }
-            public DateTime FirstSeenUtc { get; set; }
-            public DateTime LastSeenUtc { get; set; }
-            public DateTime LastPlaceholderRequestUtc { get; set; }
-            public int PlaceholderRequestCount { get; set; }
-            public string LastPlaceholderRequestId { get; set; }
-            public DateTime PlaceholderScheduledForUtc { get; set; }
-            public bool PlaceholderRequestInFlight { get; set; }
-            public CancellationTokenSource PlaceholderScheduleCts { get; set; }
-        }
-        private sealed class PlaceholderResendRequestState
-        {
-            public string ChatJid { get; set; }
-            public string MessageId { get; set; }
-            public DateTime RequestedAtUtc { get; set; }
-            public string Trigger { get; set; }
-            public bool AckAccepted { get; set; }
-            public DateTime AckAcceptedUtc { get; set; }
-        }
-        private readonly MessageIdIndex _messageIdIndex = new MessageIdIndex();
-        private readonly Dictionary<string, string> _historyOnDemandMarkerByChat = new Dictionary<string, string>();
-        private readonly HashSet<string> _historyOnDemandInFlight = new HashSet<string>();
-        private readonly Dictionary<string, HistoryOnDemandRequestState> _historyOnDemandRequestById = new Dictionary<string, HistoryOnDemandRequestState>();
-        private readonly Dictionary<string, string> _historyOnDemandLastRequestIdByChat = new Dictionary<string, string>();
-        private readonly Dictionary<string, int> _historyOnDemandAttemptsByChat = new Dictionary<string, int>();
-        private readonly Dictionary<string, DateTime> _historyOnDemandRejectedUntilUtcByChat = new Dictionary<string, DateTime>();
-        private readonly object _historyOnDemandLock = new object();
-        private volatile bool _fullHistoryOnDemandRequestedThisSession = false;
-        private string _fullHistoryOnDemandRequestId;
+        /// <summary>Per-chat and full-history requests sent and still owed. Shared with <c>HistoryFacade</c>.</summary>
+        private readonly HistoryOnDemandRegistry _historyRequests;
+        private HistoryOnDemandDispatch _historyDispatch;
+        private HistoryCatchUpWatchdog _catchUpWatchdog;
+        private HistoryOnDemandTimeout _historyRequestTimeout;
         private DateTime _lastHistorySyncReceivedUtc = DateTime.MinValue;
         private Proto.HistorySync.Types.HistorySyncType? _lastHistorySyncTypeReceived = null;
         private DateTime _lastFullHistoryRepairCompletedUtc = DateTime.MinValue;
-        private string _fullHistoryRepairRequestId;
         private TaskCompletionSource<bool> _userResyncHistoryTcs;
         private static readonly TimeSpan UserResyncHistoryWaitTimeout = TimeSpan.FromMinutes(3);
-        private readonly SemaphoreSlim _historyBackfillLock = new SemaphoreSlim(1, 1);
-        private volatile bool _historyBackfillActive = false;
-        private readonly Dictionary<string, Dictionary<string, MissingMessageCandidate>> _pendingMissingMessagesByChat = new Dictionary<string, Dictionary<string, MissingMessageCandidate>>();
-        private readonly Dictionary<string, PlaceholderResendRequestState> _placeholderResendRequestsByStanzaId = new Dictionary<string, PlaceholderResendRequestState>();
-        private readonly Dictionary<string, DateTime> _activeChatReconcileCooldownByChat = new Dictionary<string, DateTime>();
-        private sealed class PendingPinState
-        {
-            public bool IsPinned { get; set; }
-            public DateTime? PinnedAtUtc { get; set; }
-            public DateTime? ExpiresAtUtc { get; set; }
-        }
-
-        private readonly object _messageStateLock = new object();
-        private readonly Dictionary<string, string> _pendingOutgoingStatusByMessageId =
-            new Dictionary<string, string>(StringComparer.Ordinal);
-        private readonly Dictionary<string, Dictionary<string, PendingPinState>> _pendingPinStateByChat =
-            new Dictionary<string, Dictionary<string, PendingPinState>>(StringComparer.OrdinalIgnoreCase);
-
-        private sealed class GroupRecipientCountCacheEntry
-        {
-            public int RecipientCount { get; set; }
-            public DateTime FetchedUtc { get; set; }
-        }
-
+        private readonly PendingMessageState _pendingMessageState = new PendingMessageState();
         private readonly GroupReceiptTally _groupReceipts = new GroupReceiptTally();
+        private readonly GroupRecipientCountCache _groupRecipientCounts = new GroupRecipientCountCache();
         // Field initializers run in declaration order, so _selfMarkers is set before it is read below.
         private readonly ISelfMarkerNaming _selfMarkers = new SelfMarkerNaming();
         private readonly ContactLabelSanitizer _contactLabels = new ContactLabelSanitizer(new SelfMarkerNaming());
-        private readonly Dictionary<string, GroupRecipientCountCacheEntry> _groupRecipientCountByChat =
-            new Dictionary<string, GroupRecipientCountCacheEntry>(StringComparer.OrdinalIgnoreCase);
+        private readonly ContactDisplayNames _displayNames;
 
-        private bool ShouldDeferReconnectReplayWork()
-        {
-            return _deferReconnectWorkUntilReplayDrain || (_socket?.IsAwaitingInitialSync ?? false);
-        }
+        private bool ShouldDeferReconnectReplayWork() => _syncWork.IsReplayDrainActive;
 
         private bool ShouldPrioritizeHistoryFreshness(out string reason)
         {
@@ -1304,90 +754,15 @@ namespace Unison.Uwp.Services.WhatsApp
         /// Every row that stands for the same conversation - a chat addressed by LID and the same
         /// chat addressed by phone number are two rows until they are merged.
         /// </summary>
-        /// <remarks>
-        /// Answered from an index that is built on demand and thrown away whenever the list or
-        /// the aliases change. This is the most-called lookup in the service - a message, a
-        /// receipt, a preview, a conversation in a history chunk all go through it - and it used
-        /// to canonicalise every row in the list on every call. With a few hundred chats and a
-        /// sync's worth of calls that is tens of millions of string operations on the UI thread.
-        /// </remarks>
-        private List<ChatItem> GetChatRowsForCanonicalJid(string jid)
-        {
-            string canonical = GetCanonicalJid(jid);
-            if (string.IsNullOrWhiteSpace(canonical))
-            {
-                canonical = NormalizeJid(jid);
-            }
+        private List<ChatItem> GetChatRowsForCanonicalJid(string jid) => _chatRows.FindConversation(jid);
 
-            if (string.IsNullOrWhiteSpace(canonical))
-            {
-                return new List<ChatItem>();
-            }
 
-            var index = _chatRowsByCanonical;
-            if (index == null)
-            {
-                int builtFrom = _chatRowIndexVersion;
-                index = new Dictionary<string, List<ChatItem>>(StringComparer.OrdinalIgnoreCase);
-                foreach (var chat in Chats)
-                {
-                    if (chat == null)
-                    {
-                        continue;
-                    }
-
-                    string key = GetCanonicalJid(chat.JID);
-                    if (string.IsNullOrWhiteSpace(key))
-                    {
-                        continue;
-                    }
-
-                    List<ChatItem> bucket;
-                    if (!index.TryGetValue(key, out bucket))
-                    {
-                        bucket = new List<ChatItem>();
-                        index[key] = bucket;
-                    }
-
-                    bucket.Add(chat);
-                }
-
-                // Only published if nothing changed while it was being built. Without this a
-                // build that raced an invalidation would install an index describing a list that
-                // no longer exists, and it would stay installed.
-                if (_chatRowIndexVersion == builtFrom)
-                {
-                    _chatRowsByCanonical = index;
-                }
-            }
-
-            List<ChatItem> rows;
-
-            // Copied out: callers routinely add to or remove from the chat list while walking the
-            // result, which is exactly what the old ToList was protecting them from.
-            return index.TryGetValue(canonical, out rows)
-                ? new List<ChatItem>(rows)
-                : new List<ChatItem>();
-        }
-
-        IReadOnlyList<ChatItem> IWhatsAppService.GetChatRowsForCanonicalJid(string jid) =>
-            GetChatRowsForCanonicalJid(jid);
-
-        void IWhatsAppService.RequestChatListDedup(string reason) =>
-            _ = DeduplicateChatsAsync(reason ?? "facade");
-
-        void IWhatsAppService.RequestAliasChatMerge(string lidJid, string pnJid) =>
-            _ = CheckAndMergeDuplicateChatsAsync(lidJid, pnJid);
 
         /// <summary>
         /// Drops the row index. Called whenever the list changes or a JID stops resolving to what
         /// it used to - a new alias, a row re-keyed to its canonical address.
         /// </summary>
-        private void InvalidateChatRowIndex()
-        {
-            Interlocked.Increment(ref _chatRowIndexVersion);
-            _chatRowsByCanonical = null;
-        }
+        private void InvalidateChatRowIndex() => _chatRows.Invalidate();
 
         /// <summary>
         /// Updates the chat-list strip when the candidate is not older than the current tip.
@@ -1404,7 +779,9 @@ namespace Unison.Uwp.Services.WhatsApp
             System.Collections.Generic.IList<string> mentionedJids = null,
             bool? isFromMe = null,
             MessageSendState? sendState = null,
-            string messageId = null)
+            string messageId = null,
+            string participantJid = null,
+            string senderName = null)
         {
             return LiveChatPreviewApplier.ApplyIfNewer(
                 chat,
@@ -1417,6 +794,24 @@ namespace Unison.Uwp.Services.WhatsApp
                 isFromMe,
                 sendState,
                 messageId,
+                LocalizedStrings.Get("Common_Yesterday", "Yesterday"),
+                participantJid,
+                senderName);
+        }
+
+        /// <summary>
+        /// Shows <paramref name="message"/> as the chat's list strip when it is newer than the
+        /// tip already there, or regardless when <paramref name="force"/>.
+        /// </summary>
+        private bool ApplyMessageAsChatTip(ChatItem chat, ChatMessage message, bool isGroup, bool force)
+        {
+            return ChatMessageTipApply.Apply(
+                chat,
+                message,
+                isGroup,
+                force,
+                SelfListDisplayName(),
+                message == null ? null : GetCanonicalJid(message.ParticipantJid),
                 LocalizedStrings.Get("Common_Yesterday", "Yesterday"));
         }
 
@@ -1434,68 +829,8 @@ namespace Unison.Uwp.Services.WhatsApp
             return GetNewestStoredMessageUtc(null);
         }
 
-        private DateTime GetNewestStoredMessageUtc(Func<string, bool> includeChat)
-        {
-            DateTime newest = DateTime.MinValue;
-            foreach (var kvp in MessagesByChat)
-            {
-                string chatJid = NormalizeJid(kvp.Key);
-                if (includeChat != null && !includeChat(chatJid))
-                {
-                    continue;
-                }
-
-                var chatMessages = kvp.Value;
-                if (chatMessages == null)
-                {
-                    continue;
-                }
-
-                foreach (var message in chatMessages)
-                {
-                    if (message == null)
-                    {
-                        continue;
-                    }
-
-                    DateTime candidate = ToComparableUtc(message.Timestamp);
-                    if (candidate > newest)
-                    {
-                        newest = candidate;
-                    }
-                }
-            }
-
-            // Cold start: MessagesByChat is often empty until a chat is opened. The list strip
-            // already carries Last Message times from SQLite — use them so reconnect freshness
-            // is not permanently "no-stored-messages".
-            var chats = Chats;
-            if (chats != null)
-            {
-                for (int i = 0; i < chats.Count; i++)
-                {
-                    ChatItem chat = chats[i];
-                    if (chat == null || !chat.LastMessageTimestampUtc.HasValue)
-                    {
-                        continue;
-                    }
-
-                    string chatJid = NormalizeJid(chat.JID);
-                    if (includeChat != null && !includeChat(chatJid))
-                    {
-                        continue;
-                    }
-
-                    DateTime candidate = ToComparableUtc(chat.LastMessageTimestampUtc.Value);
-                    if (candidate > newest)
-                    {
-                        newest = candidate;
-                    }
-                }
-            }
-
-            return newest;
-        }
+        private DateTime GetNewestStoredMessageUtc(Func<string, bool> includeChat) =>
+            NewestStoredMessage.FindUtc(MessagesByChat.Snapshot(), Chats, includeChat);
 
         private static string FormatFreshnessTimestamp(DateTime timestamp)
         {
@@ -1523,21 +858,10 @@ namespace Unison.Uwp.Services.WhatsApp
                 out reason);
         }
 
-        private int GetStoredMessageCount()
-        {
-            int count = 0;
-            foreach (var chatMessages in MessagesByChat.Values)
-            {
-                if (chatMessages != null)
-                {
-                    count += chatMessages.Count;
-                }
-            }
-            return count;
-        }
+        private int GetStoredMessageCount() => MessagesByChat.TotalMessageCount();
 
-        private readonly object _missingMessageLock = new object();
-        private string _lastResolvedSelfDisplayNameForLog;
+        private readonly MissingMessageLedger _missing = new MissingMessageLedger();
+        private PlaceholderResendDispatch _placeholderResends;
         private static readonly TimeSpan HistoryBackfillCooldown = TimeSpan.FromHours(2);
         private static readonly TimeSpan HistoryBackfillStaleThreshold = TimeSpan.FromHours(8);
         private static readonly TimeSpan HistoryFreshnessStaleThreshold = TimeSpan.FromMinutes(30);
@@ -1553,62 +877,43 @@ namespace Unison.Uwp.Services.WhatsApp
         // --- FULL_HISTORY catch-up continue (next offline lot via soft-reconnect) ---
         // Idle must outlast slow Mobile SQLite/UI between chunks (15s was aborting too early).
         private TimeSpan FullHistoryCatchUpIdleAbort =>
-            UseFrugalSyncBudget ? TimeSpan.FromSeconds(45) : TimeSpan.FromSeconds(35);
+            TimeSpan.FromSeconds(CurrentSyncPacing.CatchUpIdleAbortSeconds);
 
         private static readonly TimeSpan FullHistoryCatchUpProgressPoll = TimeSpan.FromSeconds(8);
         private static readonly TimeSpan CatchUpContinueReconnectDelay = TimeSpan.FromSeconds(12);
         private static readonly TimeSpan CatchUpContinueReconnectCooldown = TimeSpan.FromSeconds(15);
 
-        private const int CatchUpContinueMaxRounds = 60;
+        private int CatchUpContinueMaxRounds =>
+            Math.Max(0, _workload.MaxFullHistoryCatchUpRounds);
         /// <summary>Tip watermark must stall this many idle cycles before catch-up stops.</summary>
         private int CatchUpStagnantCyclesBeforeStop =>
-            UseFrugalSyncBudget ? 3 : 2;
+            CurrentSyncPacing.CatchUpStagnantCyclesBeforeStop;
         private static readonly TimeSpan ActiveChatReconcileCooldown = TimeSpan.FromSeconds(12);
 
-        private string _currentUserAvatar;
-        public string CurrentUserAvatar
+        private string CurrentUserAvatar => _selfProfile.AvatarUrl;
+
+        private string CurrentUserName
         {
-            get => _currentUserAvatar;
-            set
-            {
-                if (string.Equals(_currentUserAvatar, value, StringComparison.Ordinal)) return;
-                _currentUserAvatar = value;
-                PersistSelfAvatarUrl(value);
-                OnPropertyChanged();
-                try { OnUserProfileChanged?.Invoke(this, EventArgs.Empty); } catch { }
-            }
+            get => _selfProfile.Name;
+            set => _selfProfile.Name = value;
         }
 
-        /// <summary>
-        /// Domain snapshot of the logged-in user (Core <see cref="Profile"/>).
-        /// </summary>
-        public Profile CurrentProfile => new Profile
+        private SelfProfileAccount ReadSelfProfileAccount()
         {
-            Id = _authState?.Me?.Id,
-            Lid = _authState?.Me?.Lid,
-            Name = !string.IsNullOrWhiteSpace(CurrentUserName)
-                ? CurrentUserName
-                : NormalizeSelfNameCandidate(
-                    _authState?.Me?.Name,
-                    NormalizeJid(_authState?.Me?.Id),
-                    NormalizeJid(_authState?.Me?.Lid)),
-            Phone = CurrentUserPhone,
-            AvatarUrl = !string.IsNullOrWhiteSpace(CurrentUserAvatar)
-                ? CurrentUserAvatar
-                : _authState?.Me?.AvatarUrl
-        };
-        private string _currentUserName;
-        public string CurrentUserName
-        {
-            get => _currentUserName;
-            set
+            var me = _authState?.Me;
+            if (me == null)
             {
-                string next = IsOwnPhoneEchoLabel(value) ? null : value;
-                if (_currentUserName == next) return;
-                _currentUserName = next;
-                OnPropertyChanged();
-                try { OnUserProfileChanged?.Invoke(this, EventArgs.Empty); } catch { }
+                return null;
             }
+
+            return new SelfProfileAccount
+            {
+                Id = me.Id,
+                Lid = me.Lid,
+                CredentialsName = NormalizeSelfNameCandidate(me.Name, NormalizeJid(me.Id), NormalizeJid(me.Lid)),
+                Phone = CurrentUserPhone,
+                AvatarUrl = me.AvatarUrl
+            };
         }
 
         /// <summary>Account phone digits — UI placeholder when the push name is unknown.</summary>
@@ -1629,12 +934,9 @@ namespace Unison.Uwp.Services.WhatsApp
         public event EventHandler OnQrExpired;
         public event EventHandler<string> OnConnectionUpdate;
         public event EventHandler<HistorySync> OnHistorySyncReceived;
-        public event EventHandler<InitialSyncProgressEventArgs> OnInitialSyncProgress;
         public event EventHandler OnSessionInitialized;
         public event EventHandler<SessionClearedEventArgs> OnSessionCleared;
-        public event EventHandler OnUserProfileChanged;
         public event EventHandler<Exception> OnError;
-        public event EventHandler<string> OnSyncStatus;
         public event EventHandler OnDisplayNamesUpdated;
         public event EventHandler<string> OnChatMessagesChanged;
         public event EventHandler<PresenceUpdateEventArgs> OnPresenceUpdate;
@@ -1643,7 +945,9 @@ namespace Unison.Uwp.Services.WhatsApp
         public event EventHandler<HistoryStatus> OnLiveStatusReceived;
         public event EventHandler OnBackgroundHistorySyncBounced;
         public event EventHandler<AvatarCachedEventArgs> OnAvatarCached;
+        public event EventHandler OnGroupListingDue;
         public event EventHandler<JidAliasResolvedEventArgs> OnJidAliasResolved;
+        public event EventHandler<AvatarRetryDueEventArgs> OnAvatarRetryDue;
 
         /// <summary>
         /// These are raised from the socket's own threads, so a facade that throws would otherwise
@@ -1666,6 +970,11 @@ namespace Unison.Uwp.Services.WhatsApp
             RaiseReport(() => OnStreamError?.Invoke(this, code), nameof(OnStreamError));
         }
 
+        void IAvatarReport.ReportCached(string jid, string localUri)
+        {
+            ReportAvatarCached(jid, localUri);
+        }
+
         private void ReportAvatarCached(string jid, string localAvatarUrl)
         {
             if (string.IsNullOrWhiteSpace(jid) || string.IsNullOrWhiteSpace(localAvatarUrl))
@@ -1681,27 +990,22 @@ namespace Unison.Uwp.Services.WhatsApp
         public string CurrentConnectionStatus { get; private set; }
         private void PublishInitialSyncProgress(bool active, bool completed, int processed, int total, string stage)
         {
-            _initialSyncSafeModeActive = active;
-            _initialSyncProcessedConversations = Math.Max(0, processed);
-            _initialSyncTotalConversations = Math.Max(0, total);
-
             RuntimeDiagnosticsService.Instance.Write(
                 "history",
                 completed ? "initial-sync-safe-mode-complete" : "initial-sync-safe-mode-progress",
                 "active=" + active +
-                "; processed=" + _initialSyncProcessedConversations +
-                "; total=" + _initialSyncTotalConversations +
-                "; stage=" + (stage ?? string.Empty));
+                "; processed=" + Math.Max(0, processed) +
+                "; total=" + Math.Max(0, total) +
+                "; stage=" + (stage ?? string.Empty) +
+                "; gcMb=" + (GC.GetTotalMemory(false) / (1024 * 1024)));
 
-            OnInitialSyncProgress?.Invoke(this, new InitialSyncProgressEventArgs
+            _initialSync.Publish(active, completed, processed, total, stage);
+
+            // Crash window: force disk so the completed line survives if the list materialize kills us.
+            if (completed)
             {
-                IsActive = active,
-                IsCompleted = completed,
-                ProcessedConversations = _initialSyncProcessedConversations,
-                TotalConversations = _initialSyncTotalConversations,
-                VisibleChatTarget = Math.Min(_initialSyncTotalConversations, Math.Max(20, _initialSyncProcessedConversations)),
-                Stage = stage
-            });
+                _ = RuntimeDiagnosticsService.Instance.FlushAsync("history:initial-sync-complete");
+            }
         }
 
         public event EventHandler<BinaryNode> OnLinkCodeCompanionReg;
@@ -1709,38 +1013,106 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private WhatsAppService(
             ChatStateStore chatState,
+            ChatRowIndex chatRows,
+            ActiveChat activeChat,
+            SyncStatusChannel syncStatus,
+            SyncWorkGate syncWork,
             IHistoryMessageStore historyMessages,
             IHistoryChatPreviewStore chatPreviews,
-            IAvatarCache avatarCache,
             IUsyncGate usyncGate,
             AvatarFetcher avatarFetcher,
             IMediaCache mediaCache,
             JidAliasTable jidAlias,
-            MediaDerivationService mediaDerivation)
+            ContactDisplayNames displayNames,
+            HistoryOnDemandRegistry historyRequests,
+            InitialSyncProgressState initialSync,
+            SyncBudget syncBudget,
+            SyncWorkloadStrategy workload,
+            SelfProfileState selfProfile,
+            IPersonStore personStore,
+            IGroupRosterStore groupRosterStore,
+            IChatStore chatStore,
+            ISystemInfoProvider systemInfo,
+            AttachedUiDispatcher ui,
+            ChatPreviewReconciler previewReconciler,
+            ChatNameRefresh nameRefresh,
+            StoredChatPreviewRefresh storedPreviews,
+            ChatListDeduper deduper,
+            UsyncAliasFiling usyncAliases,
+            ChatListInitialPaintGate listPaintGate = null)
         {
             if (chatState == null)
             {
                 throw new ArgumentNullException(nameof(chatState));
             }
 
+            if (systemInfo == null)
+            {
+                throw new ArgumentNullException(nameof(systemInfo));
+            }
+
             _chatState = chatState;
+            _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
+            _groupRosterStore = groupRosterStore ?? throw new ArgumentNullException(nameof(groupRosterStore));
+            _chatStore = chatStore ?? throw new ArgumentNullException(nameof(chatStore));
+            _isWindowsMobile = systemInfo.IsMobile();
+            _ui = ui ?? throw new ArgumentNullException(nameof(ui));
+            _previewReconciler = previewReconciler ?? throw new ArgumentNullException(nameof(previewReconciler));
+            _nameRefresh = nameRefresh ?? throw new ArgumentNullException(nameof(nameRefresh));
+            _nameRefresh.Applied += OnChatNamesApplied;
+            _storedPreviews = storedPreviews ?? throw new ArgumentNullException(nameof(storedPreviews));
+            _deduper = deduper ?? throw new ArgumentNullException(nameof(deduper));
+            _usyncAliases = usyncAliases ?? throw new ArgumentNullException(nameof(usyncAliases));
+            _listPaintGate = listPaintGate ?? new ChatListInitialPaintGate();
+            _listPaintGate.Released += OnChatListInitialPaintReleased;
+            _chatRows = chatRows ?? throw new ArgumentNullException(nameof(chatRows));
+            _activeChat = activeChat ?? throw new ArgumentNullException(nameof(activeChat));
+            _activeChat.Changed += OnActiveChatChanged;
+            _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
+            _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
+            _historyRequests = historyRequests ?? throw new ArgumentNullException(nameof(historyRequests));
+            _initialSync = initialSync ?? throw new ArgumentNullException(nameof(initialSync));
+            _syncBudget = syncBudget ?? throw new ArgumentNullException(nameof(syncBudget));
+            _workload = workload ?? throw new ArgumentNullException(nameof(workload));
+            _selfProfile = selfProfile ?? throw new ArgumentNullException(nameof(selfProfile));
+            _selfProfile.Bind(ReadSelfProfileAccount, IsOwnPhoneEchoLabel, PersistSelfAvatarUrl);
             _historyMessages = historyMessages ?? throw new ArgumentNullException(nameof(historyMessages));
             _chatPreviews = chatPreviews ?? throw new ArgumentNullException(nameof(chatPreviews));
-            _avatarCache = avatarCache ?? throw new ArgumentNullException(nameof(avatarCache));
             _usyncGate = usyncGate ?? throw new ArgumentNullException(nameof(usyncGate));
             _avatarFetcher = avatarFetcher ?? throw new ArgumentNullException(nameof(avatarFetcher));
             _mediaCache = mediaCache ?? throw new ArgumentNullException(nameof(mediaCache));
-            _mediaDerivation = mediaDerivation ?? throw new ArgumentNullException(nameof(mediaDerivation));
             JidAlias = jidAlias ?? throw new ArgumentNullException(nameof(jidAlias));
-            JidAlias.BindSelf(() => _authState?.Me?.Id, () => _authState?.Me?.Lid);
+            JidAlias.BindSelf(() => _authState?.Me?.Id, () => _authState?.Me?.Lid, () => CurrentUserPhone);
             JidAlias.Changed += (s, e) => InvalidateChatRowIndex();
+            _displayNames = displayNames ?? throw new ArgumentNullException(nameof(displayNames));
+            _displayNames.Bind(
+                () => new SelfNameInputs
+                {
+                    Id = _authState?.Me?.Id,
+                    Lid = _authState?.Me?.Lid,
+                    CredentialsName = _authState?.Me?.Name,
+                    CurrentUserName = CurrentUserName,
+                    Phone = CurrentUserPhone
+                },
+                LogContactLabelDecision);
 
             // After JidAlias: the readers below capture the table now rather than calling back
             // into this instance later, so the property has to be set before they are built.
-            var jidResolver = new JidResolver(JidAlias, this);
+            var jidResolver = new JidResolver(JidAlias);
+            _jids = jidResolver;
             _groupMetadata = new GroupMetadataReader(jidResolver);
+            var groupNaming = new GroupNaming(displayNames, jidResolver, _selfMarkers, new StringResourcesService());
+            _groupApply = new GroupMetadataApply(groupNaming, _ui, this, new GroupRosterWriter(_groupRosterStore, _personStore), jidResolver, _chatState, _chatRows, _chatState.PushNames);
             _receipts = new ReceiptReader(jidResolver);
             _chatState.Chats.CollectionChanged += (s, e) => InvalidateChatRowIndex();
+
+            Debug.WriteLine(
+                "[WhatsAppService] mobile=" + _isWindowsMobile +
+                ", memory=" + Windows.System.MemoryManager.AppMemoryUsageLevel);
+
+            _ = WarmPersonStoreAsync();
+            _ = WarmGroupRosterStoreAsync();
+            _ = WarmChatStoreAsync();
         }
 
         /// <summary>
@@ -1749,17 +1121,37 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         internal static WhatsAppService Create(
             ChatStateStore chatState,
+            ChatRowIndex chatRows,
+            ActiveChat activeChat,
+            SyncStatusChannel syncStatus,
+            SyncWorkGate syncWork,
             IHistoryMessageStore historyMessages,
             IHistoryChatPreviewStore chatPreviews,
-            IAvatarCache avatarCache,
             IUsyncGate usyncGate,
             AvatarFetcher avatarFetcher,
             IMediaCache mediaCache,
             JidAliasTable jidAlias,
-            MediaDerivationService mediaDerivation)
+            ContactDisplayNames displayNames,
+            HistoryOnDemandRegistry historyRequests,
+            InitialSyncProgressState initialSync,
+            SyncBudget syncBudget,
+            SyncWorkloadStrategy workload,
+            SelfProfileState selfProfile,
+            IPersonStore personStore,
+            IGroupRosterStore groupRosterStore,
+            IChatStore chatStore,
+            ISystemInfoProvider systemInfo,
+            AttachedUiDispatcher ui,
+            ChatPreviewReconciler previewReconciler,
+            ChatNameRefresh nameRefresh,
+            StoredChatPreviewRefresh storedPreviews,
+            ChatListDeduper deduper,
+            UsyncAliasFiling usyncAliases,
+            ChatListInitialPaintGate listPaintGate = null)
         {
             return _instance ?? (_instance = new WhatsAppService(
-                chatState, historyMessages, chatPreviews, avatarCache, usyncGate, avatarFetcher, mediaCache, jidAlias, mediaDerivation));
+                chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
+                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, previewReconciler, nameRefresh, storedPreviews, deduper, usyncAliases, listPaintGate));
         }
 
         /// <summary>
@@ -1801,10 +1193,7 @@ namespace Unison.Uwp.Services.WhatsApp
             if (string.IsNullOrWhiteSpace(CurrentUserAvatar) &&
                 !string.IsNullOrWhiteSpace(_authState.Me.AvatarUrl))
             {
-                // Assign field directly to avoid re-saving auth while hydrating.
-                _currentUserAvatar = _authState.Me.AvatarUrl;
-                OnPropertyChanged(nameof(CurrentUserAvatar));
-                try { OnUserProfileChanged?.Invoke(this, EventArgs.Empty); } catch { }
+                _selfProfile.RestoreAvatar(_authState.Me.AvatarUrl);
             }
         }
 
@@ -1832,7 +1221,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             _authState.Me.Phone = phone;
             OnPropertyChanged(nameof(CurrentUserPhone));
-            try { OnUserProfileChanged?.Invoke(this, EventArgs.Empty); } catch { }
+            _selfProfile.NotifyChanged();
             _ = PersistAuthStateAsync(null, "self-phone");
         }
 
@@ -1971,22 +1360,31 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </remarks>
         public Task ClearConversationCachesAsync()
         {
-            return RunOnUiThreadAsync(() =>
+            return _ui.RunAsync(() =>
             {
                 Chats.Clear();
                 MessagesByChat.Clear();
-                _messageIdIndex.Clear();
-                lock (_historyOnDemandLock)
-                {
-                    _historyOnDemandMarkerByChat.Clear();
-                    _historyOnDemandInFlight.Clear();
-                    _historyOnDemandRequestById.Clear();
-                    _historyOnDemandLastRequestIdByChat.Clear();
-                    _fullHistoryOnDemandRequestedThisSession = false;
-                    _fullHistoryOnDemandRequestId = null;
-                    _fullHistoryRepairRequestId = null;
-                }
+                _historyRequests.ClearRequests();
+                _historyRequests.ReleaseFull();
             });
+        }
+
+        async Task IConversationResyncHost.ResyncChatListAppStateFlagsAsync()
+        {
+            try
+            {
+                var bridge = _socket as SocketBridge;
+                if (bridge == null)
+                {
+                    return;
+                }
+
+                await bridge.ResyncAppStateReportingAllAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[WhatsAppService] ResyncChatListAppStateFlags failed: " + ex.Message);
+            }
         }
 
         /// <summary>
@@ -2020,12 +1418,7 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 // Reset the per-session gate cleared above; otherwise a failed first
                 // attempt that flipped the flag without a real send would block retry.
-                lock (_historyOnDemandLock)
-                {
-                    _fullHistoryOnDemandRequestedThisSession = false;
-                    _fullHistoryOnDemandRequestId = null;
-                    _fullHistoryRepairRequestId = null;
-                }
+                _historyRequests.ReleaseFull();
 
                 await EnsureConnectedAsync(timeoutMs: 45000, forceFreshTransport: true)
                     .ConfigureAwait(false);
@@ -2051,7 +1444,7 @@ namespace Unison.Uwp.Services.WhatsApp
             await TryConsumeMessageStoreForceHistoryRepairAsync(reason + ":post-reconnect-consume")
                 .ConfigureAwait(false);
 
-            return _fullHistoryOnDemandRequestedThisSession;
+            return _historyRequests.IsFullClaimed;
         }
 
         private void CompleteUserResyncHistoryWait(string reason)
@@ -2080,18 +1473,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private bool IsUserConversationResyncWaiting()
         {
             return Interlocked.CompareExchange(ref _userResyncHistoryTcs, null, null) != null;
-        }
-
-        private static string GenerateOutgoingMessageId()
-        {
-            var randomBytes = CryptoUtils.RandomBytes(10);
-            var builder = new System.Text.StringBuilder(24);
-            builder.Append("3EB0");
-            for (int i = 0; i < randomBytes.Length; i++)
-            {
-                builder.Append(randomBytes[i].ToString("X2"));
-            }
-            return builder.ToString();
         }
 
         private void SchedulePostReplayMaintenance(int offlineCount)
@@ -2137,43 +1518,43 @@ namespace Unison.Uwp.Services.WhatsApp
 
                     // Always realign list Last Message from SQLite after offline drain settles —
                     // memory MessagesByChat is often empty for chats the user never opened.
-                    try
+                    // Defer while the first list paint is still releasing rows (Mobile crash window).
+                    if (_listPaintGate != null && !_listPaintGate.IsReleased)
                     {
-                        token.ThrowIfCancellationRequested();
-                        await ReconcileChatPreviewsFromSqliteAsync(null, "post-replay")
-                            .ConfigureAwait(false);
+                        RuntimeDiagnosticsService.Instance.Write(
+                            "preview-tip",
+                            "reconcile-deferred-list-paint",
+                            "reason=post-replay");
                     }
-                    catch (OperationCanceledException)
+                    else
                     {
-                        RaiseSyncStatus(null);
-                        return;
-                    }
-                    catch (Exception exReconcile)
-                    {
-                        Debug.WriteLine(
-                            "[WhatsAppService] Post-replay preview reconcile failed: " +
-                            exReconcile.Message);
+                        try
+                        {
+                            token.ThrowIfCancellationRequested();
+                            await ReconcileChatPreviewsFromSqliteAsync(null, "post-replay")
+                                .ConfigureAwait(false);
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            RaiseSyncStatus(null);
+                            return;
+                        }
+                        catch (Exception exReconcile)
+                        {
+                            Debug.WriteLine(
+                                "[WhatsAppService] Post-replay preview reconcile failed: " +
+                                exReconcile.Message);
+                        }
                     }
 
                     // Extra in-memory repair only for large desktop drains (already warmed timelines).
                     if (offlineCount >= 50 && !UseFrugalSyncBudget)
                     {
-                        if (_chatService != null)
-                        {
-                            await _chatService.ReconcileChatListFromStoredAsync(
-                                "delayed-offline-repair:" + offlineCount);
-                            await Task.Delay(400, token);
-                            await _chatService.RefreshAllChatPreviewsFromStoredAsync(
-                                "delayed-post-offline-drain");
-                        }
-                        else
-                        {
-                            await ReconcileChatListFromStoredMessagesAsync(
-                                "delayed-offline-repair:" + offlineCount);
-                            await Task.Delay(400, token);
-                            await RefreshAllChatPreviewsFromStoredAsync(
-                                "delayed-post-offline-drain");
-                        }
+                        await _storedPreviews.ReconcileAsync(
+                            "delayed-offline-repair:" + offlineCount).ConfigureAwait(false);
+                        await Task.Delay(400, token);
+                        await _storedPreviews.RefreshAsync(
+                            "delayed-post-offline-drain").ConfigureAwait(false);
                     }
 
                     RuntimeDiagnosticsService.Instance.Write(
@@ -2219,8 +1600,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            if (_fullHistoryOnDemandRequestedThisSession &&
-                !string.IsNullOrWhiteSpace(_fullHistoryOnDemandRequestId))
+            if (_historyRequests.IsFullInFlight)
             {
                 Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 1);
                 Debug.WriteLine(
@@ -2229,7 +1609,30 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
+            if (_listPaintGate != null && !_listPaintGate.IsReleased)
+            {
+                Interlocked.Exchange(ref _enrichmentAwaitingListPaint, 1);
+                Debug.WriteLine(
+                    "[WhatsAppService] Post-message enrichment deferred until chat list paint (" +
+                    reason + ")");
+                RuntimeDiagnosticsService.Instance.Write(
+                    "startup",
+                    "post-message-enrichment-deferred-list-paint",
+                    "reason=" + (reason ?? string.Empty));
+                return;
+            }
+
             SchedulePostMessageEnrichment(reason);
+        }
+
+        private void OnChatListInitialPaintReleased(object sender, EventArgs e)
+        {
+            if (Interlocked.Exchange(ref _enrichmentAwaitingListPaint, 0) != 1)
+            {
+                return;
+            }
+
+            TrySchedulePostMessageEnrichment("list-paint-released");
         }
 
         private void SchedulePostMessageEnrichment(string reason)
@@ -2264,12 +1667,8 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 try
                 {
-                    if (!await WaitForStartupQuietAsync(
-                            UseFrugalSyncBudget
-                                ? TimeSpan.FromSeconds(10)
-                                : TimeSpan.FromSeconds(5),
-                            "post-message-enrich",
-                            token) ||
+                    TimeSpan quiet = TimeSpan.FromSeconds(_workload.PostSyncEnrichmentQuietSeconds);
+                    if (!await WaitForStartupQuietAsync(quiet, "post-message-enrich", token) ||
                         !IsConnected ||
                         !Unison.Uwp.App.IsWindowVisible)
                     {
@@ -2282,12 +1681,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         await ResolveMissingNamesAsync();
                     }
 
-                    if (!await WaitForStartupQuietAsync(
-                            UseFrugalSyncBudget
-                                ? TimeSpan.FromSeconds(8)
-                                : TimeSpan.FromSeconds(4),
-                            "post-message-enrich-contacts",
-                            token) ||
+                    if (!await WaitForStartupQuietAsync(quiet, "post-message-enrich-contacts", token) ||
                         !IsConnected ||
                         !Unison.Uwp.App.IsWindowVisible)
                     {
@@ -2300,12 +1694,19 @@ namespace Unison.Uwp.Services.WhatsApp
                         await RefreshContactNamesAsync(includeGroups: false, force: false);
                     }
 
-                    TriggerBackgroundResolution();
+                    if (_workload.SerializePostSyncEnrichment)
+                    {
+                        await RunSerializedPostSyncEnrichmentAsync(quiet, token).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        TriggerBackgroundResolution();
+                    }
 
                     RuntimeDiagnosticsService.Instance.Write(
                         "startup",
                         "post-message-enrichment-complete",
-                        "reason=" + reason);
+                        "reason=" + reason + "; serial=" + _workload.SerializePostSyncEnrichment);
                 }
                 catch (TaskCanceledException)
                 {
@@ -2329,10 +1730,69 @@ namespace Unison.Uwp.Services.WhatsApp
             });
         }
 
+        /// <summary>
+        /// Low-memory path: one avatar pass, then group listing, each behind its own quiet gap.
+        /// Does not call <see cref="TriggerBackgroundResolution"/>, which would re-run names and
+        /// cascade another avatar schedule.
+        /// </summary>
+        private async Task RunSerializedPostSyncEnrichmentAsync(TimeSpan quiet, CancellationToken token)
+        {
+            if (!await WaitForStartupQuietAsync(quiet, "post-message-enrich-avatars", token) ||
+                !IsConnected ||
+                !Unison.Uwp.App.IsWindowVisible)
+            {
+                RaiseSyncStatus(null);
+                return;
+            }
+
+            string deferReason;
+            if (ShouldDeferProfilePictureFetch(out deferReason))
+            {
+                ScheduleDeferredProfilePictureResolution(deferReason);
+            }
+            else if (_contactService != null)
+            {
+                using (TraceStartupPhase("post-replay-avatars"))
+                {
+                    CancelDeferredProfilePictureResolution();
+                    await _contactService.RetrieveContactPicturesAsync(token).ConfigureAwait(false);
+                }
+            }
+
+            if (!await WaitForStartupQuietAsync(quiet, "post-message-enrich-groups", token) ||
+                !IsConnected ||
+                !Unison.Uwp.App.IsWindowVisible)
+            {
+                RaiseSyncStatus(null);
+                return;
+            }
+
+            RaiseSyncStatus(null);
+            RaiseReport(
+                () => OnGroupListingDue?.Invoke(this, EventArgs.Empty),
+                nameof(OnGroupListingDue));
+        }
+
         private void ReleaseEnrichmentAfterHeavyHistory(string reason)
         {
+            // Keep names/avatars/groups deferred while catch-up still wants adjacent lots —
+            // starting enrich on the first InitialBootstrap chunk (1.8.3-era gap that High
+            // workload made fatal on Mobile) races the next FULL_HISTORY page.
+            if (IsHistoryCatchUpActive() && CatchUpContinueMaxRounds > 0)
+            {
+                Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 1);
+                Debug.WriteLine(
+                    "[WhatsAppService] Post-message enrichment still deferred (catch-up active, " +
+                    reason + ")");
+                RuntimeDiagnosticsService.Instance.Write(
+                    "startup",
+                    "post-message-enrichment-deferred",
+                    "reason=" + (reason ?? string.Empty) + "; catchUp=True");
+                return;
+            }
+
             Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 0);
-            SchedulePostMessageEnrichment("heavy-history:" + reason);
+            TrySchedulePostMessageEnrichment("heavy-history:" + reason);
         }
 
         private static ChatPreviewKind ResolvePreviewKind(ChatMessage message, MessageRenderInfo renderInfo)
@@ -2373,7 +1833,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// Completes resync/progress after a history chunk. SQLite apply lives on HistoryFacade;
         /// this leftover notify is the live-message fallback if MessageFacade is unset.
         /// </summary>
-        public Task ProcessHistorySyncCoreAsync(HistorySync sync)
+        private Task ProcessHistorySyncCoreAsync(HistorySync sync)
         {
             if (sync != null)
             {
@@ -2472,6 +1932,9 @@ namespace Unison.Uwp.Services.WhatsApp
 
             int count = Math.Max(0, conversationCount);
             int processed = Math.Max(_sqliteHistoryConversationsAccumulated, 0);
+            // Cancel any quiet-finalize armed by a prior empty Status chunk so Bootstrap's
+            // apply owns the next sqlite-finalized (otherwise Continue fires on processed=0).
+            Interlocked.Increment(ref _sqliteHistoryFinalizeGeneration);
             PublishInitialSyncProgress(
                 true,
                 false,
@@ -2503,58 +1966,23 @@ namespace Unison.Uwp.Services.WhatsApp
                 // request-cleared before DecideCatchUpAfterIdleBatch could solicit the next
                 // page, so only one bounce ever ran. Hand the lot to the continue decision
                 // instead (same path as idle/hard-timeout).
-                string lotRequestId = null;
-                bool lotAckAccepted = false;
-                int lotProgressSignals = 0;
-                string lotTrigger = "sqlite-lot-quiet";
-                bool handOffCatchUp = false;
-                lock (_historyOnDemandLock)
-                {
-                    string pendingId = !string.IsNullOrWhiteSpace(_fullHistoryOnDemandRequestId)
-                        ? _fullHistoryOnDemandRequestId
-                        : _fullHistoryRepairRequestId;
-                    HistoryOnDemandRequestState pendingState = null;
-                    if (!string.IsNullOrWhiteSpace(pendingId))
-                    {
-                        _historyOnDemandRequestById.TryGetValue(pendingId, out pendingState);
-                    }
-
-                    bool catchUpBanner = Volatile.Read(ref _historyCatchUpBannerActive) == 1 ||
-                                         _catchUpContinueRound > 0;
-                    bool pendingFull = pendingState != null &&
-                        string.Equals(
-                            pendingState.RequestType,
-                            "FullHistorySyncOnDemand",
-                            StringComparison.Ordinal);
-
-                    if (catchUpBanner || pendingFull)
-                    {
-                        handOffCatchUp = true;
-                        lotRequestId = pendingId;
-                        if (pendingState != null)
-                        {
-                            lotAckAccepted = pendingState.AckAccepted;
-                            lotProgressSignals = pendingState.ProgressSignalCount;
-                            lotTrigger = pendingState.TriggerReason ?? lotTrigger;
-                            ClearHistoryRequestStateLocked(pendingState);
-                        }
-                        else
-                        {
-                            _fullHistoryOnDemandRequestedThisSession = false;
-                            _fullHistoryOnDemandRequestId = null;
-                            _fullHistoryRepairRequestId = null;
-                        }
-
-                        Debug.WriteLine(
-                            "[WhatsAppService] SQLite quiet lot handed to catch-up continue: requestId=" +
-                            (lotRequestId ?? "<none>") +
-                            ", signals=" + lotProgressSignals +
-                            ", banner=" + (Volatile.Read(ref _historyCatchUpBannerActive) == 1));
-                    }
-                }
+                bool catchUpBanner = IsHistoryCatchUpActive();
+                bool handOffCatchUp = _historyRequests.TryHandOffQuietLot(
+                    catchUpBanner,
+                    out string lotRequestId,
+                    out HistoryOnDemandRequest lotRequest);
+                bool lotAckAccepted = lotRequest?.AckAccepted ?? false;
+                int lotProgressSignals = lotRequest?.ProgressSignalCount ?? 0;
+                string lotTrigger = lotRequest?.TriggerReason ?? "sqlite-lot-quiet";
 
                 if (handOffCatchUp)
                 {
+                    Debug.WriteLine(
+                        "[WhatsAppService] SQLite quiet lot handed to catch-up continue: requestId=" +
+                        (lotRequestId ?? "<none>") +
+                        ", signals=" + lotProgressSignals +
+                        ", processed=" + processed +
+                        ", banner=" + (IsHistoryCatchUpBannerActive));
                     RuntimeDiagnosticsService.Instance.Write(
                         "history",
                         "catch-up-sqlite-lot-quiet",
@@ -2563,12 +1991,24 @@ namespace Unison.Uwp.Services.WhatsApp
                         "; delayMs=" + delayMs +
                         "; processed=" + processed);
 
-                    DecideCatchUpAfterIdleBatch(
-                        lotRequestId,
-                        lotAckAccepted,
-                        lotProgressSignals,
-                        "sqlite-lot-quiet:" + (lotTrigger ?? string.Empty),
-                        delayMs);
+                    // Empty StatusV3 quiet must not solicit the next FULL_HISTORY page.
+                    if (processed <= 0)
+                    {
+                        RuntimeDiagnosticsService.Instance.Write(
+                            "history",
+                            "catch-up-sqlite-lot-quiet-skip-empty",
+                            "requestId=" + (lotRequestId ?? string.Empty));
+                        FinishHistoryCatchUpContinue("sqlite-empty-lot", releaseEnrichment: true);
+                    }
+                    else
+                    {
+                        DecideCatchUpAfterIdleBatch(
+                            lotRequestId,
+                            lotAckAccepted,
+                            lotProgressSignals,
+                            "sqlite-lot-quiet:" + (lotTrigger ?? string.Empty),
+                            delayMs);
+                    }
                 }
                 else
                 {
@@ -2578,15 +2018,27 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 // After history quiet: re-read newest history_message per visible chat so the
                 // list strip matches SQLite even when preview rows lagged or skipped fromMe.
-                try
+                // Skip while the list is still materializing — ChatListViewModel + post-replay
+                // already reconcile; doubling tip-swaps on Mobile overlapped the paint storm.
+                if (_listPaintGate != null && !_listPaintGate.IsReleased)
                 {
-                    await ReconcileChatPreviewsFromSqliteAsync(null, "history-quiet")
-                        .ConfigureAwait(false);
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "preview-tip",
+                        "reconcile-deferred-list-paint",
+                        "reason=history-quiet");
                 }
-                catch (Exception exReconcile)
+                else
                 {
-                    Debug.WriteLine(
-                        "[WhatsAppService] Post-sync preview reconcile failed: " + exReconcile.Message);
+                    try
+                    {
+                        await ReconcileChatPreviewsFromSqliteAsync(null, "history-quiet")
+                            .ConfigureAwait(false);
+                    }
+                    catch (Exception exReconcile)
+                    {
+                        Debug.WriteLine(
+                            "[WhatsAppService] Post-sync preview reconcile failed: " + exReconcile.Message);
+                    }
                 }
             }
             catch (Exception ex)
@@ -2595,99 +2047,12 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        /// <inheritdoc />
-        public Task SeedChatMessagesInMemoryAsync(string chatJid, IList<ChatMessage> messages)
-        {
-            if (string.IsNullOrWhiteSpace(chatJid) || messages == null || messages.Count == 0)
-            {
-                return Task.CompletedTask;
-            }
-
-            string normJid = NormalizeJid(chatJid);
-            var incoming = messages.Where(m => m != null).ToList();
-            if (incoming.Count == 0)
-            {
-                return Task.CompletedTask;
-            }
-
-            return RunOnUiThreadAsync(() =>
-            {
-                if (!MessagesByChat.TryGetValue(normJid, out var list) || list == null)
-                {
-                    list = new List<ChatMessage>();
-                    MessagesByChat[normJid] = list;
-                }
-
-                var byId = new Dictionary<string, ChatMessage>(StringComparer.Ordinal);
-                foreach (var existing in list)
-                {
-                    if (existing != null && !string.IsNullOrWhiteSpace(existing.Id))
-                    {
-                        byId[existing.Id] = existing;
-                    }
-                }
-
-                foreach (var message in incoming)
-                {
-                    if (string.IsNullOrWhiteSpace(message.Id))
-                    {
-                        list.Add(message);
-                        continue;
-                    }
-
-                    if (!byId.ContainsKey(message.Id))
-                    {
-                        byId[message.Id] = message;
-                        list.Add(message);
-                    }
-                }
-
-                ChatMessageOrder.SortInPlace(list);
-                _messageIdIndex.Rebuild(normJid, list);
-            });
-        }
-
-        /// <inheritdoc />
-        public void CompleteHistoryOnDemandForChats(IEnumerable<string> chatJids)
-        {
-            if (chatJids == null)
-            {
-                return;
-            }
-
-            lock (_historyOnDemandLock)
-            {
-                foreach (string raw in chatJids)
-                {
-                    string normJid = NormalizeJid(raw);
-                    if (string.IsNullOrWhiteSpace(normJid))
-                    {
-                        continue;
-                    }
-
-                    _historyOnDemandInFlight.Remove(normJid);
-                    if (_historyOnDemandLastRequestIdByChat.TryGetValue(normJid, out var requestId))
-                    {
-                        _historyOnDemandLastRequestIdByChat.Remove(normJid);
-                        _historyOnDemandRequestById.Remove(requestId);
-                    }
-
-                    _historyOnDemandAttemptsByChat.Remove(normJid);
-                    _historyOnDemandRejectedUntilUtcByChat.Remove(normJid);
-                }
-            }
-        }
-
         private async Task RepairLegacyDeletedPreviewsAsync()
         {
             // Builds before v5.14 could persist a replayed revoke envelope as a new
             // "[Message Deleted]" row with DateTime.Now. Repair only those known-bad
             // previews and leave normal chats untouched, keeping startup lightweight.
-            var suspicious = Chats
-                .Where(c => c != null &&
-                            string.Equals(c.LastMessage, "[Message Deleted]", StringComparison.OrdinalIgnoreCase) &&
-                            !string.IsNullOrWhiteSpace(c.JID))
-                .ToList();
+            var suspicious = Chats.Where(LegacyDeletedPreview.IsSuspect).ToList();
             if (suspicious.Count == 0) return;
 
             bool changed = false;
@@ -2698,24 +2063,11 @@ namespace Unison.Uwp.Services.WhatsApp
                     string jid = GetCanonicalJid(chat.JID);
                     IReadOnlyList<HistoryMessage> recentRows =
                         await _historyMessages.GetForChatAsync(jid, 120).ConfigureAwait(false);
-                    ChatMessage replacement = null;
-                    if (recentRows != null)
-                    {
-                        for (int i = recentRows.Count - 1; i >= 0; i--)
-                        {
-                            ChatMessage mapped = HistoryMessageMapper.ToChatMessage(recentRows[i]);
-                            if (mapped != null &&
-                                IsValidMessageTimestamp(mapped.Timestamp) &&
-                                !string.Equals(mapped.Content, "[Message Deleted]", StringComparison.OrdinalIgnoreCase) &&
-                                !mapped.IsRevoked)
-                            {
-                                replacement = mapped;
-                                break;
-                            }
-                        }
-                    }
+                    ChatMessage replacement = LegacyDeletedPreview.PickReplacement(
+                        recentRows?.Select(HistoryMessageMapper.ToChatMessage).ToList(),
+                        DateTime.UtcNow);
 
-                    await RunOnUiThreadAsync(() =>
+                    await _ui.RunAsync(() =>
                     {
                         foreach (var row in GetChatRowsForCanonicalJid(jid))
                         {
@@ -2730,17 +2082,25 @@ namespace Unison.Uwp.Services.WhatsApp
                                     replacement.Timestamp,
                                     true,
                                     ChatPreviewNormalizer.InferKindFromMessage(replacement),
-                                    ChatPreviewNormalizer.FormatListAuthorPrefix(replacement, isGroup, SelfListDisplayName()),
-                                    replacement.MentionedJids);
+                                    ChatPreviewNormalizer.FormatListAuthorPrefix(
+                                        replacement,
+                                        isGroup,
+                                        SelfListDisplayName(),
+                                        GetCanonicalJid(replacement.ParticipantJid)),
+                                    replacement.MentionedJids,
+                                    replacement.IsFromMe,
+                                    HistoryLiveMessageMapper.FromStatus(replacement.Status, replacement.IsFromMe),
+                                    replacement.Id,
+                                    isGroup
+                                        ? ParticipantStripIdentity.PreferForDisplay(
+                                            replacement.ParticipantJid,
+                                            GetCanonicalJid(replacement.ParticipantJid))
+                                        : null,
+                                    isGroup && !replacement.IsFromMe ? replacement.SenderName : null);
                             }
                             else
                             {
-                                row.LastMessage = string.Empty;
-                                row.LastMessageAuthor = string.Empty;
-                                row.LastMessageMentionedJids = null;
-                                row.LastMessageKind = ChatPreviewKind.Text;
-                                row.Timestamp = string.Empty;
-                                row.LastMessageTimestampUtc = null;
+                                ChatPreviewTip.Clear(row);
                             }
                         }
                         SortChatsForDisplay();
@@ -2761,7 +2121,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     // Same reason as the other catalogue writes: Chats belongs to the UI thread
                     // and this loop has been yielding, so the snapshot has to be taken there.
                     List<ChatItem> snapshot = null;
-                    await RunOnUiThreadAsync(() => snapshot = Chats.Where(c => c != null).ToList());
+                    await _ui.RunAsync(() => snapshot = Chats.Where(c => c != null).ToList());
                     await PersistChatCatalogAsync(snapshot ?? new List<ChatItem>()).ConfigureAwait(false);
                 }
                 catch
@@ -2773,418 +2133,36 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        /// <inheritdoc />
-        public async Task ReconcileChatPreviewsFromSqliteAsync(
+        /// <summary>
+        /// Client-owned tip pass after startup / catch-up / quiet history. UI goes through
+        /// <see cref="IChatService.ReconcileChatPreviewsFromSqliteAsync"/>.
+        /// </summary>
+        private async Task ReconcileChatPreviewsFromSqliteAsync(
             IReadOnlyList<string> chatJids = null,
             string reason = null)
         {
-            string tag = string.IsNullOrWhiteSpace(reason) ? "unknown" : reason;
-            if (_historyMessages == null)
-            {
-                RuntimeDiagnosticsService.Instance.Write(
-                    "preview-tip", "reconcile-skipped", "reason=" + tag + "; cause=no-history-store");
-                return;
-            }
-
-            // One work item per canonical chat, with PN+LID (+canonical) keys — same expansion
-            // as MessageFacade.LoadMessages. Querying only the list JID misses cross-device
-            // fromMe rows stored under the alias and leaves the strip on the older peer line.
-            var work = new List<Tuple<string, List<string>>>();
-            var seenCanonical = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            void EnqueueChat(string raw)
-            {
-                string norm = JidHelper.Normalize(raw);
-                if (string.IsNullOrWhiteSpace(norm))
-                {
-                    return;
-                }
-
-                string canonical = GetCanonicalJid(norm);
-                if (string.IsNullOrWhiteSpace(canonical))
-                {
-                    canonical = norm;
-                }
-
-                if (!seenCanonical.Add(canonical))
-                {
-                    return;
-                }
-
-                work.Add(Tuple.Create(canonical, ExpandHistoryChatKeys(norm)));
-            }
-
-            if (chatJids != null && chatJids.Count > 0)
-            {
-                for (int i = 0; i < chatJids.Count; i++)
-                {
-                    EnqueueChat(chatJids[i]);
-                }
-            }
-            else
-            {
-                await RunOnUiThreadAsync(() =>
-                {
-                    for (int i = 0; i < Chats.Count; i++)
-                    {
-                        EnqueueChat(Chats[i]?.JID);
-                    }
-                }).ConfigureAwait(false);
-            }
-
-            RuntimeDiagnosticsService.Instance.Write(
-                "preview-tip",
-                "reconcile-begin",
-                "reason=" + tag + "; requested=" + (chatJids != null ? chatJids.Count : -1) +
-                "; chats=" + work.Count);
-
-            if (work.Count == 0)
-            {
-                return;
-            }
-
-            var newestByCanonical = new List<Tuple<string, List<string>, List<HistoryMessage>>>(work.Count);
-            for (int i = 0; i < work.Count; i++)
-            {
-                string canonical = work[i].Item1;
-                List<string> keys = work[i].Item2;
-                if (keys == null || keys.Count == 0)
-                {
-                    continue;
-                }
-
-                List<HistoryMessage> page = null;
-                try
-                {
-                    // Newest across every alias key (IN + ORDER BY ts DESC LIMIT 8), oldest first.
-                    IReadOnlyList<HistoryMessage> rows =
-                        await _historyMessages.GetForChatKeysAsync(keys, 8).ConfigureAwait(false);
-                    if (rows != null && rows.Count > 0)
-                    {
-                        page = new List<HistoryMessage>(rows);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine(
-                        "[WhatsAppService] ReconcileChatPreviewsFromSqlite query failed for " +
-                        canonical + ": " + ex.Message);
-                }
-
-                if (page == null)
-                {
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "preview-tip",
-                        "db-empty",
-                        "reason=" + tag + "; jid=" + MaskJidForDiagnostics(canonical) +
-                        "; keys=" + keys.Count);
-                }
-
-                // Always enqueue: memory tip alone can still fix the strip.
-                newestByCanonical.Add(Tuple.Create(canonical, keys, page));
-            }
-
-            if (newestByCanonical.Count == 0)
-            {
-                return;
-            }
-
-            int updated = 0;
-            await RunOnUiThreadAsync(() =>
-            {
-                for (int i = 0; i < newestByCanonical.Count; i++)
-                {
-                    string canonical = newestByCanonical[i].Item1;
-                    List<string> keys = newestByCanonical[i].Item2;
-                    List<HistoryMessage> page = newestByCanonical[i].Item3;
-
-                    // A revoked or bogus-timestamp row at the top must not hide the real tip:
-                    // walk the page down instead of giving up on the first candidate.
-                    ChatMessage mapped = null;
-                    if (page != null)
-                    {
-                        for (int p = page.Count - 1; p >= 0 && mapped == null; p--)
-                        {
-                            mapped = MapPreviewTipCandidate(page[p]);
-                        }
-                    }
-
-                    // Open-chat merge can show a live tip SQLite has not caught up with yet.
-                    ChatMessage memoryTip = FindNewestInMemoryForChat(canonical, keys);
-                    ChatMessage best = PickNewerPreviewSource(mapped, memoryTip);
-                    if (best == null)
-                    {
-                        continue;
-                    }
-
-                    bool isGroup = canonical.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
-                    string preview = ChatPreviewNormalizer.FormatListPreview(best, isGroup);
-                    string author = ChatPreviewNormalizer.FormatListAuthorPrefix(
-                        best,
-                        isGroup,
-                        SelfListDisplayName());
-
-                    foreach (var chat in GetChatRowsForCanonicalJid(canonical))
-                    {
-                        // Tip from DB/memory by TimestampUtc; swap when MessageId differs (or body).
-                        if (ChatPreviewTip.IsAlreadyShowing(chat, best, preview))
-                        {
-                            continue;
-                        }
-
-                        // force: tip was already chosen as newest by TimestampUtc (DB+RAM).
-                        // A strip poisoned by Unspecified→ToUniversalTime (+3h in Brazil) must
-                        // not win the stale gate and keep an older Last Message.
-                        bool applied = ApplyChatPreviewIfNewer(
-                            chat,
-                            preview,
-                            best.Timestamp,
-                            true,
-                            ChatPreviewNormalizer.InferKindFromMessage(best),
-                            author,
-                            best.MentionedJids,
-                            best.IsFromMe,
-                            HistoryLiveMessageMapper.FromStatus(best.Status, best.IsFromMe),
-                            best.Id);
-
-                        // Schema v4 upgrade: old preview rows have no LastMessageId. Stamp it from
-                        // history_message without a WhatsApp history resync when the tip already matches.
-                        if (!applied && ChatPreviewTip.ShouldStampMissingMessageId(chat, best))
-                        {
-                            chat.LastMessageId = best.Id;
-                            applied = true;
-                        }
-
-                        if (applied)
-                        {
-                            updated++;
-                            RuntimeDiagnosticsService.Instance.Write(
-                                "preview-tip",
-                                "tip-swapped",
-                                "reason=" + tag +
-                                "; jid=" + MaskJidForDiagnostics(chat.JID) +
-                                "; tipId=" + (best.Id ?? "-") +
-                                "; tipFromMe=" + best.IsFromMe +
-                                "; tipTs=" + ToComparableUtc(best.Timestamp).ToString("O"));
-                        }
-                        else
-                        {
-                            RuntimeDiagnosticsService.Instance.Write(
-                                "preview-tip",
-                                "kept-old-tip",
-                                "reason=" + tag +
-                                "; jid=" + MaskJidForDiagnostics(chat.JID) +
-                                "; stripTs=" + (chat.LastMessageTimestampUtc.HasValue
-                                    ? ToComparableUtc(chat.LastMessageTimestampUtc.Value).ToString("O")
-                                    : "-") +
-                                "; stripId=" + (chat.LastMessageId ?? "-") +
-                                "; stripFromMe=" + chat.LastMessageIsFromMe +
-                                "; tipTs=" + ToComparableUtc(best.Timestamp).ToString("O") +
-                                "; tipId=" + (best.Id ?? "-") +
-                                "; tipFromMe=" + best.IsFromMe +
-                                "; src=" + (ReferenceEquals(best, memoryTip) ? "mem" : "db") +
-                                "; dbRows=" + (page != null ? page.Count : 0));
-                        }
-                    }
-                }
-
-                if (updated > 0)
-                {
-                    SortChatsForDisplay();
-                }
-            }).ConfigureAwait(false);
-
+            int updated = await _previewReconciler.ReconcileAsync(chatJids, reason).ConfigureAwait(false);
             if (updated > 0)
             {
-                Debug.WriteLine("[WhatsAppService] ReconcileChatPreviewsFromSqlite updated=" + updated);
                 NoteFullHistoryCatchUpProgress("tip-swapped:" + updated);
                 SchedulePersist();
             }
         }
 
         /// <summary>
-        /// Keeps the runtime journal free of full phone numbers while still allowing one chat to be
-        /// followed across events.
-        /// </summary>
-        private static string MaskJidForDiagnostics(string jid)
-        {
-            if (string.IsNullOrWhiteSpace(jid))
-            {
-                return "-";
-            }
-
-            int at = jid.IndexOf('@');
-            string user = at > 0 ? jid.Substring(0, at) : jid;
-            string domain = at > 0 ? jid.Substring(at) : string.Empty;
-            string tail = user.Length <= 4 ? user : user.Substring(user.Length - 4);
-            return "*" + tail + domain;
-        }
-
-        /// <summary>
-        /// history_message row to a list-strip candidate, or null when it must never own the strip
-        /// (revoked, tombstone body, or a timestamp we do not trust).
-        /// </summary>
-        private ChatMessage MapPreviewTipCandidate(HistoryMessage row)
-        {
-            if (row == null || row.IsRevoked || !row.TimestampUtc.HasValue)
-            {
-                return null;
-            }
-
-            ChatMessage mapped = HistoryMessageMapper.ToChatMessage(row);
-            if (mapped == null ||
-                mapped.IsRevoked ||
-                !IsValidMessageTimestamp(mapped.Timestamp) ||
-                string.Equals(mapped.Content, "[Message Deleted]", StringComparison.OrdinalIgnoreCase))
-            {
-                return null;
-            }
-
-            return mapped;
-        }
-
-        private ChatMessage FindNewestInMemoryForChat(string canonical, List<string> keys)
-        {
-            ChatMessage best = null;
-            DateTime bestUtc = DateTime.MinValue;
-
-            void Consider(IList<ChatMessage> list)
-            {
-                if (list == null)
-                {
-                    return;
-                }
-
-                // Snapshot: open-chat / unload can mutate the list while reconcile runs.
-                ChatMessage[] snapshot;
-                try
-                {
-                    snapshot = list.ToArray();
-                }
-                catch (ArgumentException)
-                {
-                    return;
-                }
-                catch (InvalidOperationException)
-                {
-                    return;
-                }
-
-                for (int i = 0; i < snapshot.Length; i++)
-                {
-                    ChatMessage message = snapshot[i];
-                    if (message == null ||
-                        message.IsRevoked ||
-                        !IsValidMessageTimestamp(message.Timestamp) ||
-                        string.Equals(message.Content, "[Message Deleted]", StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
-
-                    DateTime utc = ToComparableUtc(message.Timestamp);
-                    if (best == null ||
-                        utc > bestUtc ||
-                        (utc == bestUtc &&
-                         string.CompareOrdinal(message.Id ?? string.Empty, best.Id ?? string.Empty) > 0))
-                    {
-                        best = message;
-                        bestUtc = utc;
-                    }
-                }
-            }
-
-            if (keys != null)
-            {
-                for (int i = 0; i < keys.Count; i++)
-                {
-                    string key = keys[i];
-                    if (string.IsNullOrWhiteSpace(key))
-                    {
-                        continue;
-                    }
-
-                    List<ChatMessage> list;
-                    if (MessagesByChat.TryGetValue(key, out list))
-                    {
-                        Consider(list);
-                    }
-                }
-            }
-
-            // Dictionary enumeration throws if another thread Adds/Removes mid-loop.
-            KeyValuePair<string, List<ChatMessage>>[] pairs;
-            try
-            {
-                pairs = MessagesByChat.ToArray();
-            }
-            catch (InvalidOperationException)
-            {
-                try
-                {
-                    pairs = MessagesByChat.ToArray();
-                }
-                catch (InvalidOperationException)
-                {
-                    return best;
-                }
-            }
-
-            for (int i = 0; i < pairs.Length; i++)
-            {
-                KeyValuePair<string, List<ChatMessage>> pair = pairs[i];
-                if (pair.Value == null ||
-                    string.IsNullOrWhiteSpace(pair.Key) ||
-                    !string.Equals(GetCanonicalJid(pair.Key), canonical, StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                Consider(pair.Value);
-            }
-
-            return best;
-        }
-
-        private static ChatMessage PickNewerPreviewSource(ChatMessage sql, ChatMessage memory) =>
-            ChatPreviewTip.PickNewer(sql, memory);
-
-        /// <summary>
-        /// PN + LID (+ canonical) keys for SQLite history reads — mirrors MessageFacade.ResolveChatKeys.
+        /// PN + LID (+ canonical) keys for SQLite history reads and avatar lookups. The same
+        /// expansion <see cref="ChatPinStoreKeys"/> does for pins.
         /// </summary>
         private List<string> ExpandHistoryChatKeys(string jid)
         {
-            var keys = new List<string>();
-            void AddKey(string raw)
-            {
-                string norm = JidHelper.Normalize(raw);
-                if (string.IsNullOrWhiteSpace(norm))
-                {
-                    return;
-                }
-
-                for (int i = 0; i < keys.Count; i++)
-                {
-                    if (string.Equals(keys[i], norm, StringComparison.OrdinalIgnoreCase))
-                    {
-                        return;
-                    }
-                }
-
-                keys.Add(norm);
-            }
-
-            AddKey(jid);
-            AddKey(GetCanonicalJid(jid));
-
+            string alias = null;
             string normalized = JidHelper.Normalize(jid);
-            if (!string.IsNullOrWhiteSpace(normalized) &&
-                JidAlias != null &&
-                JidAlias.TryGetValue(normalized, out string alias))
+            if (!string.IsNullOrWhiteSpace(normalized) && JidAlias != null)
             {
-                AddKey(alias);
+                JidAlias.TryGetValue(normalized, out alias);
             }
 
-            return keys;
+            return new List<string>(ChatPinStoreKeys.For(jid, GetCanonicalJid(jid), alias));
         }
 
         public void StartDeferredStartupMaintenance()
@@ -3205,7 +2183,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 // should show faces before we wait for sync or ask the server for history.
                 try
                 {
-                    await HydrateCachedAvatarUrisAsync("deferred-startup-early")
+                    await HydrateCachedAvatarsFromContactAsync("deferred-startup-early")
                         .ConfigureAwait(false);
                 }
                 catch (Exception exHydrate)
@@ -3217,7 +2195,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 // Give the compositor and input thread time to present an interactive chat list
                 // before doing optional repair and enrichment work - and no longer than that.
                 await WaitForStartupQuietAsync(
-                    UseFrugalSyncBudget ? TimeSpan.FromSeconds(6) : TimeSpan.FromMilliseconds(1800),
+                    TimeSpan.FromMilliseconds(CurrentSyncPacing.DeferredStartupQuietMs),
                     "deferred-startup",
                     CancellationToken.None);
 
@@ -3248,18 +2226,18 @@ namespace Unison.Uwp.Services.WhatsApp
                 foreach (var kvp in storedNames)
                 {
                     string sanitized = SanitizeContactLabel(kvp.Value, kvp.Key);
-                    if (!string.IsNullOrWhiteSpace(sanitized) && !ContactNames.ContainsKey(kvp.Key))
+                    if (!string.IsNullOrWhiteSpace(sanitized))
                     {
-                        ContactNames[kvp.Key] = sanitized;
+                        ContactNames.TryAdd(kvp.Key, sanitized);
                     }
                 }
 
                 var storedPhoneNames = await _messageStore.LoadPhoneContactNamesAsync();
                 foreach (var kvp in storedPhoneNames)
                 {
-                    if (!string.IsNullOrWhiteSpace(kvp.Value) && !PhoneContactNamesByJid.ContainsKey(kvp.Key))
+                    if (!string.IsNullOrWhiteSpace(kvp.Value))
                     {
-                        PhoneContactNamesByJid[kvp.Key] = kvp.Value.Trim();
+                        PhoneContactNamesByJid.TryAdd(kvp.Key, kvp.Value.Trim());
                     }
                 }
 
@@ -3277,7 +2255,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 await NormalizePersistedChatNamesAsync();
                 // Second pass for chats that arrived after the early hydrate (sync/catalog race).
-                await HydrateCachedAvatarUrisAsync("deferred-startup");
+                await HydrateCachedAvatarsFromContactAsync("deferred-startup");
 
                 if (_contactService != null)
                 {
@@ -3314,79 +2292,27 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         /// <summary>
-        /// Loads messages for a specific chat from disk if not already in memory.
-        /// Call this when opening a chat to lazy-load messages.
+        /// Loads only the initial messages for a chat from the RAM overlay.
+        /// SQLite history is merged by <c>MessageFacade</c>.
         /// </summary>
-        public async Task<List<ChatMessage>> LoadMessagesForChatAsync(string chatJid)
-        {
-            return await LoadInitialMessagesAsync(chatJid);
-        }
-
-        /// <summary>
-        /// Loads only the initial (last 30) messages for a chat.
-        /// </summary>
-        public async Task<List<ChatMessage>> LoadInitialMessagesAsync(string chatJid)
+        private async Task<List<ChatMessage>> LoadInitialMessagesAsync(string chatJid)
         {
             string normJid = NormalizeJid(chatJid);
 
             try
             {
                 // RAM overlay only — SQLite history is loaded by MessageFacade.
-                var merged = new List<ChatMessage>();
-                var byId = new Dictionary<string, ChatMessage>(StringComparer.Ordinal);
-
-                Action<IEnumerable<ChatMessage>> addMessages = source =>
-                {
-                    foreach (var message in source ?? Enumerable.Empty<ChatMessage>())
-                    {
-                        if (message == null) continue;
-                        if (string.IsNullOrWhiteSpace(message.Id))
-                        {
-                            merged.Add(message);
-                        }
-                        else
-                        {
-                            byId[message.Id] = message;
-                        }
-                    }
-                };
-
-                addMessages(GetPendingPersistMessagesSnapshot(normJid));
-                if (MessagesByChat.TryGetValue(normJid, out var liveMessages))
-                {
-                    addMessages(liveMessages);
-                }
-
-                merged.AddRange(byId.Values);
-                var cache = merged
-                    .OrderBy(m => m.Timestamp)
-                    .ThenBy(m => m.Id ?? string.Empty, StringComparer.Ordinal)
-                    .ToList();
-
-                if (cache.Count > MaxActiveChatMessagesInMemory)
-                {
-                    DateTime nowUtc = DateTime.UtcNow;
-                    var activePinned = cache.Where(m => m.IsPinned &&
-                        (!m.PinExpiresAtUtc.HasValue || m.PinExpiresAtUtc.Value > nowUtc)).ToList();
-                    var pinnedIds = new HashSet<string>(activePinned.Where(m => !string.IsNullOrWhiteSpace(m.Id)).Select(m => m.Id), StringComparer.Ordinal);
-                    cache = activePinned
-                        .Concat(cache.Where(m => string.IsNullOrWhiteSpace(m.Id) || !pinnedIds.Contains(m.Id))
-                            .OrderByDescending(m => m.Timestamp)
-                            .Take(Math.Max(0, MaxActiveChatMessagesInMemory - activePinned.Count)))
-                        .GroupBy(m => m.Id ?? Guid.NewGuid().ToString(), StringComparer.Ordinal)
-                        .Select(g => g.First())
-                        .OrderBy(m => m.Timestamp)
-                        .ToList();
-                }
+                List<ChatMessage> cache = MessagesByChat.RebuildWindow(
+                    normJid,
+                    GetPendingPersistMessagesSnapshot(normJid),
+                    MaxActiveChatMessagesInMemory,
+                    DateTime.UtcNow);
 
                 var stateAdjustedMessages = new List<ChatMessage>();
                 foreach (var message in cache)
                 {
                     if (ApplyPendingStateToMessage(normJid, message)) stateAdjustedMessages.Add(message);
                 }
-
-                MessagesByChat[normJid] = cache;
-                _messageIdIndex.Rebuild(normJid, cache);
 
                 if (stateAdjustedMessages.Count > 0)
                 {
@@ -3403,74 +2329,6 @@ namespace Unison.Uwp.Services.WhatsApp
             catch (Exception ex)
             {
                 Debug.WriteLine($"[WhatsAppService] Failed to load initial messages for {normJid}: {ex.Message}");
-                return new List<ChatMessage>();
-            }
-        }
-
-        /// <summary>
-        /// Loads the next segment of messages (previous 30) before the current set.
-        /// </summary>
-        public async Task<List<ChatMessage>> LoadMoreMessagesAsync(string chatJid)
-        {
-            string normJid = NormalizeJid(chatJid);
-            if (!MessagesByChat.ContainsKey(normJid)) return new List<ChatMessage>();
-
-            try
-            {
-                int currentCount = MessagesByChat[normJid].Count;
-                if (currentCount >= MaxActiveChatMessagesInMemory)
-                {
-                    Debug.WriteLine($"[WhatsAppService] In-memory message cap reached for {normJid}: {currentCount}");
-                    return new List<ChatMessage>();
-                }
-
-                int totalCount = await _messageStore.GetMessageCountAsync(normJid);
-                
-                if (currentCount >= totalCount) 
-                {
-                    Debug.WriteLine($"[WhatsAppService] No more messages to load for {normJid} (Already have {currentCount}/{totalCount})");
-                    _ = RequestHistoryOnDemandIfNeededAsync(normJid, 30, "load-more:no-more-disk-messages");
-                    return new List<ChatMessage>(); // No more to load
-                }
-
-                int take = 30;
-                int skip = Math.Max(0, totalCount - currentCount - take);
-                int actualTake = Math.Min(take, totalCount - currentCount);
-
-                var previousMessages = await _messageStore.LoadMessagesPagedAsync(normJid, skip, actualTake);
-                if (previousMessages.Count > 0)
-                {
-                    var knownIds = new HashSet<string>(MessagesByChat[normJid]
-                        .Where(m => m != null && !string.IsNullOrWhiteSpace(m.Id))
-                        .Select(m => m.Id));
-                    var uniquePrevious = previousMessages
-                        .Where(m => m != null && (string.IsNullOrWhiteSpace(m.Id) || !knownIds.Contains(m.Id)))
-                        .Take(Math.Max(0, MaxActiveChatMessagesInMemory - currentCount))
-                        .ToList();
-                    foreach (var message in uniquePrevious) ApplyPendingStateToMessage(normJid, message);
-
-                    if (uniquePrevious.Count > 0)
-                    {
-                        var cache = MessagesByChat[normJid];
-                        foreach (var older in uniquePrevious)
-                        {
-                            ChatMessageOrder.InsertSorted(cache, older);
-                            RegisterMessageId(normJid, older?.Id);
-                        }
-                        Debug.WriteLine($"[WhatsAppService] Added {uniquePrevious.Count} older messages for {normJid}. total_in_cache={cache.Count}, total_on_disk={totalCount}");
-                    }
-                    previousMessages = uniquePrevious;
-                }
-                else
-                {
-                    Debug.WriteLine($"[WhatsAppService] LoadMoreMessagesAsync: MessageStore returned 0 messages for {normJid} (skipping skip={skip}, take={actualTake})");
-                    _ = RequestHistoryOnDemandIfNeededAsync(normJid, 30, "load-more:store-returned-empty");
-                }
-                return previousMessages;
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WhatsAppService] Failed to load more messages for {normJid}: {ex.Message}");
                 return new List<ChatMessage>();
             }
         }
@@ -3511,29 +2369,6 @@ namespace Unison.Uwp.Services.WhatsApp
             return null;
         }
 
-        public void StartNewChat(string jid)
-
-        {
-            if (string.IsNullOrEmpty(jid)) return;
-            
-            string normJid = NormalizeJid(jid);
-            _ = RunOnUiThreadAsync(() =>
-            {
-                var existing = Chats.FirstOrDefault(c => NormalizeJid(c.JID) == normJid);
-                if (existing == null)
-                {
-                    Chats.Insert(0, new ChatItem
-                    {
-                        JID = normJid,
-                        Name = ResolveDisplayName(jid, "chat"),
-                        LastMessage = "",
-                        Timestamp = "",
-                        Kind = ResolveChatKind(normJid)
-                    });
-                    _ = DeduplicateChatsAsync("start-new-chat");
-                }
-            });
-        }
 
         private void TriggerBackgroundResolution()
         {
@@ -3596,33 +2431,19 @@ namespace Unison.Uwp.Services.WhatsApp
                         {
                             await _contactService.RetrieveContactPicturesAsync(token);
                         }
-                        else
-                        {
-                            await FetchProfilePicturesAsync(token);
-                        }
                     }
 
-                    RaiseSyncStatus(SyncPhaseStatus.Format(SyncPhaseStatus.Groups));
-                    try
-                    {
-                        using (TraceStartupPhase("background-groups"))
-                        {
-                            await QueryAllGroupsAsync();
-                        }
-                    }
-                    catch (Exception exGroup)
-                    {
-                        Debug.WriteLine($"[WhatsAppService] Background group query failed: {exGroup.Message}");
-                    }
-
-                    // Clear status when done
+                    // Last step: the group façade shows the status, runs the listing and clears it.
                     RaiseSyncStatus(null);
+                    RaiseReport(
+                        () => OnGroupListingDue?.Invoke(this, EventArgs.Empty),
+                        nameof(OnGroupListingDue));
                 }
                 catch (TaskCanceledException) { }
                 catch (Exception ex)
                 {
                     Debug.WriteLine($"[WhatsAppService] Background resolution error: {ex.Message}");
-                    OnSyncStatus?.Invoke(this, null);
+                    PublishSyncStatus(null);
                 }
             }, token);
         }
@@ -3681,306 +2502,18 @@ namespace Unison.Uwp.Services.WhatsApp
             });
         }
 
-        private bool ShouldDeferProfilePictureFetch(out string reason)
-        {
-            reason = null;
-
-            if (ShouldDeferReconnectReplayWork())
-            {
-                reason = "reconnect-replay-active";
-                return true;
-            }
-
-            if (_historyBackfillActive)
-            {
-                reason = "history-backfill-active";
-                return true;
-            }
-
-            lock (_historyOnDemandLock)
-            {
-                if (!string.IsNullOrWhiteSpace(_fullHistoryOnDemandRequestId))
-                {
-                    if (_historyOnDemandRequestById.ContainsKey(_fullHistoryOnDemandRequestId))
-                    {
-                        reason = "full-history-on-demand-in-flight:" + _fullHistoryOnDemandRequestId;
-                        return true;
-                    }
-
-                    Debug.WriteLine($"[WhatsAppService] Clearing stale full-history request marker before avatar fetch: requestId={_fullHistoryOnDemandRequestId}");
-                    _fullHistoryOnDemandRequestId = null;
-                    _fullHistoryRepairRequestId = null;
-                    _fullHistoryOnDemandRequestedThisSession = false;
-                }
-                else if (_fullHistoryOnDemandRequestedThisSession)
-                {
-                    Debug.WriteLine("[WhatsAppService] Clearing stale full-history requested flag before avatar fetch.");
-                    _fullHistoryOnDemandRequestedThisSession = false;
-                    _fullHistoryRepairRequestId = null;
-                }
-
-                if (_historyOnDemandInFlight.Count > 0)
-                {
-                    reason = "history-on-demand-in-flight:" + _historyOnDemandInFlight.Count;
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        // NeedsAvatarRefresh/IsAvatarFetchBackoffActive/IsLegacyGroupAvatarMissReason (batch/single-refresh
-        // policy) now live in ContactService. FindSiblingGroupAvatarSource stays here (also used by the
-        // group-avatar fallback protocol path below) and is duplicated in ContactService for its own policy check.
-        private ChatItem FindSiblingGroupAvatarSource(ChatItem chat)
-        {
-            return SiblingGroupAvatar.Find(chat, Chats);
-        }
-
-        private async Task ApplyAvatarResultAsync(ChatItem chat, ProfilePictureResult result, CancellationToken token)
-        {
-            if (chat == null || result == null)
-            {
-                return;
-            }
-
-            DateTime nowUtc = DateTime.UtcNow;
-            if (!string.IsNullOrWhiteSpace(result.Url))
-            {
-                string localUri = null;
-                try
-                {
-                    localUri = await _avatarFetcher.CachePreviewAsync(chat.JID, result.Url, token);
-                }
-                catch (Exception ex)
-                {
-                    await RunOnUiThreadAsync(() =>
-                        ChatAvatarOutcome.RecordFailure(chat, "download:" + ex.Message, nowUtc));
-                    Debug.WriteLine($"[WhatsAppService] Avatar download/cache failed for {chat.JID}: target={result.TargetJid}, reason={ex.Message}");
-                    return;
-                }
-
-                if (string.IsNullOrWhiteSpace(localUri))
-                {
-                    await RunOnUiThreadAsync(() =>
-                        ChatAvatarOutcome.RecordFailure(chat, "download:empty", nowUtc));
-                    return;
-                }
-
-                await RunOnUiThreadAsync(() =>
-                    {
-                        ChatAvatarOutcome.RecordCached(chat, localUri, nowUtc);
-                        StampGroupMemberAvatars(chat.JID, localUri);
-                    });
-                ReportAvatarCached(chat.JID, localUri);
-                return;
-            }
-
-            if (result.IsNotFound)
-            {
-                if (await TryApplyGroupAvatarFallbackAsync(chat, result, token))
-                {
-                    return;
-                }
-
-                string failureReason = result.FailureReason ?? "no-picture";
-                if (chat.IsGroup && ShouldTryGroupAvatarFallback(result))
-                {
-                    failureReason = failureReason + ":" + GroupAvatarFallbackMissReason;
-                }
-
-                await RunOnUiThreadAsync(() =>
-                    ChatAvatarOutcome.RecordAbsent(chat, failureReason, nowUtc));
-                Debug.WriteLine($"[WhatsAppService] Avatar confirmed absent for {chat.JID}: target={result.TargetJid}, reason={failureReason}");
-                return;
-            }
-
-            if (await TryApplyGroupAvatarFallbackAsync(chat, result, token))
-            {
-                return;
-            }
-
-            await RunOnUiThreadAsync(() =>
-                ChatAvatarOutcome.RecordFailure(
-                    chat,
-                    result.FailureReason ?? (result.IsTimeout ? "timeout" : "transient"),
-                    nowUtc));
-            Debug.WriteLine($"[WhatsAppService] Avatar refresh failed without clearing existing image for {chat.JID}: target={result.TargetJid}, lookup={result.TokenLookupJid}, reason={chat.AvatarFetchFailureReason}");
-        }
-
-        private List<string> GetAvatarLookupCandidates(ChatItem chat)
-        {
-            var candidates = new List<string>();
-            Action<string> add = value =>
-            {
-                string normalized = NormalizeJid(value);
-                if (!string.IsNullOrWhiteSpace(normalized) &&
-                    !candidates.Contains(normalized, StringComparer.OrdinalIgnoreCase))
-                {
-                    candidates.Add(normalized);
-                }
-            };
-
-            add(chat?.JID);
-            add(GetCanonicalJid(chat?.JID));
-
-            string normalizedChat = NormalizeJid(chat?.JID);
-            if (!string.IsNullOrWhiteSpace(normalizedChat) && JidAlias.TryGetValue(normalizedChat, out var alias))
-            {
-                add(alias);
-            }
-
-            return candidates;
-        }
-
-
-        /// <summary>
-        /// Fetches profile pictures for chats that don't have one yet
-        /// </summary>
-        private async Task FetchProfilePicturesAsync(CancellationToken token)
-        {
-            await RetrieveContactPicturesCoreAsync(token);
-        }
-
-        Task IWhatsAppService.QueryUnresolvedGroupMetadataAsync(int limit) => QueryUnresolvedGroupMetadataAsync(limit);
-
-        Task IWhatsAppService.RefreshGroupSendPermissionsAsync(string groupJid) => RefreshGroupSendPermissionsAsync(groupJid);
-
-        Task IWhatsAppService.EnsureGroupRosterLoadedFromStoreAsync(string groupJid) =>
-            EnsureGroupRosterLoadedFromStoreAsync(groupJid);
-
-
-        private IEnumerable<string> EnumerateMembershipPersonKeys(GroupMember member)
-        {
-            if (member == null)
-            {
-                yield break;
-            }
-
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            void Consider(string raw)
-            {
-                if (string.IsNullOrWhiteSpace(raw))
-                {
-                    return;
-                }
-
-                string key = NormalizeJid(raw);
-                if (string.IsNullOrEmpty(key) || IsGroupJid(key))
-                {
-                    return;
-                }
-
-                seen.Add(key);
-            }
-
-            Consider(member.Jid);
-            Consider(GetCanonicalJid(member.Jid));
-            Consider(member.Lid);
-            if (!string.IsNullOrWhiteSpace(member.Lid))
-            {
-                Consider(GetCanonicalJid(member.Lid));
-            }
-
-            string phone = member.PhoneNumber;
-            if (!string.IsNullOrWhiteSpace(phone))
-            {
-                if (phone.IndexOf('@') >= 0)
-                {
-                    Consider(phone);
-                }
-                else
-                {
-                    string digits = PhoneNumberHelper.NormalizePhoneDigits(phone);
-                    if (!string.IsNullOrEmpty(digits))
-                    {
-                        Consider(digits + "@s.whatsapp.net");
-                    }
-                }
-            }
-
-            foreach (string key in seen)
-            {
-                yield return key;
-            }
-        }
-
-        private string FindExistingAvatarUrl(string jid, string phone, string lid)
-        {
-            string fromChat = FindAvatarOnChatRows(jid);
-            if (!string.IsNullOrWhiteSpace(fromChat))
-            {
-                return fromChat;
-            }
-
-            if (!string.IsNullOrWhiteSpace(phone))
-            {
-                fromChat = FindAvatarOnChatRows(NormalizeJid(phone));
-                if (!string.IsNullOrWhiteSpace(fromChat))
-                {
-                    return fromChat;
-                }
-            }
-
-            if (!string.IsNullOrWhiteSpace(lid))
-            {
-                fromChat = FindAvatarOnChatRows(NormalizeJid(lid));
-                if (!string.IsNullOrWhiteSpace(fromChat))
-                {
-                    return fromChat;
-                }
-            }
-
-            return null;
-        }
-
-        private bool MemberMatchesJid(GroupMember member, string canonical)
-        {
-            if (member == null || string.IsNullOrWhiteSpace(canonical))
-            {
-                return false;
-            }
-
-            if (JidsMatchCanonical(member.Jid, canonical))
-            {
-                return true;
-            }
-
-            if (JidsMatchCanonical(member.PhoneNumber, canonical))
-            {
-                return true;
-            }
-
-            return JidsMatchCanonical(member.Lid, canonical);
-        }
-
-        private static long ToUnixMilliseconds(DateTime timestamp)
-        {
-            if (timestamp.Kind == DateTimeKind.Unspecified)
-            {
-                timestamp = DateTime.SpecifyKind(timestamp, DateTimeKind.Local);
-            }
-
-            return new DateTimeOffset(timestamp).ToUnixTimeMilliseconds();
-        }
+        private bool ShouldDeferProfilePictureFetch(out string reason) => _syncWork.ShouldDeferAvatarFetch(out reason);
 
         /// <summary>
         /// Watches an accepted FULL_HISTORY request and aborts only after a stretch with
         /// no catch-up progress (tips / SQLite chunks / offline apply). Progress resets
         /// the idle clock — Mobile often needs several minutes of slow peer delivery.
         /// </summary>
-        private void ScheduleFullHistoryCatchUpWatchdog(HistoryOnDemandRequestState state)
+        private void ScheduleFullHistoryCatchUpWatchdog(HistoryOnDemandRequest state)
         {
             if (state == null || string.IsNullOrWhiteSpace(state.RequestId))
             {
                 return;
-            }
-
-            if (state.LastProgressUtc == DateTime.MinValue)
-            {
-                state.LastProgressUtc = DateTime.UtcNow;
-                state.LastProgressReason = "watchdog-armed";
             }
 
             _ = Task.Run(async () =>
@@ -3996,100 +2529,43 @@ namespace Unison.Uwp.Services.WhatsApp
                         "; hardTimeoutMs=" + (int)FullHistoryOnDemandResponseTimeout.TotalMilliseconds +
                         "; trigger=" + (state.TriggerReason ?? string.Empty));
 
-                    while (true)
-                    {
-                        await Task.Delay(FullHistoryCatchUpProgressPoll).ConfigureAwait(false);
-
-                        bool stillPending = false;
-                        bool ackAccepted = false;
-                        DateTime ackAcceptedUtc = DateTime.MinValue;
-                        DateTime lastProgressUtc = DateTime.MinValue;
-                        string lastProgressReason = null;
-                        int progressSignals = 0;
-                        int baselineCount = state.BaselineMessageCount;
-                        string triggerReason = state.TriggerReason ?? "unspecified";
-                        DateTime requestedAtUtc = state.RequestedAtUtc;
-
-                        lock (_historyOnDemandLock)
-                        {
-                            if (_historyOnDemandRequestById.TryGetValue(state.RequestId, out var pendingState) &&
-                                object.ReferenceEquals(pendingState, state))
-                            {
-                                stillPending = true;
-                                ackAccepted = pendingState.AckAccepted;
-                                ackAcceptedUtc = pendingState.AckAcceptedUtc;
-                                lastProgressUtc = pendingState.LastProgressUtc;
-                                lastProgressReason = pendingState.LastProgressReason;
-                                progressSignals = pendingState.ProgressSignalCount;
-                                baselineCount = pendingState.BaselineMessageCount;
-                                triggerReason = pendingState.TriggerReason ?? "unspecified";
-                                requestedAtUtc = pendingState.RequestedAtUtc;
-                            }
-                        }
-
-                        if (!stillPending)
-                        {
-                            RuntimeDiagnosticsService.Instance.Write(
-                                "history",
-                                "catch-up-watchdog-exit",
-                                "requestId=" + state.RequestId + "; reason=request-cleared");
-                            return;
-                        }
-
-                        DateTime nowUtc = DateTime.UtcNow;
-                        if (lastProgressUtc == DateTime.MinValue)
-                        {
-                            lastProgressUtc = requestedAtUtc != DateTime.MinValue
-                                ? requestedAtUtc
-                                : nowUtc;
-                        }
-
-                        TimeSpan idle = nowUtc - lastProgressUtc;
-                        TimeSpan age = nowUtc - (requestedAtUtc != DateTime.MinValue ? requestedAtUtc : nowUtc);
-                        int currentCount = GetStoredMessageCount();
-
-                        RuntimeDiagnosticsService.Instance.Write(
+                    HistoryCatchUpWatchdogExit exit = await CatchUpWatchdog.WatchAsync(
+                        state,
+                        tick => RuntimeDiagnosticsService.Instance.Write(
                             "history",
                             "catch-up-watchdog-tick",
                             "requestId=" + state.RequestId +
-                            "; idleMs=" + (int)idle.TotalMilliseconds +
-                            "; ageMs=" + (int)age.TotalMilliseconds +
-                            "; signals=" + progressSignals +
-                            "; lastProgress=" + (lastProgressReason ?? "<none>") +
-                            "; ackAccepted=" + ackAccepted +
-                            "; baselineMsgs=" + baselineCount +
-                            "; ramMsgs=" + currentCount +
-                            "; banner=" + (Volatile.Read(ref _historyCatchUpBannerActive) == 1));
+                            "; idleMs=" + (int)tick.Idle.TotalMilliseconds +
+                            "; ageMs=" + (int)tick.Age.TotalMilliseconds +
+                            "; signals=" + tick.Request.ProgressSignalCount +
+                            "; lastProgress=" + (tick.Request.LastProgressReason ?? "<none>") +
+                            "; ackAccepted=" + tick.Request.AckAccepted +
+                            "; baselineMsgs=" + tick.Request.BaselineMessageCount +
+                            "; ramMsgs=" + GetStoredMessageCount() +
+                            "; banner=" + (IsHistoryCatchUpBannerActive)))
+                        .ConfigureAwait(false);
 
-                        if (idle < FullHistoryCatchUpIdleAbort)
-                        {
-                            continue;
-                        }
-
-                        bool clearedPendingRequest = false;
-                        lock (_historyOnDemandLock)
-                        {
-                            if (_historyOnDemandRequestById.TryGetValue(state.RequestId, out var pendingState) &&
-                                object.ReferenceEquals(pendingState, state))
-                            {
-                                ClearHistoryRequestStateLocked(pendingState);
-                                clearedPendingRequest = true;
-                            }
-                        }
-
-                        if (!clearedPendingRequest)
-                        {
-                            return;
-                        }
-
-                        DecideCatchUpAfterIdleBatch(
-                            state.RequestId,
-                            ackAccepted,
-                            progressSignals,
-                            triggerReason,
-                            (int)idle.TotalMilliseconds);
+                    if (exit.Outcome == HistoryCatchUpWatchdogOutcome.RequestCleared)
+                    {
+                        RuntimeDiagnosticsService.Instance.Write(
+                            "history",
+                            "catch-up-watchdog-exit",
+                            "requestId=" + state.RequestId + "; reason=request-cleared");
                         return;
                     }
+
+                    if (exit.Outcome != HistoryCatchUpWatchdogOutcome.Idle)
+                    {
+                        return;
+                    }
+
+                    HistoryOnDemandRequest last = exit.LastTick.Request;
+                    DecideCatchUpAfterIdleBatch(
+                        state.RequestId,
+                        last.AckAccepted,
+                        last.ProgressSignalCount,
+                        last.TriggerReason ?? "unspecified",
+                        (int)exit.LastTick.Idle.TotalMilliseconds);
                 }
                 catch (Exception ex)
                 {
@@ -4103,104 +2579,46 @@ namespace Unison.Uwp.Services.WhatsApp
             });
         }
 
-        private void ScheduleAcceptedHistoryRequestTimeout(HistoryOnDemandRequestState state)
+        private void ScheduleAcceptedHistoryRequestTimeout(HistoryOnDemandRequest state)
         {
-            if (state == null || string.IsNullOrWhiteSpace(state.RequestId))
+            if (!HistoryRequestTimeout.TryArm(state, out Task<HistoryOnDemandRequest> expiry))
             {
                 return;
             }
 
-            lock (_historyOnDemandLock)
-            {
-                if (!_historyOnDemandRequestById.TryGetValue(state.RequestId, out var currentState) ||
-                    !object.ReferenceEquals(currentState, state) ||
-                    state.TimeoutTaskStarted)
-                {
-                    return;
-                }
+            bool isFullHistory = state.Kind == HistoryOnDemandKind.FullHistory;
+            TimeSpan timeout = HistoryRequestTimeout.WindowFor(state);
 
-                state.TimeoutTaskStarted = true;
-            }
-
-            TimeSpan timeout = string.Equals(state.RequestType, "FullHistorySyncOnDemand", StringComparison.Ordinal)
-                ? FullHistoryOnDemandResponseTimeout
-                : HistoryOnDemandResponseTimeout;
-
-            if (string.Equals(state.RequestType, "FullHistorySyncOnDemand", StringComparison.Ordinal))
+            if (isFullHistory)
             {
                 ScheduleFullHistoryCatchUpWatchdog(state);
             }
 
             _ = Task.Run(async () =>
             {
-                await Task.Delay(timeout);
-
-                bool requestStillPending = false;
-                int currentMessageCount = 0;
-                int progressSignals = 0;
-                string lastProgressReason = null;
-                DateTime lastProgressUtc = DateTime.MinValue;
-
-                lock (_historyOnDemandLock)
-                {
-                    if (_historyOnDemandRequestById.TryGetValue(state.RequestId, out var pendingState) &&
-                        object.ReferenceEquals(pendingState, state))
-                    {
-                        requestStillPending = true;
-                        progressSignals = pendingState.ProgressSignalCount;
-                        lastProgressReason = pendingState.LastProgressReason;
-                        lastProgressUtc = pendingState.LastProgressUtc;
-                        _historyOnDemandRequestById.Remove(state.RequestId);
-
-                        if (string.Equals(state.RequestType, "HistorySyncOnDemand", StringComparison.Ordinal))
-                        {
-                            _historyOnDemandInFlight.Remove(state.ChatJid);
-                            if (_historyOnDemandLastRequestIdByChat.TryGetValue(state.ChatJid, out var lastRequestId) &&
-                                string.Equals(lastRequestId, state.RequestId, StringComparison.Ordinal))
-                            {
-                                _historyOnDemandLastRequestIdByChat.Remove(state.ChatJid);
-                            }
-
-                            if (_historyOnDemandMarkerByChat.TryGetValue(state.ChatJid, out var existingMarker) &&
-                                string.Equals(existingMarker, state.Marker, StringComparison.Ordinal))
-                            {
-                                _historyOnDemandMarkerByChat.Remove(state.ChatJid);
-                            }
-
-                            if (MessagesByChat.TryGetValue(state.ChatJid, out var currentMessages) && currentMessages != null)
-                            {
-                                currentMessageCount = currentMessages.Count;
-                            }
-                        }
-                        else if (string.Equals(state.RequestType, "FullHistorySyncOnDemand", StringComparison.Ordinal))
-                        {
-                            if (string.Equals(_fullHistoryOnDemandRequestId, state.RequestId, StringComparison.Ordinal))
-                            {
-                                _fullHistoryOnDemandRequestId = null;
-                            }
-
-                            if (string.Equals(_fullHistoryRepairRequestId, state.RequestId, StringComparison.Ordinal))
-                            {
-                                _fullHistoryRepairRequestId = null;
-                            }
-
-                            _fullHistoryOnDemandRequestedThisSession = false;
-                        }
-                    }
-                }
-
-                if (!requestStillPending)
+                HistoryOnDemandRequest expired = await expiry;
+                if (expired == null)
                 {
                     return;
                 }
 
-                if (string.Equals(state.RequestType, "FullHistorySyncOnDemand", StringComparison.Ordinal))
+                int progressSignals = expired.ProgressSignalCount;
+                string lastProgressReason = expired.LastProgressReason;
+                DateTime lastProgressUtc = expired.LastProgressUtc;
+                int currentMessageCount;
+                if (isFullHistory)
                 {
                     currentMessageCount = GetStoredMessageCount();
                 }
+                else
+                {
+                    currentMessageCount = MessagesByChat.TryGet(state.ChatJid, out var currentMessages) && currentMessages != null
+                        ? currentMessages.Count
+                        : 0;
+                }
 
                 Debug.WriteLine(
-                    "[WhatsAppService] " + state.RequestType + " timed out: requestId=" + state.RequestId +
+                    "[WhatsAppService] " + state.TypeName + " timed out: requestId=" + state.RequestId +
                     ", chat=" + (state.ChatJid ?? "<full-history>") +
                     ", baseline=" + state.BaselineMessageCount +
                     ", current=" + currentMessageCount +
@@ -4210,7 +2628,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     ", lastProgressUtc=" + (lastProgressUtc == DateTime.MinValue ? "<none>" : lastProgressUtc.ToString("O")) +
                     ", trigger=" + (state.TriggerReason ?? "unspecified"));
 
-                if (string.Equals(state.RequestType, "FullHistorySyncOnDemand", StringComparison.Ordinal))
+                if (isFullHistory)
                 {
                     Debug.WriteLine(
                         "[WhatsAppService] FullHistorySyncOnDemand hard timeout: evaluating catch-up continue.");
@@ -4225,7 +2643,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         "; trigger=" + (state.TriggerReason ?? string.Empty));
                     DecideCatchUpAfterIdleBatch(
                         state.RequestId,
-                        state.AckAccepted,
+                        expired.AckAccepted,
                         progressSignals,
                         state.TriggerReason ?? "hard-timeout",
                         (int)timeout.TotalMilliseconds);
@@ -4233,81 +2651,19 @@ namespace Unison.Uwp.Services.WhatsApp
             });
         }
 
-        private void ClearHistoryRequestStateLocked(HistoryOnDemandRequestState state)
-        {
-            if (state == null)
-            {
-                return;
-            }
-
-            _historyOnDemandRequestById.Remove(state.RequestId);
-
-            if (string.Equals(state.RequestType, "HistorySyncOnDemand", StringComparison.Ordinal))
-            {
-                _historyOnDemandInFlight.Remove(state.ChatJid);
-
-                if (_historyOnDemandLastRequestIdByChat.TryGetValue(state.ChatJid, out var lastRequestId) &&
-                    string.Equals(lastRequestId, state.RequestId, StringComparison.Ordinal))
-                {
-                    _historyOnDemandLastRequestIdByChat.Remove(state.ChatJid);
-                }
-
-                if (_historyOnDemandMarkerByChat.TryGetValue(state.ChatJid, out var marker) &&
-                    string.Equals(marker, state.Marker, StringComparison.Ordinal))
-                {
-                    _historyOnDemandMarkerByChat.Remove(state.ChatJid);
-                }
-            }
-            else if (string.Equals(state.RequestType, "FullHistorySyncOnDemand", StringComparison.Ordinal))
-            {
-                if (string.Equals(_fullHistoryOnDemandRequestId, state.RequestId, StringComparison.Ordinal))
-                {
-                    _fullHistoryOnDemandRequestId = null;
-                }
-
-                if (string.Equals(_fullHistoryRepairRequestId, state.RequestId, StringComparison.Ordinal))
-                {
-                    _fullHistoryRepairRequestId = null;
-                }
-
-                _fullHistoryOnDemandRequestedThisSession = false;
-            }
-        }
-
         private void ClearFullHistoryOnDemandRequestState(string reason)
         {
-            lock (_historyOnDemandLock)
+            switch (_historyRequests.ClearFull(out string requestId, out string repairId))
             {
-                string requestId = _fullHistoryOnDemandRequestId;
-                if (!string.IsNullOrWhiteSpace(requestId) &&
-                    _historyOnDemandRequestById.TryGetValue(requestId, out var state))
-                {
-                    ClearHistoryRequestStateLocked(state);
+                case HistoryOnDemandFullClear.Tracked:
                     Debug.WriteLine($"[WhatsAppService] Cleared full-history request state after {reason}: requestId={requestId}");
                     EndHistoryCatchUpBanner("clear-full-history:" + reason);
                     return;
-                }
 
-                if (_fullHistoryOnDemandRequestedThisSession ||
-                    !string.IsNullOrWhiteSpace(_fullHistoryOnDemandRequestId) ||
-                    !string.IsNullOrWhiteSpace(_fullHistoryRepairRequestId))
-                {
-                    if (!string.IsNullOrWhiteSpace(_fullHistoryOnDemandRequestId))
-                    {
-                        _historyOnDemandRequestById.Remove(_fullHistoryOnDemandRequestId);
-                    }
-
-                    if (!string.IsNullOrWhiteSpace(_fullHistoryRepairRequestId))
-                    {
-                        _historyOnDemandRequestById.Remove(_fullHistoryRepairRequestId);
-                    }
-
-                    Debug.WriteLine($"[WhatsAppService] Cleared stale full-history request flags after {reason}: requestId={_fullHistoryOnDemandRequestId ?? "<none>"}, repairId={_fullHistoryRepairRequestId ?? "<none>"}");
-                    _fullHistoryOnDemandRequestedThisSession = false;
-                    _fullHistoryOnDemandRequestId = null;
-                    _fullHistoryRepairRequestId = null;
+                case HistoryOnDemandFullClear.Stale:
+                    Debug.WriteLine($"[WhatsAppService] Cleared stale full-history request flags after {reason}: requestId={requestId ?? "<none>"}, repairId={repairId ?? "<none>"}");
                     EndHistoryCatchUpBanner("clear-full-history:" + reason);
-                }
+                    return;
             }
         }
 
@@ -4325,20 +2681,17 @@ namespace Unison.Uwp.Services.WhatsApp
             int idleMs)
         {
             DateTime newestUtc = GetNewestStoredMessageUtc();
-            DateTime watermarkUtc = _catchUpWatermarkUtc;
             string staleReason;
             bool stillStale = TryGetHistoryFreshnessStaleReason(DateTime.UtcNow, out staleReason);
             int stagnantStop = CatchUpStagnantCyclesBeforeStop;
 
-            HistoryCatchUpContinueResult decision = HistoryCatchUpContinueDecision.Decide(
+            HistoryCatchUpContinueResult decision = _catchUp.DecideAfterQuietLot(
                 newestUtc,
-                watermarkUtc,
                 progressSignals,
                 stillStale,
-                _catchUpStagnantCycles,
                 stagnantStop,
-                _catchUpContinueRound,
-                CatchUpContinueMaxRounds);
+                CatchUpContinueMaxRounds,
+                out HistoryCatchUpProgress before);
 
             RuntimeDiagnosticsService.Instance.Write(
                 "history",
@@ -4351,9 +2704,9 @@ namespace Unison.Uwp.Services.WhatsApp
                 "; tipAdvanced=" + decision.TipAdvanced +
                 "; madeProgress=" + decision.MadeProgress +
                 "; newest=" + FormatFreshnessTimestamp(newestUtc) +
-                "; watermark=" + FormatFreshnessTimestamp(watermarkUtc) +
-                "; round=" + _catchUpContinueRound +
-                "; stagnant=" + _catchUpStagnantCycles +
+                "; watermark=" + FormatFreshnessTimestamp(before.WatermarkUtc) +
+                "; round=" + before.Round +
+                "; stagnant=" + before.StagnantCycles +
                 "; stagnantStop=" + stagnantStop +
                 "; frugal=" + UseFrugalSyncBudget +
                 "; action=" + decision.Action +
@@ -4366,14 +2719,11 @@ namespace Unison.Uwp.Services.WhatsApp
                 ", madeProgress=" + decision.MadeProgress +
                 ", signals=" + progressSignals +
                 ", newest=" + FormatFreshnessTimestamp(newestUtc) +
-                ", watermark=" + FormatFreshnessTimestamp(watermarkUtc) +
-                ", round=" + _catchUpContinueRound +
-                ", stagnant=" + _catchUpStagnantCycles +
+                ", watermark=" + FormatFreshnessTimestamp(before.WatermarkUtc) +
+                ", round=" + before.Round +
+                ", stagnant=" + before.StagnantCycles +
                 "/" + stagnantStop +
                 ", action=" + decision.Action);
-
-            _catchUpStagnantCycles = decision.NextStagnantCycles;
-            _catchUpWatermarkUtc = decision.NextWatermarkUtc;
 
             switch (decision.Action)
             {
@@ -4390,15 +2740,14 @@ namespace Unison.Uwp.Services.WhatsApp
                     return;
             }
 
-            _catchUpContinueRound = decision.NextContinueRound;
             // Insist on the next FULL_HISTORY page on the live socket. Soft-reconnect alone does
             // not solicit history — and a reconnect with an empty offline buffer never re-enters
             // LogHistoryFreshnessAfterOfflineDrain in a way that asks again.
             _ = RequestAdjacentFullHistoryCatchUpAsync(
                 "idle-continue:requestId=" + (requestId ?? string.Empty) +
                 ":ackAccepted=" + ackAccepted +
-                ":round=" + _catchUpContinueRound +
-                ":stagnant=" + _catchUpStagnantCycles +
+                ":round=" + decision.NextContinueRound +
+                ":stagnant=" + decision.NextStagnantCycles +
                 ":signals=" + progressSignals +
                 ":newest=" + FormatFreshnessTimestamp(newestUtc));
         }
@@ -4413,8 +2762,7 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 await Task.Delay(CatchUpContinueReconnectDelay).ConfigureAwait(false);
 
-                if (Volatile.Read(ref _historyCatchUpBannerActive) == 0 &&
-                    _catchUpContinueRound <= 0)
+                if (!IsHistoryCatchUpActive())
                 {
                     Debug.WriteLine(
                         "[WhatsAppService] Adjacent FULL_HISTORY skipped; catch-up already finished (" +
@@ -4438,7 +2786,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         "history",
                         "catch-up-adjacent-live",
                         "reason=" + (reason ?? string.Empty) +
-                        "; round=" + _catchUpContinueRound);
+                        "; round=" + _catchUp.Snapshot().Round);
 
                     bool ok = await RequestFullHistoryOnDemandTrackedAsync(
                         reason,
@@ -4467,19 +2815,21 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
+        private bool IsHistoryCatchUpActive()
+        {
+            return _catchUp.IsActive(IsHistoryCatchUpBannerActive);
+        }
+
         private void FinishHistoryCatchUpContinue(string reason, bool releaseEnrichment)
         {
+            HistoryCatchUpProgress last = _catchUp.Finish();
             RuntimeDiagnosticsService.Instance.Write(
                 "history",
                 "catch-up-finish",
                 "reason=" + (reason ?? string.Empty) +
-                "; rounds=" + _catchUpContinueRound +
-                "; stagnant=" + _catchUpStagnantCycles +
-                "; watermark=" + FormatFreshnessTimestamp(_catchUpWatermarkUtc));
-
-            _catchUpContinueRound = 0;
-            _catchUpStagnantCycles = 0;
-            _catchUpWatermarkUtc = DateTime.MinValue;
+                "; rounds=" + last.Round +
+                "; stagnant=" + last.StagnantCycles +
+                "; watermark=" + FormatFreshnessTimestamp(last.WatermarkUtc));
 
             EndHistoryCatchUpBanner(reason ?? "catch-up-finish");
             if (!releaseEnrichment)
@@ -4534,20 +2884,20 @@ namespace Unison.Uwp.Services.WhatsApp
             _freshnessReconnectFallbackInProgress = true;
             Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 1);
             // Keep Synchronizing history… across the soft reconnect.
-            if (Volatile.Read(ref _historyCatchUpBannerActive) == 0)
+            if (!IsHistoryCatchUpBannerActive)
             {
                 BeginHistoryCatchUpBanner("catch-up-continue");
             }
             else
             {
-                OnSyncStatus?.Invoke(this, SyncPhaseStatus.Format(SyncPhaseStatus.HistoryCatchUp));
+                PublishSyncStatus(SyncPhaseStatus.Format(SyncPhaseStatus.HistoryCatchUp));
             }
 
             RuntimeDiagnosticsService.Instance.Write(
                 "history",
                 "catch-up-continue-reconnect",
                 "trigger=" + (triggerReason ?? string.Empty) +
-                "; round=" + _catchUpContinueRound +
+                "; round=" + _catchUp.Snapshot().Round +
                 "; delayMs=" + (int)CatchUpContinueReconnectDelay.TotalMilliseconds);
 
             Debug.WriteLine(
@@ -4572,8 +2922,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
                     // Mid catch-up: tip freshness must not cancel soft-reconnect. Older history
                     // lots do not move the newest tip; aborting here stops pagination.
-                    bool catchUpActive = Volatile.Read(ref _historyCatchUpBannerActive) == 1 ||
-                                         _catchUpContinueRound > 0;
+                    bool catchUpActive = IsHistoryCatchUpActive();
                     if (tipLooksFresh && !catchUpActive)
                     {
                         FinishHistoryCatchUpContinue("fresh-before-continue", releaseEnrichment: true);
@@ -4717,45 +3066,22 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            HistoryOnDemandRequestState state;
-            bool hasState;
-            lock (_historyOnDemandLock)
+            HistoryOnDemandRequest state = _historyRequests.Ack(ackId, ackError, DateTime.UtcNow);
+            if (state == null)
             {
-                hasState = _historyOnDemandRequestById.TryGetValue(ackId, out state);
-                if (!hasState) return;
-
-                if (!string.IsNullOrWhiteSpace(ackError))
-                {
-                    ClearHistoryRequestStateLocked(state);
-                }
-                else
-                {
-                    state.AckAccepted = true;
-                    state.AckAcceptedUtc = DateTime.UtcNow;
-                }
+                return;
             }
 
             if (!string.IsNullOrWhiteSpace(ackError))
             {
-                if (string.Equals(state.RequestType, "HistorySyncOnDemand", StringComparison.Ordinal))
-                {
-                    lock (_historyOnDemandLock)
-                    {
-                        TimeSpan backoff = string.Equals(ackError, "479", StringComparison.OrdinalIgnoreCase)
-                            ? TimeSpan.FromMinutes(15)
-                            : TimeSpan.FromMinutes(3);
-                        _historyOnDemandRejectedUntilUtcByChat[state.ChatJid] = DateTime.UtcNow.Add(backoff);
-                    }
-                }
-
-                Debug.WriteLine($"[WhatsAppService] {state.RequestType} ack rejected: id={ackId}, chat={state.ChatJid ?? "<full-history>"}, error={ackError}, trigger={state.TriggerReason ?? "unspecified"}");
-                if (string.Equals(state.RequestType, "HistorySyncOnDemand", StringComparison.Ordinal) &&
+                Debug.WriteLine($"[WhatsAppService] {state.TypeName} ack rejected: id={ackId}, chat={state.ChatJid ?? "<full-history>"}, error={ackError}, trigger={state.TriggerReason ?? "unspecified"}");
+                if (state.Kind == HistoryOnDemandKind.Chat &&
                     string.Equals(ackError, "479", StringComparison.OrdinalIgnoreCase))
                 {
                     Debug.WriteLine($"[WhatsAppService] Not escalating HISTORY_SYNC_ON_DEMAND 479 for {state.ChatJid} into FULL_HISTORY_SYNC_ON_DEMAND. Treating as server rejection with backoff.");
                 }
 
-                if (string.Equals(state.RequestType, "FullHistorySyncOnDemand", StringComparison.Ordinal) &&
+                if (state.Kind == HistoryOnDemandKind.FullHistory &&
                     IsUserConversationResyncWaiting())
                 {
                     EndHistoryCatchUpBanner("full-history-ack-rejected");
@@ -4766,8 +3092,8 @@ namespace Unison.Uwp.Services.WhatsApp
             }
             else
             {
-                Debug.WriteLine($"[WhatsAppService] {state.RequestType} ack accepted: id={ackId}, chat={state.ChatJid ?? "<full-history>"}, baseline={state.BaselineMessageCount}, trigger={state.TriggerReason ?? "unspecified"}. Waiting for follow-up payload.");
-                if (string.Equals(state.RequestType, "FullHistorySyncOnDemand", StringComparison.Ordinal))
+                Debug.WriteLine($"[WhatsAppService] {state.TypeName} ack accepted: id={ackId}, chat={state.ChatJid ?? "<full-history>"}, baseline={state.BaselineMessageCount}, trigger={state.TriggerReason ?? "unspecified"}. Waiting for follow-up payload.");
+                if (state.Kind == HistoryOnDemandKind.FullHistory)
                 {
                     NoteFullHistoryCatchUpProgress("ack-accepted");
                 }
@@ -4776,221 +3102,110 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        public bool IsHistoryOnDemandPending(string chatJid)
+        private HistoryCatchUpWatchdog CatchUpWatchdog =>
+            _catchUpWatchdog ??= new HistoryCatchUpWatchdog(
+                _historyRequests,
+                FullHistoryCatchUpProgressPoll,
+                FullHistoryCatchUpIdleAbort);
+
+        private HistoryOnDemandTimeout HistoryRequestTimeout =>
+            _historyRequestTimeout ??= new HistoryOnDemandTimeout(
+                _historyRequests,
+                HistoryOnDemandResponseTimeout,
+                FullHistoryOnDemandResponseTimeout);
+
+        private HistoryOnDemandDispatch HistoryDispatch =>
+            _historyDispatch ??= new HistoryOnDemandDispatch(
+                _historyRequests,
+                this,
+                line => Debug.WriteLine("[WhatsAppService] " + line));
+
+        bool IHistoryOnDemandSocket.IsReady => _socket != null && _socket.IsHandshakeComplete;
+
+        string IHistoryOnDemandSocket.GenerateMessageId() => _socket.GenerateMessageId();
+
+        Task<string> IHistoryOnDemandSocket.RequestChatHistoryAsync(
+            string chatJid,
+            string oldestMessageId,
+            bool oldestFromMe,
+            long oldestTimestampMs,
+            int count,
+            string stanzaId) =>
+            _socket.RequestHistorySyncOnDemandAsync(
+                chatJid,
+                oldestMessageId,
+                oldestFromMe,
+                oldestTimestampMs,
+                count,
+                stanzaId);
+
+        Task<string> IHistoryOnDemandSocket.RequestFullHistoryAsync(string stanzaId) =>
+            _socket.RequestFullHistorySyncOnDemandAsync(stanzaId);
+
+        private Task<bool> RequestHistoryOnDemandIfNeededAsync(string normJid, int count, string triggerReason = null)
         {
-            string normJid = NormalizeJid(chatJid);
-            if (string.IsNullOrWhiteSpace(normJid))
+            if (string.IsNullOrWhiteSpace(normJid) ||
+                !MessagesByChat.TryGet(normJid, out var cached))
             {
-                return false;
+                return Task.FromResult(false);
             }
 
-            lock (_historyOnDemandLock)
-            {
-                return _historyOnDemandInFlight.Contains(normJid) ||
-                       _historyOnDemandLastRequestIdByChat.ContainsKey(normJid);
-            }
-        }
-
-        public Task<bool> EnsureHistoryOnDemandAsync(string chatJid, int count = 30)
-        {
-            string normJid = NormalizeJid(chatJid);
-            return RequestHistoryOnDemandIfNeededAsync(normJid, count);
-        }
-
-        private async Task<bool> RequestHistoryOnDemandIfNeededAsync(string normJid, int count, string triggerReason = null)
-        {
-            if (string.IsNullOrWhiteSpace(normJid) || _socket == null || !_socket.IsHandshakeComplete)
-            {
-                return false;
-            }
-
-            if (!MessagesByChat.TryGetValue(normJid, out var cached) || cached == null || cached.Count == 0)
-            {
-                return false;
-            }
-
-            var oldest = cached[0];
-            if (oldest == null || string.IsNullOrWhiteSpace(oldest.Id))
-            {
-                return false;
-            }
-
-            string marker = $"{oldest.Id}|{oldest.IsFromMe}|{ToUnixMilliseconds(oldest.Timestamp)}";
-            DateTime utcNow = DateTime.UtcNow;
-            lock (_historyOnDemandLock)
-            {
-                if (_historyOnDemandInFlight.Contains(normJid))
-                {
-                    return false;
-                }
-
-                if (_historyOnDemandRejectedUntilUtcByChat.TryGetValue(normJid, out var rejectedUntilUtc) &&
-                    rejectedUntilUtc > utcNow)
-                {
-                    Debug.WriteLine($"[WhatsAppService] HISTORY_SYNC_ON_DEMAND skipped for {normJid}: backoff active until {rejectedUntilUtc:O}");
-                    return false;
-                }
-
-                if (_historyOnDemandMarkerByChat.TryGetValue(normJid, out var previousMarker) &&
-                    string.Equals(previousMarker, marker, StringComparison.Ordinal))
-                {
-                    return false;
-                }
-
-                _historyOnDemandInFlight.Add(normJid);
-            }
-
-            try
-            {
-                string requestId = _socket.GenerateMessageId();
-                int baselineCount;
-                lock (_historyOnDemandLock)
-                {
-                    _historyOnDemandMarkerByChat[normJid] = marker;
-                    baselineCount = (MessagesByChat.TryGetValue(normJid, out var msgList) && msgList != null) ? msgList.Count : 0;
-                    _historyOnDemandRequestById[requestId] = new HistoryOnDemandRequestState
-                    {
-                        RequestId = requestId,
-                        RequestType = "HistorySyncOnDemand",
-                        ChatJid = normJid,
-                        Marker = marker,
-                        RequestedAtUtc = DateTime.UtcNow,
-                        BaselineMessageCount = baselineCount,
-                        TriggerReason = triggerReason
-                    };
-                    _historyOnDemandLastRequestIdByChat[normJid] = requestId;
-                    if (!_historyOnDemandAttemptsByChat.ContainsKey(normJid))
-                    {
-                        _historyOnDemandAttemptsByChat[normJid] = 0;
-                    }
-                    _historyOnDemandAttemptsByChat[normJid]++;
-                }
-
-                string sentRequestId = await _socket.RequestHistorySyncOnDemandAsync(
-                    normJid,
-                    oldest.Id,
-                    oldest.IsFromMe,
-                    ToUnixMilliseconds(oldest.Timestamp),
-                    count,
-                    requestId);
-                if (!string.Equals(sentRequestId, requestId, StringComparison.Ordinal))
-                {
-                    Debug.WriteLine($"[WhatsAppService] HISTORY_SYNC_ON_DEMAND stanza id changed unexpectedly: tracked={requestId}, sent={sentRequestId}");
-                }
-
-                Debug.WriteLine($"[WhatsAppService] Requested HISTORY_SYNC_ON_DEMAND for {normJid} (requestId={requestId}, oldestId={oldest.Id}, baseline={baselineCount}, trigger={triggerReason ?? "unspecified"})");
-
-                return true;
-            }
-            catch (Exception ex)
-            {
-                lock (_historyOnDemandLock)
-                {
-                    _historyOnDemandInFlight.Remove(normJid);
-                    if (_historyOnDemandLastRequestIdByChat.TryGetValue(normJid, out var failedRequestId))
-                    {
-                        _historyOnDemandRequestById.Remove(failedRequestId);
-                        _historyOnDemandLastRequestIdByChat.Remove(normJid);
-                    }
-                }
-                Debug.WriteLine($"[WhatsAppService] HISTORY_SYNC_ON_DEMAND request failed for {normJid}: {ex.Message}");
-                return false;
-            }
+            return HistoryDispatch.RequestChatPageAsync(normJid, cached, count, triggerReason, DateTime.UtcNow);
         }
 
         private async Task<bool> RequestFullHistoryOnDemandTrackedAsync(string reason, bool isFreshnessRepair)
         {
-            if (_fullHistoryOnDemandRequestedThisSession)
+            HistoryFullRequestResult result = await HistoryDispatch.RequestFullAsync(
+                reason,
+                isFreshnessRepair,
+                GetStoredMessageCount,
+                DateTime.UtcNow);
+            if (result.Outcome != HistoryFullRequestOutcome.Sent)
             {
-                Debug.WriteLine($"[WhatsAppService] FULL_HISTORY_SYNC_ON_DEMAND skipped ({reason}): request already pending this session, requestId={_fullHistoryOnDemandRequestId ?? "<none>"}");
                 return false;
             }
 
-            if (_socket == null || !_socket.IsHandshakeComplete)
+            string stanzaId = result.RequestId;
+            int baselineCount = result.BaselineMessageCount;
+            Debug.WriteLine(
+                $"[WhatsAppService] Requested FULL_HISTORY_SYNC_ON_DEMAND (reason={reason}, stanzaId={stanzaId}, baseline={baselineCount}, freshnessRepair={isFreshnessRepair}, idleAbortMs={(int)FullHistoryCatchUpIdleAbort.TotalMilliseconds}, hardTimeoutMs={(int)FullHistoryOnDemandResponseTimeout.TotalMilliseconds})");
+            RuntimeDiagnosticsService.Instance.Write(
+                "history",
+                "full-history-requested",
+                "reason=" + (reason ?? string.Empty) +
+                "; requestId=" + stanzaId +
+                "; baselineMsgs=" + baselineCount +
+                "; freshnessRepair=" + isFreshnessRepair +
+                "; idleAbortMs=" + (int)FullHistoryCatchUpIdleAbort.TotalMilliseconds +
+                "; hardTimeoutMs=" + (int)FullHistoryOnDemandResponseTimeout.TotalMilliseconds);
+            if (isFreshnessRepair)
             {
-                Debug.WriteLine($"[WhatsAppService] FULL_HISTORY_SYNC_ON_DEMAND skipped ({reason}): socket not ready");
-                return false;
+                BeginHistoryCatchUpBanner(reason);
             }
 
-            _fullHistoryOnDemandRequestedThisSession = true;
-            try
-            {
-                DateTime requestedAtUtc = DateTime.UtcNow;
-                int baselineCount = GetStoredMessageCount();
-                string stanzaId = _socket.GenerateMessageId();
-                lock (_historyOnDemandLock)
-                {
-                    _fullHistoryOnDemandRequestId = stanzaId;
-                    if (isFreshnessRepair)
-                    {
-                        _fullHistoryRepairRequestId = stanzaId;
-                    }
+            RaiseReport(
+                () => OnBackgroundHistorySyncBounced?.Invoke(this, EventArgs.Empty),
+                nameof(OnBackgroundHistorySyncBounced));
 
-                    _historyOnDemandRequestById[stanzaId] = new HistoryOnDemandRequestState
-                    {
-                        RequestId = stanzaId,
-                        RequestType = "FullHistorySyncOnDemand",
-                        RequestedAtUtc = requestedAtUtc,
-                        BaselineMessageCount = baselineCount,
-                        Marker = reason ?? string.Empty,
-                        TriggerReason = reason,
-                        LastProgressUtc = requestedAtUtc,
-                        LastProgressReason = "request-sent",
-                        ProgressSignalCount = 0
-                    };
-                }
-
-                string sentStanzaId = await _socket.RequestFullHistorySyncOnDemandAsync(stanzaId);
-                if (!string.Equals(sentStanzaId, stanzaId, StringComparison.Ordinal))
-                {
-                    Debug.WriteLine($"[WhatsAppService] FULL_HISTORY_SYNC_ON_DEMAND stanza id changed unexpectedly: tracked={stanzaId}, sent={sentStanzaId}");
-                }
-
-                Debug.WriteLine(
-                    $"[WhatsAppService] Requested FULL_HISTORY_SYNC_ON_DEMAND (reason={reason}, stanzaId={stanzaId}, baseline={baselineCount}, freshnessRepair={isFreshnessRepair}, idleAbortMs={(int)FullHistoryCatchUpIdleAbort.TotalMilliseconds}, hardTimeoutMs={(int)FullHistoryOnDemandResponseTimeout.TotalMilliseconds})");
-                RuntimeDiagnosticsService.Instance.Write(
-                    "history",
-                    "full-history-requested",
-                    "reason=" + (reason ?? string.Empty) +
-                    "; requestId=" + stanzaId +
-                    "; baselineMsgs=" + baselineCount +
-                    "; freshnessRepair=" + isFreshnessRepair +
-                    "; idleAbortMs=" + (int)FullHistoryCatchUpIdleAbort.TotalMilliseconds +
-                    "; hardTimeoutMs=" + (int)FullHistoryOnDemandResponseTimeout.TotalMilliseconds);
-                if (isFreshnessRepair)
-                {
-                    BeginHistoryCatchUpBanner(reason);
-                }
-
-                RaiseReport(
-                    () => OnBackgroundHistorySyncBounced?.Invoke(this, EventArgs.Empty),
-                    nameof(OnBackgroundHistorySyncBounced));
-
-                return true;
-            }
-            catch (Exception ex)
-            {
-                lock (_historyOnDemandLock)
-                {
-                    if (!string.IsNullOrWhiteSpace(_fullHistoryOnDemandRequestId))
-                    {
-                        _historyOnDemandRequestById.Remove(_fullHistoryOnDemandRequestId);
-                    }
-                    _fullHistoryOnDemandRequestedThisSession = false;
-                    _fullHistoryOnDemandRequestId = null;
-                    if (isFreshnessRepair)
-                    {
-                        _fullHistoryRepairRequestId = null;
-                    }
-                }
-                Debug.WriteLine($"[WhatsAppService] FULL_HISTORY_SYNC_ON_DEMAND request failed ({reason}): {ex.Message}");
-                return false;
-            }
+            return true;
         }
 
         private Task<bool> RequestFullHistoryBootstrapIfNeededAsync(string reason)
         {
             return RequestFullHistoryOnDemandTrackedAsync(reason, false);
+        }
+
+        /// <inheritdoc />
+        public Task<bool> RequestFullHistoryOnDemandAsync(string reason = null, bool force = false)
+        {
+            if (force)
+            {
+                _historyRequests.ForceReleaseFull();
+            }
+
+            return RequestFullHistoryOnDemandTrackedAsync(
+                string.IsNullOrWhiteSpace(reason) ? "manual-full-history" : reason,
+                isFreshnessRepair: true);
         }
 
         /// <summary>
@@ -5053,8 +3268,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 Debug.WriteLine($"[WhatsAppService] Post-offline freshness note: history sync observed this session at {_lastHistorySyncReceivedUtc:O} (type={(_lastHistorySyncTypeReceived?.ToString() ?? "<unknown>")}); freshness is evaluated by newest stored message age.");
             }
 
-            bool catchUpActive = Volatile.Read(ref _historyCatchUpBannerActive) == 1 ||
-                                 _catchUpContinueRound > 0;
+            bool catchUpActive = IsHistoryCatchUpActive();
 
             if (catchUpActive && offlineCount > 0)
             {
@@ -5076,28 +3290,29 @@ namespace Unison.Uwp.Services.WhatsApp
                 {
                     Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 1);
 
-                    if (offlineCount > 0)
+                    int stagnantStop = CatchUpStagnantCyclesBeforeStop;
+                    HistoryCatchUpDrainAction drain = _catchUp.DecideAfterFreshDrain(
+                        offlineCount,
+                        stagnantStop,
+                        out int stagnantCycles);
+                    if (drain == HistoryCatchUpDrainAction.Continue)
                     {
-                        _catchUpStagnantCycles = 0;
                         _ = RequestReconnectHistoryCatchUpAsync(
                             "catch-up-continue-offline:" + offlineCount);
                         return;
                     }
 
-                    _catchUpStagnantCycles++;
-                    int stagnantStop = CatchUpStagnantCyclesBeforeStop;
                     Debug.WriteLine(
                         "[WhatsAppService] Catch-up offline drain empty while tip fresh; stagnant=" +
-                        _catchUpStagnantCycles + "/" + stagnantStop);
-                    if (_catchUpStagnantCycles >= stagnantStop)
+                        stagnantCycles + "/" + stagnantStop);
+                    if (drain == HistoryCatchUpDrainAction.Finish)
                     {
                         FinishHistoryCatchUpContinue("offline-fresh-empty", releaseEnrichment: true);
                         return;
                     }
 
-                    // One more FULL_HISTORY try — empty offline buffer ≠ phone finished history.
                     _ = RequestReconnectHistoryCatchUpAsync(
-                        "catch-up-retry-empty:" + _catchUpStagnantCycles);
+                        "catch-up-retry-empty:" + stagnantCycles);
                     return;
                 }
 
@@ -5121,8 +3336,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 // Short settle for both budgets — disk avatars/list paint first, then ask the
                 // server. Manual wipe / user resync still goes through
                 // RequestFullHistoryOnDemandTrackedAsync directly and skips this floor.
-                bool catchUpActive = Volatile.Read(ref _historyCatchUpBannerActive) == 1 ||
-                                     _catchUpContinueRound > 0;
+                bool catchUpActive = IsHistoryCatchUpActive();
                 bool quiet = await WaitForStartupQuietAsync(
                     TimeSpan.FromSeconds(1.5),
                     "full-history-catchup-floor",
@@ -5145,11 +3359,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
                 // Adjacent pages: flag must be clear (watchdog / ConnectAsync already clears it).
-                if (_fullHistoryOnDemandRequestedThisSession &&
-                    string.IsNullOrWhiteSpace(_fullHistoryOnDemandRequestId))
-                {
-                    _fullHistoryOnDemandRequestedThisSession = false;
-                }
+                _historyRequests.ReleaseFullIfUntracked();
 
                 bool ok = await RequestFullHistoryOnDemandTrackedAsync(
                     reason,
@@ -5272,57 +3482,23 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            if (update.Archived.HasValue ||
-                update.AppliesPin ||
-                update.Pinned.HasValue ||
-                update.AppliesMute ||
-                update.MuteEndTime.HasValue)
+            AppStateMuteMapping.Result mute = AppStateMuteMapping.FromChatUpdate(
+                update.AppliesMute,
+                update.MuteEndTime);
+            AppStatePinMapping.Result pin = AppStatePinMapping.FromChatUpdate(
+                update.AppliesPin,
+                update.Pinned,
+                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+
+            if (update.Archived.HasValue || pin.AppliesPin || mute.AppliesMute)
             {
-                long? muteSeconds = null;
-                bool applyMute = update.AppliesMute;
-                if (applyMute)
-                {
-                    // Wire timestamps are usually ms; ChatItem.MutedUntil is unix seconds.
-                    AppStateMuteMapping.Result mute = AppStateMuteMapping.FromAction(
-                        muted: update.MuteEndTime.HasValue,
-                        muteEndTimestamp: update.MuteEndTime ?? 0);
-                    muteSeconds = mute.MutedUntilUnixSeconds;
-                }
-                else if (update.MuteEndTime.HasValue)
-                {
-                    // Legacy updates without AppliesMute still carried a deadline.
-                    AppStateMuteMapping.Result mute = AppStateMuteMapping.FromAction(
-                        muted: true,
-                        muteEndTimestamp: update.MuteEndTime.Value);
-                    muteSeconds = mute.MutedUntilUnixSeconds;
-                    applyMute = true;
-                }
-
-                bool? pinned = null;
-                long? pinTs = null;
-                if (update.AppliesPin)
-                {
-                    AppStatePinMapping.Result pin = AppStatePinMapping.FromAction(
-                        pinned: update.Pinned.HasValue,
-                        actionTimestamp: update.Pinned ?? 0,
-                        fallbackTimestampMs: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
-                    pinned = pin.IsPinned;
-                    pinTs = pin.PinnedTimestampUnixSeconds;
-                }
-                else if (update.Pinned.HasValue)
-                {
-                    // Legacy: positive timestamp = pinned, 0 = unpin.
-                    pinned = update.Pinned.Value > 0;
-                    pinTs = AppStatePinMapping.NormalizeSortKey(update.Pinned);
-                }
-
                 await ApplyAppStateChatFlagsAsync(
                     update.Id,
                     archived: update.Archived,
-                    pinned: pinned,
-                    muteEndTimestamp: muteSeconds,
-                    pinnedTimestamp: pinTs,
-                    applyMute: applyMute);
+                    pinned: pin.AppliesPin ? pin.IsPinned : (bool?)null,
+                    muteEndTimestamp: mute.MutedUntilUnixSeconds,
+                    pinnedTimestamp: pin.AppliesPin ? pin.PinnedTimestampUnixSeconds : (long?)null,
+                    applyMute: mute.AppliesMute);
             }
 
             if (update.UnreadCount.HasValue)
@@ -5386,124 +3562,20 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
             }
 
-            string message = ex?.Message;
-            if (string.IsNullOrWhiteSpace(message))
-            {
-                return null;
-            }
-
-            // Prefer explicit stream codes from TranslateStreamError.
-            if (message.IndexOf("(401)", StringComparison.Ordinal) >= 0)
-            {
-                return "401";
-            }
-
-            if (message.IndexOf("(440)", StringComparison.Ordinal) >= 0)
-            {
-                return "440";
-            }
-
-            if (message.IndexOf("(403)", StringComparison.Ordinal) >= 0)
-            {
-                return "403";
-            }
-
-            if (message.IndexOf("(500)", StringComparison.Ordinal) >= 0)
-            {
-                return "500";
-            }
-
-            if (message.IndexOf("Logged out", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                message.IndexOf("device_removed", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                message.IndexOf("device-removed", StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return "401";
-            }
-
-            if (message.IndexOf("Connection replaced", StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return "440";
-            }
-
-            if (message.IndexOf("Bad session", StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return "500";
-            }
-
-            return null;
+            return FatalStreamCodeText.Read(ex?.Message);
         }
 
-
-        private static int GetMessageStatusRank(string status)
-        {
-            return MessageStatusProgression.Rank(status);
-        }
-
-        private static bool ShouldApplyMessageStatus(string current, string incoming)
-        {
-            return MessageStatusProgression.ShouldApply(current, incoming);
-        }
 
         private static string MapWebMessageStatus(Proto.WebMessageInfo message) =>
             WebMessageStatusMap.FromWebMessageInfo(message);
 
-        private static DateTime UnixMillisecondsToUtc(long milliseconds)
-        {
-            long seconds = milliseconds / 1000;
-            long remainder = milliseconds % 1000;
-            return DateTimeOffset.FromUnixTimeSeconds(seconds).UtcDateTime.AddMilliseconds(remainder);
-        }
-
-        private void StorePendingOutgoingStatus(string messageId, string status)
-        {
-            if (string.IsNullOrWhiteSpace(messageId) || string.IsNullOrWhiteSpace(status)) return;
-            lock (_messageStateLock)
-            {
-                if (!_pendingOutgoingStatusByMessageId.TryGetValue(messageId, out var current) ||
-                    ShouldApplyMessageStatus(current, status))
-                {
-                    _pendingOutgoingStatusByMessageId[messageId] = status;
-                }
-            }
-        }
-
         private bool ApplyPendingStateToMessage(string chatJid, ChatMessage message)
         {
             if (message == null || string.IsNullOrWhiteSpace(message.Id)) return false;
-            string canonical = GetCanonicalJid(chatJid);
-            bool changed = false;
-            lock (_messageStateLock)
-            {
-                if (message.IsFromMe &&
-                    _pendingOutgoingStatusByMessageId.TryGetValue(message.Id, out var pendingStatus))
-                {
-                    pendingStatus = ApplyChatStatusPolicy(chatJid, pendingStatus);
-                    if (ShouldApplyMessageStatus(message.Status, pendingStatus))
-                    {
-                        message.Status = pendingStatus;
-                        changed = true;
-                    }
-                    _pendingOutgoingStatusByMessageId.Remove(message.Id);
-                }
-
-                if (!string.IsNullOrWhiteSpace(canonical) &&
-                    _pendingPinStateByChat.TryGetValue(canonical, out var byMessageId) &&
-                    byMessageId.TryGetValue(message.Id, out var pinState))
-                {
-                    if (message.IsPinned != pinState.IsPinned ||
-                        message.PinnedAtUtc != (pinState.IsPinned ? pinState.PinnedAtUtc : null) ||
-                        message.PinExpiresAtUtc != (pinState.IsPinned ? pinState.ExpiresAtUtc : null))
-                    {
-                        message.IsPinned = pinState.IsPinned;
-                        message.PinnedAtUtc = pinState.IsPinned ? pinState.PinnedAtUtc : null;
-                        message.PinExpiresAtUtc = pinState.IsPinned ? pinState.ExpiresAtUtc : null;
-                        changed = true;
-                    }
-                    byMessageId.Remove(message.Id);
-                    if (byMessageId.Count == 0) _pendingPinStateByChat.Remove(canonical);
-                }
-            }
-            return changed;
+            return _pendingMessageState.ApplyTo(
+                message,
+                GetCanonicalJid(chatJid),
+                status => ApplyChatStatusPolicy(chatJid, status));
         }
 
         private async Task UpdateOutgoingMessageStatusSafelyAsync(string messageId, string status, string error = null)
@@ -5523,22 +3595,15 @@ namespace Unison.Uwp.Services.WhatsApp
             if (string.IsNullOrWhiteSpace(messageId) || string.IsNullOrWhiteSpace(status)) return;
 
             var changedChats = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var changedMessages = new List<Tuple<string, ChatMessage>>();
+            var changedMessages = new List<KeyValuePair<string, ChatMessage>>();
 
-            await RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
-                foreach (var pair in MessagesByChat)
+                changedMessages = MessagesByChat.ApplyOutgoingStatus(messageId, status, ApplyChatStatusPolicy);
+                foreach (var change in changedMessages)
                 {
-                    var message = pair.Value?.FirstOrDefault(m => string.Equals(m?.Id, messageId, StringComparison.Ordinal));
-                    if (message == null || !message.IsFromMe) continue;
-
-                    string effective = ApplyChatStatusPolicy(pair.Key, status);
-                    if (!ShouldApplyMessageStatus(message.Status, effective)) continue;
-
-                    message.Status = effective;
-                    changedChats.Add(pair.Key);
-                    changedMessages.Add(Tuple.Create(pair.Key, message));
-                    ApplyListPreviewSendState(pair.Key, message, effective);
+                    changedChats.Add(change.Key);
+                    ApplyListPreviewSendState(change.Key, change.Value, change.Value.Status);
                 }
             });
 
@@ -5546,19 +3611,16 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 // Receipt bursts must not force disk I/O on a 512 MB phone. Keep the
                 // compact state in memory and merge/persist it when that chat is opened.
-                StorePendingOutgoingStatus(messageId, status);
+                _pendingMessageState.HoldStatus(messageId, status);
             }
             else
             {
-                lock (_messageStateLock)
-                {
-                    _pendingOutgoingStatusByMessageId.Remove(messageId);
-                }
+                _pendingMessageState.ForgetStatus(messageId);
             }
 
             foreach (var item in changedMessages)
             {
-                QueueOfflineReplayMessageForPersist(item.Item1, item.Item2);
+                QueueOfflineReplayMessageForPersist(item.Key, item.Value);
             }
             if (changedMessages.Count > 0) SchedulePersist();
             foreach (var chat in changedChats) QueueChatMessagesChanged(chat);
@@ -5603,26 +3665,13 @@ namespace Unison.Uwp.Services.WhatsApp
             string canonical = GetCanonicalJid(chatJid);
             if (string.IsNullOrWhiteSpace(canonical) || string.IsNullOrWhiteSpace(messageId)) return false;
 
-            var state = new PendingPinState
-            {
-                IsPinned = isPinned,
-                PinnedAtUtc = isPinned ? (DateTime?)(pinnedAtUtc ?? DateTime.UtcNow) : (DateTime?)null,
-                ExpiresAtUtc = isPinned ? expiresAtUtc : null
-            };
-            lock (_messageStateLock)
-            {
-                if (!_pendingPinStateByChat.TryGetValue(canonical, out var byMessageId))
-                {
-                    byMessageId = new Dictionary<string, PendingPinState>(StringComparer.Ordinal);
-                    _pendingPinStateByChat[canonical] = byMessageId;
-                }
-                byMessageId[messageId] = state;
-            }
+            PendingPin state = _pendingMessageState.HoldPin(
+                canonical, messageId, isPinned, pinnedAtUtc, expiresAtUtc, DateTime.UtcNow);
 
             ChatMessage target = null;
-            await RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
-                if (MessagesByChat.TryGetValue(canonical, out var messages))
+                if (MessagesByChat.TryGet(canonical, out var messages))
                 {
                     target = messages?.FirstOrDefault(m => string.Equals(m?.Id, messageId, StringComparison.Ordinal));
                 }
@@ -5648,34 +3697,15 @@ namespace Unison.Uwp.Services.WhatsApp
 
                     if (IsActiveChatJid(canonical))
                     {
-                        await RunOnUiThreadAsync(() =>
-                        {
-                            if (!MessagesByChat.TryGetValue(canonical, out var messages))
-                            {
-                                messages = new List<ChatMessage>();
-                                MessagesByChat[canonical] = messages;
-                            }
-                            if (!messages.Any(m => string.Equals(m?.Id, target.Id, StringComparison.Ordinal)))
-                            {
-                                ChatMessageOrder.InsertSorted(messages, target);
-                                TrimInMemoryMessageWindow(canonical);
-                                RegisterMessageId(canonical, target.Id);
-                            }
-                        });
+                        await _ui.RunAsync(() =>
+                            MessagesByChat.InsertIfAbsent(canonical, target, MaxActiveChatMessagesInMemory, DateTime.UtcNow));
                     }
                 }
             }
 
             if (target != null)
             {
-                lock (_messageStateLock)
-                {
-                    if (_pendingPinStateByChat.TryGetValue(canonical, out var byMessageId))
-                    {
-                        byMessageId.Remove(messageId);
-                        if (byMessageId.Count == 0) _pendingPinStateByChat.Remove(canonical);
-                    }
-                }
+                _pendingMessageState.ForgetPin(canonical, messageId);
 
                 // Pin must hit history_message immediately. Offline-replay flush is debounced and
                 // a later history/live body upsert used to InsertOrReplace with IsPinned=false.
@@ -5702,13 +3732,12 @@ namespace Unison.Uwp.Services.WhatsApp
         private async Task PersistPinnedMessageToSqliteAsync(
             string canonical,
             string messageId,
-            PendingPinState state,
+            PendingPin state,
             ChatMessage target)
         {
             if (_historyMessages == null ||
                 string.IsNullOrWhiteSpace(canonical) ||
-                string.IsNullOrWhiteSpace(messageId) ||
-                state == null)
+                string.IsNullOrWhiteSpace(messageId))
             {
                 return;
             }
@@ -5744,7 +3773,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        public async Task ApplyIncomingPinInChatAsync(
+        private async Task ApplyIncomingPinInChatAsync(
             string chatJid,
             string targetMessageId,
             bool pin,
@@ -5756,46 +3785,20 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            DateTime pinnedAt = senderTimestampMs > 0
-                ? UnixMillisecondsToUtc(senderTimestampMs)
-                : DateTime.UtcNow;
-            DateTime? expires = pin && durationSeconds > 0
-                ? pinnedAt.AddSeconds(durationSeconds)
-                : (DateTime?)null;
-            await ApplyPinnedMessageStateAsync(chatJid, targetMessageId, pin, pinnedAt, expires);
+            MessagePinWindow window = MessagePinWindow.FromIncoming(
+                pin, senderTimestampMs, durationSeconds, DateTime.UtcNow);
+            await ApplyPinnedMessageStateAsync(
+                chatJid, targetMessageId, pin, window.PinnedAtUtc, window.ExpiresAtUtc);
         }
 
-        public async Task SetMessagePinnedAsync(string chatJid, ChatMessage message, bool pin, uint durationSeconds = 604800)
+        Task IAppStateLocalHost.ApplyMessagePinAsync(
+            string chatJid,
+            string messageId,
+            bool isPinned,
+            DateTime? pinnedAtUtc,
+            DateTime? expiresAtUtc)
         {
-            await EnsureConnectedAsync();
-            if (message == null || string.IsNullOrWhiteSpace(message.Id))
-                throw new ArgumentException("A valid message is required", nameof(message));
-
-            string canonical = GetCanonicalJid(chatJid);
-            string targetRemoteJid = string.IsNullOrWhiteSpace(message.RemoteJid)
-                ? canonical
-                : NormalizeJid(message.RemoteJid);
-            var key = new Proto.MessageKey
-            {
-                RemoteJid = targetRemoteJid,
-                FromMe = message.IsFromMe,
-                Id = message.Id
-            };
-            if (!string.IsNullOrWhiteSpace(message.ParticipantJid)) key.Participant = message.ParticipantJid;
-
-            await _socket.SendPinInChatMessageAsync(canonical, key, pin, durationSeconds);
-            DateTime now = DateTime.UtcNow;
-            await ApplyPinnedMessageStateAsync(canonical, message.Id, pin, now, pin ? now.AddSeconds(durationSeconds) : (DateTime?)null);
-        }
-
-        /// <summary>
-        /// Whether a failure means the connection itself is gone, as opposed to the message
-        /// having been refused by something above it.
-        /// </summary>
-        private static bool IsTransportFailure(Exception ex, IWhatsAppSocket socket)
-        {
-            bool socketUsable = socket != null && socket.IsConnected && socket.IsHandshakeComplete;
-            return OutgoingFailureClassification.IsTransportFailure(ex, socketUsable);
+            return ApplyPinnedMessageStateAsync(chatJid, messageId, isPinned, pinnedAtUtc, expiresAtUtc);
         }
 
         private void InvalidateCurrentSocket(IWhatsAppSocket socket, string reason)
@@ -5820,262 +3823,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 "reason=" + reason);
         }
 
-        private async Task SendTextTransportWithRetryAsync(string jid, string text, string messageId)
-        {
-            Exception lastError = null;
-
-            for (int attempt = 1; attempt <= 2; attempt++)
-            {
-                await EnsureConnectedAsync(attempt == 1 ? 35000 : 25000);
-                var socket = _socket;
-                if (socket == null || !socket.IsConnected || !socket.IsHandshakeComplete)
-                {
-                    lastError = new InvalidOperationException("WhatsApp socket is not ready");
-                }
-                else
-                {
-                    try
-                    {
-                        Task<string> sendTask = socket.SendTextMessageAsync(jid, text, messageId);
-                        Task completed = await Task.WhenAny(sendTask, Task.Delay(15000));
-                        if (completed != sendTask)
-                        {
-                            throw new TimeoutException("Timed out writing the message to the WhatsApp transport");
-                        }
-
-                        await sendTask;
-                        return;
-                    }
-                    catch (Exception ex)
-                    {
-                        lastError = ex;
-                        RuntimeDiagnosticsService.Instance.RecordException(
-                            "send",
-                            "text-transport-attempt-failed",
-                            ex,
-                            "messageId=" + messageId + "; attempt=" + attempt);
-
-                        // Only a broken pipe justifies throwing the connection away. A refusal
-                        // from the layers above it - no session with a device, a group we cannot
-                        // read - fails this one message on a connection that is still fine, and
-                        // tearing it down there leaves the whole app offline over one send.
-                        if (IsTransportFailure(ex, socket))
-                        {
-                            InvalidateCurrentSocket(socket, "send-attempt-" + attempt);
-                        }
-                        else
-                        {
-                            break;
-                        }
-                    }
-                }
-
-                if (attempt < 2)
-                {
-                    await Task.Delay(500);
-                }
-            }
-
-            throw lastError ?? new InvalidOperationException("Unable to send the message");
-        }
-
-        /// <summary>
-        /// Sends a text message to a JID and adds an optimistic local message immediately.
-        /// Transport failures are represented by StatusFailed on the returned message.
-        /// </summary>
-        public async Task<ChatMessage> SendTextMessageAsync(string jid, string text)
-        {
-            if (string.IsNullOrWhiteSpace(jid))
-                throw new ArgumentException("A destination JID is required", nameof(jid));
-            if (string.IsNullOrWhiteSpace(text))
-                throw new ArgumentException("Message text is empty", nameof(text));
-
-            string normJid = GetCanonicalJid(NormalizeJid(jid));
-            string msgId = GenerateOutgoingMessageId();
-            Interlocked.Increment(ref _diagnosticsSendAttemptCount);
-            Interlocked.Exchange(ref _diagnosticsLastSendAttemptUtcTicks, DateTime.UtcNow.Ticks);
-            RuntimeDiagnosticsService.Instance.Write(
-                "send",
-                "text-attempt",
-                "messageId=" + msgId + "; connected=" + IsConnected);
-
-            Debug.WriteLine($"[WhatsAppService] SendTextMessageAsync to {jid}: {text.Substring(0, Math.Min(50, text.Length))}...");
-
-            var msg = new ChatMessage
-            {
-                Id = msgId,
-                Content = text,
-                Kind = ChatMessageKind.Text,
-                IsFromMe = true,
-                Timestamp = DateTime.UtcNow,
-                SenderName = "Me",
-                RemoteJid = normJid,
-                ParticipantJid = _authState?.Me?.Id,
-                Status = ChatMessage.StatusPending
-            };
-
-            ApplyPendingStateToMessage(normJid, msg);
-            if (!MessagesByChat.ContainsKey(normJid)) MessagesByChat[normJid] = new List<ChatMessage>();
-            ChatMessageOrder.InsertSorted(MessagesByChat[normJid], msg);
-            TrimInMemoryMessageWindow(normJid);
-            RegisterMessageId(normJid, msg.Id);
-            await UpdateChatPreviewForLocalSendAsync(normJid, text, msg.Timestamp, ChatPreviewKind.Text, msg.MentionedJids, msg.Id, msg.Status);
-
-            // Make the bubble visible immediately, then persist it in the small durable
-            // outbox. This avoids rewriting the entire chat JSON before every send.
-            QueueChatMessagesChanged(normJid);
-            await PersistLiveMessagesAsync(normJid, new[] { msg });
-
-            try
-            {
-                // Reopening a suspended UWP app keeps the page alive but not its
-                // WebSocket. Use the same permanent message ID across one bounded
-                // reconnect/retry so a stale transport cannot leave the send button
-                // waiting forever or create a duplicate bubble.
-                await SendTextTransportWithRetryAsync(normJid, text, msgId);
-                if (string.Equals(msg.Status, ChatMessage.StatusPending, StringComparison.OrdinalIgnoreCase))
-                {
-                    msg.Status = ResolveSentStatus(normJid);
-                }
-                Interlocked.Increment(ref _diagnosticsSendSuccessCount);
-                Interlocked.Exchange(ref _diagnosticsLastSendSuccessUtcTicks, DateTime.UtcNow.Ticks);
-                RuntimeDiagnosticsService.Instance.Write("send", "text-accepted", "messageId=" + msgId);
-            }
-            catch (Exception ex)
-            {
-                msg.Status = ChatMessage.StatusFailed;
-                Interlocked.Increment(ref _diagnosticsSendFailureCount);
-                Interlocked.Exchange(ref _diagnosticsLastSendFailureUtcTicks, DateTime.UtcNow.Ticks);
-                RuntimeDiagnosticsService.Instance.RecordException(
-                    "send",
-                    "text-failed",
-                    ex,
-                    "messageId=" + msgId + "; connected=" + IsConnected);
-                Debug.WriteLine($"[WhatsAppService] Message {msgId} failed before/while leaving client: {ex.Message}");
-                OnError?.Invoke(this, ex);
-            }
-
-            // Update the durable outbox state and queue the normal batched chat-file
-            // upsert. The flush removes the outbox item only after the main file is saved.
-            await PersistLiveMessagesAsync(normJid, new[] { msg });
-            QueueOfflineReplayMessageForPersist(normJid, msg);
-            SchedulePersist();
-            QueueChatMessagesChanged(normJid);
-            return msg;
-        }
-
-        /// <summary>
-        /// Sends an image message and stores a local chat model immediately.
-        /// </summary>
-        public async Task<ChatMessage> SendImageMessageAsync(string jid, byte[] imageBytes, string caption = null)
-        {
-            await EnsureConnectedAsync();
-            if (imageBytes == null || imageBytes.Length == 0)
-                throw new ArgumentException("Image payload is empty", nameof(imageBytes));
-            string normJid = NormalizeJid(jid);
-
-            string msgId = await Task.Run(async () => await _socket.SendImageMessageAsync(jid, imageBytes, caption));
-            string preview = MediaPreviewTag.ForImage(caption);
-            string localUri = await SaveImageBytesToCacheAsync(imageBytes, msgId + "_out", "image/jpeg");
-
-            var msg = new ChatMessage
-            {
-                Id = msgId,
-                Content = preview,
-                Kind = ChatMessageKind.Image,
-                IsImage = true,
-                ImageUri = localUri,
-                Caption = caption ?? "",
-                IsFromMe = true,
-                Timestamp = DateTime.UtcNow,
-                SenderName = "Me",
-                RemoteJid = normJid,
-                ParticipantJid = _authState?.Me?.Id,
-                Status = ResolveSentStatus(normJid)
-            };
-
-            if (!MessagesByChat.ContainsKey(normJid))
-                MessagesByChat[normJid] = new List<ChatMessage>();
-            ChatMessageOrder.InsertSorted(MessagesByChat[normJid], msg);
-            TrimInMemoryMessageWindow(normJid);
-            RegisterMessageId(normJid, msg.Id);
-            await UpdateChatPreviewForLocalSendAsync(normJid, preview, msg.Timestamp, ChatPreviewKind.Image, null, msg.Id, msg.Status);
-
-            QueueOfflineReplayMessageForPersist(normJid, msg);
-            SchedulePersist();
-            QueueChatMessagesChanged(normJid);
-            return msg;
-        }
-
-        public async Task<ChatMessage> SendAudioMessageAsync(string jid, byte[] audioBytes, string mimeType, uint durationSeconds, bool isVoiceMessage = false)
-        {
-            await EnsureConnectedAsync();
-            if (audioBytes == null || audioBytes.Length == 0) throw new ArgumentException("Audio payload is empty", nameof(audioBytes));
-            string normJid = GetCanonicalJid(NormalizeJid(jid));
-            string msgId = await _socket.SendAudioMessageAsync(jid, audioBytes, mimeType, durationSeconds, isVoiceMessage);
-            string preview = MediaPreviewTag.ForAudio(isVoiceMessage);
-            string localUri = await SaveAudioBytesToCacheAsync(audioBytes, msgId + "_out", mimeType);
-            var msg = new ChatMessage
-            {
-                Id = msgId,
-                Content = preview,
-                Kind = isVoiceMessage ? ChatMessageKind.Voice : ChatMessageKind.Audio,
-                IsAudio = true,
-                IsVoiceMessage = isVoiceMessage,
-                AudioUri = localUri,
-                AudioMimeType = mimeType,
-                AudioDurationSeconds = durationSeconds,
-                IsFromMe = true,
-                Timestamp = DateTime.UtcNow,
-                SenderName = "Me",
-                RemoteJid = normJid,
-                ParticipantJid = _authState?.Me?.Id,
-                Status = ResolveSentStatus(normJid)
-            };
-            if (!MessagesByChat.ContainsKey(normJid)) MessagesByChat[normJid] = new List<ChatMessage>();
-            ChatMessageOrder.InsertSorted(MessagesByChat[normJid], msg);
-            TrimInMemoryMessageWindow(normJid);
-            RegisterMessageId(normJid, msg.Id);
-            await UpdateChatPreviewForLocalSendAsync(normJid, preview, msg.Timestamp, ChatPreviewKind.Voice, null, msg.Id, msg.Status);
-            QueueOfflineReplayMessageForPersist(normJid, msg);
-            SchedulePersist();
-            QueueChatMessagesChanged(normJid);
-            PrepareLocalPlaybackInBackground(msg);
-            return msg;
-        }
-
-        /// <summary>
-        /// Decodes an outgoing voice note into something the platform can play, without making
-        /// the sender wait for it.
-        /// </summary>
-        /// <remarks>
-        /// What we send is Ogg/Opus, and this platform plays neither. The bubble reports itself
-        /// as ready the moment the file is cached, so leaving the decode until the user presses
-        /// play means the first press on their own message stalls - the one message they are
-        /// most likely to press, right after recording it. Doing it here trades nothing: the
-        /// work happens either way, just off the tap. Failure is silent because the play path
-        /// still performs the same conversion on demand.
-        /// </remarks>
-        private void PrepareLocalPlaybackInBackground(ChatMessage message)
-        {
-            if (message == null || string.IsNullOrWhiteSpace(message.AudioUri))
-            {
-                return;
-            }
-
-            var ignored = Task.Run(async () =>
-            {
-                try
-                {
-                    await EnsurePlayableAudioUriAsync(message, message.AudioUri).ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine("[WhatsAppService] Outgoing audio playback prep failed: " + ex.Message);
-                }
-            });
-        }
-
         private async Task UpdateChatPreviewForLocalSendAsync(
             string jid,
             string preview,
@@ -6091,7 +3838,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            await RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 // PN e LID podem existir temporariamente como duas linhas para o mesmo
                 // contato. Atualizar apenas FirstOrDefault deixava a linha visivel com
@@ -6119,55 +3866,11 @@ namespace Unison.Uwp.Services.WhatsApp
                         true, HistoryLiveMessageMapper.FromStatus(status ?? ChatMessage.StatusPending, true), messageId);
                 }
 
-                var preferred = matchingRows
-                    .OrderByDescending(c => !string.IsNullOrWhiteSpace(c.AvatarUrl))
-                    .ThenByDescending(c => !string.IsNullOrWhiteSpace(c.Name))
-                    .First();
-                RepositionChatForDisplay(preferred);
+                RepositionChatForDisplay(DuplicateChatRowPick.PreferredForPreview(matchingRows));
             });
 
             _ = DeduplicateChatsAsync("local-send-preview");
             SchedulePersist();
-        }
-
-        private string TryGetPersonDisplayName(string jid)
-        {
-            if (_personStore == null || string.IsNullOrWhiteSpace(jid))
-            {
-                return null;
-            }
-
-            try
-            {
-                var person = _personStore.TryGetCached(jid);
-                if (person == null || string.IsNullOrWhiteSpace(person.Name))
-                {
-                    return null;
-                }
-
-                return SanitizeContactLabel(person.Name, jid);
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        private async Task WarmPersonIntoCacheAsync(string jid)
-        {
-            if (_personStore == null || string.IsNullOrWhiteSpace(jid))
-            {
-                return;
-            }
-
-            try
-            {
-                await _personStore.GetAsync(jid).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[WhatsAppService] Person warm failed for " + jid + ": " + ex.Message);
-            }
         }
 
         /// <summary>
@@ -6187,11 +3890,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            ContactNames[norm] = sanitized;
-            if (_personStore == null)
-            {
-                return;
-            }
+            ContactNames.Set(norm, sanitized);
 
             // History sync repeats the same push name on every message its author wrote, and each
             // repeat used to start its own database task. A group with five hundred messages from
@@ -6211,134 +3910,13 @@ namespace Unison.Uwp.Services.WhatsApp
             _ = PersistPersonNameAsync(norm, sanitized);
         }
 
-        private string ResolveSelfDisplayName(string canonical, string normalized, string context)
-        {
-            string source = null;
-            string baseName = null;
+        private string NormalizeSelfNameCandidate(string candidate, string canonical, string normalized) =>
+            SelfNameCandidate.Normalize(candidate, canonical, normalized, _selfMarkers);
 
-            if (PhoneContactNamesByJid.TryGetValue(canonical, out var phoneCanonical))
-            {
-                baseName = NormalizeSelfNameCandidate(phoneCanonical, canonical, normalized);
-                if (!string.IsNullOrWhiteSpace(baseName))
-                {
-                    source = "phone-canonical";
-                }
-            }
-
-            if (string.IsNullOrWhiteSpace(baseName) && PhoneContactNamesByJid.TryGetValue(normalized, out var phoneNormalized))
-            {
-                baseName = NormalizeSelfNameCandidate(phoneNormalized, canonical, normalized);
-                if (!string.IsNullOrWhiteSpace(baseName))
-                {
-                    source = "phone-normalized";
-                }
-            }
-
-            if (string.IsNullOrWhiteSpace(baseName))
-            {
-                string waName = GetBestWhatsAppName(canonical, normalized, _authState?.Me?.Id, _authState?.Me?.Lid);
-                baseName = NormalizeSelfNameCandidate(waName, canonical, normalized);
-                if (!string.IsNullOrWhiteSpace(baseName))
-                {
-                    source = "whatsapp-cache";
-                }
-            }
-
-            if (string.IsNullOrWhiteSpace(baseName))
-            {
-                baseName = NormalizeSelfNameCandidate(_authState?.Me?.Name, canonical, normalized);
-                if (!string.IsNullOrWhiteSpace(baseName))
-                {
-                    source = "auth-me-name";
-                }
-            }
-
-            if (string.IsNullOrWhiteSpace(baseName))
-            {
-                baseName = NormalizeSelfNameCandidate(CurrentUserName, canonical, normalized);
-                if (!string.IsNullOrWhiteSpace(baseName))
-                {
-                    source = "current-user-name";
-                }
-            }
-
-            // Persist / protocol path: base name only — UI adds localized (You)/(Você).
-            string resolved = string.IsNullOrWhiteSpace(baseName) ? null : baseName.Trim();
-            if (string.IsNullOrWhiteSpace(resolved))
-            {
-                resolved = CurrentUserPhone;
-                if (!string.IsNullOrWhiteSpace(resolved))
-                {
-                    source = "me-phone-placeholder";
-                }
-            }
-
-            if (!string.Equals(_lastResolvedSelfDisplayNameForLog, resolved ?? string.Empty, StringComparison.Ordinal))
-            {
-                _lastResolvedSelfDisplayNameForLog = resolved ?? string.Empty;
-                Debug.WriteLine($"[WhatsAppService] Self base name resolved for {canonical}: '{resolved ?? "(empty)"}' (source={source ?? "fallback"})");
-            }
-
-            return resolved ?? string.Empty;
-        }
-
-        private string NormalizeSelfNameCandidate(string candidate, string canonical, string normalized)
-        {
-            if (string.IsNullOrWhiteSpace(candidate))
-            {
-                return null;
-            }
-
-            string trimmed = SelfChatDisplayHelper.StripSelfMarker(candidate);
-            if (string.IsNullOrWhiteSpace(trimmed) || SelfChatDisplayHelper.IsSelfMarkerLabel(trimmed))
-            {
-                return null;
-            }
-
-            if (IsMaskedPhoneLabel(trimmed))
-            {
-                Debug.WriteLine($"[WhatsAppService] Ignoring masked self phone label for {canonical}: '{trimmed}'");
-                return null;
-            }
-
-            string canonicalUser = canonical?.Split('@')[0];
-            string normalizedUser = normalized?.Split('@')[0];
-
-            if (!string.IsNullOrEmpty(canonicalUser) && string.Equals(trimmed, canonicalUser, StringComparison.OrdinalIgnoreCase))
-            {
-                return null;
-            }
-
-            if (!string.IsNullOrEmpty(normalizedUser) && string.Equals(trimmed, normalizedUser, StringComparison.OrdinalIgnoreCase))
-            {
-                return null;
-            }
-
-            if (trimmed.Contains("@") && string.Equals(NormalizeJid(trimmed), canonical, StringComparison.OrdinalIgnoreCase))
-            {
-                return null;
-            }
-
-            return trimmed;
-        }
-
-        /// <summary>
-        /// True when the sidebar/profile string is just our own JID digits — the fallback
-        /// that used to run before any push name arrived, and that then blocked a real name
-        /// from replacing it.
-        /// </summary>
         private bool IsOwnPhoneEchoLabel(string label)
         {
-            if (string.IsNullOrWhiteSpace(label) || _authState?.Me == null)
-            {
-                return false;
-            }
-
-            return NormalizeSelfNameCandidate(
-                       label,
-                       NormalizeJid(_authState.Me.Id),
-                       NormalizeJid(_authState.Me.Lid)) == null &&
-                   !SelfChatDisplayHelper.IsSelfMarkerLabel(label.Trim());
+            var me = _authState?.Me;
+            return me != null && SelfNameCandidate.IsOwnPhoneEcho(label, me.Id, me.Lid, _selfMarkers);
         }
 
         private string GetResolvedName(string jid)
@@ -6351,55 +3929,21 @@ namespace Unison.Uwp.Services.WhatsApp
             return GetBestWhatsAppName(GetCanonicalJid(jid), NormalizeJid(jid));
         }
 
-        private string GetWhatsAppNameFromCache(string jid)
-        {
-            if (string.IsNullOrEmpty(jid)) return null;
-
-            if (ContactNames.TryGetValue(jid, out var name))
-            {
-                string sanitized = SanitizeContactLabel(name, jid);
-                if (string.IsNullOrWhiteSpace(sanitized))
-                {
-                    Debug.WriteLine($"[WhatsAppService] Found stale/suspicious cached name '{name}' for {jid}. Ignoring cached value.");
-                    return null;
-                }
-
-                return sanitized;
-            }
-
-            return null;
-        }
-
         private IEnumerable<string> ExpandNameLookupCandidates(params string[] jids)
         {
-            var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            void add(string jid)
-            {
-                if (string.IsNullOrWhiteSpace(jid)) return;
-                string normalized = NormalizeJid(jid);
-                if (string.IsNullOrWhiteSpace(normalized)) return;
-                candidates.Add(normalized);
-
-                if (JidAlias.TryGetValue(normalized, out var alias) && !string.IsNullOrWhiteSpace(alias))
+            return NameLookupCandidates.Expand(
+                jids,
+                NormalizeJid,
+                normalized =>
                 {
-                    candidates.Add(NormalizeJid(alias));
-                }
+                    string alias;
+                    if (JidAlias.TryGetValue(normalized, out alias) && !string.IsNullOrWhiteSpace(alias))
+                    {
+                        return alias;
+                    }
 
-                string user = normalized.Split('@')[0];
-                if (!string.IsNullOrEmpty(user))
-                {
-                    candidates.Add($"{user}@s.whatsapp.net");
-                    candidates.Add($"{user}@lid");
-                }
-            }
-
-            foreach (var jid in jids)
-            {
-                add(jid);
-            }
-
-            return candidates;
+                    return null;
+                });
         }
 
         private string ResolveLiveDirectChatJid(Client.DecryptedMessageEventArgs e, out string routingReason)
@@ -6419,7 +3963,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 e.SenderLid,
                 NormalizeJid,
                 IsSelfLinkedJid,
-                TryGetCanonicalNonSelfDirectJid,
                 GetCanonicalSelfPnJid,
                 GetCanonicalJid);
             routingReason = route.Reason;
@@ -6430,68 +3973,8 @@ namespace Unison.Uwp.Services.WhatsApp
 
         internal bool IsSelfChatJid(string jid) => IsSelfJid(jid);
 
-        internal async Task RunOnUiThreadTaskAsync(Func<Task> action)
-        {
-            if (action == null)
-            {
-                return;
-            }
+        internal Task RunOnUiThreadTaskAsync(Func<Task> action) => _ui.RunTaskAsync(action);
 
-            var dispatcher = GetUiDispatcher();
-            if (dispatcher == null)
-            {
-                RuntimeDiagnosticsService.Instance.Write(
-                    "runtime",
-                    "ui-dispatch-skipped",
-                    "kind=async; reason=no-dispatcher");
-                return;
-            }
-            if (dispatcher.HasThreadAccess)
-            {
-                await action();
-                return;
-            }
-
-            var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            await dispatcher.RunAsync(CoreDispatcherPriority.Low, async () =>
-            {
-                try
-                {
-                    await action();
-                    completion.TrySetResult(true);
-                }
-                catch (Exception ex)
-                {
-                    completion.TrySetException(ex);
-                }
-            });
-            await completion.Task;
-        }
-
-        internal async Task RunOnUiThreadAsync(Action action)
-        {
-            if (action == null)
-            {
-                return;
-            }
-
-            var dispatcher = GetUiDispatcher();
-            if (dispatcher == null)
-            {
-                RuntimeDiagnosticsService.Instance.Write(
-                    "runtime",
-                    "ui-dispatch-skipped",
-                    "kind=sync; reason=no-dispatcher");
-                return;
-            }
-            if (dispatcher.HasThreadAccess)
-            {
-                action();
-                return;
-            }
-
-            await dispatcher.RunAsync(CoreDispatcherPriority.Normal, () => action());
-        }
 
         private void QueueChatMessagesChanged(string chatJid)
         {
@@ -6500,21 +3983,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            var dispatcher = GetUiDispatcher();
-            if (dispatcher == null)
-            {
-                return;
-            }
-            if (dispatcher.HasThreadAccess)
-            {
-                RaiseChatMessagesChanged(chatJid);
-                return;
-            }
-
-            _ = dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
-            {
-                RaiseChatMessagesChanged(chatJid);
-            });
+            _ui.Post(() => RaiseChatMessagesChanged(chatJid));
         }
 
         /// <summary>
@@ -6525,7 +3994,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private void RaiseChatMessagesChanged(string chatJid)
         {
             OnChatMessagesChanged?.Invoke(this, chatJid);
-            _chatState.NotifyChangedExternally(chatJid);
+            _chatState.NotifyMessagesChanged(chatJid);
         }
 
         /// <summary>
@@ -6572,44 +4041,17 @@ namespace Unison.Uwp.Services.WhatsApp
                     continue;
                 }
 
-                string lid = contact.Lid;
-                string phone = contact.PhoneNumber;
+                ContactUpdateReading reading = ContactUpdateFiling.Read(
+                    contact.Id, contact.Lid, contact.PhoneNumber, contact.Name, contact.Notify);
 
-                // The index carries whichever address the action was filed under, so it fills in
-                // whichever half the action itself left out.
-                if (string.IsNullOrEmpty(phone) && !IsLidJid(contact.Id))
+                if (reading.HasAliasPair)
                 {
-                    phone = contact.Id;
+                    aliasPairs.Add(new KeyValuePair<string, string>(reading.Lid, reading.Phone));
                 }
 
-                if (string.IsNullOrEmpty(lid) && IsLidJid(contact.Id))
+                foreach (string address in reading.NameAddresses)
                 {
-                    lid = contact.Id;
-                }
-
-                if (!string.IsNullOrEmpty(lid) && !string.IsNullOrEmpty(phone))
-                {
-                    aliasPairs.Add(new KeyValuePair<string, string>(lid, phone));
-                }
-
-                string name = string.IsNullOrEmpty(contact.Name) ? contact.Notify : contact.Name;
-                if (string.IsNullOrWhiteSpace(name))
-                {
-                    continue;
-                }
-
-                // Filed under both addresses rather than trusting the alias to be resolvable in
-                // every direction: whichever one a chat happens to be keyed by, the lookup lands.
-                AddResolvedName(entries, contact.Id, name, isSubject: false);
-
-                if (!string.IsNullOrEmpty(lid) && !string.Equals(lid, contact.Id, StringComparison.OrdinalIgnoreCase))
-                {
-                    AddResolvedName(entries, lid, name, isSubject: false);
-                }
-
-                if (!string.IsNullOrEmpty(phone) && !string.Equals(phone, contact.Id, StringComparison.OrdinalIgnoreCase))
-                {
-                    AddResolvedName(entries, phone, name, isSubject: false);
+                    AddResolvedName(entries, address, reading.Name, isSubject: false);
                 }
             }
 
@@ -6623,12 +4065,6 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             await ApplyResolvedNameBatchAsync(entries);
-        }
-
-        private static bool IsLidJid(string jid)
-        {
-            return !string.IsNullOrEmpty(jid) &&
-                   jid.EndsWith("@lid", StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>
@@ -6684,7 +4120,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 byCanonical[entry.Canonical] = entry;
             }
 
-            await RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 foreach (var entry in entries)
                 {
@@ -6692,17 +4128,17 @@ namespace Unison.Uwp.Services.WhatsApp
                     {
                         if (!GroupNameSyncBlacklist.ShouldCacheSyncedSubject(
                                 entry.Name,
-                                HasMeaningfulGroupLabel(entry.Canonical, FindGroupRowName(entry.Canonical))))
+                                HasMeaningfulGroupLabel(entry.Canonical, DuplicateChatRowPick.FirstNonBlankName(_chatRows.FindConversation(entry.Canonical)))))
                         {
                             continue;
                         }
                     }
 
-                    ContactNames[entry.Canonical] = entry.Name;
+                    ContactNames.Set(entry.Canonical, entry.Name);
                     if (!string.IsNullOrEmpty(entry.Normalized) &&
                         !string.Equals(entry.Normalized, entry.Canonical, StringComparison.OrdinalIgnoreCase))
                     {
-                        ContactNames[entry.Normalized] = entry.Name;
+                        ContactNames.Set(entry.Normalized, entry.Name);
                     }
                 }
 
@@ -6773,7 +4209,7 @@ namespace Unison.Uwp.Services.WhatsApp
             // WhatsApp occasionally emits packets carrying only a placeholder "-" as the name.
             // Our self-name capture is deliberately eager, so without this it would overwrite the
             // real display name with a dash until the next genuine update arrived.
-            if (string.Equals(pushName.Trim(), "-", StringComparison.Ordinal))
+            if (SelfPushNameCapture.IsDashPlaceholder(pushName))
             {
                 Debug.WriteLine(
                     "[WhatsAppService] Ignoring placeholder self push name '-' from " + (source ?? "unknown"));
@@ -6798,9 +4234,8 @@ namespace Unison.Uwp.Services.WhatsApp
             // phone number on screen. Substituting it here lets the rest of the method put both
             // back in step.
             string established = ResolveEstablishedSelfName();
-            if (!string.IsNullOrWhiteSpace(established) &&
-                !string.Equals(established, sanitized, StringComparison.Ordinal) &&
-                !string.Equals(source, SelfPushNameAppStateSource, StringComparison.Ordinal))
+            bool fromAppState = string.Equals(source, SelfPushNameAppStateSource, StringComparison.Ordinal);
+            if (!string.Equals(sanitized, SelfPushNameCapture.PreferEstablished(established, sanitized, fromAppState), StringComparison.Ordinal))
             {
                 Debug.WriteLine(
                     "[WhatsAppService] Keeping established self name '" + established + "'; ignoring '" +
@@ -6844,278 +4279,28 @@ namespace Unison.Uwp.Services.WhatsApp
         /// phone number. A phone echo is not a name, which is why the credentials are read through
         /// <see cref="IsOwnPhoneEchoLabel"/> rather than tested for emptiness.
         /// </summary>
-        private string ResolveEstablishedSelfName()
-        {
-            if (!string.IsNullOrWhiteSpace(CurrentUserName))
-            {
-                return CurrentUserName;
-            }
-
-            string fromCredentials = _authState?.Me?.Name;
-            return !string.IsNullOrWhiteSpace(fromCredentials) && !IsOwnPhoneEchoLabel(fromCredentials)
-                ? fromCredentials
-                : null;
-        }
+        private string ResolveEstablishedSelfName() =>
+            SelfDisplayNameResolution.Established(CurrentUserName, _authState?.Me?.Name, IsOwnPhoneEchoLabel);
 
         private bool IsLidLikeJid(string jid) => JidAlias.IsLidLike(jid);
 
         /// <summary>
         /// Proactively merges duplicate chats when a new identity mapping is found.
-        /// Moves messages from LID chat to PN chat and removes the LID chat.
         /// </summary>
-        private async Task CheckAndMergeDuplicateChatsAsync(string lidJid, string pnJid)
-        {
-            if (string.IsNullOrEmpty(lidJid) || string.IsNullOrEmpty(pnJid)) return;
-            string normLidJid = NormalizeJid(lidJid);
-            string normPnJid = NormalizeJid(pnJid);
-            
-            await RunOnUiThreadAsync(() =>
-            {
-                var lidChat = Chats.FirstOrDefault(c => NormalizeJid(c.JID) == normLidJid);
-                var pnChat = Chats.FirstOrDefault(c => NormalizeJid(c.JID) == normPnJid);
-
-                if (lidChat != null && pnChat != null && lidChat != pnChat)
-                {
-                    Log($"[WhatsAppService] Merging duplicate chats: {normLidJid} -> {normPnJid}");
-                    
-                    // 1. Move messages
-                    if (MessagesByChat.ContainsKey(normLidJid))
-                    {
-                        if (!MessagesByChat.ContainsKey(normPnJid))
-                        {
-                            MessagesByChat[normPnJid] = new List<ChatMessage>();
-                        }
-                        
-                        var pnMsgs = MessagesByChat[normPnJid];
-                        var pnIdSet = GetOrBuildMessageIdIndex(normPnJid);
-                        foreach (var msg in MessagesByChat[normLidJid].ToList())
-                        {
-                            if (msg == null) continue;
-
-                            if (string.IsNullOrEmpty(msg.Id))
-                            {
-                                if (!pnMsgs.Contains(msg))
-                                {
-                                    pnMsgs.Add(msg);
-                                }
-                            }
-                            else if (pnIdSet.Add(msg.Id))
-                            {
-                                pnMsgs.Add(msg);
-                            }
-                        }
-                        MessagesByChat.Remove(normLidJid);
-                        _messageIdIndex.RemoveChat(normLidJid);
-                    }
-
-                    // 2. Remove LID chat from UI
-                    Chats.Remove(lidChat);
-                }
-            });
-        }
+        /// <remarks>
+        /// With the pair filed, the dedupe pass folds the two rows field by field (pin, mute,
+        /// unread, preview, avatar). Without it the fold cannot tell they are one person, so
+        /// only the messages move and the LID row goes.
+        /// </remarks>
 
         private string NormalizeJid(string jid)
         {
             return JidHelper.Normalize(jid);
         }
 
-        /// <summary>
-        /// History/WebMessageInfo often leave MessageKey.participant unset while setting
-        /// WebMessageInfo.participant (field 5). Newer WA builds also stash alt JIDs in
-        /// unknown MessageKey string fields (participantAlt / remoteJidAlt overlays).
-        /// Protobuf getters return "" when unset — never coalesce with ??.
-        /// </summary>
-        private string ResolveHistoryParticipantJid(Proto.WebMessageInfo info)
-        {
-            if (info == null)
-            {
-                return null;
-            }
-
-            string raw = FirstNonEmptyString(
-                info.Key?.Participant,
-                info.Participant,
-                ExtractUnknownUserJidFromMessageKey(info.Key));
-
-            if (string.IsNullOrWhiteSpace(raw))
-            {
-                return null;
-            }
-
-            string normalized = NormalizeJid(raw);
-            // Never treat the group/chat JID itself as the participant.
-            if (string.IsNullOrWhiteSpace(normalized) ||
-                normalized.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase) ||
-                normalized.EndsWith("@broadcast", StringComparison.OrdinalIgnoreCase))
-            {
-                return null;
-            }
-
-            return normalized;
-        }
-
-        private string ResolveHistorySenderName(
-            Proto.WebMessageInfo info,
-            bool fromMe,
-            bool isGroup,
-            string participantJid,
-            string chatJid)
-        {
-            if (fromMe)
-            {
-                return _authState?.Me?.Name ?? "Me";
-            }
-
-            string nameContext = !string.IsNullOrWhiteSpace(participantJid)
-                ? participantJid
-                : (isGroup ? null : chatJid);
-
-            string fromPush = SanitizeContactLabel(info?.PushName, nameContext)
-                              ?? SanitizeContactLabel(info?.VerifiedBizName, nameContext);
-            if (!string.IsNullOrWhiteSpace(fromPush))
-            {
-                return fromPush;
-            }
-
-            if (!string.IsNullOrWhiteSpace(participantJid))
-            {
-                return GetResolvedName(participantJid);
-            }
-
-            // Never resolve the group JID as the sender display name.
-            if (isGroup)
-            {
-                return string.Empty;
-            }
-
-            return GetResolvedName(chatJid);
-        }
-
-        private static bool IsWeakHistorySenderName(string senderName)
-        {
-            return string.IsNullOrWhiteSpace(senderName);
-        }
-
-        /// <summary>
-        /// Scan MessageKey protobuf bytes for length-delimited string fields that look
-        /// like user JIDs. Field 4 is already known (`participant`); fields 5+ may hold
-        /// participantAlt / remoteJidAlt that our generated MessageKey schema omits.
-        /// </summary>
-        private static string ExtractUnknownUserJidFromMessageKey(Proto.MessageKey key)
-        {
-            if (key == null)
-            {
-                return null;
-            }
-
-            byte[] bytes;
-            try
-            {
-                bytes = Google.Protobuf.MessageExtensions.ToByteArray(key);
-            }
-            catch
-            {
-                return null;
-            }
-
-            if (bytes == null || bytes.Length == 0)
-            {
-                return null;
-            }
-
-            int index = 0;
-            while (index < bytes.Length)
-            {
-                if (!TryReadProtoVarint(bytes, ref index, out ulong tag))
-                {
-                    break;
-                }
-
-                int fieldNumber = (int)(tag >> 3);
-                int wireType = (int)(tag & 0x7);
-                if (wireType == 2) // length-delimited
-                {
-                    if (!TryReadProtoVarint(bytes, ref index, out ulong length) ||
-                        length > (ulong)(bytes.Length - index))
-                    {
-                        break;
-                    }
-
-                    int len = (int)length;
-                    // Skip known field 4 (participant) — already read via the typed API.
-                    if (fieldNumber != 4 && len > 0 && len < 256)
-                    {
-                        string candidate = System.Text.Encoding.UTF8.GetString(bytes, index, len);
-                        if (LooksLikeUserJid(candidate))
-                        {
-                            return candidate;
-                        }
-                    }
-
-                    index += len;
-                }
-                else if (wireType == 0) // varint
-                {
-                    if (!TryReadProtoVarint(bytes, ref index, out _))
-                    {
-                        break;
-                    }
-                }
-                else if (wireType == 1) // 64-bit
-                {
-                    index += 8;
-                }
-                else if (wireType == 5) // 32-bit
-                {
-                    index += 4;
-                }
-                else
-                {
-                    break;
-                }
-            }
-
-            return null;
-        }
-
-        private static bool LooksLikeUserJid(string value) =>
-            UserJidShape.Matches(value);
-
-        private static bool TryReadProtoVarint(byte[] buffer, ref int index, out ulong value)
-        {
-            value = 0;
-            int shift = 0;
-            while (index < buffer.Length && shift < 64)
-            {
-                byte b = buffer[index++];
-                value |= (ulong)(b & 0x7F) << shift;
-                if ((b & 0x80) == 0)
-                {
-                    return true;
-                }
-
-                shift += 7;
-            }
-
-            return false;
-        }
-
         private static string FirstNonEmptyString(params string[] values)
         {
-            if (values == null)
-            {
-                return null;
-            }
-
-            foreach (var value in values)
-            {
-                if (!string.IsNullOrWhiteSpace(value))
-                {
-                    return value.Trim();
-                }
-            }
-
-            return null;
+            return FirstNonBlankText.Pick(values);
         }
 
         private bool IsSelfJid(string jid) => JidAlias.IsSelfJid(jid);
@@ -7177,9 +4362,6 @@ namespace Unison.Uwp.Services.WhatsApp
             return SelfChatDisplayHelper.IsSelfMarkerLabel(label);
         }
 
-        private static bool IsMaskedPhoneLabel(string label) =>
-            ContactLabelSanitizer.IsMaskedPhoneLabel(label);
-
         private string SanitizeContactLabel(string label, string contextJid)
         {
             ContactLabelResult result = _contactLabels.Sanitize(label, contextJid);
@@ -7233,251 +4415,21 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private async Task DeduplicateChatsAsync(string reason)
         {
-            await RunOnUiThreadAsync(() =>
-                {
-                    var snapshots = Chats
-                        .Where(c => c != null && !string.IsNullOrWhiteSpace(c.JID))
-                        .ToList();
+            ChatListDeduperResult result = await _deduper.RunAsync(reason ?? "client").ConfigureAwait(false);
+            if (result.Merged <= 0 && result.NormalizedKeys <= 0)
+            {
+                return;
+            }
 
-                    if (snapshots.Count < 2)
-                    {
-                        snapshots.ForEach(c => c.JID = GetCanonicalJid(c.JID));
-                        InvalidateChatRowIndex();
-                    }
-
-                    int mergedCount = 0;
-                    int normalizedMessageKeyCount = 0;
-                    var groups = snapshots
-                        .GroupBy(c => GetCanonicalJid(NormalizeJid(c.JID)), StringComparer.OrdinalIgnoreCase)
-                        .Where(g => g.Count() > 1)
-                        .ToList();
-
-                    foreach (var group in groups)
-                    {
-                        var ordered = group
-                            .OrderByDescending(c => !IsLidLikeJid(NormalizeJid(c.JID)))
-                            .ThenByDescending(c => !string.IsNullOrWhiteSpace(c.AvatarUrl))
-                            .ThenByDescending(c => MessagesByChat.TryGetValue(NormalizeJid(c.JID), out var msgs) ? msgs.Count : 0)
-                            .ToList();
-
-                        var primary = ordered[0];
-                        string primaryNorm = NormalizeJid(primary.JID);
-                        primary.JID = primaryNorm;
-                        InvalidateChatRowIndex();
-
-                        for (int i = 1; i < ordered.Count; i++)
-                        {
-                            var secondary = ordered[i];
-                            string secondaryNorm = NormalizeJid(secondary.JID);
-                            if (string.Equals(primaryNorm, secondaryNorm, StringComparison.OrdinalIgnoreCase))
-                            {
-                                DateTime primaryPreviewUtc = primary.LastMessageTimestampUtc.HasValue
-                                    ? ToComparableUtc(primary.LastMessageTimestampUtc.Value)
-                                    : DateTime.MinValue;
-                                DateTime secondaryPreviewUtc = secondary.LastMessageTimestampUtc.HasValue
-                                    ? ToComparableUtc(secondary.LastMessageTimestampUtc.Value)
-                                    : DateTime.MinValue;
-                                if ((secondaryPreviewUtc > primaryPreviewUtc || string.IsNullOrWhiteSpace(primary.LastMessage)) &&
-                                    !string.IsNullOrWhiteSpace(secondary.LastMessage))
-                                {
-                                    primary.LastMessage = secondary.LastMessage;
-                                    primary.LastMessageKind = secondary.LastMessageKind;
-                                    primary.LastPreview.CopyFrom(secondary.LastPreview);
-                                    primary.Timestamp = secondary.Timestamp;
-                                    primary.LastMessageTimestampUtc = secondary.LastMessageTimestampUtc;
-                                }
-                                if (string.IsNullOrWhiteSpace(primary.AvatarUrl) && !string.IsNullOrWhiteSpace(secondary.AvatarUrl))
-                                {
-                                    primary.AvatarUrl = secondary.AvatarUrl;
-                                    primary.AvatarFetchedAtUtc = secondary.AvatarFetchedAtUtc;
-                                    primary.AvatarFetchFailedAtUtc = secondary.AvatarFetchFailedAtUtc;
-                                    primary.AvatarFetchFailureReason = secondary.AvatarFetchFailureReason;
-                                }
-                                if (primary.UnreadCount < secondary.UnreadCount)
-                                {
-                                    primary.UnreadCount = secondary.UnreadCount;
-                                }
-                                if (secondary.IsChatPinned && secondary.PinnedTimestamp != 0)
-                                {
-                                    if (!primary.IsChatPinned ||
-                                        (secondary.PinnedTimestamp ?? 0) > (primary.PinnedTimestamp ?? 0))
-                                    {
-                                        primary.IsChatPinned = true;
-                                        primary.PinnedTimestamp = secondary.PinnedTimestamp;
-                                    }
-                                }
-                                Chats.Remove(secondary);
-                                mergedCount++;
-                                continue;
-                            }
-
-                            if (MessagesByChat.TryGetValue(secondaryNorm, out var secondaryMsgs))
-                            {
-                                if (!MessagesByChat.TryGetValue(primaryNorm, out var primaryMsgs))
-                                {
-                                    primaryMsgs = new List<ChatMessage>();
-                                    MessagesByChat[primaryNorm] = primaryMsgs;
-                                }
-
-                                var idSet = GetOrBuildMessageIdIndex(primaryNorm);
-                                foreach (var msg in secondaryMsgs)
-                                {
-                                    if (msg == null) continue;
-                                    if (string.IsNullOrEmpty(msg.Id))
-                                    {
-                                        primaryMsgs.Add(msg);
-                                        continue;
-                                    }
-
-                                    if (idSet.Add(msg.Id))
-                                    {
-                                        primaryMsgs.Add(msg);
-                                    }
-                                }
-
-                                MessagesByChat.Remove(secondaryNorm);
-                                _messageIdIndex.RemoveChat(secondaryNorm);
-                            }
-
-                            if (ContactNames.TryGetValue(secondaryNorm, out var secondaryName) && !ContactNames.ContainsKey(primaryNorm))
-                            {
-                                ContactNames[primaryNorm] = secondaryName;
-                            }
-
-                            // The rows merge either way; only the alias is withheld when the pair
-                            // is not one we are allowed to file.
-                            if (AliasPairPolicy.TryAcceptPair(secondaryNorm, primaryNorm, JidAlias, out string mergedLid, out string mergedPn))
-                            {
-                                JidAlias[mergedLid] = mergedPn;
-
-                                // An existing @lid alias on this side is more specific than what
-                                // the merge knows, so it is left in place.
-                                if (!JidAlias.TryGetValue(mergedPn, out var existingPrimaryAlias) ||
-                                    string.IsNullOrWhiteSpace(existingPrimaryAlias) ||
-                                    !NormalizeJid(existingPrimaryAlias).EndsWith("@lid", StringComparison.OrdinalIgnoreCase))
-                                {
-                                    JidAlias[mergedPn] = mergedLid;
-                                }
-                            }
-
-                            if (primary.UnreadCount < secondary.UnreadCount)
-                            {
-                                primary.UnreadCount = secondary.UnreadCount;
-                            }
-
-                            // history_chat_preview has no pin columns; carry ChatStore pin across
-                            // PN/LID merge or a sync-created unpinned primary wins and sinks the row.
-                            if (secondary.IsChatPinned && secondary.PinnedTimestamp != 0)
-                            {
-                                if (!primary.IsChatPinned ||
-                                    (secondary.PinnedTimestamp ?? 0) > (primary.PinnedTimestamp ?? 0))
-                                {
-                                    primary.IsChatPinned = true;
-                                    primary.PinnedTimestamp = secondary.PinnedTimestamp;
-                                }
-                            }
-
-                            if (string.IsNullOrWhiteSpace(primary.AvatarUrl) && !string.IsNullOrWhiteSpace(secondary.AvatarUrl))
-                            {
-                                primary.AvatarUrl = secondary.AvatarUrl;
-                                primary.AvatarFetchedAtUtc = secondary.AvatarFetchedAtUtc;
-                                primary.AvatarFetchFailedAtUtc = secondary.AvatarFetchFailedAtUtc;
-                                primary.AvatarFetchFailureReason = secondary.AvatarFetchFailureReason;
-                            }
-
-                            // Both sides go through ToComparableUtc, like the LastMessageTimestampUtc
-                            // branch below: these lists mix live messages with rows read back from
-                            // SQLite, so the raw timestamps are not comparable to each other.
-                            MessagesByChat.TryGetValue(primaryNorm, out var primaryPreviewMessages);
-                            DateTime primaryLatestMessageTimestamp =
-                                ChatMessageOrder.NewestComparableUtc(primaryPreviewMessages);
-
-                            MessagesByChat.TryGetValue(secondaryNorm, out var secondaryPreviewMessages);
-                            DateTime secondaryLatestMessageTimestamp =
-                                ChatMessageOrder.NewestComparableUtc(secondaryPreviewMessages);
-
-                            DateTime primaryPreviewTimestamp = primary.LastMessageTimestampUtc.HasValue
-                                ? ToComparableUtc(primary.LastMessageTimestampUtc.Value)
-                                : primaryLatestMessageTimestamp;
-                            DateTime secondaryPreviewTimestamp = secondary.LastMessageTimestampUtc.HasValue
-                                ? ToComparableUtc(secondary.LastMessageTimestampUtc.Value)
-                                : secondaryLatestMessageTimestamp;
-
-                            bool secondaryHasNewerPreview =
-                                secondaryPreviewTimestamp > primaryPreviewTimestamp &&
-                                !string.IsNullOrWhiteSpace(secondary.LastMessage);
-                            bool primaryPreviewMissing =
-                                string.IsNullOrWhiteSpace(primary.LastMessage) &&
-                                !string.IsNullOrWhiteSpace(secondary.LastMessage);
-
-                            if (secondaryHasNewerPreview || primaryPreviewMissing)
-                            {
-                                primary.LastMessage = secondary.LastMessage;
-                                primary.LastMessageKind = secondary.LastMessageKind;
-                                primary.Timestamp = secondary.Timestamp;
-                                primary.LastMessageTimestampUtc = secondary.LastMessageTimestampUtc;
-                            }
-
-                            Chats.Remove(secondary);
-                            mergedCount++;
-                        }
-                    }
-
-                    // Ensure message-cache keys are canonicalized even when a secondary chat row no longer exists.
-                    var cacheKeys = MessagesByChat.Keys.ToList();
-                    foreach (var key in cacheKeys)
-                    {
-                        string canonicalKey = GetCanonicalJid(key);
-                        if (string.IsNullOrWhiteSpace(canonicalKey) ||
-                            string.Equals(canonicalKey, key, StringComparison.OrdinalIgnoreCase))
-                        {
-                            continue;
-                        }
-
-                        if (!MessagesByChat.TryGetValue(key, out var secondaryMsgs) || secondaryMsgs == null)
-                        {
-                            continue;
-                        }
-
-                        if (!MessagesByChat.TryGetValue(canonicalKey, out var primaryMsgs) || primaryMsgs == null)
-                        {
-                            primaryMsgs = new List<ChatMessage>();
-                            MessagesByChat[canonicalKey] = primaryMsgs;
-                        }
-
-                        var idSet = GetOrBuildMessageIdIndex(canonicalKey);
-                        foreach (var msg in secondaryMsgs)
-                        {
-                            if (msg == null) continue;
-                            if (string.IsNullOrWhiteSpace(msg.Id))
-                            {
-                                primaryMsgs.Add(msg);
-                                continue;
-                            }
-
-                            if (idSet.Add(msg.Id))
-                            {
-                                primaryMsgs.Add(msg);
-                            }
-                        }
-
-                        ChatMessageOrder.SortInPlace(primaryMsgs);
-                        MessagesByChat.Remove(key);
-                        _messageIdIndex.RemoveChat(key);
-                        normalizedMessageKeyCount++;
-                    }
-
-                    if (mergedCount > 0 || normalizedMessageKeyCount > 0)
-                    {
-                        Debug.WriteLine($"[WhatsAppService] Deduplicated {mergedCount} duplicate chat entries and normalized {normalizedMessageKeyCount} message caches (reason={reason})");
-                        OnDisplayNamesUpdated?.Invoke(this, EventArgs.Empty);
-                        SchedulePersist();
-                        if (mergedCount > 0)
-                        {
-                            _ = PersistChatIdentityStateAsync($"dedupe:{reason}");
-                        }
-                    }
-                });
+            Debug.WriteLine(
+                $"[WhatsAppService] Deduplicated {result.Merged} duplicate chat entries and normalized " +
+                $"{result.NormalizedKeys} message caches (reason={reason})");
+            OnDisplayNamesUpdated?.Invoke(this, EventArgs.Empty);
+            SchedulePersist();
+            if (result.Merged > 0)
+            {
+                _ = PersistChatIdentityStateAsync("dedupe:" + reason);
+            }
         }
 
         private static string FormatTimestamp(DateTime msgTime)
@@ -7492,56 +4444,13 @@ namespace Unison.Uwp.Services.WhatsApp
             return LocalizedStrings.Get("Chat_SelfFallbackName", "You");
         }
 
-        private async Task ApplyResolvedNamesToChatsAsync()
+        private Task ApplyResolvedNamesToChatsAsync() => _nameRefresh.ApplyAsync();
+
+        private void OnChatNamesApplied(object sender, int updated)
         {
-            await RunOnUiThreadAsync(() =>
-                {
-                    int updated = 0;
-                    foreach (var chat in Chats)
-                    {
-                        if (chat == null) continue;
-                        string resolved = ResolveDisplayName(chat.JID, "chat");
-                        if (ChatNameReplacement.ShouldReplace(
-                                chat.Name,
-                                resolved,
-                                resolvedMeaningful: IsMeaningfulChatLabel(resolved, chat.JID, chat.IsGroup),
-                                existingMeaningful: IsMeaningfulChatLabel(chat.Name, chat.JID, chat.IsGroup),
-                                isGroup: chat.IsGroup))
-                        {
-                            chat.Name = resolved;
-                            updated++;
-                        }
-
-                        if (chat.GroupMembers == null || chat.GroupMembers.Count == 0)
-                        {
-                            continue;
-                        }
-
-                        foreach (var member in chat.GroupMembers)
-                        {
-                            if (member == null || string.IsNullOrWhiteSpace(member.Jid))
-                            {
-                                continue;
-                            }
-
-                            string memberName = ResolveDisplayName(member.Jid, "sender");
-                            if (string.IsNullOrWhiteSpace(memberName) ||
-                                string.Equals(member.DisplayName, memberName, StringComparison.Ordinal))
-                            {
-                                continue;
-                            }
-
-                            member.DisplayName = memberName;
-                            updated++;
-                        }
-                    }
-
-                    if (updated > 0)
-                    {
-                        Debug.WriteLine($"[WhatsAppService] Applied resolved display names to {updated} chats");
-                        OnDisplayNamesUpdated?.Invoke(this, EventArgs.Empty);
-                    }
-                });
+            Debug.WriteLine($"[WhatsAppService] Applied resolved display names to {updated} chats");
+            RuntimeDiagnosticsService.Instance.Write("names", "list-names-applied", "count=" + updated);
+            OnDisplayNamesUpdated?.Invoke(this, EventArgs.Empty);
         }
 
         /// <summary>Delegates to <see cref="IContactService"/>; this class only supplies the client primitives.</summary>
@@ -7550,139 +4459,18 @@ namespace Unison.Uwp.Services.WhatsApp
             return _contactService?.ResolveMissingNamesAsync() ?? Task.CompletedTask;
         }
 
-        /// <summary>
-        /// Name resolution over the new stack. The query, the retry and the parsing belong to
-        /// <see cref="ResolveContactNamesUseCase"/>; what stays here is everything the protocol
-        /// has no opinion about - repairing our own identity when the server disagrees with it,
-        /// aliasing the two addresses of one person, merging the chats that resulted from not
-        /// knowing they were the same person, and fetching avatars.
-        /// </summary>
-        private async Task ResolveContactsViaSocketAsync(string[] jids)
+        public bool TryFileUsyncAlias(string userJid, string lidJid, out bool wasAlreadyAliased)
         {
-            var session = ((SocketBridge)_socket).Session;
-
-            // LIDs are mapped back to the number first: this endpoint answers by phone number,
-            // and asking it with a LID returns an empty entry that reads as "no such account".
-            var lookup = new List<string>();
-            var meId = NormalizeJid(_authState?.Me?.Id);
-            foreach (var jid in jids)
-            {
-                if (string.IsNullOrWhiteSpace(jid) || NormalizeJid(jid) == meId)
-                {
-                    continue;
-                }
-
-                var canonical = GetCanonicalJid(jid);
-                lookup.Add(string.IsNullOrWhiteSpace(canonical) ? jid : canonical);
-            }
-
-            if (lookup.Count == 0)
-            {
-                return;
-            }
-
-            try
-            {
-                using (await _usyncGate.AcquireAsync().ConfigureAwait(false))
-                {
-                    if (_socket == null || !_socket.IsHandshakeComplete)
-                    {
-                        Debug.WriteLine("[WhatsAppService] ResolveContactsAsync skipped after lock (socket not ready)");
-                        return;
-                    }
-
-                    var useCase = new ResolveContactNamesUseCase(session.Connection);
-                    var timeout = TimeSpan.FromSeconds(lookup.Count > 1 ? 15 : 8);
-                    var contacts = await useCase.ExecuteAsync(lookup, "interactive", timeout).ConfigureAwait(false);
-
-                    var cacheUpdated = false;
-                    foreach (var contact in contacts)
-                    {
-                        if (ApplyResolvedContact(contact))
-                        {
-                            cacheUpdated = true;
-                        }
-                    }
-
-                    if (cacheUpdated)
-                    {
-                        await ApplyResolvedNamesToChatsAsync().ConfigureAwait(false);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[WhatsAppService] ResolveContactsAsync failed: " + ex);
-                try
-                {
-                    RuntimeDiagnosticsService.Instance.RecordException(
-                        "contacts",
-                        "resolve-contacts-failed",
-                        ex,
-                        "count=" + lookup.Count);
-                }
-                catch
-                {
-                }
-            }
-        }
-
-        /// <summary>Returns true when the name or alias caches changed and the chats need redrawing.</summary>
-        private bool ApplyResolvedContact(ResolvedContact contact)
-        {
-            if (contact == null || string.IsNullOrEmpty(contact.Jid))
+            UsyncAliasFilingResult result = _usyncAliases.TryFile(userJid, lidJid);
+            wasAlreadyAliased = result.WasAlreadyAliased;
+            if (!result.Filed)
             {
                 return false;
             }
 
-            var normalizedUser = NormalizeJid(contact.Jid);
-            var changed = false;
-
-            if (!string.IsNullOrEmpty(contact.Lid))
-            {
-                var normalizedLid = NormalizeJid(contact.Lid);
-                var knownAlready = JidAlias.ContainsKey(normalizedLid);
-
-                if (AliasPairPolicy.TryAcceptPair(normalizedLid, normalizedUser, JidAlias, out string contactLid, out string contactPn))
-                {
-                    JidAlias[contactLid] = contactPn;
-                    JidAlias[contactPn] = contactLid;
-                    RegisterSocketAlias(normalizedUser, normalizedLid, "contact-usync");
-                    changed = true;
-
-                    HealOwnIdentity(normalizedUser, normalizedLid);
-
-                    // Two chats for one person, which is what happens when the pair was learned late.
-                    // Only worth doing the first time, hence the check before the alias was written.
-                    if (!knownAlready)
-                    {
-                        _ = CheckAndMergeDuplicateChatsAsync(normalizedLid, normalizedUser);
-                    }
-                }
-            }
-
-            var pushName = SanitizeContactLabel(contact.Name, normalizedUser);
-            if (!string.IsNullOrEmpty(pushName))
-            {
-                ContactNames[normalizedUser] = pushName;
-                changed = true;
-                Debug.WriteLine("[WhatsAppService] usync name resolved: " + contact.Jid + " -> " + pushName);
-            }
-
-            // The id only says the picture exists and which one it is; the URL is a separate
-            // round trip, so it is worth making only for a chat that is showing no avatar.
-            if (!string.IsNullOrEmpty(contact.PictureId))
-            {
-                var needsAvatar = Chats.FirstOrDefault(
-                    c => NormalizeJid(c.JID) == normalizedUser && string.IsNullOrEmpty(c.AvatarUrl));
-
-                if (needsAvatar != null)
-                {
-                    _ = FetchAvatarForResolvedContactAsync(contact.Jid, normalizedUser);
-                }
-            }
-
-            return changed;
+            RegisterSocketAlias(result.AcceptedPn, result.AcceptedLid, "contact-usync");
+            HealOwnIdentity(result.AcceptedPn, result.AcceptedLid);
+            return true;
         }
 
         /// <summary>
@@ -7720,27 +4508,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 JidAlias.Remove(normalizedUser);
                 _ = PersistAuthStateAsync(null, "usync-identity-purge");
             }
-        }
-
-        private async Task FetchAvatarForResolvedContactAsync(string jid, string normalizedUser)
-        {
-            var url = await GetProfilePictureAsync(jid).ConfigureAwait(false);
-            if (string.IsNullOrEmpty(url))
-            {
-                return;
-            }
-
-            await RunOnUiThreadAsync(() =>
-            {
-                var chat = Chats.FirstOrDefault(c => NormalizeJid(c.JID) == normalizedUser);
-                if (chat != null && string.IsNullOrEmpty(chat.AvatarUrl))
-                {
-                    chat.AvatarUrl = url;
-                    chat.AvatarFetchedAtUtc = DateTime.UtcNow;
-                    chat.AvatarFetchFailedAtUtc = null;
-                    chat.AvatarFetchFailureReason = null;
-                }
-            });
         }
     }
 }

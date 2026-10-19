@@ -62,7 +62,7 @@ Chat list rows are the exception: they bind `ChatItem` directly and read local s
 
 Do not `new ChatMessageViewModel(...)` from a view. Use the factory from DI.
 Before dropping a bubble from a collection, call `Detach()` (via `ChatDetailViewModel.ClearTimeline` / `RemoveTimelineAt`) so `Model.PropertyChanged` does not keep the VM alive.
-Open only a small UI window (`InitialUiMessageWindow` 50); SQLite open page is 100 (`MessageFacade.SqlOpenPageSize`). Grow via top-scroll when `CanLoadMore` (code-behind checks scroll offset ≈ 0, ViewModel owns load-more / paging). Cap with `MaxUiMessageWindow`.
+Open only a small UI window (`InitialUiMessageWindow` / `MaxUiMessageWindow` from `SyncWorkloadStrategy`: 30/80 on Unsupported+Low, 50/150 on High); SQLite open page is 100 (`MessageFacade.SqlOpenPageSize`). Grow via top-scroll when `CanLoadMore` (code-behind checks scroll offset ≈ 0, ViewModel owns load-more / paging).
 
 Whoever mutates `ChatDetailViewModel.Messages` is the ViewModel — merge, dedupe, ordered insert, group-JID stamp, preview fallback and trim are its methods (`MergeTimelineFromService`, `InsertTimelineMessage`, `ApplyPreviewFallback`, `StampGroupRemoteJid`). Code-behind may read the collection and drive scroll, run layout and the pinned banner, but must not insert or remove rows itself.
 
@@ -180,6 +180,8 @@ Do not grow `IWhatsAppService` for UI features. Add the member on the façade th
 
 `SocketBridge` implements `IWhatsAppSocket` so the client can keep working. New protocol features go on Socket use cases / modules, then a façade — not on `IWhatsAppSocket` unless the client still must see them.
 
+Core rules lifted out of the client live in `Unison.Core/Helpers/<Domain>/`, with the same folder names as `Services/WhatsApp/` (`Chats`, `Contacts`, `Groups`, `Messages`, `History`, `Connection`, `Status`, plus `Diagnostics`). The namespace stays `Unison.Core.Helpers`: the folders are for finding a rule, not module boundaries, because the rules call across domains. Generic helpers (`RelayCommand`, `Observable`, `JidHelper`, `UnixTime`, …) stay at the root.
+
 Text normalization: `ChatPreviewNormalizer.Normalize` is the **chat-list preview** (one line, 50-char cap). Message bodies and media captions — anything persisted or shown in a bubble — use `NormalizeBody`, which keeps the text whole and keeps line breaks.
 
 ---
@@ -208,7 +210,7 @@ Text normalization: `ChatPreviewNormalizer.Normalize` is the **chat-list preview
 - Features register on `NodeDispatcher`. Do not add a giant switch on `ConnectionHandler`.
 - Host seams go in `Unison.Socket/Abstractions/` (`IWaTransport`, `ISocketLog`, stores). UWP implements them.
 - Do not compile or “revive” `SocketClient.cs` / `PairingHandler.cs` (on disk, out of the csproj). Live path is `SocketBridge` → `WhatsAppSession`.
-- Do not implement `TransferSocketToBrokerAsync` as a fake success. Until the session can lend the transport, it returns `false`.
+- `TransferSocketToBrokerAsync` returns `true` only when the transport actually moved ownership; every failure answers `false` and the caller keeps the socket. Never report a handoff that did not happen.
 
 ---
 
@@ -247,7 +249,7 @@ These are hybrid **on purpose** until [Migration](Migration) says otherwise:
 - `WhatsAppService` still owns in-memory chats, history body, send transport, persist.
 - `ChatDetailView` code-behind still owns the message list host, scroll, and `MediaElement` chrome. Group run layout / date chips / author-avatar **resolve** lives on `ChatDetailViewModel.ApplyMessageRunLayout` (bubble only binds `ContactUri`). Midnight date-chip refresh is a view `DispatcherTimer`.
 - `ChatListView` may still mirror `VisibleChats` during initial-sync safe mode.
-- `SocketBridge` broker transfer / reclaim / cold restore return false / unused.
+- `SocketBridge` does not cold-restore a broker socket left by a terminated process; the next connect closes it and starts fresh.
 - `ChatsModule` in Socket is not instantiated by the bridge yet.
 - A few platform helpers still use `.Instance`; new code uses the interface.
 

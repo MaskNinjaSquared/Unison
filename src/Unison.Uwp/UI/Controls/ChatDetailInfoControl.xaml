@@ -253,11 +253,14 @@
                         Click="PinButton_Click"
                         ToolTipService.ToolTip="Pin to Start">
                     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <FontIcon Glyph="&#xE718;"
-                                  FontFamily="{StaticResource IconFont}"
-                                  FontSize="18"
-                                  Foreground="White"
-                                  HorizontalAlignment="Center"/>
+                        <TextBlock Text="&#xEB08;"
+                                   FontFamily="{StaticResource LegacyIconFont}"
+                                   FontSize="28"
+                                   Margin="1,0,0,0"
+                                   TextLineBounds="Tight"
+                                   Foreground="White"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
                         <TextBlock x:Name="PinButtonLabel"
                                    x:Uid="ChatDetailInfo_PinAppBarLabel"
                                    Text="Pin to&#x0a;Start"

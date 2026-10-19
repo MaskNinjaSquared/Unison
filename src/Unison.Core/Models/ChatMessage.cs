@@ -27,7 +27,10 @@ namespace Unison.Core.Models
             {
                 _content = value;
                 OnPropertyChanged();
-                OnPropertyChanged(nameof(DocumentDisplayName));
+                Raise(
+                    nameof(DocumentDisplayName),
+                    nameof(IsDocument),
+                    nameof(ShowTextContent));
             }
         }
 
@@ -249,13 +252,21 @@ namespace Unison.Core.Models
         }
 
         /// <summary>
-        /// Fills <see cref="Kind"/> from legacy boolean flags after JSON load
-        /// (rows persisted before Kind existed).
+        /// Fills <see cref="Kind"/> from legacy boolean flags / document fields after JSON load
+        /// (rows persisted before Kind existed, or outgoing rows that kept Text while the
+        /// document URI / file name were already set).
         /// </summary>
         public void EnsureKindFromLegacyFlags()
         {
             if (_kind != ChatMessageKind.Text)
             {
+                return;
+            }
+
+            if (IsDocument)
+            {
+                // IsDocument can be true from URI / key / preview tag while Kind is still Text.
+                Kind = ChatMessageKind.Document;
                 return;
             }
 
@@ -271,8 +282,22 @@ namespace Unison.Core.Models
                 return;
             }
 
-            _kind = inferred;
-            SyncLegacyFlagsFromKind();
+            Kind = inferred;
+        }
+
+        /// <summary>
+        /// Local URI or protocol media key — enough to treat the row as a document even when
+        /// <see cref="Kind"/> was left as Text. File name alone is not included (preview fallback).
+        /// </summary>
+        [JsonIgnore]
+        public bool HasDocumentPayload =>
+            !string.IsNullOrWhiteSpace(_documentUri) ||
+            !string.IsNullOrWhiteSpace(DocumentMediaKeyBase64);
+
+        private static bool HasDocumentPreviewTag(string content)
+        {
+            return !string.IsNullOrWhiteSpace(content) &&
+                   content.IndexOf("[Document]", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private void SyncLegacyFlagsFromKind()
@@ -288,6 +313,7 @@ namespace Unison.Core.Models
             get => _audioUri;
             set
             {
+                if (string.Equals(_audioUri, value, StringComparison.Ordinal)) return;
                 _audioUri = value;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(HasLocalAudio));
@@ -335,7 +361,7 @@ namespace Unison.Core.Models
         /// Body text is hidden for audio, images, video, stickers, and documents.
         /// </summary>
         [JsonIgnore]
-        public bool ShowTextContent => !IsAudio && !IsImage && !IsVideo && !IsSticker && !IsDocument;
+        public bool ShowTextContent => !IsRevoked && !IsAudio && !IsImage && !IsVideo && !IsSticker && !IsDocument;
 
         /// <summary>Protocol video message (local file may still be pending download).</summary>
         [JsonIgnore]
@@ -344,9 +370,17 @@ namespace Unison.Core.Models
         [JsonIgnore]
         public bool IsSticker => _kind == ChatMessageKind.Sticker;
 
-        /// <summary>Protocol document / file message.</summary>
+        /// <summary>
+        /// Protocol document / file message. Also true when a local URI, media key, or
+        /// <c>[Document]</c> preview tag is present but <see cref="Kind"/> was left as Text —
+        /// otherwise the bubble never loads document chrome. File name alone is not enough
+        /// (preview-fallback rows set a name while intentionally staying Text).
+        /// </summary>
         [JsonIgnore]
-        public bool IsDocument => _kind == ChatMessageKind.Document;
+        public bool IsDocument =>
+            _kind == ChatMessageKind.Document ||
+            HasDocumentPayload ||
+            HasDocumentPreviewTag(Content);
 
         private bool _isStickerFailed;
         /// <summary>Sticker media could not be loaded — bubble shows "!Sticker Error".</summary>
@@ -409,6 +443,7 @@ namespace Unison.Core.Models
             get => _imageUri;
             set
             {
+                if (string.Equals(_imageUri, value, StringComparison.Ordinal)) return;
                 _imageUri = value;
                 OnPropertyChanged();
                 Raise(
@@ -545,8 +580,10 @@ namespace Unison.Core.Models
             get => _documentUri;
             set
             {
+                if (string.Equals(_documentUri, value, StringComparison.Ordinal)) return;
                 _documentUri = value;
                 OnPropertyChanged();
+                Raise(nameof(HasDocumentPayload), nameof(IsDocument), nameof(ShowTextContent));
                 OnPropertyChanged(nameof(HasLocalDocument));
                 NotifyDocumentDownloadStateChanged();
             }
@@ -624,7 +661,12 @@ namespace Unison.Core.Models
         public string ParticipantJid
         {
             get => _participantJid;
-            set { _participantJid = value; OnPropertyChanged(); }
+            set
+            {
+                if (string.Equals(_participantJid, value, StringComparison.Ordinal)) return;
+                _participantJid = value;
+                OnPropertyChanged();
+            }
         }
 
         private bool _isRevoked;
@@ -635,7 +677,7 @@ namespace Unison.Core.Models
             {
                 if (_isRevoked == value) return;
                 _isRevoked = value;
-                OnPropertyChanged();
+                Raise(nameof(IsRevoked), nameof(ShowTextContent));
             }
         }
 
@@ -895,7 +937,29 @@ namespace Unison.Core.Models
 
         /// <summary>True when <see cref="MentionedJids"/> has at least one entry (no empty-list alloc).</summary>
         [JsonIgnore]
-        public bool HasMentions => _mentionedJids != null && _mentionedJids.Count > 0;
+        public bool HasMentions => (_mentionedJids != null && _mentionedJids.Count > 0) || _mentionAll;
+
+        private bool _mentionAll;
+
+        /// <summary>
+        /// The message mentions every current group member
+        /// (<c>ContextInfo.nonJidMentions</c>). The body keeps the localized word.
+        /// </summary>
+        public bool MentionAll
+        {
+            get => _mentionAll;
+            set
+            {
+                if (_mentionAll == value)
+                {
+                    return;
+                }
+
+                _mentionAll = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasMentions));
+            }
+        }
 
         private bool _showGroupSenderName;
         /// <summary>

@@ -58,6 +58,7 @@ namespace Unison.Uwp.Data
                         "UPDATE history_chat_preview SET Status = ? WHERE DeletedAtUtc IS NOT NULL",
                         (int)ChatStatus.Deleted)
                     .ConfigureAwait(false);
+                await StaleOutgoingSweep.EnsureRanAsync(_connection).ConfigureAwait(false);
                 _initialized = true;
                 Debug.WriteLine("[HistoryChatPreviewStore] Initialized at " + dbPath);
             }
@@ -169,16 +170,26 @@ namespace Unison.Uwp.Data
                             notified.Add(CloneForNotify(model, status));
                             prior.LastMessageTimestampUtc = model.LastMessageTimestampUtc;
                             prior.LastMessageId = model.LastMessageId;
+                            CopyAuthorStripIntoSnapshot(prior, model);
                         }
                         else
                         {
                             // Same tip, but the strip around it moved: unread cleared, a tick
-                            // advanced over the same message, a name resolved. None of those
-                            // touch the tip, and before this they never reached disk at all -
-                            // the badge came back on the next start.
+                            // advanced over the same message, a name resolved. Carry empty
+                            // author parts from prior so a sync re-upsert of the same tip cannot
+                            // blank a name ChatAuthorProjection already persisted.
+                            string author = Carry(model.LastMessageAuthor, prior.LastMessageAuthor);
+                            string senderName = Carry(
+                                model.LastMessageSenderName,
+                                prior.LastMessageSenderName);
+                            string participant = Carry(
+                                model.LastMessageParticipantJid,
+                                prior.LastMessageParticipantJid);
                             conn.Execute(
                                 "UPDATE history_chat_preview SET Status = ?, DeletedAtUtc = ?, " +
                                 "UnreadCount = ?, Name = ?, LastMessageSendState = ?, IsGroup = ?, " +
+                                "LastMessageAuthor = ?, LastMessageSenderName = ?, " +
+                                "LastMessageParticipantJid = ?, LastMessageIsFromMe = ?, " +
                                 "UpdatedAtUtc = ? WHERE Jid = ?",
                                 (int)status,
                                 carried,
@@ -186,11 +197,23 @@ namespace Unison.Uwp.Data
                                 model.Name,
                                 (int)model.LastMessageSendState,
                                 model.IsGroup,
+                                author,
+                                senderName,
+                                participant,
+                                model.LastMessageIsFromMe,
                                 DateTime.UtcNow,
                                 jid);
                             flagUpdates++;
                             upserted++;
-                            notified.Add(CloneForNotify(model, status));
+                            HistoryChatPreview notify = CloneForNotify(model, status);
+                            notify.LastMessageAuthor = author;
+                            notify.LastMessageSenderName = senderName;
+                            notify.LastMessageParticipantJid = participant;
+                            notified.Add(notify);
+                            prior.LastMessageAuthor = author;
+                            prior.LastMessageSenderName = senderName;
+                            prior.LastMessageParticipantJid = participant;
+                            prior.LastMessageIsFromMe = model.LastMessageIsFromMe;
                         }
 
                         prior.Status = (int)status;
@@ -292,7 +315,9 @@ namespace Unison.Uwp.Data
                 var rows = await _connection
                     .QueryAsync<LifecycleSnapshot>(
                         "SELECT Jid, Status, DeletedAtUtc, LastMessageTimestampUtc, LastMessageId, " +
-                        "UnreadCount, Name, LastMessageSendState, IsGroup, LidJid, PnJid " +
+                        "UnreadCount, Name, LastMessageSendState, IsGroup, LidJid, PnJid, " +
+                        "LastMessageAuthor, LastMessageSenderName, LastMessageParticipantJid, " +
+                        "LastMessageIsFromMe " +
                         "FROM history_chat_preview" + WhereJidIn(scope),
                         scope ?? new string[0])
                     .ConfigureAwait(false);
@@ -361,7 +386,33 @@ namespace Unison.Uwp.Data
             return prior.UnreadCount != Math.Max(0, model.UnreadCount) ||
                    prior.LastMessageSendState != (int)model.LastMessageSendState ||
                    prior.IsGroup != model.IsGroup ||
-                   !string.Equals(prior.Name ?? string.Empty, model.Name ?? string.Empty, StringComparison.Ordinal);
+                   !string.Equals(prior.Name ?? string.Empty, model.Name ?? string.Empty, StringComparison.Ordinal) ||
+                   !string.Equals(
+                       prior.LastMessageAuthor ?? string.Empty,
+                       model.LastMessageAuthor ?? string.Empty,
+                       StringComparison.Ordinal) ||
+                   !string.Equals(
+                       prior.LastMessageSenderName ?? string.Empty,
+                       model.LastMessageSenderName ?? string.Empty,
+                       StringComparison.Ordinal) ||
+                   !string.Equals(
+                       prior.LastMessageParticipantJid ?? string.Empty,
+                       model.LastMessageParticipantJid ?? string.Empty,
+                       StringComparison.OrdinalIgnoreCase) ||
+                   prior.LastMessageIsFromMe != model.LastMessageIsFromMe;
+        }
+
+        private static void CopyAuthorStripIntoSnapshot(LifecycleSnapshot prior, HistoryChatPreview model)
+        {
+            if (prior == null || model == null)
+            {
+                return;
+            }
+
+            prior.LastMessageAuthor = model.LastMessageAuthor;
+            prior.LastMessageSenderName = model.LastMessageSenderName;
+            prior.LastMessageParticipantJid = model.LastMessageParticipantJid;
+            prior.LastMessageIsFromMe = model.LastMessageIsFromMe;
         }
 
         /// <summary>
@@ -452,6 +503,16 @@ namespace Unison.Uwp.Data
             public string LidJid { get; set; }
 
             public string PnJid { get; set; }
+
+            // Group author strip parts — ChatAuthorProjection / live tip update these without
+            // moving LastMessageTimestampUtc, so the lifecycle gate must see them.
+            public string LastMessageAuthor { get; set; }
+
+            public string LastMessageSenderName { get; set; }
+
+            public string LastMessageParticipantJid { get; set; }
+
+            public bool LastMessageIsFromMe { get; set; }
         }
 
         public async Task<IReadOnlyList<HistoryChatPreview>> GetAllAsync(string syncId = null)
@@ -765,7 +826,7 @@ namespace Unison.Uwp.Data
 
             ChatPreviewKind kind = ChatPreviewKind.Text;
             if (row.LastMessageKind >= (int)ChatPreviewKind.Text &&
-                row.LastMessageKind <= (int)ChatPreviewKind.Reaction)
+                row.LastMessageKind <= (int)ChatPreviewKind.Revoked)
             {
                 kind = (ChatPreviewKind)row.LastMessageKind;
             }

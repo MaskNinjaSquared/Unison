@@ -415,5 +415,47 @@ namespace Unison.Core.Tests.State
             var snapshot = table.Snapshot();
             Assert.Equal(2, snapshot.Count);
         }
+
+        // --- The account itself -------------------------------------------------
+
+        [Fact]
+        public void Before_binding_there_is_no_account()
+        {
+            Assert.Null(new JidAliasTable().Self);
+        }
+
+        [Fact]
+        public void A_bound_account_without_ids_is_still_no_account()
+        {
+            var table = new JidAliasTable();
+            table.BindSelf(() => null!, () => null!);
+
+            Assert.Null(table.Self);
+        }
+
+        [Fact]
+        public void The_account_carries_its_id_lid_and_phone()
+        {
+            var table = new JidAliasTable();
+            table.BindSelf(() => "5511911112222@s.whatsapp.net", () => "999@lid", () => "5511911112222");
+
+            Assert.NotNull(table.Self);
+            Assert.Equal("5511911112222@s.whatsapp.net", table.Self!.Id);
+            Assert.Equal("999@lid", table.Self.Lid);
+            Assert.Equal("5511911112222", table.Self.Phone);
+        }
+
+        [Fact]
+        public void The_account_is_read_when_asked_not_when_bound()
+        {
+            // The LID arrives after pairing and is written in place on the same auth state.
+            string? lid = null;
+            var table = new JidAliasTable();
+            table.BindSelf(() => "5511911112222@s.whatsapp.net", () => lid!);
+
+            lid = "999@lid";
+
+            Assert.Equal("999@lid", table.Self!.Lid);
+        }
     }
 }

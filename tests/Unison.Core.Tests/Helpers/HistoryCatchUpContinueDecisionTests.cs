@@ -109,6 +109,25 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
+        public void Zero_max_rounds_finishes_on_the_first_quiet_lot()
+        {
+            // Low / Mobile workload: first InitialBootstrap lot is enough — no adjacent page.
+            HistoryCatchUpContinueResult r = HistoryCatchUpContinueDecision.Decide(
+                newestUtc: Noon.AddHours(1),
+                watermarkUtc: DateTime.MinValue,
+                progressSignals: 4,
+                stillStale: false,
+                stagnantCycles: 0,
+                stagnantStop: 2,
+                continueRound: 0,
+                maxRounds: 0);
+
+            Assert.Equal(HistoryCatchUpContinueAction.FinishMaxContinues, r.Action);
+            Assert.True(r.MadeProgress);
+            Assert.Equal(0, r.NextContinueRound);
+        }
+
+        [Fact]
         public void One_stagnant_lot_while_stale_still_continues()
         {
             HistoryCatchUpContinueResult r = HistoryCatchUpContinueDecision.Decide(

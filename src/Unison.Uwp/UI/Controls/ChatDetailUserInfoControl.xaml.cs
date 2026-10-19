@@ -192,6 +192,7 @@ namespace Unison.Uwp.UI.Controls
                 NotificationsToggle,
                 vm,
                 ref _notificationsToggleQuiet);
+
         }
 
         private void BindMediaPanes()

@@ -19,18 +19,37 @@
     <Grid MinWidth="280" MinHeight="240">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+            <Button x:Name="CopyReportButton"
+                    x:Uid="Debug_CopyReport"
+                    Click="CopyReportButton_Click"
+                    Width="36" Height="36"
+                    Padding="0"
+                    Margin="0,0,8,0"
+                    ToolTipService.ToolTip="Copy to clipboard">
+                <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE8C8;" FontSize="16"/>
+            </Button>
+            <Button x:Name="RequestFullHistoryButton"
+                    x:Uid="Debug_RequestFullHistory"
+                    Content="Request Full History On-demand"
+                    Click="RequestFullHistoryButton_Click"
+                    VerticalAlignment="Center"/>
+        </StackPanel>
+
         <TextBlock x:Uid="Debug_RuntimeDialogHint"
+                   Grid.Row="1"
                    Text="Hold / right-click Chats to open. No message text is included."
                    TextWrapping="Wrap"
                    FontSize="12"
                    Opacity="0.7"
                    Margin="0,0,0,8"/>
 
-        <ScrollViewer Grid.Row="1"
+        <ScrollViewer Grid.Row="2"
                       VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Disabled"
                       MaxHeight="420">
@@ -45,7 +64,7 @@
         </ScrollViewer>
 
         <TextBlock x:Name="SaveStatusText"
-                   Grid.Row="2"
+                   Grid.Row="3"
                    Margin="0,8,0,0"
                    FontSize="12"
                    TextWrapping="Wrap"

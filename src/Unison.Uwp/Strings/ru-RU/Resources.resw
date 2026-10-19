@@ -195,6 +195,12 @@
   <data name="ChatList_PreviewReaction" xml:space="preserve">
     <value>Реакция</value>
   </data>
+  <data name="ChatList_PreviewDeleted" xml:space="preserve">
+    <value>Сообщение удалено</value>
+  </data>
+  <data name="ChatDetail_MessageDeleted.Text" xml:space="preserve">
+    <value>Сообщение удалено</value>
+  </data>
   <data name="ChatList_Loading.Text" xml:space="preserve">
     <value>Подготовка чатов...</value>
   </data>
@@ -245,6 +251,15 @@
   </data>
   <data name="ChatDetail_MessageInput.PlaceholderText" xml:space="preserve">
     <value>Сообщение</value>
+  </data>
+  <data name="ChatDetail_MentionEveryone" xml:space="preserve">
+    <value>Все</value>
+  </data>
+  <data name="ChatDetail_MentionEveryoneDetail" xml:space="preserve">
+    <value>Упомянуть всех участников группы</value>
+  </data>
+  <data name="ChatDetail_GroupOnlyAdminsCanSend.Text" xml:space="preserve">
+    <value>Только администраторы могут отправлять сообщения</value>
   </data>
   <data name="ChatDetail_AttachCamera.Text" xml:space="preserve">
     <value>Камера</value>
@@ -312,6 +327,12 @@
   <data name="ChatDetail_UnpinMessage" xml:space="preserve">
     <value>Открепить сообщение</value>
   </data>
+  <data name="ChatDetail_CopyMessage" xml:space="preserve">
+    <value>Копировать</value>
+  </data>
+  <data name="ChatDetail_ReplyMessage" xml:space="preserve">
+    <value>Ответить</value>
+  </data>
   <data name="ChatDetail_PinFor24Hours" xml:space="preserve">
     <value>Закрепить на 24 ч.</value>
   </data>
@@ -366,7 +387,9 @@
   <data name="ChatDetail_SendImage.PrimaryButtonText" xml:space="preserve">
     <value>Отправить</value>
   </data>
-  <data name="ChatDetail_SendImage.SecondaryButtonText" xml:space="preserve">
+  <data name="ChatDetail_SendImageCaption.PlaceholderText" xml:space="preserve">
+    <value>???????? ???????...</value>
+  </data>  <data name="ChatDetail_SendImage.SecondaryButtonText" xml:space="preserve">
     <value>Отмена</value>
   </data>
   <data name="ChatDetail_AudioPlayFailed" xml:space="preserve">
@@ -531,8 +554,50 @@
   <data name="StatusList_Empty.Text" xml:space="preserve">
     <value>Нет последних обновлений статуса</value>
   </data>
+  <data name="StatusList_Recent" xml:space="preserve">
+    <value>Недавние</value>
+  </data>
+  <data name="StatusList_Viewed" xml:space="preserve">
+    <value>Просмотрено</value>
+  </data>
+  <data name="StatusList_FilterHeader.Text" xml:space="preserve">
+    <value>Фильтровать статусы по</value>
+  </data>
+  <data name="StatusList_FilterAll.Text" xml:space="preserve">
+    <value>Все</value>
+  </data>
+  <data name="StatusList_FilterRecent.Text" xml:space="preserve">
+    <value>Недавние</value>
+  </data>
+  <data name="StatusList_FilterViewed.Text" xml:space="preserve">
+    <value>Просмотренные</value>
+  </data>
+  <data name="StatusList_FilterLink.Text" xml:space="preserve">
+    <value>Фильтр статуса</value>
+  </data>
+  <data name="StatusDetail_EmptyTitle.Text" xml:space="preserve">
+    <value>Делитесь обновлениями статуса</value>
+  </data>
+  <data name="StatusDetail_EmptySubtitle.Text" xml:space="preserve">
+    <value>Делитесь фото, видео и текстом, которые исчезают через 24 часа.</value>
+  </data>
   <data name="Shell_Starred.Text" xml:space="preserve">
     <value>Избранное</value>
+  </data>
+  <data name="Shell_Favorites.Text" xml:space="preserve">
+    <value>Избранное</value>
+  </data>
+  <data name="Favorites_Header.Text" xml:space="preserve">
+    <value>Избранное</value>
+  </data>
+  <data name="Favorites_Empty.Text" xml:space="preserve">
+    <value>Избранное отображается в разделах Чаты и Звонки. Добавьте столько людей и групп, сколько хотите.</value>
+  </data>
+  <data name="Calls_Header.Text" xml:space="preserve">
+    <value>Звонки</value>
+  </data>
+  <data name="Calls_Empty.Text" xml:space="preserve">
+    <value>Чтобы начать звонок, выберите контакт и нажмите Позвонить.</value>
   </data>
   <data name="Shell_Archived.Text" xml:space="preserve">
     <value>Архив</value>
@@ -609,6 +674,12 @@
   <data name="Settings_NotificationsSection.Text" xml:space="preserve">
     <value>Уведомления</value>
   </data>
+  <data name="Settings_ShowSyncStatus.Header" xml:space="preserve">
+    <value>Показывать статус синхронизации</value>
+  </data>
+  <data name="Settings_ShowSyncStatus.Text" xml:space="preserve">
+    <value>Показывает статус синхронизации в списке чатов.</value>
+  </data>
   <data name="Settings_Notifications.Header" xml:space="preserve">
     <value>Уведомления</value>
   </data>
@@ -639,6 +710,24 @@
   <data name="Settings_LiveTiles.Text" xml:space="preserve">
     <value>Показывать последнее сообщение на плитке приложения.</value>
   </data>
+  <data name="Settings_DiskUsage.Text" xml:space="preserve"><value>Использование диска</value></data>
+  <data name="Settings_MediaCache.Header" xml:space="preserve"><value>Медиа в чатах</value></data>
+  <data name="Settings_MediaCacheClean.Content" xml:space="preserve"><value>Очистить данные</value></data>
+  <data name="Settings_StartTile.Header" xml:space="preserve"><value>Плитка Пуска</value></data>
+  <data name="Settings_StartTile.Text" xml:space="preserve"><value>Выберите значок и закрепите плитку, которая получает те же уведомления, что и приложение.</value></data>
+  <data name="Settings_StartTileChoose.Content" xml:space="preserve"><value>Выбрать</value></data>
+  <data name="StartTileDialog.Title" xml:space="preserve"><value>Плитка Пуска</value></data>
+  <data name="StartTileDialog.PrimaryButtonText" xml:space="preserve"><value>Закрепить</value></data>
+  <data name="StartTileDialog.CloseButtonText" xml:space="preserve"><value>Отмена</value></data>
+  <data name="StartTileDialog_Unison.Content" xml:space="preserve"><value>Unison</value></data>
+  <data name="StartTileDialog_WhatsAppWeb.Content" xml:space="preserve"><value>WhatsApp Web</value></data>
+  <data name="StartTileDialog_WhatsAppLegacy.Content" xml:space="preserve"><value>WhatsApp Legacy</value></data>
+  <data name="Settings_DiskUsageCalculating" xml:space="preserve"><value>Вычисление...</value></data>
+  <data name="Settings_DiskUsageFailed" xml:space="preserve"><value>Не удалось посчитать</value></data>
+  <data name="Settings_DiskUsageSummary" xml:space="preserve"><value>{0} в {1} файлах</value></data>
+  <data name="MediaDeleted.Title" xml:space="preserve"><value>Ошибка</value></data>
+  <data name="MediaDeleted.Message" xml:space="preserve"><value>Файл удалён с устройства</value></data>
+  <data name="MediaDeleted.Close" xml:space="preserve"><value>OK</value></data>
   <data name="Settings_KeepAlive.Header" xml:space="preserve">
     <value>Фоновый режим</value>
   </data>
@@ -995,6 +1084,12 @@
   <data name="ChatDetailInfo_NotificationsToggle.OffContent" xml:space="preserve">
     <value>Выкл</value>
   </data>
+  <data name="LegacyImageViewer_Download.Label" xml:space="preserve">
+    <value>Download</value>
+  </data>
+  <data name="LegacyImageViewer_Share.Label" xml:space="preserve">
+    <value>Share</value>
+  </data>
   <data name="ImageViewer_Download.ToolTipService.ToolTip" xml:space="preserve">
     <value>Сохранить</value>
   </data>
@@ -1033,5 +1128,119 @@
   </data>
   <data name="Debug_RuntimeDialog.Title" xml:space="preserve">
     <value>Диагностика среды выполнения</value>
+  </data>
+  <data name="Debug_CopyReport.[using:Windows.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Copy to clipboard</value>
+  </data>
+  <data name="Debug_CopyReport.AutomationProperties.Name" xml:space="preserve">
+    <value>Copy to clipboard</value>
+  </data>
+  <data name="Debug_RequestFullHistory.Content" xml:space="preserve">
+    <value>Request Full History On-demand</value>
+  </data>
+  <data name="Debug_FullHistoryRequesting" xml:space="preserve">
+    <value>Requesting full history…</value>
+  </data>
+  <data name="Debug_FullHistoryRequested" xml:space="preserve">
+    <value>Full history on-demand requested.</value>
+  </data>
+  <data name="Debug_FullHistorySkipped" xml:space="preserve">
+    <value>Full history request was not sent (socket not ready or skipped).</value>
+  </data>
+  <data name="Debug_FullHistoryUnavailable" xml:space="preserve">
+    <value>History service unavailable.</value>
+  </data>
+  <data name="Debug_FullHistoryFailed" xml:space="preserve">
+    <value>Full history request failed: </value>
+  </data>
+  <data name="Settings_YourProfile.Text" xml:space="preserve">
+    <value>Ваш профиль</value>
+  </data>
+  <data name="Settings_Profile.Text" xml:space="preserve">
+    <value>Профиль</value>
+  </data>
+  <data name="Settings_ProfileName.Title" xml:space="preserve">
+    <value>Имя</value>
+  </data>
+  <data name="Settings_ProfilePhone.Title" xml:space="preserve">
+    <value>Телефон</value>
+  </data>
+  <data name="Settings_ProfileStatus.Title" xml:space="preserve">
+    <value>О себе</value>
+  </data>
+  <data name="Settings_ProfilePhotoButton.AutomationProperties.Name" xml:space="preserve">
+    <value>Фото профиля</value>
+  </data>
+  <data name="Settings_ProfilePhotoCamera.Text" xml:space="preserve">
+    <value>Камера</value>
+  </data>
+  <data name="Settings_ProfilePhotoGallery.Text" xml:space="preserve">
+    <value>Галерея</value>
+  </data>
+  <data name="Settings_ProfilePhotoDelete.Text" xml:space="preserve">
+    <value>Удалить</value>
+  </data>
+  <data name="StartTileDialog_Transparent.Content" xml:space="preserve">
+    <value>Прозрачная плитка</value>
+  </data>  <data name="Shell_LegacyPivot_Calls.Header" xml:space="preserve">
+    <value>звонки</value>
+  </data>
+  <data name="Shell_LegacyPivot_Favorites.Header" xml:space="preserve">
+    <value>избранное</value>
+  </data>
+  <data name="Shell_LegacyBrand.Text" xml:space="preserve">
+    <value>WHATSAPP LEGACY</value>
+  </data>
+  <data name="Shell_LegacyAppBar_Filter.Text" xml:space="preserve">
+    <value>Фильтровать сообщения</value>
+  </data>
+  <data name="Shell_LegacyAppBar_Filter.Label" xml:space="preserve">
+    <value>Фильтровать сообщения</value>
+  </data>
+  <data name="Shell_LegacyAppBar_Search.Label" xml:space="preserve">
+    <value>Поиск</value>
+  </data>
+  <data name="Shell_LegacyAppBar_NewChat.Label" xml:space="preserve">
+    <value>Новый чат</value>
+  </data>
+  <data name="Shell_LegacyAppBar_AddContact.Label" xml:space="preserve">
+    <value>Добавить контакт</value>
+  </data>
+  <data name="Shell_LegacyAppBar_NewStatus.Label" xml:space="preserve">
+    <value>Новый статус</value>
+  </data>
+  <data name="Shell_LegacyAppBar_More.Label" xml:space="preserve">
+    <value>Ещё</value>
+  </data>
+  <data name="Shell_LegacyMenu_Debug.Label" xml:space="preserve">
+    <value>Debug</value>
+  </data>
+  <data name="Shell_LegacyMenu_Settings.Label" xml:space="preserve">
+    <value>Настройки</value>
+  </data>
+  <data name="Shell_LegacyMenu_Profile.Label" xml:space="preserve">
+    <value>Профиль</value>
+  </data>
+  <data name="Shell_LegacySearch_Cancel.Content" xml:space="preserve">
+    <value>Отмена</value>
+  </data>
+  <data name="Shell_LegacySearchBox.PlaceholderText" xml:space="preserve">
+    <value>Поиск</value>
+  </data>  <data name="Shell_LegacyPlaceholder.Text" xml:space="preserve">
+    <value>Скоро</value>
+  </data>  <data name="Shell_LegacySearchTitle.Text" xml:space="preserve">
+    <value>Поиск</value>
+  </data>
+  <data name="ChatDetail_DocumentOpen.Label" xml:space="preserve">
+    <value>Открыть документ</value>
+  </data>
+    <data name="ChatDetail_AudioPlay.Label" xml:space="preserve">
+    <value>Воспроизвести аудио</value>
+  </data>
+<data name="ChatDetail_DocumentSaveAs.Label" xml:space="preserve">
+    <value>Сохранить как…</value>
+  </data>
+  <data name="ChatDetail_Back.ToolTip" xml:space="preserve">
+    <value>Назад</value>
   </data>
 </root>

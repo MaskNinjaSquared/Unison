@@ -26,6 +26,9 @@ namespace Unison.Core.Constants
         /// <summary>Toast notifications for incoming messages (foreground).</summary>
         public const string NotificationsEnabled = "NotificationsEnabled";
 
+        /// <summary>Chat-list line that reports synchronization. On by default.</summary>
+        public const string ShowSyncStatus = "ShowSyncStatus";
+
         /// <summary>
         /// Toast sound for 1:1 messages (<see cref="NotificationSound"/> as int).
         /// Same key string is read by Unison.Background.
@@ -40,6 +43,15 @@ namespace Unison.Core.Constants
 
         /// <summary>Primary Live Tile updates.</summary>
         public const string LiveTilesEnabled = "LiveTilesEnabled";
+
+        /// <summary>
+        /// Glyph of the pinned Start tile (<see cref="Models.StartTileMark"/> stored as int).
+        /// Default <see cref="Models.StartTileMark.Unison"/>.
+        /// </summary>
+        public const string StartTileMark = "StartTileMark";
+
+        /// <summary>When true, the pinned Start tile uses a transparent plate instead of the accent color.</summary>
+        public const string StartTileTransparent = "StartTileTransparent";
 
         /// <summary>
         /// LocationTracking extended execution keep-alive (Unogram pattern).
@@ -118,10 +130,14 @@ namespace Unison.Core.Constants
                 { LastFreshnessReconnectFallbackUtc, "" },
                 { SocketBrokerTaskRegistrationMarker, "" },
                 { ReconnectToastActive, false },
+                { SuppressReconnectToast, false },
                 { NotificationsEnabled, true },
+                { ShowSyncStatus, true },
                 { MessageNotificationSound, (int)NotificationSound.SystemDefault },
                 { GroupNotificationSound, (int)NotificationSound.SystemDefault },
                 { LiveTilesEnabled, true },
+                { StartTileMark, (int)Models.StartTileMark.Unison },
+                { StartTileTransparent, false },
                 { LocationKeepAliveEnabled, false },
                 { AutoUnlinkOnLogoutEnabled, false },
                 { SelectedShell, (int)AppShell.Unison },

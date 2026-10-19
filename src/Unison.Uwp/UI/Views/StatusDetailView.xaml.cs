@@ -182,10 +182,10 @@ namespace Unison.Uwp.UI.Views
                 return;
             }
 
-            if (ViewerVideo.NaturalDuration.HasTimeSpan)
-            {
-                ViewModel.ApplyVideoNaturalDuration(ViewerVideo.NaturalDuration.TimeSpan.TotalSeconds);
-            }
+            double seconds = ViewerVideo.NaturalDuration.HasTimeSpan
+                ? ViewerVideo.NaturalDuration.TimeSpan.TotalSeconds
+                : 0d;
+            ViewModel.ApplyVideoNaturalDuration(seconds);
         }
 
         private void ViewerVideo_MediaEnded(object sender, RoutedEventArgs e)

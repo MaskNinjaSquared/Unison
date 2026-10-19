@@ -138,13 +138,6 @@ namespace Unison.Uwp.Client
 
         Task<BinaryNode> QueryParticipatingGroupsAsync();
 
-        Task<BinaryNode> QueryUsyncAsync(
-            List<BinaryNode> userNodes,
-            string context,
-            string mode,
-            List<BinaryNode> queryProtocols,
-            int timeoutMs = 60000);
-
         Task<ProfilePictureResult> GetProfilePictureUrlResultAsync(string jid, string type = "preview");
 
         Task<byte[]> DownloadAndDecryptMediaAsync(
@@ -170,16 +163,35 @@ namespace Unison.Uwp.Client
         /// <summary>Tells the senders of those messages that they were read.</summary>
         Task MarkMessagesReadAsync(IEnumerable<Unison.Socket.UseCases.Messages.ReceiptTarget> targets);
 
-        Task<string> SendTextMessageAsync(string jid, string text, string explicitMessageId = null);
+        Task<string> SendTextMessageAsync(
+            string jid,
+            string text,
+            string explicitMessageId = null,
+            IList<string> mentions = null,
+            bool mentionAll = false,
+            OutgoingQuote quote = null);
 
-        Task<string> SendImageMessageAsync(string jid, byte[] imageBytes, string caption = null);
+        Task<string> SendImageMessageAsync(
+            string jid,
+            byte[] imageBytes,
+            string caption = null,
+            string explicitMessageId = null);
 
         Task<string> SendAudioMessageAsync(
             string jid,
             byte[] audioBytes,
             string mimeType,
             uint durationSeconds,
-            bool isVoiceMessage = false);
+            bool isVoiceMessage = false,
+            string explicitMessageId = null);
+
+        Task<string> SendDocumentMessageAsync(
+            string jid,
+            byte[] documentBytes,
+            string mimeType,
+            string fileName,
+            string caption = null,
+            string explicitMessageId = null);
 
         Task<string> SendPinInChatMessageAsync(
             string jid,

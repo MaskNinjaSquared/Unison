@@ -209,10 +209,19 @@ namespace Unison.Uwp.Services
                 if (totalUnread <= 0 || !IsNotificationsSettingEnabled())
                 {
                     updater.Clear();
+                    StartTileMirror.ClearBadge();
                     return;
                 }
 
-                int badgeValue = Math.Min(99, totalUnread);
+                // Desktop WinRT: values above 99 render as "99+".
+                // Mobile: the glyph badge cannot paint a superscript; shell/Live Tile text uses "99⁺".
+                // Passing 100+ still asks the OS for its overflow mark on Mobile.
+                int badgeValue = totalUnread;
+                if (SystemInfoProvider.DetectIsMobile() && totalUnread > 99)
+                {
+                    badgeValue = 100;
+                }
+
                 var badgeXml = BadgeUpdateManager.GetTemplateContent(BadgeTemplateType.BadgeNumber);
                 var badgeElement = badgeXml.SelectSingleNode("/badge") as XmlElement;
                 if (badgeElement == null)
@@ -222,6 +231,7 @@ namespace Unison.Uwp.Services
 
                 badgeElement.SetAttribute("value", badgeValue.ToString());
                 updater.Update(new BadgeNotification(badgeXml));
+                StartTileMirror.UpdateBadge(totalUnread, true);
             }
             catch
             {
@@ -231,6 +241,7 @@ namespace Unison.Uwp.Services
         public void ClearAll()
         {
             try { BadgeUpdateManager.CreateBadgeUpdaterForApplication().Clear(); } catch { }
+            StartTileMirror.ClearBadge();
             LiveTiles.Clear();
             try { ToastNotificationManager.History.Clear(); } catch { }
         }
@@ -240,6 +251,7 @@ namespace Unison.Uwp.Services
             if (!IsNotificationsSettingEnabled())
             {
                 try { BadgeUpdateManager.CreateBadgeUpdaterForApplication().Clear(); } catch { }
+                StartTileMirror.ClearBadge();
                 try { ToastNotificationManager.History.Clear(); } catch { }
             }
         }

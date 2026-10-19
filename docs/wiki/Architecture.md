@@ -118,11 +118,10 @@ That is intentional:
 - Replacing the connection first, without dismantling the 16k-line client in the same step, is how a real account could move onto rc14.
 - Facades that are ready (`ConnectionFacade`, `HistoryFacade`, `ProfileFacade`, parts of `ContactFacade`) reach `WhatsAppSession` directly via `IWhatsAppSessionProvider`.
 
-Three things the bridge **does not fake**:
+Broker transfer and reclaim go through `ConnectionHandler` and answer `true` only when ownership actually moved. Two things the bridge **does not fake**:
 
-1. **Broker transfer** — both methods return `false`; the caller keeps the socket.
-2. **Legacy app-state raw events** — `AppStateModule` decodes patches inside the session; changes arrive as callbacks.
-3. **Cold restore of a broker-owned socket** — the bridge always opens a new transport.
+1. **Legacy app-state raw events** — `AppStateModule` decodes patches inside the session; changes arrive as callbacks.
+2. **Cold restore of a broker-owned socket** — after process termination the next connect closes that socket and opens a new transport.
 
 ## WhatsAppService today
 

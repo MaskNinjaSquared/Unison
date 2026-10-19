@@ -55,6 +55,31 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         void StartDeferredStartupMaintenance();
 
+        // ---------------------------------------------------------------------
+        // App lifecycle
+        //
+        // What the app does to the connection when the OS moves it between foreground,
+        // background and suspension. Nothing here decides when; App does.
+        // ---------------------------------------------------------------------
+
+        /// <summary>Brings the connection back after the app became visible or resumed.</summary>
+        Task ResumeAsync();
+
+        /// <summary>Drops caches the OS asked us to give back under memory pressure.</summary>
+        Task ReleaseMemoryAsync();
+
+        /// <summary>
+        /// Hands the live socket to the background broker. True only when ownership actually
+        /// moved; false leaves the socket where it was.
+        /// </summary>
+        Task<bool> TransferActiveSocketToBrokerAsync(string reason);
+
+        /// <summary>Gets ready for suspension after the socket went to the broker.</summary>
+        Task PrepareForSuspendAsync();
+
+        /// <summary>Closes the connection, saving first when <paramref name="persist"/> is true.</summary>
+        Task ShutdownAsync(bool persist = true);
+
         /// <summary>
         /// User setting: automatically clear session and return to QR on logout/revocation.
         /// </summary>

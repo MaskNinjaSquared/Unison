@@ -43,13 +43,13 @@
                       Foreground="{ThemeResource ChatListStatusCheckReadBrush}"
                       VerticalAlignment="Center"
                       Visibility="Collapsed"/>
-            <TextBlock x:Name="FailedMark"
-                       Text="!"
-                       FontSize="12"
-                       FontWeight="Bold"
-                       Foreground="#E81123"
-                       VerticalAlignment="Center"
-                       Visibility="Collapsed"/>
+            <FontIcon x:Name="FailedMark"
+                      Glyph="&#xE783;"
+                      FontFamily="{StaticResource IconFont}"
+                      FontSize="14"
+                      Foreground="#E81123"
+                      VerticalAlignment="Center"
+                      Visibility="Collapsed"/>
         </Grid>
 
         <TextBlock x:Name="AuthorBlock"

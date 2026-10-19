@@ -17,6 +17,12 @@ namespace Unison.Core.Contracts.WhatsApp
         event System.EventHandler DisplayNamesUpdated;
 
         /// <summary>
+        /// Asks listeners to re-read labels after the list fold or another bulk rename that did
+        /// not go through the usual name-resolution path.
+        /// </summary>
+        void NotifyDisplayNamesUpdated();
+
+        /// <summary>
         /// Best known label for a JID: device address book first, then the push name the account
         /// broadcasts, then the bare number. <paramref name="context"/> only labels the call site
         /// in diagnostics.
@@ -53,6 +59,12 @@ namespace Unison.Core.Contracts.WhatsApp
         Task RetrieveContactPicturesAsync(CancellationToken cancellationToken = default(CancellationToken));
 
         /// <summary>
+        /// Puts picture files already on disk onto the chat rows. One UI pass to see which rows
+        /// need it, the disk probe off that thread, then one UI pass to write the URIs.
+        /// </summary>
+        Task HydrateCachedAvatarUrisAsync(string reason);
+
+        /// <summary>
         /// One idle pass of group-member pictures (16, then schedules the next). Confirmed
         /// no-photo misses are stamped so the same people are not asked again soon.
         /// Used by the Members pivot — not on chat open.
@@ -81,6 +93,12 @@ namespace Unison.Core.Contracts.WhatsApp
 
         /// <summary>Refreshes the device-contact name overlay for the given direct chats.</summary>
         Task RefreshPhoneContactOverlayAsync(bool force);
+
+        /// <summary>
+        /// Names the 1:1 chats already in the list from the device address book, then relabels
+        /// the rows. Groups are skipped. Local only, so it can run before the session is up.
+        /// </summary>
+        Task RefreshChatListAddressBookNamesAsync();
 
         /// <summary>True while a <see cref="RefreshContactNamesAsync"/> call is in flight.</summary>
         bool IsContactRefreshRunning { get; }

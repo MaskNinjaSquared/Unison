@@ -25,8 +25,11 @@ namespace Unison.Core.ViewModels
         private readonly IDialogService _dialogs;
         private readonly IUriLauncher _uriLauncher;
         private readonly IFilePicker _filePicker;
+        private readonly IAudioExportService _audioExport;
         private readonly ISessionLogger _sessionLogger;
         private readonly IRuntimeDiagnostics _diagnostics;
+        private readonly IHistoryMessageStore _history;
+        private readonly ICopyService _copy;
         private bool _isExpanded;
         private bool _isHighlighted;
         private bool? _canExpandCached;
@@ -43,8 +46,11 @@ namespace Unison.Core.ViewModels
             IDialogService dialogs = null,
             IUriLauncher uriLauncher = null,
             IFilePicker filePicker = null,
+            IAudioExportService audioExport = null,
             ISessionLogger sessionLogger = null,
-            IRuntimeDiagnostics diagnostics = null)
+            IRuntimeDiagnostics diagnostics = null,
+            IHistoryMessageStore history = null,
+            ICopyService copy = null)
         {
             Model = model ?? throw new ArgumentNullException(nameof(model));
             _strings = strings;
@@ -52,8 +58,11 @@ namespace Unison.Core.ViewModels
             _dialogs = dialogs;
             _uriLauncher = uriLauncher;
             _filePicker = filePicker;
+            _audioExport = audioExport;
             _sessionLogger = sessionLogger;
             _diagnostics = diagnostics;
+            _history = history;
+            _copy = copy;
 
             ShowReactionsCommand = new RelayCommand(
                 () => _ = ShowReactionsAsync(),
@@ -91,9 +100,16 @@ namespace Unison.Core.ViewModels
                 () => _ = SaveDocumentAsAsync(),
                 () => HasLocalDocument);
 
+            SaveAudioAsCommand = new RelayCommand(
+                () => _ = SaveAudioAsAsync(),
+                () => CanSaveAudioAs);
+
             ExportDocumentCommand = new RelayCommand(
                 () => _ = ExportDocumentAsync(),
                 () => Model.IsDocument && !IsDocumentDownloading);
+
+            CopyCommand = new RelayCommand(CopyText, () => !string.IsNullOrWhiteSpace(CopyableText));
+            ReplyCommand = new RelayCommand(() => ReplyRequested?.Invoke(this, EventArgs.Empty));
 
             Model.PropertyChanged += OnModelPropertyChanged;
             SyncAudioPlaybackStatusFromModel();
@@ -139,6 +155,13 @@ namespace Unison.Core.ViewModels
                 name == nameof(ChatMessage.DocumentDisplayName))
             {
                 _documentDisplayNameCached = null;
+            }
+
+            if (name == nameof(ChatMessage.Content) ||
+                name == nameof(ChatMessage.Caption) ||
+                name == nameof(ChatMessage.Kind))
+            {
+                (CopyCommand as RelayCommand)?.RaiseCanExecuteChanged();
             }
 
             if (name == nameof(ChatMessage.MentionedJids))
@@ -277,6 +300,17 @@ namespace Unison.Core.ViewModels
 
         /// <summary>FileSavePicker for a cached document.</summary>
         public ICommand SaveDocumentAsCommand { get; }
+
+        /// <summary>Save downloaded audio as MP3 (overflow menu).</summary>
+        public ICommand SaveAudioAsCommand { get; }
+
+        /// <summary>Copies this bubble's text, or its caption, to the clipboard.</summary>
+        public ICommand CopyCommand { get; }
+
+        /// <summary>Reply to this bubble. The conversation opens the composer bar.</summary>
+        public ICommand ReplyCommand { get; }
+
+        public event EventHandler ReplyRequested;
 
         /// <summary>Download to cache if needed, then FileSavePicker to disk.</summary>
         public ICommand ExportDocumentCommand { get; }
@@ -458,7 +492,41 @@ namespace Unison.Core.ViewModels
             (_audioPlaybackStatus == AudioPlaybackStatus.Playing ||
              _audioPlaybackStatus == AudioPlaybackStatus.Paused);
 
-        /// <summary>Kind label without duration (duration lives in <see cref="AudioTimestampText"/>).</summary>
+        /// <summary>
+        /// "…" overflow (Save as…) while Ready and already downloaded — hidden while playing.
+        /// </summary>
+        public bool ShowAudioOverflowMenu =>
+            Model.IsAudio &&
+            HasLocalAudio &&
+            _audioPlaybackStatus == AudioPlaybackStatus.Ready;
+
+        /// <summary>Running/paused clock in the transport bar (replaces the overflow while active).</summary>
+        public bool ShowAudioBarTimestamp =>
+            Model.IsAudio &&
+            (_audioPlaybackStatus == AudioPlaybackStatus.Playing ||
+             _audioPlaybackStatus == AudioPlaybackStatus.Paused);
+
+        public bool CanSaveAudioAs => ShowAudioOverflowMenu && _audioExport != null;
+
+        /// <summary>Total duration in the bubble footer (next to the sound glyph).</summary>
+        public bool ShowAudioFooterDuration =>
+            Model.IsAudio && Model.AudioDurationSeconds > 0;
+
+        public string AudioFooterDurationText
+        {
+            get
+            {
+                if (!ShowAudioFooterDuration)
+                {
+                    return string.Empty;
+                }
+
+                uint seconds = Model.AudioDurationSeconds;
+                return string.Format("{0}:{1:00}", seconds / 60, seconds % 60);
+            }
+        }
+
+        /// <summary>Kind label without duration (duration lives in the footer / bar clock).</summary>
         public string AudioReadyLabelText =>
             Model.IsVoiceMessage
                 ? (_strings != null
@@ -468,7 +536,7 @@ namespace Unison.Core.ViewModels
                     ? _strings.Get("ChatDetail_Audio", "Audio")
                     : "Audio");
 
-        /// <summary>Right-side clock: total when Ready; current/frozen while Playing/Paused.</summary>
+        /// <summary>Bar clock while Playing/Paused (position). Ready uses the footer for total.</summary>
         public string AudioTimestampText
         {
             get
@@ -568,10 +636,15 @@ namespace Unison.Core.ViewModels
                 nameof(ShowAudioTransportBar),
                 nameof(ShowAudioReadyLabel),
                 nameof(ShowAudioSlider),
+                nameof(ShowAudioOverflowMenu),
+                nameof(ShowAudioBarTimestamp),
+                nameof(CanSaveAudioAs),
                 nameof(CanDownloadAudio),
                 nameof(AudioButtonText),
                 nameof(AudioReadyLabelText),
                 nameof(AudioTimestampText),
+                nameof(ShowAudioFooterDuration),
+                nameof(AudioFooterDurationText),
                 nameof(MediaBadgeDurationText),
                 nameof(AudioSliderMaximum),
                 nameof(AudioSliderValue));
@@ -588,7 +661,12 @@ namespace Unison.Core.ViewModels
                 nameof(AudioButtonText),
                 nameof(IsAudio),
                 nameof(ShowTextContent),
+                nameof(ShowAudioOverflowMenu),
+                nameof(CanSaveAudioAs),
+                nameof(ShowAudioFooterDuration),
+                nameof(AudioFooterDurationText),
                 nameof(MediaBadgeDurationText));
+            RaiseMediaCommandsChanged();
         }
 
         private void RaiseQuoteUiChanged()
@@ -670,6 +748,25 @@ namespace Unison.Core.ViewModels
         }
 
         public string ImageUri => Model.ImageUri;
+
+        /// <summary>Local picture for a minimized reply chrome. Thumbnail when the full file is not here.</summary>
+        public string PreviewImageUri
+        {
+            get
+            {
+                if (!string.IsNullOrWhiteSpace(Model.ImageUri))
+                {
+                    return Model.ImageUri;
+                }
+
+                if (!string.IsNullOrWhiteSpace(Model.VideoPosterUri))
+                {
+                    return Model.VideoPosterUri;
+                }
+
+                return string.IsNullOrWhiteSpace(Model.ThumbnailUri) ? null : Model.ThumbnailUri;
+            }
+        }
         public bool HasImage => Model.HasImage;
         public string ThumbnailUri => Model.ThumbnailUri;
         public bool HasMediaThumbnail => Model.HasMediaThumbnail;
@@ -683,8 +780,39 @@ namespace Unison.Core.ViewModels
         public bool ShowStickerError => Model.ShowStickerError;
         public bool ShowStickerLoading => Model.ShowStickerLoading;
         public string Caption => Model.Caption;
+
+        private string CopyableText
+        {
+            get
+            {
+                if (ShowTextContent && !string.IsNullOrWhiteSpace(Content))
+                {
+                    return Content;
+                }
+
+                if (!string.IsNullOrWhiteSpace(Caption))
+                {
+                    return Caption;
+                }
+
+                return null;
+            }
+        }
+
+        private void CopyText()
+        {
+            string text = CopyableText;
+            if (string.IsNullOrWhiteSpace(text) || _copy == null)
+            {
+                return;
+            }
+
+            _copy.CopyText(text);
+        }
         public bool HasCaption => Model.HasCaption;
         public bool ShowTextContent => Model.ShowTextContent;
+
+        public bool IsRevoked => Model.IsRevoked;
         public bool HasQuote => Model.HasQuote;
         public string QuotedText => Model.QuotedText;
         public ChatPreviewKind QuotedKind => Model.QuotedKind;

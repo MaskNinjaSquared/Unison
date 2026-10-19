@@ -15,15 +15,25 @@ namespace Unison.Core.ViewModels
     {
         private readonly IStatusService _status;
         private readonly IDispatcher _dispatcher;
+        private readonly IStringResources _strings;
+        private readonly List<StatusAuthorItem> _allAuthors = new List<StatusAuthorItem>();
         private bool _attached;
         private bool _isEmpty = true;
+        private bool _isLoading = true;
         private StatusAuthorItem _selectedAuthor;
+        private StatusListFilter _activeFilter = StatusListFilter.All;
 
-        public StatusListViewModel(IStatusService status, IDispatcher dispatcher)
+        public StatusListViewModel(
+            IStatusService status,
+            IDispatcher dispatcher,
+            IStringResources strings = null)
         {
             _status = status ?? throw new ArgumentNullException(nameof(status));
             _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
+            _strings = strings;
             MenuCommand = new RelayCommand(() => MenuRequested?.Invoke(this, EventArgs.Empty));
+            NewStatusCommand = new RelayCommand(BeginNewStatus);
+            FilterStatusCommand = new RelayCommand<int>(ApplyStatusListFilter);
         }
 
         public ObservableCollection<StatusAuthorItem> Authors { get; } =
@@ -41,7 +51,38 @@ namespace Unison.Core.ViewModels
             private set => Set(ref _isEmpty, value);
         }
 
+        /// <summary>True until the first author list arrives — Legacy (and others) show a spinner.</summary>
+        public bool IsLoading
+        {
+            get => _isLoading;
+            private set => Set(ref _isLoading, value);
+        }
+
+        public StatusListFilter ActiveFilter
+        {
+            get => _activeFilter;
+            private set
+            {
+                if (Set(ref _activeFilter, value))
+                {
+                    OnPropertyChanged(nameof(IsFilterActive));
+                }
+            }
+        }
+
+        public bool IsFilterActive => _activeFilter != StatusListFilter.All;
+
         public ICommand MenuCommand { get; }
+
+        /// <summary>App-bar "new status". Compose is not wired yet.</summary>
+        public ICommand NewStatusCommand { get; }
+
+        /// <summary>Flyout filter: All / Recent / Viewed.</summary>
+        public ICommand FilterStatusCommand { get; }
+
+        private static void BeginNewStatus()
+        {
+        }
 
         public event EventHandler MenuRequested;
 
@@ -94,16 +135,56 @@ namespace Unison.Core.ViewModels
         private void ApplyAuthors(IReadOnlyList<StatusAuthorItem> next)
         {
             string selectedJid = SelectedAuthor?.Jid;
-            Authors.Clear();
+            _allAuthors.Clear();
             if (next != null)
             {
                 for (int i = 0; i < next.Count; i++)
                 {
-                    if (next[i] != null)
+                    StatusAuthorItem author = next[i];
+                    if (author == null)
                     {
-                        Authors.Add(next[i]);
+                        continue;
                     }
+
+                    author.ViewStateCaption = CaptionFor(author.ViewState);
+                    _allAuthors.Add(author);
                 }
+            }
+
+            IsLoading = false;
+            RebuildVisible(selectedJid);
+        }
+
+        private void ApplyStatusListFilter(int filterId)
+        {
+            if (!Enum.IsDefined(typeof(StatusListFilter), filterId))
+            {
+                return;
+            }
+
+            var next = (StatusListFilter)filterId;
+            if (next == ActiveFilter)
+            {
+                return;
+            }
+
+            ActiveFilter = next;
+            string selectedJid = SelectedAuthor?.Jid;
+            RebuildVisible(selectedJid);
+        }
+
+        private void RebuildVisible(string selectedJid)
+        {
+            Authors.Clear();
+            for (int i = 0; i < _allAuthors.Count; i++)
+            {
+                StatusAuthorItem author = _allAuthors[i];
+                if (author == null || !MatchesActiveFilter(author))
+                {
+                    continue;
+                }
+
+                Authors.Add(author);
             }
 
             IsEmpty = Authors.Count == 0;
@@ -126,6 +207,35 @@ namespace Unison.Core.ViewModels
             {
                 SelectionCleared?.Invoke(this, EventArgs.Empty);
             }
+        }
+
+        private bool MatchesActiveFilter(StatusAuthorItem author)
+        {
+            switch (_activeFilter)
+            {
+                case StatusListFilter.All:
+                    return true;
+                case StatusListFilter.Recent:
+                    return author.ViewState == StatusViewState.Recent;
+                case StatusListFilter.Viewed:
+                    return author.ViewState == StatusViewState.Viewed;
+                default:
+                    return true;
+            }
+        }
+
+        private string CaptionFor(StatusViewState state)
+        {
+            if (state == StatusViewState.Viewed)
+            {
+                return _strings != null
+                    ? _strings.Get("StatusList_Viewed", "Viewed")
+                    : "Viewed";
+            }
+
+            return _strings != null
+                ? _strings.Get("StatusList_Recent", "Recent")
+                : "Recent";
         }
     }
 }

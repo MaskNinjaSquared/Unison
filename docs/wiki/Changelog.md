@@ -1,6 +1,665 @@
 # Changelog
 
-Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, the product “What’s New” notes, the Socket Broker work, v6.9, and v6.8. It is not a substitute for git history.
+Newest first.
+
+## In-chat camera pick
+
+`AttachCameraCommand` shows `CameraPickView` over the conversation
+(`ContentPresenter` on each chat-detail shell). Chrome: back, flash on/off,
+switch camera when `IsMultipleCameras` (WinRT video devices). Shutter JPEG bytes
+go through `CameraPickViewModel.PhotoCaptured` into the existing image-send
+preview. Webcam capability added to the package.
+
+
+## Composer can send documents
+
+`AttachFileCommand` opens a document-only picker (`OutgoingDocumentKinds`: PDF, office,
+archives, text — not image/audio/video). The send path mirrors image/audio:
+`OutgoingMediaSend` → `IOutgoingMessageHost.SendDocumentAsync` →
+`SocketBridge.SendDocumentMessageAsync` → Baileys `MediaType.Document` /
+`DocumentMessage`. `IMessageService.SendDocumentAsync` is the façade entry.
+
+
+## Startup UI load left the client contract
+
+`LoadPersistedUiStateAsync` and `StartDeferredStartupMaintenance` go through
+`IStartupUiHost`. `ConnectionFacade` is the caller; both members left `IWhatsAppService`.
+
+
+## Usync alias filing left the client contract
+
+`TryFileUsyncAlias` is `IUsyncAliasHost`. The usync resolver no longer takes
+`IWhatsAppService` for that write. The member left the contract.
+
+
+## History sync notifies left the client contract
+
+Chunk started/applied, LID filing from history and the full on-demand request go through
+`IHistorySyncHost`. `HistoryFacade` is the caller; the four members left `IWhatsAppService`.
+
+
+## Conversation resync left the client contract
+
+Wiping in-memory chats, forcing app-state pin/mute re-report and the no-socket full
+resync fallback go through `IConversationResyncHost`. `HistoryFacade` is the only
+caller; the three members left `IWhatsAppService`.
+
+
+## Personal chat keeps the profile name
+
+The notes-to-self row used to take a WhatsApp push nick or an agenda entry under the
+account's own number ahead of the logged-in profile name, so name enrichment could rename
+it to something unrelated. `ContactDisplayNames` now prefers the profile (then credentials)
+for self addresses; push and agenda only fill gaps.
+
+
+## Chat pin and delete no longer name the client
+
+Local chat pin, chat delete and message pin go through `IAppStateLocalHost`. The chat
+façade dropped its `IWhatsAppService` dependency. The three members left the contract.
+
+
+## SQLite tip reconcile and deferred avatars left the client contract
+
+`ChatFacade` owns `ReconcileChatPreviewsFromSqliteAsync` over `ChatPreviewReconciler`.
+`ChatAvatarPolicy` asks for the next enrichment pass through `IDeferredAvatarResolution`.
+Both members left `IWhatsAppService`. No behaviour change.
+
+
+## Open-chat merge left the façade body
+
+Combining SQLite history rows with the live RAM overlay is `OpenChatMessageMerge`. The
+message façade maps history rows and asks `IOutgoingMessageHost.LoadLiveOverlayAsync` for
+the overlay; `LoadMessagesForChatAsync` left `IWhatsAppService`. No behaviour change.
+
+
+## Alias merge and usync filing left the client
+
+Collapsing a LID chat into its phone row is `ChatListAliasMerge`. Filing an accepted usync
+pair into the alias table is `UsyncAliasFiling`. The chat façade and the usync resolver call
+the merge helper; the client only keeps `TryFileUsyncAlias` so it can register the pair with
+the live socket and heal our own identity afterward. `MergeDuplicateChatsAsync` and
+`RequestAliasChatMerge` left `IWhatsAppService`.
+ This is a wiki-facing merge of the Unison.Socket architecture PR, the product “What’s New” notes, the Socket Broker work, v6.9, and v6.8. It is not a substitute for git history.
+
+---
+
+## App lifecycle goes through the connection façade
+
+Resume, memory release, broker hand-off, suspend and shutdown are called on `IConnectionService`
+instead of the WhatsApp client. The façade forwards to the client as before, and the hand-off still
+reports true only when the broker took the socket. No behaviour change.
+
+The Debug-only file-watch sender is started once by `App` instead of being started and stopped by
+the connection; it already waited for a ready transport before sending.
+
+## Façades read the chat list and name tables directly
+
+The chat and contact façades now take the chat list, the address-book names, the conversation row
+index and the push-name lookup from the shared Core objects instead of asking the client.
+`Chats`, `PhoneContactNamesByJid`, `GetTotalUnreadCount`, `GetLiveMessages`,
+`GetChatRowsForCanonicalJid`, `HasResolvedContactName` and `SeedChatMessagesInMemoryAsync` left
+`IWhatsAppService`. No behaviour change.
+
+## Chat names are applied to the list after sync
+
+When a sync ended, names the app already knew could stay off the chat list, which kept showing
+numbers and addresses even though opening the chat showed the name. The opportunistic name pass
+skipped the local re-apply on every early exit (cooldown, a refresh running, nothing left to ask the
+server). It now applies known names first, and the end of the history catch-up applies them too,
+without waiting on the post-sync enrichment.
+
+## Group recipient count left the client
+
+How many members a group receipt has to hear from before a message turns delivered or read is cached
+by `GroupRecipientCountCache` in Core, 30 minutes per group as before. The client lost the dictionary,
+its entry class and `_messageStateLock`. No behaviour change.
+
+A pin arriving from another device now writes each store key once (`ChatPinStoreKeys.Merge`); the
+row and wire keys used to overlap and repeat the upsert. Two duplicated client blocks became helpers
+(find-or-add row for app-state, apply a message as the list tip).
+
+## Calls and Favorites empty states are unlocked
+
+Unison and WhatsApp shells can open Calls and Favorites from the sidebar (they were greyed out).
+Each section is a shared page with title and hamburger, and a shared empty-state control for the body:
+desktop shows the hint at the top-left, mobile centered. The Legacy pivot uses the same controls
+instead of “Coming soon”. There is still no call history or favorites list — only the empty copy.
+
+## UI thread and chat-list save are no longer client members
+
+Facades and contact helpers now get the UI thread from an injected `AttachedUiDispatcher` and save
+the chat list through `IChatCatalogPersistence`, instead of calling `RunOnUiThreadAsync`,
+`SchedulePersistPublic` and `PersistChatListRowsPublic` on `IWhatsAppService`. Those three members
+left the contract. The save debounce itself still lives in the client until the connection
+shutdown moves (phase 4). No behaviour change.
+
+The picture a contact lookup finds is fetched by the contact façade too
+(`FetchAvatarForResolvedContactAsync` left the contract). It now fills the same row the "has no
+picture yet" check found; before, when a person had two rows, it could look at the one that already
+had a picture and fill nothing.
+
+The group listing at the end of the background pass is started by an event the group façade
+listens to (`OnGroupListingDue`), so the client no longer holds the group service. The pass clears
+its own status before handing over, and the façade shows "Loading group info" until the listing ends.
+
+When a phone number and a LID are newly paired, the rows still without a picture are handed to the
+contact façade by an event (`OnAvatarRetryDue`) instead of a client forward, and the façade forces
+the retry. A failing retry no longer aborts the alias follow-up; the duplicate merge still runs. The
+"no contact façade" picture fallback of the background pass is gone — it only forwarded back to the
+façade.
+
+## A deleted message is a state, shown in your language
+
+Deleting a message for everyone used to overwrite its text with the English "[Message Deleted]", and
+that string was what the bubble, the chat list and the store all read. Now the message is only flagged
+(`IsRevoked`) and emptied; the bubble shows an icon and "This message was deleted" in the app language,
+and the chat list shows the same through a new `Revoked` preview kind. A deleted last message stays on
+the list line, as on the phone, instead of the reconcile pass bringing back the message before it. A
+list line saved by an older build with the English text is repaired once at startup.
+
+## A contact found by number keeps its pin, mute and unread count
+
+When a contact lookup or a new chat pairs a LID row with the phone row of the same person, the two
+rows now fold through the same pass as the list dedupe. The LID row's pin, mute, unread count,
+newer preview and picture used to be dropped; only its messages moved. Removing a message deleted on
+another device, and the leftover row of an old revoke, also go through the message cache now, so the
+message id is forgotten with it. A row repaired from an old "[Message Deleted]" line with nothing to
+replace it also loses the stale message id. A chat update that touches only pin or only mute is read
+by `AppStatePinMapping` / `AppStateMuteMapping`, and the badge total, the chat-row index, the reconcile
+tip choice, the self name precedence and the pin-in-chat window are Core rules with tests.
+
+## Usync names filed by the contact façade
+
+What a contact lookup learns about a name is now stored by `ContactFacade` directly in the shared
+name table (`UsyncContactCaches`), and the "already a known number?" search reads the alias and name
+tables itself. Three members left `IWhatsAppService`. Filing the LID/phone pair, fetching the picture
+and merging duplicate chats still go through the client.
+
+## Resolved names written in one pass
+
+Applying a freshly resolved name to a chat title, and to a group member, is `ResolvedNameApply`.
+The two copies in the client now call it. A group member is still renamed on any non-blank name
+that differs, which is the rule that copy already had.
+
+## Merged duplicate chats keep the newer preview
+
+When two rows for the same contact merge (phone and LID), the newest message is now compared on each
+row's own messages before they are combined. The row that was folded away used to read as empty, so
+the surviving row could keep an older last-message line than the one it absorbed.
+
+## Alias follow-up keeps its avatar retries on failure
+
+The follow-up that runs after new LID/phone pairs arrive (rewrite the alias file, merge duplicate
+rows, retry missing avatars) keeps what it owes in `AliasFollowUpQueue`. A pass that failed used to
+drop its avatar retries; they now wait for the next pass.
+
+## One snapshot for every chat-list save
+
+The periodic, suspend and identity saves of the chat list now take the same snapshot
+(`ChatCatalogSnapshot`), mapped while still on the UI thread. The identity save, which runs after
+duplicate conversations are merged, used to drop the newest message's id, its mentions and the group
+sender when it was the first to write a row.
+
+## Legacy command bar centred on the whole bar
+
+The primary buttons on the chat list, Status and section bars are now centred on the full width of
+the bar, not on the width left of the … button. Buttons sit 2px closer on each side, and the label
+under each icon keeps 2px off the bottom of the bar.
+
+## Message timelines have one owner
+
+Every edit to an open chat's in-memory messages now goes through `ChatMessageCache`: the initial
+window, load-more, the pinned-message insert, and the chat store's own upsert and remove. The store's
+writes used to skip the seen-id index and sort on raw timestamps. Load-more no longer loses room to
+duplicates inside one page.
+
+## Message cache keys canonicalized in the cache
+
+Folding conversations stored under an alias key into their canonical one is
+`ChatMessageCache.CanonicalizeKeys`. Same behaviour, now with tests.
+
+## Contact update reading moved out of the client
+
+How a synced contact is read (which LID/phone pair it names, which name it carries, and under which
+addresses that name is filed) is `ContactUpdateFiling` in Core, with tests. Two fixes on the way: a
+contact whose name is only spaces now falls back to its push name, and a LID address with stray
+whitespace is no longer filed as a phone number.
+
+## Alias filing moved out of the client
+
+Writing an accepted LID/phone pair into the alias table is `AliasPairFiling` in Core. The live
+alias path and the usync answer file both ways; the duplicate-row merge keeps a phone address
+that already points at a LID. Same behaviour, now one place with tests instead of three hand copies.
+
+## WhatsApp Legacy icon font rebuilt
+
+`WhatsAppLegacyIcons.ttf` is regenerated from new sources in `scripts/icons/whatsapp-legacy/`.
+The generator reads ink from alpha only (the red mic was partly dropped), fixes contour winding,
+and fits every glyph centred into the same box, so app-bar, composer and search icons share one
+size per surface.
+
+## History catch-up progress moved out of the client
+
+Where the paginated history catch-up stands between lots (round, lots without progress, newest
+tip seen) and the two "ask again or stop" decisions are `HistoryCatchUpContinuation` in Core.
+Same behaviour; the state is now read and updated under one lock instead of from three threads
+without one.
+
+## Message history store opens again on Mobile
+
+On release (.NET Native) builds the message history database failed to open on every
+start with "duplicate column name: flag_deleted", so no messages were saved or read:
+chats showed only their last message and the first sync never finished. The column check
+read `PRAGMA table_info` into a private row type whose properties .NET Native strips;
+it now adds the column and treats "already exists" as done. The deleted-media flag and
+the cached-media list no longer map private row types either.
+
+## No broker handoff during the first sync; chat-open journal
+
+While the first sync after login is still arriving, entered-background and suspending
+keep the socket in the app instead of handing it to the broker (`BrokerHandoffHold`).
+Opening a chat now writes `chat-open` lines to the diagnostics journal: rows from memory
+and SQLite, the total SQLite row count when the chat got none, whether the thin-timeline
+history request went out, loads abandoned before rendering, and whether the list preview
+had to stand in for an empty timeline.
+
+## On-demand history bookkeeping
+
+What history has been requested from the phone and is still owed — per-chat pages and
+the full catch-up — is one Core type (`HistoryOnDemandRegistry`) instead of nine fields
+spread over four files. Every read and write now happens under its lock (deleting a
+chat, the frugal-budget check and the avatar-fetch deferral used to read or write
+outside it), and claiming the full catch-up can no longer be won by two callers at once.
+
+## Chat window trim and duplicate-row merge rules
+
+The open chat's in-memory window (`ActiveChatMessageWindow`) and the dedupe pass's
+row merge (`DuplicateChatRowMerge`) are Core rules with tests. Three fixes came with
+them: the window picks its newest messages by comparable UTC instead of the raw clock,
+so a row read back from SQLite is no longer dropped in favour of an older live one; a
+pinned message without an id is no longer kept twice; and a merged LID/phone row takes
+the whole preview, including the author line and message id, instead of only the text
+and clock.
+
+## App logo
+
+The start tile, splash and boot screen use the isometric mark. Live tiles are
+the mark alone, on a transparent background. The previous artwork is kept under
+`Assets/LegacyLogo` for a later feature.
+
+## Broker handoff on the socket stack
+
+Suspending hands the live socket to the background task again, now through the new
+session: `ConnectionHandler` stops its keep-alive, checkpoints Noise under the send gate
+and lets the transport transfer ownership. Resuming reclaims it and replays what the
+broker journaled before the session continues. A failed transfer keeps the socket in
+the app, and a failed reclaim connects fresh, as before. Not wired: picking up a broker
+socket after the app process was terminated; that socket is closed on the next connect
+and the server redelivers what the broker read.
+
+## Media fetch off the client
+
+On-demand media downloads fetch the blob through `IEncryptedMediaDownloader` directly
+instead of asking the client to reach its socket. The fetch was already plain HTTP, so it
+now also works in the window where the client has dropped its socket reference. A voice
+note you just sent is prepared for playback by the message façade; the client's copy of
+that path is removed. The quiet save of the repaired row still goes through the client.
+
+## List strip from one stored message
+
+Delete, bulk refresh, reconcile and the history tip were each assembling the same
+chat-list fields. That assembly is `ChatListStrip` (Core). Whether a typed number
+already matches an alias or a stored name is `KnownJidByPhoneDigits`. The download
+orchestration and the broker handoff are unchanged: the first still differs per
+kind, and `TransferSocketToBrokerAsync` still returns false.
+
+## Message cache behind ChatMessageCache
+
+`MessagesByChat` is a `ChatMessageCache` (Core) instead of a bare dictionary. Which
+conversations exist is locked; walking all of them goes through a snapshot, so a loop
+may remove the one it is looking at. "Create the list if missing" is `GetOrAdd`, which
+also replaces a null entry that used to crash the next insert. The in-memory catch-up
+scan no longer needs its retry around a dictionary that changed mid-copy. The lists
+inside are unchanged: still edited in place on the UI thread. `IncomingTimeline`,
+`AliasLinkedMessageFind` and `AliasDuplicateMessageMove` take the cache.
+
+## Display-name maps lock on their own
+
+The push-name and address-book maps on `ChatStateStore` are `DisplayNameTable` (Core)
+instead of bare dictionaries. The address-book reader wrote its names off the UI thread
+while the chat list read the same map on it; now every read and write takes the table's
+lock and enumeration walks a copy. "Add only if missing" and "move from the old address"
+are single calls (`TryAdd`, `Remove`) instead of a check followed by a write.
+`MessagesByChat` is the last transitional dictionary.
+
+## Placeholder resend dispatch
+
+The 5-second wait before a resend, the send itself, and the 15-second window for its
+answer are `PlaceholderResendDispatch` (Core). It reaches the socket through
+`IPlaceholderResendSocket`. The client still decides whether a resend may start at all
+(socket up, nothing deferring it).
+
+## Incoming timeline accept
+
+Whether an arriving message is moved from the contact's other address, only upgrades a
+bubble that is already there, or is inserted is `IncomingTimeline` (Core). Groups never
+look under an alias. The client hands it the message cache, the id index, the alias
+chats and the trim.
+
+## Offline replay tips on ChatFacade
+
+Recording a replayed message into its chat's tip, deciding its unread, the 180 ms
+throttle and the flush onto the list moved from the incoming pump to `ChatFacade`, through
+`OfflineReplayTips` (Core). The client answers what only it knows (open chat, window,
+catch-up progress, persist) through `IOfflineReplayHost`.
+
+## Incoming message queue
+
+The two lanes the incoming pump drains (live first, then offline replay), the generation
+that retires a stalled drain, the current stage, and the retry-once list for live
+messages that time out are one Core type, `IncomingMessageQueue<T>`, under one lock. The
+pump still runs the loop, waits on each message and decides when to reset.
+
+## Placeholder resend book
+
+The missing-message ledger now owns each step of a repair: arm the timer, claim it,
+record the stanza, expire it, give the try back when the send throws, take a peer-data
+answer, mark an ack, and start the per-chat quiet period. `PlaceholderResendAck` reads
+the ack node. `PlaceholderResendDeferral` names why a resend waits. `IncomingPumpStall`
+says when the pump has sat too long. The pump still waits, sends, and holds the queue.
+
+## Placeholder resend permit
+
+A missing message is asked again only when it is under two tries, nothing is in flight,
+and the previous answer has had its wait. That is `PlaceholderResendPermit`.
+
+## Missing-message drain order
+
+The repairs a drain may send are chosen by `MissingMessageLedger`: not in flight, not
+already timed, under two tries, a direct chat before a group, then only as many as the
+budget allows.
+
+---
+
+## Name lookup addresses
+
+The phone, the LID and the stored alias of either are one set, `NameLookupCandidates`.
+Name lookup and the alias-message search both walk it.
+
+## Where an alias message already sits
+
+Finding a message id under one of those addresses is `AliasLinkedMessageFind`. The first
+chat in the list that holds it is the one the duplicate move uses.
+
+---
+
+## Offline replay tips — one book
+
+The compact per-chat tips gathered during an offline replay now live in
+`OfflineReplaySummaryBook`. Recording a tip and putting it back after a failed
+list apply share that book. The 180 ms timer still fires from the incoming pump.
+
+## Alias addresses for one person
+
+Which direct chats to search when a message might already exist under the contact's
+other identity is `AliasLinkedDirectChats`. A group address is not one of them.
+
+---
+
+## Alias duplicate bubble — one move
+
+When the same message is held under both addresses of one person, moving it onto the
+target chat is `AliasDuplicateMessageMove`. A target that already has the id keeps its
+copy. The incoming pump still decides when the two addresses are the same person.
+
+---
+
+## Missing-message ledger — one lock
+
+Placeholder repairs for messages that never arrived now live in `MissingMessageLedger`.
+Noting a gap, resolving it, and forgetting a deleted chat share one lock with the resend
+they are waiting on. The request to the server still goes out from the incoming pump.
+
+---
+
+## Broken chat picture — cleared by `ContactFacade`
+
+A picture that fails to draw is dropped by `ContactFacade`: the cached file is deleted, the row
+is cleared, and a new fetch is asked for at once. The 30-minute backoff is still not applied to
+that failure.
+
+---
+
+## Cached chat pictures — filled in by `ContactFacade`
+
+Pictures already on disk are written onto the rows by `ChatAvatarFetch`, on one UI pass
+around a disk probe. Startup and the avatar batch both ask `IContactService` for that.
+
+---
+
+## Chat picture fetch — on `ContactFacade`
+
+Fetching a chat picture and writing it on the row, including a group's parent or a sibling with
+the same name, left `WhatsAppService`. `ChatAvatarFetch` does that work. Pictures already on
+disk are still filled in by the client at startup.
+
+---
+
+## Live image and sticker — on `MessageFacade`
+
+An image or a sticker that arrives on its own is no longer downloaded inside the incoming pump.
+`MessageFacade` fetches it, including the embedded thumbnail and a Lottie that cannot be shown.
+It waits on the same download gate as a file the user opens.
+
+---
+
+## On-demand media download — on `MessageFacade`
+
+Opening an image, a sticker, a voice note, a video or a document no longer downloads inside
+`WhatsAppService`. `MessageFacade` does it. The phone still allows one download at a time and the
+desktop three, and a picture that arrives live waits on that same gate.
+
+---
+
+## Playback repair — PNG sibling and playable voice note
+
+Building the PNG a phone can show, and the M4A or WAV a phone can play, left the download methods.
+`MediaDerivationService` does that work. The client still writes the new URI onto the message and
+saves it. A file that is already a `_display` sibling is still left alone.
+
+---
+
+## Member pictures — on `GroupFacade`
+
+A member picture GET and the stamp onto every matching roster row left `WhatsAppService`.
+`GroupFacade` asks through the same usync gate as a 1:1 picture. A confirmed miss is still
+remembered, and any transient failure still puts the member back in the queue. The queue itself
+stays in `GroupRosterPolicy`.
+
+---
+
+## Group picture fallback — which addresses to try
+
+When a group has no picture of its own, the parent and community addresses to ask now come from
+`GroupAvatarFallbackJids`. The fetch stays in the client. The group's own address is still left out,
+a bare id is still completed to `@g.us`, and the same address is still asked once.
+
+---
+
+## Group picture — full size on `GroupFacade` (3.2b)
+
+The full-size group picture no longer runs inside `WhatsAppService`. `GroupFacade` fetches it
+through `AvatarFetcher` and writes `AvatarHighUrl` on the UI thread. A direct chat still skips
+the round trip. `EnsureHighQualityGroupAvatarAsync` left `IWhatsAppService`. Member pictures stay
+in the client.
+
+---
+
+## Group listing — on `GroupFacade` (3.2b)
+
+`QueryAllGroupsAsync` and the per-group metadata fallback left `WhatsAppService`. `GroupFacade`
+runs both, and `GroupQueryWindow` is the one two-minute reuse window the name refresh and the
+background pass share. `QueryAllGroupsAsync` and `QueryUnresolvedGroupMetadataAsync` left
+`IWhatsAppService`. The high-quality group picture still forwards to the client.
+
+---
+
+## Group info pane — one roster rule (3.2b)
+
+The member-message match and the groups-in-common lookup in `ChatDetailInfoViewModel` now call
+`GroupRosterRules`, the same rule the metadata apply writes memberships with. A missing resolver
+still lists and compares the addresses the member already carries. The reader's unused
+`IsIdPlaceholder` forward is gone; callers use `GroupIdPlaceholder`.
+
+---
+
+## Group apply — moved to Core, refresh on `GroupFacade` (3.2b)
+
+Putting a w:g2 listing or metadata reply on the chat rows no longer runs inside `WhatsAppService`.
+`GroupMetadataApply` (Core) owns the subject cache, the synced label, announce-only, role, member
+count and the roster replace-or-merge with its saves, and still applies a whole listing in one UI
+pass. `GroupFacade` runs the send-permission refresh itself; `RefreshGroupSendPermissionsAsync`
+left `IWhatsAppService`. The reader returns `GroupMetadataSnapshot` (Core). The client port grew
+from `IGroupRosterHost` into `IGroupHost`. The query passes stay in the client.
+
+---
+
+## Group roster — rules out, restore on `GroupFacade` (3.2b)
+
+`GroupRosterRules` (Core) owns the roster copy for the store, the rebuild from the store, the
+"never over a live roster" check, prior-member matching across LID / PN / phone, and the
+groups-in-common person keys. The client's metadata apply calls it. Restoring a persisted roster
+onto a group row now runs in `GroupRosterRestore`, built for `GroupFacade`, which reaches the client
+only through `IGroupRosterHost` (UI dispatch and member labels).
+`EnsureGroupRosterLoadedFromStoreAsync` left `IWhatsAppService`.
+
+---
+
+## Alias keys — one expansion, and a device suffix no longer hides the pair (3.7)
+
+History reads, avatar lookups and contact phone lookup were each rebuilding the same
+PN/LID key list that `ChatPinStoreKeys` already owned for pins. They call it now.
+`ChatPinStoreKeys` and `JidResolver.TryGetAlias` normalize before asking the table, so a
+`:device` address finds the pair stored under the plain one. A pin write does the same
+for the row it is updating.
+
+---
+
+## Send — moved to `MessageFacade` (3.4)
+
+Text, image and audio sends no longer run inside `WhatsAppService`. `OutgoingTextSend` and
+`OutgoingMediaSend` (Core, built by `MessageFacade`) own the whole flow: the bubble, the retry, the
+settled status and the order of the side effects. They reach the timeline caches, the outbox and
+the socket through `IOutgoingMessageHost`, which the client implements explicitly. The three send
+methods left `IWhatsAppService`; the debug sender goes through `IMessageService`.
+
+---
+
+## Diagnostics, unix time, self push name, and MessageKey alt JID
+
+`DiagnosticJidMask` keeps four characters of a JID in the journal. `UnixTime` and
+`DiagnosticUtcTicks` are the two clock conversions the client was doing inline.
+`SelfPushNameCapture` rejects a dash and refuses to overwrite a trusted self name except from
+app-state. `MessageKeyAltJidScan` reads an undeclared user JID out of MessageKey bytes; turning
+the protobuf into bytes stays on the client. `FirstNonBlankText` is the shared fallback pick.
+
+---
+
+## Send path, disconnect text, and replay noise — rules left the client
+
+`OutgoingMessageId` formats the companion id (`3EB0` + hex). `OutgoingSendSettlement` refuses to
+overwrite a bubble whose status already moved past pending. `DuplicateChatRowPick` chooses which
+PN/LID row a local send repositions, and the first non-blank group name. `FatalStreamCodeText`
+reads a close code out of an exception message. `ReplayDiagnosticNoise` recognises the protocol
+lines a history replay may drop. A typed `WaConnectionException` is still trusted first, and the
+replay suppression switch stays on the client.
+
+---
+
+## Text send retry — the decision left the client (3.4)
+
+`OutgoingTextSendRetry` decides, for one text-send attempt, whether to drop the socket and try
+again. Two attempts; the second gets a shorter connect budget; a refusal stops immediately and
+keeps the connection. The loop, the diagnostics and the socket still live on the client.
+
+---
+
+## Usync contact resolution — moved to `ContactFacade` (3.6)
+
+`ContactUsyncResolver` (built by `ContactFacade`) owns the usync pass end to end: number selection,
+`IUsyncGate`, the session, `ResolveContactNamesUseCase` and the per-contact apply plan. The
+number-search fallback moved with it. `IWhatsAppService.ResolveContactsAsync` and
+`SearchContactAsync` are removed; the client keeps narrow façade-only primitives for the alias, name
+and avatar writes.
+
+---
+
+## Usync contact apply — the decision left the client (3.6)
+
+`ResolvedContactApplyPlan` decides what one usync answer may change: file the alias, merge the two
+chats only the first time that LID is seen, store the push name, and fetch an avatar only for a
+listed chat that has none. The writes still run on the client, because the alias table, name cache
+and auth state have not moved.
+
+---
+
+## Contact lookup — one usync path (3.6)
+
+`ResolveContactsAsync` kept a hand-built usync query behind the `ResolveContactNamesUseCase` path. It
+could only run on a disconnected session, through that session, so it always failed; it is removed
+along with `allowBatchFallback` and `IWhatsAppSocket.QueryUsyncAsync`. Numbers for the live query now
+come from `ContactLookupNumber` (brackets and dots stripped, device suffix cut), and a LID with no
+known phone pair is skipped (`UnmappedLid`) instead of being queried as a fake number.
+
+---
+
+## FULL_HISTORY catch-up — ACK-only loops + debug controls
+
+Catch-up idle lots treated `ack-accepted` and `banner-begin` as progress signals, so
+`stagnant` never rose and adjacent FULL_HISTORY kept firing forever when the phone only ACKed.
+Those notes still refresh the idle clock; only sqlite/offline/tip work bumps lot progress.
+
+Diagnostics dialog: copy-to-clipboard (copy glyph) + **Request Full History On-demand**.
+Debug view: same history button (`IHistoryService.RequestFullHistoryOnDemandAsync`, force clears a stuck gate).
+
+---
+
+## Chat-list pins still missing after resync — protocol path fixed
+
+Baileys returns pins from **two** places: app-state `pin_v1` / `pinAction` (timestamp|null on
+`chats.update`) and optional `Conversation.pinned` on history. Unison already decoded both, but:
+
+1. After a local conversation wipe, LT-hash was already current so `regular_low` mutations
+   (including every `pin_v1`) were **not re-reported** — force snapshot + `reportAllMutations`.
+2. Pin was written under one JID while the list row used the PN/LID sibling — dual-write +
+   alias fallback (`ChatPinStoreKeys`).
+3. History skipped Conversations with pin/mute but no listable tip — flags now reach ChatStore.
+
+---
+
+## Pin ≠ Favourites — undo bad alias
+
+During the pin protocol fix, `ChatItem.IsFavorite` was briefly aliased to `IsChatPinned` so the
+Favorites filter would show pins. That is wrong: pin is `pinAction` / `Conversation.pinned` (icon +
+top of list); Favourites is `favoritesAction` (~500 contacts) with no store/UI yet. `IsFavorite`
+is a stub again (`false`). List pin UI and sort keep using `IsChatPinned` only.
+
+---
+
+## Status viewer — black screen / stuck at 0 progress (Baileys-aligned)
+
+Compared with Baileys rc14: Status media is the same `imageMessage` / `videoMessage` envelope as
+chat (`status@broadcast` + participant). List rows only need author + time; opening needs keys.
+
+Fixes:
+
+- **`HistoryStatusStore` upsert** merges media fields so a later history chunk without keys cannot
+  wipe `mediaKey` / `directPath` / materialized thumbs (`HistoryStatusMediaMerge`).
+- **`StatusFacade.EnsureMediaAsync`** persists a successful full-media URI and falls back to poster /
+  thumb when download fails (Baileys also shows media from the same envelope fields).
+- **Viewer** never waits forever for `NaturalDuration` when proto `seconds` is 0; thumb URIs for
+  video render as images (`StatusMediaDisplay`); `MediaOpened` without a timespan still advances.
 
 ---
 
@@ -9,8 +668,11 @@ Newest first. This is a wiki-facing merge of the Unison.Socket architecture PR, 
 Baileys emits `pinned: timestamp` when `pinAction.pinned` is true, else `null`. Our processor wrote
 `Pinned = timestamp` and the host decided pin with `Pinned > 0`. Protobuf leaves
 `SyncActionValue.timestamp` at **0** when absent, so a real pin collapsed to unpin and never set
-`IsChatPinned`. `AppliesPin` + fallback timestamp (like the legacy path) fix that. Also
-`IsFavorite` was hardcoded `false`, so the Favorites filter could never show pins.
+`IsChatPinned`. `AppliesPin` + fallback timestamp (like the legacy path) fix that.
+
+**Not Favourites.** Chat-list pin (`pinAction` / `Conversation.pinned` → `IsChatPinned`, pin icon +
+top of list) is unrelated to WhatsApp Favourites (`favoritesAction`, ~500 contacts). Favourites
+have no store/UI yet; `IsFavorite` stays a stub (`false`). Do not alias Favourites to pin.
 
 ---
 
@@ -34,7 +696,7 @@ Compared with rc14 `processSyncAction` (`chat-utils.ts`):
 
 The earlier write-merge fix was necessary but not sufficient. `RememberMutedUntil` (and any
 single-field remember) created a cache row whose *other* fields defaulted to off. `ApplyTo` then
-treated `IsChatPinned = false` as an answer and cleared favourites that history or app-state had
+treated `IsChatPinned = false` as an answer and cleared chat-list pins that history or app-state had
 already put on the row. Warming the store from SQLite could also overwrite a pin still only in the
 cache.
 

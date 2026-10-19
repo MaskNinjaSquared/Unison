@@ -12,6 +12,7 @@
 // =============================================================================
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading;
 using System.Threading.Tasks;
@@ -127,8 +128,18 @@ namespace Unison.Uwp.Services
         public string SanitizeFileBase(string fileBase) =>
             string.IsNullOrWhiteSpace(fileBase) ? Guid.NewGuid().ToString("N") : Sanitize(fileBase);
 
-        internal string BuildUri(MediaCacheKind kind, string fileName) =>
+        internal string BuildUri(MediaCacheKind kind, string fileName) => UriFor(kind, fileName);
+
+        internal static string UriFor(MediaCacheKind kind, string fileName) =>
             UriPrefix + SubfolderName(kind) + "/" + fileName;
+
+        /// <summary>
+        /// The folder as a file-system path, for the history thumbnail batch: it writes hundreds of
+        /// small files per lot with <c>System.IO</c> on a worker thread, and a StorageFile round trip
+        /// per thumb would stall the history sync that awaits it on Mobile.
+        /// </summary>
+        internal static string LocalFolderPath(MediaCacheKind kind) =>
+            Path.Combine(ApplicationData.Current.LocalFolder.Path, RootFolderName, SubfolderName(kind));
 
         internal string BuildFileName(string fileBase, string extension) =>
             SanitizeFileBase(fileBase) + (extension ?? string.Empty);

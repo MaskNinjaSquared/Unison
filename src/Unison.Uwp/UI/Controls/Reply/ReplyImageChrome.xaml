@@ -1,0 +1,24 @@
+<UserControl
+    x:Class="Unison.Uwp.UI.Controls.Reply.ReplyImageChrome"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <Border Width="48" Height="48">
+            <Image Source="{Binding PreviewImageUri, Converter={StaticResource StringToImageSourceConverter}, ConverterParameter=96}" Stretch="UniformToFill"/>
+        </Border>
+        <TextBlock Grid.Column="1"
+                   Margin="8,0,0,0"
+                   VerticalAlignment="Center"
+                   Text="{Binding Caption}"
+                   MaxLines="2"
+                   TextTrimming="CharacterEllipsis"
+                   TextWrapping="Wrap"
+                   FontFamily="{StaticResource MainFont}"
+                   FontSize="13"
+                   Opacity="0.8"/>
+    </Grid>
+</UserControl>

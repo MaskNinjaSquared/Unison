@@ -20,7 +20,7 @@ namespace Unison.Uwp.Data
     {
         private static readonly string DatabaseFileName = "unison.db";
 
-        public const int CurrentSchemaVersion = 2;
+        public const int CurrentSchemaVersion = 3;
 
         private readonly SemaphoreSlim _initLock = new SemaphoreSlim(1, 1);
         private readonly SemaphoreSlim _writeLock = new SemaphoreSlim(1, 1);
@@ -52,6 +52,7 @@ namespace Unison.Uwp.Data
                 _connection = new SQLiteAsyncConnection(dbPath);
                 await _connection.CreateTableAsync<HistoryStatusRow>().ConfigureAwait(false);
                 await DropLegacyThumbnailColumnAsync().ConfigureAwait(false);
+                await EnsureIsViewedColumnAsync().ConfigureAwait(false);
                 _initialized = true;
                 Debug.WriteLine("[HistoryStatusStore] Initialized schema=" + CurrentSchemaVersion + " at " + dbPath);
                 await DeleteExpiredAsync().ConfigureAwait(false);
@@ -86,7 +87,15 @@ namespace Unison.Uwp.Data
                             continue;
                         }
 
-                        conn.InsertOrReplace(ToRow(model));
+                        string id = HistoryStatusRow.MakeId(model.AuthorJid, model.MessageId);
+                        HistoryStatusRow existingRow = conn.Find<HistoryStatusRow>(id);
+                        HistoryStatus toWrite = model;
+                        if (existingRow != null)
+                        {
+                            toWrite = HistoryStatusMediaMerge.Merge(ToModel(existingRow), model);
+                        }
+
+                        conn.InsertOrReplace(ToRow(toWrite));
                         upserted++;
                     }
                 }).ConfigureAwait(false);
@@ -139,6 +148,62 @@ namespace Unison.Uwp.Data
                 .ConfigureAwait(false);
 
             return ToModels(rows);
+        }
+
+        public async Task<bool> MarkViewedAsync(string authorJid, string messageId)
+        {
+            string key = JidHelper.Normalize(authorJid);
+            if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(messageId))
+            {
+                return false;
+            }
+
+            await EnsureInitializedAsync().ConfigureAwait(false);
+            string id = HistoryStatusRow.MakeId(key, messageId.Trim());
+            await _writeLock.WaitAsync().ConfigureAwait(false);
+            bool changed = false;
+            try
+            {
+                HistoryStatusRow row = await _connection.FindAsync<HistoryStatusRow>(id)
+                    .ConfigureAwait(false);
+                if (row == null)
+                {
+                    // Author may be stored under LID/PN aliases — match message id.
+                    List<HistoryStatusRow> matches = await _connection.Table<HistoryStatusRow>()
+                        .Where(r =>
+                            r.MessageId == messageId.Trim() &&
+                            (r.AuthorJid == key || r.AuthorLid == key || r.AuthorPn == key))
+                        .ToListAsync()
+                        .ConfigureAwait(false);
+                    if (matches == null || matches.Count == 0)
+                    {
+                        return false;
+                    }
+
+                    row = matches[0];
+                }
+
+                if (row.IsViewed)
+                {
+                    return false;
+                }
+
+                row.IsViewed = true;
+                row.UpdatedAtUtc = DateTime.UtcNow;
+                await _connection.UpdateAsync(row).ConfigureAwait(false);
+                changed = true;
+            }
+            finally
+            {
+                _writeLock.Release();
+            }
+
+            if (changed)
+            {
+                RaiseChanged();
+            }
+
+            return changed;
         }
 
         public async Task<int> DeleteExpiredAsync()
@@ -198,24 +263,7 @@ namespace Unison.Uwp.Data
         {
             try
             {
-                List<SqliteTableInfoRow> cols = await _connection
-                    .QueryAsync<SqliteTableInfoRow>("PRAGMA table_info(history_status)")
-                    .ConfigureAwait(false);
-                bool hasColumn = false;
-                if (cols != null)
-                {
-                    for (int i = 0; i < cols.Count; i++)
-                    {
-                        if (cols[i] != null &&
-                            string.Equals(cols[i].name, "MediaThumbnailBase64", StringComparison.OrdinalIgnoreCase))
-                        {
-                            hasColumn = true;
-                            break;
-                        }
-                    }
-                }
-
-                if (!hasColumn)
+                if (!await HasColumnAsync("MediaThumbnailBase64").ConfigureAwait(false))
                 {
                     return;
                 }
@@ -229,6 +277,48 @@ namespace Unison.Uwp.Data
             {
                 Debug.WriteLine("[HistoryStatusStore] Drop MediaThumbnailBase64 skipped: " + ex.Message);
             }
+        }
+
+        private async Task EnsureIsViewedColumnAsync()
+        {
+            try
+            {
+                if (await HasColumnAsync("IsViewed").ConfigureAwait(false))
+                {
+                    return;
+                }
+
+                await _connection.ExecuteAsync(
+                        "ALTER TABLE history_status ADD COLUMN IsViewed INTEGER NOT NULL DEFAULT 0")
+                    .ConfigureAwait(false);
+                Debug.WriteLine("[HistoryStatusStore] Added IsViewed column");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[HistoryStatusStore] Add IsViewed skipped: " + ex.Message);
+            }
+        }
+
+        private async Task<bool> HasColumnAsync(string columnName)
+        {
+            List<SqliteTableInfoRow> cols = await _connection
+                .QueryAsync<SqliteTableInfoRow>("PRAGMA table_info(history_status)")
+                .ConfigureAwait(false);
+            if (cols == null)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < cols.Count; i++)
+            {
+                if (cols[i] != null &&
+                    string.Equals(cols[i].name, columnName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private sealed class SqliteTableInfoRow
@@ -280,6 +370,7 @@ namespace Unison.Uwp.Data
                 MediaLocalUri = model.MediaLocalUri,
                 MediaPosterUri = model.MediaPosterUri,
                 IsVoiceNote = model.IsVoiceNote,
+                IsViewed = model.IsViewed,
                 TimestampUtc = model.TimestampUtc,
                 ExpiresAtUtc = model.ExpiresAtUtc,
                 SyncId = model.SyncId ?? string.Empty,
@@ -322,6 +413,7 @@ namespace Unison.Uwp.Data
                 MediaLocalUri = row.MediaLocalUri,
                 MediaPosterUri = row.MediaPosterUri,
                 IsVoiceNote = row.IsVoiceNote,
+                IsViewed = row.IsViewed,
                 TimestampUtc = row.TimestampUtc,
                 ExpiresAtUtc = row.ExpiresAtUtc,
                 SyncId = row.SyncId,

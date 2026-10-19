@@ -18,5 +18,13 @@
                    Foreground="{ThemeResource ChatDetailMutedTextBrush}"
                    FontSize="12"
                    FontFamily="{StaticResource MainFont}"/>
+        <TextBox x:Name="CaptionBox"
+                 x:Uid="ChatDetail_SendImageCaption"
+                 Margin="0,12,0,0"
+                 AcceptsReturn="False"
+                 TextWrapping="Wrap"
+                 MaxLength="1024"
+                 FontFamily="{StaticResource MainFont}"
+                 PlaceholderText="Add a caption..."/>
     </StackPanel>
 </ContentDialog>

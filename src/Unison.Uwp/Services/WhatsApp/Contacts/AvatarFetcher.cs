@@ -9,9 +9,9 @@
 // called from a background batch, a row scrolling into view, or the group info
 // pivot without any of them having to agree about threads.
 //
-// Candidates arrive from the caller rather than being resolved here. The PN/LID
-// table is still the client's until phase 3.7, and reaching for it would put a
-// cycle between this and IJidResolver.
+// Candidates arrive from the caller rather than being resolved here. Building
+// them needs IJidResolver, and this is constructed before the client the resolver
+// reads, so taking it would close a cycle. The caller uses ChatPinStoreKeys.
 // =============================================================================
 using System;
 using System.Collections.Generic;

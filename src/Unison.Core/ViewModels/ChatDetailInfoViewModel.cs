@@ -976,27 +976,7 @@ namespace Unison.Core.ViewModels
                 canonical = JidHelper.Normalize(participant);
             }
 
-            return JidsMatchCanonical(_member.Jid, canonical) ||
-                   JidsMatchCanonical(_member.PhoneNumber, canonical) ||
-                   JidsMatchCanonical(_member.Lid, canonical);
-        }
-
-        private bool JidsMatchCanonical(string jid, string canonical)
-        {
-            if (string.IsNullOrWhiteSpace(jid) || string.IsNullOrWhiteSpace(canonical))
-            {
-                return false;
-            }
-
-            string other = _jids != null
-                ? _jids.GetCanonicalJid(jid)
-                : JidHelper.Normalize(jid);
-            if (string.IsNullOrWhiteSpace(other))
-            {
-                other = JidHelper.Normalize(jid);
-            }
-
-            return string.Equals(other, canonical, StringComparison.OrdinalIgnoreCase);
+            return GroupRosterRules.MemberMatches(_member, canonical, _jids);
         }
 
         private async Task LoadSharedGroupsAsync()
@@ -1011,7 +991,7 @@ namespace Unison.Core.ViewModels
                 await _personStore.InitializeAsync().ConfigureAwait(false);
 
                 var membershipsByGroup = new Dictionary<string, PersonGroupMembership>(StringComparer.OrdinalIgnoreCase);
-                foreach (string personKey in EnumeratePersonLookupKeys(_member))
+                foreach (string personKey in GroupRosterRules.MembershipPersonKeys(_member, _jids))
                 {
                     var found = await _personStore.ListGroupsForPersonAsync(personKey).ConfigureAwait(false);
                     if (found == null)
@@ -1098,67 +1078,6 @@ namespace Unison.Core.ViewModels
             {
                 System.Diagnostics.Debug.WriteLine(
                     "[ChatDetailInfoViewModel] Shared groups load failed: " + ex.Message);
-            }
-        }
-
-        /// <summary>
-        /// PersonGroup rows may be keyed by LID, PN, or phone digits — try all aliases for the member.
-        /// </summary>
-        private IEnumerable<string> EnumeratePersonLookupKeys(GroupMember member)
-        {
-            if (member == null)
-            {
-                yield break;
-            }
-
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            void Add(string raw)
-            {
-                if (string.IsNullOrWhiteSpace(raw))
-                {
-                    return;
-                }
-
-                string key = JidHelper.Normalize(raw);
-                if (string.IsNullOrEmpty(key) || !seen.Add(key))
-                {
-                    return;
-                }
-            }
-
-            Add(member.Jid);
-            if (_jids != null && !string.IsNullOrWhiteSpace(member.Jid))
-            {
-                Add(_jids.GetCanonicalJid(member.Jid));
-            }
-
-            Add(member.Lid);
-            if (_jids != null && !string.IsNullOrWhiteSpace(member.Lid))
-            {
-                Add(_jids.GetCanonicalJid(member.Lid));
-            }
-
-            string phone = member.PhoneNumber;
-            if (!string.IsNullOrWhiteSpace(phone))
-            {
-                if (phone.Contains("@"))
-                {
-                    Add(phone);
-                }
-                else
-                {
-                    string digits = PhoneNumberHelper.NormalizePhoneDigits(phone);
-                    if (!string.IsNullOrEmpty(digits))
-                    {
-                        Add(digits + "@s.whatsapp.net");
-                    }
-                }
-            }
-
-            foreach (string key in seen)
-            {
-                yield return key;
             }
         }
 

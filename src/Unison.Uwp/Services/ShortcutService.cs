@@ -4,7 +4,9 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
+using Windows.ApplicationModel.Core;
 using Windows.Data.Xml.Dom;
+using Windows.UI.Core;
 using Windows.UI.Notifications;
 using Windows.UI.StartScreen;
 using Unison.Core.Contracts;
@@ -110,6 +112,73 @@ namespace Unison.Uwp.Services
             {
                 Debug.WriteLine("[ShortcutService] UnpinChatAsync failed: " + ex.Message);
                 return false;
+            }
+        }
+
+        public async Task UnpinAllChatsAsync()
+        {
+            var dispatcher = CoreApplication.MainView?.CoreWindow?.Dispatcher;
+            if (dispatcher != null && !dispatcher.HasThreadAccess)
+            {
+                var done = new TaskCompletionSource<bool>();
+                await dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
+                {
+                    UnpinAllChatsCoreAsync().ContinueWith(task =>
+                    {
+                        if (task.Exception != null)
+                        {
+                            done.TrySetException(task.Exception);
+                        }
+                        else
+                        {
+                            done.TrySetResult(true);
+                        }
+                    });
+                });
+                await done.Task;
+                return;
+            }
+
+            await UnpinAllChatsCoreAsync();
+        }
+
+        private async Task UnpinAllChatsCoreAsync()
+        {
+            IReadOnlyList<SecondaryTile> tiles;
+            try
+            {
+                tiles = await SecondaryTile.FindAllAsync();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ShortcutService] UnpinAll FindAll failed: " + ex.Message);
+                return;
+            }
+
+            if (tiles == null)
+            {
+                return;
+            }
+
+            foreach (SecondaryTile tile in tiles)
+            {
+                if (tile == null ||
+                    string.IsNullOrWhiteSpace(tile.TileId) ||
+                    !tile.TileId.StartsWith(TileIdPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    TileUpdateManager.CreateTileUpdaterForSecondaryTile(tile.TileId).Clear();
+                    BadgeUpdateManager.CreateBadgeUpdaterForSecondaryTile(tile.TileId).Clear();
+                    await new SecondaryTile(tile.TileId).RequestDeleteAsync();
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[ShortcutService] UnpinAll " + tile.TileId + " failed: " + ex.Message);
+                }
             }
         }
 
@@ -296,7 +365,12 @@ namespace Unison.Uwp.Services
                 return;
             }
 
-            int badgeValue = Math.Min(99, unreadCount);
+            int badgeValue = unreadCount;
+            if (SystemInfoProvider.DetectIsMobile() && unreadCount > 99)
+            {
+                badgeValue = 100;
+            }
+
             var badgeXml = BadgeUpdateManager.GetTemplateContent(BadgeTemplateType.BadgeNumber);
             var badgeElement = badgeXml.SelectSingleNode("/badge") as XmlElement;
             if (badgeElement == null)

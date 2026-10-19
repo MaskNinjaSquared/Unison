@@ -80,7 +80,8 @@ namespace Unison.Uwp.UI.Controls
             {
                 _whatsAppBar = new ChatAudioBubbleBar
                 {
-                    HorizontalAlignment = HorizontalAlignment.Stretch
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    UseRing = ShellUi.IsWhatsAppLegacy
                 };
                 Root.Children.Add(_whatsAppBar);
             }

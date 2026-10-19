@@ -50,6 +50,9 @@ namespace Unison.Uwp.UI.Views
 
         void OnDocumentReadyHolding(object sender, HoldingRoutedEventArgs e);
 
+        /// <summary>Overflow "…" on a ready document bubble — Abrir / Salvar como (flyout on demand).</summary>
+        void OnDocumentOverflowClick(object sender, RoutedEventArgs e);
+
         void SeekAudioPlayback(ChatMessageViewModel vm, double seconds);
 
         void OpenInfoImage(ChatMessageViewModel vm);

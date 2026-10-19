@@ -254,6 +254,12 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   <data name="ChatList_PreviewReaction" xml:space="preserve">
     <value>Reactie</value>
   </data>
+  <data name="ChatList_PreviewDeleted" xml:space="preserve">
+    <value>Dit bericht is verwijderd</value>
+  </data>
+  <data name="ChatDetail_MessageDeleted.Text" xml:space="preserve">
+    <value>Dit bericht is verwijderd</value>
+  </data>
   <data name="ChatList_Loading.Text" xml:space="preserve">
     <value>Chats voorbereieden…</value>
   </data>
@@ -304,6 +310,15 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   </data>
   <data name="ChatDetail_MessageInput.PlaceholderText" xml:space="preserve">
     <value>Type een bericht</value>
+  </data>
+  <data name="ChatDetail_MentionEveryone" xml:space="preserve">
+    <value>Iedereen</value>
+  </data>
+  <data name="ChatDetail_MentionEveryoneDetail" xml:space="preserve">
+    <value>Noem alle groepsleden</value>
+  </data>
+  <data name="ChatDetail_GroupOnlyAdminsCanSend.Text" xml:space="preserve">
+    <value>Alleen beheerders kunnen berichten sturen</value>
   </data>
   <data name="ChatDetail_AttachCamera.Text" xml:space="preserve">
     <value>Camera</value>
@@ -371,6 +386,12 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   <data name="ChatDetail_UnpinMessage" xml:space="preserve">
     <value>Bericht losmaken</value>
   </data>
+  <data name="ChatDetail_CopyMessage" xml:space="preserve">
+    <value>Kopiëren</value>
+  </data>
+  <data name="ChatDetail_ReplyMessage" xml:space="preserve">
+    <value>Beantwoorden</value>
+  </data>
   <data name="ChatDetail_PinFor24Hours" xml:space="preserve">
     <value>Vastzetten voor 24 uur</value>
   </data>
@@ -425,7 +446,9 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   <data name="ChatDetail_SendImage.PrimaryButtonText" xml:space="preserve">
     <value>Verzenden</value>
   </data>
-  <data name="ChatDetail_SendImage.SecondaryButtonText" xml:space="preserve">
+  <data name="ChatDetail_SendImageCaption.PlaceholderText" xml:space="preserve">
+    <value>Bijschrift toevoegen...</value>
+  </data>  <data name="ChatDetail_SendImage.SecondaryButtonText" xml:space="preserve">
     <value>Annuleren</value>
   </data>
   <data name="ChatDetail_AudioPlayFailed" xml:space="preserve">
@@ -590,8 +613,50 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   <data name="StatusList_Empty.Text" xml:space="preserve">
     <value>Geen recente statusupdates</value>
   </data>
+  <data name="StatusList_Recent" xml:space="preserve">
+    <value>Recent</value>
+  </data>
+  <data name="StatusList_Viewed" xml:space="preserve">
+    <value>Bekeken</value>
+  </data>
+  <data name="StatusList_FilterHeader.Text" xml:space="preserve">
+    <value>Status filteren op</value>
+  </data>
+  <data name="StatusList_FilterAll.Text" xml:space="preserve">
+    <value>Alles</value>
+  </data>
+  <data name="StatusList_FilterRecent.Text" xml:space="preserve">
+    <value>Recent</value>
+  </data>
+  <data name="StatusList_FilterViewed.Text" xml:space="preserve">
+    <value>Bekeken</value>
+  </data>
+  <data name="StatusList_FilterLink.Text" xml:space="preserve">
+    <value>Status filteren</value>
+  </data>
+  <data name="StatusDetail_EmptyTitle.Text" xml:space="preserve">
+    <value>Deel statusupdates</value>
+  </data>
+  <data name="StatusDetail_EmptySubtitle.Text" xml:space="preserve">
+    <value>Deel foto's, video's en tekst die na 24 uur verdwijnen.</value>
+  </data>
   <data name="Shell_Starred.Text" xml:space="preserve">
     <value>Berichten met ster</value>
+  </data>
+  <data name="Shell_Favorites.Text" xml:space="preserve">
+    <value>Favorieten</value>
+  </data>
+  <data name="Favorites_Header.Text" xml:space="preserve">
+    <value>Favorieten</value>
+  </data>
+  <data name="Favorites_Empty.Text" xml:space="preserve">
+    <value>Favorieten worden weergegeven in de secties Chats en Oproepen. Voeg zoveel mensen en groepen toe als je wilt.</value>
+  </data>
+  <data name="Calls_Header.Text" xml:space="preserve">
+    <value>Oproepen</value>
+  </data>
+  <data name="Calls_Empty.Text" xml:space="preserve">
+    <value>Om een oproep te starten, selecteer je een contact en tik je op Bellen.</value>
   </data>
   <data name="Shell_Archived.Text" xml:space="preserve">
     <value>Gearchiveerde chats</value>
@@ -668,6 +733,12 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   <data name="Settings_NotificationsSection.Text" xml:space="preserve">
     <value>Meldingen</value>
   </data>
+  <data name="Settings_ShowSyncStatus.Header" xml:space="preserve">
+    <value>Synchronisatiestatus tonen</value>
+  </data>
+  <data name="Settings_ShowSyncStatus.Text" xml:space="preserve">
+    <value>Toont de synchronisatiestatus in de chatlijst.</value>
+  </data>
   <data name="Settings_Notifications.Header" xml:space="preserve">
     <value>Meldingen</value>
   </data>
@@ -698,6 +769,24 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   <data name="Settings_LiveTiles.Text" xml:space="preserve">
     <value>Werk de primaire tegel bij met het laatst ontvangen bericht.</value>
   </data>
+  <data name="Settings_DiskUsage.Text" xml:space="preserve"><value>Schijfgebruik</value></data>
+  <data name="Settings_MediaCache.Header" xml:space="preserve"><value>Media in chats</value></data>
+  <data name="Settings_MediaCacheClean.Content" xml:space="preserve"><value>Gegevens wissen</value></data>
+  <data name="Settings_StartTile.Header" xml:space="preserve"><value>Starttegel</value></data>
+  <data name="Settings_StartTile.Text" xml:space="preserve"><value>Kies het pictogram en maak een tegel vast die dezelfde meldingen krijgt als de app.</value></data>
+  <data name="Settings_StartTileChoose.Content" xml:space="preserve"><value>Kiezen</value></data>
+  <data name="StartTileDialog.Title" xml:space="preserve"><value>Starttegel</value></data>
+  <data name="StartTileDialog.PrimaryButtonText" xml:space="preserve"><value>Vastmaken</value></data>
+  <data name="StartTileDialog.CloseButtonText" xml:space="preserve"><value>Annuleren</value></data>
+  <data name="StartTileDialog_Unison.Content" xml:space="preserve"><value>Unison</value></data>
+  <data name="StartTileDialog_WhatsAppWeb.Content" xml:space="preserve"><value>WhatsApp Web</value></data>
+  <data name="StartTileDialog_WhatsAppLegacy.Content" xml:space="preserve"><value>WhatsApp Legacy</value></data>
+  <data name="Settings_DiskUsageCalculating" xml:space="preserve"><value>Berekenen...</value></data>
+  <data name="Settings_DiskUsageFailed" xml:space="preserve"><value>Kan niet berekenen</value></data>
+  <data name="Settings_DiskUsageSummary" xml:space="preserve"><value>{0} in {1} bestanden</value></data>
+  <data name="MediaDeleted.Title" xml:space="preserve"><value>Fout</value></data>
+  <data name="MediaDeleted.Message" xml:space="preserve"><value>Bestand verwijderd van het apparaat</value></data>
+  <data name="MediaDeleted.Close" xml:space="preserve"><value>OK</value></data>
   <data name="Settings_KeepAlive.Header" xml:space="preserve">
     <value>Achtergrond modus</value>
   </data>
@@ -1054,6 +1143,12 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   <data name="ChatDetailInfo_NotificationsToggle.OffContent" xml:space="preserve">
     <value>Uit</value>
   </data>
+  <data name="LegacyImageViewer_Download.Label" xml:space="preserve">
+    <value>Download</value>
+  </data>
+  <data name="LegacyImageViewer_Share.Label" xml:space="preserve">
+    <value>Share</value>
+  </data>
   <data name="ImageViewer_Download.ToolTipService.ToolTip" xml:space="preserve">
     <value>Downloaden</value>
   </data>
@@ -1092,5 +1187,119 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   </data>
   <data name="Debug_RuntimeDialog.Title" xml:space="preserve">
     <value>Runtime-diagnostiek</value>
+  </data>
+  <data name="Debug_CopyReport.[using:Windows.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Copy to clipboard</value>
+  </data>
+  <data name="Debug_CopyReport.AutomationProperties.Name" xml:space="preserve">
+    <value>Copy to clipboard</value>
+  </data>
+  <data name="Debug_RequestFullHistory.Content" xml:space="preserve">
+    <value>Request Full History On-demand</value>
+  </data>
+  <data name="Debug_FullHistoryRequesting" xml:space="preserve">
+    <value>Requesting full history…</value>
+  </data>
+  <data name="Debug_FullHistoryRequested" xml:space="preserve">
+    <value>Full history on-demand requested.</value>
+  </data>
+  <data name="Debug_FullHistorySkipped" xml:space="preserve">
+    <value>Full history request was not sent (socket not ready or skipped).</value>
+  </data>
+  <data name="Debug_FullHistoryUnavailable" xml:space="preserve">
+    <value>History service unavailable.</value>
+  </data>
+  <data name="Debug_FullHistoryFailed" xml:space="preserve">
+    <value>Full history request failed: </value>
+  </data>
+  <data name="Settings_YourProfile.Text" xml:space="preserve">
+    <value>Je profiel</value>
+  </data>
+  <data name="Settings_Profile.Text" xml:space="preserve">
+    <value>Profiel</value>
+  </data>
+  <data name="Settings_ProfileName.Title" xml:space="preserve">
+    <value>Naam</value>
+  </data>
+  <data name="Settings_ProfilePhone.Title" xml:space="preserve">
+    <value>Telefoon</value>
+  </data>
+  <data name="Settings_ProfileStatus.Title" xml:space="preserve">
+    <value>Over</value>
+  </data>
+  <data name="Settings_ProfilePhotoButton.AutomationProperties.Name" xml:space="preserve">
+    <value>Profielfoto</value>
+  </data>
+  <data name="Settings_ProfilePhotoCamera.Text" xml:space="preserve">
+    <value>Camera</value>
+  </data>
+  <data name="Settings_ProfilePhotoGallery.Text" xml:space="preserve">
+    <value>Galerij</value>
+  </data>
+  <data name="Settings_ProfilePhotoDelete.Text" xml:space="preserve">
+    <value>Verwijderen</value>
+  </data>
+  <data name="StartTileDialog_Transparent.Content" xml:space="preserve">
+    <value>Transparante tegel</value>
+  </data>  <data name="Shell_LegacyPivot_Calls.Header" xml:space="preserve">
+    <value>gesprekken</value>
+  </data>
+  <data name="Shell_LegacyPivot_Favorites.Header" xml:space="preserve">
+    <value>favorieten</value>
+  </data>
+  <data name="Shell_LegacyBrand.Text" xml:space="preserve">
+    <value>WHATSAPP LEGACY</value>
+  </data>
+  <data name="Shell_LegacyAppBar_Filter.Text" xml:space="preserve">
+    <value>Berichten filteren</value>
+  </data>
+  <data name="Shell_LegacyAppBar_Filter.Label" xml:space="preserve">
+    <value>Berichten filteren</value>
+  </data>
+  <data name="Shell_LegacyAppBar_Search.Label" xml:space="preserve">
+    <value>Zoeken</value>
+  </data>
+  <data name="Shell_LegacyAppBar_NewChat.Label" xml:space="preserve">
+    <value>Nieuwe chat</value>
+  </data>
+  <data name="Shell_LegacyAppBar_AddContact.Label" xml:space="preserve">
+    <value>Contact toevoegen</value>
+  </data>
+  <data name="Shell_LegacyAppBar_NewStatus.Label" xml:space="preserve">
+    <value>Nieuwe status</value>
+  </data>
+  <data name="Shell_LegacyAppBar_More.Label" xml:space="preserve">
+    <value>Meer</value>
+  </data>
+  <data name="Shell_LegacyMenu_Debug.Label" xml:space="preserve">
+    <value>Debug</value>
+  </data>
+  <data name="Shell_LegacyMenu_Settings.Label" xml:space="preserve">
+    <value>Instellingen</value>
+  </data>
+  <data name="Shell_LegacyMenu_Profile.Label" xml:space="preserve">
+    <value>Profiel</value>
+  </data>
+  <data name="Shell_LegacySearch_Cancel.Content" xml:space="preserve">
+    <value>Annuleren</value>
+  </data>
+  <data name="Shell_LegacySearchBox.PlaceholderText" xml:space="preserve">
+    <value>Zoeken</value>
+  </data>  <data name="Shell_LegacyPlaceholder.Text" xml:space="preserve">
+    <value>Binnenkort</value>
+  </data>  <data name="Shell_LegacySearchTitle.Text" xml:space="preserve">
+    <value>Zoeken</value>
+  </data>
+  <data name="ChatDetail_DocumentOpen.Label" xml:space="preserve">
+    <value>Document openen</value>
+  </data>
+    <data name="ChatDetail_AudioPlay.Label" xml:space="preserve">
+    <value>Audio afspelen</value>
+  </data>
+<data name="ChatDetail_DocumentSaveAs.Label" xml:space="preserve">
+    <value>Opslaan als…</value>
+  </data>
+  <data name="ChatDetail_Back.ToolTip" xml:space="preserve">
+    <value>Terug</value>
   </data>
 </root>

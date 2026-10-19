@@ -16,9 +16,23 @@ namespace Unison.Uwp.UI.Dialogs
             this.InitializeComponent();
         }
 
-        public async System.Threading.Tasks.Task SetPreviewAsync(byte[] imageBytes, string infoText)
+        /// <summary>Caption typed by the user; trimmed, or null when empty.</summary>
+        public string Caption
+        {
+            get
+            {
+                string text = CaptionBox?.Text;
+                return string.IsNullOrWhiteSpace(text) ? null : text.Trim();
+            }
+        }
+
+        public async System.Threading.Tasks.Task SetPreviewAsync(
+            byte[] imageBytes,
+            string infoText,
+            string initialCaption = null)
         {
             InfoText.Text = infoText ?? string.Empty;
+            CaptionBox.Text = initialCaption ?? string.Empty;
             PreviewImage.Source = null;
 
             if (imageBytes == null || imageBytes.Length == 0)

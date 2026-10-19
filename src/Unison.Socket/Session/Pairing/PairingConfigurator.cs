@@ -18,6 +18,7 @@ using Google.Protobuf;
 using Unison.Baileys.Client;
 using Unison.Baileys.Crypto;
 using Unison.Baileys.Protocol;
+using Unison.Socket.WABinary;
 
 namespace Unison.Socket.Session.Pairing
 {
@@ -153,7 +154,10 @@ namespace Unison.Socket.Session.Pairing
                 Me = new UserInfo
                 {
                     Id = deviceNode.GetAttribute("jid"),
-                    Lid = deviceNode.GetAttribute("lid"),
+                    // Pairing lid may omit the companion device; keep it from the PN jid.
+                    Lid = JidUtils.TransferDevice(
+                        deviceNode.GetAttribute("jid"),
+                        deviceNode.GetAttribute("lid")),
                     Name = businessNode != null ? businessNode.GetAttribute("name") : null
                 },
                 Account = new AccountInfo

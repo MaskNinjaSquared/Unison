@@ -1,7 +1,8 @@
 // =============================================================================
 // GroupRosterPolicy
 //
-// Idle member-picture work: 16 GETs, then the next 16. Not a migration.
+// Idle member-picture work: one batch of GETs, then the next (batch size and
+// pauses come from SyncWorkloadStrategy; 16 on High). Not a migration.
 //
 // ChatAvatarPolicy already does this for chat-list rows. Group members were a
 // one-shot of 16 on open that never continued and never remembered a miss, so
@@ -18,18 +19,30 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
+using Unison.Core.State;
+using Unison.Uwp.Services.Socket;
 
 namespace Unison.Uwp.Services.WhatsApp.Contacts
 {
     internal sealed class GroupRosterPolicy
     {
-        private static readonly TimeSpan NextBatchDelay = TimeSpan.FromSeconds(20);
-        private static readonly TimeSpan InterRequestDelay = TimeSpan.FromMilliseconds(900);
         private static readonly TimeSpan NoPictureRetry = TimeSpan.FromDays(7);
         private static readonly TimeSpan FailureBackoff = TimeSpan.FromMinutes(30);
-        private const int BatchSize = 16;
 
-        private readonly IWhatsAppService _whatsAppService;
+        private readonly SyncWorkloadStrategy _workload;
+
+        private TimeSpan NextBatchDelay => TimeSpan.FromSeconds(_workload.GroupRosterNextBatchDelaySeconds);
+
+        private TimeSpan InterRequestDelay => TimeSpan.FromMilliseconds(_workload.GroupRosterInterRequestDelayMs);
+
+        private int BatchSize => Math.Max(1, _workload.GroupRosterBatchSize);
+
+        private readonly IWhatsAppSessionProvider _sessions;
+        private readonly IChatStateStore _chatState;
+        private readonly SyncWorkGate _syncWork;
+        private readonly IDispatcher _ui;
+        private readonly IChatCatalogPersistence _catalog;
+        private readonly IGroupService _groups;
         private readonly IContactService _contacts;
         private readonly IJidResolver _jids;
 
@@ -41,9 +54,24 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             new Dictionary<string, CancellationTokenSource>(StringComparer.OrdinalIgnoreCase);
         private int _fullHydrateInFlight;
 
-        internal GroupRosterPolicy(IWhatsAppService whatsAppService, IContactService contacts, IJidResolver jids)
+        internal GroupRosterPolicy(
+            IGroupService groups,
+            IContactService contacts,
+            IJidResolver jids,
+            IDispatcher ui,
+            IChatCatalogPersistence catalog,
+            IChatStateStore chatState,
+            SyncWorkGate syncWork,
+            IWhatsAppSessionProvider sessions,
+            SyncWorkloadStrategy workload)
         {
-            _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
+            _workload = workload ?? throw new ArgumentNullException(nameof(workload));
+            _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
+            _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
+            _ui = ui ?? throw new ArgumentNullException(nameof(ui));
+            _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
+            _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
+            _groups = groups ?? throw new ArgumentNullException(nameof(groups));
             _contacts = contacts ?? throw new ArgumentNullException(nameof(contacts));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
         }
@@ -76,7 +104,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
         private async Task HydrateCoreAsync(string groupJid, CancellationToken token)
         {
-            if (string.IsNullOrWhiteSpace(groupJid) || !_whatsAppService.IsTransportReady)
+            if (string.IsNullOrWhiteSpace(groupJid) || !_sessions.IsTransportReady)
             {
                 return;
             }
@@ -100,7 +128,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             try
             {
                 string deferReason;
-                if (_whatsAppService.ShouldDeferAvatarFetch(out deferReason))
+                if (_syncWork.ShouldDeferAvatarFetch(out deferReason))
                 {
                     Debug.WriteLine("[GroupRosterPolicy] Deferred " + canonical + ": " + deferReason);
                     ScheduleNext(canonical, "deferred:" + deferReason);
@@ -120,7 +148,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
                 if (persist)
                 {
-                    _whatsAppService.SchedulePersistPublic();
+                    _catalog.Schedule();
                 }
 
                 if (await HasRemainingAsync(canonical).ConfigureAwait(false))
@@ -156,7 +184,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             if (string.IsNullOrWhiteSpace(groupJid) ||
                 memberJids == null ||
                 memberJids.Count == 0 ||
-                !_whatsAppService.IsTransportReady)
+                !_sessions.IsTransportReady)
             {
                 return;
             }
@@ -168,7 +196,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             }
 
             string deferReason;
-            if (_whatsAppService.ShouldDeferAvatarFetch(out deferReason))
+            if (_syncWork.ShouldDeferAvatarFetch(out deferReason))
             {
                 Debug.WriteLine("[GroupRosterPolicy] Visible deferred " + canonical + ": " + deferReason);
                 return;
@@ -187,7 +215,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 bool persist = await FetchMembersAsync(batch, token).ConfigureAwait(false);
                 if (persist)
                 {
-                    _whatsAppService.SchedulePersistPublic();
+                    _catalog.Schedule();
                 }
             }
             catch (TaskCanceledException)
@@ -225,7 +253,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 try
                 {
                     GroupMemberAvatarFetchResult result =
-                        await _whatsAppService.FetchGroupMemberAvatarAsync(member, token)
+                        await _groups.FetchGroupMemberAvatarAsync(member, token)
                             .ConfigureAwait(false);
                     if (result == null)
                     {
@@ -236,8 +264,8 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                         };
                     }
 
-                    await _whatsAppService.RunOnUiThreadAsync(
-                        () => _whatsAppService.ApplyGroupMemberAvatarOutcome(member.Jid, result))
+                    await _ui.RunAsync(
+                        () => _groups.ApplyGroupMemberAvatarOutcome(member.Jid, result))
                         .ConfigureAwait(false);
 
                     if (result.HasPicture)
@@ -344,7 +372,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         {
             var batch = new List<GroupMember>();
             DateTime nowUtc = DateTime.UtcNow;
-            await _whatsAppService.RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 ChatItem chat = FindGroup(groupJid);
                 if (chat?.GroupMembers == null)
@@ -401,7 +429,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             }
 
             DateTime nowUtc = DateTime.UtcNow;
-            await _whatsAppService.RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 ChatItem chat = FindGroup(groupJid);
                 if (chat?.GroupMembers == null)
@@ -464,7 +492,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         {
             bool remaining = false;
             DateTime nowUtc = DateTime.UtcNow;
-            await _whatsAppService.RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 ChatItem chat = FindGroup(groupJid);
                 if (chat?.GroupMembers == null)
@@ -517,7 +545,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
         private ChatItem FindGroup(string groupJid)
         {
-            foreach (ChatItem chat in _whatsAppService.Chats)
+            foreach (ChatItem chat in _chatState.Chats)
             {
                 if (chat == null)
                 {

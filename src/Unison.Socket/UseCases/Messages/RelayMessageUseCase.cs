@@ -251,9 +251,13 @@ namespace Unison.Socket.UseCases.Messages
                     attributes,
                     extraAttrs).ConfigureAwait(false);
 
-                content.Add(groupResult.EncNode);
+                // SKDM participant nodes first, then the skmsg — receivers that walk children
+                // in order must install the sender key before opening the ciphertext.
                 participantNodes.AddRange(groupResult.ParticipantNodes);
                 shouldIncludeDeviceIdentity = shouldIncludeDeviceIdentity || groupResult.ShouldIncludeDeviceIdentity;
+                AppendParticipantNodes(content, participantNodes, attributes);
+                participantNodes.Clear();
+                content.Add(groupResult.EncNode);
             }
             else if (!isRetryResend)
             {
@@ -283,26 +287,7 @@ namespace Unison.Socket.UseCases.Messages
                     isGroup || isStatus).ConfigureAwait(false));
             }
 
-            if (participantNodes.Count > 0)
-            {
-                string category;
-                attributes.TryGetValue("category", out category);
-
-                if (category == "peer")
-                {
-                    // A peer message goes to exactly one device, so its enc node sits directly
-                    // in the stanza rather than inside a participants wrapper.
-                    var peerNode = participantNodes[0].GetChildren("enc").FirstOrDefault();
-                    if (peerNode != null)
-                    {
-                        content.Add(peerNode);
-                    }
-                }
-                else
-                {
-                    content.Add(new BinaryNode("participants", null, participantNodes));
-                }
-            }
+            AppendParticipantNodes(content, participantNodes, attributes);
 
             var stanzaAttrs = new Dictionary<string, string>
             {
@@ -456,22 +441,41 @@ namespace Unison.Socket.UseCases.Messages
                 result.Devices.AddRange(enumerated);
             }
 
+            // Usync can answer empty (timeout, partial). Without at least each member's primary
+            // device the stanza carries an skmsg and no SKDM — sealed for nobody but us.
+            EnsurePrimaryParticipantDevices(result.Devices, participantJids);
+
             // The group decides which of our identities signs its messages, so a guess here does
             // not degrade gracefully: the recipients derive the sender key from an address we
             // never used, and the message arrives as one they will never open.
+            //
+            // Signer always carries our companion device (TransferDevice): Me.Lid is often stored
+            // without one, and a sender key filed under device 0 is invisible to members who look
+            // under our real device id.
             string addressingModeSource;
-            var addressingMode = ResolveAddressingMode(metadata, meLid, out addressingModeSource);
+            var addressingMode = GroupSendIdentity.ResolveAddressingMode(
+                metadata,
+                meLid,
+                out addressingModeSource);
 
             if (isGroup)
             {
                 attributes["addressing_mode"] = addressingMode;
             }
 
-            var senderIdentity = addressingMode == "lid" && !string.IsNullOrEmpty(meLid) ? meLid : meId;
+            var senderIdentity = GroupSendIdentity.ResolveSigner(addressingMode, meId, meLid);
+
+            _log.Info(
+                "[Send] Group " + jid + " encrypt begin; addressing=" + addressingMode +
+                "; signer=" + senderIdentity + "; devices=" + result.Devices.Count);
 
             var encrypted = await _signal
                 .EncryptGroupMessageAsync(destinationJid, senderIdentity, message.ToByteArray())
                 .ConfigureAwait(false);
+
+            _log.Info(
+                "[Send] Group " + jid + " encrypt ok; keyId=" + encrypted.KeyId +
+                "; newKey=" + encrypted.CreatedNewSenderKey);
 
             var senderKeyMemory = GetSenderKeyMemory(
                 jid,
@@ -480,8 +484,18 @@ namespace Unison.Socket.UseCases.Messages
                 encrypted.CreatedNewSenderKey);
 
             var alreadyHasKey = new HashSet<string>(
-                senderKeyMemory.Where(entry => !entry.StartsWith(KeyIdMarker, StringComparison.Ordinal)),
-                StringComparer.Ordinal);
+                senderKeyMemory
+                    .Where(entry => !entry.StartsWith(KeyIdMarker, StringComparison.Ordinal))
+                    .Select(WA.NormalizeDeviceJid),
+                StringComparer.OrdinalIgnoreCase);
+
+            // Phone (device 0) must be able to open what we seal. Only the address space of this
+            // group — PN and LID both remap to one Signal session; sealing twice burns the ratchet.
+            EnsureOwnOtherPrimaryDevices(result.Devices, meId, meLid, addressingMode);
+
+            var ownPrimaryInMode = new HashSet<string>(
+                GroupSendIdentity.OwnOtherPrimaryJids(meId, meLid, addressingMode),
+                StringComparer.OrdinalIgnoreCase);
 
             var needSenderKey = new List<string>();
 
@@ -489,10 +503,25 @@ namespace Unison.Socket.UseCases.Messages
             {
                 var deviceJid = device.Jid;
                 if (string.IsNullOrEmpty(deviceJid) ||
-                    alreadyHasKey.Contains(deviceJid) ||
                     JidUtils.IsHostedLidUser(deviceJid) ||
                     JidUtils.IsHostedPnUser(deviceJid) ||
                     device.Device == JidUtils.HostedDeviceId)
+                {
+                    continue;
+                }
+
+                bool ownPrimaryAny = GroupSendIdentity.IsOwnOtherPrimaryDevice(deviceJid, meId, meLid);
+                bool ownPrimaryHere = ownPrimaryInMode.Contains(deviceJid);
+
+                // Drop our handset when it is listed under the other address space.
+                if (ownPrimaryAny && !ownPrimaryHere)
+                {
+                    continue;
+                }
+
+                // Memory is authoritative once we only mark devices we actually sealed for.
+                // Re-forcing the phone on every send re-ran encrypt+persist and froze the UI.
+                if (alreadyHasKey.Contains(WA.NormalizeDeviceJid(deviceJid)))
                 {
                     continue;
                 }
@@ -512,11 +541,19 @@ namespace Unison.Socket.UseCases.Messages
                     }
                 };
 
+                var ownTargets = needSenderKey.Where(ownPrimaryInMode.Contains).ToList();
+
+                _log.Info(
+                    "[Send] Group " + jid + " SKDM begin; targets=" + needSenderKey.Count +
+                    "; ownPrimary=" + (ownTargets.Count > 0 ? string.Join(",", ownTargets) : "none"));
+
                 if (_sessions != null)
                 {
                     await _sessions.ExecuteAsync(needSenderKey).ConfigureAwait(false);
                 }
 
+                // Bare SKDM for everyone including our phone (Baileys). DeviceSentMessage on the
+                // initial group send left the Android copy pending and is not required for skmsg.
                 var nodes = await _participants
                     .ExecuteAsync(needSenderKey, senderKeyMessage, extraAttrs)
                     .ConfigureAwait(false);
@@ -524,13 +561,24 @@ namespace Unison.Socket.UseCases.Messages
                 result.ParticipantNodes.AddRange(nodes.Nodes);
                 result.ShouldIncludeDeviceIdentity = nodes.ShouldIncludeDeviceIdentity;
 
+                var keyedJids = nodes.Nodes
+                    .Select(n => n != null ? n.GetAttribute("jid") : null)
+                    .Where(j => !string.IsNullOrEmpty(j))
+                    .ToList();
+
+                RequireOwnPrimaryKeyed(ownTargets, keyedJids, addressingMode);
+
                 // Written down only once the stanza is away. Recording it here instead would
                 // mean a send that throws still leaves those devices marked as holding the key,
                 // and the next message skips them - for good.
                 result.SenderKeyMemory = senderKeyMemory;
-                result.NewlyKeyedDevices.AddRange(needSenderKey.Where(alreadyHasKey.Add));
+                result.NewlyKeyedDevices.AddRange(keyedJids.Where(alreadyHasKey.Add));
 
-                _log.Debug("[Send] Distributed the sender key of " + jid + " to " + needSenderKey.Count + " device(s)");
+                var ownKeyed = keyedJids.Where(ownPrimaryInMode.Contains).ToList();
+                _log.Info(
+                    "[Send] Distributed the sender key of " + jid + " to " + keyedJids.Count +
+                    "/" + needSenderKey.Count + " device(s); ownPrimaryKeyed=" +
+                    (ownKeyed.Count > 0 ? string.Join(",", ownKeyed) : "none"));
             }
 
             var encAttrs = new Dictionary<string, string> { { "v", "2" }, { "type", "skmsg" } };
@@ -541,28 +589,20 @@ namespace Unison.Socket.UseCases.Messages
 
             result.EncNode = new BinaryNode("enc", encAttrs, encrypted.Ciphertext);
 
-            _log.Debug(
+            var loggedOwnTargets = needSenderKey.Where(ownPrimaryInMode.Contains).ToList();
+            _log.Info(
                 "[Send] Group " + jid + ": addressing=" + addressingMode + " (" + addressingModeSource +
                 "), signer=" + senderIdentity +
                 ", keyId=" + encrypted.KeyId +
                 ", participants=" + participantJids.Count +
                 ", devices=" + result.Devices.Count +
-                ", keyGoesTo=" + needSenderKey.Count);
+                ", keyGoesTo=" + needSenderKey.Count +
+                ", ownPrimaryTargets=" +
+                (loggedOwnTargets.Count > 0 ? string.Join(",", loggedOwnTargets) : "none"));
 
             return result;
         }
 
-        /// <summary>
-        /// Which address space a group's messages travel in. What the server said, and lid when
-        /// it said nothing - rc14 relayMessage, messages-send.ts.
-        ///
-        /// The one addition is the guard on having a LID at all. rc14 defaults to lid and then
-        /// signs with the phone number when there is no lid to sign with, which would stamp the
-        /// stanza with one identity and the sender key with the other, leaving every member
-        /// holding a message whose key they cannot find. It never happens there because a
-        /// companion always has a LID once paired; here it can, while credentials are still
-        /// being restored, so the fallback follows what we can actually sign under.
-        /// </summary>
         /// <summary>Two addresses naming the same party, compared as identity is compared elsewhere.</summary>
         private static bool SameAddress(string left, string right)
         {
@@ -570,28 +610,40 @@ namespace Unison.Socket.UseCases.Messages
                    string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
         }
 
-        private static string ResolveAddressingMode(GroupMetadata metadata, string meLid, out string source)
+        private static void AppendParticipantNodes(
+            IList<BinaryNode> content,
+            IList<BinaryNode> participantNodes,
+            IDictionary<string, string> attributes)
         {
-            if (metadata != null && metadata.AddressingMode == GroupAddressingMode.Lid)
+            if (content == null || participantNodes == null || participantNodes.Count == 0)
             {
-                source = "server";
-                return "lid";
+                return;
             }
 
-            if (metadata != null && metadata.AddressingMode == GroupAddressingMode.Pn)
+            string category;
+            if (attributes != null)
             {
-                source = "server";
-                return "pn";
+                attributes.TryGetValue("category", out category);
+            }
+            else
+            {
+                category = null;
             }
 
-            if (string.IsNullOrEmpty(meLid))
+            if (category == "peer")
             {
-                source = "no-lid-of-our-own";
-                return "pn";
+                // A peer message goes to exactly one device, so its enc node sits directly
+                // in the stanza rather than inside a participants wrapper.
+                var peerNode = participantNodes[0].GetChildren("enc").FirstOrDefault();
+                if (peerNode != null)
+                {
+                    content.Add(peerNode);
+                }
+
+                return;
             }
 
-            source = "default";
-            return "lid";
+            content.Add(new BinaryNode("participants", null, participantNodes.ToList()));
         }
 
         /// <summary>
@@ -789,13 +841,143 @@ namespace Unison.Socket.UseCases.Messages
         /// <summary>Which of our identities the group's sender key was created under.</summary>
         private async Task<string> ResolveGroupSenderIdentityAsync(string groupJid, string meId, string meLid)
         {
-            if (!string.IsNullOrEmpty(meLid) &&
-                await _signal.HasSenderKeyAsync(groupJid, meLid).ConfigureAwait(false))
+            var lidSigner = GroupSendIdentity.ResolveSigner("lid", meId, meLid);
+            if (!string.IsNullOrEmpty(lidSigner) &&
+                await _signal.HasSenderKeyAsync(groupJid, lidSigner).ConfigureAwait(false))
             {
-                return meLid;
+                return lidSigner;
             }
 
-            return await _signal.HasSenderKeyAsync(groupJid, meId).ConfigureAwait(false) ? meId : null;
+            // Keys minted before TransferDevice lived under the bare LID.
+            if (!string.IsNullOrEmpty(meLid) &&
+                !string.Equals(meLid, lidSigner, StringComparison.OrdinalIgnoreCase) &&
+                await _signal.HasSenderKeyAsync(groupJid, meLid).ConfigureAwait(false))
+            {
+                return WA.NormalizeDeviceJid(meLid);
+            }
+
+            var pnSigner = WA.NormalizeDeviceJid(meId);
+            return await _signal.HasSenderKeyAsync(groupJid, pnSigner).ConfigureAwait(false)
+                ? pnSigner
+                : null;
+        }
+
+        /// <summary>
+        /// Guarantees each roster member's primary (device 0) is a SKDM target when usync omitted them.
+        /// </summary>
+        private static void EnsurePrimaryParticipantDevices(
+            IList<DeviceJid> devices,
+            IEnumerable<string> participantJids)
+        {
+            if (devices == null || participantJids == null)
+            {
+                return;
+            }
+
+            var present = new HashSet<string>(
+                devices.Where(d => d != null && !string.IsNullOrEmpty(d.Jid)).Select(d => d.Jid),
+                StringComparer.Ordinal);
+
+            foreach (var participant in participantJids)
+            {
+                if (string.IsNullOrEmpty(participant))
+                {
+                    continue;
+                }
+
+                var user = JidUtils.GetUser(participant);
+                var server = JidUtils.GetServer(participant);
+                if (string.IsNullOrEmpty(user) || string.IsNullOrEmpty(server))
+                {
+                    continue;
+                }
+
+                var primary = WA.JidEncode(user, server, 0);
+                if (string.IsNullOrEmpty(primary) || present.Contains(primary))
+                {
+                    continue;
+                }
+
+                devices.Add(new DeviceJid
+                {
+                    User = user,
+                    Device = 0,
+                    Server = server,
+                    Jid = primary
+                });
+                present.Add(primary);
+            }
+        }
+
+        /// <summary>
+        /// Adds our phone (device 0) in the group's address space so the primary always gets the SKDM.
+        /// </summary>
+        private static void EnsureOwnOtherPrimaryDevices(
+            IList<DeviceJid> devices,
+            string meId,
+            string meLid,
+            string addressingMode)
+        {
+            if (devices == null)
+            {
+                return;
+            }
+
+            var present = new HashSet<string>(
+                devices.Where(d => d != null && !string.IsNullOrEmpty(d.Jid)).Select(d => d.Jid),
+                StringComparer.Ordinal);
+
+            foreach (var primary in GroupSendIdentity.OwnOtherPrimaryJids(meId, meLid, addressingMode))
+            {
+                if (present.Contains(primary))
+                {
+                    continue;
+                }
+
+                // Do not add device 0 if this process IS the phone (companion device unknown
+                // and meId is already bare device 0).
+                if (GroupSendIdentity.ResolveCompanionDevice(meId, meLid) == 0 &&
+                    string.Equals(WA.NormalizeDeviceJid(meId), primary, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                devices.Add(new DeviceJid
+                {
+                    User = JidUtils.GetUser(primary),
+                    Device = 0,
+                    Server = JidUtils.GetServer(primary),
+                    Jid = primary
+                });
+                present.Add(primary);
+            }
+        }
+
+        /// <summary>
+        /// Abort rather than ship an skmsg our phone cannot open. Partial SKDM to other members
+        /// is tolerable; silent failure to our own primary is not.
+        /// </summary>
+        private static void RequireOwnPrimaryKeyed(
+            IList<string> ownTargets,
+            IList<string> keyedJids,
+            string addressingMode)
+        {
+            if (ownTargets == null || keyedJids == null || ownTargets.Count == 0)
+            {
+                return;
+            }
+
+            var keyed = new HashSet<string>(keyedJids, StringComparer.OrdinalIgnoreCase);
+
+            foreach (var primary in ownTargets)
+            {
+                if (!keyed.Contains(primary))
+                {
+                    throw new InvalidOperationException(
+                        "Could not distribute the group sender key to our own device " + primary +
+                        " (mode=" + (addressingMode ?? "unset") + ")");
+                }
+            }
         }
 
         /// <summary>
@@ -877,7 +1059,7 @@ namespace Unison.Socket.UseCases.Messages
             int keyId,
             bool createdNewSenderKey)
         {
-            var memoryKey = groupJid + "|" + senderIdentity;
+            var memoryKey = groupJid + "|" + WA.NormalizeDeviceJid(senderIdentity);
             var marker = KeyIdMarker + keyId;
 
             List<string> known;

@@ -35,6 +35,11 @@ namespace Unison.Uwp.Services.Themes
 
         public override bool UsesMobileStatusBarProgress => false;
 
+        public override string ShellBrandName => "WhatsApp Web";
+
+        public override string ShellBrandIcon =>
+            "ms-appx:///Assets/LegacyLogo/Square44x44Logo.targetsize-256_altform-unplated.png";
+
         /// <summary>
         /// Keep the system caption background; only tint title + window buttons green.
         /// Explicit null / Transparent clears any leftover Unison green fill from an in-process shell switch.
@@ -69,7 +74,7 @@ namespace Unison.Uwp.Services.Themes
             }
         }
 
-        public override void OpenSettings(Frame shellFrame)
+        public override void OpenSettings(Frame shellFrame, bool openProfile = false)
         {
             // Keep the current shell page (usually Chats); settings is an overlay dialog.
             if (_settingsOpen || _dialogs == null)
@@ -77,7 +82,7 @@ namespace Unison.Uwp.Services.Themes
                 return;
             }
 
-            _ = OpenSettingsOverlayAsync();
+            _ = OpenSettingsOverlayAsync(openProfile);
         }
 
         public override bool IsSettingsPage(object content)
@@ -86,7 +91,7 @@ namespace Unison.Uwp.Services.Themes
             return false;
         }
 
-        private async Task OpenSettingsOverlayAsync()
+        private async Task OpenSettingsOverlayAsync(bool openProfile)
         {
             if (_settingsOpen)
             {
@@ -97,7 +102,7 @@ namespace Unison.Uwp.Services.Themes
             try
             {
                 SettingsViewModel vm = _settingsVmFactory();
-                await _dialogs.ShowWhatsAppSettingsAsync(vm);
+                await _dialogs.ShowWhatsAppSettingsAsync(vm, openProfile);
             }
             catch (Exception ex)
             {

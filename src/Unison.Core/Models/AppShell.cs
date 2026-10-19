@@ -7,6 +7,8 @@ namespace Unison.Core.Models
     public enum AppShell
     {
         Unison = 0,
-        WhatsApp = 1
+        WhatsApp = 1,
+        /// <summary>Windows Phone 8–style shell: pivot + app bar, no sidebar.</summary>
+        WhatsAppLegacy = 2
     }
 }

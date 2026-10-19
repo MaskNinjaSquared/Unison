@@ -14,7 +14,7 @@ namespace Unison.Uwp.Services.Themes
 
         Type ResolveShellPage(NavigationDestination destination);
 
-        void OpenSettings(Frame shellFrame);
+        void OpenSettings(Frame shellFrame, bool openProfile = false);
 
         bool IsSettingsPage(object content);
 

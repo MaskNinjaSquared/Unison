@@ -543,6 +543,28 @@ namespace Unison.Uwp.Services
             return "w" + jid.Trim().Replace('@', '.');
         }
 
+        internal static string FromRemoteId(string remoteId)
+        {
+            if (!IsUnisonRemoteId(remoteId))
+            {
+                return null;
+            }
+
+            string body = remoteId.Substring(1);
+            const string phoneSuffix = ".s.whatsapp.net";
+            if (body.EndsWith(phoneSuffix, StringComparison.OrdinalIgnoreCase))
+            {
+                return body.Substring(0, body.Length - phoneSuffix.Length) + "@s.whatsapp.net";
+            }
+
+            if (body.EndsWith(".lid", StringComparison.OrdinalIgnoreCase))
+            {
+                return body.Substring(0, body.Length - 4) + "@lid";
+            }
+
+            return null;
+        }
+
         internal static bool IsUnisonRemoteId(string remoteId)
         {
             if (string.IsNullOrWhiteSpace(remoteId) ||

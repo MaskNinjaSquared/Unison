@@ -34,6 +34,7 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
             <TextBlock x:Name="HeaderTitle" 
                        x:Uid="ChatList_Header"
                        Text="Chats" 
@@ -48,6 +49,14 @@
                        IsRightTapEnabled="True"
                        Holding="HeaderTitle_Holding"
                        RightTapped="HeaderTitle_RightTapped"/>
+            <TextBlock Text="{x:Bind ViewModel.NotificationCounterBadgeText, Mode=OneWay}"
+                       Margin="8,0,0,0"
+                       FontSize="24"
+                       FontFamily="{StaticResource MainFontSemibold}"
+                       FontWeight="SemiBold"
+                       VerticalAlignment="Center"
+                       Foreground="{ThemeResource ChatDetailAccentBrush}"/>
+            </StackPanel>
 
             <Grid x:Name="SyncStatusPanel" Grid.Column="1"
                   
@@ -61,7 +70,7 @@
                     <ColumnDefinition Width="*" MinWidth="0"/>
                 </Grid.ColumnDefinitions>
                 <controls:ModernProgressRing IsActive="{x:Bind ViewModel.ShowSyncStatusInUi, Mode=OneWay}"
-                                             Width="14" Height="14"
+                                             Width="18" Height="18"
                                              VerticalAlignment="Center"
                                              Foreground="{ThemeResource ChatListSyncStatusBrush}"/>
                 <TextBlock x:Name="SyncStatusText" Grid.Column="1"
@@ -196,10 +205,13 @@
 
         
         <ListView Grid.Row="2" x:Name="ChatList" 
+                  x:Load="{x:Bind ViewModel.IsChatListMaterialized, Mode=OneWay}"
                   ItemsSource="{x:Bind ViewModel.VisibleChats}"
                   ItemTemplate="{StaticResource ChatItemTemplate}"
                   ItemContainerStyle="{StaticResource WhatsAppChatListItemStyle}"
                   SelectionMode="Single"
+                  Loaded="ChatList_Loaded"
+                  Unloaded="ChatList_Unloaded"
                   SelectionChanged="ChatList_SelectionChanged"
                   ContainerContentChanging="ChatList_ContainerContentChanging"
                   ShowsScrollingPlaceholders="False"

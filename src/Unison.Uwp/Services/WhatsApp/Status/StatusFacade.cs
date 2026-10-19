@@ -13,6 +13,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
+using Unison.Uwp.Services.WhatsApp.History;
 
 namespace Unison.Uwp.Services.WhatsApp.Status
 {
@@ -21,16 +22,19 @@ namespace Unison.Uwp.Services.WhatsApp.Status
         private readonly IHistoryStatusStore _store;
         private readonly IPersonStore _people;
         private readonly IMessageService _messages;
+        private readonly IRuntimeDiagnostics _diagnostics;
 
         internal StatusFacade(
             IHistoryStatusStore store,
             IPersonStore people,
             IMessageService messages,
-            IWhatsAppService client)
+            IWhatsAppService client,
+            IRuntimeDiagnostics diagnostics = null)
         {
             _store = store ?? throw new ArgumentNullException(nameof(store));
             _people = people ?? throw new ArgumentNullException(nameof(people));
             _messages = messages ?? throw new ArgumentNullException(nameof(messages));
+            _diagnostics = diagnostics;
             if (client == null)
             {
                 throw new ArgumentNullException(nameof(client));
@@ -54,6 +58,7 @@ namespace Unison.Uwp.Services.WhatsApp.Status
 
             var latestByAuthor = new Dictionary<string, HistoryStatus>(StringComparer.OrdinalIgnoreCase);
             var countByAuthor = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var unviewedByAuthor = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
             for (int i = 0; i < items.Count; i++)
             {
@@ -76,6 +81,17 @@ namespace Unison.Uwp.Services.WhatsApp.Status
                 }
 
                 countByAuthor[key] = count + 1;
+
+                if (!row.IsViewed)
+                {
+                    int unviewed;
+                    if (!unviewedByAuthor.TryGetValue(key, out unviewed))
+                    {
+                        unviewed = 0;
+                    }
+
+                    unviewedByAuthor[key] = unviewed + 1;
+                }
 
                 HistoryStatus existing;
                 if (!latestByAuthor.TryGetValue(key, out existing) ||
@@ -101,11 +117,26 @@ namespace Unison.Uwp.Services.WhatsApp.Status
                     itemCount = 1;
                 }
 
+                int unviewedCount;
+                if (!unviewedByAuthor.TryGetValue(pair.Key, out unviewedCount))
+                {
+                    unviewedCount = 0;
+                }
+
+                // WhatsApp list shows the latest status media thumb in the circle when present;
+                // profile avatar is only the fallback (Baileys/proto jpegThumbnail → MediaLocalUri /
+                // MediaPosterUri after materialize).
+                string listThumb = ResolveListThumbUri(latest);
                 authors.Add(new StatusAuthorItem
                 {
                     Jid = pair.Key,
                     DisplayName = ResolveDisplayName(person, latest, pair.Key),
-                    AvatarUrl = person != null ? person.AvatarUrl : null,
+                    AvatarUrl = !string.IsNullOrWhiteSpace(listThumb)
+                        ? listThumb
+                        : (person != null ? person.AvatarUrl : null),
+                    ViewState = unviewedCount > 0
+                        ? StatusViewState.Recent
+                        : StatusViewState.Viewed,
                     LatestTimestampUtc = latest.TimestampUtc,
                     ItemCount = itemCount
                 });
@@ -121,8 +152,17 @@ namespace Unison.Uwp.Services.WhatsApp.Status
                 await _store.GetActiveForAuthorAsync(authorJid).ConfigureAwait(false);
             if (newestFirst == null || newestFirst.Count == 0)
             {
+                _diagnostics?.Write(
+                    "status",
+                    "store-author-empty",
+                    "author=" + (authorJid ?? "-"));
                 return Array.Empty<HistoryStatus>();
             }
+
+            _diagnostics?.Write(
+                "status",
+                "store-author-hit",
+                "author=" + (authorJid ?? "-") + "; count=" + newestFirst.Count);
 
             var oldestFirst = new List<HistoryStatus>(newestFirst.Count);
             for (int i = newestFirst.Count - 1; i >= 0; i--)
@@ -135,31 +175,114 @@ namespace Unison.Uwp.Services.WhatsApp.Status
 
         public async Task<string> EnsureMediaAsync(HistoryStatus status)
         {
+            _diagnostics?.Write(
+                "status",
+                "ensure-media-start",
+                StatusItemDiagnostics.DescribeItem(status));
+
             ChatMessage message = HistoryStatusMapper.ToChatMessage(status);
             if (message == null)
             {
-                return null;
+                _diagnostics?.Write(
+                    "status",
+                    "ensure-media-unmap",
+                    "id=" + (status?.MessageId ?? "-"));
+                return StatusMediaDisplay.ResolveUri(null, status);
             }
 
+            if (string.IsNullOrWhiteSpace(status.MediaKeyBase64) &&
+                string.IsNullOrWhiteSpace(status.MediaUrl) &&
+                string.IsNullOrWhiteSpace(status.MediaDirectPath) &&
+                string.IsNullOrWhiteSpace(status.MediaLocalUri) &&
+                string.IsNullOrWhiteSpace(status.MediaPosterUri))
+            {
+                _diagnostics?.Write(
+                    "status",
+                    "ensure-media-no-keys",
+                    StatusItemDiagnostics.DescribeItem(status));
+            }
+
+            string downloaded = null;
             try
             {
                 if (message.Kind == ChatMessageKind.Video)
                 {
-                    return await _messages.EnsureVideoAvailableAsync(message).ConfigureAwait(false);
+                    downloaded = await _messages.EnsureVideoAvailableAsync(message).ConfigureAwait(false);
                 }
-
-                if (message.Kind == ChatMessageKind.Image || message.Kind == ChatMessageKind.Sticker)
+                else if (message.Kind == ChatMessageKind.Image || message.Kind == ChatMessageKind.Sticker)
                 {
-                    return await _messages.EnsureImageAvailableAsync(message).ConfigureAwait(false);
+                    downloaded = await _messages.EnsureImageAvailableAsync(message).ConfigureAwait(false);
                 }
             }
             catch (Exception ex)
             {
                 Debug.WriteLine("[StatusFacade] EnsureMedia failed id=" + status.MessageId + ": " + ex.Message);
-                return null;
+                _diagnostics?.RecordException(
+                    "status",
+                    "ensure-media-fail",
+                    ex,
+                    "id=" + status.MessageId);
+                downloaded = null;
             }
 
-            return null;
+            if (!string.IsNullOrWhiteSpace(downloaded) &&
+                !HistoryMessageMapper.IsThumbCacheUri(downloaded))
+            {
+                status.MediaLocalUri = downloaded;
+                if (message.Kind == ChatMessageKind.Video &&
+                    !string.IsNullOrWhiteSpace(message.VideoPosterUri))
+                {
+                    status.MediaPosterUri = message.VideoPosterUri;
+                }
+
+                try
+                {
+                    await _store.UpsertManyAsync(new[] { status }).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[StatusFacade] Persist media uri failed id=" + status.MessageId + ": " + ex.Message);
+                }
+
+                _diagnostics?.Write(
+                    "status",
+                    "ensure-media-ok",
+                    "id=" + status.MessageId + "; uri=" + downloaded);
+                return downloaded;
+            }
+
+            string fallback = StatusMediaDisplay.ResolveUri(downloaded, status);
+            _diagnostics?.Write(
+                "status",
+                "ensure-media-fallback",
+                "id=" + status.MessageId +
+                "; downloaded=" + (downloaded ?? "-") +
+                "; fallback=" + (fallback ?? "-"));
+            return fallback;
+        }
+
+        public async Task MarkViewedAsync(string authorJid, string messageId)
+        {
+            try
+            {
+                bool changed = await _store.MarkViewedAsync(authorJid, messageId).ConfigureAwait(false);
+                if (changed)
+                {
+                    _diagnostics?.Write(
+                        "status",
+                        "marked-viewed",
+                        "author=" + (authorJid ?? "-") + "; id=" + (messageId ?? "-"));
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[StatusFacade] MarkViewed failed: " + ex.Message);
+                _diagnostics?.RecordException(
+                    "status",
+                    "mark-viewed-fail",
+                    ex,
+                    "author=" + (authorJid ?? "-"));
+            }
         }
 
         /// <summary>
@@ -194,11 +317,66 @@ namespace Unison.Uwp.Services.WhatsApp.Status
 
             if (item.IsExpired(DateTime.UtcNow))
             {
+                _diagnostics?.Write(
+                    "status",
+                    "live-expired",
+                    StatusItemDiagnostics.DescribeItem(item));
                 return false;
+            }
+
+            _diagnostics?.Write(
+                "status",
+                "live-ingest",
+                StatusItemDiagnostics.DescribeItem(item));
+
+            try
+            {
+                await HistoryThumbnailMaterializer.MaterializeStatusThumbsAsync(
+                        new List<HistoryStatus> { item })
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[StatusFacade] Live status thumb failed: " + ex.Message);
             }
 
             await _store.UpsertManyAsync(new[] { item }).ConfigureAwait(false);
             return true;
+        }
+
+        /// <summary>
+        /// Protocol thumb already on disk (poster for video, local thumb for image/sticker).
+        /// Full media URIs are not used for the list circle.
+        /// </summary>
+        private static string ResolveListThumbUri(HistoryStatus latest)
+        {
+            if (latest == null)
+            {
+                return null;
+            }
+
+            if (!string.IsNullOrWhiteSpace(latest.MediaPosterUri))
+            {
+                return latest.MediaPosterUri.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(latest.MediaLocalUri) &&
+                HistoryMessageMapper.IsThumbCacheUri(latest.MediaLocalUri))
+            {
+                return latest.MediaLocalUri.Trim();
+            }
+
+            // Image status often stores the proto thumb as MediaLocalUri without the _thumb suffix
+            // when it is the only local file yet.
+            if (latest.Kind == ChatPreviewKind.Image || latest.Kind == ChatPreviewKind.Sticker)
+            {
+                if (!string.IsNullOrWhiteSpace(latest.MediaLocalUri))
+                {
+                    return latest.MediaLocalUri.Trim();
+                }
+            }
+
+            return null;
         }
 
         private void Store_Changed(object sender, EventArgs e)

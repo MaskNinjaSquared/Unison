@@ -9,7 +9,11 @@ using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.State;
+using Unison.Socket.Abstractions;
+using Unison.Uwp.Client;
+using Unison.Uwp.Services.Socket;
 using Unison.Uwp.Services.WhatsApp.History;
+using Unison.Uwp.Services;
 
 namespace Unison.Uwp.Services.WhatsApp.Messages
 {
@@ -21,6 +25,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
     {
         private readonly IPersonStore _personStore;
         private readonly IWhatsAppService _whatsAppService;
+        private readonly IAppStateLocalHost _localAppState;
         private readonly IChatMessageMapper _chatMessageMapper;
         private readonly IReactionMapper _reactionMapper;
         private readonly HistoryFacade _history;
@@ -29,34 +34,71 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
         private readonly IChatStateStore _chatState;
         private readonly INotificationService _notifications;
         private readonly IChatStore _chatStore;
+        private readonly OutgoingTextSend _textSend;
+        private readonly OutgoingMediaSend _mediaSend;
+        private readonly MediaAvailability _availability;
+        private readonly IChatCatalogPersistence _catalog;
+        private readonly IWhatsAppSessionProvider _sessions;
+        private readonly IOutgoingMessageHost _outgoingHost;
+        private readonly IRuntimeDiagnostics _diagnostics;
         private readonly int _sqlOpenPageSize;
         private readonly int _sqlLoadMorePageSize;
         private readonly int _thinTimelineThreshold;
 
-        public MessageFacade(
+        internal MessageFacade(
             IPersonStore personStore,
             IWhatsAppService whatsAppService,
+            IAppStateLocalHost localAppState,
             IChatMessageMapper chatMessageMapper,
             IReactionMapper reactionMapper,
             HistoryFacade history,
             IHistoryMessageStore historyMessageStore,
             IJidResolver jids,
             INotificationService notifications,
+            IOutgoingMessageHost outgoingHost,
+            IMediaCache mediaCache,
+            MediaDerivationService derivation,
+            MediaDownloadGate downloadGate,
+            IMediaDownloadHost mediaHost,
+            IEncryptedMediaDownloader mediaDownloader,
+            IChatCatalogPersistence catalog,
+            IWhatsAppSessionProvider sessions,
             IChatStore chatStore = null,
             IChatStateStore chatState = null,
-            ISystemInfoProvider systemInfo = null)
+            ISystemInfoProvider systemInfo = null,
+            IRuntimeDiagnostics diagnostics = null)
         {
+            _diagnostics = diagnostics;
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
             _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
+            _localAppState = localAppState ?? throw new ArgumentNullException(nameof(localAppState));
             _chatMessageMapper = chatMessageMapper ?? throw new ArgumentNullException(nameof(chatMessageMapper));
             _reactionMapper = reactionMapper ?? throw new ArgumentNullException(nameof(reactionMapper));
             _history = history ?? throw new ArgumentNullException(nameof(history));
             _historyMessageStore = historyMessageStore
                 ?? throw new ArgumentNullException(nameof(historyMessageStore));
             _notifications = notifications ?? throw new ArgumentNullException(nameof(notifications));
+            _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
+            _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
             _chatStore = chatStore;
             _chatState = chatState;
+            _outgoingHost = outgoingHost ?? throw new ArgumentNullException(nameof(outgoingHost));
+
+            _textSend = new OutgoingTextSend(_outgoingHost, _jids);
+            _mediaSend = new OutgoingMediaSend(
+                _outgoingHost,
+                _jids,
+                mediaCache ?? throw new ArgumentNullException(nameof(mediaCache)));
+            _availability = new MediaAvailability(
+                _whatsAppService,
+                mediaHost ?? throw new ArgumentNullException(nameof(mediaHost)),
+                mediaDownloader ?? throw new ArgumentNullException(nameof(mediaDownloader)),
+                _jids,
+                mediaCache,
+                derivation ?? throw new ArgumentNullException(nameof(derivation)),
+                downloadGate ?? throw new ArgumentNullException(nameof(downloadGate)),
+                _catalog);
             // systemInfo kept in the ctor for DI compatibility; page sizes match desktop on all devices.
             _ = systemInfo;
 
@@ -76,7 +118,13 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
 
         public Task SubscribeToPresenceAsync(string jid)
         {
-            return _whatsAppService.PresenceSubscribeAsync(jid);
+            IWhatsAppSocket socket = _sessions.Socket;
+            if (string.IsNullOrWhiteSpace(jid) || socket == null || !socket.IsConnected)
+            {
+                return Task.CompletedTask;
+            }
+
+            return socket.PresenceSubscribeAsync(jid);
         }
 
         private static void Relay(Action raise, string name)
@@ -150,119 +198,38 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             }
 
             List<ChatMessage> fromClient = null;
+            string clientError = null;
             try
             {
-                fromClient = await _whatsAppService.LoadMessagesForChatAsync(jid).ConfigureAwait(false);
+                fromClient = await _outgoingHost.LoadLiveOverlayAsync(jid).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
+                clientError = ex.GetType().Name;
                 Debug.WriteLine("[MessageFacade] Client LoadMessagesForChat failed: " + ex.Message);
             }
 
             IReadOnlyList<HistoryMessage> fromSql = null;
+            string sqlError = null;
             try
             {
                 fromSql = await LoadSqlHistoryRowsAsync(jid).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
+                sqlError = ex.GetType().Name + ": " + ex.Message;
                 Debug.WriteLine("[MessageFacade] SQLite history message load failed: " + ex.Message);
             }
 
-            var byId = new Dictionary<string, ChatMessage>(StringComparer.Ordinal);
-            var merged = new List<ChatMessage>();
-
-            void AddRange(IEnumerable<ChatMessage> source)
-            {
-                if (source == null)
-                {
-                    return;
-                }
-
-                foreach (var message in source)
-                {
-                    if (message == null)
-                    {
-                        continue;
-                    }
-
-                    if (string.IsNullOrWhiteSpace(message.Id))
-                    {
-                        merged.Add(message);
-                        continue;
-                    }
-
-                    if (!byId.ContainsKey(message.Id))
-                    {
-                        byId[message.Id] = message;
-                        merged.Add(message);
-                    }
-                }
-            }
-
-            if (fromSql != null)
-            {
-                foreach (var row in fromSql)
-                {
-                    ChatMessage mapped = HistoryMessageMapper.ToChatMessage(row);
-                    if (mapped != null)
-                    {
-                        AddRange(new[] { mapped });
-                    }
-                }
-            }
-
-            // Client/live rows win on id collision (newer status / media URIs),
-            // but keep SQLite media keys when the winner has none.
-            if (fromClient != null)
-            {
-                foreach (var message in fromClient)
-                {
-                    if (message == null)
-                    {
-                        continue;
-                    }
-
-                    if (string.IsNullOrWhiteSpace(message.Id))
-                    {
-                        merged.Add(message);
-                        continue;
-                    }
-
-                    ChatMessage existing;
-                    if (byId.TryGetValue(message.Id, out existing))
-                    {
-                        HistoryMessageMapper.CopyMediaKeysIfMissing(message, existing);
-                        HistoryMessageMapper.CopyForwardedIfMissing(message, existing);
-                        HistoryMessageMapper.CopyQuotedParticipantIfMissing(message, existing);
-                        HistoryMessageMapper.CopyReactionsIfMissing(message, existing);
-                    }
-
-                    byId[message.Id] = message;
-                }
-
-                merged = byId.Values
-                    .Concat(merged.Where(m => string.IsNullOrWhiteSpace(m.Id)))
-                    .GroupBy(m => m.Id ?? Guid.NewGuid().ToString("N"), StringComparer.Ordinal)
-                    .Select(g => g.First())
-                    .OrderBy(m => m.Timestamp)
-                    .ThenBy(m => m.Id ?? string.Empty, StringComparer.Ordinal)
-                    .ToList();
-            }
-            else
-            {
-                merged = merged
-                    .OrderBy(m => m.Timestamp)
-                    .ThenBy(m => m.Id ?? string.Empty, StringComparer.Ordinal)
-                    .ToList();
-            }
+            List<ChatMessage> fromSqlMapped = MapHistoryRows(fromSql);
+            List<ChatMessage> merged = OpenChatMessageMerge.Merge(fromSqlMapped, fromClient);
 
             if (merged.Count > 0)
             {
                 try
                 {
                     // Seed even when rows came only from live/client so on-demand has a cursor.
-                    await _whatsAppService.SeedChatMessagesInMemoryAsync(jid, merged).ConfigureAwait(false);
+                    await _chatState.AddMissingMessagesAsync(jid, merged).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
@@ -271,14 +238,72 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             }
 
             // RECENT history often leaves a single listable message — pull older on open.
-            if (merged.Count > 0 &&
-                merged.Count < _thinTimelineThreshold &&
-                !IsHistoryOnDemandPending(jid))
+            bool onDemandPending = IsHistoryOnDemandPending(jid);
+            bool isThin = merged.Count > 0 && merged.Count < _thinTimelineThreshold;
+            if (isThin && !onDemandPending)
             {
                 _ = RequestOlderHistorySafeAsync(jid, merged.Count);
             }
 
+            await WriteChatOpenLoadAsync(
+                jid,
+                fromClient?.Count ?? 0,
+                fromSql?.Count ?? 0,
+                merged.Count,
+                isThin,
+                onDemandPending,
+                clientError,
+                sqlError).ConfigureAwait(false);
+
             return merged;
+        }
+
+        /// <summary>
+        /// One journal line per open. sql=0 with dbRows&gt;0 means the rows are filed under keys
+        /// this chat does not resolve to; dbRows=0 means history never reached SQLite.
+        /// </summary>
+        private async Task WriteChatOpenLoadAsync(
+            string jid,
+            int ramCount,
+            int sqlCount,
+            int mergedCount,
+            bool isThin,
+            bool onDemandPending,
+            string clientError,
+            string sqlError)
+        {
+            if (_diagnostics == null)
+            {
+                return;
+            }
+
+            try
+            {
+                List<string> keys = ResolveChatKeys(jid);
+                string dbRows = "-";
+                if (sqlCount == 0 && sqlError == null)
+                {
+                    dbRows = (await _historyMessageStore.CountAsync().ConfigureAwait(false)).ToString();
+                }
+
+                _diagnostics.Write(
+                    "chat-open",
+                    "load",
+                    "chat=" + DiagnosticJidMask.Apply(jid) +
+                    "; keys=" + string.Join(",", keys.Select(DiagnosticJidMask.Apply)) +
+                    "; ram=" + ramCount +
+                    "; sql=" + sqlCount +
+                    "; merged=" + mergedCount +
+                    "; dbRows=" + dbRows +
+                    "; thin=" + isThin +
+                    "; onDemandPending=" + onDemandPending +
+                    "; clientError=" + (clientError ?? "-") +
+                    "; sqlError=" + (sqlError ?? "-"));
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] chat-open diagnostics failed: " + ex.Message);
+            }
         }
 
         private async Task RequestOlderHistorySafeAsync(string jid, int localCount)
@@ -289,67 +314,28 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                 Debug.WriteLine(
                     "[MessageFacade] Thin timeline on-demand for " + jid +
                     " local=" + localCount + " requested=" + requested);
+                _diagnostics?.Write(
+                    "chat-open",
+                    "thin-on-demand",
+                    "chat=" + DiagnosticJidMask.Apply(jid) +
+                    "; local=" + localCount +
+                    "; requested=" + requested);
             }
             catch (Exception ex)
             {
                 Debug.WriteLine("[MessageFacade] Thin timeline on-demand failed: " + ex.Message);
+                _diagnostics?.RecordException("chat-open", "thin-on-demand-failed", ex);
             }
         }
 
         /// <summary>
         /// Every SQLite key a chat can be stored under: the JID itself, its canonical form, and the
-        /// LID/PN alias. History rows land under whichever one the chunk carried.
+        /// LID/PN alias (both lookup directions). History rows land under whichever the chunk used —
+        /// self-chat especially splits across PN and LID.
         /// </summary>
         private List<string> ResolveChatKeys(string jid)
         {
-            var keys = new List<string>();
-            void AddKey(string key)
-            {
-                if (string.IsNullOrWhiteSpace(key))
-                {
-                    return;
-                }
-
-                string norm = JidHelper.Normalize(key);
-                if (string.IsNullOrWhiteSpace(norm))
-                {
-                    return;
-                }
-
-                for (int i = 0; i < keys.Count; i++)
-                {
-                    if (string.Equals(keys[i], norm, StringComparison.OrdinalIgnoreCase))
-                    {
-                        return;
-                    }
-                }
-
-                keys.Add(norm);
-            }
-
-            AddKey(jid);
-            try
-            {
-                AddKey(_jids.GetCanonicalJid(jid));
-            }
-            catch
-            {
-            }
-
-            try
-            {
-                string norm = JidHelper.Normalize(jid);
-                if (!string.IsNullOrWhiteSpace(norm) &&
-                    _jids.TryGetAlias(norm, out string alias))
-                {
-                    AddKey(alias);
-                }
-            }
-            catch
-            {
-            }
-
-            return keys;
+            return new List<string>(ChatPinStoreKeys.For(jid, _jids));
         }
 
         public async Task<List<ChatMessage>> LoadChatMediaIndexAsync(string jid, int limit = 400)
@@ -406,7 +392,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             List<ChatMessage> cached = null;
             try
             {
-                cached = await _whatsAppService.LoadMessagesForChatAsync(jid).ConfigureAwait(false);
+                cached = await _outgoingHost.LoadLiveOverlayAsync(jid).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -474,7 +460,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             List<ChatMessage> fromClient = null;
             try
             {
-                fromClient = await _whatsAppService.LoadMessagesForChatAsync(jid).ConfigureAwait(false);
+                fromClient = await _outgoingHost.LoadLiveOverlayAsync(jid).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -492,100 +478,27 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                 Debug.WriteLine("[MessageFacade] SQLite sync load failed: " + ex.Message);
             }
 
-            return MergeClientAndSql(fromClient, fromSql);
+            return OpenChatMessageMerge.Merge(MapHistoryRows(fromSql), fromClient);
         }
 
-        private List<ChatMessage> MergeClientAndSql(
-            List<ChatMessage> fromClient,
-            IReadOnlyList<HistoryMessage> fromSql)
+        private static List<ChatMessage> MapHistoryRows(IReadOnlyList<HistoryMessage> fromSql)
         {
-            var byId = new Dictionary<string, ChatMessage>(StringComparer.Ordinal);
-            var merged = new List<ChatMessage>();
-
-            void AddRange(IEnumerable<ChatMessage> source)
+            if (fromSql == null || fromSql.Count == 0)
             {
-                if (source == null)
+                return null;
+            }
+
+            var mapped = new List<ChatMessage>(fromSql.Count);
+            for (int i = 0; i < fromSql.Count; i++)
+            {
+                ChatMessage message = HistoryMessageMapper.ToChatMessage(fromSql[i]);
+                if (message != null)
                 {
-                    return;
-                }
-
-                foreach (var message in source)
-                {
-                    if (message == null)
-                    {
-                        continue;
-                    }
-
-                    if (string.IsNullOrWhiteSpace(message.Id))
-                    {
-                        merged.Add(message);
-                        continue;
-                    }
-
-                    if (!byId.ContainsKey(message.Id))
-                    {
-                        byId[message.Id] = message;
-                        merged.Add(message);
-                    }
+                    mapped.Add(message);
                 }
             }
 
-            if (fromSql != null)
-            {
-                foreach (var row in fromSql)
-                {
-                    ChatMessage mapped = HistoryMessageMapper.ToChatMessage(row);
-                    if (mapped != null)
-                    {
-                        AddRange(new[] { mapped });
-                    }
-                }
-            }
-
-            if (fromClient != null)
-            {
-                foreach (var message in fromClient)
-                {
-                    if (message == null)
-                    {
-                        continue;
-                    }
-
-                    if (string.IsNullOrWhiteSpace(message.Id))
-                    {
-                        merged.Add(message);
-                        continue;
-                    }
-
-                    ChatMessage existing;
-                    if (byId.TryGetValue(message.Id, out existing))
-                    {
-                        HistoryMessageMapper.CopyMediaKeysIfMissing(message, existing);
-                        HistoryMessageMapper.CopyForwardedIfMissing(message, existing);
-                        HistoryMessageMapper.CopyQuotedParticipantIfMissing(message, existing);
-                        HistoryMessageMapper.CopyReactionsIfMissing(message, existing);
-                    }
-
-                    byId[message.Id] = message;
-                }
-
-                merged = byId.Values
-                    .Concat(merged.Where(m => string.IsNullOrWhiteSpace(m.Id)))
-                    .GroupBy(m => m.Id ?? Guid.NewGuid().ToString("N"), StringComparer.Ordinal)
-                    .Select(g => g.First())
-                    .OrderBy(m => m.Timestamp)
-                    .ThenBy(m => m.Id ?? string.Empty, StringComparer.Ordinal)
-                    .ToList();
-            }
-            else
-            {
-                merged = merged
-                    .OrderBy(m => m.Timestamp)
-                    .ThenBy(m => m.Id ?? string.Empty, StringComparer.Ordinal)
-                    .ToList();
-            }
-
-            return merged;
+            return mapped;
         }
 
         private async Task<IReadOnlyList<HistoryMessage>> LoadSqlHistoryPageAsync(
@@ -723,52 +636,132 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
 
         public Task<bool> EnsureHistoryOnDemandAsync(string jid, int count)
         {
-            return _whatsAppService.EnsureHistoryOnDemandAsync(jid, count);
+            return _history.EnsureChatPageAsync(jid, count);
         }
 
         public bool IsHistoryOnDemandPending(string jid)
         {
-            return _whatsAppService.IsHistoryOnDemandPending(jid);
+            return _history.IsChatPagePending(jid);
         }
 
+        /// <summary>
+        /// Shows the bubble at once, then sends with one bounded reconnect. A transport failure
+        /// is the returned message's <see cref="ChatMessage.StatusFailed"/>, not an exception.
+        /// </summary>
         public Task<ChatMessage> SendTextMessageAsync(string jid, string text)
         {
-            return _whatsAppService.SendTextMessageAsync(jid, text);
+            return _textSend.SendAsync(jid, text);
+        }
+
+        public Task<ChatMessage> SendTextMessageAsync(string jid, OutgoingTextMentions message)
+        {
+            return _textSend.SendAsync(jid, message);
         }
 
         public Task SendImageAsync(string jid, byte[] imageBytes, string caption)
         {
-            return _whatsAppService.SendImageAsync(jid, imageBytes, caption);
+            return _mediaSend.SendImageAsync(jid, imageBytes, caption);
         }
 
-        public Task<ChatMessage> SendAudioMessageAsync(string jid, byte[] audioBytes, string mimeType, uint durationSeconds, bool isVoiceMessage = false)
+        public async Task<ChatMessage> SendAudioMessageAsync(string jid, byte[] audioBytes, string mimeType, uint durationSeconds, bool isVoiceMessage = false)
         {
-            return _whatsAppService.SendAudioMessageAsync(jid, audioBytes, mimeType, durationSeconds, isVoiceMessage);
+            ChatMessage message = await _mediaSend.SendAudioAsync(jid, new OutgoingAudio
+            {
+                Bytes = audioBytes,
+                MimeType = mimeType,
+                DurationSeconds = durationSeconds,
+                IsVoiceMessage = isVoiceMessage
+            });
+            _availability.PrepareLocalPlaybackInBackground(message);
+            return message;
+        }
+
+        public Task<ChatMessage> SendDocumentAsync(
+            string jid,
+            byte[] documentBytes,
+            string mimeType,
+            string fileName,
+            string caption = null)
+        {
+            return _mediaSend.SendDocumentAsync(jid, new OutgoingDocument
+            {
+                Bytes = documentBytes,
+                MimeType = mimeType,
+                FileName = fileName,
+                Caption = caption
+            });
         }
 
         public Task<string> EnsureAudioAvailableAsync(ChatMessage message)
         {
-            return _whatsAppService.EnsureAudioAvailableAsync(message);
+            return _availability.EnsureAudioAsync(message);
         }
 
         public Task<string> EnsureImageAvailableAsync(ChatMessage message)
         {
-            return _whatsAppService.EnsureImageAvailableAsync(message);
+            return _availability.EnsureImageAsync(message);
         }
 
         public Task<string> EnsureVideoAvailableAsync(ChatMessage message)
         {
-            return _whatsAppService.EnsureVideoAvailableAsync(message);
+            return _availability.EnsureVideoAsync(message);
         }
 
         public Task<string> EnsureDocumentAvailableAsync(ChatMessage message)
         {
-            return _whatsAppService.EnsureDocumentAvailableAsync(message);
+            return _availability.EnsureDocumentAsync(message);
         }
 
-        public Task SetMessagePinnedAsync(string chatJid, ChatMessage message, bool pin, uint durationSeconds = 604800)
+        public Task HydrateIncomingImageAsync(
+            ChatMessage message,
+            Message.Types.ImageMessage image,
+            string messageId,
+            string chatJid)
         {
-            return _whatsAppService.SetMessagePinnedAsync(chatJid, message, pin, durationSeconds);
+            return _availability.HydrateImageAsync(message, image, messageId, chatJid);
+        }
+
+        public Task HydrateIncomingStickerAsync(
+            ChatMessage message,
+            Message.Types.StickerMessage sticker,
+            string messageId,
+            string chatJid)
+        {
+            return _availability.HydrateStickerAsync(message, sticker, messageId, chatJid);
+        }
+
+        public async Task SetMessagePinnedAsync(string chatJid, ChatMessage message, bool pin, uint durationSeconds = 604800)
+        {
+            await _whatsAppService.EnsureConnectedAsync();
+            if (message == null || string.IsNullOrWhiteSpace(message.Id))
+            {
+                throw new ArgumentException("A valid message is required", nameof(message));
+            }
+
+            IWhatsAppSocket socket = _sessions.Socket;
+            if (socket == null)
+            {
+                throw new InvalidOperationException("Not connected: the message pin was not sent.");
+            }
+
+            string canonical = _jids.GetCanonicalJid(chatJid);
+            var key = new MessageKey
+            {
+                RemoteJid = string.IsNullOrWhiteSpace(message.RemoteJid)
+                    ? canonical
+                    : JidHelper.Normalize(message.RemoteJid),
+                FromMe = message.IsFromMe,
+                Id = message.Id
+            };
+            if (!string.IsNullOrWhiteSpace(message.ParticipantJid))
+            {
+                key.Participant = message.ParticipantJid;
+            }
+
+            await socket.SendPinInChatMessageAsync(canonical, key, pin, durationSeconds);
+            MessagePinWindow window = MessagePinWindow.FromLocal(pin, durationSeconds, DateTime.UtcNow);
+            await _localAppState.ApplyMessagePinAsync(
+                canonical, message.Id, pin, window.PinnedAtUtc, window.ExpiresAtUtc);
         }
 
         public bool TryHandleReaction(
@@ -1032,10 +1025,6 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             return _history.ResyncConversationsAsync(progress);
         }
 
-        public void StartNewChat(string jid)
-        {
-            _whatsAppService.StartNewChat(jid);
-        }
 
         public void NotifyLiveIncoming(
             string chatJid,
@@ -1062,6 +1051,10 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                 ? chat.IsMutedLocally
                 : (_chatStore?.TryGetCached(chatJid)?.IsMutedLocally ?? false);
 
+            // Belt with the pump: safe-mode history catch-up must not toast either.
+            bool quietForSync = _history != null && _history.IsInitialSyncSafeMode;
+            bool hideToast = suppressToast || quietForSync;
+
             string name = chatName;
             if (string.IsNullOrWhiteSpace(name) && chat != null)
             {
@@ -1075,55 +1068,10 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                 preview,
                 isGroup,
                 isMuted,
-                suppressToast,
+                hideToast,
                 totalUnread,
                 chat != null ? chat.GetAvatarUrl(preferHigh: false) : null,
                 chat != null ? Math.Max(0, chat.UnreadCount) : 0);
-        }
-
-        public IncomingTimelineAcceptResult AcceptIncomingTimeline(
-            string chatJid,
-            ChatMessage message,
-            bool isGroup)
-        {
-            return _whatsAppService.AcceptIncomingTimeline(chatJid, message, isGroup);
-        }
-
-        public void QueueIncomingPersist(string chatJid, ChatMessage message)
-        {
-            if (string.IsNullOrWhiteSpace(chatJid) || message == null)
-            {
-                return;
-            }
-
-            _whatsAppService.QueueIncomingMessagePersist(chatJid, message);
-            _whatsAppService.SchedulePersistPublic();
-        }
-
-        public Task ApplyIncomingRevocationAsync(
-            string chatJid,
-            string targetMessageId,
-            string envelopeMessageId = null)
-        {
-            return _whatsAppService.ApplyIncomingRevocationAsync(
-                chatJid,
-                targetMessageId,
-                envelopeMessageId);
-        }
-
-        public Task ApplyIncomingPinInChatAsync(
-            string chatJid,
-            string targetMessageId,
-            bool pin,
-            long senderTimestampMs,
-            uint durationSeconds = 0)
-        {
-            return _whatsAppService.ApplyIncomingPinInChatAsync(
-                chatJid,
-                targetMessageId,
-                pin,
-                senderTimestampMs,
-                durationSeconds);
         }
     }
 }

@@ -254,6 +254,12 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="ChatList_PreviewReaction" xml:space="preserve">
     <value>Reaksi</value>
   </data>
+  <data name="ChatList_PreviewDeleted" xml:space="preserve">
+    <value>Pesan ini telah dihapus</value>
+  </data>
+  <data name="ChatDetail_MessageDeleted.Text" xml:space="preserve">
+    <value>Pesan ini telah dihapus</value>
+  </data>
   <data name="ChatList_Loading.Text" xml:space="preserve">
     <value>Menyiapkan percakapan…</value>
   </data>
@@ -304,6 +310,15 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   </data>
   <data name="ChatDetail_MessageInput.PlaceholderText" xml:space="preserve">
     <value>Ketik pesan</value>
+  </data>
+  <data name="ChatDetail_MentionEveryone" xml:space="preserve">
+    <value>Semua</value>
+  </data>
+  <data name="ChatDetail_MentionEveryoneDetail" xml:space="preserve">
+    <value>Sebut semua anggota grup</value>
+  </data>
+  <data name="ChatDetail_GroupOnlyAdminsCanSend.Text" xml:space="preserve">
+    <value>Hanya admin yang dapat mengirim pesan</value>
   </data>
   <data name="ChatDetail_AttachCamera.Text" xml:space="preserve">
     <value>Kamera</value>
@@ -371,6 +386,12 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="ChatDetail_UnpinMessage" xml:space="preserve">
     <value>Lepas sematan pesan</value>
   </data>
+  <data name="ChatDetail_CopyMessage" xml:space="preserve">
+    <value>Salin</value>
+  </data>
+  <data name="ChatDetail_ReplyMessage" xml:space="preserve">
+    <value>Balas</value>
+  </data>
   <data name="ChatDetail_PinFor24Hours" xml:space="preserve">
     <value>Sematkan selama 24 jam</value>
   </data>
@@ -425,7 +446,9 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="ChatDetail_SendImage.PrimaryButtonText" xml:space="preserve">
     <value>Kirim</value>
   </data>
-  <data name="ChatDetail_SendImage.SecondaryButtonText" xml:space="preserve">
+  <data name="ChatDetail_SendImageCaption.PlaceholderText" xml:space="preserve">
+    <value>Tambahkan keterangan...</value>
+  </data>  <data name="ChatDetail_SendImage.SecondaryButtonText" xml:space="preserve">
     <value>Batal</value>
   </data>
   <data name="ChatDetail_AudioPlayFailed" xml:space="preserve">
@@ -590,8 +613,50 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="StatusList_Empty.Text" xml:space="preserve">
     <value>Tidak ada pembaruan status terbaru</value>
   </data>
+  <data name="StatusList_Recent" xml:space="preserve">
+    <value>Terbaru</value>
+  </data>
+  <data name="StatusList_Viewed" xml:space="preserve">
+    <value>Dilihat</value>
+  </data>
+  <data name="StatusList_FilterHeader.Text" xml:space="preserve">
+    <value>Filter status menurut</value>
+  </data>
+  <data name="StatusList_FilterAll.Text" xml:space="preserve">
+    <value>Semua</value>
+  </data>
+  <data name="StatusList_FilterRecent.Text" xml:space="preserve">
+    <value>Terbaru</value>
+  </data>
+  <data name="StatusList_FilterViewed.Text" xml:space="preserve">
+    <value>Dilihat</value>
+  </data>
+  <data name="StatusList_FilterLink.Text" xml:space="preserve">
+    <value>Filter Status</value>
+  </data>
+  <data name="StatusDetail_EmptyTitle.Text" xml:space="preserve">
+    <value>Bagikan pembaruan status</value>
+  </data>
+  <data name="StatusDetail_EmptySubtitle.Text" xml:space="preserve">
+    <value>Bagikan foto, video, dan teks yang hilang setelah 24 jam.</value>
+  </data>
   <data name="Shell_Starred.Text" xml:space="preserve">
     <value>Pesan berbintang</value>
+  </data>
+  <data name="Shell_Favorites.Text" xml:space="preserve">
+    <value>Favorit</value>
+  </data>
+  <data name="Favorites_Header.Text" xml:space="preserve">
+    <value>Favorit</value>
+  </data>
+  <data name="Favorites_Empty.Text" xml:space="preserve">
+    <value>Favorit ditampilkan di bagian Obrolan dan Panggilan. Tambahkan sebanyak orang dan grup yang Anda inginkan.</value>
+  </data>
+  <data name="Calls_Header.Text" xml:space="preserve">
+    <value>Panggilan</value>
+  </data>
+  <data name="Calls_Empty.Text" xml:space="preserve">
+    <value>Untuk memulai panggilan, pilih kontak lalu ketuk Panggil.</value>
   </data>
   <data name="Shell_Archived.Text" xml:space="preserve">
     <value>Obrolan diarsipkan</value>
@@ -668,6 +733,12 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="Settings_NotificationsSection.Text" xml:space="preserve">
     <value>Notifikasi</value>
   </data>
+  <data name="Settings_ShowSyncStatus.Header" xml:space="preserve">
+    <value>Tampilkan status sinkronisasi</value>
+  </data>
+  <data name="Settings_ShowSyncStatus.Text" xml:space="preserve">
+    <value>Menampilkan status sinkronisasi di daftar chat.</value>
+  </data>
   <data name="Settings_Notifications.Header" xml:space="preserve">
     <value>Notifikasi</value>
   </data>
@@ -698,6 +769,24 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="Settings_LiveTiles.Text" xml:space="preserve">
     <value>Perbarui ubin utama dengan pesan terbaru.</value>
   </data>
+  <data name="Settings_DiskUsage.Text" xml:space="preserve"><value>Penggunaan disk</value></data>
+  <data name="Settings_MediaCache.Header" xml:space="preserve"><value>Media di chat</value></data>
+  <data name="Settings_MediaCacheClean.Content" xml:space="preserve"><value>Hapus data</value></data>
+  <data name="Settings_StartTile.Header" xml:space="preserve"><value>Tile Mulai</value></data>
+  <data name="Settings_StartTile.Text" xml:space="preserve"><value>Pilih ikon dan sematkan tile yang menerima notifikasi yang sama dengan aplikasi.</value></data>
+  <data name="Settings_StartTileChoose.Content" xml:space="preserve"><value>Pilih</value></data>
+  <data name="StartTileDialog.Title" xml:space="preserve"><value>Tile Mulai</value></data>
+  <data name="StartTileDialog.PrimaryButtonText" xml:space="preserve"><value>Sematkan</value></data>
+  <data name="StartTileDialog.CloseButtonText" xml:space="preserve"><value>Batal</value></data>
+  <data name="StartTileDialog_Unison.Content" xml:space="preserve"><value>Unison</value></data>
+  <data name="StartTileDialog_WhatsAppWeb.Content" xml:space="preserve"><value>WhatsApp Web</value></data>
+  <data name="StartTileDialog_WhatsAppLegacy.Content" xml:space="preserve"><value>WhatsApp Legacy</value></data>
+  <data name="Settings_DiskUsageCalculating" xml:space="preserve"><value>Menghitung...</value></data>
+  <data name="Settings_DiskUsageFailed" xml:space="preserve"><value>Tidak dapat menghitung</value></data>
+  <data name="Settings_DiskUsageSummary" xml:space="preserve"><value>{0} dalam {1} file</value></data>
+  <data name="MediaDeleted.Title" xml:space="preserve"><value>Kesalahan</value></data>
+  <data name="MediaDeleted.Message" xml:space="preserve"><value>File dihapus dari perangkat</value></data>
+  <data name="MediaDeleted.Close" xml:space="preserve"><value>OK</value></data>
   <data name="Settings_KeepAlive.Header" xml:space="preserve">
     <value>Mode latar belakang</value>
   </data>
@@ -1054,6 +1143,12 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="ChatDetailInfo_NotificationsToggle.OffContent" xml:space="preserve">
     <value>Nonaktif</value>
   </data>
+  <data name="LegacyImageViewer_Download.Label" xml:space="preserve">
+    <value>Download</value>
+  </data>
+  <data name="LegacyImageViewer_Share.Label" xml:space="preserve">
+    <value>Share</value>
+  </data>
   <data name="ImageViewer_Download.ToolTipService.ToolTip" xml:space="preserve">
     <value>Unduh</value>
   </data>
@@ -1092,5 +1187,119 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   </data>
   <data name="Debug_RuntimeDialog.Title" xml:space="preserve">
     <value>Diagnostik runtime</value>
+  </data>
+  <data name="Debug_CopyReport.[using:Windows.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Copy to clipboard</value>
+  </data>
+  <data name="Debug_CopyReport.AutomationProperties.Name" xml:space="preserve">
+    <value>Copy to clipboard</value>
+  </data>
+  <data name="Debug_RequestFullHistory.Content" xml:space="preserve">
+    <value>Request Full History On-demand</value>
+  </data>
+  <data name="Debug_FullHistoryRequesting" xml:space="preserve">
+    <value>Requesting full history…</value>
+  </data>
+  <data name="Debug_FullHistoryRequested" xml:space="preserve">
+    <value>Full history on-demand requested.</value>
+  </data>
+  <data name="Debug_FullHistorySkipped" xml:space="preserve">
+    <value>Full history request was not sent (socket not ready or skipped).</value>
+  </data>
+  <data name="Debug_FullHistoryUnavailable" xml:space="preserve">
+    <value>History service unavailable.</value>
+  </data>
+  <data name="Debug_FullHistoryFailed" xml:space="preserve">
+    <value>Full history request failed: </value>
+  </data>
+  <data name="Settings_YourProfile.Text" xml:space="preserve">
+    <value>Profil Anda</value>
+  </data>
+  <data name="Settings_Profile.Text" xml:space="preserve">
+    <value>Profil</value>
+  </data>
+  <data name="Settings_ProfileName.Title" xml:space="preserve">
+    <value>Nama</value>
+  </data>
+  <data name="Settings_ProfilePhone.Title" xml:space="preserve">
+    <value>Telepon</value>
+  </data>
+  <data name="Settings_ProfileStatus.Title" xml:space="preserve">
+    <value>Tentang</value>
+  </data>
+  <data name="Settings_ProfilePhotoButton.AutomationProperties.Name" xml:space="preserve">
+    <value>Foto profil</value>
+  </data>
+  <data name="Settings_ProfilePhotoCamera.Text" xml:space="preserve">
+    <value>Kamera</value>
+  </data>
+  <data name="Settings_ProfilePhotoGallery.Text" xml:space="preserve">
+    <value>Galeri</value>
+  </data>
+  <data name="Settings_ProfilePhotoDelete.Text" xml:space="preserve">
+    <value>Hapus</value>
+  </data>
+  <data name="StartTileDialog_Transparent.Content" xml:space="preserve">
+    <value>Ubin transparan</value>
+  </data>  <data name="Shell_LegacyPivot_Calls.Header" xml:space="preserve">
+    <value>panggilan</value>
+  </data>
+  <data name="Shell_LegacyPivot_Favorites.Header" xml:space="preserve">
+    <value>favorit</value>
+  </data>
+  <data name="Shell_LegacyBrand.Text" xml:space="preserve">
+    <value>WHATSAPP LEGACY</value>
+  </data>
+  <data name="Shell_LegacyAppBar_Filter.Text" xml:space="preserve">
+    <value>Filter pesan</value>
+  </data>
+  <data name="Shell_LegacyAppBar_Filter.Label" xml:space="preserve">
+    <value>Filter pesan</value>
+  </data>
+  <data name="Shell_LegacyAppBar_Search.Label" xml:space="preserve">
+    <value>Cari</value>
+  </data>
+  <data name="Shell_LegacyAppBar_NewChat.Label" xml:space="preserve">
+    <value>Chat baru</value>
+  </data>
+  <data name="Shell_LegacyAppBar_AddContact.Label" xml:space="preserve">
+    <value>Tambah kontak</value>
+  </data>
+  <data name="Shell_LegacyAppBar_NewStatus.Label" xml:space="preserve">
+    <value>Status baru</value>
+  </data>
+  <data name="Shell_LegacyAppBar_More.Label" xml:space="preserve">
+    <value>Lainnya</value>
+  </data>
+  <data name="Shell_LegacyMenu_Debug.Label" xml:space="preserve">
+    <value>Debug</value>
+  </data>
+  <data name="Shell_LegacyMenu_Settings.Label" xml:space="preserve">
+    <value>Pengaturan</value>
+  </data>
+  <data name="Shell_LegacyMenu_Profile.Label" xml:space="preserve">
+    <value>Profil</value>
+  </data>
+  <data name="Shell_LegacySearch_Cancel.Content" xml:space="preserve">
+    <value>Batal</value>
+  </data>
+  <data name="Shell_LegacySearchBox.PlaceholderText" xml:space="preserve">
+    <value>Cari</value>
+  </data>  <data name="Shell_LegacyPlaceholder.Text" xml:space="preserve">
+    <value>Segera hadir</value>
+  </data>  <data name="Shell_LegacySearchTitle.Text" xml:space="preserve">
+    <value>Cari</value>
+  </data>
+  <data name="ChatDetail_DocumentOpen.Label" xml:space="preserve">
+    <value>Buka dokumen</value>
+  </data>
+    <data name="ChatDetail_AudioPlay.Label" xml:space="preserve">
+    <value>Putar audio</value>
+  </data>
+<data name="ChatDetail_DocumentSaveAs.Label" xml:space="preserve">
+    <value>Simpan sebagai…</value>
+  </data>
+  <data name="ChatDetail_Back.ToolTip" xml:space="preserve">
+    <value>Kembali</value>
   </data>
 </root>

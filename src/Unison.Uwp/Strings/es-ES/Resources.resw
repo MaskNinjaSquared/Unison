@@ -195,6 +195,12 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   <data name="ChatList_PreviewReaction" xml:space="preserve">
     <value>Reacción</value>
   </data>
+  <data name="ChatList_PreviewDeleted" xml:space="preserve">
+    <value>Se eliminó este mensaje</value>
+  </data>
+  <data name="ChatDetail_MessageDeleted.Text" xml:space="preserve">
+    <value>Se eliminó este mensaje</value>
+  </data>
   <data name="ChatList_Loading.Text" xml:space="preserve">
     <value>Preparando conversaciones…</value>
   </data>
@@ -245,6 +251,15 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   </data>
   <data name="ChatDetail_MessageInput.PlaceholderText" xml:space="preserve">
     <value>Escribe un mensaje</value>
+  </data>
+  <data name="ChatDetail_MentionEveryone" xml:space="preserve">
+    <value>Todos</value>
+  </data>
+  <data name="ChatDetail_MentionEveryoneDetail" xml:space="preserve">
+    <value>Menciona a todos los miembros del grupo</value>
+  </data>
+  <data name="ChatDetail_GroupOnlyAdminsCanSend.Text" xml:space="preserve">
+    <value>Solo los admins pueden enviar mensajes</value>
   </data>
   <data name="ChatDetail_AttachCamera.Text" xml:space="preserve">
     <value>Cámara</value>
@@ -312,6 +327,12 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   <data name="ChatDetail_UnpinMessage" xml:space="preserve">
     <value>Desfijar mensaje</value>
   </data>
+  <data name="ChatDetail_CopyMessage" xml:space="preserve">
+    <value>Copiar</value>
+  </data>
+  <data name="ChatDetail_ReplyMessage" xml:space="preserve">
+    <value>Responder</value>
+  </data>
   <data name="ChatDetail_PinFor24Hours" xml:space="preserve">
     <value>Fijar durante 24 horas</value>
   </data>
@@ -366,7 +387,9 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   <data name="ChatDetail_SendImage.PrimaryButtonText" xml:space="preserve">
     <value>Enviar</value>
   </data>
-  <data name="ChatDetail_SendImage.SecondaryButtonText" xml:space="preserve">
+  <data name="ChatDetail_SendImageCaption.PlaceholderText" xml:space="preserve">
+    <value>A�adir un pie de foto...</value>
+  </data>  <data name="ChatDetail_SendImage.SecondaryButtonText" xml:space="preserve">
     <value>Cancelar</value>
   </data>
   <data name="ChatDetail_AudioPlayFailed" xml:space="preserve">
@@ -531,8 +554,50 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   <data name="StatusList_Empty.Text" xml:space="preserve">
     <value>No hay actualizaciones de estado recientes</value>
   </data>
+  <data name="StatusList_Recent" xml:space="preserve">
+    <value>Reciente</value>
+  </data>
+  <data name="StatusList_Viewed" xml:space="preserve">
+    <value>Visto</value>
+  </data>
+  <data name="StatusList_FilterHeader.Text" xml:space="preserve">
+    <value>Filtrar estado por</value>
+  </data>
+  <data name="StatusList_FilterAll.Text" xml:space="preserve">
+    <value>Todos</value>
+  </data>
+  <data name="StatusList_FilterRecent.Text" xml:space="preserve">
+    <value>Recientes</value>
+  </data>
+  <data name="StatusList_FilterViewed.Text" xml:space="preserve">
+    <value>Vistos</value>
+  </data>
+  <data name="StatusList_FilterLink.Text" xml:space="preserve">
+    <value>Filtrar Estado</value>
+  </data>
+  <data name="StatusDetail_EmptyTitle.Text" xml:space="preserve">
+    <value>Comparte actualizaciones de estado</value>
+  </data>
+  <data name="StatusDetail_EmptySubtitle.Text" xml:space="preserve">
+    <value>Comparte fotos, videos y textos que desaparecen después de 24 horas.</value>
+  </data>
   <data name="Shell_Starred.Text" xml:space="preserve">
     <value>Mensajes destacados</value>
+  </data>
+  <data name="Shell_Favorites.Text" xml:space="preserve">
+    <value>Favoritos</value>
+  </data>
+  <data name="Favorites_Header.Text" xml:space="preserve">
+    <value>Favoritos</value>
+  </data>
+  <data name="Favorites_Empty.Text" xml:space="preserve">
+    <value>Los favoritos se muestran en las secciones de Chats y Llamadas. Añade todas las personas y grupos que quieras.</value>
+  </data>
+  <data name="Calls_Header.Text" xml:space="preserve">
+    <value>Llamadas</value>
+  </data>
+  <data name="Calls_Empty.Text" xml:space="preserve">
+    <value>Para iniciar una llamada, selecciona un contacto y pulsa Llamar.</value>
   </data>
   <data name="Shell_Archived.Text" xml:space="preserve">
     <value>Chats archivados</value>
@@ -609,6 +674,12 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   <data name="Settings_NotificationsSection.Text" xml:space="preserve">
     <value>Notificaciones</value>
   </data>
+  <data name="Settings_ShowSyncStatus.Header" xml:space="preserve">
+    <value>Mostrar estado de sincronización</value>
+  </data>
+  <data name="Settings_ShowSyncStatus.Text" xml:space="preserve">
+    <value>Muestra el estado de sincronización en la lista de chats.</value>
+  </data>
   <data name="Settings_Notifications.Header" xml:space="preserve">
     <value>Notificaciones</value>
   </data>
@@ -639,6 +710,24 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   <data name="Settings_LiveTiles.Text" xml:space="preserve">
     <value>Actualizar el tile principal con el último mensaje.</value>
   </data>
+  <data name="Settings_DiskUsage.Text" xml:space="preserve"><value>Uso de disco</value></data>
+  <data name="Settings_MediaCache.Header" xml:space="preserve"><value>Medios en los chats</value></data>
+  <data name="Settings_MediaCacheClean.Content" xml:space="preserve"><value>Borrar datos</value></data>
+  <data name="Settings_StartTile.Header" xml:space="preserve"><value>Tile de Inicio</value></data>
+  <data name="Settings_StartTile.Text" xml:space="preserve"><value>Elige el icono y ancla un tile que reciba las mismas notificaciones de la app.</value></data>
+  <data name="Settings_StartTileChoose.Content" xml:space="preserve"><value>Elegir</value></data>
+  <data name="StartTileDialog.Title" xml:space="preserve"><value>Tile de Inicio</value></data>
+  <data name="StartTileDialog.PrimaryButtonText" xml:space="preserve"><value>Anclar</value></data>
+  <data name="StartTileDialog.CloseButtonText" xml:space="preserve"><value>Cancelar</value></data>
+  <data name="StartTileDialog_Unison.Content" xml:space="preserve"><value>Unison</value></data>
+  <data name="StartTileDialog_WhatsAppWeb.Content" xml:space="preserve"><value>WhatsApp Web</value></data>
+  <data name="StartTileDialog_WhatsAppLegacy.Content" xml:space="preserve"><value>WhatsApp Legacy</value></data>
+  <data name="Settings_DiskUsageCalculating" xml:space="preserve"><value>Calculando...</value></data>
+  <data name="Settings_DiskUsageFailed" xml:space="preserve"><value>No se pudo calcular</value></data>
+  <data name="Settings_DiskUsageSummary" xml:space="preserve"><value>{0} en {1} archivos</value></data>
+  <data name="MediaDeleted.Title" xml:space="preserve"><value>Error</value></data>
+  <data name="MediaDeleted.Message" xml:space="preserve"><value>Archivo eliminado del dispositivo</value></data>
+  <data name="MediaDeleted.Close" xml:space="preserve"><value>OK</value></data>
   <data name="Settings_KeepAlive.Header" xml:space="preserve">
     <value>Modo en segundo plano</value>
   </data>
@@ -995,6 +1084,12 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   <data name="ChatDetailInfo_NotificationsToggle.OffContent" xml:space="preserve">
     <value>Desactivado</value>
   </data>
+  <data name="LegacyImageViewer_Download.Label" xml:space="preserve">
+    <value>Download</value>
+  </data>
+  <data name="LegacyImageViewer_Share.Label" xml:space="preserve">
+    <value>Share</value>
+  </data>
   <data name="ImageViewer_Download.ToolTipService.ToolTip" xml:space="preserve">
     <value>Descargar</value>
   </data>
@@ -1033,5 +1128,119 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   </data>
   <data name="Debug_RuntimeDialog.Title" xml:space="preserve">
     <value>Diagnóstico en tiempo de ejecución</value>
+  </data>
+  <data name="Debug_CopyReport.[using:Windows.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Copy to clipboard</value>
+  </data>
+  <data name="Debug_CopyReport.AutomationProperties.Name" xml:space="preserve">
+    <value>Copy to clipboard</value>
+  </data>
+  <data name="Debug_RequestFullHistory.Content" xml:space="preserve">
+    <value>Request Full History On-demand</value>
+  </data>
+  <data name="Debug_FullHistoryRequesting" xml:space="preserve">
+    <value>Requesting full history…</value>
+  </data>
+  <data name="Debug_FullHistoryRequested" xml:space="preserve">
+    <value>Full history on-demand requested.</value>
+  </data>
+  <data name="Debug_FullHistorySkipped" xml:space="preserve">
+    <value>Full history request was not sent (socket not ready or skipped).</value>
+  </data>
+  <data name="Debug_FullHistoryUnavailable" xml:space="preserve">
+    <value>History service unavailable.</value>
+  </data>
+  <data name="Debug_FullHistoryFailed" xml:space="preserve">
+    <value>Full history request failed: </value>
+  </data>
+  <data name="Settings_YourProfile.Text" xml:space="preserve">
+    <value>Tu perfil</value>
+  </data>
+  <data name="Settings_Profile.Text" xml:space="preserve">
+    <value>Perfil</value>
+  </data>
+  <data name="Settings_ProfileName.Title" xml:space="preserve">
+    <value>Nombre</value>
+  </data>
+  <data name="Settings_ProfilePhone.Title" xml:space="preserve">
+    <value>Teléfono</value>
+  </data>
+  <data name="Settings_ProfileStatus.Title" xml:space="preserve">
+    <value>Info</value>
+  </data>
+  <data name="Settings_ProfilePhotoButton.AutomationProperties.Name" xml:space="preserve">
+    <value>Foto de perfil</value>
+  </data>
+  <data name="Settings_ProfilePhotoCamera.Text" xml:space="preserve">
+    <value>Cámara</value>
+  </data>
+  <data name="Settings_ProfilePhotoGallery.Text" xml:space="preserve">
+    <value>Galería</value>
+  </data>
+  <data name="Settings_ProfilePhotoDelete.Text" xml:space="preserve">
+    <value>Eliminar</value>
+  </data>
+  <data name="StartTileDialog_Transparent.Content" xml:space="preserve">
+    <value>Tile transparente</value>
+  </data>  <data name="Shell_LegacyPivot_Calls.Header" xml:space="preserve">
+    <value>llamadas</value>
+  </data>
+  <data name="Shell_LegacyPivot_Favorites.Header" xml:space="preserve">
+    <value>favoritos</value>
+  </data>
+  <data name="Shell_LegacyBrand.Text" xml:space="preserve">
+    <value>WHATSAPP LEGACY</value>
+  </data>
+  <data name="Shell_LegacyAppBar_Filter.Text" xml:space="preserve">
+    <value>Filtrar mensajes</value>
+  </data>
+  <data name="Shell_LegacyAppBar_Filter.Label" xml:space="preserve">
+    <value>Filtrar mensajes</value>
+  </data>
+  <data name="Shell_LegacyAppBar_Search.Label" xml:space="preserve">
+    <value>Buscar</value>
+  </data>
+  <data name="Shell_LegacyAppBar_NewChat.Label" xml:space="preserve">
+    <value>Chat nuevo</value>
+  </data>
+  <data name="Shell_LegacyAppBar_AddContact.Label" xml:space="preserve">
+    <value>Añadir contacto</value>
+  </data>
+  <data name="Shell_LegacyAppBar_NewStatus.Label" xml:space="preserve">
+    <value>Nuevo estado</value>
+  </data>
+  <data name="Shell_LegacyAppBar_More.Label" xml:space="preserve">
+    <value>Más</value>
+  </data>
+  <data name="Shell_LegacyMenu_Debug.Label" xml:space="preserve">
+    <value>Debug</value>
+  </data>
+  <data name="Shell_LegacyMenu_Settings.Label" xml:space="preserve">
+    <value>Ajustes</value>
+  </data>
+  <data name="Shell_LegacyMenu_Profile.Label" xml:space="preserve">
+    <value>Perfil</value>
+  </data>
+  <data name="Shell_LegacySearch_Cancel.Content" xml:space="preserve">
+    <value>Cancelar</value>
+  </data>
+  <data name="Shell_LegacySearchBox.PlaceholderText" xml:space="preserve">
+    <value>Buscar</value>
+  </data>  <data name="Shell_LegacyPlaceholder.Text" xml:space="preserve">
+    <value>Próximamente</value>
+  </data>  <data name="Shell_LegacySearchTitle.Text" xml:space="preserve">
+    <value>Buscar</value>
+  </data>
+  <data name="ChatDetail_DocumentOpen.Label" xml:space="preserve">
+    <value>Abrir documento</value>
+  </data>
+    <data name="ChatDetail_AudioPlay.Label" xml:space="preserve">
+    <value>Reproducir audio</value>
+  </data>
+<data name="ChatDetail_DocumentSaveAs.Label" xml:space="preserve">
+    <value>Guardar como…</value>
+  </data>
+  <data name="ChatDetail_Back.ToolTip" xml:space="preserve">
+    <value>Atrás</value>
   </data>
 </root>

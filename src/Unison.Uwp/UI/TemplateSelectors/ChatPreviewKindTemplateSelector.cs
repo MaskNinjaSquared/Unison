@@ -18,6 +18,7 @@ namespace Unison.Uwp.UI.TemplateSelectors
         public DataTemplate VoiceTemplate { get; set; }
         public DataTemplate DocumentTemplate { get; set; }
         public DataTemplate ReactionTemplate { get; set; }
+        public DataTemplate RevokedTemplate { get; set; }
 
         protected override DataTemplate SelectTemplateCore(object item)
         {
@@ -49,6 +50,8 @@ namespace Unison.Uwp.UI.TemplateSelectors
                     return DocumentTemplate ?? TextTemplate;
                 case ChatPreviewKind.Reaction:
                     return ReactionTemplate ?? TextTemplate;
+                case ChatPreviewKind.Revoked:
+                    return RevokedTemplate ?? TextTemplate;
                 default:
                     return TextTemplate;
             }

@@ -1,0 +1,150 @@
+<UserControl
+    x:Class="Unison.Uwp.UI.Views.CameraPickView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:conv="using:Unison.Uwp.UI.Converters"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    d:DesignHeight="800"
+    d:DesignWidth="480">
+
+    <UserControl.Resources>
+        <conv:BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <Style x:Key="CameraChromeIconButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="MinHeight" Value="0"/>
+            <Setter Property="Width" Value="40"/>
+            <Setter Property="Height" Value="40"/>
+            <Setter Property="UseSystemFocusVisuals" Value="False"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid Background="{TemplateBinding Background}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid x:Name="RootGrid"
+          Background="Black"
+          SizeChanged="RootGrid_SizeChanged">
+
+        <!-- Letterboxed preview: sized to the capture aspect ratio inside the available area. -->
+        <Grid x:Name="PreviewHost"
+              HorizontalAlignment="Center"
+              VerticalAlignment="Center"
+              Background="Black">
+            <CaptureElement x:Name="PreviewElement"
+                            Stretch="UniformToFill"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Stretch"/>
+        </Grid>
+
+        <!-- Transparent top chrome -->
+        <Grid VerticalAlignment="Top"
+              MinHeight="72"
+              Padding="8,12,8,16"
+              Background="Transparent"
+              Canvas.ZIndex="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <Button x:Name="BackButton"
+                    Grid.Column="0"
+                    Command="{x:Bind ViewModel.CloseCommand, Mode=OneWay}"
+                    Style="{StaticResource CircleIconButtonStyle}"
+                    Width="34"
+                    Height="34"
+                    Margin="4,0,8,0"
+                    VerticalAlignment="Center"
+                    Content="&#xE72B;"
+                    ToolTipService.ToolTip="Back"/>
+
+            <!-- Single flash affordance; disabled until flash mode is wired. -->
+            <Border Grid.Column="1"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    CornerRadius="15"
+                    MaxHeight="30"
+                    Background="#99000000"
+                    Padding="6,2">
+                <Button Style="{StaticResource CameraChromeIconButtonStyle}"
+                        IsEnabled="False"
+                        ToolTipService.ToolTip="Ativar Flash">
+                    <FontIcon Glyph="&#xEB0E;"
+                              FontFamily="{StaticResource LegacyIconFont}"
+                              FontSize="18"
+                              Foreground="White"
+                              Opacity="0.55"/>
+                </Button>
+            </Border>
+
+            <Border Grid.Column="2"
+                    Margin="8,0,4,0"
+                    VerticalAlignment="Center"
+                    Width="40"
+                    Height="40"
+                    CornerRadius="20"
+                    Background="#99000000"
+                    Visibility="{x:Bind ViewModel.IsMultipleCameras, Mode=OneWay, Converter={StaticResource BoolToVis}}">
+                <Button Command="{x:Bind ViewModel.SwitchCameraCommand, Mode=OneWay}"
+                        Style="{StaticResource CameraChromeIconButtonStyle}"
+                        Width="40"
+                        Height="40"
+                        ToolTipService.ToolTip="Switch camera">
+                    <FontIcon Glyph="&#xE89E;"
+                              FontFamily="{StaticResource IconFont}"
+                              FontSize="18"
+                              Foreground="White"/>
+                </Button>
+            </Border>
+        </Grid>
+
+        <!-- Shutter: smaller radius, thicker ring, right + vertically centered (Windows Camera). -->
+        <Button x:Name="CaptureButton"
+                Command="{x:Bind ViewModel.CaptureCommand, Mode=OneWay}"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Center"
+                Width="56"
+                Height="56"
+                Margin="0,0,20,0"
+                Padding="0"
+                BorderThickness="4"
+                BorderBrush="White"
+                Background="#99000000"
+                UseSystemFocusVisuals="False"
+                Canvas.ZIndex="2"
+                ToolTipService.ToolTip="Take photo">
+            <Button.Template>
+                <ControlTemplate TargetType="Button">
+                    <Grid>
+                        <Ellipse x:Name="Ring"
+                                 Stroke="{TemplateBinding BorderBrush}"
+                                 StrokeThickness="{TemplateBinding BorderThickness}"
+                                 Fill="{TemplateBinding Background}"/>
+                        <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"/>
+                    </Grid>
+                </ControlTemplate>
+            </Button.Template>
+            <FontIcon Glyph="&#xE722;"
+                      FontFamily="{StaticResource IconFont}"
+                      FontSize="22"
+                      Foreground="White"
+                      Opacity="1"/>
+        </Button>
+    </Grid>
+</UserControl>

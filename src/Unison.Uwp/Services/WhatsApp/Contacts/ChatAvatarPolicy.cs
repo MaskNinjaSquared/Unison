@@ -3,7 +3,7 @@
 //
 // When a chat picture is worth fetching, and when asking again would only cost.
 //
-// The fetch itself still belongs to WhatsAppService; what lives here is the
+// The fetch itself lives in ChatAvatarFetch; what lives here is the
 // deciding. Two callers ask - the background batch and a row scrolling into
 // view - and both consult the same in-flight and already-attempted sets, which
 // is why they are one class: a row that arrives while the batch is fetching it
@@ -23,7 +23,9 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
+using Unison.Core.State;
 using Unison.Uwp.Services;
+using Unison.Uwp.Services.Socket;
 
 namespace Unison.Uwp.Services.WhatsApp.Contacts
 {
@@ -31,15 +33,21 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
     {
         private static readonly TimeSpan AvatarRefreshInterval = TimeSpan.FromDays(7);
         private static readonly TimeSpan AvatarFetchFailureBackoff = TimeSpan.FromMinutes(30);
-        private static readonly TimeSpan AvatarFetchInterRequestDelayGenerous = TimeSpan.FromMilliseconds(900);
-        private static readonly TimeSpan AvatarFetchInterRequestDelayFrugal = TimeSpan.FromMilliseconds(750);
-        private const int AvatarFetchBatchSizeGenerous = 12;
-        private const int AvatarFetchBatchSizeFrugal = 4;
         private const int AvatarStatusProgressStride = 3;
         private const string GroupAvatarFallbackMissReason = "group-avatar-fallback-miss";
 
-        private readonly IWhatsAppService _whatsAppService;
+        private readonly IDeferredAvatarResolution _deferredAvatars;
+        private readonly IWhatsAppSessionProvider _sessions;
+        private readonly IChatStateStore _chatState;
+        private readonly SyncStatusChannel _syncStatus;
+        private readonly SyncWorkGate _syncWork;
+        private readonly SyncBudget _syncBudget;
+        private readonly SyncWorkloadStrategy _workload;
+        private readonly InitialSyncProgressState _initialSync;
+        private readonly IDispatcher _ui;
+        private readonly IChatCatalogPersistence _catalog;
         private readonly IJidResolver _jids;
+        private readonly ChatAvatarFetch _fetch;
 
         private readonly object _requestLock = new object();
         private readonly HashSet<string> _inFlight = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -47,10 +55,40 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         /// <summary>JIDs realized on screen; background batches pull these first.</summary>
         private readonly HashSet<string> _viewportPriority = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        internal ChatAvatarPolicy(IWhatsAppService whatsAppService, IJidResolver jids)
+        /// <summary>Post-safe-mode avatar request counter for crash breadcrumbs.</summary>
+        private int _postSyncAvatarRequests;
+
+        internal ChatAvatarPolicy(
+            IDeferredAvatarResolution deferredAvatars,
+            IJidResolver jids,
+            ChatAvatarFetch fetch,
+            IDispatcher ui,
+            IChatCatalogPersistence catalog,
+            IChatStateStore chatState,
+            SyncStatusChannel syncStatus,
+            SyncWorkGate syncWork,
+            IWhatsAppSessionProvider sessions,
+            SyncBudget syncBudget,
+            SyncWorkloadStrategy workload,
+            InitialSyncProgressState initialSync)
         {
-            _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
+            _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
+            _syncBudget = syncBudget ?? throw new ArgumentNullException(nameof(syncBudget));
+            _workload = workload ?? throw new ArgumentNullException(nameof(workload));
+            _initialSync = initialSync ?? throw new ArgumentNullException(nameof(initialSync));
+            _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
+            _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
+            _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
+            _ui = ui ?? throw new ArgumentNullException(nameof(ui));
+            _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
+            _deferredAvatars = deferredAvatars ?? throw new ArgumentNullException(nameof(deferredAvatars));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
+            _fetch = fetch ?? throw new ArgumentNullException(nameof(fetch));
+        }
+
+        public Task HydrateCachedAsync(string reason)
+        {
+            return _fetch.HydrateCachedAsync(reason);
         }
 
         /// <summary>
@@ -59,15 +97,13 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         /// </summary>
         public async Task RetrieveBatchAsync(CancellationToken token = default(CancellationToken))
         {
-            bool frugal = _whatsAppService.PreferFrugalSyncBudget;
-            int batchSize = frugal ? AvatarFetchBatchSizeFrugal : AvatarFetchBatchSizeGenerous;
-            TimeSpan interRequestDelay = frugal
-                ? AvatarFetchInterRequestDelayFrugal
-                : AvatarFetchInterRequestDelayGenerous;
+            int batchSize = _workload.AvatarFetchBatchSize;
+            TimeSpan interRequestDelay = TimeSpan.FromMilliseconds(_workload.AvatarFetchInterRequestDelayMs);
+            bool frugal = _syncBudget.IsFrugal;
 
             // Progress only after the first completed fetch — "0 of N" is noise on Mobile StatusBar.
             // Bare phase:avatars is also skipped; hydrate/disk work stays silent.
-            await _whatsAppService.HydrateCachedAvatarUrisAsync("pre-avatar-fetch");
+            await _fetch.HydrateCachedAsync("pre-avatar-fetch");
             if (token.IsCancellationRequested) return;
 
             DateTime nowUtc = DateTime.UtcNow;
@@ -101,23 +137,23 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 try
                 {
                     string deferReason;
-                    if (_whatsAppService.ShouldDeferAvatarFetch(out deferReason))
+                    if (_syncWork.ShouldDeferAvatarFetch(out deferReason))
                     {
                         Debug.WriteLine("[ChatAvatarPolicy] Pausing batch while sync traffic settles: " + deferReason);
-                        _whatsAppService.ScheduleDeferredAvatarResolution("avatar-batch-paused:" + deferReason);
+                        _deferredAvatars.Schedule("avatar-batch-paused:" + deferReason);
                         break;
                     }
 
                     // Preview only during the background queue; high-res group art is deferred to
                     // visible refresh / chat-info so Mobile does not pay a second CDN hit per group.
-                    await _whatsAppService.FetchAndApplyAvatarAsync(chat, token, fetchHighQuality: false);
+                    await _fetch.FetchAndApplyAsync(chat, token, fetchHighQuality: false);
                     anyUpdated = true;
                     fetched++;
                     ClearViewportPriority(chat);
 
                     if (available > 0 && ShouldRaiseAvatarProgress(fetched, batch.Count))
                     {
-                        _whatsAppService.RaiseSyncStatus(
+                        _syncStatus.Raise(
                             SyncPhaseStatus.Format(SyncPhaseStatus.Avatars, fetched, available));
                     }
 
@@ -127,7 +163,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 {
                     Debug.WriteLine($"[ChatAvatarPolicy] Error fetching profile pic for {chat.JID}: {ex.Message}");
                     DateTime failedAtUtc = DateTime.UtcNow;
-                    await _whatsAppService.RunOnUiThreadAsync(() =>
+                    await _ui.RunAsync(() =>
                     {
                         chat.AvatarFetchFailedAtUtc = failedAtUtc;
                         chat.AvatarFetchFailureReason = ex.GetType().Name + ":" + ex.Message;
@@ -139,14 +175,14 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
             if (fetched > 0 && available > 0)
             {
-                _whatsAppService.RaiseSyncStatus(
+                _syncStatus.Raise(
                     SyncPhaseStatus.Format(SyncPhaseStatus.Avatars, Math.Min(fetched, available), available));
             }
 
             // One debounced catalog write for the whole batch — not per download.
             if (anyUpdated)
             {
-                _whatsAppService.SchedulePersistPublic();
+                _catalog.Schedule();
             }
 
             await ScheduleNextBatchIfNeededAsync(token);
@@ -160,14 +196,37 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         {
             // Initial history sync must keep CPU, storage and network pressure focused on chats
             // and messages. Visible rows receive their avatars once safe mode ends.
-            if (_whatsAppService.IsInitialSyncSafeMode)
+            if (_initialSync.IsActive)
             {
                 return;
             }
 
-            if (chat == null || string.IsNullOrWhiteSpace(chat.JID) || !_whatsAppService.IsTransportReady)
+            if (chat == null || string.IsNullOrWhiteSpace(chat.JID) || !_sessions.IsTransportReady)
             {
                 return;
+            }
+
+            // First post-safe-mode avatar requests often land right when the ListView materializes.
+            int avatarReq = Interlocked.Increment(ref _postSyncAvatarRequests);
+            if (avatarReq <= 5 || (avatarReq % 25) == 0)
+            {
+                try
+                {
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "chat-list-lifecycle",
+                        "avatar-request",
+                        "n=" + avatarReq +
+                        "; force=" + force +
+                        "; missing=" + string.IsNullOrWhiteSpace(chat.GetAvatarUrl(preferHigh: false)) +
+                        "; gcMb=" + (GC.GetTotalMemory(false) / (1024 * 1024)));
+                    if (avatarReq <= 3)
+                    {
+                        _ = RuntimeDiagnosticsService.Instance.FlushAsync("chat-list:avatar-request");
+                    }
+                }
+                catch
+                {
+                }
             }
 
             DateTime nowUtc = DateTime.UtcNow;
@@ -190,7 +249,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 // it from the UI thread - a visible row, a failed image, an alias discovery
                 // already marshalled - so reading it is safe on this path only.
                 if (!force && !firstVisibleRetryThisSession &&
-                    (!NeedsRefresh(chat, nowUtc, _whatsAppService.Chats) || IsBackoffActive(chat, nowUtc)))
+                    (!NeedsRefresh(chat, nowUtc, _chatState.Chats) || IsBackoffActive(chat, nowUtc)))
                 {
                     return;
                 }
@@ -207,8 +266,8 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             {
                 try
                 {
-                    await _whatsAppService.FetchAndApplyAvatarAsync(chat, CancellationToken.None, fetchHighQuality: true);
-                    _whatsAppService.SchedulePersistPublic();
+                    await _fetch.FetchAndApplyAsync(chat, CancellationToken.None, fetchHighQuality: true);
+                    _catalog.Schedule();
                     ClearViewportPriority(chat);
                 }
                 catch (Exception ex)
@@ -252,7 +311,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             if (remaining > 0 && !token.IsCancellationRequested)
             {
                 Debug.WriteLine($"[ChatAvatarPolicy] Scheduling next batch: remaining={remaining}, backedOff={backedOff}");
-                _whatsAppService.ScheduleDeferredAvatarResolution("avatar-next-batch");
+                _deferredAvatars.Schedule("avatar-next-batch");
                 return;
             }
 
@@ -260,7 +319,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
             // Nothing is scheduled behind this, so the banner would otherwise stay on the last
             // count forever.
-            _whatsAppService.RaiseSyncStatus(null);
+            _syncStatus.Raise(null);
         }
 
         /// <summary>
@@ -269,8 +328,8 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private async Task<List<ChatItem>> SnapshotChatsAsync()
         {
             List<ChatItem> snapshot = null;
-            await _whatsAppService.RunOnUiThreadAsync(
-                () => snapshot = _whatsAppService.Chats.Where(c => c != null).ToList());
+            await _ui.RunAsync(
+                () => snapshot = _chatState.Chats.Where(c => c != null).ToList());
             return snapshot ?? new List<ChatItem>();
         }
 

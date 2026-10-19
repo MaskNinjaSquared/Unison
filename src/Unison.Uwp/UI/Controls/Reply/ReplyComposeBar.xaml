@@ -1,0 +1,52 @@
+<UserControl
+    x:Class="Unison.Uwp.UI.Controls.Reply.ReplyComposeBar"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:converters="using:Unison.Uwp.UI.Converters"
+    xmlns:reply="using:Unison.Uwp.UI.Controls.Reply">
+
+    <UserControl.Resources>
+        <converters:ChatMessageKindVisibilityConverter x:Key="ReplyKind"/>
+    </UserControl.Resources>
+
+    <Grid x:Name="ReplyRoot"
+          Background="{ThemeResource ChatDetailInputBarBackgroundBrush}"
+          BorderBrush="{ThemeResource ChatDetailInputBarTopBorderBrush}"
+          BorderThickness="0,1,0,0"
+          Padding="12,8">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+        <StackPanel DataContext="{Binding ComposerReply}" VerticalAlignment="Center">
+            <TextBlock Text="{Binding SenderName}"
+                       FontFamily="{StaticResource MainFontSemibold}"
+                       FontSize="14"
+                       TextTrimming="CharacterEllipsis"/>
+            <reply:ReplyTextChrome Margin="0,4,0,0"
+                                   Visibility="{Binding Kind, Converter={StaticResource ReplyKind}, ConverterParameter=Text}"/>
+            <reply:ReplyImageChrome Margin="0,4,0,0"
+                                    Visibility="{Binding Kind, Converter={StaticResource ReplyKind}, ConverterParameter=Image}"/>
+            <reply:ReplyVideoChrome Margin="0,4,0,0"
+                                    Visibility="{Binding Kind, Converter={StaticResource ReplyKind}, ConverterParameter=Video}"/>
+            <reply:ReplyStickerChrome Margin="0,4,0,0"
+                                      Visibility="{Binding Kind, Converter={StaticResource ReplyKind}, ConverterParameter=Sticker}"/>
+            <reply:ReplyAudioChrome Margin="0,4,0,0"
+                                    Visibility="{Binding Kind, Converter={StaticResource ReplyKind}, ConverterParameter=Audio}"/>
+            <reply:ReplyDocumentChrome Margin="0,4,0,0"
+                                       Visibility="{Binding Kind, Converter={StaticResource ReplyKind}, ConverterParameter=Document}"/>
+        </StackPanel>
+        <Button Grid.Column="1"
+                Width="36"
+                Height="36"
+                Margin="8,0,0,0"
+                VerticalAlignment="Center"
+                Background="Transparent"
+                BorderThickness="0"
+                Command="{Binding DataContext.DismissReplyCommand, ElementName=ReplyRoot}">
+            <TextBlock Text="&#xE711;"
+                       FontFamily="Segoe MDL2 Assets"
+                       FontSize="14"/>
+        </Button>
+    </Grid>
+</UserControl>

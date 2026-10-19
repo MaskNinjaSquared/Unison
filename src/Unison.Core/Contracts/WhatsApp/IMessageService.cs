@@ -71,10 +71,16 @@ namespace Unison.Core.Contracts.WhatsApp
 
         Task<ChatMessage> SendTextMessageAsync(string jid, string text);
 
+        /// <summary>Same send, with @mentions already turned into JIDs and the everyone flag.</summary>
+        Task<ChatMessage> SendTextMessageAsync(string jid, OutgoingTextMentions message);
+
         Task SendImageAsync(string jid, byte[] imageBytes, string caption);
 
         /// <summary>Sends a recorded/picked audio clip (voice note when isVoiceMessage=true).</summary>
         Task<ChatMessage> SendAudioMessageAsync(string jid, byte[] audioBytes, string mimeType, uint durationSeconds, bool isVoiceMessage = false);
+
+        /// <summary>Sends a picked document (PDF / office / archive / text). MIME must be document-only.</summary>
+        Task<ChatMessage> SendDocumentAsync(string jid, byte[] documentBytes, string mimeType, string fileName, string caption = null);
 
         /// <summary>Downloads + decrypts the audio media on demand, caching the local URI on the message.</summary>
         Task<string> EnsureAudioAvailableAsync(ChatMessage message);
@@ -87,6 +93,20 @@ namespace Unison.Core.Contracts.WhatsApp
 
         /// <summary>Downloads + decrypts a document on demand, caching the local URI on the message.</summary>
         Task<string> EnsureDocumentAvailableAsync(ChatMessage message);
+
+        /// <summary>Downloads an image that just arrived, beside the incoming pump.</summary>
+        Task HydrateIncomingImageAsync(
+            ChatMessage message,
+            Message.Types.ImageMessage image,
+            string messageId,
+            string chatJid);
+
+        /// <summary>Downloads a sticker that just arrived, beside the incoming pump.</summary>
+        Task HydrateIncomingStickerAsync(
+            ChatMessage message,
+            Message.Types.StickerMessage sticker,
+            string messageId,
+            string chatJid);
 
         /// <summary>Pins/unpins a message for the given chat (WhatsApp pin duration, default 7 days).</summary>
         Task SetMessagePinnedAsync(string chatJid, ChatMessage message, bool pin, uint durationSeconds = 604800);
@@ -137,10 +157,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         Task ResyncConversationsAsync(System.IProgress<ConversationResyncPhase> progress = null);
 
-        /// <summary>
-        /// User action: ensure a chat row exists for <paramref name="jid"/> (new-chat flow).
-        /// </summary>
-        void StartNewChat(string jid);
 
         /// <summary>
         /// Live inbound announce: toast / badge / tile. From-me is a no-op. Mute is read from
@@ -156,37 +172,5 @@ namespace Unison.Core.Contracts.WhatsApp
             bool suppressToast,
             int totalUnread,
             ChatItem chat);
-
-        /// <summary>
-        /// Inserts or enriches a live/offline message in the in-memory timeline.
-        /// Alias consolidate side-effects (store delete, list dedupe) stay with the pump.
-        /// </summary>
-        IncomingTimelineAcceptResult AcceptIncomingTimeline(
-            string chatJid,
-            ChatMessage message,
-            bool isGroup);
-
-        /// <summary>Queues a message for debounced JSON/SQLite persist and schedules a flush.</summary>
-        void QueueIncomingPersist(string chatJid, ChatMessage message);
-
-        /// <summary>
-        /// Applies an inbound revoke protocol to the timeline (tombstone + persist).
-        /// Prefer this over calling the WhatsApp client from the pump.
-        /// </summary>
-        Task ApplyIncomingRevocationAsync(
-            string chatJid,
-            string targetMessageId,
-            string envelopeMessageId = null);
-
-        /// <summary>
-        /// Applies an inbound pin-in-chat protocol to the timeline.
-        /// Prefer this over calling the WhatsApp client from the pump.
-        /// </summary>
-        Task ApplyIncomingPinInChatAsync(
-            string chatJid,
-            string targetMessageId,
-            bool pin,
-            long senderTimestampMs,
-            uint durationSeconds = 0);
     }
 }

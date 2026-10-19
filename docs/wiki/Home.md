@@ -8,8 +8,8 @@ This wiki describes the **current architecture** of the tree in `Unison.slnx`. E
 
 Day-to-day chat on a linked session:
 
-- Text, image and voice-note send and receive
-- Gallery attach and in-chat microphone recording
+- Text, image, document and voice-note send and receive
+- Gallery / document / camera attach and in-chat microphone recording
 - Contact names and profile pictures (including the rc14 LID flow)
 - On-demand image / video / document download and fullscreen viewers
 - New chats by phone number, plus self-chat

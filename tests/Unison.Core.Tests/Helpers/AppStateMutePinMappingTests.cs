@@ -98,5 +98,122 @@ namespace Unison.Core.Tests.Helpers
                 1_700_000_000L,
                 AppStatePinMapping.NormalizeSortKey(1_700_000_000L));
         }
+
+        [Fact]
+        public void Chat_update_silent_about_mute_leaves_it_alone()
+        {
+            AppStateMuteMapping.Result result = AppStateMuteMapping.FromChatUpdate(
+                appliesMute: false,
+                muteEndTime: null);
+
+            Assert.False(result.AppliesMute);
+            Assert.Null(result.MutedUntilUnixSeconds);
+        }
+
+        [Fact]
+        public void Chat_update_applying_mute_without_deadline_unmutes()
+        {
+            AppStateMuteMapping.Result result = AppStateMuteMapping.FromChatUpdate(
+                appliesMute: true,
+                muteEndTime: null);
+
+            Assert.True(result.AppliesMute);
+            Assert.Null(result.MutedUntilUnixSeconds);
+        }
+
+        [Fact]
+        public void Chat_update_applying_mute_with_ms_deadline_mutes_in_seconds()
+        {
+            AppStateMuteMapping.Result result = AppStateMuteMapping.FromChatUpdate(
+                appliesMute: true,
+                muteEndTime: 1_700_000_000_000L);
+
+            Assert.True(result.AppliesMute);
+            Assert.Equal(1_700_000_000L, result.MutedUntilUnixSeconds);
+        }
+
+        [Fact]
+        public void Legacy_chat_update_with_deadline_but_no_flag_still_mutes()
+        {
+            AppStateMuteMapping.Result result = AppStateMuteMapping.FromChatUpdate(
+                appliesMute: false,
+                muteEndTime: 1_700_000_000L);
+
+            Assert.True(result.AppliesMute);
+            Assert.Equal(1_700_000_000L, result.MutedUntilUnixSeconds);
+        }
+
+        [Fact]
+        public void Legacy_chat_update_with_zero_deadline_is_forever()
+        {
+            AppStateMuteMapping.Result result = AppStateMuteMapping.FromChatUpdate(
+                appliesMute: false,
+                muteEndTime: 0);
+
+            Assert.True(result.AppliesMute);
+            Assert.Equal(0, result.MutedUntilUnixSeconds);
+        }
+
+        [Fact]
+        public void Chat_update_silent_about_pin_leaves_it_alone()
+        {
+            AppStatePinMapping.Result result = AppStatePinMapping.FromChatUpdate(
+                appliesPin: false,
+                pinned: null,
+                fallbackTimestampMs: 99);
+
+            Assert.False(result.AppliesPin);
+        }
+
+        [Fact]
+        public void Chat_update_applying_pin_without_sort_key_unpins()
+        {
+            AppStatePinMapping.Result result = AppStatePinMapping.FromChatUpdate(
+                appliesPin: true,
+                pinned: null,
+                fallbackTimestampMs: 99);
+
+            Assert.True(result.AppliesPin);
+            Assert.False(result.IsPinned);
+            Assert.Equal(0, result.PinnedTimestampUnixSeconds);
+        }
+
+        [Fact]
+        public void Chat_update_applying_pin_with_zero_sort_key_uses_the_fallback()
+        {
+            AppStatePinMapping.Result result = AppStatePinMapping.FromChatUpdate(
+                appliesPin: true,
+                pinned: 0,
+                fallbackTimestampMs: 1_700_000_000_123L);
+
+            Assert.True(result.IsPinned);
+            Assert.Equal(1_700_000_000L, result.PinnedTimestampUnixSeconds);
+        }
+
+        [Fact]
+        public void Legacy_chat_update_with_positive_sort_key_pins()
+        {
+            AppStatePinMapping.Result result = AppStatePinMapping.FromChatUpdate(
+                appliesPin: false,
+                pinned: 1_700_000_000_000L,
+                fallbackTimestampMs: 99);
+
+            Assert.True(result.AppliesPin);
+            Assert.True(result.IsPinned);
+            Assert.Equal(1_700_000_000L, result.PinnedTimestampUnixSeconds);
+        }
+
+        [Fact]
+        public void Legacy_chat_update_with_zero_sort_key_unpins()
+        {
+            AppStatePinMapping.Result result = AppStatePinMapping.FromChatUpdate(
+                appliesPin: false,
+                pinned: 0,
+                fallbackTimestampMs: 99);
+
+            Assert.True(result.AppliesPin);
+            Assert.False(result.IsPinned);
+            Assert.Equal(0, result.PinnedTimestampUnixSeconds);
+        }
     }
 }

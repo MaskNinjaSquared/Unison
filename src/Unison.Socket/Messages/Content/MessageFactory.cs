@@ -469,7 +469,7 @@ namespace Unison.Socket.Messages.Content
             var hasMentions = content.Mentions != null && content.Mentions.Count > 0;
             var hasQuote = content.Quoted != null && content.Quoted.Key != null;
 
-            if (!hasMentions && !hasQuote && content.EphemeralExpiration <= 0)
+            if (!hasMentions && !content.MentionAll && !hasQuote && content.EphemeralExpiration <= 0)
             {
                 return null;
             }
@@ -484,6 +484,11 @@ namespace Unison.Socket.Messages.Content
                 }
             }
 
+            if (content.MentionAll)
+            {
+                context.NonJidMentions = 1;
+            }
+
             if (content.EphemeralExpiration > 0)
             {
                 context.Expiration = (uint)content.EphemeralExpiration;
@@ -492,13 +497,21 @@ namespace Unison.Socket.Messages.Content
             if (hasQuote)
             {
                 var quoted = content.Quoted;
-                var participant = quoted.Participant ??
-                                  quoted.Key.Participant ??
-                                  quoted.Key.RemoteJid;
-
                 context.StanzaId = quoted.Key.Id;
-                context.Participant = JidUtils.NormalizedUser(participant);
                 context.QuotedMessage = quoted.Message;
+
+                // Private chats omit participant. A peer PN (or the chat JID
+                // itself) on ContextInfo makes the server drop the frame, which
+                // shows up as a transport write timeout. Groups name the author
+                // only when that author is a user, never the group JID.
+                if (JidUtils.IsGroup(quoted.Key.RemoteJid))
+                {
+                    string participant = quoted.Participant ?? quoted.Key.Participant;
+                    if (!string.IsNullOrWhiteSpace(participant) && !JidUtils.IsGroup(participant))
+                    {
+                        context.Participant = JidUtils.NormalizedUser(participant);
+                    }
+                }
             }
 
             return context;

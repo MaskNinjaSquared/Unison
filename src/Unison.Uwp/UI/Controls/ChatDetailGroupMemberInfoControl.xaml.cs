@@ -188,6 +188,7 @@ namespace Unison.Uwp.UI.Controls
             {
                 SharedGroupsEmpty.Visibility = vm.HasSharedGroups ? Visibility.Collapsed : Visibility.Visible;
             }
+
         }
 
         private void BindMediaPanes()

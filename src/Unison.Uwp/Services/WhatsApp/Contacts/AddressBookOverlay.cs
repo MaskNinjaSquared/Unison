@@ -18,6 +18,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
+using Unison.Core.State;
 
 namespace Unison.Uwp.Services.WhatsApp.Contacts
 {
@@ -25,19 +26,25 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
     {
         private readonly ILocalContactsService _localContacts;
         private readonly IPersonStore _personStore;
-        private readonly IWhatsAppService _whatsAppService;
+        private readonly IDispatcher _ui;
         private readonly IJidResolver _jids;
+        private readonly DisplayNameTable _addressBookNames;
+        private readonly IChatStateStore _chatState;
 
         internal AddressBookOverlay(
             ILocalContactsService localContacts,
             IPersonStore personStore,
-            IWhatsAppService whatsAppService,
-            IJidResolver jids)
+            IJidResolver jids,
+            IDispatcher ui,
+            DisplayNameTable addressBookNames,
+            IChatStateStore chatState)
         {
+            _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
+            _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _localContacts = localContacts ?? throw new ArgumentNullException(nameof(localContacts));
             _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
-            _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
+            _addressBookNames = addressBookNames ?? throw new ArgumentNullException(nameof(addressBookNames));
         }
 
         /// <summary>
@@ -51,10 +58,23 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             return await SyncAsync(directChatJids, extraPhones: null, cancellationToken).ConfigureAwait(false);
         }
 
-        public async Task<Dictionary<string, string>> SyncAsync(
+        public Task<Dictionary<string, string>> SyncAsync(
             IEnumerable<string> jids,
             IReadOnlyDictionary<string, string> extraPhones,
             CancellationToken cancellationToken = default(CancellationToken))
+        {
+            return SyncAsync(jids, extraPhones, onlyGivenJids: false, cancellationToken);
+        }
+
+        /// <param name="onlyGivenJids">
+        /// When true, stored people only supply the phone of the given JIDs; nobody else in the
+        /// person store is looked up.
+        /// </param>
+        private async Task<Dictionary<string, string>> SyncAsync(
+            IEnumerable<string> jids,
+            IReadOnlyDictionary<string, string> extraPhones,
+            bool onlyGivenJids,
+            CancellationToken cancellationToken)
         {
             var overlay = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             cancellationToken.ThrowIfCancellationRequested();
@@ -97,6 +117,11 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
                 string jid = JidHelper.Normalize(person.Jid);
                 if (string.IsNullOrEmpty(jid) || JidHelper.IsGroupJid(jid))
+                {
+                    continue;
+                }
+
+                if (onlyGivenJids && !candidates.ContainsKey(jid))
                 {
                     continue;
                 }
@@ -188,18 +213,18 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         /// </summary>
         public async Task RefreshAsync(bool force)
         {
-            if (!force && _whatsAppService.PhoneContactNamesByJid.Count > 0)
+            if (!force && _addressBookNames.Count > 0)
             {
                 return;
             }
 
             var extraPhones = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             List<string> jids = null;
-            await _whatsAppService.RunOnUiThreadAsync(() =>
+            await _ui.RunAsync(() =>
             {
                 jids = new List<string>();
                 var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var chat in _whatsAppService.Chats)
+                foreach (var chat in _chatState.Chats)
                 {
                     if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
                     {
@@ -253,6 +278,38 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 return;
             }
 
+            int updates = ApplyToTable(overlay);
+            Debug.WriteLine($"[AddressBookOverlay] Overlay refreshed: {updates} mapped JIDs");
+        }
+
+        /// <summary>
+        /// Names the 1:1 rows already in the chat list from the address book. Needs no session:
+        /// the agenda and the person store are local. Group members wait for <see cref="RefreshAsync"/>.
+        /// </summary>
+        /// <returns>How many JIDs received an address-book name.</returns>
+        public async Task<int> RefreshChatListAsync(CancellationToken cancellationToken = default(CancellationToken))
+        {
+            List<string> jids = null;
+            await _ui.RunAsync(() =>
+            {
+                jids = ChatListAddressBookTargets.Select(_chatState.Chats, _jids.GetCanonicalJid);
+            });
+
+            if (jids == null || jids.Count == 0)
+            {
+                Debug.WriteLine("[AddressBookOverlay] Chat-list pass skipped: no direct chats");
+                return 0;
+            }
+
+            var overlay = await SyncAsync(jids, extraPhones: null, onlyGivenJids: true, cancellationToken)
+                .ConfigureAwait(false);
+            int updates = overlay == null ? 0 : ApplyToTable(overlay);
+            Debug.WriteLine($"[AddressBookOverlay] Chat-list pass: directChats={jids.Count}, mapped={updates}");
+            return updates;
+        }
+
+        private int ApplyToTable(Dictionary<string, string> overlay)
+        {
             int updates = 0;
             foreach (var pair in overlay)
             {
@@ -261,11 +318,11 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                     continue;
                 }
 
-                _whatsAppService.PhoneContactNamesByJid[pair.Key] = pair.Value.Trim();
+                _addressBookNames.Set(pair.Key, pair.Value.Trim());
                 updates++;
             }
 
-            Debug.WriteLine($"[AddressBookOverlay] Overlay refreshed: {updates} mapped JIDs");
+            return updates;
         }
 
         private static void AddCandidate(

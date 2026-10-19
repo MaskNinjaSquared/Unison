@@ -56,7 +56,7 @@ namespace Unison.Uwp.Services
         private int _flushRequested;
         private int _droppedLineCount;
         private string _lastHealthFingerprint;
-        private IWhatsAppService _whatsAppService;
+        private IRuntimeSnapshotSource _snapshotSource;
 
         public static RuntimeDiagnosticsService Instance
         {
@@ -67,31 +67,17 @@ namespace Unison.Uwp.Services
         {
         }
 
-        /// <summary>
-        /// Wires the WhatsApp service used by health snapshots (avoids static Instance lookup).
-        /// </summary>
-        public void AttachWhatsAppService(IWhatsAppService whatsAppService)
+        /// <summary>Wires what health snapshots sample (avoids a static Instance lookup).</summary>
+        public void AttachSnapshotSource(IRuntimeSnapshotSource source)
         {
-            _whatsAppService = whatsAppService;
+            _snapshotSource = source;
         }
 
-        /// <summary>
-        /// The gate itself lives on the client, which owns both the setting and the sink it
-        /// silences. Answering false before the client is attached is correct rather than
-        /// defensive: nothing is being traced yet either.
-        /// </summary>
-        public bool IsVerboseLoggingEnabled
-        {
-            get
-            {
-                var whatsApp = _whatsAppService;
-                return whatsApp != null && whatsApp.VerboseLogging;
-            }
-        }
+        public bool IsVerboseLoggingEnabled => VerboseLog.IsEnabled;
 
         public void SetVerboseLogging(bool enabled, string source)
         {
-            _whatsAppService?.SetVerboseLogging(enabled, source ?? "diagnostics");
+            VerboseLog.Set(enabled, source ?? "diagnostics");
         }
 
         public void Start()
@@ -189,8 +175,8 @@ namespace Unison.Uwp.Services
         {
             try
             {
-                var whatsApp = _whatsAppService;
-                if (whatsApp == null)
+                var source = _snapshotSource;
+                if (source == null)
                 {
                     return new RuntimeDiagnosticsSnapshot
                     {
@@ -205,7 +191,7 @@ namespace Unison.Uwp.Services
                     };
                 }
 
-                return whatsApp.GetRuntimeDiagnosticsSnapshot();
+                return source.CaptureRuntimeSnapshot();
             }
             catch (Exception ex)
             {
@@ -508,7 +494,7 @@ namespace Unison.Uwp.Services
                 Package package = Package.Current;
                 PackageVersion version = package.Id.Version;
                 return string.Format(
-                    "package={0}; version={1}.{2}.{3}.{4}; architecture={5}; memory={6}/{7}MB; level={8}",
+                    "package={0}; version={1}.{2}.{3}.{4}; architecture={5}; memory={6}/{7}MB; level={8}; category={9}",
                     package.Id.Name,
                     version.Major,
                     version.Minor,
@@ -517,7 +503,13 @@ namespace Unison.Uwp.Services
                     package.Id.Architecture,
                     MemoryManager.AppMemoryUsage / (1024UL * 1024UL),
                     MemoryManager.AppMemoryUsageLimit / (1024UL * 1024UL),
-                    MemoryManager.AppMemoryUsageLevel);
+                    MemoryManager.AppMemoryUsageLevel,
+                    DeviceCategories.CapForMobile(
+                        DeviceCategories.FromAppMemoryLimit(MemoryManager.AppMemoryUsageLimit),
+                        string.Equals(
+                            Windows.System.Profile.AnalyticsInfo.VersionInfo.DeviceFamily,
+                            "Windows.Mobile",
+                            StringComparison.OrdinalIgnoreCase)));
             }
             catch (Exception ex)
             {

@@ -27,11 +27,13 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
+using Unison.Core.State;
 using Unison.Socket.Events;
 using Unison.Socket.Session;
 using Unison.Socket.Sync;
 using Unison.Uwp.Client;
 using Unison.Uwp.Services.Socket;
+
 namespace Unison.Uwp.Services.WhatsApp.History
 {
     public sealed class HistoryFacade : IHistoryService
@@ -52,6 +54,8 @@ namespace Unison.Uwp.Services.WhatsApp.History
 
         private readonly IWhatsAppSessionProvider _sessions;
         private readonly IWhatsAppService _appState;
+        private readonly IConversationResyncHost _resync;
+        private readonly IHistorySyncHost _historySync;
         private readonly IMessageStore _store;
         private readonly ILocalSettings _settings;
         private readonly IHistoryChatPreviewStore _chatPreviewStore;
@@ -60,6 +64,15 @@ namespace Unison.Uwp.Services.WhatsApp.History
         private readonly IHistoryStatusStore _statusStore;
         private readonly INotificationService _notifications;
         private readonly IStringResources _strings;
+        private readonly HistoryOnDemandRegistry _onDemandRequests;
+        private readonly HistoryOnDemandDispatch _onDemand;
+        private readonly IChatStateStore _chatState;
+        private readonly SyncStatusChannel _syncStatus;
+        private readonly InitialSyncProgressState _initialSync;
+        private readonly SyncBudget _syncBudget;
+        private readonly SyncWorkloadStrategy _workload;
+        private readonly IDisplayKeepAwakeService _displayKeepAwake;
+        private readonly ChatListInitialPaintGate _listPaintGate;
 
         /// <summary>
         /// Session-scoped: one toast after repeated background history lots. Not reset until
@@ -69,17 +82,35 @@ namespace Unison.Uwp.Services.WhatsApp.History
         private int _historySyncBounceTimes;
         private readonly object _historySyncToastGate = new object();
 
+        /// <summary>
+        /// False until the SQLite warm says otherwise, so an unknown state never hides a list
+        /// that is already there.
+        /// </summary>
+        private volatile bool _awaitingFirstHistorySync;
+        private volatile bool _firstHistorySyncCompletedThisSession;
+
         internal HistoryFacade(
             IWhatsAppSessionProvider sessions,
             IWhatsAppService appState,
+            IConversationResyncHost resync,
+            IHistorySyncHost historySync,
             IMessageStore store,
             ILocalSettings settings,
+            HistoryOnDemandRegistry onDemandRequests,
+            IHistoryOnDemandSocket onDemandSocket,
+            IChatStateStore chatState,
+            SyncStatusChannel syncStatus,
+            InitialSyncProgressState initialSync,
+            SyncBudget syncBudget,
+            SyncWorkloadStrategy workload,
             IHistoryChatPreviewStore chatPreviewStore = null,
             IHistoryMigrationStore migrationStore = null,
             IHistoryMessageStore messageHistoryStore = null,
             IHistoryStatusStore statusStore = null,
             INotificationService notifications = null,
-            IStringResources strings = null)
+            IStringResources strings = null,
+            IDisplayKeepAwakeService displayKeepAwake = null,
+            ChatListInitialPaintGate listPaintGate = null)
         {
             if (sessions == null)
             {
@@ -103,23 +134,50 @@ namespace Unison.Uwp.Services.WhatsApp.History
 
             _sessions = sessions;
             _appState = appState;
+            _resync = resync ?? throw new ArgumentNullException(nameof(resync));
+            _historySync = historySync ?? throw new ArgumentNullException(nameof(historySync));
             _store = store;
             _settings = settings;
+            _onDemandRequests = onDemandRequests ?? throw new ArgumentNullException(nameof(onDemandRequests));
+            _onDemand = new HistoryOnDemandDispatch(
+                onDemandRequests,
+                onDemandSocket ?? throw new ArgumentNullException(nameof(onDemandSocket)),
+                line => Debug.WriteLine("[HistoryFacade] " + line));
+            _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
+            _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
+            _initialSync = initialSync ?? throw new ArgumentNullException(nameof(initialSync));
+            _syncBudget = syncBudget ?? throw new ArgumentNullException(nameof(syncBudget));
+            _workload = workload ?? throw new ArgumentNullException(nameof(workload));
             _chatPreviewStore = chatPreviewStore;
             _migrationStore = migrationStore;
             _messageHistoryStore = messageHistoryStore;
             _statusStore = statusStore;
             _notifications = notifications;
             _strings = strings;
+            _displayKeepAwake = displayKeepAwake;
+            _listPaintGate = listPaintGate;
 
             // Both live as long as the app does, so there is nothing to unhook from.
-            _appState.OnSyncStatus += (s, status) =>
+            _syncStatus.Changed += (s, status) =>
             {
                 Debug.WriteLine("[HistoryFacade] SyncStatusChanged → " + (status ?? "<null>"));
                 Relay(() => SyncStatusChanged?.Invoke(this, status), "SyncStatusChanged");
             };
             _appState.OnHistorySyncReceived += (s, sync) => Relay(() => HistorySyncReceived?.Invoke(this, sync), "HistorySyncReceived");
-            _appState.OnInitialSyncProgress += (s, e) => Relay(() => InitialSyncProgress?.Invoke(this, e), "InitialSyncProgress");
+            _initialSync.Changed += (s, e) =>
+            {
+                // Before the relay: the list reads IsAwaitingFirstHistorySync inside its handler.
+                // Release DisplayRequest immediately before clearing the hold so x:Load can run
+                // without keeping the screen forced on through the paint storm.
+                if (e != null && e.IsCompleted)
+                {
+                    _displayKeepAwake?.Release("before-list-xload");
+                    _firstHistorySyncCompletedThisSession = true;
+                    _awaitingFirstHistorySync = false;
+                }
+
+                Relay(() => InitialSyncProgress?.Invoke(this, e), "InitialSyncProgress");
+            };
             _appState.OnSessionCleared += (s, e) => { _ = ResetHistorySqliteAsync("session-cleared"); };
             _appState.OnBackgroundHistorySyncBounced += (s, e) => NoteBackgroundHistorySyncBounce();
             if (_chatPreviewStore != null)
@@ -147,15 +205,17 @@ namespace Unison.Uwp.Services.WhatsApp.History
         // and the chat list should not have to name the client to ask it.
         // ---------------------------------------------------------------------
 
-        public bool IsLoadingPersistedChats => _appState.IsLoadingPersistedChats;
+        public bool IsLoadingPersistedChats => _chatState.IsLoadingPersistedChats;
 
-        public bool IsInitialSyncSafeMode => _appState.IsInitialSyncSafeMode;
+        public bool IsInitialSyncSafeMode => _initialSync.IsActive;
 
-        public bool PreferFrugalSyncBudget => _appState.PreferFrugalSyncBudget;
+        public bool IsAwaitingFirstHistorySync => _awaitingFirstHistorySync;
 
-        public int InitialSyncProcessedConversations => _appState.InitialSyncProcessedConversations;
+        public bool PreferFrugalSyncBudget => _syncBudget.IsFrugal;
 
-        public int InitialSyncTotalConversations => _appState.InitialSyncTotalConversations;
+        public int InitialSyncProcessedConversations => _initialSync.ProcessedConversations;
+
+        public int InitialSyncTotalConversations => _initialSync.TotalConversations;
 
         public event EventHandler<global::Proto.HistorySync> HistorySyncReceived;
 
@@ -226,6 +286,9 @@ namespace Unison.Uwp.Services.WhatsApp.History
         public async Task ResetHistorySqliteAsync(string reason = null)
         {
             string resetReason = reason ?? string.Empty;
+            _firstHistorySyncCompletedThisSession = false;
+            _listPaintGate?.Reset("session-reset:" + resetReason);
+            BeginFirstSyncListHold("session-reset:" + resetReason);
             if (_migrationStore != null)
             {
                 try
@@ -280,7 +343,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
         {
             try
             {
-                _appState.NotifyHistorySqliteChunkApplied(syncType, conversationCount);
+                _historySync.NotifyHistorySqliteChunkApplied(syncType, conversationCount);
             }
             catch (Exception ex)
             {
@@ -296,6 +359,12 @@ namespace Unison.Uwp.Services.WhatsApp.History
         {
             // Foreground already shows the catch-up banner; do not spend the one-toast budget.
             if (Unison.Uwp.App.IsWindowVisible)
+            {
+                return;
+            }
+
+            // First login / safe-mode catch-up: no toast popups while the list is still syncing.
+            if (_initialSync != null && _initialSync.IsActive)
             {
                 return;
             }
@@ -372,7 +441,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
             try
             {
                 // Banner before SQLite work: Mobile can spend seconds here with no UI otherwise.
-                _appState.NotifyHistorySqliteChunkStarted(result.SyncType, result.ConversationCount);
+                _historySync.NotifyHistorySqliteChunkStarted(result.SyncType, result.ConversationCount);
             }
             catch (Exception ex)
             {
@@ -426,7 +495,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
                     IReadOnlyList<string> latchJids = result.ConversationJids.Count > 0
                         ? result.ConversationJids
                         : result.MessageChatJids;
-                    _appState.CompleteHistoryOnDemandForChats(latchJids);
+                    _onDemandRequests.CompleteChats(latchJids.Select(JidHelper.Normalize).ToList());
                 }
                 catch (Exception ex)
                 {
@@ -534,7 +603,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
                 return;
             }
 
-            _appState.ApplyHistoryLidMappings(pairs, "history-sqlite-chunk");
+            _historySync.ApplyHistoryLidMappings(pairs, "history-sqlite-chunk");
         }
 
         private async Task<int> PersistChatPreviewsAsync(HistorySync sync)
@@ -573,8 +642,9 @@ namespace Unison.Uwp.Services.WhatsApp.History
             }
 
             string syncId = CurrentSyncId();
+            int messageCap = _workload.MaxMessagesPerConversation;
             HistoryMessageWriteBatch batch = await Task.Run(
-                    () => HistoryMessageBuilder.Build(sync, syncId ?? string.Empty))
+                    () => HistoryMessageBuilder.Build(sync, syncId ?? string.Empty, messageCap))
                 .ConfigureAwait(false);
 
             if (batch == null || batch.IsEmpty)
@@ -582,24 +652,65 @@ namespace Unison.Uwp.Services.WhatsApp.History
                 return empty;
             }
 
-            try
+            if (_workload.MaterializeHistoryThumbsDuringSync)
             {
-                await HistoryThumbnailMaterializer.MaterializeMessageThumbsAsync(batch.Messages)
-                    .ConfigureAwait(false);
+                try
+                {
+                    await HistoryThumbnailMaterializer.MaterializeMessageThumbsAsync(batch.Messages)
+                        .ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[HistoryFacade] Thumbnail materialize failed: " + ex.Message);
+                }
             }
-            catch (Exception ex)
+            else
             {
-                Debug.WriteLine("[HistoryFacade] Thumbnail materialize failed: " + ex.Message);
+                DropInlineThumbnails(batch.Messages);
             }
 
-            HistoryWriteBatchResult written = await _messageHistoryStore.PersistWriteBatchAsync(batch)
-                .ConfigureAwait(false);
+            int upserted = 0;
+            var chatJids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (HistoryMessageWriteBatch slice in HistoryPersistBatching.Split(
+                batch,
+                _workload.HistoryPersistSubBatchSize))
+            {
+                HistoryWriteBatchResult written = await _messageHistoryStore.PersistWriteBatchAsync(slice)
+                    .ConfigureAwait(false);
+                upserted += written?.UpsertedCount ?? 0;
+                if (written?.ChatJids != null)
+                {
+                    for (int i = 0; i < written.ChatJids.Count; i++)
+                    {
+                        if (!string.IsNullOrWhiteSpace(written.ChatJids[i]))
+                        {
+                            chatJids.Add(written.ChatJids[i]);
+                        }
+                    }
+                }
+            }
 
             return new PersistMessagesResult
             {
-                Upserted = written?.UpsertedCount ?? 0,
-                ChatJids = written?.ChatJids ?? Array.Empty<string>()
+                Upserted = upserted,
+                ChatJids = chatJids.Count == 0 ? Array.Empty<string>() : chatJids.ToList()
             };
+        }
+
+        private static void DropInlineThumbnails(IList<HistoryMessage> messages)
+        {
+            if (messages == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < messages.Count; i++)
+            {
+                if (messages[i] != null)
+                {
+                    messages[i].MediaThumbnailJpeg = null;
+                }
+            }
         }
 
         private async Task PersistStatusesAsync(HistorySync sync)
@@ -617,6 +728,13 @@ namespace Unison.Uwp.Services.WhatsApp.History
             if (rows == null || rows.Count == 0)
             {
                 return;
+            }
+
+            Debug.WriteLine("[HistoryFacade] Status persist count=" + rows.Count + " sync=" + (syncId ?? ""));
+            for (int i = 0; i < rows.Count && i < 12; i++)
+            {
+                Debug.WriteLine(
+                    "[HistoryFacade] Status row " + StatusItemDiagnostics.DescribeItem(rows[i], i));
             }
 
             try
@@ -656,11 +774,47 @@ namespace Unison.Uwp.Services.WhatsApp.History
                 {
                     await _statusStore.InitializeAsync().ConfigureAwait(false);
                 }
+
+                await ResolveAwaitingFirstHistorySyncAsync().ConfigureAwait(false);
             }
             catch (Exception ex)
             {
                 Debug.WriteLine("[HistoryFacade] SQLite warm failed: " + ex.Message);
             }
+        }
+
+        /// <summary>
+        /// Awaiting only when no history batch ever succeeded and no list preview is stored:
+        /// an older install with rows but a gate never marked must not get an empty list.
+        /// </summary>
+        private async Task ResolveAwaitingFirstHistorySyncAsync()
+        {
+            if (_migrationStore == null || _chatPreviewStore == null)
+            {
+                return;
+            }
+
+            HistoryMigrationState gate = await _migrationStore.GetAsync().ConfigureAwait(false);
+            if (gate != null && gate.IsSucceeded)
+            {
+                return;
+            }
+
+            int storedPreviews = await _chatPreviewStore.CountAsync().ConfigureAwait(false);
+            if (storedPreviews == 0 && !_firstHistorySyncCompletedThisSession)
+            {
+                BeginFirstSyncListHold("sqlite-warm-empty");
+            }
+        }
+
+        /// <summary>
+        /// List stays unmaterialized and the screen stays awake until quiet-finalize clears the hold.
+        /// </summary>
+        private void BeginFirstSyncListHold(string reason)
+        {
+            _awaitingFirstHistorySync = true;
+            _listPaintGate?.Arm(reason);
+            _displayKeepAwake?.Hold(reason);
         }
 
         private string CurrentSyncId()
@@ -690,7 +844,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
                 // No socket to correlate an answer through. The service's own resync knows how to
                 // force a fresh transport first, which is the one thing worth trying from here.
                 await ResetHistorySqliteAsync("resync-fallback").ConfigureAwait(false);
-                await _appState.ResyncConversationsAsync(progress).ConfigureAwait(false);
+                await _resync.ResyncConversationsAsync(progress).ConfigureAwait(false);
                 return;
             }
 
@@ -698,7 +852,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
             await WipeLocalConversationsAsync().ConfigureAwait(false);
 
             progress?.Report(ConversationResyncPhase.PreparingConversations);
-            _appState.RaiseSyncStatus("Re-syncing conversations...");
+            _syncStatus.Raise("Re-syncing conversations...");
 
             try
             {
@@ -707,7 +861,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
             catch (Exception ex)
             {
                 Debug.WriteLine("[ConversationResync] Could not connect before requesting history: " + ex.Message);
-                _appState.RaiseSyncStatus("Could not start history download. Try again.");
+                _syncStatus.Raise("Could not start history download. Try again.");
                 return;
             }
 
@@ -716,7 +870,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
             var session = _sessions.Current;
             if (socket == null || session == null)
             {
-                _appState.RaiseSyncStatus("Could not start history download. Try again.");
+                _syncStatus.Raise("Could not start history download. Try again.");
                 return;
             }
 
@@ -726,19 +880,19 @@ namespace Unison.Uwp.Services.WhatsApp.History
                 // The latch only exists to make a later connection retry a request that was never
                 // answered. It was, so it would only cause a second full download.
                 TrySetForceHistoryRepair(false);
-                _appState.RaiseSyncStatus(null);
+                _syncStatus.Raise(null);
                 return;
             }
 
             Debug.WriteLine("[ConversationResync] The phone did not answer with history.");
-            _appState.RaiseSyncStatus("History did not arrive. It will be retried on the next connection.");
+            _syncStatus.Raise("History did not arrive. It will be retried on the next connection.");
         }
 
         private async Task WipeLocalConversationsAsync()
         {
             await ResetHistorySqliteAsync("resync-wipe").ConfigureAwait(false);
             await _store.WipeChatsAndMessagesAsync().ConfigureAwait(false);
-            await _appState.ClearConversationCachesAsync().ConfigureAwait(false);
+            await _resync.ClearConversationCachesAsync().ConfigureAwait(false);
 
             try
             {
@@ -749,9 +903,50 @@ namespace Unison.Uwp.Services.WhatsApp.History
                 Debug.WriteLine("[ConversationResync] Could not clear notifications: " + ex.Message);
             }
 
+            // LT-hash still says app-state is current, so a normal sync would skip pin_v1.
+            // Force a snapshot re-report so pins/mutes land again on the rebuilt list.
+            try
+            {
+                await _resync.ResyncChatListAppStateFlagsAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ConversationResync] App-state flag resync failed: " + ex.Message);
+            }
+
             // Set before the request rather than after it: if the app dies between the wipe and
             // the answer, this is what stops it from starting up permanently empty.
             TrySetForceHistoryRepair(true);
+        }
+
+        /// <inheritdoc />
+        public Task<bool> RequestFullHistoryOnDemandAsync(string reason = null, bool force = false)
+        {
+            return _historySync.RequestFullHistoryOnDemandAsync(
+                string.IsNullOrWhiteSpace(reason) ? "ui-full-history-on-demand" : reason,
+                force);
+        }
+
+        /// <summary>
+        /// Asks the phone for the page of <paramref name="jid"/> older than the oldest message
+        /// in memory. True when a request went out.
+        /// </summary>
+        public Task<bool> EnsureChatPageAsync(string jid, int count)
+        {
+            string normJid = JidHelper.Normalize(jid);
+            if (string.IsNullOrWhiteSpace(normJid))
+            {
+                return Task.FromResult(false);
+            }
+
+            return _onDemand.RequestChatPageAsync(normJid, _chatState.GetMessages(normJid), count, null, DateTime.UtcNow);
+        }
+
+        /// <summary>A page was asked for <paramref name="jid"/> and has not landed yet.</summary>
+        public bool IsChatPagePending(string jid)
+        {
+            string normJid = JidHelper.Normalize(jid);
+            return !string.IsNullOrWhiteSpace(normJid) && _onDemandRequests.IsChatPending(normJid);
         }
 
         /// <summary>

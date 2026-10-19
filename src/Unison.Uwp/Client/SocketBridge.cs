@@ -10,12 +10,14 @@
 // the service is dismantled afterwards, rather than both at once.
 //
 // The translation is mostly downhill - the new stack publishes richer events
-// than the old one had, so most of the work here is throwing detail away. Three
-// things do not translate and are stated rather than faked:
+// than the old one had, so most of the work here is throwing detail away.
 //
-//   * Broker transfer. Handing the raw socket to a background task needs the
-//     transport itself, which the session owns and does not lend out. Both
-//     methods answer false, which the caller already handles as "keep it".
+// Broker transfer goes through ConnectionHandler, which lends its transport while
+// the broker holds the socket. Adopting a broker socket left by a terminated
+// process is not done: the transport closes it on the next connect.
+//
+// What does not translate is stated rather than faked:
+//
 //   * The two app-state events. In this mode app state is decoded by
 //     AppStateModule rather than by the legacy service, so the notifications
 //     that used to drive it are consumed inside the session and the changes
@@ -27,9 +29,11 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Unison.Background;
 using Unison.Baileys.Client;
 using Unison.Baileys.Crypto;
 using Unison.Baileys.Protocol;
+using Unison.Core.Contracts;
 using Unison.Core.Models;
 using Unison.Socket.Abstractions;
 using Unison.Socket.AppState;
@@ -77,7 +81,21 @@ namespace Unison.Uwp.Client
         private readonly SignalHandler _signal;
         private readonly LidMappingStore _lidMappings;
         private readonly IEncryptedMediaDownloader _downloader;
-        private readonly SocketConfig _config = new SocketConfig();
+        private readonly SocketConfig _config = CreateSocketConfig();
+
+        /// <summary>
+        /// Match legacy SocketClient headers. MessageWebSocket on Mobile without a browser
+        /// User-Agent has been observed to abort during Noise (1.9.6: receive failure ~10s).
+        /// </summary>
+        private static SocketConfig CreateSocketConfig()
+        {
+            return new SocketConfig
+            {
+                UserAgent =
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+                    "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+            };
+        }
         private readonly ISocketLog _log;
         private readonly object _gate = new object();
 
@@ -135,7 +153,21 @@ namespace Unison.Uwp.Client
             _reuseLoadedKeyState = sharedKeyStore != null && reuseLoadedKeyState;
             _signal = new SignalHandler(_authState, _keyStore);
             _lidMappings = new LidMappingStore(new SqliteLidMappingStorage());
-            _log = new DelegateSocketLog(line => Diag.W("[Bridge] " + line));
+            _log = new DelegateSocketLog(line =>
+            {
+                Diag.W("[Bridge] " + line);
+                // Group relay details must reach Runtime Health even when SessionLogger diag is off.
+                if (!string.IsNullOrEmpty(line) &&
+                    line.IndexOf("[Send] Group", StringComparison.Ordinal) >= 0)
+                {
+                    RuntimeDiagnosticsService.Instance.Write("send", "group-relay", line);
+                }
+                else if (!string.IsNullOrEmpty(line) &&
+                         line.IndexOf("Distributed the sender key", StringComparison.Ordinal) >= 0)
+                {
+                    RuntimeDiagnosticsService.Instance.Write("send", "group-skdm", line);
+                }
+            });
             _downloader = new HttpEncryptedMediaDownloader(_log);
             _events = new WaEventBuffer(_log);
 
@@ -283,10 +315,13 @@ namespace Unison.Uwp.Client
             get { return _awaitingInitialSync; }
         }
 
-        /// <summary>Always false: the session owns its transport and never lends it out.</summary>
         public bool IsSocketOwnedByBroker
         {
-            get { return false; }
+            get
+            {
+                var session = Current;
+                return session != null && session.Connection.IsOwnedByBroker;
+            }
         }
 
         public bool HasFreshConnection(TimeSpan maximumSilence)
@@ -439,7 +474,70 @@ namespace Unison.Uwp.Client
                 Disconnect();
             }
 
-            var transport = new WaTransportAdapter(new StreamSocketWebSocketTransport());
+            Raise(OnConnectionUpdate, "connecting");
+
+            // Windows 10 Mobile (Creators Update) keeps the 1.8 connect: MessageWebSocket only.
+            // Socket Activity, EnableTransferOwnership and StreamSocket TLS have hung on that
+            // build. Desktop still opens the broker-capable StreamSocket and falls back.
+            bool mobile = IsWindowsMobileDevice();
+            RuntimeDiagnosticsService.Instance.Write(
+                "transport",
+                "socket-bridge-connect-order",
+                mobile
+                    ? "mobile=True; primary=MessageWebSocket-classic; fallback=none"
+                    : "mobile=False; primary=StreamSocket-RFC6455-broker; fallback=MessageWebSocket-classic");
+
+            if (mobile)
+            {
+                await ConnectWithTransportAsync(new MessageWebSocketTransport())
+                    .ConfigureAwait(false);
+            }
+            else
+            {
+                try
+                {
+                    await ConnectWithTransportAsync(new StreamSocketWebSocketTransport())
+                        .ConfigureAwait(false);
+                }
+                catch (Exception streamFailure)
+                {
+                    RuntimeDiagnosticsService.Instance.RecordException(
+                        "transport",
+                        "streamsocket-connect-failed-fallback-classic",
+                        streamFailure);
+                    Disconnect();
+                    await ConnectWithTransportAsync(new MessageWebSocketTransport())
+                        .ConfigureAwait(false);
+                }
+            }
+
+            _handshakeComplete = true;
+            Raise(OnConnectionUpdate, "connected");
+        }
+
+        private static bool IsWindowsMobileDevice()
+        {
+            try
+            {
+                return string.Equals(
+                    Windows.System.Profile.AnalyticsInfo.VersionInfo.DeviceFamily,
+                    "Windows.Mobile",
+                    StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private async Task ConnectWithTransportAsync(IWhatsAppTransport innerTransport)
+        {
+            if (innerTransport == null)
+            {
+                throw new ArgumentNullException(nameof(innerTransport));
+            }
+
+            var transport = new WaTransportAdapter(innerTransport);
             var session = new WhatsAppSession(transport, _authState, _config, _log, events: _events);
 
             var messages = BuildMessageModule(session);
@@ -475,12 +573,12 @@ namespace Unison.Uwp.Client
                 offline.BeginBuffering();
             }
 
-            Raise(OnConnectionUpdate, "connecting");
+            RuntimeDiagnosticsService.Instance.Write(
+                "transport",
+                "socket-bridge-transport",
+                "name=" + (innerTransport.Name ?? "<none>"));
 
             await session.ConnectAsync().ConfigureAwait(false);
-
-            _handshakeComplete = true;
-            Raise(OnConnectionUpdate, "connected");
         }
 
         /// <summary>
@@ -647,15 +745,76 @@ namespace Unison.Uwp.Client
             }
         }
 
-        public Task<bool> TransferSocketToBrokerAsync(string reason)
+        public async Task<bool> TransferSocketToBrokerAsync(string reason)
         {
-            Diag.W("[Bridge] Broker transfer is not available on this stack (" + reason + ")");
-            return Task.FromResult(false);
+            var session = Current;
+            if (session == null || !_handshakeComplete)
+            {
+                return false;
+            }
+
+            bool transferred = await session.Connection.TransferToBrokerAsync(
+                reason,
+                (noise, socketId) => SaveBrokerCheckpointAsync(noise, socketId, reason)).ConfigureAwait(false);
+            RuntimeDiagnosticsService.Instance.Write(
+                "socket-broker",
+                transferred ? "socket-client-transferred" : "socket-client-transfer-declined",
+                "transport=" + TransportName + "; reason=" + reason);
+            return transferred;
         }
 
-        public Task<bool> ReclaimSocketFromBrokerAsync()
+        public async Task<bool> ReclaimSocketFromBrokerAsync()
         {
-            return Task.FromResult(false);
+            var session = Current;
+            if (session == null || !session.Connection.IsOwnedByBroker)
+            {
+                return false;
+            }
+
+            bool reclaimed = await session.Connection.ReclaimFromBrokerAsync().ConfigureAwait(false);
+            if (reclaimed)
+            {
+                await NoiseSessionStore.ClearAsync().ConfigureAwait(false);
+                RuntimeDiagnosticsService.Instance.Write(
+                    "socket-broker",
+                    "socket-client-reclaimed",
+                    "transport=" + TransportName);
+            }
+
+            return reclaimed;
+        }
+
+        /// <summary>
+        /// What the broker needs to read the socket while it holds it. Only the Noise state is
+        /// required; the Signal snapshot lets toasts show message text, so its failure is
+        /// recorded and the handoff goes ahead without it.
+        /// </summary>
+        private async Task SaveBrokerCheckpointAsync(NoiseSessionState noise, string socketId, string reason)
+        {
+            try
+            {
+                var senderKeys = await _keyStore.GetAllSenderKeysAsync().ConfigureAwait(false);
+                await BackgroundSignalSnapshotStore.SaveAsync(_authState, senderKeys).ConfigureAwait(false);
+                RuntimeDiagnosticsService.Instance.Write(
+                    "socket-broker",
+                    "signal-preview-snapshot-persisted",
+                    "sessions=" + _authState.Sessions.Count +
+                    "; prekeys=" + _authState.PreKeys.Count +
+                    "; senderKeys=" + senderKeys.Count);
+            }
+            catch (Exception ex)
+            {
+                RuntimeDiagnosticsService.Instance.RecordException(
+                    "socket-broker",
+                    "signal-preview-snapshot-failed",
+                    ex);
+            }
+
+            await NoiseSessionStore.SaveAsync(noise, socketId).ConfigureAwait(false);
+            RuntimeDiagnosticsService.Instance.Write(
+                "socket-broker",
+                "noise-state-persisted",
+                "transport=" + TransportName + "; reason=" + reason + "; phase=pre-transfer; id=" + socketId);
         }
 
         // -- Operations ------------------------------------------------------
@@ -749,43 +908,6 @@ namespace Unison.Uwp.Client
             await ForwardMappingsAsync(mappings, source).ConfigureAwait(false);
         }
 
-        public Task<BinaryNode> QueryUsyncAsync(
-            List<BinaryNode> userNodes,
-            string context,
-            string mode,
-            List<BinaryNode> queryProtocols,
-            int timeoutMs = 60000)
-        {
-            var usync = new BinaryNode(
-                "usync",
-                new Dictionary<string, string>
-                {
-                    { "sid", NextTag() },
-                    { "mode", mode },
-                    { "last", "true" },
-                    { "index", "0" },
-                    { "context", context }
-                },
-                new List<BinaryNode>
-                {
-                    new BinaryNode("query", null, queryProtocols),
-                    new BinaryNode("list", null, userNodes)
-                });
-
-            return QueryAsync(
-                new BinaryNode(
-                    "iq",
-                    new Dictionary<string, string>
-                    {
-                        { "id", NextTag() },
-                        { "to", JidUtils.ServerWhatsApp },
-                        { "type", "get" },
-                        { "xmlns", "usync" }
-                    },
-                    usync),
-                TimeSpan.FromMilliseconds(timeoutMs));
-        }
-
         public async Task<ProfilePictureResult> GetProfilePictureUrlResultAsync(string jid, string type = "preview")
         {
             if (string.IsNullOrEmpty(jid))
@@ -872,6 +994,25 @@ namespace Unison.Uwp.Client
         public Task SetChatPinnedAsync(string jid, bool pinned)
         {
             return RequireAppState().Patch.ExecuteAsync(AppStatePatchFactory.Pin(jid, pinned));
+        }
+
+        /// <summary>
+        /// Re-emits pin/mute/archive mutations even when LT-hash says we are current.
+        /// </summary>
+        public async Task ResyncAppStateReportingAllAsync()
+        {
+            AppStateModule appState;
+            lock (_gate)
+            {
+                appState = _appState;
+            }
+
+            if (appState == null)
+            {
+                return;
+            }
+
+            await appState.SyncAllAsync(reportAllMutations: true).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -994,12 +1135,50 @@ namespace Unison.Uwp.Client
             return RequireMessages().Receipts.MarkReadAsync(targets);
         }
 
-        public Task<string> SendTextMessageAsync(string jid, string text, string explicitMessageId = null)
+        public Task<string> SendTextMessageAsync(
+            string jid,
+            string text,
+            string explicitMessageId = null,
+            System.Collections.Generic.IList<string> mentions = null,
+            bool mentionAll = false,
+            OutgoingQuote quote = null)
         {
-            return SendAsync(jid, new TextContent(text), explicitMessageId);
+            var content = new TextContent(text) { MentionAll = mentionAll };
+            if (mentions != null)
+            {
+                for (int i = 0; i < mentions.Count; i++)
+                {
+                    if (!string.IsNullOrWhiteSpace(mentions[i]))
+                    {
+                        content.Mentions.Add(mentions[i]);
+                    }
+                }
+            }
+
+            if (quote != null && !string.IsNullOrWhiteSpace(quote.MessageId))
+            {
+                content.Quoted = new Unison.Socket.Messages.Content.QuotedMessage
+                {
+                    Key = new Unison.Socket.Messages.MessageEnvelopeKey
+                    {
+                        Id = quote.MessageId,
+                        RemoteJid = quote.ChatJid,
+                        FromMe = quote.FromMe,
+                        Participant = quote.ParticipantJid
+                    },
+                    Participant = quote.ParticipantJid,
+                    Message = QuotedMessageStub.Create(quote)
+                };
+            }
+
+            return SendAsync(jid, content, explicitMessageId);
         }
 
-        public async Task<string> SendImageMessageAsync(string jid, byte[] imageBytes, string caption = null)
+        public async Task<string> SendImageMessageAsync(
+            string jid,
+            byte[] imageBytes,
+            string caption = null,
+            string explicitMessageId = null)
         {
             var content = new MediaContent(imageBytes, Unison.Socket.Media.MediaType.Image)
             {
@@ -1008,7 +1187,7 @@ namespace Unison.Uwp.Client
                 Thumbnail = await BuildThumbnailAsync(imageBytes).ConfigureAwait(false)
             };
 
-            return await SendAsync(jid, content, null).ConfigureAwait(false);
+            return await SendAsync(jid, content, explicitMessageId).ConfigureAwait(false);
         }
 
         public Task<string> SendAudioMessageAsync(
@@ -1016,7 +1195,8 @@ namespace Unison.Uwp.Client
             byte[] audioBytes,
             string mimeType,
             uint durationSeconds,
-            bool isVoiceMessage = false)
+            bool isVoiceMessage = false,
+            string explicitMessageId = null)
         {
             var content = new MediaContent(
                 audioBytes,
@@ -1026,7 +1206,25 @@ namespace Unison.Uwp.Client
                 Seconds = (int)durationSeconds
             };
 
-            return SendAsync(jid, content, null);
+            return SendAsync(jid, content, explicitMessageId);
+        }
+
+        public Task<string> SendDocumentMessageAsync(
+            string jid,
+            byte[] documentBytes,
+            string mimeType,
+            string fileName,
+            string caption = null,
+            string explicitMessageId = null)
+        {
+            var content = new MediaContent(documentBytes, Unison.Socket.Media.MediaType.Document)
+            {
+                Mimetype = string.IsNullOrWhiteSpace(mimeType) ? "application/octet-stream" : mimeType,
+                FileName = string.IsNullOrWhiteSpace(fileName) ? "document" : fileName.Trim(),
+                Caption = caption
+            };
+
+            return SendAsync(jid, content, explicitMessageId);
         }
 
         public Task<string> SendPinInChatMessageAsync(

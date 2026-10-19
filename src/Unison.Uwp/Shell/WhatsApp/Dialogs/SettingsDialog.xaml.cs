@@ -2,7 +2,6 @@ using System;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
-using Unison.Core.Constants;
 using Unison.Core.Contracts;
 using Unison.Core.ViewModels;
 using Unison.Uwp.Services;
@@ -61,15 +60,21 @@ namespace Unison.Uwp.Shell.WhatsApp.Dialogs
             DataContext = _viewModel;
         }
 
+        /// <summary>When true, the dialog opens on the profile section instead of General.</summary>
+        public bool OpenOnProfile { get; set; }
+
         private void SettingsDialog_Opened(ContentDialog sender, ContentDialogOpenedEventArgs args)
         {
             HookWindowSizeChanged();
             HookUnderlayDismiss();
             _dialogChrome = null;
             ApplyLayout(GetHostWidth(), allowFullSizeDesired: false);
+            DisableDialogContentScroll();
+            UpdateSectionScrollViewport();
             Activate();
             HookLeaveRequested();
-            ShowSection("general");
+            ShowSection(OpenOnProfile ? "profile" : "general");
+            _ = _viewModel?.LoadDiskUsageAsync();
         }
 
         private void SettingsDialog_Closed(ContentDialog sender, ContentDialogClosedEventArgs args)
@@ -79,15 +84,6 @@ namespace Unison.Uwp.Shell.WhatsApp.Dialogs
             UnhookLeaveRequested();
             _viewModel?.Detach();
             _dialogChrome = null;
-            try
-            {
-                App.Services?.GetService<ShellViewModel>()
-                    ?.NavigateToSectionCommand.Execute(NavigationRoutes.Chats);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[WhatsAppSettingsDialog] reset section failed: " + ex.Message);
-            }
         }
 
         private void LayoutStates_CurrentStateChanged(object sender, VisualStateChangedEventArgs e)
@@ -420,25 +416,26 @@ namespace Unison.Uwp.Shell.WhatsApp.Dialogs
                 return;
             }
 
-            chrome.ClearValue(FrameworkElement.HeightProperty);
             chrome.ClearValue(FrameworkElement.MaxWidthProperty);
             chrome.ClearValue(FrameworkElement.MinWidthProperty);
             chrome.ClearValue(FrameworkElement.WidthProperty);
             chrome.ClearValue(FrameworkElement.MaxHeightProperty);
-            chrome.MinHeight = 400;
+
+            double fixedHeight = ResolveDialogHeight();
+            chrome.MinHeight = fixedHeight;
+            chrome.MaxHeight = fixedHeight;
+            chrome.Height = fixedHeight;
 
             if (hostWidth < NarrowBelow)
             {
                 chrome.Width = hostWidth;
                 chrome.MaxWidth = hostWidth;
-                chrome.MaxHeight = DialogMaxHeightCap;
             }
             else if (hostWidth < FullModeAtOrAbove)
             {
                 chrome.MinWidth = CompactBoxSize;
                 chrome.MaxWidth = CompactBoxSize;
                 chrome.Width = CompactBoxSize;
-                chrome.MaxHeight = DialogMaxHeightCap;
             }
             else
             {
@@ -446,8 +443,27 @@ namespace Unison.Uwp.Shell.WhatsApp.Dialogs
                 chrome.MinWidth = FullBoxMinWidth;
                 chrome.MaxWidth = DialogMaxWidthCap;
                 chrome.Width = target;
-                chrome.MaxHeight = DialogMaxHeightCap;
             }
+        }
+
+        /// <summary>
+        /// Desktop dialog keeps one height (capped at 720) so section changes cannot shrink it.
+        /// A shorter window uses that window, never the content height.
+        /// </summary>
+        private double ResolveDialogHeight()
+        {
+            double host = GetHostHeight();
+            if (host <= 0)
+            {
+                host = DialogMaxHeightCap;
+            }
+
+            if (FullSizeDesired || IsPhoneHandset())
+            {
+                return Math.Max(host, 400);
+            }
+
+            return Math.Min(Math.Max(host, 400), DialogMaxHeightCap);
         }
 
         private void ApplyRootBoxSize(double width)
@@ -458,21 +474,99 @@ namespace Unison.Uwp.Shell.WhatsApp.Dialogs
             }
 
             RootLayout.ClearValue(FrameworkElement.WidthProperty);
-            RootLayout.ClearValue(FrameworkElement.HeightProperty);
             RootLayout.ClearValue(FrameworkElement.MinWidthProperty);
             RootLayout.ClearValue(FrameworkElement.MaxWidthProperty);
             RootLayout.HorizontalAlignment = HorizontalAlignment.Stretch;
             RootLayout.VerticalAlignment = VerticalAlignment.Stretch;
-            RootLayout.MinHeight = 400;
 
-            if (FullSizeDesired || IsPhoneHandset())
+            double fixedHeight = ResolveDialogHeight();
+            RootLayout.MinHeight = fixedHeight;
+            RootLayout.MaxHeight = fixedHeight;
+            RootLayout.Height = fixedHeight;
+            if (IsPhoneHandset() || width < NarrowBelow)
             {
-                RootLayout.ClearValue(FrameworkElement.MaxHeightProperty);
+                double fullWidth = Math.Max(width, 320);
+                RootLayout.Width = fullWidth;
+                RootLayout.MinWidth = fullWidth;
+                RootLayout.MaxWidth = fullWidth;
             }
-            else
+
+            if (RootSplitView != null)
             {
-                RootLayout.MaxHeight = DialogMaxHeightCap;
+                RootSplitView.Height = fixedHeight;
+                RootSplitView.MaxHeight = fixedHeight;
             }
+
+            if (PaneLayout != null)
+            {
+                PaneLayout.Height = fixedHeight;
+            }
+
+            if (SectionHost != null)
+            {
+                SectionHost.Height = fixedHeight;
+                SectionHost.MaxHeight = fixedHeight;
+            }
+
+            UpdateSectionScrollViewport();
+        }
+
+        private void SectionHost_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            UpdateSectionScrollViewport();
+        }
+
+        /// <summary>
+        /// ContentDialog's own scroller measures our body with infinite height, so the
+        /// section list never scrolls. Keep the title fixed and scroll only what is below it.
+        /// </summary>
+        private void DisableDialogContentScroll()
+        {
+            ScrollViewer contentScroll = GetTemplateChild("ContentScrollViewer") as ScrollViewer;
+            if (contentScroll == null)
+            {
+                return;
+            }
+
+            contentScroll.HorizontalScrollMode = ScrollMode.Disabled;
+            contentScroll.VerticalScrollMode = ScrollMode.Disabled;
+            contentScroll.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
+            contentScroll.VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
+        }
+
+        private void UpdateSectionScrollViewport()
+        {
+            if (SectionScroll == null)
+            {
+                return;
+            }
+
+            double host = 0;
+            if (SectionHost != null && SectionHost.ActualHeight > 0)
+            {
+                host = SectionHost.ActualHeight;
+            }
+            else if (SectionHost != null && !double.IsNaN(SectionHost.Height) && SectionHost.Height > 0)
+            {
+                host = SectionHost.Height;
+            }
+
+            double titleHeight = 48;
+            if (SectionTitleRow != null && SectionTitleRow.ActualHeight > 0)
+            {
+                titleHeight = SectionTitleRow.ActualHeight + SectionTitleRow.Margin.Top + SectionTitleRow.Margin.Bottom;
+            }
+
+            double available = host - titleHeight;
+            if (available < 0)
+            {
+                available = 0;
+            }
+
+            SectionScroll.Height = available;
+            SectionScroll.MaxHeight = available;
+            SectionScroll.VerticalScrollMode = ScrollMode.Enabled;
+            SectionScroll.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
         }
 
         private void HookLeaveRequested()
@@ -578,9 +672,19 @@ namespace Unison.Uwp.Shell.WhatsApp.Dialogs
                 AdvancedPanel.Visibility = tag == "advanced" ? Visibility.Visible : Visibility.Collapsed;
             }
 
+            if (DiskUsagePanel != null)
+            {
+                DiskUsagePanel.Visibility = tag == "disk" ? Visibility.Visible : Visibility.Collapsed;
+            }
+
             if (AboutPanel != null)
             {
                 AboutPanel.Visibility = tag == "about" ? Visibility.Visible : Visibility.Collapsed;
+            }
+
+            if (ProfilePanel != null)
+            {
+                ProfilePanel.Visibility = tag == "profile" ? Visibility.Visible : Visibility.Collapsed;
             }
 
             if (SectionTitleText != null)
@@ -593,16 +697,19 @@ namespace Unison.Uwp.Shell.WhatsApp.Dialogs
             {
                 if (SectionList != null)
                 {
+                    ListViewItem match = null;
                     foreach (var obj in SectionList.Items)
                     {
                         var listItem = obj as ListViewItem;
                         if (listItem != null &&
                             string.Equals(listItem.Tag as string, tag, StringComparison.OrdinalIgnoreCase))
                         {
-                            SectionList.SelectedItem = listItem;
+                            match = listItem;
                             break;
                         }
                     }
+
+                    SectionList.SelectedItem = match;
                 }
             }
             finally
@@ -630,8 +737,12 @@ namespace Unison.Uwp.Shell.WhatsApp.Dialogs
                     return Loc(strings, "Settings_Customization.Text", "Customization");
                 case "advanced":
                     return Loc(strings, "Settings_Advanced.Text", "Advanced");
+                case "disk":
+                    return Loc(strings, "Settings_DiskUsage.Text", "Disk Usage");
                 case "about":
                     return Loc(strings, "Settings_About.Text", "About");
+                case "profile":
+                    return Loc(strings, "Settings_Profile.Text", "Profile");
                 default:
                     return Loc(strings, "Settings_General.Text", "General");
             }

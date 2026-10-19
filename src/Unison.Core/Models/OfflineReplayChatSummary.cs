@@ -25,5 +25,11 @@ namespace Unison.Core.Models
         /// already computed.
         /// </summary>
         public string AuthorPrefix { get; set; }
+
+        /// <summary>Group tip sender (prefer PN) so ChatAuthorProjection can upgrade later.</summary>
+        public string ParticipantJid { get; set; }
+
+        /// <summary>Best name known for <see cref="ParticipantJid"/> when the tip was recorded.</summary>
+        public string SenderName { get; set; }
     }
 }

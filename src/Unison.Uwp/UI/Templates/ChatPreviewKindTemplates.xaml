@@ -158,5 +158,30 @@
                 </Grid>
             </DataTemplate>
         </selectors:ChatPreviewKindTemplateSelector.ReactionTemplate>
+
+        <selectors:ChatPreviewKindTemplateSelector.RevokedTemplate>
+            <DataTemplate>
+                <Grid VerticalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*" MinWidth="0"/>
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Glyph="&#xE733;"
+                              FontFamily="{StaticResource IconFont}"
+                              FontSize="14"
+                              VerticalAlignment="Center"
+                              Margin="0,0,4,0"/>
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding Converter={StaticResource ChatPreviewKindToLabelConverter}}"
+                               FontSize="16"
+                               FontStyle="Italic"
+                               VerticalAlignment="Center"
+                               FontFamily="{StaticResource MainFont}"
+                               TextWrapping="NoWrap"
+                               TextTrimming="CharacterEllipsis"
+                               MaxLines="1"/>
+                </Grid>
+            </DataTemplate>
+        </selectors:ChatPreviewKindTemplateSelector.RevokedTemplate>
     </selectors:ChatPreviewKindTemplateSelector>
 </ResourceDictionary>

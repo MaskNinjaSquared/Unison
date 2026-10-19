@@ -111,14 +111,9 @@ namespace Unison.Uwp.Services.WhatsApp
             string canonical = GetCanonicalJid(groupJid);
             if (string.IsNullOrWhiteSpace(canonical) || _socket == null) return 0;
 
-            lock (_messageStateLock)
+            if (_groupRecipientCounts.TryGetFresh(canonical, DateTime.UtcNow, out int cachedCount))
             {
-                if (_groupRecipientCountByChat.TryGetValue(canonical, out var cached) &&
-                    cached != null &&
-                    DateTime.UtcNow - cached.FetchedUtc < TimeSpan.FromMinutes(30))
-                {
-                    return cached.RecipientCount;
-                }
+                return cachedCount;
             }
 
             try
@@ -130,14 +125,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 if (counted == null) return 0;
 
                 int recipientCount = counted.Value;
-                lock (_messageStateLock)
-                {
-                    _groupRecipientCountByChat[canonical] = new GroupRecipientCountCacheEntry
-                    {
-                        RecipientCount = recipientCount,
-                        FetchedUtc = DateTime.UtcNow
-                    };
-                }
+                _groupRecipientCounts.Store(canonical, recipientCount, DateTime.UtcNow);
                 return recipientCount;
             }
             catch (Exception ex)

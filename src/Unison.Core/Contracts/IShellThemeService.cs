@@ -20,6 +20,12 @@ namespace Unison.Core.Contracts
         /// </summary>
         bool UsesMobileStatusBarProgress { get; }
 
+        /// <summary>Brand title shown in the shell sidebar. Comes from the active theme strategy.</summary>
+        string ShellBrandName { get; }
+
+        /// <summary>ms-appx logo for the shell sidebar brand.</summary>
+        string ShellBrandIcon { get; }
+
         /// <summary>Applies the shell stored in LocalSettings (call early at launch).</summary>
         void ApplyFromSettings();
 

@@ -9,6 +9,7 @@ using Newtonsoft.Json.Linq;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
+using Unison.Uwp.Services.Socket;
 using Windows.Storage;
 
 namespace Unison.Uwp.Services.WhatsApp.Diagnostics
@@ -16,26 +17,28 @@ namespace Unison.Uwp.Services.WhatsApp.Diagnostics
     /// <summary>
     /// Dev-only tooling: polls LocalState for a debug-send request file (written externally,
     /// e.g. by a test harness), validates it against a local allowlist, and sends it through
-    /// the WhatsApp connection client. Only attached/started in DEBUG builds.
+    /// the same message façade the chat page uses. Only attached/started in DEBUG builds.
     ///
     /// Extracted from WhatsAppService (was <c>StartDebugSendWatcher</c> and friends) so the
     /// connection/session "client" doesn't carry test-only file-watching state.
     /// </summary>
-    public sealed class DebugSendService : IDebugSendService
+    internal sealed class DebugSendService : IDebugSendService
     {
         private const string DebugSendRequestFileName = "debug-send.json";
         private const string DebugSendAllowlistFileName = "debug-send-allowlist.json";
         private const string DebugSendResultFileName = "debug-send-result.json";
 
-        private readonly IWhatsAppService _whatsAppService;
+        private readonly IWhatsAppSessionProvider _sessions;
+        private readonly IMessageService _messages;
         private readonly IJidResolver _jids;
         private readonly SemaphoreSlim _debugSendLock = new SemaphoreSlim(1, 1);
         private CancellationTokenSource _debugSendCts;
         private string _lastDebugSendRequestId;
 
-        public DebugSendService(IWhatsAppService whatsAppService, IJidResolver jids)
+        public DebugSendService(IWhatsAppSessionProvider sessions, IMessageService messages, IJidResolver jids)
         {
-            _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
+            _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
+            _messages = messages ?? throw new ArgumentNullException(nameof(messages));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
         }
 
@@ -111,7 +114,7 @@ namespace Unison.Uwp.Services.WhatsApp.Diagnostics
 
         private async Task TryProcessDebugSendRequestAsync(CancellationToken token)
         {
-            if (!_whatsAppService.IsTransportReady)
+            if (!_sessions.IsTransportReady)
             {
                 return;
             }
@@ -179,7 +182,7 @@ namespace Unison.Uwp.Services.WhatsApp.Diagnostics
 
                 try
                 {
-                    var sent = await _whatsAppService.SendTextMessageAsync(targetJid, text);
+                    var sent = await _messages.SendTextMessageAsync(targetJid, text);
                     string messageId = sent?.Id;
                     await WriteDebugSendResultAsync(requestId, targetJid, "sent", messageId, null);
                     _lastDebugSendRequestId = requestId;

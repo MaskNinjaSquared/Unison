@@ -1,0 +1,218 @@
+using System;
+using System.Collections.Generic;
+using Unison.Core.Mappers;
+using Unison.Core.Models;
+
+namespace Unison.Core.Helpers
+{
+    /// <summary>
+    /// One pass over a visible timeline: run chrome, date chips, sender labels, and group
+    /// author avatars. The bubble only binds the resolved <see cref="ChatMessage.ContactUri"/>.
+    /// Mentions refresh stays on the ViewModel.
+    /// </summary>
+    public static class MessageRunLayout
+    {
+        public static void Apply(
+            IList<ChatMessage> messages,
+            bool isGroup,
+            ChatItem groupChat,
+            GroupParticipantLookup lookup,
+            string todayLabel,
+            string yesterdayLabel,
+            Func<string, bool> quotedIdIsFromMe)
+        {
+            if (messages == null || messages.Count == 0)
+            {
+                return;
+            }
+
+            if (isGroup && lookup != null)
+            {
+                lookup.EnsureFresh(groupChat);
+            }
+
+            string today = string.IsNullOrWhiteSpace(todayLabel) ? "Today" : todayLabel;
+            string yesterday = string.IsNullOrWhiteSpace(yesterdayLabel) ? "Yesterday" : yesterdayLabel;
+            Func<string, bool> quoteFromMe = quotedIdIsFromMe ?? (_ => false);
+            DateTime? previousLocalDate = null;
+
+            // Names first, so a row whose address was not stored can still be compared with
+            // its neighbour by the name it shows. Resolving names inside the layout loop left
+            // the next message still unnamed when the current one asked whether the run
+            // continued.
+            if (lookup != null)
+            {
+                for (int i = 0; i < messages.Count; i++)
+                {
+                    ChatMessage message = messages[i];
+                    if (message == null)
+                    {
+                        continue;
+                    }
+
+                    if (isGroup)
+                    {
+                        lookup.EnsureGroupSenderName(message, groupChat);
+                    }
+
+                    // Quotes exist in 1:1 too; self-quotes often omit Participant and must still show You.
+                    lookup.EnsureQuotedSenderName(message, groupChat, quoteFromMe);
+                }
+            }
+
+            for (int i = 0; i < messages.Count; i++)
+            {
+                ChatMessage current = messages[i];
+                if (current == null)
+                {
+                    continue;
+                }
+
+                DateTime localDate = WhatsAppMapper.ToLocalCalendarDate(current.Timestamp);
+                bool isFirstOfDay = localDate != DateTime.MinValue &&
+                    (!previousLocalDate.HasValue || localDate != previousLocalDate.Value);
+                current.IsFirstOfDay = isFirstOfDay;
+                current.DateSeparatorText = isFirstOfDay
+                    ? WhatsAppMapper.FormatDaySeparator(current.Timestamp, today, yesterday)
+                    : string.Empty;
+                if (localDate != DateTime.MinValue)
+                {
+                    previousLocalDate = localDate;
+                }
+
+                bool isRunStart = i == 0;
+                bool isRunEnd = i == messages.Count - 1;
+
+                if (!isRunStart)
+                {
+                    isRunStart = !IsSameMessageRun(messages[i - 1], current, isGroup);
+                }
+
+                if (!isRunEnd)
+                {
+                    isRunEnd = !IsSameMessageRun(current, messages[i + 1], isGroup);
+                }
+
+                current.IsRunStart = isRunStart;
+                current.IsRunEnd = isRunEnd;
+                current.ShowGroupSenderName =
+                    isGroup &&
+                    isRunStart &&
+                    !current.IsFromMe &&
+                    !string.IsNullOrWhiteSpace(current.SenderName) &&
+                    !SelfChatNaming.IsKnownFallback(current.SenderName);
+
+                bool contactSlot = isGroup && !current.IsFromMe;
+                current.ShowContactSlot = contactSlot;
+                current.ShowContact = contactSlot && isRunStart;
+                current.ContactUri = contactSlot && lookup != null
+                    ? lookup.ResolveContactUri(current.ParticipantJid, groupChat)
+                    : null;
+
+                current.ShowQuotedAuthorLink =
+                    isGroup &&
+                    current.HasQuote &&
+                    (!string.IsNullOrWhiteSpace(current.QuotedParticipantJid) ||
+                     !string.IsNullOrWhiteSpace(current.QuotedSenderName));
+            }
+        }
+
+        /// <summary>
+        /// Relabels date chips after local midnight (Hoje / Ontem / date).
+        /// Does not re-resolve participant names/avatars — only the date separator fields.
+        /// </summary>
+        public static void RefreshDateSeparators(
+            IList<ChatMessage> models,
+            string todayLabel,
+            string yesterdayLabel)
+        {
+            if (models == null || models.Count == 0)
+            {
+                return;
+            }
+
+            string today = string.IsNullOrWhiteSpace(todayLabel) ? "Today" : todayLabel;
+            string yesterday = string.IsNullOrWhiteSpace(yesterdayLabel) ? "Yesterday" : yesterdayLabel;
+            DateTime? previousLocalDate = null;
+
+            for (int i = 0; i < models.Count; i++)
+            {
+                ChatMessage current = models[i];
+                if (current == null)
+                {
+                    continue;
+                }
+
+                DateTime localDate = WhatsAppMapper.ToLocalCalendarDate(current.Timestamp);
+                bool isFirstOfDay = localDate != DateTime.MinValue &&
+                    (!previousLocalDate.HasValue || localDate != previousLocalDate.Value);
+                current.IsFirstOfDay = isFirstOfDay;
+                current.DateSeparatorText = isFirstOfDay
+                    ? WhatsAppMapper.FormatDaySeparator(current.Timestamp, today, yesterday)
+                    : string.Empty;
+                if (localDate != DateTime.MinValue)
+                {
+                    previousLocalDate = localDate;
+                }
+            }
+        }
+
+        public static bool IsSameMessageRun(ChatMessage left, ChatMessage right, bool isGroup)
+        {
+            if (left == null || right == null)
+            {
+                return false;
+            }
+
+            if (left.IsFromMe != right.IsFromMe)
+            {
+                return false;
+            }
+
+            // Own bubbles are always one run (no participant identity to mismatch).
+            if (left.IsFromMe)
+            {
+                return true;
+            }
+
+            // 1:1 peer is a single counterparty — LID/PN/empty ParticipantJid must not split the run
+            // or middle bubbles incorrectly get IsRunEnd (Unison tip) / IsRunStart (avatar).
+            if (!isGroup)
+            {
+                return true;
+            }
+
+            string leftParticipant = JidHelper.Normalize(left.ParticipantJid) ?? string.Empty;
+            string rightParticipant = JidHelper.Normalize(right.ParticipantJid) ?? string.Empty;
+            bool leftHasAddress = !string.IsNullOrEmpty(leftParticipant);
+            bool rightHasAddress = !string.IsNullOrEmpty(rightParticipant);
+
+            // Any two different addresses are two people, including a LID beside a phone
+            // number that happens to carry the same display name. Matching on the name
+            // joined the next person into this run, so their bubble grew no tail. A message
+            // of ours in between already broke the run, which is why that order looked fine.
+            if (leftHasAddress && rightHasAddress)
+            {
+                return string.Equals(leftParticipant, rightParticipant, StringComparison.OrdinalIgnoreCase);
+            }
+
+            if (leftHasAddress || rightHasAddress)
+            {
+                return false;
+            }
+
+            // Neither side stored an address (some history rows). Keep the run only when
+            // both names are present and agree. Two blanks are not the same person.
+            string leftKnown = left.SenderName ?? string.Empty;
+            string rightKnown = right.SenderName ?? string.Empty;
+            return !string.IsNullOrWhiteSpace(leftKnown) &&
+                   string.Equals(leftKnown, rightKnown, StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>Backward-compatible overload (treats as group identity rules).</summary>
+        public static bool IsSameMessageRun(ChatMessage left, ChatMessage right)
+        {
+            return IsSameMessageRun(left, right, isGroup: true);
+        }
+    }
+}

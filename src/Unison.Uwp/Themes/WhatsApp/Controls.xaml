@@ -232,6 +232,92 @@
         </Setter>
     </Style>
 
+    <!-- Full-area hit target whose hover does not paint a rectangle over a circular glyph. -->
+    <Style x:Key="MediaHitTargetButtonStyle" TargetType="Button">
+        <Setter Property="helpers:DesktopCursor.CursorKind" Value="Hand"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="MinWidth" Value="0"/>
+        <Setter Property="MinHeight" Value="0"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="UseSystemFocusVisuals" Value="False"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <ContentPresenter Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                      VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                      Padding="{TemplateBinding Padding}"/>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Disc stays a disc on hover. Used by the media back button. -->
+    <Style x:Key="CircleIconButtonStyle" TargetType="Button">
+        <Setter Property="helpers:DesktopCursor.CursorKind" Value="Hand"/>
+        <Setter Property="Background" Value="#E6232424"/>
+        <Setter Property="Foreground" Value="WhiteSmoke"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="MinWidth" Value="0"/>
+        <Setter Property="MinHeight" Value="0"/>
+        <Setter Property="FontFamily" Value="{StaticResource IconFont}"/>
+        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="UseSystemFocusVisuals" Value="False"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Grid Width="{TemplateBinding Width}" Height="{TemplateBinding Height}">
+                        <Ellipse x:Name="Fill" Fill="{TemplateBinding Background}"/>
+                        <ContentPresenter x:Name="ContentPresenter"
+                                          Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Foreground="{TemplateBinding Foreground}"
+                                          FontFamily="{TemplateBinding FontFamily}"
+                                          FontSize="{TemplateBinding FontSize}"
+                                          FontWeight="{TemplateBinding FontWeight}"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"/>
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal"/>
+                                <VisualState x:Name="PointerOver">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Fill" Storyboard.TargetProperty="Fill">
+                                            <DiscreteObjectKeyFrame KeyTime="0">
+                                                <DiscreteObjectKeyFrame.Value>
+                                                    <SolidColorBrush Color="#F23A3B3B"/>
+                                                </DiscreteObjectKeyFrame.Value>
+                                            </DiscreteObjectKeyFrame>
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Fill" Storyboard.TargetProperty="Fill">
+                                            <DiscreteObjectKeyFrame KeyTime="0">
+                                                <DiscreteObjectKeyFrame.Value>
+                                                    <SolidColorBrush Color="#FF111111"/>
+                                                </DiscreteObjectKeyFrame.Value>
+                                            </DiscreteObjectKeyFrame>
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- Transparent icon button (no WinUI chrome border; tight padding). -->
     <Style x:Key="WhatsAppIconButtonStyle" TargetType="Button">
         <Setter Property="helpers:DesktopCursor.CursorKind" Value="Hand"/>
@@ -372,10 +458,11 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="MenuFlyoutItem">
-                    <Grid x:Name="LayoutRoot" 
-                          Background="{TemplateBinding Background}"
-                          CornerRadius="4"
-                          Margin="4,2">
+                    <!-- Border.CornerRadius works on Creators; Grid.CornerRadius needs 1809+. -->
+                    <Border x:Name="LayoutRoot"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="4"
+                            Margin="4,2">
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CommonStates">
                                 <VisualState x:Name="Normal" />
@@ -400,26 +487,81 @@
                                 </VisualState>
                             </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="34" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <!-- Container for Icon with Viewbox to prevent cropping and ensure scale -->
-                        <Viewbox Grid.Column="0" 
-                                 Width="16" Height="16" 
-                                 HorizontalAlignment="Center" 
-                                 VerticalAlignment="Center">
-                            <ContentPresenter x:Name="IconContent" 
-                                              Content="{TemplateBinding Icon}" 
-                                              Foreground="{TemplateBinding Foreground}"/>
-                        </Viewbox>
-                        <TextBlock x:Name="TextBlock" 
-                                   Grid.Column="1" 
-                                   Text="{TemplateBinding Text}" 
-                                   Foreground="{TemplateBinding Foreground}"
-                                   VerticalAlignment="Center"
-                                   Margin="8,0,0,0"/>
-                    </Grid>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="34" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Viewbox Grid.Column="0"
+                                     Width="16" Height="16"
+                                     HorizontalAlignment="Center"
+                                     VerticalAlignment="Center">
+                                <ContentPresenter x:Name="IconContent"
+                                                  Content="{TemplateBinding Icon}"
+                                                  Foreground="{TemplateBinding Foreground}"/>
+                            </Viewbox>
+                            <TextBlock x:Name="TextBlock"
+                                       Grid.Column="1"
+                                       Text="{TemplateBinding Text}"
+                                       Foreground="{TemplateBinding Foreground}"
+                                       VerticalAlignment="Center"
+                                       Margin="8,0,0,0"/>
+                        </Grid>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Pin to Start only. Same row as the menu, icon slot 20 instead of 16. -->
+    <Style TargetType="MenuFlyoutItem" x:Key="ModernMenuFlyoutPinItemStyle" BasedOn="{StaticResource ModernMenuFlyoutItemStyle}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="MenuFlyoutItem">
+                    <Border x:Name="LayoutRoot"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="4"
+                            Margin="4,2">
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="PointerOver">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="LayoutRoot" Storyboard.TargetProperty="Background">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="#33FFFFFF" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="LayoutRoot" Storyboard.TargetProperty="Background">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="#44FFFFFF" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Disabled">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="LayoutRoot" Storyboard.TargetProperty="Opacity" To="0.5" Duration="0" />
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="34" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Viewbox Grid.Column="0" Width="20" Height="20"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <ContentPresenter Content="{TemplateBinding Icon}" Foreground="{TemplateBinding Foreground}"/>
+                            </Viewbox>
+                            <TextBlock Grid.Column="1"
+                                       Text="{TemplateBinding Text}"
+                                       Foreground="{TemplateBinding Foreground}"
+                                       VerticalAlignment="Center"
+                                       Margin="8,0,0,0"/>
+                        </Grid>
+                    </Border>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
@@ -437,10 +579,10 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="MenuFlyoutSubItem">
-                    <Grid x:Name="LayoutRoot"
-                          Background="{TemplateBinding Background}"
-                          CornerRadius="4"
-                          Margin="4,2">
+                    <Border x:Name="LayoutRoot"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="4"
+                            Margin="4,2">
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CommonStates">
                                 <VisualState x:Name="Normal" />
@@ -465,31 +607,33 @@
                                 </VisualState>
                             </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="34" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="24" />
-                        </Grid.ColumnDefinitions>
-                        <Viewbox Grid.Column="0"
-                                 Width="16" Height="16"
-                                 HorizontalAlignment="Center"
-                                 VerticalAlignment="Center">
-                            <ContentPresenter Content="{TemplateBinding Icon}"
-                                              Foreground="{TemplateBinding Foreground}"/>
-                        </Viewbox>
-                        <TextBlock Grid.Column="1"
-                                   Text="{TemplateBinding Text}"
-                                   Foreground="{TemplateBinding Foreground}"
-                                   VerticalAlignment="Center"
-                                   Margin="8,0,0,0"/>
-                        <TextBlock Grid.Column="2"
-                                   Text="&#xE76C;"
-                                   FontFamily="{StaticResource IconFont}"
-                                   FontSize="12"
-                                   Foreground="{TemplateBinding Foreground}"
-                                   VerticalAlignment="Center"
-                                   HorizontalAlignment="Center"/>
-                    </Grid>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="34" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="24" />
+                            </Grid.ColumnDefinitions>
+                            <Viewbox Grid.Column="0"
+                                     Width="16" Height="16"
+                                     HorizontalAlignment="Center"
+                                     VerticalAlignment="Center">
+                                <ContentPresenter Content="{TemplateBinding Icon}"
+                                                  Foreground="{TemplateBinding Foreground}"/>
+                            </Viewbox>
+                            <TextBlock Grid.Column="1"
+                                       Text="{TemplateBinding Text}"
+                                       Foreground="{TemplateBinding Foreground}"
+                                       VerticalAlignment="Center"
+                                       Margin="8,0,0,0"/>
+                            <TextBlock Grid.Column="2"
+                                       Text="&#xE76C;"
+                                       FontFamily="{StaticResource IconFont}"
+                                       FontSize="12"
+                                       Foreground="{TemplateBinding Foreground}"
+                                       VerticalAlignment="Center"
+                                       HorizontalAlignment="Center"/>
+                        </Grid>
+                    </Border>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
