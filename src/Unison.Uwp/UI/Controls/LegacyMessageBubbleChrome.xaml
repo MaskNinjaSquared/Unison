@@ -9,8 +9,10 @@
     d:DesignWidth="240">
 
     <!--
-      WhatsApp Legacy: square bubble, tail 10px in from the outer edge.
-      Received on the left, sent on the right.
+      WhatsApp Legacy: square bubble.
+      Received — 1:1: tail above, 10px in from the left.
+      Received — group: tail flush left, pointing at the sender photo, same place as Unison.
+      Sent — 1:1 and group: tail below, 10px in from the right.
     -->
     <Grid x:Name="RootGrid">
         <Grid x:Name="OutgoingHost" Visibility="Collapsed">
@@ -46,7 +48,7 @@
                   Height="12"
                   VerticalAlignment="Top"
                   HorizontalAlignment="Left"
-                  Margin="10,0,0,0"
+                  Margin="-10,0,0,0"
                   Visibility="Collapsed">
                 <Path Stretch="Fill"
                       Fill="{ThemeResource ChatDetailReceivedBubbleBrush}"

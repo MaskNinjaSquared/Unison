@@ -97,7 +97,13 @@ namespace Unison.Uwp.Services.WhatsApp
 
             try
             {
-                Task<string> sendTask = socket.SendTextMessageAsync(request.ChatJid, request.Text, request.MessageId);
+                Task<string> sendTask = socket.SendTextMessageAsync(
+                    request.ChatJid,
+                    request.Text,
+                    request.MessageId,
+                    request.Mentions,
+                    request.MentionAll,
+                    request.Quote);
                 Task completed = await Task.WhenAny(sendTask, Task.Delay(request.WriteTimeout));
                 if (completed != sendTask)
                 {

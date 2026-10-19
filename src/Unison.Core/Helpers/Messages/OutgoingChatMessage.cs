@@ -29,12 +29,51 @@ namespace Unison.Core.Helpers
 
     public static class OutgoingChatMessage
     {
-        public static ChatMessage Text(OutgoingMessageStamp stamp, string text)
+        public static ChatMessage Text(
+            OutgoingMessageStamp stamp,
+            string text,
+            System.Collections.Generic.IList<string> mentions = null,
+            bool mentionAll = false)
         {
             ChatMessage message = FromStamp(stamp);
             message.Content = text;
             message.Kind = ChatMessageKind.Text;
+            if (mentions != null && mentions.Count > 0)
+            {
+                message.MentionedJids = new System.Collections.Generic.List<string>(mentions);
+            }
+
+            message.MentionAll = mentionAll;
             return message;
+        }
+
+        public static ChatMessage Text(
+            OutgoingMessageStamp stamp,
+            string text,
+            System.Collections.Generic.IList<string> mentions,
+            bool mentionAll,
+            OutgoingQuote quote)
+        {
+            ChatMessage message = Text(stamp, text, mentions, mentionAll);
+            ApplyQuote(message, quote);
+            return message;
+        }
+
+        public static void ApplyQuote(ChatMessage message, OutgoingQuote quote)
+        {
+            if (message == null || quote == null || string.IsNullOrWhiteSpace(quote.MessageId))
+            {
+                return;
+            }
+
+            message.QuotedMessageId = quote.MessageId;
+            message.QuotedParticipantJid = quote.ParticipantJid;
+            message.QuotedText = quote.Text;
+            message.QuotedKind = quote.Kind;
+            if (!string.IsNullOrWhiteSpace(quote.AuthorName))
+            {
+                message.QuotedSenderName = quote.AuthorName;
+            }
         }
 
         public static ChatMessage Image(OutgoingMessageStamp stamp, string caption, string localUri)

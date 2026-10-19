@@ -29,6 +29,7 @@ namespace Unison.Core.ViewModels
         private readonly ISessionLogger _sessionLogger;
         private readonly IRuntimeDiagnostics _diagnostics;
         private readonly IHistoryMessageStore _history;
+        private readonly ICopyService _copy;
         private bool _isExpanded;
         private bool _isHighlighted;
         private bool? _canExpandCached;
@@ -48,7 +49,8 @@ namespace Unison.Core.ViewModels
             IAudioExportService audioExport = null,
             ISessionLogger sessionLogger = null,
             IRuntimeDiagnostics diagnostics = null,
-            IHistoryMessageStore history = null)
+            IHistoryMessageStore history = null,
+            ICopyService copy = null)
         {
             Model = model ?? throw new ArgumentNullException(nameof(model));
             _strings = strings;
@@ -60,6 +62,7 @@ namespace Unison.Core.ViewModels
             _sessionLogger = sessionLogger;
             _diagnostics = diagnostics;
             _history = history;
+            _copy = copy;
 
             ShowReactionsCommand = new RelayCommand(
                 () => _ = ShowReactionsAsync(),
@@ -105,6 +108,9 @@ namespace Unison.Core.ViewModels
                 () => _ = ExportDocumentAsync(),
                 () => Model.IsDocument && !IsDocumentDownloading);
 
+            CopyCommand = new RelayCommand(CopyText, () => !string.IsNullOrWhiteSpace(CopyableText));
+            ReplyCommand = new RelayCommand(() => ReplyRequested?.Invoke(this, EventArgs.Empty));
+
             Model.PropertyChanged += OnModelPropertyChanged;
             SyncAudioPlaybackStatusFromModel();
         }
@@ -149,6 +155,13 @@ namespace Unison.Core.ViewModels
                 name == nameof(ChatMessage.DocumentDisplayName))
             {
                 _documentDisplayNameCached = null;
+            }
+
+            if (name == nameof(ChatMessage.Content) ||
+                name == nameof(ChatMessage.Caption) ||
+                name == nameof(ChatMessage.Kind))
+            {
+                (CopyCommand as RelayCommand)?.RaiseCanExecuteChanged();
             }
 
             if (name == nameof(ChatMessage.MentionedJids))
@@ -290,6 +303,14 @@ namespace Unison.Core.ViewModels
 
         /// <summary>Save downloaded audio as MP3 (overflow menu).</summary>
         public ICommand SaveAudioAsCommand { get; }
+
+        /// <summary>Copies this bubble's text, or its caption, to the clipboard.</summary>
+        public ICommand CopyCommand { get; }
+
+        /// <summary>Reply to this bubble. The conversation opens the composer bar.</summary>
+        public ICommand ReplyCommand { get; }
+
+        public event EventHandler ReplyRequested;
 
         /// <summary>Download to cache if needed, then FileSavePicker to disk.</summary>
         public ICommand ExportDocumentCommand { get; }
@@ -727,6 +748,25 @@ namespace Unison.Core.ViewModels
         }
 
         public string ImageUri => Model.ImageUri;
+
+        /// <summary>Local picture for a minimized reply chrome. Thumbnail when the full file is not here.</summary>
+        public string PreviewImageUri
+        {
+            get
+            {
+                if (!string.IsNullOrWhiteSpace(Model.ImageUri))
+                {
+                    return Model.ImageUri;
+                }
+
+                if (!string.IsNullOrWhiteSpace(Model.VideoPosterUri))
+                {
+                    return Model.VideoPosterUri;
+                }
+
+                return string.IsNullOrWhiteSpace(Model.ThumbnailUri) ? null : Model.ThumbnailUri;
+            }
+        }
         public bool HasImage => Model.HasImage;
         public string ThumbnailUri => Model.ThumbnailUri;
         public bool HasMediaThumbnail => Model.HasMediaThumbnail;
@@ -740,6 +780,35 @@ namespace Unison.Core.ViewModels
         public bool ShowStickerError => Model.ShowStickerError;
         public bool ShowStickerLoading => Model.ShowStickerLoading;
         public string Caption => Model.Caption;
+
+        private string CopyableText
+        {
+            get
+            {
+                if (ShowTextContent && !string.IsNullOrWhiteSpace(Content))
+                {
+                    return Content;
+                }
+
+                if (!string.IsNullOrWhiteSpace(Caption))
+                {
+                    return Caption;
+                }
+
+                return null;
+            }
+        }
+
+        private void CopyText()
+        {
+            string text = CopyableText;
+            if (string.IsNullOrWhiteSpace(text) || _copy == null)
+            {
+                return;
+            }
+
+            _copy.CopyText(text);
+        }
         public bool HasCaption => Model.HasCaption;
         public bool ShowTextContent => Model.ShowTextContent;
 

@@ -252,6 +252,12 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   <data name="ChatDetail_MessageInput.PlaceholderText" xml:space="preserve">
     <value>Escribe un mensaje</value>
   </data>
+  <data name="ChatDetail_MentionEveryone" xml:space="preserve">
+    <value>Todos</value>
+  </data>
+  <data name="ChatDetail_MentionEveryoneDetail" xml:space="preserve">
+    <value>Menciona a todos los miembros del grupo</value>
+  </data>
   <data name="ChatDetail_GroupOnlyAdminsCanSend.Text" xml:space="preserve">
     <value>Solo los admins pueden enviar mensajes</value>
   </data>
@@ -320,6 +326,12 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   </data>
   <data name="ChatDetail_UnpinMessage" xml:space="preserve">
     <value>Desfijar mensaje</value>
+  </data>
+  <data name="ChatDetail_CopyMessage" xml:space="preserve">
+    <value>Copiar</value>
+  </data>
+  <data name="ChatDetail_ReplyMessage" xml:space="preserve">
+    <value>Responder</value>
   </data>
   <data name="ChatDetail_PinFor24Hours" xml:space="preserve">
     <value>Fijar durante 24 horas</value>

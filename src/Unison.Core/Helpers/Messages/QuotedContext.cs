@@ -28,6 +28,9 @@ namespace Unison.Core.Helpers
         /// <summary>Normalized and de-duplicated, or null when the message mentions nobody.</summary>
         public List<string> MentionedJids { get; private set; }
 
+        /// <summary>ContextInfo.nonJidMentions — the message mentions every current member.</summary>
+        public bool MentionAll { get; private set; }
+
         /// <summary>The id of the quoted message, when the sender included one.</summary>
         public string QuotedMessageId { get; private set; }
 
@@ -75,7 +78,8 @@ namespace Unison.Core.Helpers
             var read = new QuotedContext
             {
                 IsForwarded = forwarded,
-                MentionedJids = HistorySyncContentFilter.ReadMentionedJids(unwrapped)
+                MentionedJids = HistorySyncContentFilter.ReadMentionedJids(unwrapped),
+                MentionAll = context.HasNonJidMentions && context.NonJidMentions != 0
             };
 
             if (context.QuotedMessage == null)

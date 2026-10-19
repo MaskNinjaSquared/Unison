@@ -311,6 +311,12 @@ Disable after diagnosing: keeping it on slows the app.</value>
   <data name="ChatDetail_MessageInput.PlaceholderText" xml:space="preserve">
     <value>Type a message</value>
   </data>
+  <data name="ChatDetail_MentionEveryone" xml:space="preserve">
+    <value>Everyone</value>
+  </data>
+  <data name="ChatDetail_MentionEveryoneDetail" xml:space="preserve">
+    <value>Mention all group members</value>
+  </data>
   <data name="ChatDetail_GroupOnlyAdminsCanSend.Text" xml:space="preserve">
     <value>Only admins can send messages</value>
   </data>
@@ -379,6 +385,12 @@ Disable after diagnosing: keeping it on slows the app.</value>
   </data>
   <data name="ChatDetail_UnpinMessage" xml:space="preserve">
     <value>Unpin message</value>
+  </data>
+  <data name="ChatDetail_CopyMessage" xml:space="preserve">
+    <value>Copy</value>
+  </data>
+  <data name="ChatDetail_ReplyMessage" xml:space="preserve">
+    <value>Reply</value>
   </data>
   <data name="ChatDetail_PinFor24Hours" xml:space="preserve">
     <value>Pin for 24 hours</value>

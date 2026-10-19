@@ -311,6 +311,12 @@
   <data name="ChatDetail_MessageInput.PlaceholderText" xml:space="preserve">
     <value>Введіть повідомлення</value>
   </data>
+  <data name="ChatDetail_MentionEveryone" xml:space="preserve">
+    <value>Усі</value>
+  </data>
+  <data name="ChatDetail_MentionEveryoneDetail" xml:space="preserve">
+    <value>Згадати всіх учасників групи</value>
+  </data>
   <data name="ChatDetail_GroupOnlyAdminsCanSend.Text" xml:space="preserve">
     <value>Лише адміністратори можуть надсилати повідомлення</value>
   </data>
@@ -379,6 +385,12 @@
   </data>
   <data name="ChatDetail_UnpinMessage" xml:space="preserve">
     <value>Відкріпити повідомлення</value>
+  </data>
+  <data name="ChatDetail_CopyMessage" xml:space="preserve">
+    <value>Копіювати</value>
+  </data>
+  <data name="ChatDetail_ReplyMessage" xml:space="preserve">
+    <value>Відповісти</value>
   </data>
   <data name="ChatDetail_PinFor24Hours" xml:space="preserve">
     <value>Закріпити на 24 год.</value>

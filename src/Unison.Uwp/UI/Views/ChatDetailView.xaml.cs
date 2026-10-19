@@ -18,6 +18,7 @@ using Unison.Uwp.Helpers;
 using Unison.Uwp.Services;
 using Unison.Uwp.Services.WhatsApp;
 using Unison.Uwp.UI.Controls;
+using Unison.Uwp.UI.Helpers;
 using Windows.Foundation;
 using Windows.Media;
 using Windows.Media.Core;
@@ -283,6 +284,12 @@ namespace Unison.Uwp.UI.Views
         {
             e.Handled = true;
             SetAttachMenuOpen(false);
+        }
+
+        private void ReplyScrim_Tapped(object sender, TappedRoutedEventArgs e)
+        {
+            e.Handled = true;
+            ViewModel?.DismissReply();
         }
 
         /// <summary>Choosing an option dismisses the bar, as a flyout item would.</summary>
@@ -1438,6 +1445,7 @@ namespace Unison.Uwp.UI.Views
             string saveLabel = LocalizedStrings.Get("ChatDetail_DocumentSaveAs.Label", "Save as…");
 
             var flyout = new MenuFlyout();
+            MessageBubbleContextActions.Add(flyout, vm);
             var openItem = new MenuFlyoutItem
             {
                 Text = openLabel,
@@ -2517,6 +2525,11 @@ namespace Unison.Uwp.UI.Views
 
         private void MessageInput_KeyDown(object sender, KeyRoutedEventArgs e)
         {
+            if (MentionComposerInput.OnKeyDown(ViewModel, sender as TextBox, e))
+            {
+                return;
+            }
+
             if (e.Key != Windows.System.VirtualKey.Enter)
             {
                 return;
@@ -2551,6 +2564,27 @@ namespace Unison.Uwp.UI.Views
 
             e.Handled = true;
             ViewModel.SendMessageCommand.Execute(null);
+        }
+
+        private void MessageInput_SelectionChanged(object sender, RoutedEventArgs e)
+        {
+            MentionComposerInput.OnSelectionChanged(ViewModel, sender as TextBox);
+        }
+
+        private void MentionSuggestList_ItemClick(object sender, ItemClickEventArgs e)
+        {
+            var choice = e.ClickedItem as MentionChoice;
+            if (choice == null || ViewModel == null)
+            {
+                return;
+            }
+
+            ViewModel.AcceptMention(choice);
+            if (ViewModel.MentionInsertCaret >= 0)
+            {
+                MessageInput.SelectionStart = ViewModel.MentionInsertCaret;
+                MessageInput.Focus(FocusState.Programmatic);
+            }
         }
 
         /// <summary>
@@ -2850,6 +2884,7 @@ namespace Unison.Uwp.UI.Views
             }
 
             var flyout = new MenuFlyout();
+            MessageBubbleContextActions.Add(flyout, vm);
             if (message.IsPinned)
             {
                 AddPinAction(

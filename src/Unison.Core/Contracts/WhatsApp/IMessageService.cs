@@ -71,6 +71,9 @@ namespace Unison.Core.Contracts.WhatsApp
 
         Task<ChatMessage> SendTextMessageAsync(string jid, string text);
 
+        /// <summary>Same send, with @mentions already turned into JIDs and the everyone flag.</summary>
+        Task<ChatMessage> SendTextMessageAsync(string jid, OutgoingTextMentions message);
+
         Task SendImageAsync(string jid, byte[] imageBytes, string caption);
 
         /// <summary>Sends a recorded/picked audio clip (voice note when isVoiceMessage=true).</summary>

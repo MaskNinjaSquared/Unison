@@ -653,6 +653,11 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             return _textSend.SendAsync(jid, text);
         }
 
+        public Task<ChatMessage> SendTextMessageAsync(string jid, OutgoingTextMentions message)
+        {
+            return _textSend.SendAsync(jid, message);
+        }
+
         public Task SendImageAsync(string jid, byte[] imageBytes, string caption)
         {
             return _mediaSend.SendImageAsync(jid, imageBytes, caption);

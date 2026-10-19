@@ -163,7 +163,13 @@ namespace Unison.Uwp.Client
         /// <summary>Tells the senders of those messages that they were read.</summary>
         Task MarkMessagesReadAsync(IEnumerable<Unison.Socket.UseCases.Messages.ReceiptTarget> targets);
 
-        Task<string> SendTextMessageAsync(string jid, string text, string explicitMessageId = null);
+        Task<string> SendTextMessageAsync(
+            string jid,
+            string text,
+            string explicitMessageId = null,
+            IList<string> mentions = null,
+            bool mentionAll = false,
+            OutgoingQuote quote = null);
 
         Task<string> SendImageMessageAsync(
             string jid,

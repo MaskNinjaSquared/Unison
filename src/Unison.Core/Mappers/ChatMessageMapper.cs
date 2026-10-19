@@ -79,7 +79,8 @@ namespace Unison.Core.Mappers
                 QuotedMessageId = snapshot.QuotedMessageId,
                 MentionedJids = snapshot.MentionedJids != null
                     ? new System.Collections.Generic.List<string>(snapshot.MentionedJids)
-                    : null
+                    : null,
+                MentionAll = snapshot.MentionAll
             };
         }
 

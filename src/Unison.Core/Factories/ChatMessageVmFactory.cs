@@ -16,6 +16,7 @@ namespace Unison.Core.Factories
         private readonly ISessionLogger _sessionLogger;
         private readonly IRuntimeDiagnostics _diagnostics;
         private readonly IHistoryMessageStore _history;
+        private readonly ICopyService _copy;
 
         public ChatMessageVmFactory(
             IStringResources strings = null,
@@ -26,7 +27,8 @@ namespace Unison.Core.Factories
             IAudioExportService audioExport = null,
             ISessionLogger sessionLogger = null,
             IRuntimeDiagnostics diagnostics = null,
-            IHistoryMessageStore history = null)
+            IHistoryMessageStore history = null,
+            ICopyService copy = null)
         {
             _strings = strings;
             _messages = messages;
@@ -37,6 +39,7 @@ namespace Unison.Core.Factories
             _sessionLogger = sessionLogger;
             _diagnostics = diagnostics;
             _history = history;
+            _copy = copy;
         }
 
         public ChatMessageViewModel Create(ChatMessage model) =>
@@ -50,6 +53,7 @@ namespace Unison.Core.Factories
                 _audioExport,
                 _sessionLogger,
                 _diagnostics,
-                _history);
+                _history,
+                _copy);
     }
 }

@@ -311,6 +311,12 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="ChatDetail_MessageInput.PlaceholderText" xml:space="preserve">
     <value>Digite uma mensagem</value>
   </data>
+  <data name="ChatDetail_MentionEveryone" xml:space="preserve">
+    <value>Todos</value>
+  </data>
+  <data name="ChatDetail_MentionEveryoneDetail" xml:space="preserve">
+    <value>Mencione todos os membros do grupo</value>
+  </data>
   <data name="ChatDetail_GroupOnlyAdminsCanSend.Text" xml:space="preserve">
     <value>Somente admins podem enviar mensagens</value>
   </data>
@@ -379,6 +385,12 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   </data>
   <data name="ChatDetail_UnpinMessage" xml:space="preserve">
     <value>Desafixar mensagem</value>
+  </data>
+  <data name="ChatDetail_CopyMessage" xml:space="preserve">
+    <value>Copiar</value>
+  </data>
+  <data name="ChatDetail_ReplyMessage" xml:space="preserve">
+    <value>Responder</value>
   </data>
   <data name="ChatDetail_PinFor24Hours" xml:space="preserve">
     <value>Fixar por 24 horas</value>

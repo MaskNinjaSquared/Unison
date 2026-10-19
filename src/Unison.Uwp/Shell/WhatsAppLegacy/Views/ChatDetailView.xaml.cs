@@ -19,6 +19,7 @@ using Unison.Uwp.Services;
 using Unison.Uwp.Services.WhatsApp;
 using IChatDetailSurface = Unison.Uwp.UI.Views.IChatDetailSurface;
 using Unison.Uwp.UI.Controls;
+using Unison.Uwp.UI.Helpers;
 using Unison.Uwp.UI.Views;
 using Windows.Foundation;
 using Windows.Media;
@@ -2727,6 +2728,11 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private void MessageInput_KeyDown(object sender, KeyRoutedEventArgs e)
         {
+            if (MentionComposerInput.OnKeyDown(ViewModel, sender as TextBox, e))
+            {
+                return;
+            }
+
             if (e.Key != Windows.System.VirtualKey.Enter)
             {
                 return;
@@ -2761,6 +2767,27 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
             e.Handled = true;
             ViewModel.SendMessageCommand.Execute(null);
+        }
+
+        private void MessageInput_SelectionChanged(object sender, RoutedEventArgs e)
+        {
+            MentionComposerInput.OnSelectionChanged(ViewModel, sender as TextBox);
+        }
+
+        private void MentionSuggestList_ItemClick(object sender, ItemClickEventArgs e)
+        {
+            var choice = e.ClickedItem as MentionChoice;
+            if (choice == null || ViewModel == null)
+            {
+                return;
+            }
+
+            ViewModel.AcceptMention(choice);
+            if (ViewModel.MentionInsertCaret >= 0)
+            {
+                MessageInput.SelectionStart = ViewModel.MentionInsertCaret;
+                MessageInput.Focus(FocusState.Programmatic);
+            }
         }
 
         /// <summary>
@@ -3052,70 +3079,40 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         {
             var vm = anchor?.DataContext as ChatMessageViewModel;
             var message = vm?.Model ?? UnwrapMessage(anchor?.DataContext);
-            if (message == null || _activeChat == null || string.IsNullOrWhiteSpace(message.Id)) return;
+            if (message == null || _activeChat == null || string.IsNullOrWhiteSpace(message.Id) || ViewModel == null)
+            {
+                return;
+            }
 
-            if (vm == null && ViewModel != null)
+            if (vm == null)
             {
                 vm = ViewModel.CreateMessageVm(message);
             }
 
-            var flyout = new MenuFlyout();
-            if (message.IsPinned)
-            {
-                AddPinAction(
-                    flyout,
-                    vm,
-                    LocalizedStrings.Get("ChatDetail_UnpinMessage", "Unpin message"),
-                    false,
-                    0);
-            }
-            else
-            {
-                AddPinAction(
-                    flyout,
-                    vm,
-                    LocalizedStrings.Get("ChatDetail_PinFor24Hours", "Pin for 24 hours"),
-                    true,
-                    86400);
-                AddPinAction(
-                    flyout,
-                    vm,
-                    LocalizedStrings.Get("ChatDetail_PinFor7Days", "Pin for 7 days"),
-                    true,
-                    604800);
-                AddPinAction(
-                    flyout,
-                    vm,
-                    LocalizedStrings.Get("ChatDetail_PinFor30Days", "Pin for 30 days"),
-                    true,
-                    2592000);
-            }
-            // The one-argument FlyoutBase.ShowAt overload requires Windows 10 1809.
-            // Windows 10 Mobile 15063 supports the original MenuFlyout overload.
-            flyout.ShowAt(anchor, new Windows.Foundation.Point(
-                Math.Max(0, anchor.ActualWidth / 2),
-                Math.Max(0, anchor.ActualHeight / 2)));
+            ViewModel.SelectMessage(vm);
         }
 
-        private void AddPinAction(MenuFlyout flyout, ChatMessageViewModel vm, string label, bool pin, uint durationSeconds)
+        private void MessageActionsScrim_Tapped(object sender, TappedRoutedEventArgs e)
         {
-            var item = new MenuFlyoutItem { Text = label };
-            item.Click += async (s, e) =>
-            {
-                if (vm?.Model == null)
-                {
-                    return;
-                }
+            e.Handled = true;
+            ViewModel?.DismissMessageActions();
+        }
 
-                if (string.IsNullOrWhiteSpace(vm.Model.RemoteJid) && _activeChat != null)
-                {
-                    vm.Model.RemoteJid = _activeChat.JID;
-                }
+        private void ReplyScrim_Tapped(object sender, TappedRoutedEventArgs e)
+        {
+            e.Handled = true;
+            ViewModel?.DismissReply();
+        }
 
-                await vm.SetPinnedAsync(pin, durationSeconds);
-                UpdatePinnedBanner();
-            };
-            flyout.Items.Add(item);
+        private void MessageActionsBar_Loaded(object sender, RoutedEventArgs e)
+        {
+            CopyMessageButton.Label = LocalizedStrings.Get("ChatDetail_CopyMessage", "Copy");
+            ReplyMessageButton.Label = LocalizedStrings.Get("ChatDetail_ReplyMessage", "Reply");
+            PinFor24HoursButton.Label = LocalizedStrings.Get("ChatDetail_PinFor24Hours", "Pin for 24 hours");
+            PinFor7DaysButton.Label = LocalizedStrings.Get("ChatDetail_PinFor7Days", "Pin for 7 days");
+            PinFor30DaysButton.Label = LocalizedStrings.Get("ChatDetail_PinFor30Days", "Pin for 30 days");
+            UnpinMessageButton.Label = LocalizedStrings.Get("ChatDetail_UnpinMessage", "Unpin message");
+            LegacyCommandBarLayout.CenterPrimaryCommands(sender as CommandBar);
         }
 
         /// <summary>Play / resume / pause for a ready local audio bubble + SMTC.</summary>

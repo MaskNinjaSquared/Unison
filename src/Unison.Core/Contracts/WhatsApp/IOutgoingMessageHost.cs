@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
@@ -11,6 +12,15 @@ namespace Unison.Core.Contracts.WhatsApp
         public string ChatJid { get; set; }
 
         public string Text { get; set; }
+
+        /// <summary>JIDs for @number tokens in <see cref="Text"/>.</summary>
+        public IList<string> Mentions { get; set; }
+
+        /// <summary>ContextInfo.nonJidMentions — everyone in the group, not a JID list.</summary>
+        public bool MentionAll { get; set; }
+
+        /// <summary>Reply target. Null when this send quotes nothing.</summary>
+        public OutgoingQuote Quote { get; set; }
 
         /// <summary>The same on every attempt, so a retry cannot mint a second bubble.</summary>
         public string MessageId { get; set; }

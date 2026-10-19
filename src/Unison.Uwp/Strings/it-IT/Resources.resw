@@ -299,6 +299,12 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
   <data name="ChatDetail_MessageInput.PlaceholderText" xml:space="preserve">
     <value>Scrivi un messaggio</value>
   </data>
+  <data name="ChatDetail_MentionEveryone" xml:space="preserve">
+    <value>Tutti</value>
+  </data>
+  <data name="ChatDetail_MentionEveryoneDetail" xml:space="preserve">
+    <value>Menziona tutti i membri del gruppo</value>
+  </data>
   <data name="ChatDetail_GroupOnlyAdminsCanSend.Text" xml:space="preserve">
     <value>Solo gli admin possono inviare messaggi</value>
   </data>
@@ -367,6 +373,12 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
   </data>
   <data name="ChatDetail_UnpinMessage" xml:space="preserve">
     <value>Rimuovi messaggio in evidenza</value>
+  </data>
+  <data name="ChatDetail_CopyMessage" xml:space="preserve">
+    <value>Copia</value>
+  </data>
+  <data name="ChatDetail_ReplyMessage" xml:space="preserve">
+    <value>Rispondi</value>
   </data>
   <data name="ChatDetail_PinFor24Hours" xml:space="preserve">
     <value>Fissa per 24 ore</value>

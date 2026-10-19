@@ -597,6 +597,7 @@ namespace Unison.Uwp
             services.AddSingleton<IAppLifecycle, AppLifecycleService>();
             services.AddSingleton<IBackgroundAccessPrompt, BackgroundAccessPrompt>();
             services.AddSingleton<IUriLauncher, UriLauncherService>();
+            services.AddSingleton<ICopyService, CopyService>();
             services.AddSingleton<IFilePicker, FilePickerService>();
             services.AddSingleton<IAudioExportService, AudioExportService>();
             services.AddSingleton<IShareService, ShareService>();

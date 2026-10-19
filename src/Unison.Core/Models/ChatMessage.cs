@@ -937,7 +937,29 @@ namespace Unison.Core.Models
 
         /// <summary>True when <see cref="MentionedJids"/> has at least one entry (no empty-list alloc).</summary>
         [JsonIgnore]
-        public bool HasMentions => _mentionedJids != null && _mentionedJids.Count > 0;
+        public bool HasMentions => (_mentionedJids != null && _mentionedJids.Count > 0) || _mentionAll;
+
+        private bool _mentionAll;
+
+        /// <summary>
+        /// The message mentions every current group member
+        /// (<c>ContextInfo.nonJidMentions</c>). The body keeps the localized word.
+        /// </summary>
+        public bool MentionAll
+        {
+            get => _mentionAll;
+            set
+            {
+                if (_mentionAll == value)
+                {
+                    return;
+                }
+
+                _mentionAll = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasMentions));
+            }
+        }
 
         private bool _showGroupSenderName;
         /// <summary>

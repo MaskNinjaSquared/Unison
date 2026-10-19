@@ -311,6 +311,12 @@ Nach der Diagnose deaktivieren: Wenn es aktiviert bleibt, wird die App langsamer
   <data name="ChatDetail_MessageInput.PlaceholderText" xml:space="preserve">
     <value>Nachricht eingeben</value>
   </data>
+  <data name="ChatDetail_MentionEveryone" xml:space="preserve">
+    <value>Alle</value>
+  </data>
+  <data name="ChatDetail_MentionEveryoneDetail" xml:space="preserve">
+    <value>Alle Gruppenmitglieder erwähnen</value>
+  </data>
   <data name="ChatDetail_GroupOnlyAdminsCanSend.Text" xml:space="preserve">
     <value>Nur Admins können Nachrichten senden</value>
   </data>
@@ -379,6 +385,12 @@ Nach der Diagnose deaktivieren: Wenn es aktiviert bleibt, wird die App langsamer
   </data>
   <data name="ChatDetail_UnpinMessage" xml:space="preserve">
     <value>Nachricht lösen</value>
+  </data>
+  <data name="ChatDetail_CopyMessage" xml:space="preserve">
+    <value>Kopieren</value>
+  </data>
+  <data name="ChatDetail_ReplyMessage" xml:space="preserve">
+    <value>Antworten</value>
   </data>
   <data name="ChatDetail_PinFor24Hours" xml:space="preserve">
     <value>24 Stunden anheften</value>

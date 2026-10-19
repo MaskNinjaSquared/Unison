@@ -25,7 +25,8 @@ namespace Unison.Core.Helpers
             string quotedSenderName,
             string quotedParticipantJid,
             string quotedMessageId,
-            List<string> mentionedJids)
+            List<string> mentionedJids,
+            bool mentionAll = false)
         {
             return new ChatMessageContentSnapshot
             {
@@ -43,7 +44,8 @@ namespace Unison.Core.Helpers
                 QuotedSenderName = quotedSenderName,
                 QuotedParticipantJid = quotedParticipantJid,
                 QuotedMessageId = quotedMessageId,
-                MentionedJids = mentionedJids
+                MentionedJids = mentionedJids,
+                MentionAll = mentionAll
             };
         }
     }

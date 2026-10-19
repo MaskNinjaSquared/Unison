@@ -1,6 +1,7 @@
 using System;
 using Unison.Core.ViewModels;
 using Unison.Uwp.Helpers;
+using Unison.Uwp.UI.Helpers;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Media;
@@ -29,6 +30,7 @@ namespace Unison.Uwp.UI.Controls
             }
 
             var flyout = new MenuFlyout();
+            MessageBubbleContextActions.Add(flyout, vm);
 
             var playItem = new MenuFlyoutItem { Text = playLabel };
             if (iconFont != null)

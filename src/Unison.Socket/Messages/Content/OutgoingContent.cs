@@ -40,6 +40,12 @@ namespace Unison.Socket.Messages.Content
         /// <summary>JIDs written as @mentions in the text; the phone highlights these.</summary>
         public IList<string> Mentions { get; private set; }
 
+        /// <summary>
+        /// Mention every current member. On the wire this is <c>ContextInfo.nonJidMentions</c>,
+        /// not one JID per person. The body keeps the localized word the sender inserted.
+        /// </summary>
+        public bool MentionAll { get; set; }
+
         public QuotedMessage Quoted { get; set; }
 
         /// <summary>Seconds until the message disappears, or zero when the chat has no timer.</summary>

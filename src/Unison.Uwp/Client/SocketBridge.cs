@@ -1135,9 +1135,43 @@ namespace Unison.Uwp.Client
             return RequireMessages().Receipts.MarkReadAsync(targets);
         }
 
-        public Task<string> SendTextMessageAsync(string jid, string text, string explicitMessageId = null)
+        public Task<string> SendTextMessageAsync(
+            string jid,
+            string text,
+            string explicitMessageId = null,
+            System.Collections.Generic.IList<string> mentions = null,
+            bool mentionAll = false,
+            OutgoingQuote quote = null)
         {
-            return SendAsync(jid, new TextContent(text), explicitMessageId);
+            var content = new TextContent(text) { MentionAll = mentionAll };
+            if (mentions != null)
+            {
+                for (int i = 0; i < mentions.Count; i++)
+                {
+                    if (!string.IsNullOrWhiteSpace(mentions[i]))
+                    {
+                        content.Mentions.Add(mentions[i]);
+                    }
+                }
+            }
+
+            if (quote != null && !string.IsNullOrWhiteSpace(quote.MessageId))
+            {
+                content.Quoted = new Unison.Socket.Messages.Content.QuotedMessage
+                {
+                    Key = new Unison.Socket.Messages.MessageEnvelopeKey
+                    {
+                        Id = quote.MessageId,
+                        RemoteJid = quote.ChatJid,
+                        FromMe = quote.FromMe,
+                        Participant = quote.ParticipantJid
+                    },
+                    Participant = quote.ParticipantJid,
+                    Message = QuotedMessageStub.Create(quote)
+                };
+            }
+
+            return SendAsync(jid, content, explicitMessageId);
         }
 
         public async Task<string> SendImageMessageAsync(

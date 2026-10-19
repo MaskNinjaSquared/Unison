@@ -40,8 +40,14 @@ namespace Unison.Core.Helpers
 
         // No ConfigureAwait(false) anywhere below: the host mutates the in-memory timeline,
         // which is only safe from the thread the caller (the UI) started on.
-        public async Task<ChatMessage> SendAsync(string jid, string text)
+        public Task<ChatMessage> SendAsync(string jid, string text)
         {
+            return SendAsync(jid, new OutgoingTextMentions { Text = text });
+        }
+
+        public async Task<ChatMessage> SendAsync(string jid, OutgoingTextMentions message)
+        {
+            string text = message != null ? message.Text : null;
             if (string.IsNullOrWhiteSpace(jid))
             {
                 throw new ArgumentException("A destination JID is required", nameof(jid));
@@ -56,7 +62,7 @@ namespace Unison.Core.Helpers
             string messageId = _newMessageId();
             _host.RecordSendAttempt(messageId);
 
-            ChatMessage message = OutgoingChatMessage.Text(
+            ChatMessage bubble = OutgoingChatMessage.Text(
                 new OutgoingMessageStamp
                 {
                     Id = messageId,
@@ -65,19 +71,22 @@ namespace Unison.Core.Helpers
                     TimestampUtc = _utcNow(),
                     Status = ChatMessage.StatusPending
                 },
-                text);
+                text,
+                message.Mentions,
+                message.MentionAll,
+                message.Quote);
 
-            _host.AcceptOutgoing(chatJid, message);
-            await _host.ShowLocalSendPreviewAsync(chatJid, message, ChatPreviewKind.Text);
+            _host.AcceptOutgoing(chatJid, bubble);
+            await _host.ShowLocalSendPreviewAsync(chatJid, bubble, ChatPreviewKind.Text);
             _host.NotifyChatChanged(chatJid);
-            await _host.PersistLiveAsync(chatJid, message);
+            await _host.PersistLiveAsync(chatJid, bubble);
 
-            Exception failure = await SendWithRetryAsync(chatJid, text, messageId);
+            Exception failure = await SendWithRetryAsync(chatJid, message, messageId);
             if (failure == null)
             {
-                if (OutgoingSendSettlement.ShouldPromotePending(message.Status))
+                if (OutgoingSendSettlement.ShouldPromotePending(bubble.Status))
                 {
-                    message.Status = SelfChatStatusPolicy.Resolve(
+                    bubble.Status = SelfChatStatusPolicy.Resolve(
                         ChatMessage.StatusSent,
                         _jids.IsSelfLinked(chatJid));
                 }
@@ -86,19 +95,19 @@ namespace Unison.Core.Helpers
             }
             else
             {
-                message.Status = ChatMessage.StatusFailed;
+                bubble.Status = ChatMessage.StatusFailed;
                 _host.RecordSendFailure(messageId, failure);
                 _host.ReportError(failure);
             }
 
-            await _host.PersistLiveAsync(chatJid, message);
-            _host.QueueForPersist(chatJid, message);
+            await _host.PersistLiveAsync(chatJid, bubble);
+            _host.QueueForPersist(chatJid, bubble);
             _host.NotifyChatChanged(chatJid);
-            return message;
+            return bubble;
         }
 
         /// <summary>Null when the server took the message; otherwise the last error seen.</summary>
-        private async Task<Exception> SendWithRetryAsync(string chatJid, string text, string messageId)
+        private async Task<Exception> SendWithRetryAsync(string chatJid, OutgoingTextMentions message, string messageId)
         {
             Exception lastError = null;
             for (int attempt = 1; attempt <= OutgoingTextSendRetry.MaxAttempts; attempt++)
@@ -106,7 +115,10 @@ namespace Unison.Core.Helpers
                 OutgoingSendAttempt result = await _host.TrySendTextOnceAsync(new OutgoingTextAttempt
                 {
                     ChatJid = chatJid,
-                    Text = text,
+                    Text = message.Text,
+                    Mentions = message.Mentions,
+                    MentionAll = message.MentionAll,
+                    Quote = message.Quote,
                     MessageId = messageId,
                     Attempt = attempt,
                     ConnectTimeout = OutgoingTextSendRetry.ConnectTimeout(attempt),

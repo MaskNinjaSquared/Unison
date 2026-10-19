@@ -249,6 +249,26 @@ namespace Unison.Core.ViewModels
                 () => ActiveChat != null &&
                       !string.IsNullOrWhiteSpace(ActiveChat.JID) &&
                       ActiveChat.Status == ChatStatus.Archived);
+            _messageActions.PropertyChanged += OnMessageActionsChanged;
+            CopySelectedMessageCommand = new RelayCommand(
+                () => SelectedMessage?.CopyCommand.Execute(null),
+                () => _messageActions.CanCopy);
+            ReplySelectedMessageCommand = new RelayCommand(
+                () => BeginReply(SelectedMessage),
+                () => _messageActions.CanReply);
+            DismissReplyCommand = new RelayCommand(DismissReply);
+            PinSelectedFor24HoursCommand = new RelayCommand(
+                () => _ = PinSelectedAsync(true, MessageActionSelection.PinFor24HoursSeconds),
+                () => _messageActions.CanPin);
+            PinSelectedFor7DaysCommand = new RelayCommand(
+                () => _ = PinSelectedAsync(true, MessageActionSelection.PinFor7DaysSeconds),
+                () => _messageActions.CanPin);
+            PinSelectedFor30DaysCommand = new RelayCommand(
+                () => _ = PinSelectedAsync(true, MessageActionSelection.PinFor30DaysSeconds),
+                () => _messageActions.CanPin);
+            UnpinSelectedMessageCommand = new RelayCommand(
+                () => _ = PinSelectedAsync(false, 0),
+                () => _messageActions.CanUnpin);
             MuteFor8HoursCommand = new RelayCommand(
                 () => _ = SetLocalMuteAsync(ChatMuteHelper.FromNow(ChatMuteHelper.EightHours)),
                 () => CanMuteActiveChat());
@@ -331,6 +351,8 @@ namespace Unison.Core.ViewModels
             {
                 vm.PinnedChanged -= OnBubblePinnedChanged;
                 vm.PinnedChanged += OnBubblePinnedChanged;
+                vm.ReplyRequested -= OnBubbleReplyRequested;
+                vm.ReplyRequested += OnBubbleReplyRequested;
                 vm.AttachMentionLookup(ActiveChat?.MentionLookup);
             }
 
@@ -446,11 +468,57 @@ namespace Unison.Core.ViewModels
             }
 
             vm.PinnedChanged -= OnBubblePinnedChanged;
+            vm.ReplyRequested -= OnBubbleReplyRequested;
             vm.Detach();
         }
 
         private void OnBubblePinnedChanged(object sender, EventArgs e) =>
             MessagePinnedChanged?.Invoke(this, EventArgs.Empty);
+
+        private void OnBubbleReplyRequested(object sender, EventArgs e)
+        {
+            BeginReply(sender as ChatMessageViewModel);
+        }
+
+        private ChatMessageViewModel _composerReply;
+
+        /// <summary>The bubble the composer is replying to. The same instance the timeline shows.</summary>
+        public ChatMessageViewModel ComposerReply
+        {
+            get => _composerReply;
+            private set
+            {
+                if (ReferenceEquals(_composerReply, value))
+                {
+                    return;
+                }
+
+                _composerReply = value;
+                OnPropertyChanged(nameof(ComposerReply));
+                OnPropertyChanged(nameof(IsReplyBarOpen));
+            }
+        }
+
+        public bool IsReplyBarOpen => _composerReply != null;
+
+        public ICommand DismissReplyCommand { get; }
+
+        /// <summary>Opens the reply bar on this bubble and closes the Legacy action bar.</summary>
+        public void BeginReply(ChatMessageViewModel message)
+        {
+            if (message == null || message.Model == null || string.IsNullOrWhiteSpace(message.Model.Id))
+            {
+                return;
+            }
+
+            ComposerReply = message;
+            DismissMessageActions();
+        }
+
+        public void DismissReply()
+        {
+            ComposerReply = null;
+        }
 
         // ── Events ────────────────────────────────────────────────────────────
 
@@ -525,6 +593,9 @@ namespace Unison.Core.ViewModels
                 RaiseComposerCommandsChanged();
                 OnPropertyChanged(nameof(IsGroupLockedForMessages));
                 OnPropertyChanged(nameof(CanLoadMore));
+                CloseMentionMenu();
+                DismissMessageActions();
+                DismissReply();
             }
         }
 
@@ -539,9 +610,256 @@ namespace Unison.Core.ViewModels
             get => _messageText;
             set
             {
-                Set(ref _messageText, value);
+                if (_composerHeld)
+                {
+                    Set(ref _messageText, value);
+                    RaiseSendMessageCanExecuteChanged();
+                    return;
+                }
+
+                string shown = _mentions.SetText(value);
+                Set(ref _messageText, shown);
+                if (!string.Equals(shown, value, StringComparison.Ordinal))
+                {
+                    OnPropertyChanged(nameof(MessageText));
+                }
+
                 RaiseSendMessageCanExecuteChanged();
             }
+        }
+
+        private readonly ComposerMentionDraft _mentions = new ComposerMentionDraft();
+        private bool _composerHeld;
+        private int _mentionTokenStart;
+        private int _mentionTokenLength;
+        private int _mentionTokenCaret;
+
+        /// <summary>Rows for the @ menu. Everyone stays first. Empty when the menu is closed.</summary>
+        public ObservableCollection<MentionChoice> MentionChoices { get; } = new ObservableCollection<MentionChoice>();
+
+        public bool IsMentionMenuOpen
+        {
+            get => _mentionMenuOpen;
+            private set => Set(ref _mentionMenuOpen, value);
+        }
+
+        private readonly MessageActionSelection _messageActions = new MessageActionSelection();
+
+        /// <summary>The bubble the Legacy command bar is acting on. Null when the bar is closed.</summary>
+        public ChatMessageViewModel SelectedMessage => _messageActions.Message;
+
+        public bool IsMessageActionsOpen => _messageActions.IsOpen;
+
+        public bool CanPinSelectedMessage => _messageActions.CanPin;
+
+        public bool CanUnpinSelectedMessage => _messageActions.CanUnpin;
+
+        public ICommand CopySelectedMessageCommand { get; }
+
+        public ICommand ReplySelectedMessageCommand { get; }
+
+        public ICommand PinSelectedFor24HoursCommand { get; }
+
+        public ICommand PinSelectedFor7DaysCommand { get; }
+
+        public ICommand PinSelectedFor30DaysCommand { get; }
+
+        public ICommand UnpinSelectedMessageCommand { get; }
+
+        /// <summary>
+        /// Opens the Legacy action bar on this bubble. The same bubble again closes it.
+        /// </summary>
+        public void SelectMessage(ChatMessageViewModel message)
+        {
+            _messageActions.Select(message);
+        }
+
+        public void DismissMessageActions()
+        {
+            _messageActions.Dismiss();
+        }
+
+        private void OnMessageActionsChanged(object sender, PropertyChangedEventArgs e)
+        {
+            OnPropertyChanged(nameof(SelectedMessage));
+            OnPropertyChanged(nameof(IsMessageActionsOpen));
+            OnPropertyChanged(nameof(CanPinSelectedMessage));
+            OnPropertyChanged(nameof(CanUnpinSelectedMessage));
+            (CopySelectedMessageCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (ReplySelectedMessageCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (PinSelectedFor24HoursCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (PinSelectedFor7DaysCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (PinSelectedFor30DaysCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (UnpinSelectedMessageCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        }
+
+        private async Task PinSelectedAsync(bool pin, uint durationSeconds)
+        {
+            ChatMessageViewModel message = SelectedMessage;
+            if (message == null)
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(message.Model.RemoteJid) && ActiveChat != null)
+            {
+                message.Model.RemoteJid = ActiveChat.JID;
+            }
+
+            await message.SetPinnedAsync(pin, durationSeconds);
+        }
+
+        private bool _mentionMenuOpen;
+
+        public int MentionSelectedIndex
+        {
+            get => _mentionSelectedIndex;
+            private set => Set(ref _mentionSelectedIndex, value);
+        }
+
+        private int _mentionSelectedIndex;
+
+        /// <summary>Where the caret belongs after a mention is inserted. -1 when nothing was inserted.</summary>
+        public int MentionInsertCaret { get; private set; } = -1;
+
+        /// <summary>
+        /// Opens or refreshes the @ menu from the field text and caret.
+        /// Groups only. A direct chat never offers members.
+        /// </summary>
+        public void UpdateMentionQuery(string text, int caret)
+        {
+            MentionInsertCaret = -1;
+            if (ActiveChat == null || !ActiveChat.IsGroup || ActiveChat.IsGroupLockedForMessages)
+            {
+                CloseMentionMenu();
+                return;
+            }
+
+            int at;
+            string query;
+            int length;
+            if (!MentionSearch.TryReadToken(text, caret, out at, out query, out length))
+            {
+                CloseMentionMenu();
+                return;
+            }
+
+            _mentionTokenStart = at;
+            _mentionTokenLength = length;
+            _mentionTokenCaret = caret;
+            string everyone = _strings != null
+                ? _strings.Get("ChatDetail_MentionEveryone", "Everyone")
+                : "Everyone";
+            string detail = _strings != null
+                ? _strings.Get("ChatDetail_MentionEveryoneDetail", "Mention all group members")
+                : "Mention all group members";
+            IReadOnlyList<MentionChoice> rows = MentionSearch.Search(
+                ActiveChat.GroupMembers,
+                query,
+                everyone,
+                detail,
+                ActiveChat.AvatarUrl,
+                IsCurrentMember);
+
+            MentionChoices.Clear();
+            for (int i = 0; i < rows.Count; i++)
+            {
+                MentionChoices.Add(rows[i]);
+            }
+
+            MentionSelectedIndex = -1;
+            MentionSelectedIndex = 0;
+            IsMentionMenuOpen = MentionChoices.Count > 0;
+        }
+
+        private bool IsCurrentMember(GroupMember member)
+        {
+            if (member == null || _jids == null)
+            {
+                return false;
+            }
+
+            if (SelfIdentity.IsSelf(member.Jid, _jids) || SelfIdentity.IsSelf(member.Lid, _jids))
+            {
+                return true;
+            }
+
+            string phone = member.PhoneNumber;
+            if (string.IsNullOrWhiteSpace(phone))
+            {
+                return false;
+            }
+
+            if (phone.IndexOf('@') < 0)
+            {
+                phone = phone + "@s.whatsapp.net";
+            }
+
+            return SelfIdentity.IsSelf(phone, _jids);
+        }
+
+        public void MoveMentionSelection(int delta)
+        {
+            if (!IsMentionMenuOpen || MentionChoices.Count == 0)
+            {
+                return;
+            }
+
+            int next = _mentionSelectedIndex + delta;
+            if (next < 0)
+            {
+                next = MentionChoices.Count - 1;
+            }
+            else if (next >= MentionChoices.Count)
+            {
+                next = 0;
+            }
+
+            MentionSelectedIndex = next;
+        }
+
+        /// <summary>Inserts the highlighted row. Returns false when the menu is closed.</summary>
+        public bool TryAcceptSelectedMention()
+        {
+            if (!IsMentionMenuOpen || MentionChoices.Count == 0)
+            {
+                return false;
+            }
+
+            int index = _mentionSelectedIndex;
+            if (index < 0 || index >= MentionChoices.Count)
+            {
+                index = 0;
+            }
+
+            AcceptMention(MentionChoices[index]);
+            return true;
+        }
+
+        public void AcceptMention(MentionChoice choice)
+        {
+            if (choice == null)
+            {
+                return;
+            }
+
+            string shown = _mentions.Insert(choice, _mentionTokenCaret, _mentionTokenLength);
+            MentionInsertCaret = _mentions.CaretAfterInsert(_mentionTokenStart, choice.Name);
+            _messageText = shown;
+            OnPropertyChanged(nameof(MessageText));
+            RaiseSendMessageCanExecuteChanged();
+            CloseMentionMenu();
+        }
+
+        private void CloseMentionMenu()
+        {
+            if (MentionChoices.Count > 0)
+            {
+                MentionChoices.Clear();
+            }
+
+            MentionSelectedIndex = 0;
+            IsMentionMenuOpen = false;
         }
 
         public bool IsSending
@@ -1274,6 +1592,15 @@ namespace Unison.Core.ViewModels
             {
                 OnPropertyChanged(nameof(IsGroupLockedForMessages));
                 RaiseComposerCommandsChanged();
+                if (ActiveChat == null || ActiveChat.IsGroupLockedForMessages)
+                {
+                    CloseMentionMenu();
+                }
+            }
+
+            if (e.PropertyName == nameof(ChatItem.GroupMembers) && IsMentionMenuOpen)
+            {
+                UpdateMentionQuery(_messageText, _mentionTokenCaret);
             }
         }
 
@@ -2276,10 +2603,20 @@ namespace Unison.Core.ViewModels
         {
             if (string.IsNullOrWhiteSpace(MessageText) || _activeChat == null) return;
 
-            string text = MessageText;
             string jid = _activeChat.JID;
+            OutgoingTextMentions wire = _mentions.GetMessage();
+            if (ComposerReply != null)
+            {
+                wire.Quote = OutgoingQuote.From(ComposerReply.Model, jid);
+            }
+            string text = _mentions.Text;
             IsSending = true;
-            MessageText = string.Empty;
+            _composerHeld = true;
+            _messageText = string.Empty;
+            OnPropertyChanged(nameof(MessageText));
+            CloseMentionMenu();
+            DismissReply();
+            RaiseSendMessageCanExecuteChanged();
             // Optimistic bubble is queued inside the service before transport completes —
             // ask the view to stick to bottom immediately.
             MessageSent?.Invoke(this, EventArgs.Empty);
@@ -2287,18 +2624,27 @@ namespace Unison.Core.ViewModels
 
             try
             {
-                await _messageService.SendTextMessageAsync(jid, text);
+                await _messageService.SendTextMessageAsync(jid, wire);
+                _mentions.Clear();
+                _composerHeld = false;
+                if (!string.IsNullOrEmpty(_messageText))
+                {
+                    _mentions.SetText(_messageText);
+                }
+
                 MessageSent?.Invoke(this, EventArgs.Empty);
                 _uiSounds?.PlayMessageSent();
                 LogSend("text-ok", "jid=" + jid);
             }
             catch (UnisonUserException ex)
             {
+                _composerHeld = false;
                 MessageText = text;
                 await PresentUserExceptionAsync(ex, "text-fail");
             }
             catch (Exception ex)
             {
+                _composerHeld = false;
                 MessageText = text;
                 await PresentUserExceptionAsync(
                     new TextSendException("SendText failed: " + ex.Message, ex),
@@ -2306,6 +2652,7 @@ namespace Unison.Core.ViewModels
             }
             finally
             {
+                _composerHeld = false;
                 IsSending = false;
             }
         }

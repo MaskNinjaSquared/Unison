@@ -20,7 +20,7 @@
     <PackageCertificateThumbprint>
     </PackageCertificateThumbprint>
     <!-- APPX4001: declare bundle platforms explicitly -->
-    <AppxBundlePlatforms>arm</AppxBundlePlatforms>
+    <AppxBundlePlatforms>x64|arm</AppxBundlePlatforms>
     <!-- PRI257: avoid NuGet satellite assemblies overriding app default language -->
     <AppxGeneratePrisForPortableLibrariesEnabled>false</AppxGeneratePrisForPortableLibrariesEnabled>
     <!-- Prefer 64-bit ILC; can avoid some 1.7.6 Analysis NREs -->
@@ -245,6 +245,7 @@
     <!-- Client components -->
     <Compile Include="Client\IWhatsAppSocket.cs" />
     <Compile Include="Client\SocketBridge.cs" />
+    <Compile Include="Client\QuotedMessageStub.cs" />
     <Compile Include="Client\SocketContracts.cs" />
     <Compile Include="Client\AuthStore.cs" />
     <Compile Include="Client\FileKeyStore.cs" />
@@ -259,6 +260,7 @@
     <Compile Include="Services\AppLifecycleService.cs" />
     <Compile Include="Services\UriLauncherService.cs" />
     <Compile Include="Services\FilePickerService.cs" />
+    <Compile Include="Services\CopyService.cs" />
     <Compile Include="Services\AudioExportService.cs" />
     <Compile Include="UI\Controls\ChatAudioOverflowMenu.cs" />
     <Compile Include="Services\ShareService.cs" />
@@ -440,6 +442,8 @@
     <Compile Include="UI\Triggers\WindowWidthRangeTrigger.cs" />
     <Compile Include="UI\Helpers\ChatPreviewKindPresentation.cs" />
     <Compile Include="UI\Helpers\CommentRichService.cs" />
+    <Compile Include="UI\Helpers\MentionComposerInput.cs" />
+    <Compile Include="UI\Helpers\MessageBubbleContextActions.cs" />
     <Compile Include="UI\Helpers\DesktopCursor.cs" />
     <Compile Include="UI\Helpers\DesktopCursorKind.cs" />
     <Compile Include="UI\Helpers\RichTextBuilder.cs" />
@@ -461,6 +465,31 @@
     </Compile>
     <Compile Include="UI\Controls\StatusListAvatarControl.xaml.cs">
       <DependentUpon>StatusListAvatarControl.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Converters\ChatMessageKindVisibilityConverter.cs" />
+    <Compile Include="UI\Controls\Reply\ReplyComposeBar.xaml.cs">
+      <DependentUpon>ReplyComposeBar.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Controls\Reply\ReplyTextChrome.xaml.cs">
+      <DependentUpon>ReplyTextChrome.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Controls\Reply\ReplyImageChrome.xaml.cs">
+      <DependentUpon>ReplyImageChrome.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Controls\Reply\ReplyVideoChrome.xaml.cs">
+      <DependentUpon>ReplyVideoChrome.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Controls\Reply\ReplyStickerChrome.xaml.cs">
+      <DependentUpon>ReplyStickerChrome.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Controls\Reply\ReplyAudioChrome.xaml.cs">
+      <DependentUpon>ReplyAudioChrome.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Controls\Reply\ReplyDocumentChrome.xaml.cs">
+      <DependentUpon>ReplyDocumentChrome.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Controls\MentionSuggestList.xaml.cs">
+      <DependentUpon>MentionSuggestList.xaml</DependentUpon>
     </Compile>
     <Compile Include="UI\Controls\ChatDateSeparator.xaml.cs">
       <DependentUpon>ChatDateSeparator.xaml</DependentUpon>
@@ -719,6 +748,38 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="UI\Controls\StatusListAvatarControl.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Controls\MentionSuggestList.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Controls\Reply\ReplyComposeBar.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Controls\Reply\ReplyTextChrome.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Controls\Reply\ReplyImageChrome.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Controls\Reply\ReplyVideoChrome.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Controls\Reply\ReplyStickerChrome.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Controls\Reply\ReplyAudioChrome.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Controls\Reply\ReplyDocumentChrome.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

@@ -252,6 +252,12 @@
   <data name="ChatDetail_MessageInput.PlaceholderText" xml:space="preserve">
     <value>Сообщение</value>
   </data>
+  <data name="ChatDetail_MentionEveryone" xml:space="preserve">
+    <value>Все</value>
+  </data>
+  <data name="ChatDetail_MentionEveryoneDetail" xml:space="preserve">
+    <value>Упомянуть всех участников группы</value>
+  </data>
   <data name="ChatDetail_GroupOnlyAdminsCanSend.Text" xml:space="preserve">
     <value>Только администраторы могут отправлять сообщения</value>
   </data>
@@ -320,6 +326,12 @@
   </data>
   <data name="ChatDetail_UnpinMessage" xml:space="preserve">
     <value>Открепить сообщение</value>
+  </data>
+  <data name="ChatDetail_CopyMessage" xml:space="preserve">
+    <value>Копировать</value>
+  </data>
+  <data name="ChatDetail_ReplyMessage" xml:space="preserve">
+    <value>Ответить</value>
   </data>
   <data name="ChatDetail_PinFor24Hours" xml:space="preserve">
     <value>Закрепить на 24 ч.</value>

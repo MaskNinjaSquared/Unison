@@ -506,7 +506,8 @@ namespace Unison.Uwp.Services.WhatsApp
             out string quotedMessageId,
             out ChatPreviewKind quotedKind,
             out List<string> mentionedJids,
-            out bool isForwarded)
+            out bool isForwarded,
+            out bool mentionAll)
         {
             QuotedContext context = QuotedContext.Read(msg);
 
@@ -516,6 +517,7 @@ namespace Unison.Uwp.Services.WhatsApp
             quotedKind = context.QuotedKind;
             mentionedJids = context.MentionedJids;
             isForwarded = context.IsForwarded;
+            mentionAll = context.MentionAll;
 
             // Naming the author is the one part that is not in the envelope: it needs the account,
             // the alias table and the directory, which is why the reading above stops here.
@@ -1419,7 +1421,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 SetIncomingMessagePumpStage("model", e);
                 // Domain ChatMessage via the MessageFacade (Kind resolved in mapper).
-                ApplyContextInfoExtras(e.Message, out string quotedText, out string quotedSender, out string quotedParticipantJid, out string quotedMessageId, out var quotedKind, out var mentionedJids, out bool isForwarded);
+                ApplyContextInfoExtras(e.Message, out string quotedText, out string quotedSender, out string quotedParticipantJid, out string quotedMessageId, out var quotedKind, out var mentionedJids, out bool isForwarded, out bool mentionAll);
 
                 if (_messageService == null)
                 {
@@ -1452,7 +1454,8 @@ namespace Unison.Uwp.Services.WhatsApp
                         quotedSender,
                         quotedParticipantJid,
                         quotedMessageId,
-                        mentionedJids));
+                        mentionedJids,
+                        mentionAll));
 
                 IncomingMediaMetadata.Apply(chatMessage, renderInfo);
 

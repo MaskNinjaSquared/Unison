@@ -4,7 +4,8 @@ using Windows.UI.Xaml.Controls;
 namespace Unison.Uwp.UI.Controls
 {
     /// <summary>
-    /// WhatsApp Legacy bubble chrome. Same tails as Unison, inset 10px from the outer edge.
+    /// WhatsApp Legacy bubble chrome. 1:1 tails sit 10px in from the outer edge.
+    /// In a group the received tail is flush left, pointing at the sender photo, same place as Unison.
     /// </summary>
     public sealed partial class LegacyMessageBubbleChrome : UserControl
     {
