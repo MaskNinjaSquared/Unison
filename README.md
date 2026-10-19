@@ -1,7 +1,7 @@
+<img width="1023" height="733" alt="image" src="https://github.com/user-attachments/assets/5fca56ce-b9f7-4bae-b39c-a0f03bf6576a" />
+
+
 # Unison
-<img width="1024" height="505" alt="UNISON LOGO" src="https://github.com/user-attachments/assets/9f2675d6-6c8c-4e4c-8578-e2575d80af49" />
-
-
 UWP WhatsApp Multi-Device client, aimed mainly at Windows 10 Mobile. Built as a Baileys-style secondary device.
 
 
