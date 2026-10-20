@@ -743,6 +743,7 @@ namespace Unison.Core.ViewModels
                 nameof(CanDownloadImage),
                 nameof(ShowStickerError),
                 nameof(ShowStickerLoading),
+                nameof(ShowStickerImage),
                 nameof(IsSticker),
                 nameof(HasImage),
                 nameof(ImageUri),
@@ -753,6 +754,7 @@ namespace Unison.Core.ViewModels
                 nameof(HasInfoPreviewUri),
                 nameof(NeedsImageDownload),
                 nameof(IsImage),
+                nameof(CanOpenImageViewer),
                 nameof(ShowTextContent));
             RaiseMediaCommandsChanged();
         }
@@ -842,6 +844,10 @@ namespace Unison.Core.ViewModels
         public bool ShowImageDownloadPlaceholderGlyph => NeedsImageDownload && !HasMediaThumbnail;
         /// <summary>Protocol image bubble (Kind.Image) — footer photo glyph.</summary>
         public bool IsImage => Model.IsImage;
+        /// <summary>Photo bubble with a local file — opens the image viewer on tap.</summary>
+        public bool CanOpenImageViewer => IsImage && HasImage;
+        /// <summary>Sticker with a local file — shown inline, never opens the image viewer.</summary>
+        public bool ShowStickerImage => IsSticker && HasImage;
         public bool NeedsImageDownload => Model.NeedsImageDownload;
         public bool CanDownloadImage => Model.CanDownloadImage;
         public bool IsSticker => Model.IsSticker;

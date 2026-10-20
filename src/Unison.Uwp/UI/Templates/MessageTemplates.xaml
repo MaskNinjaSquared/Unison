@@ -99,7 +99,7 @@
                         <Button x:Name="SentImageOpenButton"
                                 Click="ImageOpenButton_Click"
                                 Style="{StaticResource TransparentMediaButtonStyle}"
-                                x:Load="{x:Bind HasImage, Mode=OneWay}"
+                                x:Load="{x:Bind CanOpenImageViewer, Mode=OneWay}"
                                 HorizontalAlignment="Left"
                                 Margin="0,0,0,6"
                                 Padding="0">
@@ -108,6 +108,14 @@
                                    Stretch="Uniform"
                                    HorizontalAlignment="Left"/>
                         </Button>
+                        <Image x:Name="SentStickerImage"
+                               Source="{x:Bind ImageUri, Mode=OneWay, Converter={StaticResource StringToImageSourceConverter}, ConverterParameter=320}"
+                               MaxWidth="220"
+                               Stretch="Uniform"
+                               HorizontalAlignment="Left"
+                               Margin="0,0,0,6"
+                               IsHitTestVisible="False"
+                               x:Load="{x:Bind ShowStickerImage, Mode=OneWay}"/>
                         <Grid x:Name="SentStickerLoading"
                               Width="96" Height="96" Margin="0,0,0,6"
                               x:Load="{x:Bind ShowStickerLoading, Mode=OneWay}">
@@ -671,7 +679,7 @@
                         <Button x:Name="ReceivedImageOpenButton"
                                 Click="ImageOpenButton_Click"
                                 Style="{StaticResource TransparentMediaButtonStyle}"
-                                x:Load="{x:Bind HasImage, Mode=OneWay}"
+                                x:Load="{x:Bind CanOpenImageViewer, Mode=OneWay}"
                                 HorizontalAlignment="Left"
                                 Margin="0,0,0,6"
                                 Padding="0">
@@ -680,6 +688,14 @@
                                    Stretch="Uniform"
                                    HorizontalAlignment="Left"/>
                         </Button>
+                        <Image x:Name="ReceivedStickerImage"
+                               Source="{x:Bind ImageUri, Mode=OneWay, Converter={StaticResource StringToImageSourceConverter}, ConverterParameter=320}"
+                               MaxWidth="220"
+                               Stretch="Uniform"
+                               HorizontalAlignment="Left"
+                               Margin="0,0,0,6"
+                               IsHitTestVisible="False"
+                               x:Load="{x:Bind ShowStickerImage, Mode=OneWay}"/>
                         <Grid x:Name="ReceivedStickerLoading"
                               Width="96" Height="96" Margin="0,0,0,6"
                               x:Load="{x:Bind ShowStickerLoading, Mode=OneWay}">

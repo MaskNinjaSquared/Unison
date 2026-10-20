@@ -1200,7 +1200,7 @@ namespace Unison.Uwp.UI.Views
         {
             var element = sender as FrameworkElement;
             var vm = element?.DataContext as ChatMessageViewModel;
-            if (vm == null || !vm.HasImage)
+            if (vm == null || !vm.CanOpenImageViewer)
             {
                 return;
             }
@@ -1212,7 +1212,7 @@ namespace Unison.Uwp.UI.Views
 
             // W10M: cached .webp ImageUri → PNG display before the viewer opens.
             await vm.EnsureImageReadyAsync(showErrorDialog: false);
-            if (vm.HasImage)
+            if (vm.CanOpenImageViewer)
             {
                 OpenImageViewer(vm);
             }
@@ -1220,7 +1220,7 @@ namespace Unison.Uwp.UI.Views
 
         public async void OpenInfoImage(ChatMessageViewModel vm)
         {
-            if (vm == null)
+            if (vm == null || vm.IsSticker)
             {
                 return;
             }
@@ -1243,7 +1243,7 @@ namespace Unison.Uwp.UI.Views
                     await vm.EnsureImageReadyAsync(showErrorDialog: false);
                 }
 
-                if (vm.HasImage)
+                if (vm.CanOpenImageViewer)
                 {
                     OpenImageViewer(vm);
                 }

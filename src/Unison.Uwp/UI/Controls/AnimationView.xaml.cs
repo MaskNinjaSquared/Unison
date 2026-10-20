@@ -1,4 +1,5 @@
 using System;
+using Windows.Foundation.Metadata;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Media;
@@ -10,8 +11,18 @@ namespace Unison.Uwp.UI.Controls
     /// <see cref="MediaElement"/>. Viewport leave always pauses; resume depends on
     /// <see cref="ResumeWhenVisible"/> (Low+ after user play; never on Unsupported).
     /// </summary>
+    /// <remarks>
+    /// <c>EffectiveViewportChanged</c> needs UniversalApiContract 7 (1809+). On Creators
+    /// Update (15063 / MinVersion) subscribing throws and tears down the chat — gate it.
+    /// </remarks>
     public sealed partial class AnimationView : UserControl
     {
+        /// <summary>1809+ only; false on Windows 10 Mobile Creators Update.</summary>
+        private static readonly bool SupportsEffectiveViewport =
+            ApiInformation.IsEventPresent(
+                "Windows.UI.Xaml.FrameworkElement",
+                "EffectiveViewportChanged");
+
         private bool _viewportRegistered;
         private bool _inViewport = true;
 
@@ -195,7 +206,7 @@ namespace Unison.Uwp.UI.Controls
 
         private void EnsureViewportWatch()
         {
-            if (_viewportRegistered)
+            if (_viewportRegistered || !SupportsEffectiveViewport)
             {
                 return;
             }
