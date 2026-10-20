@@ -17,6 +17,12 @@ Codepoints (Private Use Area):
   EB0D  flash      (cam-flash.png)          flash on
   EB0E  flashoff   (cam-flash-off.png)      flash off
   EB0F  flashauto  (cam-flash-auto.png)     flash auto (reserved; not on chrome yet)
+  EB10  picture    (attach-picture.png)     attach camera / photo tile
+  EB11  video      (attach-video.png)       attach media / video tile
+  EB12  document   (attach-doc.png)         attach file tile
+  EB13  contact    (attach-contact.png)     attach contact tile
+  EB14  audio      (attach-audio.png)       attach audio tile
+  EB15  location   (attach-location.png)    attach location tile
 
 Ink is read from alpha only (source colour is ignored; XAML sets Foreground).
 Each glyph is cropped to its own ink and fitted into the same square box,
@@ -62,6 +68,12 @@ GLYPHS = [
     ("flash", 0xEB0D, "cam-flash.png", 0.90),
     ("flashoff", 0xEB0E, "cam-flash-off.png", 0.90),
     ("flashauto", 0xEB0F, "cam-flash-auto.png", 0.90),
+    ("picture", 0xEB10, "attach-picture.png", 0.92),
+    ("video", 0xEB11, "attach-video.png", 0.92),
+    ("document", 0xEB12, "attach-doc.png", 0.92),
+    ("contact", 0xEB13, "attach-contact.png", 0.92),
+    ("audio", 0xEB14, "attach-audio.png", 0.92),
+    ("location", 0xEB15, "attach-location.png", 0.92),
 ]
 
 

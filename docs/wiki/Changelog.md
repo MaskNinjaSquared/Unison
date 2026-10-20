@@ -2,6 +2,13 @@
 
 Newest first.
 
+## 2.0.18 — legacy attach icons + toast deep-link sync UI
+
+WhatsApp Legacy attach tiles use dedicated glyphs (picture, video, doc, audio,
+contact, location). Toast/tile cold open keeps only "Preparing conversations…"
+on the list until the conversation loads — "Synchronizing…" is deferred and
+flushed after deep-link release (warm toast only hides the sync line, no overlay).
+
 ## 2.0.13 — camera preview orientation on Mobile
 
 In-chat camera preview and stills were sideways on portrait-first phones because

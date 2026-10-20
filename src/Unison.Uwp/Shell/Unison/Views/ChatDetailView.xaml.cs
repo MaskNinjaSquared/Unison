@@ -17,7 +17,7 @@ using global::Unison.Uwp.Client;
 using global::Unison.Uwp.Helpers;
 using global::Unison.Uwp.Services;
 using global::Unison.Uwp.Services.WhatsApp;
-using Unison.Uwp.UI.Helpers;
+using global::Unison.Uwp.UI.Helpers;
 using Windows.Foundation;
 using Windows.Media;
 using Windows.Media.Core;

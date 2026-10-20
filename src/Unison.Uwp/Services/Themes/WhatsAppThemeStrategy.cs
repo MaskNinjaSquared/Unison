@@ -1,10 +1,12 @@
 using System;
 using System.Threading.Tasks;
 using Unison.Core.Contracts;
+using Unison.Core.Models;
 using Unison.Core.ViewModels;
 using Windows.UI;
 using Windows.UI.ViewManagement;
 using Windows.UI.Xaml.Controls;
+using WhatsAppShell = global::Unison.Uwp.Shell.WhatsApp.Views;
 
 namespace Unison.Uwp.Services.Themes
 {
@@ -39,6 +41,36 @@ namespace Unison.Uwp.Services.Themes
 
         public override string ShellBrandIcon =>
             "ms-appx:///Assets/LegacyLogo/Square44x44Logo.targetsize-256_altform-unplated.png";
+
+        public override Type ResolveShellPage(NavigationDestination destination)
+        {
+            switch (destination)
+            {
+                case NavigationDestination.Chats:
+                    return typeof(WhatsAppShell.ChatsView);
+                case NavigationDestination.Archived:
+                    return typeof(WhatsAppShell.ArchivedChatsView);
+                default:
+                    return base.ResolveShellPage(destination);
+            }
+        }
+
+        public override bool TryResolveShellDestination(object content, out NavigationDestination destination)
+        {
+            if (content is WhatsAppShell.ChatsView)
+            {
+                destination = NavigationDestination.Chats;
+                return true;
+            }
+
+            if (content is WhatsAppShell.ArchivedChatsView)
+            {
+                destination = NavigationDestination.Archived;
+                return true;
+            }
+
+            return base.TryResolveShellDestination(content, out destination);
+        }
 
         /// <summary>
         /// Keep the system caption background; only tint title + window buttons green.

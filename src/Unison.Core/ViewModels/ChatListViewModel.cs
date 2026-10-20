@@ -87,6 +87,12 @@ namespace Unison.Core.ViewModels
         private CancellationTokenSource _refreshContinueCts;
         private string _lastSyncBannerLog;
 
+        /// <summary>
+        /// Sync banner deferred while toast/tile deep-link holds the list — flushed on release.
+        /// </summary>
+        private string _pendingDeepLinkSyncMessage;
+        private bool _pendingDeepLinkSyncVisible;
+
         /// <summary>Breadcrumbs for Mobile post-sync ListView materialize crashes (flushed to disk).</summary>
         private int _postSyncReleaseTicks;
         private int _postSyncRowRealized;
@@ -521,13 +527,21 @@ namespace Unison.Core.ViewModels
             TraceListLifecycle("attach", BuildListSnapshot());
             RaiseChatListMaterialized();
 
-            // First history sync only: keep the list unmaterialized until the persist
-            // quiet-finalize. Later bursts release progressively.
+            // First history sync / cold toast: keep the list unmaterialized. Deep-link
+            // hold shows only ChatList_Loading until the conversation is ready — sync
+            // banner is deferred and flushed on release.
             if (IsListHeldForSync)
             {
-                ShowSyncProgressOnly(
-                    _history.InitialSyncProcessedConversations,
-                    _history.InitialSyncTotalConversations);
+                if (IsDeepLinkHeldPreferLoading)
+                {
+                    ShowDeepLinkLoadingOverlay();
+                }
+                else
+                {
+                    ShowSyncProgressOnly(
+                        _history.InitialSyncProcessedConversations,
+                        _history.InitialSyncTotalConversations);
+                }
             }
             else if (IsInSafeMode)
             {
@@ -1012,6 +1026,26 @@ namespace Unison.Core.ViewModels
             {
                 message = null;
                 visible = false;
+            }
+
+            // Toast/tile: conversation first — stash sync line and keep Loading until release.
+            if (ChatListDeepLinkSyncUi.ShouldSuppressSyncBanner(IsDeepLinkHeld))
+            {
+                _pendingDeepLinkSyncMessage = message;
+                _pendingDeepLinkSyncVisible = visible && !string.IsNullOrEmpty(message);
+                SyncStatusText = string.Empty;
+                IsSyncStatusVisible = false;
+                if (_statusBar != null)
+                {
+                    await _statusBar.HideProgressAsync();
+                }
+
+                if (IsDeepLinkHeldPreferLoading)
+                {
+                    ShowDeepLinkLoadingOverlay();
+                }
+
+                return;
             }
 
             SyncStatusText = message ?? string.Empty;
@@ -2569,6 +2603,11 @@ namespace Unison.Core.ViewModels
             _deepLinkHold != null && _deepLinkHold.IsHeld,
             _listEverMaterialized);
 
+        private bool IsDeepLinkHeld => _deepLinkHold != null && _deepLinkHold.IsHeld;
+
+        private bool IsDeepLinkHeldPreferLoading =>
+            ChatListDeepLinkSyncUi.ShouldPreferLoadingOverlay(IsDeepLinkHeld, _listEverMaterialized);
+
         private void DeepLinkHold_Changed(object sender, EventArgs e)
         {
             if (!_attached)
@@ -2581,6 +2620,56 @@ namespace Unison.Core.ViewModels
             {
                 RefreshVisibleChats();
                 NotifyListPaintReleased("deep-link-hold-released");
+            }
+
+            // Hold: stash any visible sync line and keep ChatList_Loading until conversation ready.
+            // Release: re-present the deferred sync banner (catch-up, progress, etc.).
+            if (IsDeepLinkHeld)
+            {
+                if (IsSyncStatusVisible && !string.IsNullOrEmpty(SyncStatusText))
+                {
+                    _pendingDeepLinkSyncMessage = SyncStatusText;
+                    _pendingDeepLinkSyncVisible = true;
+                }
+
+                if (IsDeepLinkHeldPreferLoading)
+                {
+                    ShowDeepLinkLoadingOverlay();
+                }
+            }
+            else
+            {
+                _ = FlushPendingDeepLinkSyncStatusAsync();
+            }
+        }
+
+        private void ShowDeepLinkLoadingOverlay()
+        {
+            LoadingOverlayText = _strings == null
+                ? string.Empty
+                : _strings.Get("ChatList_Loading.Text", "Preparing conversations...");
+            IsLoadingOverlayVisible = true;
+            IsSyncStatusVisible = false;
+            SyncStatusText = string.Empty;
+        }
+
+        private async Task FlushPendingDeepLinkSyncStatusAsync()
+        {
+            string pending = _pendingDeepLinkSyncMessage;
+            bool visible = _pendingDeepLinkSyncVisible;
+            _pendingDeepLinkSyncMessage = null;
+            _pendingDeepLinkSyncVisible = false;
+
+            if (_batchRendering)
+            {
+                UpdateBatchProgressText();
+                return;
+            }
+
+            if (visible && !string.IsNullOrEmpty(pending))
+            {
+                await PresentSyncStatusAsync(pending, visible: true, source: "deep-link-hold-released")
+                    .ConfigureAwait(false);
             }
         }
 
@@ -2614,6 +2703,12 @@ namespace Unison.Core.ViewModels
             _batchProcessed = Math.Max(_batchProcessed, Math.Max(0, processed));
             _batchTotal = Math.Max(_batchTotal, Math.Max(0, total));
             IsLoadingOverlayVisible = true;
+            if (IsDeepLinkHeldPreferLoading)
+            {
+                ShowDeepLinkLoadingOverlay();
+                return;
+            }
+
             UpdateBatchProgressText();
         }
 
@@ -3136,6 +3231,12 @@ namespace Unison.Core.ViewModels
 
         private void UpdateBatchProgressText()
         {
+            if (IsDeepLinkHeldPreferLoading)
+            {
+                ShowDeepLinkLoadingOverlay();
+                return;
+            }
+
             if (_batchCompleted)
             {
                 _ = PresentSyncStatusAsync(_strings.Get("ChatList_SyncDone"), visible: true);

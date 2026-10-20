@@ -93,7 +93,18 @@
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
-            <Image Grid.Row="1"
+            <!-- Font glyph (Legacy attach icons) preferred when IconGlyph is set. -->
+            <FontIcon x:Name="GlyphIcon"
+                      Grid.Row="1"
+                      Glyph="{x:Bind IconGlyph, Mode=OneWay}"
+                      FontFamily="{x:Bind IconFontFamily, Mode=OneWay}"
+                      FontSize="54"
+                      Foreground="White"
+                      HorizontalAlignment="Center"
+                      VerticalAlignment="Top"
+                      Visibility="Collapsed"/>
+            <Image x:Name="GlyphImage"
+                   Grid.Row="1"
                    Width="54" Height="54"
                    HorizontalAlignment="Center"
                    VerticalAlignment="Top"
