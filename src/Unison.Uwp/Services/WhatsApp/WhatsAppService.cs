@@ -414,6 +414,12 @@ namespace Unison.Uwp.Services.WhatsApp
         private volatile bool _freshnessReconnectFallbackInProgress = false;
         private readonly HistoryCatchUpContinuation _catchUp = new HistoryCatchUpContinuation();
         private DateTime _lastCatchUpContinueUtc = DateTime.MinValue;
+        private readonly SemaphoreSlim _historyHydrationLock = new SemaphoreSlim(1, 1);
+        private int _historyHydrationActive;
+        private DateTime _lastHydrationFallbackUtc = DateTime.MinValue;
+        private DateTime _hydrationDayAnchorUtc = DateTime.MinValue;
+        private int _hydrationDayAttempts;
+        private CancellationTokenSource _hydrationDayRetryCts;
         // Default retry delay for the deferred background-resolution pass (names+avatars+groups).
         private static readonly TimeSpan AvatarFetchNextBatchDelay = TimeSpan.FromSeconds(20);
         private DateTime _replayDrainCompletedUtc = DateTime.MinValue;
@@ -730,16 +736,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly AliasFollowUpQueue _aliasFollowUps = new AliasFollowUpQueue();
         private readonly object _aliasFollowUpTimerGate = new object();
         private CancellationTokenSource _aliasFollowUpCts;
-        private sealed class HistoryBackfillCandidate
-        {
-            public string Jid { get; set; }
-            public bool IsGroup { get; set; }
-            public int MessageCount { get; set; }
-            public int ListIndex { get; set; }
-            public bool IsStale { get; set; }
-            public DateTime LastMessageTimestamp { get; set; }
-            public string SelectionReason { get; set; }
-        }
         /// <summary>Per-chat and full-history requests sent and still owed. Shared with <c>HistoryFacade</c>.</summary>
         private readonly HistoryOnDemandRegistry _historyRequests;
         private HistoryOnDemandDispatch _historyDispatch;
@@ -885,12 +881,15 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private readonly MissingMessageLedger _missing = new MissingMessageLedger();
         private PlaceholderResendDispatch _placeholderResends;
-        private static readonly TimeSpan HistoryBackfillCooldown = TimeSpan.FromHours(2);
         private static readonly TimeSpan HistoryBackfillStaleThreshold = TimeSpan.FromHours(8);
         private static readonly TimeSpan HistoryFreshnessStaleThreshold = TimeSpan.FromMinutes(30);
         private static readonly TimeSpan FullHistoryRepairCooldown = TimeSpan.FromHours(6);
         private static readonly TimeSpan FreshnessReconnectFallbackCooldown = TimeSpan.FromMinutes(20);
-        private const int HistoryBackfillMaxStaleTopChats = 20;
+        private static readonly TimeSpan HistoryHydrationSettleBudget = TimeSpan.FromSeconds(25);
+        private const int HistoryBackfillMaxStaleTopChats = 40;
+        private const int HistoryHydrationBatchSize = 10;
+        private const int HistoryHydrationPageSize = 50;
+        private const int HistoryHydrationMaxPagesPerChat = 5;
         private static readonly TimeSpan PlaceholderResendDispatchDelay = TimeSpan.FromSeconds(5);
         private static readonly TimeSpan PlaceholderResendResponseTimeout = TimeSpan.FromSeconds(15);
         private static readonly TimeSpan PlaceholderResendDrainDelay = TimeSpan.FromSeconds(4);
@@ -2966,6 +2965,11 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
 
                     FinishHistoryCatchUpContinue("stagnant-progress", releaseEnrichment: true);
+                    if (stillStale)
+                    {
+                        _ = RunHydrationFallbackPipelineAsync("stagnant-progress");
+                    }
+
                     return;
 
                 case HistoryCatchUpContinueAction.FinishMaxContinues:
@@ -2975,6 +2979,11 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
 
                     FinishHistoryCatchUpContinue("max-continues", releaseEnrichment: true);
+                    if (stillStale)
+                    {
+                        _ = RunHydrationFallbackPipelineAsync("max-continues");
+                    }
+
                     return;
             }
 
@@ -3241,6 +3250,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 nowUtc - _lastFreshnessReconnectFallbackUtc < FreshnessReconnectFallbackCooldown)
             {
                 Debug.WriteLine($"[WhatsAppService] Freshness reconnect fallback skipped: cooldown active, last={_lastFreshnessReconnectFallbackUtc:O}, cooldownMinutes={FreshnessReconnectFallbackCooldown.TotalMinutes:F0}, trigger={triggerReason}");
+                // High FULL/reconnect cooldown and nothing arrived — hydrate per-JID, then retry FULL.
+                _ = RunHydrationFallbackPipelineAsync("freshness-cooldown:" + triggerReason);
                 return;
             }
 
@@ -3692,10 +3703,387 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        private async Task StartBackgroundHistoryBackfillAsync()
+        /// <summary>
+        /// After FULL_HISTORY quiet fails while tips stay stale: per-JID ON_DEMAND hydration
+        /// (Pending → syncing → HasMore/Synced), then natural FULL_HISTORY again. Day retries
+        /// keep going until tips look fresh (max 5 / day, every 3h).
+        /// </summary>
+        private async Task RunHydrationFallbackPipelineAsync(string reason)
         {
-            Debug.WriteLine("[WhatsAppService] Automatic background history backfill disabled. Reconnect recovery requests FULL_HISTORY only when post-offline freshness is stale; name/group enrichment waits for that catch-up.");
-            await Task.CompletedTask;
+            try
+            {
+                string staleReason;
+                bool stillStale = TryGetHistoryFreshnessStaleReason(DateTime.UtcNow, out staleReason);
+                HistoryHydrationFallbackAction start =
+                    HistoryHydrationFallbackDecision.AfterFullCatchUpFinished(
+                        stillStale,
+                        Volatile.Read(ref _historyHydrationActive) != 0);
+                if (start != HistoryHydrationFallbackAction.StartPerChatHydration)
+                {
+                    Debug.WriteLine(
+                        "[WhatsAppService] Hydration fallback skipped (" + reason +
+                        "): action=" + start + ", stillStale=" + stillStale);
+                    return;
+                }
+
+                NoteHydrationDayAttempt(DateTime.UtcNow);
+                RuntimeDiagnosticsService.Instance.Write(
+                    "history",
+                    "hydration-fallback-start",
+                    "reason=" + (reason ?? string.Empty) +
+                    "; stale=" + (staleReason ?? string.Empty));
+
+                int requested = await StartBackgroundHistoryBackfillAsync(reason).ConfigureAwait(false);
+                stillStale = TryGetHistoryFreshnessStaleReason(DateTime.UtcNow, out staleReason);
+                HistoryHydrationFallbackAction next =
+                    HistoryHydrationFallbackDecision.AfterPerChatHydration(stillStale);
+
+                Debug.WriteLine(
+                    "[WhatsAppService] Hydration fallback settled: requested=" + requested +
+                    ", stillStale=" + stillStale + ", next=" + next + ", trigger=" + reason);
+
+                if (next == HistoryHydrationFallbackAction.RetryFullHistory)
+                {
+                    _ = RequestReconnectHistoryCatchUpAsync(
+                        "hydration-then-full:" + (reason ?? string.Empty));
+                }
+
+                ScheduleHydrationDayRetryIfNeeded(reason);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "[WhatsAppService] Hydration fallback failed (" + reason + "): " + ex.Message);
+                RuntimeDiagnosticsService.Instance.RecordException(
+                    "history",
+                    "hydration-fallback-failed",
+                    ex,
+                    reason);
+            }
+        }
+
+        private void NoteHydrationDayAttempt(DateTime nowUtc)
+        {
+            if (_hydrationDayAnchorUtc == DateTime.MinValue ||
+                nowUtc.Date != _hydrationDayAnchorUtc.Date)
+            {
+                _hydrationDayAnchorUtc = nowUtc.Date;
+                _hydrationDayAttempts = 0;
+            }
+
+            _hydrationDayAttempts++;
+            _lastHydrationFallbackUtc = nowUtc;
+        }
+
+        private void ScheduleHydrationDayRetryIfNeeded(string reason)
+        {
+            string staleReason;
+            bool stillStale = TryGetHistoryFreshnessStaleReason(DateTime.UtcNow, out staleReason);
+            if (!stillStale ||
+                _hydrationDayAttempts >= HistoryHydrationFallbackDecision.DefaultMaxDayAttempts)
+            {
+                return;
+            }
+
+            CancellationTokenSource prior = Interlocked.Exchange(ref _hydrationDayRetryCts, null);
+            try { prior?.Cancel(); } catch { }
+            try { prior?.Dispose(); } catch { }
+
+            var cts = new CancellationTokenSource();
+            _hydrationDayRetryCts = cts;
+            TimeSpan delay = HistoryHydrationFallbackDecision.DefaultDayRetryInterval;
+            Debug.WriteLine(
+                "[WhatsAppService] Hydration day retry armed in " + delay.TotalHours.ToString("F1") +
+                "h (attempt=" + _hydrationDayAttempts + "/" +
+                HistoryHydrationFallbackDecision.DefaultMaxDayAttempts +
+                ", trigger=" + reason + ")");
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(delay, cts.Token).ConfigureAwait(false);
+                    if (cts.IsCancellationRequested)
+                    {
+                        return;
+                    }
+
+                    string again;
+                    if (!TryGetHistoryFreshnessStaleReason(DateTime.UtcNow, out again))
+                    {
+                        return;
+                    }
+
+                    await RunHydrationFallbackPipelineAsync(
+                            "day-retry:" + (reason ?? string.Empty))
+                        .ConfigureAwait(false);
+                }
+                catch (TaskCanceledException)
+                {
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine(
+                        "[WhatsAppService] Hydration day retry failed: " + ex.Message);
+                }
+            });
+        }
+
+        /// <summary>
+        /// Per-JID HISTORY_SYNC_ON_DEMAND pass: ledger Pending/InFlight/HasMore/Synced until
+        /// pages stop growing or a silent batch aborts. Returns how many requests went out.
+        /// </summary>
+        private async Task<int> StartBackgroundHistoryBackfillAsync(string reason)
+        {
+            if (!await _historyHydrationLock.WaitAsync(0).ConfigureAwait(false))
+            {
+                Debug.WriteLine("[WhatsAppService] History hydration skipped: already running (" + reason + ")");
+                return 0;
+            }
+
+            Interlocked.Exchange(ref _historyHydrationActive, 1);
+            try
+            {
+                if (!IsConnected)
+                {
+                    Debug.WriteLine("[WhatsAppService] History hydration skipped: not connected (" + reason + ")");
+                    return 0;
+                }
+
+                IReadOnlyList<HistoryBackfillCandidate> selected =
+                    BuildHistoryHydrationCandidates(DateTime.UtcNow);
+                if (selected.Count == 0)
+                {
+                    Debug.WriteLine("[WhatsAppService] History hydration: no stale chats with cursor (" + reason + ")");
+                    return 0;
+                }
+
+                var ledger = new HistoryBackfillLedger(HistoryHydrationMaxPagesPerChat);
+                ledger.Enqueue(selected);
+                Debug.WriteLine(
+                    "[WhatsAppService] History hydration starting: chats=" + selected.Count +
+                    " batchSize=" + HistoryHydrationBatchSize +
+                    " maxPages=" + HistoryHydrationMaxPagesPerChat +
+                    " reason=" + reason);
+                RuntimeDiagnosticsService.Instance.Write(
+                    "history",
+                    "hydration-backfill-start",
+                    "reason=" + (reason ?? string.Empty) +
+                    "; chats=" + selected.Count +
+                    "; batchSize=" + HistoryHydrationBatchSize +
+                    "; maxPages=" + HistoryHydrationMaxPagesPerChat);
+
+                int requested = 0;
+                int batchIndex = 0;
+                while (ledger.HasWorkRemaining && IsConnected)
+                {
+                    batchIndex++;
+                    IReadOnlyList<HistoryBackfillLedgerEntry> batch = ledger.TakeBatch(
+                        HistoryHydrationBatchSize,
+                        GetHistoryHydrationMessageCount);
+                    if (batch.Count == 0)
+                    {
+                        break;
+                    }
+
+                    var sentJids = new List<string>(batch.Count);
+                    for (int i = 0; i < batch.Count; i++)
+                    {
+                        if (!IsConnected)
+                        {
+                            break;
+                        }
+
+                        HistoryBackfillLedgerEntry entry = batch[i];
+                        if (entry == null || string.IsNullOrWhiteSpace(entry.Jid))
+                        {
+                            continue;
+                        }
+
+                        string normJid = NormalizeJid(entry.Jid);
+                        if (ledger.TryGet(normJid, out HistoryBackfillLedgerEntry live))
+                        {
+                            live.BaselineCount = GetHistoryHydrationMessageCount(normJid);
+                        }
+
+                        bool sent = await RequestHistoryOnDemandIfNeededAsync(
+                                normJid,
+                                HistoryHydrationPageSize,
+                                "hydration:batch" + batchIndex + ":" + reason)
+                            .ConfigureAwait(false);
+                        if (sent)
+                        {
+                            ledger.NoteRequestSent(normJid);
+                            sentJids.Add(normJid);
+                            requested++;
+                        }
+                        else
+                        {
+                            ledger.MarkSynced(normJid);
+                        }
+                    }
+
+                    await WaitForHistoryHydrationSettleAsync().ConfigureAwait(false);
+
+                    int outcomeAckSilent = 0;
+                    int outcomeRamGrew = 0;
+                    int outcomeNoAck = 0;
+                    int outcomeRejected = 0;
+                    for (int i = 0; i < sentJids.Count; i++)
+                    {
+                        string jid = sentJids[i];
+                        int afterRam = GetHistoryHydrationMessageCount(jid);
+                        int baselineRam = 0;
+                        if (ledger.TryGet(jid, out HistoryBackfillLedgerEntry before) && before != null)
+                        {
+                            baselineRam = before.BaselineCount;
+                        }
+
+                        var obs = new HistoryBackfillFlightObservation
+                        {
+                            HadRequest = true,
+                            AckAccepted = true,
+                            BaselineRam = baselineRam,
+                            AfterRam = afterRam,
+                            ChunkApplied = afterRam > baselineRam
+                        };
+                        HistoryBackfillFlightOutcome outcome =
+                            HistoryBackfillFlightClassifier.Classify(obs);
+                        switch (outcome)
+                        {
+                            case HistoryBackfillFlightOutcome.RamGrew:
+                                outcomeRamGrew++;
+                                break;
+                            case HistoryBackfillFlightOutcome.AckSilent:
+                            case HistoryBackfillFlightOutcome.ChunkNoRamGrowth:
+                                outcomeAckSilent++;
+                                break;
+                            case HistoryBackfillFlightOutcome.NoAck:
+                                outcomeNoAck++;
+                                break;
+                            case HistoryBackfillFlightOutcome.Rejected:
+                                outcomeRejected++;
+                                break;
+                        }
+
+                        ledger.CompleteFlight(jid, afterRam, outcome);
+                    }
+
+                    for (int i = 0; i < batch.Count; i++)
+                    {
+                        HistoryBackfillLedgerEntry entry = batch[i];
+                        if (entry != null && entry.State == HistoryBackfillChatState.InFlight)
+                        {
+                            ledger.CompleteFlight(
+                                entry.Jid,
+                                GetHistoryHydrationMessageCount(entry.Jid));
+                        }
+                    }
+
+                    bool silentAbort = HistoryBackfillAbortDecision.ShouldAbortAfterSilentBatch(
+                        sentJids.Count,
+                        outcomeAckSilent,
+                        outcomeNoAck,
+                        outcomeRejected,
+                        outcomeRamGrew);
+                    HistoryBackfillContinueAction cont = HistoryBackfillContinueDecision.Decide(
+                        ledger.HasWorkRemaining,
+                        silentAbort);
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "history",
+                        "hydration-backfill-batch",
+                        "batch=" + batchIndex +
+                        "; sent=" + sentJids.Count +
+                        "; ramGrew=" + outcomeRamGrew +
+                        "; hasMore=" + ledger.CountInState(HistoryBackfillChatState.HasMore) +
+                        "; action=" + cont);
+                    if (cont != HistoryBackfillContinueAction.Continue)
+                    {
+                        break;
+                    }
+                }
+
+                Debug.WriteLine(
+                    "[WhatsAppService] History hydration done: requested=" + requested +
+                    " synced=" + ledger.CountInState(HistoryBackfillChatState.Synced) +
+                    " hasMoreLeft=" + ledger.CountInState(HistoryBackfillChatState.HasMore) +
+                    " failed=" + ledger.CountInState(HistoryBackfillChatState.Failed));
+                return requested;
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _historyHydrationActive, 0);
+                _historyHydrationLock.Release();
+            }
+        }
+
+        private IReadOnlyList<HistoryBackfillCandidate> BuildHistoryHydrationCandidates(DateTime nowUtc)
+        {
+            var snapshots = new List<HistoryBackfillChatSnapshot>(Chats.Count);
+            for (int i = 0; i < Chats.Count; i++)
+            {
+                ChatItem chat = Chats[i];
+                if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
+                {
+                    continue;
+                }
+
+                string jid = NormalizeJid(chat.JID);
+                int messageCount = GetHistoryHydrationMessageCount(jid);
+                // ON_DEMAND needs an oldest-message cursor — skip empty timelines.
+                if (messageCount <= 0)
+                {
+                    continue;
+                }
+
+                DateTime tipUtc = chat.LastMessageTimestampUtc ?? DateTime.MinValue;
+                if (tipUtc != DateTime.MinValue && tipUtc.Kind != DateTimeKind.Utc)
+                {
+                    tipUtc = tipUtc.ToUniversalTime();
+                }
+
+                snapshots.Add(new HistoryBackfillChatSnapshot
+                {
+                    Jid = jid,
+                    IsGroup = IsGroupJid(jid),
+                    ListIndex = i,
+                    LastMessageUtc = tipUtc,
+                    MessageCount = messageCount
+                });
+            }
+
+            return HistoryBackfillSelection.SelectTopStale(
+                snapshots,
+                nowUtc,
+                HistoryBackfillStaleThreshold,
+                HistoryBackfillMaxStaleTopChats);
+        }
+
+        private int GetHistoryHydrationMessageCount(string jid)
+        {
+            if (string.IsNullOrWhiteSpace(jid))
+            {
+                return 0;
+            }
+
+            return MessagesByChat.TryGet(jid, out var list) && list != null ? list.Count : 0;
+        }
+
+        private async Task WaitForHistoryHydrationSettleAsync()
+        {
+            var elapsed = Stopwatch.StartNew();
+            while (elapsed.Elapsed < HistoryHydrationSettleBudget && IsConnected)
+            {
+                if (_historyRequests.ChatsInFlight == 0)
+                {
+                    await Task.Delay(400).ConfigureAwait(false);
+                    if (_historyRequests.ChatsInFlight == 0)
+                    {
+                        return;
+                    }
+                }
+
+                await Task.Delay(500).ConfigureAwait(false);
+            }
         }
 
         /// <summary>

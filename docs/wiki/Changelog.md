@@ -2,6 +2,13 @@
 
 Newest first.
 
+## 2.0.19 — per-JID hydration fallback after empty FULL_HISTORY
+
+When FULL_HISTORY catch-up finishes stagnant/empty (or freshness reconnect is on
+cooldown) and tips stay stale, hydrate via per-chat `HISTORY_SYNC_ON_DEMAND`
+(ledger Pending → InFlight → HasMore/Synced), then solicit FULL_HISTORY again.
+Day retries: every 3 hours, max 5 attempts, until tips look up-to-date.
+
 ## 2.0.18 — legacy attach icons + toast deep-link sync UI
 
 WhatsApp Legacy attach tiles use dedicated glyphs (picture, video, doc, audio,
