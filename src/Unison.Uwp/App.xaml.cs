@@ -303,6 +303,7 @@ namespace Unison.Uwp
             services.AddSingleton<ChatListDeepLinkHoldGate>();
             // Hold DisplayRequest for the first-sync list hold; HistoryFacade calls Hold/Release.
             services.AddSingleton<IDisplayKeepAwakeService, DisplayKeepAwakeService>();
+            services.AddSingleton<ICameraOrientationService, CameraOrientationService>();
             services.AddSingleton<SelfProfileState>();
             // Memory tier once: drives history caps, list release, avatars and the phone's quota ask.
             services.AddSingleton(sp =>

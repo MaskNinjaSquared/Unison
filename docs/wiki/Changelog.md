@@ -2,6 +2,14 @@
 
 Newest first.
 
+## 2.0.13 — camera preview orientation on Mobile
+
+In-chat camera preview and stills were sideways on portrait-first phones because
+`MediaCapture` had no enclosure / display rotation. `ICameraOrientationService`
+(Core math + UWP WinRT sensors) applies `MF_MT_VIDEO_ROTATION`, mirrors the front
+camera, and stamps JPEG EXIF — same path as Unigram / CameraStarterKit. Desktop
+webcams stay unrotated.
+
 ## 2.0.12 — first-sync list hold until history + names
 
 Chat list stayed behind `x:Load` until zero-sync is really done: FULL_HISTORY

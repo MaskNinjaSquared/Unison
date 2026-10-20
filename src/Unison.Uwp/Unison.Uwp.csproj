@@ -189,6 +189,7 @@
     <Compile Include="Services\StatusBarService.cs" />
     <Compile Include="Services\LocationKeepAliveService.cs" />
     <Compile Include="Services\DisplayKeepAwakeService.cs" />
+    <Compile Include="Services\CameraOrientationService.cs" />
     <Compile Include="Services\ShellThemeService.cs" />
     <Compile Include="Services\AppLanguageService.cs" />
     <Compile Include="Services\Themes\IShellNavigationStrategy.cs" />
