@@ -88,7 +88,7 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>Downloads + decrypts an image on demand, caching the local URI on the message.</summary>
         Task<string> EnsureImageAvailableAsync(ChatMessage message);
 
-        /// <summary>Downloads + decrypts a video on demand, caching the local URI (+ poster) on the message.</summary>
+        /// <summary>Downloads + decrypts a video or GIF on demand, caching the local URI (+ poster) on the message.</summary>
         Task<string> EnsureVideoAvailableAsync(ChatMessage message);
 
         /// <summary>Downloads + decrypts a document on demand, caching the local URI on the message.</summary>

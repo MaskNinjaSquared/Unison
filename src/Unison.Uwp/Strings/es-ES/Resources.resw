@@ -180,6 +180,9 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   <data name="ChatList_PreviewVideo" xml:space="preserve">
     <value>Vídeo</value>
   </data>
+  <data name="ChatList_PreviewGif" xml:space="preserve">
+    <value>GIF</value>
+  </data>
   <data name="ChatList_PreviewSticker" xml:space="preserve">
     <value>Sticker</value>
   </data>

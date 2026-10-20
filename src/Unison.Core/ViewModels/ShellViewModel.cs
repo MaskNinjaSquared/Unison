@@ -423,7 +423,12 @@ namespace Unison.Core.ViewModels
         /// Parses activation arguments and queues navigation into the target chat
         /// (narrow → detail pane when open succeeds). Used by secondary tiles and toast clicks.
         /// </summary>
-        public void QueueOpenChatFromActivation(string arguments)
+        /// <param name="delayChatListUntilConversationReady">
+        /// Cold start only. When the app was already open (list loaded), leave the list alone.
+        /// </param>
+        public void QueueOpenChatFromActivation(
+            string arguments,
+            bool delayChatListUntilConversationReady = true)
         {
             string jid = LaunchActivationHelper.TryGetChatJid(arguments);
             if (string.IsNullOrWhiteSpace(jid))
@@ -445,8 +450,20 @@ namespace Unison.Core.ViewModels
             }
 
             _pendingOpenChatJid = jid.Trim();
-            // Cold toast: keep chat-list x:Load held until the conversation finishes loading.
-            _deepLinkHold?.Hold("activation:" + _pendingOpenChatJid);
+            bool armHold = ChatListDeepLinkSyncUi.ShouldArmListHold(
+                appWasAlreadyOpen: !delayChatListUntilConversationReady);
+            if (armHold)
+            {
+                // Cold toast: keep chat-list x:Load held until the conversation finishes loading.
+                _deepLinkHold?.Hold("activation:" + _pendingOpenChatJid);
+            }
+            else
+            {
+                Debug.WriteLine(
+                    "[ShellViewModel] Deep-link list hold skipped (app already open): " +
+                    _pendingOpenChatJid);
+            }
+
             RaisePendingOpenChatChanged();
             Debug.WriteLine("[ShellViewModel] Queued open chat from activation: " + _pendingOpenChatJid);
         }

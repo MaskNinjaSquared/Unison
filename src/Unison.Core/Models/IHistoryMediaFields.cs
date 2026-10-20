@@ -26,5 +26,8 @@ namespace Unison.Core.Models
         byte[] MediaThumbnailJpeg { get; set; }
 
         bool IsVoiceNote { get; set; }
+
+        /// <summary>WhatsApp <c>GifPlayback</c> on a video envelope.</summary>
+        bool IsAnimated { get; set; }
     }
 }

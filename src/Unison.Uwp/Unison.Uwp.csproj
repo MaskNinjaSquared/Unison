@@ -519,6 +519,9 @@
     <Compile Include="UI\Controls\ChatMediaCircleButtonHost.xaml.cs">
       <DependentUpon>ChatMediaCircleButtonHost.xaml</DependentUpon>
     </Compile>
+    <Compile Include="UI\Controls\AnimationView.xaml.cs">
+      <DependentUpon>AnimationView.xaml</DependentUpon>
+    </Compile>
     <Compile Include="UI\Controls\ChatAudioTransportPresenter.cs" />
     <Compile Include="UI\Controls\ChatMediaPlaceholderHost.cs" />
     <Compile Include="UI\Controls\ShellUi.cs" />
@@ -814,6 +817,10 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="UI\Controls\ChatMediaCircleButtonHost.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Controls\AnimationView.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

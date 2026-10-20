@@ -251,7 +251,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
 
         public async Task<string> EnsureVideoAsync(ChatMessage message)
         {
-            if (message == null || !message.IsVideo) return null;
+            if (message == null || !message.IsVideoMedia) return null;
             if (!string.IsNullOrWhiteSpace(message.VideoUri))
             {
                 return await EnsureVideoPosterAsync(message);

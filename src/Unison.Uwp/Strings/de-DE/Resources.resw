@@ -239,6 +239,9 @@ Nach der Diagnose deaktivieren: Wenn es aktiviert bleibt, wird die App langsamer
   <data name="ChatList_PreviewVideo" xml:space="preserve">
     <value>Video</value>
   </data>
+  <data name="ChatList_PreviewGif" xml:space="preserve">
+    <value>GIF</value>
+  </data>
   <data name="ChatList_PreviewSticker" xml:space="preserve">
     <value>Sticker</value>
   </data>

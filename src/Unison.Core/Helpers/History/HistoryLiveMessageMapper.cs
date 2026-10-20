@@ -71,6 +71,7 @@ namespace Unison.Core.Helpers
             if (!revoked &&
                 (kind == ChatPreviewKind.Image ||
                  kind == ChatPreviewKind.Video ||
+                 kind == ChatPreviewKind.Gif ||
                  kind == ChatPreviewKind.Document) &&
                 !string.IsNullOrWhiteSpace(message.Caption))
             {
@@ -200,12 +201,14 @@ namespace Unison.Core.Helpers
                         ?? NullIfEmpty(message.ThumbnailUri);
                     break;
                 case ChatPreviewKind.Video:
+                case ChatPreviewKind.Gif:
                     row.MediaUrl = NullIfEmpty(message.VideoUrl);
                     row.MediaDirectPath = NullIfEmpty(message.VideoDirectPath);
                     row.MediaKeyBase64 = NullIfEmpty(message.VideoMediaKeyBase64);
                     row.MediaFileEncSha256Base64 = NullIfEmpty(message.VideoFileEncSha256Base64);
                     row.MediaMimeType = NullIfEmpty(message.VideoMimeType);
                     row.MediaDurationSeconds = message.VideoDurationSeconds;
+                    row.IsAnimated = message.IsGif || message.IsAnimated;
                     row.MediaLocalUri = NullIfEmpty(message.VideoUri);
                     row.MediaPosterUri = NullIfEmpty(message.VideoPosterUri)
                         ?? NullIfEmpty(message.ThumbnailUri);

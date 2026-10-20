@@ -11,6 +11,8 @@ namespace Unison.Core.Models
         Sticker = 3,
         Voice = 4,
         Audio = 5,
-        Document = 6
+        Document = 6,
+        /// <summary>WhatsApp GIF (<c>VideoMessage.GifPlayback</c>) — video bytes, animation UI.</summary>
+        Gif = 7
     }
 }

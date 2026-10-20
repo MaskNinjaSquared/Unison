@@ -1921,6 +1921,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return;
             }
 
+            ViewModel.BeginLoadingMessages();
             await YieldForChatSurfacePaintAsync();
             if (token.IsCancellationRequested || _activeChat == null ||
                 !ReferenceEquals(_activeChat, chat))
@@ -1929,13 +1930,27 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                     "aborted",
                     chat.JID,
                     "stage=after-yield; reason=" + DescribeChatLoadAbort(token, chat));
+                ViewModel.EndLoadingMessages();
+                return;
+            }
+
+            // Mobile experiment: let NarrowDetail navigation + ProgressBar paint before
+            // SQLite / bubble materialization fights the compositor.
+            if (!await AwaitTimelineMaterializeDelayAsync(token).ConfigureAwait(true) ||
+                _activeChat == null ||
+                !ReferenceEquals(_activeChat, chat))
+            {
+                WriteChatOpenDiagnostics(
+                    "aborted",
+                    chat.JID,
+                    "stage=after-materialize-delay; reason=" + DescribeChatLoadAbort(token, chat));
+                ViewModel.EndLoadingMessages();
                 return;
             }
 
             string requestedJid = Jids.GetCanonicalJid(chat.JID);
             Debug.WriteLine($"[ChatDetailView] Loading messages for {requestedJid}");
 
-            ViewModel.BeginLoadingMessages();
             List<ChatMessage> messages;
             try
             {
@@ -2034,6 +2049,34 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 await Task.Delay(48);
             }
         }
+
+        /// <summary>
+        /// Extra Mobile pause after the top ProgressBar shows and before bubbles load.
+        /// Cancelled when the user switches chat. Returns false when aborted.
+        /// </summary>
+        private async Task<bool> AwaitTimelineMaterializeDelayAsync(CancellationToken token)
+        {
+            if (!_isWindowsMobile)
+            {
+                return !token.IsCancellationRequested;
+            }
+
+            try
+            {
+                WriteChatOpenDiagnostics(
+                    "materialize-delay",
+                    _activeChat?.JID,
+                    "ms=" + (int)TimelineMaterializeDelay.TotalMilliseconds);
+                await Task.Delay(TimelineMaterializeDelay, token).ConfigureAwait(true);
+                return !token.IsCancellationRequested && _activeChat != null;
+            }
+            catch (TaskCanceledException)
+            {
+                return false;
+            }
+        }
+
+        private static readonly TimeSpan TimelineMaterializeDelay = TimeSpan.FromSeconds(2);
 
         private string DescribeChatLoadAbort(CancellationToken token, ChatItem chat)
         {

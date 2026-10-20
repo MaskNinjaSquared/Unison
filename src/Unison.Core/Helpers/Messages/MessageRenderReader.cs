@@ -14,6 +14,7 @@ namespace Unison.Core.Helpers
         public string Content { get; set; }
         public bool IsImage { get; set; }
         public bool IsVideo { get; set; }
+        public bool IsGif { get; set; }
         public bool IsSticker { get; set; }
         public string Caption { get; set; }
         public Proto.Message.Types.ImageMessage ImageMessage { get; set; }
@@ -36,6 +37,7 @@ namespace Unison.Core.Helpers
             {
                 if (IsSticker) return ChatPreviewKind.Sticker;
                 if (IsImage) return ChatPreviewKind.Image;
+                if (IsGif) return ChatPreviewKind.Gif;
                 if (IsVideo) return ChatPreviewKind.Video;
                 if (IsDocument) return ChatPreviewKind.Document;
                 if (IsVoice || IsAudio) return ChatPreviewKind.Voice;
@@ -105,10 +107,14 @@ namespace Unison.Core.Helpers
                 unwrapped.VideoMessage ?? unwrapped.PtvMessage;
             if (video != null)
             {
+                bool isGif = video.GifPlayback;
                 return new MessageRenderInfo
                 {
-                    Content = MediaPreviewTag.ForVideo(video.Caption),
-                    IsVideo = true,
+                    Content = isGif
+                        ? MediaPreviewTag.WithCaption(MediaPreviewTag.Gif, video.Caption)
+                        : MediaPreviewTag.ForVideo(video.Caption),
+                    IsVideo = !isGif,
+                    IsGif = isGif,
                     Caption = video.Caption ?? string.Empty,
                     VideoMessage = video
                 };

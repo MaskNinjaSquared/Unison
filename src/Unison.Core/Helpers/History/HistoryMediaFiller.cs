@@ -59,6 +59,7 @@ namespace Unison.Core.Helpers
                 target.MediaMimeType = NullIfEmpty(video.Mimetype);
                 target.MediaDurationSeconds = video.Seconds;
                 target.MediaThumbnailJpeg = ToBytes(video.JpegThumbnail);
+                target.IsAnimated = video.GifPlayback;
                 return;
             }
 

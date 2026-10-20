@@ -239,6 +239,9 @@ Matikan setelah diagnosa: menjaga aplikasi tetap lambat.</value>
   <data name="ChatList_PreviewVideo" xml:space="preserve">
     <value>Video</value>
   </data>
+  <data name="ChatList_PreviewGif" xml:space="preserve">
+    <value>GIF</value>
+  </data>
   <data name="ChatList_PreviewSticker" xml:space="preserve">
     <value>Stiker</value>
   </data>

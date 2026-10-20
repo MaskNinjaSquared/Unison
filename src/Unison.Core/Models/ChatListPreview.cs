@@ -42,6 +42,7 @@ namespace Unison.Core.Models
                 RaiseProperties(
                     nameof(IsImage),
                     nameof(IsVideo),
+                    nameof(IsGif),
                     nameof(IsSticker),
                     nameof(IsVoice),
                     nameof(IsText));
@@ -84,6 +85,7 @@ namespace Unison.Core.Models
 
         public bool IsImage => _kind == ChatPreviewKind.Image;
         public bool IsVideo => _kind == ChatPreviewKind.Video;
+        public bool IsGif => _kind == ChatPreviewKind.Gif;
         public bool IsSticker => _kind == ChatPreviewKind.Sticker;
         public bool IsVoice => _kind == ChatPreviewKind.Voice;
         public bool IsText => _kind == ChatPreviewKind.Text;

@@ -13,7 +13,7 @@ namespace Unison.Core.ViewModels
     /// One timeline bubble: presentation state + per-message actions (media prepare, document, pin).
     /// Conversation-level composer/send stays on <see cref="ChatDetailViewModel"/>.
     /// </summary>
-    public partial class ChatMessageViewModel : INotifyPropertyChanged
+    public partial class ChatMessageViewModel : INotifyPropertyChanged, IGifPlaybackClient
     {
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -31,6 +31,14 @@ namespace Unison.Core.ViewModels
         private readonly IHistoryMessageStore _history;
         private readonly ICopyService _copy;
         private readonly IDispatcher _ui;
+        private readonly DeviceCategory _deviceCategory;
+        private readonly IGifPlaybackCoordinator _gifPlayback;
+        private bool _gifRegistered;
+        private bool _hasStartedGifPlayback;
+        private bool _isGifPlaying;
+        private bool _gifAutoDownloadStarted;
+        private bool _gifAutoDownloadFailed;
+        private Task _gifAutoDownloadTask;
         private bool _isExpanded;
         private bool _isHighlighted;
         private bool? _canExpandCached;
@@ -52,7 +60,9 @@ namespace Unison.Core.ViewModels
             IRuntimeDiagnostics diagnostics = null,
             IHistoryMessageStore history = null,
             ICopyService copy = null,
-            IDispatcher ui = null)
+            IDispatcher ui = null,
+            DeviceCategory deviceCategory = DeviceCategory.High,
+            IGifPlaybackCoordinator gifPlayback = null)
         {
             Model = model ?? throw new ArgumentNullException(nameof(model));
             _strings = strings;
@@ -69,6 +79,8 @@ namespace Unison.Core.ViewModels
             // PropertyChanged inline hits XAML bindings (IsRevoked, HasReactions) and throws
             // RPC_E_WRONG_THREAD (0x8001010E) on Mobile — 1.8.3 avoided IsRevoked on tombstone.
             _ui = ui;
+            _deviceCategory = deviceCategory;
+            _gifPlayback = gifPlayback;
 
             ShowReactionsCommand = new RelayCommand(
                 () => _ = ShowReactionsAsync(),
@@ -117,9 +129,18 @@ namespace Unison.Core.ViewModels
             CopyCommand = new RelayCommand(CopyText, () => !string.IsNullOrWhiteSpace(CopyableText));
             ReplyCommand = new RelayCommand(() => ReplyRequested?.Invoke(this, EventArgs.Empty));
 
+            PlayGifCommand = new RelayCommand(
+                StartGifPlayback,
+                () => ShowGifSurface && !IsGifPlaying);
+
             Model.PropertyChanged += OnModelPropertyChanged;
             SyncAudioPlaybackStatusFromModel();
+            EnsureGifPlaybackRegistration();
+            ScheduleGifAutoDownloadIfNeeded();
         }
+
+        /// <summary>User tapped the GIF glyph — play in-bubble only (no fullscreen viewer).</summary>
+        public ICommand PlayGifCommand { get; }
 
         /// <summary>
         /// Drops the model subscription so cleared/trimmed timeline rows can be GC'd.
@@ -128,6 +149,7 @@ namespace Unison.Core.ViewModels
         public void Detach()
         {
             Model.PropertyChanged -= OnModelPropertyChanged;
+            UnregisterGifPlayback();
         }
 
         /// <summary>
@@ -278,6 +300,8 @@ namespace Unison.Core.ViewModels
             name == nameof(ChatMessage.VideoDurationSeconds) ||
             name == nameof(ChatMessage.CanDownloadVideo) ||
             name == nameof(ChatMessage.IsVideo) ||
+            name == nameof(ChatMessage.IsGif) ||
+            name == nameof(ChatMessage.IsAnimated) ||
             name == nameof(ChatMessage.Kind);
 
         private static bool IsDocumentProperty(string name) =>
@@ -737,6 +761,8 @@ namespace Unison.Core.ViewModels
         {
             Raise(
                 nameof(IsVideo),
+                nameof(IsGif),
+                nameof(IsAnimated),
                 nameof(IsImage),
                 nameof(NeedsVideoDownload),
                 nameof(CanDownloadVideo),
@@ -748,11 +774,25 @@ namespace Unison.Core.ViewModels
                 nameof(HasInfoPreviewUri),
                 nameof(ShowVideoDownloadIcon),
                 nameof(ShowVideoPlayOverlay),
+                nameof(ShowGifSurface),
+                nameof(ShowGifPlayButton),
+                nameof(ResumeGifWhenVisible),
                 nameof(ShowVideoFooterDuration),
                 nameof(VideoFooterDurationText),
                 nameof(MediaBadgeDurationText),
                 nameof(ShowTextContent));
             RaiseMediaCommandsChanged();
+            (PlayGifCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            if (Model.IsGif)
+            {
+                EnsureGifPlaybackRegistration();
+            }
+            else
+            {
+                UnregisterGifPlayback();
+            }
+
+            ScheduleGifAutoDownloadIfNeeded();
         }
 
         private void RaiseDocumentUiChanged()
@@ -956,19 +996,122 @@ namespace Unison.Core.ViewModels
         }
 
         public bool IsVideo => Model.IsVideo;
+        public bool IsGif => Model.IsGif;
+        /// <summary>WhatsApp GIF (<c>GifPlayback</c>) — same as <see cref="IsGif"/>.</summary>
+        public bool IsAnimated => Model.IsAnimated;
         public string VideoUri => Model.VideoUri;
         public string VideoPosterUri => Model.VideoPosterUri;
         public bool HasLocalVideo => Model.HasLocalVideo;
         public bool HasVideoPoster => Model.HasVideoPoster;
         public bool NeedsVideoDownload => Model.NeedsVideoDownload;
         public bool CanDownloadVideo => Model.CanDownloadVideo;
-        public bool ShowVideoDownloadIcon => NeedsVideoDownload && !IsVideoDownloading;
-        /// <summary>Poster + play balloon once the local video file exists.</summary>
+
+        /// <summary>
+        /// Download affordance for video/GIF. Hidden on High while a GIF is expected to
+        /// auto-fetch (retry icon only after that silent attempt fails).
+        /// </summary>
+        public bool ShowVideoDownloadIcon =>
+            NeedsVideoDownload &&
+            !IsVideoDownloading &&
+            !(IsGif && _deviceCategory == DeviceCategory.High && !_gifAutoDownloadFailed);
+
+        /// <summary>Completes when the High-tier GIF auto-download finishes (or was a no-op).</summary>
+        public Task GifAutoDownloadCompletion => _gifAutoDownloadTask ?? Task.CompletedTask;
+        /// <summary>Poster + play balloon once the local video file exists (not GIF).</summary>
         public bool ShowVideoPlayOverlay => Model.IsVideo && Model.HasLocalVideo;
 
-        /// <summary>Duration next to the footer video glyph — only after download.</summary>
+        /// <summary>GIF bubble surface (poster + optional AnimationView) once the file exists.</summary>
+        public bool ShowGifSurface => Model.IsGif && Model.HasLocalVideo;
+
+        /// <summary>Segoe MDL2 GIF glyph button — visible while the animation is paused/static.</summary>
+        public bool ShowGifPlayButton => ShowGifSurface && !IsGifPlaying;
+
+        /// <summary>
+        /// Session flag: user already tapped play. Used with device tier for viewport resume.
+        /// </summary>
+        public bool HasStartedGifPlayback => _hasStartedGifPlayback;
+
+        /// <summary>True while the in-bubble GIF player is running.</summary>
+        public bool IsGifPlaying
+        {
+            get => _isGifPlaying;
+            set
+            {
+                if (_isGifPlaying == value)
+                {
+                    return;
+                }
+
+                _isGifPlaying = value;
+                Raise(
+                    nameof(IsGifPlaying),
+                    nameof(ShowGifPlayButton));
+                (PlayGifCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            }
+        }
+
+        /// <summary>
+        /// Low+ resume GIF when scrolling back into view after a prior play.
+        /// Unsupported never auto-resumes.
+        /// </summary>
+        public bool ResumeGifWhenVisible =>
+            _deviceCategory != DeviceCategory.Unsupported && _hasStartedGifPlayback;
+
+        /// <summary>Duration next to the footer video glyph — only after download (not GIF).</summary>
         public bool ShowVideoFooterDuration =>
-            Model.IsVideo && Model.HasLocalVideo && Model.VideoDurationSeconds > 0;
+            Model.IsVideo &&
+            Model.HasLocalVideo &&
+            Model.VideoDurationSeconds > 0;
+
+        /// <summary>Starts in-bubble GIF playback; does not open the fullscreen viewer.</summary>
+        public void StartGifPlayback()
+        {
+            if (!ShowGifSurface)
+            {
+                return;
+            }
+
+            EnsureGifPlaybackRegistration();
+            _gifPlayback?.NotifyPlaying(this);
+            _hasStartedGifPlayback = true;
+            IsGifPlaying = true;
+            Raise(nameof(HasStartedGifPlayback), nameof(ResumeGifWhenVisible));
+            (PlayGifCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        }
+
+        /// <summary>Pauses in-bubble GIF (viewport leave). Keeps <see cref="HasStartedGifPlayback"/>.</summary>
+        public void PauseGifPlayback()
+        {
+            IsGifPlaying = false;
+        }
+
+        /// <summary>Exclusive GIF slot on Unsupported — other bubbles claim play.</summary>
+        public void PauseFromCoordinator()
+        {
+            PauseGifPlayback();
+        }
+
+        private void EnsureGifPlaybackRegistration()
+        {
+            if (_gifRegistered || _gifPlayback == null || !Model.IsGif)
+            {
+                return;
+            }
+
+            _gifPlayback.Register(this);
+            _gifRegistered = true;
+        }
+
+        private void UnregisterGifPlayback()
+        {
+            if (!_gifRegistered || _gifPlayback == null)
+            {
+                return;
+            }
+
+            _gifPlayback.Unregister(this);
+            _gifRegistered = false;
+        }
 
         public string VideoFooterDurationText
         {

@@ -67,6 +67,29 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
+        public void A_gif_video_marks_is_animated()
+        {
+            var target = new ChatMessage();
+            var video = new Message.Types.VideoMessage
+            {
+                GifPlayback = true,
+                Seconds = 3,
+                Mimetype = "video/mp4",
+                Url = "https://mmg.example/gif",
+                DirectPath = "/v/t62/gif",
+                MediaKey = KeyBytes,
+                FileEncSha256 = KeyBytes
+            };
+
+            IncomingMediaMetadata.ApplyVideo(target, video);
+
+            Assert.Equal(ChatMessageKind.Gif, target.Kind);
+            Assert.True(target.IsGif);
+            Assert.True(target.IsAnimated);
+            Assert.Equal("video/mp4", target.VideoMimeType);
+        }
+
+        [Fact]
         public void A_document_keeps_file_name_and_length()
         {
             var target = new ChatMessage();

@@ -23,6 +23,12 @@ namespace Unison.Core.Helpers
                 kind = ChatMessageKind.Audio;
             }
 
+            // Rows written before ChatPreviewKind.Gif: Video + IsAnimated.
+            if (kind == ChatMessageKind.Video && row.IsAnimated)
+            {
+                kind = ChatMessageKind.Gif;
+            }
+
             var message = new ChatMessage
             {
                 Id = row.MessageId,
@@ -143,12 +149,19 @@ namespace Unison.Core.Helpers
                     break;
 
                 case ChatPreviewKind.Video:
+                case ChatPreviewKind.Gif:
                     message.VideoUrl = row.MediaUrl;
                     message.VideoDirectPath = row.MediaDirectPath;
                     message.VideoMediaKeyBase64 = row.MediaKeyBase64;
                     message.VideoFileEncSha256Base64 = row.MediaFileEncSha256Base64;
                     message.VideoMimeType = row.MediaMimeType;
                     message.VideoDurationSeconds = row.MediaDurationSeconds;
+                    if (kind == ChatPreviewKind.Gif || row.IsAnimated)
+                    {
+                        message.Kind = ChatMessageKind.Gif;
+                        message.IsAnimated = true;
+                    }
+
                     if (!string.IsNullOrWhiteSpace(body))
                     {
                         message.Caption = body;
@@ -218,6 +231,7 @@ namespace Unison.Core.Helpers
                     message.NotifyImageDownloadStateChanged();
                     break;
                 case ChatPreviewKind.Video:
+                case ChatPreviewKind.Gif:
                     if (IsThumbCacheUri(row.MediaLocalUri))
                     {
                         if (string.IsNullOrWhiteSpace(message.VideoPosterUri))
@@ -466,6 +480,11 @@ namespace Unison.Core.Helpers
                 if (string.IsNullOrWhiteSpace(target.VideoPosterUri))
                 {
                     target.VideoPosterUri = source.VideoPosterUri;
+                }
+
+                if (source.IsAnimated)
+                {
+                    target.IsAnimated = true;
                 }
 
                 target.NotifyVideoDownloadStateChanged();

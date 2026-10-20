@@ -239,6 +239,9 @@ Wyłącz po zakończeniu diagnozy: pozostawienie włączonego spowalnia aplikacj
   <data name="ChatList_PreviewVideo" xml:space="preserve">
     <value>Wideo</value>
   </data>
+  <data name="ChatList_PreviewGif" xml:space="preserve">
+    <value>GIF</value>
+  </data>
   <data name="ChatList_PreviewSticker" xml:space="preserve">
     <value>Naklejka</value>
   </data>

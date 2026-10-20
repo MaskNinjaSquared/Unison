@@ -184,6 +184,10 @@ namespace Unison.Background
                     "ChatList_PreviewVideo",
                     "Video"),
                 new MediaTagRule(
+                    new[] { "[GIF]", "[Gif]" },
+                    "ChatList_PreviewGif",
+                    "GIF"),
+                new MediaTagRule(
                     new[] { "[Sticker]", "[Figurinha]", "[Adesivo]" },
                     "ChatList_PreviewSticker",
                     "Sticker"),

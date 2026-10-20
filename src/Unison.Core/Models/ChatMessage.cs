@@ -361,11 +361,56 @@ namespace Unison.Core.Models
         /// Body text is hidden for audio, images, video, stickers, and documents.
         /// </summary>
         [JsonIgnore]
-        public bool ShowTextContent => !IsRevoked && !IsAudio && !IsImage && !IsVideo && !IsSticker && !IsDocument;
+        public bool ShowTextContent =>
+            !IsRevoked && !IsAudio && !IsImage && !IsVideo && !IsGif && !IsSticker && !IsDocument;
 
         /// <summary>Protocol video message (local file may still be pending download).</summary>
         [JsonIgnore]
         public bool IsVideo => _kind == ChatMessageKind.Video;
+
+        /// <summary>WhatsApp GIF (<c>GifPlayback</c>) — same download path as video, animation UI.</summary>
+        [JsonIgnore]
+        public bool IsGif => _kind == ChatMessageKind.Gif;
+
+        /// <summary>
+        /// Video or GIF: both use the video media envelope (<see cref="VideoUri"/>, keys, MMG).
+        /// </summary>
+        [JsonIgnore]
+        public bool IsVideoMedia => IsVideo || IsGif;
+
+        private bool _isAnimated;
+        /// <summary>
+        /// Persisted GIF flag (history). Prefer <see cref="IsGif"/> / <see cref="Kind"/>;
+        /// kept so Video+IsAnimated rows upgrade to <see cref="ChatMessageKind.Gif"/>.
+        /// </summary>
+        public bool IsAnimated
+        {
+            get => _isAnimated || _kind == ChatMessageKind.Gif;
+            set
+            {
+                if (_isAnimated == value && (!value || _kind == ChatMessageKind.Gif))
+                {
+                    return;
+                }
+
+                _isAnimated = value;
+                if (value && _kind != ChatMessageKind.Gif)
+                {
+                    _kind = ChatMessageKind.Gif;
+                    OnPropertyChanged(nameof(Kind));
+                    RaiseKindDependentChanged();
+                }
+                else if (!value && _kind == ChatMessageKind.Gif)
+                {
+                    _kind = ChatMessageKind.Video;
+                    OnPropertyChanged(nameof(Kind));
+                    RaiseKindDependentChanged();
+                }
+
+                OnPropertyChanged();
+                NotifyVideoDownloadStateChanged();
+            }
+        }
 
         [JsonIgnore]
         public bool IsSticker => _kind == ChatMessageKind.Sticker;
@@ -526,9 +571,9 @@ namespace Unison.Core.Models
         [JsonIgnore]
         public bool HasVideoPoster => !string.IsNullOrWhiteSpace(VideoPosterUri);
 
-        /// <summary>Video protocol message without a local file yet — show download placeholder.</summary>
+        /// <summary>Video/GIF protocol message without a local file yet — show download placeholder.</summary>
         [JsonIgnore]
-        public bool NeedsVideoDownload => IsVideo && !HasLocalVideo;
+        public bool NeedsVideoDownload => IsVideoMedia && !HasLocalVideo;
 
         /// <summary>True when persisted media keys allow an on-demand video download.</summary>
         [JsonIgnore]
@@ -545,7 +590,9 @@ namespace Unison.Core.Models
                 nameof(CanDownloadVideo),
                 nameof(HasLocalVideo),
                 nameof(ShowTextContent),
-                nameof(IsVideo));
+                nameof(IsVideo),
+                nameof(IsGif),
+                nameof(IsAnimated));
         }
 
         private string _documentFileName;
@@ -1088,6 +1135,8 @@ namespace Unison.Core.Models
             Raise(
                 nameof(IsImage),
                 nameof(IsVideo),
+                nameof(IsGif),
+                nameof(IsAnimated),
                 nameof(IsAudio),
                 nameof(IsVoiceMessage),
                 nameof(IsSticker),

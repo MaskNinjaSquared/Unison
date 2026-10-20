@@ -21,7 +21,7 @@ namespace Unison.Uwp.Data
     {
         private static readonly string DatabaseFileName = "unison.db";
 
-        public const int CurrentSchemaVersion = 8;
+        public const int CurrentSchemaVersion = 9;
 
         /// <summary>
         /// Timeline open / load-more: protocol thumbs live on disk (<c>MediaLocalUri</c> / poster).
@@ -29,7 +29,7 @@ namespace Unison.Uwp.Data
         private const string TimelineSelectSql =
             "SELECT Id, ChatJid, MessageId, IsFromMe, ParticipantJid, SenderName, Body, Kind, SendState, " +
             "MediaUrl, MediaDirectPath, MediaKeyBase64, MediaFileEncSha256Base64, MediaMimeType, " +
-            "MediaDurationSeconds, MediaFileName, MediaFileLengthBytes, IsVoiceNote, IsRevoked, IsForwarded, IsPinned, " +
+            "MediaDurationSeconds, MediaFileName, MediaFileLengthBytes, IsVoiceNote, IsAnimated, IsRevoked, IsForwarded, IsPinned, " +
             "PinnedAtUtc, PinExpiresAtUtc, QuotedMessageId, QuotedChatJid, QuotedParticipantJid, " +
             "QuotedSenderName, QuotedBody, QuotedKind, MediaLocalUri, MediaPosterUri, MentionedJids, " +
             "TimestampUtc, SyncId, SyncType, UpdatedAtUtc FROM history_message ";
@@ -69,6 +69,7 @@ namespace Unison.Uwp.Data
                 await _connection.CreateTableAsync<HistoryMessageRow>().ConfigureAwait(false);
                 await _connection.CreateTableAsync<HistoryMessageReactionRow>().ConfigureAwait(false);
                 await EnsureFlagDeletedColumnAsync().ConfigureAwait(false);
+                await EnsureIsAnimatedColumnAsync().ConfigureAwait(false);
                 await DropLegacyThumbnailColumnAsync().ConfigureAwait(false);
                 await EnsureIndexesAsync().ConfigureAwait(false);
                 await StaleOutgoingSweep.EnsureRanAsync(_connection).ConfigureAwait(false);
@@ -1318,6 +1319,20 @@ namespace Unison.Uwp.Data
             }
         }
 
+        private async Task EnsureIsAnimatedColumnAsync()
+        {
+            try
+            {
+                await _connection.ExecuteAsync(
+                    "ALTER TABLE history_message ADD COLUMN IsAnimated INTEGER NOT NULL DEFAULT 0").ConfigureAwait(false);
+            }
+            catch (SQLiteException ex) when (
+                ex.Message != null &&
+                ex.Message.IndexOf("duplicate column name", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+            }
+        }
+
         private static HistoryMessageRow ToRow(HistoryMessage model)
         {
             return new HistoryMessageRow
@@ -1340,6 +1355,7 @@ namespace Unison.Uwp.Data
                 MediaFileName = model.MediaFileName,
                 MediaFileLengthBytes = model.MediaFileLengthBytes,
                 IsVoiceNote = model.IsVoiceNote,
+                IsAnimated = model.IsAnimated,
                 IsRevoked = model.IsRevoked,
                 IsForwarded = model.IsForwarded,
                 IsPinned = model.IsPinned,
@@ -1370,13 +1386,13 @@ namespace Unison.Uwp.Data
             }
 
             ChatPreviewKind kind = ChatPreviewKind.Text;
-            if (row.Kind >= (int)ChatPreviewKind.Text && row.Kind <= (int)ChatPreviewKind.Reaction)
+            if (row.Kind >= (int)ChatPreviewKind.Text && row.Kind <= (int)ChatPreviewKind.Gif)
             {
                 kind = (ChatPreviewKind)row.Kind;
             }
 
             ChatPreviewKind quotedKind = ChatPreviewKind.Text;
-            if (row.QuotedKind >= (int)ChatPreviewKind.Text && row.QuotedKind <= (int)ChatPreviewKind.Reaction)
+            if (row.QuotedKind >= (int)ChatPreviewKind.Text && row.QuotedKind <= (int)ChatPreviewKind.Gif)
             {
                 quotedKind = (ChatPreviewKind)row.QuotedKind;
             }
@@ -1407,6 +1423,7 @@ namespace Unison.Uwp.Data
                 MediaFileName = row.MediaFileName,
                 MediaFileLengthBytes = row.MediaFileLengthBytes,
                 IsVoiceNote = row.IsVoiceNote,
+                IsAnimated = row.IsAnimated,
                 IsRevoked = row.IsRevoked,
                 IsForwarded = row.IsForwarded,
                 IsPinned = row.IsPinned,

@@ -239,6 +239,9 @@
   <data name="ChatList_PreviewVideo" xml:space="preserve">
     <value>Відео</value>
   </data>
+  <data name="ChatList_PreviewGif" xml:space="preserve">
+    <value>GIF</value>
+  </data>
   <data name="ChatList_PreviewSticker" xml:space="preserve">
     <value>Стікер</value>
   </data>

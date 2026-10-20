@@ -94,6 +94,8 @@ namespace Unison.Core.Helpers
                     return MediaPreviewTag.Image;
                 case ChatMessageKind.Video:
                     return MediaPreviewTag.Video;
+                case ChatMessageKind.Gif:
+                    return MediaPreviewTag.Gif;
                 case ChatMessageKind.Sticker:
                     return MediaPreviewTag.Sticker;
                 case ChatMessageKind.Voice:

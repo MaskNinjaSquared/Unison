@@ -180,6 +180,9 @@
   <data name="ChatList_PreviewVideo" xml:space="preserve">
     <value>Видео</value>
   </data>
+  <data name="ChatList_PreviewGif" xml:space="preserve">
+    <value>GIF</value>
+  </data>
   <data name="ChatList_PreviewSticker" xml:space="preserve">
     <value>Стикер</value>
   </data>

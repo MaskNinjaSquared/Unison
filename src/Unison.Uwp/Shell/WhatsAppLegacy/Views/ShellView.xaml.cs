@@ -1416,7 +1416,10 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                     await Task.Delay(100);
                 }
 
-                _shell?.QueueOpenChatFromActivation("chat=" + Uri.EscapeDataString(jid));
+                // In-app tile/toast while shell is up: never delay the chat list.
+                _shell?.QueueOpenChatFromActivation(
+                    "chat=" + Uri.EscapeDataString(jid),
+                    delayChatListUntilConversationReady: false);
             }
             catch (Exception ex)
             {

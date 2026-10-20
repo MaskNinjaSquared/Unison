@@ -75,5 +75,45 @@ namespace Unison.Core.Tests.Helpers
                 CameraDeviceAttitude.Rotated90Counterclockwise,
                 CameraOrientationMath.Mirror(CameraDeviceAttitude.Rotated270Counterclockwise));
         }
+
+        [Fact]
+        public void Bake_preview_rotation_only_for_landscape_buffer_with_normal_exif()
+        {
+            // Typical Mobile portrait preview: 90° metadata, sensor still landscape.
+            Assert.True(CameraOrientationMath.ShouldBakePreviewRotation(
+                90,
+                CameraPhotoExifOrientation.Normal,
+                pixelWidth: 1280,
+                pixelHeight: 720));
+
+            // VideoPreview already wrote upright portrait pixels — do not rotate again.
+            Assert.False(CameraOrientationMath.ShouldBakePreviewRotation(
+                90,
+                CameraPhotoExifOrientation.Normal,
+                pixelWidth: 720,
+                pixelHeight: 1280));
+
+            Assert.False(CameraOrientationMath.ShouldBakePreviewRotation(
+                90,
+                CameraPhotoExifOrientation.Rotate270,
+                pixelWidth: 1280,
+                pixelHeight: 720));
+
+            Assert.False(CameraOrientationMath.ShouldBakePreviewRotation(
+                0,
+                CameraPhotoExifOrientation.Normal,
+                pixelWidth: 1280,
+                pixelHeight: 720));
+        }
+
+        [Fact]
+        public void Normalize_clockwise_degrees_snaps_to_right_angles()
+        {
+            Assert.Equal(0, CameraOrientationMath.NormalizeClockwiseDegrees(0));
+            Assert.Equal(90, CameraOrientationMath.NormalizeClockwiseDegrees(90));
+            Assert.Equal(180, CameraOrientationMath.NormalizeClockwiseDegrees(180));
+            Assert.Equal(270, CameraOrientationMath.NormalizeClockwiseDegrees(270));
+            Assert.Equal(90, CameraOrientationMath.NormalizeClockwiseDegrees(100));
+        }
     }
 }

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -238,6 +238,9 @@ Schakel uit na diagnostiseren: het ingeschakeld laten vertraagd de app.</value>
   </data>
   <data name="ChatList_PreviewVideo" xml:space="preserve">
     <value>Video</value>
+  </data>
+  <data name="ChatList_PreviewGif" xml:space="preserve">
+    <value>GIF</value>
   </data>
   <data name="ChatList_PreviewSticker" xml:space="preserve">
     <value>Sticker</value>

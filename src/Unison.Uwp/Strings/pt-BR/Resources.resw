@@ -239,6 +239,9 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="ChatList_PreviewVideo" xml:space="preserve">
     <value>Vídeo</value>
   </data>
+  <data name="ChatList_PreviewGif" xml:space="preserve">
+    <value>GIF</value>
+  </data>
   <data name="ChatList_PreviewSticker" xml:space="preserve">
     <value>Adesivo</value>
   </data>

@@ -1,6 +1,6 @@
 // =============================================================================
 // Tests for ChatListDeepLinkSyncUi — toast/tile open suppresses sync banner
-// until the conversation finishes loading.
+// until the conversation finishes loading (cold start only).
 // =============================================================================
 using Unison.Core.Helpers;
 using Xunit;
@@ -9,6 +9,18 @@ namespace Unison.Core.Tests.Helpers
 {
     public class ChatListDeepLinkSyncUiTests
     {
+        [Fact]
+        public void Cold_start_arms_list_hold()
+        {
+            Assert.True(ChatListDeepLinkSyncUi.ShouldArmListHold(appWasAlreadyOpen: false));
+        }
+
+        [Fact]
+        public void Warm_app_does_not_arm_list_hold()
+        {
+            Assert.False(ChatListDeepLinkSyncUi.ShouldArmListHold(appWasAlreadyOpen: true));
+        }
+
         [Fact]
         public void Deep_link_hold_suppresses_sync_banner()
         {

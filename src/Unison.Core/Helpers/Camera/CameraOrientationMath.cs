@@ -140,6 +140,57 @@ namespace Unison.Core.Helpers
             }
         }
 
+        /// <summary>
+        /// True when the JPEG still needs the live preview's MF_MT_VIDEO_ROTATION baked in.
+        /// </summary>
+        /// <remarks>
+        /// <c>PhotoCaptureSource.VideoPreview</c> may already encode an upright buffer (EXIF
+        /// Normal + portrait pixels). Re-applying preview degrees — or stamping sensor EXIF —
+        /// flips Mobile portrait stills ~180° vs the viewfinder. Only bake when EXIF is Normal
+        /// and a 90°/270° preview rotation still sees a landscape pixel buffer.
+        /// </remarks>
+        public static bool ShouldBakePreviewRotation(
+            int previewRotationClockwiseDegrees,
+            CameraPhotoExifOrientation jpegExif,
+            int pixelWidth,
+            int pixelHeight)
+        {
+            if (jpegExif != CameraPhotoExifOrientation.Normal)
+            {
+                return false;
+            }
+
+            int degrees = NormalizeClockwiseDegrees(previewRotationClockwiseDegrees);
+            if (degrees == 0)
+            {
+                return false;
+            }
+
+            if (degrees == 90 || degrees == 270)
+            {
+                // Preview is on its side relative to the sensor — bake only while the JPEG
+                // is still landscape (not already upright from the preview encoder).
+                return pixelWidth > 0 && pixelHeight > 0 && pixelWidth > pixelHeight;
+            }
+
+            // 180°: aspect cannot tell; bake when EXIF did not already express it.
+            return degrees == 180;
+        }
+
+        /// <summary>Maps clockwise degrees to a 90° step (0 / 90 / 180 / 270).</summary>
+        public static int NormalizeClockwiseDegrees(int degrees)
+        {
+            int n = degrees % 360;
+            if (n < 0)
+            {
+                n += 360;
+            }
+
+            // Snap to nearest 90° for BitmapRotation / MF.
+            int step = ((n + 45) / 90) * 90;
+            return step == 360 ? 0 : step;
+        }
+
         public static CameraDeviceAttitude FromDisplay(
             CameraDisplayOrientation current,
             CameraDisplayOrientation native)

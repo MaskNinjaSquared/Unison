@@ -56,6 +56,10 @@ namespace Unison.Core.Helpers
                 case ChatPreviewKind.Video:
                     ConsumeTag(ref s, "[Video]");
                     break;
+                case ChatPreviewKind.Gif:
+                    ConsumeTag(ref s, "[GIF]");
+                    ConsumeTag(ref s, "[Gif]");
+                    break;
                 case ChatPreviewKind.Sticker:
                     ConsumeTag(ref s, "[Sticker]");
                     break;
@@ -159,6 +163,11 @@ namespace Unison.Core.Helpers
                 return ChatPreviewKind.Image;
             }
 
+            if (ContainsIgnoreCase(raw, "[GIF]") || ContainsIgnoreCase(raw, "[Gif]"))
+            {
+                return ChatPreviewKind.Gif;
+            }
+
             if (ContainsIgnoreCase(raw, "[Video]"))
             {
                 return ChatPreviewKind.Video;
@@ -195,6 +204,8 @@ namespace Unison.Core.Helpers
                     return ChatPreviewKind.Image;
                 case ChatMessageKind.Video:
                     return ChatPreviewKind.Video;
+                case ChatMessageKind.Gif:
+                    return ChatPreviewKind.Gif;
                 case ChatMessageKind.Sticker:
                     return ChatPreviewKind.Sticker;
                 case ChatMessageKind.Voice:
@@ -215,6 +226,8 @@ namespace Unison.Core.Helpers
                     return ChatMessageKind.Image;
                 case ChatPreviewKind.Video:
                     return ChatMessageKind.Video;
+                case ChatPreviewKind.Gif:
+                    return ChatMessageKind.Gif;
                 case ChatPreviewKind.Sticker:
                     return ChatMessageKind.Sticker;
                 case ChatPreviewKind.Voice:

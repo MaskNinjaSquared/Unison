@@ -492,6 +492,8 @@ namespace Unison.Uwp
             // AttachedUiDispatcher (not IDispatcher/DispatcherService): PropertyChanged from the
             // incoming pump must marshal onto the live frame dispatcher, or IsRevoked/HasReactions
             // bindings throw RPC_E_WRONG_THREAD on Mobile.
+            services.AddSingleton<IGifPlaybackCoordinator>(sp => new GifPlaybackCoordinator(
+                sp.GetRequiredService<ISystemInfoProvider>().GetDeviceCategory()));
             services.AddSingleton<IChatMessageVmFactory>(sp => new ChatMessageVmFactory(
                 sp.GetService<IStringResources>(),
                 sp.GetService<IMessageService>(),
@@ -503,7 +505,9 @@ namespace Unison.Uwp
                 sp.GetService<IRuntimeDiagnostics>(),
                 sp.GetService<IHistoryMessageStore>(),
                 sp.GetService<ICopyService>(),
-                sp.GetRequiredService<AttachedUiDispatcher>()));
+                sp.GetRequiredService<AttachedUiDispatcher>(),
+                sp.GetRequiredService<ISystemInfoProvider>().GetDeviceCategory(),
+                sp.GetRequiredService<IGifPlaybackCoordinator>()));
             services.AddSingleton<IChatDetailInfoViewModelFactory, ChatDetailInfoViewModelFactory>();
             services.AddSingleton<INewChatDialogViewModelFactory, NewChatDialogViewModelFactory>();
             services.AddSingleton<ILocalContactsService, LocalContactsService>();
@@ -749,7 +753,7 @@ namespace Unison.Uwp
                 return;
             }
 
-            HandleActivationArguments(e.Arguments);
+            HandleActivationArguments(e.Arguments, e.PreviousExecutionState);
         }
 
         protected override void OnActivated(IActivatedEventArgs args)
@@ -763,7 +767,7 @@ namespace Unison.Uwp
             if (args is ProtocolActivatedEventArgs protocolArgs &&
                 string.Equals(protocolArgs.Uri?.Scheme, PeopleMessageScheme, StringComparison.OrdinalIgnoreCase))
             {
-                HandlePeopleMessageActivation(protocolArgs.Uri);
+                HandlePeopleMessageActivation(protocolArgs.Uri, args.PreviousExecutionState);
                 return;
             }
 
@@ -795,7 +799,9 @@ namespace Unison.Uwp
                     NavigateRootToBoot(toastArgument);
                 }
 
-                HandleActivationArguments(toastArgument);
+                HandleActivationArguments(
+                    toastArgument,
+                    args.PreviousExecutionState);
 
                 Window.Current.Activate();
                 ApplyWindowChromeBootstrap();
@@ -812,7 +818,9 @@ namespace Unison.Uwp
         /// activates <c>ms-ipmessaging:?ContactRemoteIds=...</c>. Contact-action activation
         /// (<c>windows.contact</c>) types are absent from the 22621 SDK contracts.
         /// </summary>
-        private void HandlePeopleMessageActivation(Uri uri)
+        private void HandlePeopleMessageActivation(
+            Uri uri,
+            ApplicationExecutionState previousExecutionState)
         {
             Frame rootFrame = EnsureRootFrame();
             ApplyShellThemeFromSettings();
@@ -835,7 +843,7 @@ namespace Unison.Uwp
                 NavigateRootToBoot(arguments);
             }
 
-            HandleActivationArguments(arguments);
+            HandleActivationArguments(arguments, previousExecutionState);
 
             Window.Current.Activate();
             ApplyWindowChromeBootstrap();
@@ -861,7 +869,9 @@ namespace Unison.Uwp
         }
 
         /// <summary>Secondary tile / toast <c>chat=</c> deep link into an existing session.</summary>
-        private void HandleActivationArguments(string arguments)
+        private void HandleActivationArguments(
+            string arguments,
+            ApplicationExecutionState previousExecutionState)
         {
             if (string.IsNullOrWhiteSpace(arguments) || Services == null)
             {
@@ -870,8 +880,15 @@ namespace Unison.Uwp
 
             try
             {
+                // Running/Suspended: list is (or was) already up — open the chat only.
+                // NotRunning/Terminated/ClosedByUser: cold path may delay list until detail loads.
+                bool appWasAlreadyOpen =
+                    previousExecutionState == ApplicationExecutionState.Running ||
+                    previousExecutionState == ApplicationExecutionState.Suspended;
+                bool delayChatList = ChatListDeepLinkSyncUi.ShouldArmListHold(appWasAlreadyOpen);
+
                 var shell = Services.GetService<ShellViewModel>();
-                shell?.QueueOpenChatFromActivation(arguments);
+                shell?.QueueOpenChatFromActivation(arguments, delayChatList);
             }
             catch (Exception ex)
             {
