@@ -143,8 +143,23 @@ namespace Unison.Core.Tests.Helpers
         }
     }
 
-    public class OutgoingTextSendRetryTests
+    [Collection(ConnectionStabilityExperimentCollection.Name)]
+    public class OutgoingTextSendRetryTests : IDisposable
     {
+        private readonly bool _wasEnabled;
+
+        public OutgoingTextSendRetryTests()
+        {
+            _wasEnabled = ConnectionStabilityExperiment.Enabled;
+            // Pin legacy budgets so these tests stay independent of the experiment master switch.
+            ConnectionStabilityExperiment.Enabled = false;
+        }
+
+        public void Dispose()
+        {
+            ConnectionStabilityExperiment.Enabled = _wasEnabled;
+        }
+
         [Fact]
         public void The_first_attempt_waits_longer_for_a_reconnect_than_the_second()
         {
@@ -203,6 +218,22 @@ namespace Unison.Core.Tests.Helpers
             Assert.False(step.Retry);
             Assert.Equal(invalidate, step.InvalidateSocket);
             Assert.Equal(TimeSpan.Zero, step.RetryDelay);
+        }
+
+        [Fact]
+        public void Experiment_budget_allows_a_third_attempt()
+        {
+            ConnectionStabilityExperiment.Enabled = true;
+            Assert.Equal(3, OutgoingTextSendRetry.MaxAttempts);
+            Assert.Equal(TimeSpan.FromSeconds(2), OutgoingTextSendRetry.RetryDelay);
+
+            OutgoingTextSendStep step = OutgoingTextSendRetry.After(2, OutgoingSendAttemptOutcome.TransportFailure);
+            Assert.True(step.Retry);
+            Assert.True(step.InvalidateSocket);
+            Assert.Equal(TimeSpan.FromSeconds(2), step.RetryDelay);
+
+            OutgoingTextSendStep last = OutgoingTextSendRetry.After(3, OutgoingSendAttemptOutcome.TransportFailure);
+            Assert.False(last.Retry);
         }
     }
 }

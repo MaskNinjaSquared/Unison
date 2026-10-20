@@ -70,6 +70,9 @@ namespace Unison.Core.ViewModels
         private readonly ILocalSettings _localSettings;
         private readonly SyncWorkloadStrategy _workload;
         private readonly ChatListInitialPaintGate _listPaintGate;
+        private readonly ChatListDeepLinkHoldGate _deepLinkHold;
+        /// <summary>True after the ListView has painted once this attach cycle (warm toast must not unload it).</summary>
+        private bool _listEverMaterialized;
 
         /// <summary>
         /// JID labels already asked of the contact service during search. The strip's mention
@@ -185,7 +188,8 @@ namespace Unison.Core.ViewModels
             IRuntimeDiagnostics diagnostics = null,
             ILocalSettings localSettings = null,
             SyncWorkloadStrategy workload = null,
-            ChatListInitialPaintGate listPaintGate = null)
+            ChatListInitialPaintGate listPaintGate = null,
+            ChatListDeepLinkHoldGate deepLinkHold = null)
         {
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _chatService = chatService;
@@ -194,6 +198,7 @@ namespace Unison.Core.ViewModels
             _localSettings = localSettings;
             _workload = workload ?? HighSyncWorkload.Instance;
             _listPaintGate = listPaintGate;
+            _deepLinkHold = deepLinkHold;
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _messageService = messageService ?? throw new ArgumentNullException(nameof(messageService));
             _contactService = contactService ?? throw new ArgumentNullException(nameof(contactService));
@@ -502,6 +507,11 @@ namespace Unison.Core.ViewModels
                 chat.PropertyChanged += ChatItem_PropertyChanged;
             }
 
+            if (_deepLinkHold != null)
+            {
+                _deepLinkHold.Changed += DeepLinkHold_Changed;
+            }
+
             _notificationCounter = new NotificationCounterWatch(_chatState.Chats);
             _notificationCounter.Changed += NotificationCounter_Changed;
             RaiseProperties(nameof(NotificationCounterBadge), nameof(NotificationCounterBadgeText));
@@ -612,6 +622,11 @@ namespace Unison.Core.ViewModels
             _history.HistoryMessageChunkPersisted -= History_MessageChunkPersisted;
             _contactService.DisplayNamesUpdated -= Contacts_DisplayNamesUpdated;
             _chatState.Chats.CollectionChanged -= ChatState_ChatsChanged;
+
+            if (_deepLinkHold != null)
+            {
+                _deepLinkHold.Changed -= DeepLinkHold_Changed;
+            }
 
             foreach (var chat in _chatState.Chats)
             {
@@ -1335,8 +1350,8 @@ namespace Unison.Core.ViewModels
                     if (IsListHeldForSync)
                     {
                         ShowSyncProgressOnly(e.ProcessedConversations, e.TotalConversations);
-                        return;
-                    }
+                    return;
+                }
 
                     BeginBatchRendering(
                         e.ProcessedConversations,
@@ -1358,7 +1373,7 @@ namespace Unison.Core.ViewModels
                 // complete — keep the syncing banner until that queue drains.
                 if (!HasPendingPreviewHydrate())
                 {
-                    _batchCompleted = true;
+                _batchCompleted = true;
                     TraceListLifecycle("batch-marked-complete-no-hydrate", BuildListSnapshot());
                     ScheduleFullSqlitePreviewReconcile();
                 }
@@ -2060,8 +2075,8 @@ namespace Unison.Core.ViewModels
                 // While the first sync holds the list, the release builds it sorted from scratch;
                 // a dispatcher post per preview hydrate would only queue no-ops on the UI thread.
                 if (!IsListHeldForSync)
-                {
-                    _ = _dispatcher.RunAsync(ScheduleRefreshVisibleChats);
+            {
+                _ = _dispatcher.RunAsync(ScheduleRefreshVisibleChats);
                 }
 
                 return;
@@ -2183,15 +2198,15 @@ namespace Unison.Core.ViewModels
 
                 if (!incomplete)
                 {
-                    while (VisibleChats.Count > source.Count)
-                    {
+                while (VisibleChats.Count > source.Count)
+                {
                         if (mutations >= moveBudget)
                         {
                             incomplete = true;
                             break;
                         }
 
-                        VisibleChats.RemoveAt(VisibleChats.Count - 1);
+                    VisibleChats.RemoveAt(VisibleChats.Count - 1);
                         mutations++;
                     }
                 }
@@ -2546,14 +2561,42 @@ namespace Unison.Core.ViewModels
 
         /// <summary>
         /// The first history sync persists before any row reaches the screen, so the UI thread is
-        /// not fighting that bulk SQLite write. See <see cref="ChatListSyncHold"/>.
+        /// not fighting that bulk SQLite write. Toast deep-link also delays first materialize until
+        /// the conversation has loaded. See <see cref="ChatListSyncHold"/>.
         /// </summary>
         private bool IsListHeldForSync => ChatListSyncHold.ShouldHoldRows(
-            _history.IsAwaitingFirstHistorySync);
+            _history.IsAwaitingFirstHistorySync,
+            _deepLinkHold != null && _deepLinkHold.IsHeld,
+            _listEverMaterialized);
+
+        private void DeepLinkHold_Changed(object sender, EventArgs e)
+        {
+            if (!_attached)
+            {
+                return;
+            }
+
+            RaiseChatListMaterialized();
+            if (!IsListHeldForSync && !_batchRendering)
+            {
+                RefreshVisibleChats();
+                NotifyListPaintReleased("deep-link-hold-released");
+            }
+        }
 
         private void RaiseChatListMaterialized()
         {
             bool materialized = IsChatListMaterialized;
+            if (materialized)
+            {
+                _listEverMaterialized = true;
+            }
+            else if (_history.IsAwaitingFirstHistorySync)
+            {
+                // Wipe / first-sync hold again: allow a later toast to delay the next first paint.
+                _listEverMaterialized = false;
+            }
+
             RaiseProperties(nameof(IsChatListMaterialized));
             TraceListLifecycle(
                 "raise-materialized",
@@ -2586,8 +2629,8 @@ namespace Unison.Core.ViewModels
             }
             else
             {
-                _batchProcessed = Math.Max(_batchProcessed, processed);
-                _batchTotal = Math.Max(_batchTotal, total);
+            _batchProcessed = Math.Max(_batchProcessed, processed);
+            _batchTotal = Math.Max(_batchTotal, total);
             }
 
             // Never clamped to the store count: this event is raised before the chunk's previews

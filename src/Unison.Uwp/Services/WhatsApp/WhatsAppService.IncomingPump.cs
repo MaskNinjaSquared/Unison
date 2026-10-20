@@ -614,7 +614,17 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             if (target == null) return;
-            MessageRevocationContent.ApplyTombstone(target);
+
+            // Tombstone sets IsRevoked (post-1.8.3). That PropertyChanged fans into XAML bindings;
+            // apply on the UI thread when a dispatcher is attached so Mobile does not hit 0x8001010E.
+            if (_ui.Current != null)
+            {
+                await _ui.RunAsync(() => MessageRevocationContent.ApplyTombstone(target));
+            }
+            else
+            {
+                MessageRevocationContent.ApplyTombstone(target);
+            }
 
             await SaveMessageAsync(canonical, target);
 
@@ -1255,8 +1265,30 @@ namespace Unison.Uwp.Services.WhatsApp
                         Timestamp = NormalizeIncomingTimestamp(e.Timestamp)
                     };
 
-                    ChatMessage reactionParent;
-                    if (_messageService.TryHandleReaction(e.Message, reactionContext, reactionTimeline, out reactionParent))
+                    // TryApply mutates HasReactions on the parent bubble; same UI-thread rule as revoke.
+                    ChatMessage reactionParent = null;
+                    bool handledReaction = false;
+                    if (_ui.Current != null)
+                    {
+                        await _ui.RunAsync(() =>
+                        {
+                            handledReaction = _messageService.TryHandleReaction(
+                                e.Message,
+                                reactionContext,
+                                reactionTimeline,
+                                out reactionParent);
+                        }).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        handledReaction = _messageService.TryHandleReaction(
+                            e.Message,
+                            reactionContext,
+                            reactionTimeline,
+                            out reactionParent);
+                    }
+
+                    if (handledReaction)
                     {
                         SetIncomingMessagePumpStage("reaction", e);
                         if (reactionParent != null)

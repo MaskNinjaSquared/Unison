@@ -133,7 +133,9 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 avatars,
                 ui,
                 nameRefresh,
-                aliasMerge);
+                aliasMerge,
+                syncWork,
+                deferredAvatars);
             _names = new ContactNameResolver(
                 whatsAppService,
                 _addressBook,
@@ -148,7 +150,8 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 syncStatus,
                 syncWork,
                 sessions,
-                nameRefresh);
+                nameRefresh,
+                workload ?? throw new ArgumentNullException(nameof(workload)));
             _avatars = new ChatAvatarPolicy(
                 deferredAvatars ?? throw new ArgumentNullException(nameof(deferredAvatars)),
                 jids,
@@ -616,9 +619,9 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             }
         }
 
-        public Task ResolveMissingNamesAsync()
+        public Task ResolveMissingNamesAsync(bool force = false)
         {
-            return _names.ResolveMissingAsync();
+            return _names.ResolveMissingAsync(force);
         }
 
         public async Task RetrieveContactPicturesAsync(CancellationToken token = default(CancellationToken))

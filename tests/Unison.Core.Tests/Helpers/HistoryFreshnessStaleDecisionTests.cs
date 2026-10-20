@@ -2,6 +2,8 @@
 // Tests for HistoryFreshnessStaleDecision — mirrors TryGetHistoryFreshnessStaleReason.
 // =============================================================================
 using System;
+using System.Globalization;
+using System.Threading;
 using Unison.Core.Helpers;
 using Xunit;
 
@@ -133,6 +135,35 @@ namespace Unison.Core.Tests.Helpers
                 Threshold,
                 out reason));
             Assert.Null(reason);
+        }
+
+        [Fact]
+        public void Age_minutes_token_stays_invariant_under_comma_decimal_culture()
+        {
+            CultureInfo previous = CultureInfo.CurrentCulture;
+            try
+            {
+                Thread.CurrentThread.CurrentCulture = CultureInfo.GetCultureInfo("pt-BR");
+
+                string reason;
+                Assert.True(HistoryFreshnessStaleDecision.IsStale(
+                    Now,
+                    newestAnyUtc: Now.AddMinutes(-5),
+                    newestNonSelfUtc: Now.AddMinutes(-45),
+                    hasGroupChats: false,
+                    newestGroupUtc: DateTime.MinValue,
+                    Threshold,
+                    out reason));
+
+                Assert.Contains("ageMinutes=45.0", reason);
+                Assert.DoesNotContain("ageMinutes=45,0", reason);
+                Assert.True(HistoryPostOfflineCatchUpDecision.TryGetAgeMinutes(reason, out double minutes));
+                Assert.Equal(45.0, minutes, 3);
+            }
+            finally
+            {
+                Thread.CurrentThread.CurrentCulture = previous;
+            }
         }
     }
 }

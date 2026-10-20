@@ -83,20 +83,24 @@ namespace Unison.Uwp.Services.WhatsApp
 
         async Task<OutgoingSendAttempt> IOutgoingMessageHost.TrySendTextOnceAsync(OutgoingTextAttempt request)
         {
-            await EnsureConnectedAsync((int)request.ConnectTimeout.TotalMilliseconds);
-            var socket = _socket;
-            if (socket == null || !socket.IsConnected || !socket.IsHandshakeComplete)
-            {
-                return new OutgoingSendAttempt
-                {
-                    Outcome = OutgoingSendAttemptOutcome.SocketNotReady,
-                    Error = new InvalidOperationException("WhatsApp socket is not ready"),
-                    TransportToken = socket
-                };
-            }
-
+            IWhatsAppSocket socket = null;
             try
             {
+                // EnsureConnected must live in the same try as the write: a reconnect timeout
+                // is a transport failure (StatusFailed), not an uncaught throw that leaves
+                // the bubble pending (1.8.3 SendTextMessageAsync catch behaviour).
+                await EnsureConnectedAsync((int)request.ConnectTimeout.TotalMilliseconds);
+                socket = _socket;
+                if (socket == null || !socket.IsConnected || !socket.IsHandshakeComplete)
+                {
+                    return new OutgoingSendAttempt
+                    {
+                        Outcome = OutgoingSendAttemptOutcome.SocketNotReady,
+                        Error = new InvalidOperationException("WhatsApp socket is not ready"),
+                        TransportToken = socket
+                    };
+                }
+
                 Task<string> sendTask = socket.SendTextMessageAsync(
                     request.ChatJid,
                     request.Text,
@@ -125,7 +129,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     ex,
                     "messageId=" + request.MessageId + "; attempt=" + request.Attempt);
 
-                bool socketUsable = socket.IsConnected && socket.IsHandshakeComplete;
+                bool socketUsable = socket != null && socket.IsConnected && socket.IsHandshakeComplete;
                 return new OutgoingSendAttempt
                 {
                     Outcome = OutgoingFailureClassification.IsTransportFailure(ex, socketUsable)

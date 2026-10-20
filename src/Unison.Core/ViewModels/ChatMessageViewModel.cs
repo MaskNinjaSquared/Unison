@@ -30,6 +30,7 @@ namespace Unison.Core.ViewModels
         private readonly IRuntimeDiagnostics _diagnostics;
         private readonly IHistoryMessageStore _history;
         private readonly ICopyService _copy;
+        private readonly IDispatcher _ui;
         private bool _isExpanded;
         private bool _isHighlighted;
         private bool? _canExpandCached;
@@ -50,7 +51,8 @@ namespace Unison.Core.ViewModels
             ISessionLogger sessionLogger = null,
             IRuntimeDiagnostics diagnostics = null,
             IHistoryMessageStore history = null,
-            ICopyService copy = null)
+            ICopyService copy = null,
+            IDispatcher ui = null)
         {
             Model = model ?? throw new ArgumentNullException(nameof(model));
             _strings = strings;
@@ -63,6 +65,10 @@ namespace Unison.Core.ViewModels
             _diagnostics = diagnostics;
             _history = history;
             _copy = copy;
+            // Pump / revoke / reaction mutate ChatMessage off the UI thread. Forwarding
+            // PropertyChanged inline hits XAML bindings (IsRevoked, HasReactions) and throws
+            // RPC_E_WRONG_THREAD (0x8001010E) on Mobile — 1.8.3 avoided IsRevoked on tombstone.
+            _ui = ui;
 
             ShowReactionsCommand = new RelayCommand(
                 () => _ = ShowReactionsAsync(),
@@ -126,8 +132,14 @@ namespace Unison.Core.ViewModels
 
         /// <summary>
         /// Forwards model changes and fans out only the VM-computed props that depend on each group.
+        /// Marshalled onto the UI dispatcher when one is supplied (incoming pump is not UI-bound).
         /// </summary>
         private void OnModelPropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            PostToUi(() => ApplyModelPropertyChanged(e));
+        }
+
+        private void ApplyModelPropertyChanged(PropertyChangedEventArgs e)
         {
             string name = e?.PropertyName;
             PropertyChanged?.Invoke(this, e);
@@ -166,20 +178,20 @@ namespace Unison.Core.ViewModels
 
             if (name == nameof(ChatMessage.MentionedJids))
             {
-                Raise(nameof(MentionedJids));
+                RaiseCore(nameof(MentionedJids));
             }
 
             if (name == nameof(ChatMessage.IsForwarded))
             {
-                Raise(nameof(IsForwarded));
-                Raise(nameof(ShowForwardedLabel));
-                Raise(nameof(ForwardedLabelText));
+                RaiseCore(nameof(IsForwarded));
+                RaiseCore(nameof(ShowForwardedLabel));
+                RaiseCore(nameof(ForwardedLabelText));
             }
 
             if (name == nameof(ChatMessage.ShowQuotedAuthorLink))
             {
-                Raise(nameof(ShowQuotedAuthorLink));
-                Raise(nameof(CanOpenQuotedAuthor));
+                RaiseCore(nameof(ShowQuotedAuthorLink));
+                RaiseCore(nameof(CanOpenQuotedAuthor));
             }
 
             if (IsImageOrStickerProperty(name))
@@ -201,6 +213,22 @@ namespace Unison.Core.ViewModels
             {
                 RaiseAudioModelUiChanged();
             }
+        }
+
+        private void PostToUi(Action action)
+        {
+            if (action == null)
+            {
+                return;
+            }
+
+            if (_ui == null)
+            {
+                action();
+                return;
+            }
+
+            _ = _ui.RunAsync(action);
         }
 
         private static bool IsReactionProperty(string name) =>
@@ -1216,6 +1244,11 @@ namespace Unison.Core.ViewModels
 
         /// <summary>Local equivalent of <c>Observable.RaiseProperties</c> (this VM is not an Observable).</summary>
         private void Raise(params string[] propertyNames)
+        {
+            PostToUi(() => RaiseCore(propertyNames));
+        }
+
+        private void RaiseCore(params string[] propertyNames)
         {
             var handler = PropertyChanged;
             if (handler == null || propertyNames == null)

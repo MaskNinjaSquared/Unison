@@ -278,14 +278,29 @@ namespace Unison.Uwp
                     sp.GetRequiredService<ActiveChat>(),
                     () => settings.Get<bool>(LocalSettingsConstants.ShowSyncStatus));
             });
-            // The socket is read lazily: the client takes this gate in its constructor.
-            services.AddSingleton(sp => new SyncWorkGate(
-                sp.GetRequiredService<HistoryOnDemandRegistry>(),
-                () => ((WhatsAppService)sp.GetRequiredService<IWhatsAppService>()).Socket?.IsAwaitingInitialSync ?? false));
             // The client publishes first-sync progress; HistoryFacade and the budget read it.
             services.AddSingleton<InitialSyncProgressState>();
+            // The socket is read lazily: the client takes this gate in its constructor.
+            // Avatar network fetch also waits on first-sync list hold / safe mode (WhatsApp:
+            // unlock chats, then load photos).
+            services.AddSingleton(sp => new SyncWorkGate(
+                sp.GetRequiredService<HistoryOnDemandRegistry>(),
+                () => ((WhatsAppService)sp.GetRequiredService<IWhatsAppService>()).Socket?.IsAwaitingInitialSync ?? false,
+                () => ((WhatsAppService)sp.GetRequiredService<IWhatsAppService>()).IsHistoryCatchUpInProgress,
+                () =>
+                {
+                    IHistoryService history = sp.GetService<IHistoryService>();
+                    if (history != null && history.IsAwaitingFirstHistorySync)
+                    {
+                        return true;
+                    }
+
+                    return sp.GetService<InitialSyncProgressState>()?.IsActive == true;
+                }));
             // Enrichment waits until the chat list finishes its first post-sync paint.
             services.AddSingleton<ChatListInitialPaintGate>();
+            // Toast/tile: hold chat-list x:Load until the conversation pane has loaded.
+            services.AddSingleton<ChatListDeepLinkHoldGate>();
             // Hold DisplayRequest for the first-sync list hold; HistoryFacade calls Hold/Release.
             services.AddSingleton<IDisplayKeepAwakeService, DisplayKeepAwakeService>();
             services.AddSingleton<SelfProfileState>();
@@ -473,7 +488,21 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IChatStateStore>(),
                 sp.GetRequiredService<ISystemInfoProvider>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>()));
-            services.AddSingleton<IChatMessageVmFactory, ChatMessageVmFactory>();
+            // AttachedUiDispatcher (not IDispatcher/DispatcherService): PropertyChanged from the
+            // incoming pump must marshal onto the live frame dispatcher, or IsRevoked/HasReactions
+            // bindings throw RPC_E_WRONG_THREAD on Mobile.
+            services.AddSingleton<IChatMessageVmFactory>(sp => new ChatMessageVmFactory(
+                sp.GetService<IStringResources>(),
+                sp.GetService<IMessageService>(),
+                sp.GetService<IDialogService>(),
+                sp.GetService<IUriLauncher>(),
+                sp.GetService<IFilePicker>(),
+                sp.GetService<IAudioExportService>(),
+                sp.GetService<ISessionLogger>(),
+                sp.GetService<IRuntimeDiagnostics>(),
+                sp.GetService<IHistoryMessageStore>(),
+                sp.GetService<ICopyService>(),
+                sp.GetRequiredService<AttachedUiDispatcher>()));
             services.AddSingleton<IChatDetailInfoViewModelFactory, ChatDetailInfoViewModelFactory>();
             services.AddSingleton<INewChatDialogViewModelFactory, NewChatDialogViewModelFactory>();
             services.AddSingleton<ILocalContactsService, LocalContactsService>();

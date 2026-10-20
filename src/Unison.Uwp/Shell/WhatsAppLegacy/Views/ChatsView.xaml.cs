@@ -151,16 +151,20 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 if (chat == null)
                 {
                     Debug.WriteLine("[LegacyChats] Deep-link chat not found yet: " + jid);
+                    // OpenDetailAsync never runs — release list hold here.
+                    _shell?.ReleaseDeepLinkListHold("deep-link-not-found");
                     return;
                 }
 
                 _shell.ClearPendingOpenChatJid();
                 ChatListPart?.HighlightChatQuiet(chat);
                 ChatOpenRequested?.Invoke(this, new ChatSelectedEventArgs(chat));
+                // Release after ShellView OpenDetailAsync completes the conversation load.
             }
             catch (Exception ex)
             {
                 Debug.WriteLine("[LegacyChats] Deep-link open failed: " + ex);
+                _shell?.ReleaseDeepLinkListHold("deep-link-failed");
             }
             finally
             {

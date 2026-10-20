@@ -61,6 +61,7 @@ namespace Unison.Core.ViewModels
         private bool _statusDetailOpen;
         private ChatItem _pendingChat;
         private string _pendingOpenChatJid;
+        private readonly ChatListDeepLinkHoldGate _deepLinkHold;
         private bool _initialized;
         private bool _eventsHooked;
         private bool _startInProgress;
@@ -89,7 +90,8 @@ namespace Unison.Core.ViewModels
             ILocalSettings localSettings,
             ISessionLogger sessionLogger = null,
             IBackgroundAccessPrompt backgroundAccessPrompt = null,
-            IContactService contactService = null)
+            IContactService contactService = null,
+            ChatListDeepLinkHoldGate deepLinkHold = null)
         {
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _connectionService = connectionService ?? throw new ArgumentNullException(nameof(connectionService));
@@ -106,6 +108,7 @@ namespace Unison.Core.ViewModels
             _sessionLogger = sessionLogger;
             _backgroundAccessPrompt = backgroundAccessPrompt;
             _contactService = contactService;
+            _deepLinkHold = deepLinkHold;
 
             _chatListPaneWidth = ReadStoredChatListPaneWidth();
 
@@ -442,6 +445,8 @@ namespace Unison.Core.ViewModels
             }
 
             _pendingOpenChatJid = jid.Trim();
+            // Cold toast: keep chat-list x:Load held until the conversation finishes loading.
+            _deepLinkHold?.Hold("activation:" + _pendingOpenChatJid);
             RaisePendingOpenChatChanged();
             Debug.WriteLine("[ShellViewModel] Queued open chat from activation: " + _pendingOpenChatJid);
         }
@@ -455,6 +460,14 @@ namespace Unison.Core.ViewModels
 
             _pendingOpenChatJid = null;
             RaisePendingOpenChatChanged();
+        }
+
+        /// <summary>
+        /// After toast deep-link conversation load (or give-up): allow the chat list to materialize.
+        /// </summary>
+        public void ReleaseDeepLinkListHold(string reason)
+        {
+            _deepLinkHold?.Release(reason ?? "deep-link-release");
         }
 
         /// <summary>Opens or closes the shell navigation pane.</summary>

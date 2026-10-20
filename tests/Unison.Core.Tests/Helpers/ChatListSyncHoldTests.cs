@@ -22,5 +22,32 @@ namespace Unison.Core.Tests.Helpers
             // Reconnect / catch-up bursts release progressively.
             Assert.False(ChatListSyncHold.ShouldHoldRows(isAwaitingFirstHistorySync: false));
         }
+
+        [Fact]
+        public void Toast_deep_link_holds_list_until_conversation_loads()
+        {
+            Assert.True(ChatListSyncHold.ShouldHoldRows(
+                isAwaitingFirstHistorySync: false,
+                deepLinkDetailFirst: true,
+                listAlreadyMaterialized: false));
+        }
+
+        [Fact]
+        public void Warm_toast_does_not_unload_an_existing_list()
+        {
+            Assert.False(ChatListSyncHold.ShouldHoldRows(
+                isAwaitingFirstHistorySync: false,
+                deepLinkDetailFirst: true,
+                listAlreadyMaterialized: true));
+        }
+
+        [Fact]
+        public void First_sync_hold_wins_even_if_list_had_painted_before_wipe()
+        {
+            Assert.True(ChatListSyncHold.ShouldHoldRows(
+                isAwaitingFirstHistorySync: true,
+                deepLinkDetailFirst: false,
+                listAlreadyMaterialized: true));
+        }
     }
 }

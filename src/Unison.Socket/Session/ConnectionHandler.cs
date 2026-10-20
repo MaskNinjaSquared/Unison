@@ -900,7 +900,10 @@ namespace Unison.Socket.Session
                 GetLastReceived,
                 SendPingAsync,
                 EndAsync,
-                _log);
+                _log,
+                () => _waiters.Count,
+                _config.KeepAliveSilenceFloor,
+                _config.KeepAliveDeferWhilePendingQueries);
 
             _keepAlive.Start();
         }
@@ -962,6 +965,10 @@ namespace Unison.Socket.Session
                         ? (DateTimeOffset.UtcNow - lastFrame.Value).TotalSeconds.ToString("F1") + "s ago"
                         : "never";
 
+                    DisconnectReason timeoutReason = _config.TreatQueryTimeoutAsConnectionLost
+                        ? DisconnectReason.ConnectionLost
+                        : DisconnectReason.ConnectionClosed;
+
                     throw new WaConnectionException(
                         "Timed out after " + effectiveTimeout.TotalSeconds.ToString("F0") + "s waiting for a reply to " +
                         (description ?? "'" + msgId + "'") +
@@ -969,7 +976,7 @@ namespace Unison.Socket.Session
                         "; pendingQueries=" + _waiters.Count +
                         "; lastFrame=" + silence +
                         "; connected=" + IsConnected + "]",
-                        DisconnectReason.ConnectionLost);
+                        timeoutReason);
                 }
 
                 cts.Cancel();
@@ -1031,6 +1038,12 @@ namespace Unison.Socket.Session
 
             return new DateTimeOffset(ticks, TimeSpan.Zero);
         }
+
+        /// <summary>
+        /// Last wire frame the handler marked received. Host health monitors can use this
+        /// instead of waiting for a fully decoded node when the receive queue is busy.
+        /// </summary>
+        public DateTimeOffset? LastReceivedAt => GetLastReceived();
 
         /// <summary>rc14 assertNodeErrorFree.</summary>
         private static void AssertNodeErrorFree(BinaryNode node)

@@ -623,6 +623,11 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             {
                 Debug.WriteLine("[WhatsAppLegacy] OpenDetail: " + ex.Message);
             }
+            finally
+            {
+                // Toast deep-link: conversation first, then chat-list x:Load.
+                _shell?.ReleaseDeepLinkListHold("deep-link-detail-done");
+            }
         }
 
         private bool IsSameConversation(ChatItem active, ChatItem chat)

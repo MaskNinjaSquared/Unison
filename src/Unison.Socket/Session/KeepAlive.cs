@@ -23,8 +23,11 @@ namespace Unison.Socket.Session
     {
         private readonly TimeSpan _interval;
         private readonly TimeSpan _grace;
+        private readonly TimeSpan _silenceFloor;
+        private readonly bool _deferWhilePendingQueries;
         private readonly Func<bool> _isOpen;
         private readonly Func<DateTimeOffset?> _lastReceived;
+        private readonly Func<int> _pendingQueryCount;
         private readonly Func<Task> _sendPing;
         private readonly Func<Exception, Task> _onConnectionLost;
         private readonly ISocketLog _log;
@@ -39,12 +42,18 @@ namespace Unison.Socket.Session
             Func<DateTimeOffset?> lastReceived,
             Func<Task> sendPing,
             Func<Exception, Task> onConnectionLost,
-            ISocketLog log)
+            ISocketLog log,
+            Func<int> pendingQueryCount = null,
+            TimeSpan silenceFloor = default(TimeSpan),
+            bool deferWhilePendingQueries = false)
         {
             _interval = interval;
             _grace = grace;
+            _silenceFloor = silenceFloor;
+            _deferWhilePendingQueries = deferWhilePendingQueries;
             _isOpen = isOpen;
             _lastReceived = lastReceived;
+            _pendingQueryCount = pendingQueryCount;
             _sendPing = sendPing;
             _onConnectionLost = onConnectionLost;
             _log = log ?? NullSocketLog.Instance;
@@ -102,12 +111,22 @@ namespace Unison.Socket.Session
             if (last.HasValue)
             {
                 var silence = DateTimeOffset.UtcNow - last.Value;
-                if (silence > _interval + _grace)
+                if (silence > EffectiveSilenceLimit())
                 {
-                    _log.Warn($"No frame received for {silence.TotalSeconds:F0}s, declaring connection lost");
-                    await _onConnectionLost(new WaConnectionException("Connection was lost", DisconnectReason.ConnectionLost))
-                        .ConfigureAwait(false);
-                    return;
+                    int pending = _pendingQueryCount != null ? _pendingQueryCount() : 0;
+                    if (_deferWhilePendingQueries && pending > 0)
+                    {
+                        _log.Warn(
+                            "No frame for " + silence.TotalSeconds.ToString("F0") +
+                            "s but " + pending + " IQ(s) still pending — keep-alive ping only");
+                    }
+                    else
+                    {
+                        _log.Warn($"No frame received for {silence.TotalSeconds:F0}s, declaring connection lost");
+                        await _onConnectionLost(new WaConnectionException("Connection was lost", DisconnectReason.ConnectionLost))
+                            .ConfigureAwait(false);
+                        return;
+                    }
                 }
             }
 
@@ -125,6 +144,17 @@ namespace Unison.Socket.Session
             {
                 _log.Error("Error sending keep alive", ex);
             }
+        }
+
+        private TimeSpan EffectiveSilenceLimit()
+        {
+            TimeSpan baseLimit = _interval + _grace;
+            if (_silenceFloor <= TimeSpan.Zero || _silenceFloor <= baseLimit)
+            {
+                return baseLimit;
+            }
+
+            return _silenceFloor;
         }
     }
 }

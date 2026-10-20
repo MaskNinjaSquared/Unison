@@ -279,9 +279,11 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
 
         public async Task QueryAllGroupsAsync(bool force)
         {
-            if (_syncWork.IsReplayDrainActive)
+            string heavyDeferReason;
+            if (_syncWork.ShouldDeferHeavyLocalWork(out heavyDeferReason))
             {
-                Debug.WriteLine("[GroupFacade] QueryAllGroupsAsync skipped (replay drain active)");
+                Debug.WriteLine(
+                    "[GroupFacade] QueryAllGroupsAsync skipped (" + heavyDeferReason + ")");
                 return;
             }
 

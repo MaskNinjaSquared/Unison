@@ -159,7 +159,7 @@ namespace Unison.Core.Helpers
             {
                 await _host.EnsureConnectedAsync();
                 await upload();
-                if (OutgoingSendSettlement.ShouldPromotePending(message.Status))
+                if (OutgoingSendSettlement.ShouldPromoteAfterTransportAccept(message.Status))
                 {
                     message.Status = SelfChatStatusPolicy.Resolve(
                         ChatMessage.StatusSent,

@@ -8,7 +8,7 @@ namespace Unison.Core.Helpers
     public static class VoiceNoteCueTiming
     {
         /// <summary>Start cue length. Capture begins after this.</summary>
-        public const int StartRecordingDelayMs = 2000;
+        public const int StartRecordingDelayMs = 1000;
 
         /// <summary>How long after finalize before the stop cue plays.</summary>
         public const int StopSoundDelayMs = 2000;

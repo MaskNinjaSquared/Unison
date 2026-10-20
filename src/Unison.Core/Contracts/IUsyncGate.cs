@@ -17,6 +17,12 @@ namespace Unison.Core.Contracts
     public interface IUsyncGate
     {
         /// <summary>
+        /// True while a contact/avatar usync lease is on the wire. Health monitors use this to
+        /// avoid tearing down the socket solely because inbound keep-alives paused during a slow IQ.
+        /// </summary>
+        bool IsHeld { get; }
+
+        /// <summary>
         /// Waits for the wire, then returns the lease to dispose when done. Cancelling while
         /// waiting throws and takes nothing, so a cancelled caller never has to release.
         /// </summary>

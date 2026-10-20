@@ -194,9 +194,9 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         /// </summary>
         public void RequestRefresh(ChatItem chat, bool force = false)
         {
-            // Initial history sync must keep CPU, storage and network pressure focused on chats
-            // and messages. Visible rows receive their avatars once safe mode ends.
-            if (_initialSync.IsActive)
+            // WhatsApp first-sync: chats unlock without network photos; visible rows fetch after.
+            if (_initialSync.IsActive ||
+                _syncWork.ShouldDeferAvatarFetch(out _))
             {
                 return;
             }

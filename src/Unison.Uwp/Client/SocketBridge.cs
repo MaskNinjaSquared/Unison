@@ -34,6 +34,7 @@ using Unison.Baileys.Client;
 using Unison.Baileys.Crypto;
 using Unison.Baileys.Protocol;
 using Unison.Core.Contracts;
+using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Socket.Abstractions;
 using Unison.Socket.AppState;
@@ -89,12 +90,24 @@ namespace Unison.Uwp.Client
         /// </summary>
         private static SocketConfig CreateSocketConfig()
         {
-            return new SocketConfig
+            var config = new SocketConfig
             {
                 UserAgent =
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
                     "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
             };
+
+            // KeepAlive / query-timeout knobs for ConnectionStabilityExperiment (Core).
+            if (ConnectionStabilityExperiment.Enabled)
+            {
+                config.KeepAliveSilenceFloor = ConnectionStabilityExperiment.KeepAliveSilenceFloor;
+                config.KeepAliveDeferWhilePendingQueries =
+                    ConnectionStabilityExperiment.KeepAliveDeferWhilePendingQueries;
+                config.TreatQueryTimeoutAsConnectionLost =
+                    ConnectionStabilityExperiment.TreatQueryTimeoutAsConnectionLost;
+            }
+
+            return config;
         }
         private readonly ISocketLog _log;
         private readonly object _gate = new object();
@@ -131,6 +144,7 @@ namespace Unison.Uwp.Client
         private bool _handshakeComplete;
         private string _appStateKeyId;
         private bool _disposed;
+        private string _activeTransportName = "unison-socket/none";
 
         private readonly object _authGate = new object();
         private DateTime _lastAuthSaveUtc = DateTime.MinValue;
@@ -326,9 +340,23 @@ namespace Unison.Uwp.Client
 
         public bool HasFreshConnection(TimeSpan maximumSilence)
         {
-            return IsConnected &&
-                   _handshakeComplete &&
-                   _lastInboundFrameUtc != DateTime.MinValue &&
+            if (!IsConnected || !_handshakeComplete)
+            {
+                return false;
+            }
+
+            // Experiment: trust the handler's last wire frame so a busy decode queue does
+            // not look like a dead socket to the health monitor.
+            if (ConnectionStabilityExperiment.UseWireFrameFreshness)
+            {
+                DateTimeOffset? wire = Current?.Connection?.LastReceivedAt;
+                if (wire.HasValue)
+                {
+                    return DateTime.UtcNow - wire.Value.UtcDateTime <= maximumSilence;
+                }
+            }
+
+            return _lastInboundFrameUtc != DateTime.MinValue &&
                    DateTime.UtcNow - _lastInboundFrameUtc <= maximumSilence;
         }
 
@@ -376,7 +404,7 @@ namespace Unison.Uwp.Client
 
         public string TransportName
         {
-            get { return "unison-socket/streamsocket"; }
+            get { return _activeTransportName ?? "unison-socket/none"; }
         }
 
         // -- Lifecycle -------------------------------------------------------
@@ -476,23 +504,20 @@ namespace Unison.Uwp.Client
 
             Raise(OnConnectionUpdate, "connecting");
 
-            // Windows 10 Mobile (Creators Update) keeps the 1.8 connect: MessageWebSocket only.
-            // Socket Activity, EnableTransferOwnership and StreamSocket TLS have hung on that
-            // build. Desktop still opens the broker-capable StreamSocket and falls back.
+            // Default HEAD: Mobile = MessageWebSocket only (Creators TLS hang avoidance).
+            // ConnectionStabilityExperiment: Mobile = StreamSocket first like tag 1.8.3,
+            // with MessageWebSocket fallback if connect fails.
             bool mobile = IsWindowsMobileDevice();
+            bool streamFirst = !mobile || ConnectionStabilityExperiment.PreferStreamSocketOnMobile;
             RuntimeDiagnosticsService.Instance.Write(
                 "transport",
                 "socket-bridge-connect-order",
-                mobile
-                    ? "mobile=True; primary=MessageWebSocket-classic; fallback=none"
-                    : "mobile=False; primary=StreamSocket-RFC6455-broker; fallback=MessageWebSocket-classic");
+                "mobile=" + mobile +
+                "; experiment=" + ConnectionStabilityExperiment.Enabled +
+                "; primary=" + (streamFirst ? "StreamSocket-RFC6455-broker" : "MessageWebSocket-classic") +
+                "; fallback=" + (streamFirst ? "MessageWebSocket-classic" : "none"));
 
-            if (mobile)
-            {
-                await ConnectWithTransportAsync(new MessageWebSocketTransport())
-                    .ConfigureAwait(false);
-            }
-            else
+            if (streamFirst)
             {
                 try
                 {
@@ -509,6 +534,11 @@ namespace Unison.Uwp.Client
                     await ConnectWithTransportAsync(new MessageWebSocketTransport())
                         .ConfigureAwait(false);
                 }
+            }
+            else
+            {
+                await ConnectWithTransportAsync(new MessageWebSocketTransport())
+                    .ConfigureAwait(false);
             }
 
             _handshakeComplete = true;
@@ -573,10 +603,12 @@ namespace Unison.Uwp.Client
                 offline.BeginBuffering();
             }
 
+            _activeTransportName = "unison-socket/" + (innerTransport.Name ?? "unknown");
             RuntimeDiagnosticsService.Instance.Write(
                 "transport",
                 "socket-bridge-transport",
-                "name=" + (innerTransport.Name ?? "<none>"));
+                "name=" + (innerTransport.Name ?? "<none>") +
+                "; transportName=" + _activeTransportName);
 
             await session.ConnectAsync().ConfigureAwait(false);
         }

@@ -18,5 +18,14 @@ namespace Unison.Core.Helpers
         {
             return string.Equals(currentStatus, ChatMessage.StatusPending, StringComparison.OrdinalIgnoreCase);
         }
+
+        /// <summary>
+        /// Whether the bubble may move to sent after the transport accepted the payload.
+        /// Honours <see cref="ConnectionStabilityExperiment"/> for the failed→sent race.
+        /// </summary>
+        public static bool ShouldPromoteAfterTransportAccept(string currentStatus)
+        {
+            return ConnectionStabilityExperiment.ShouldPromoteBubbleAfterAccept(currentStatus);
+        }
     }
 }

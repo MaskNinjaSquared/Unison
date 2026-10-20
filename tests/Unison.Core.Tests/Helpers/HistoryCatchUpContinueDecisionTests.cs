@@ -111,7 +111,7 @@ namespace Unison.Core.Tests.Helpers
         [Fact]
         public void Zero_max_rounds_finishes_on_the_first_quiet_lot()
         {
-            // Low / Mobile workload: first InitialBootstrap lot is enough — no adjacent page.
+            // Unsupported workload: no adjacent FULL_HISTORY page.
             HistoryCatchUpContinueResult r = HistoryCatchUpContinueDecision.Decide(
                 newestUtc: Noon.AddHours(1),
                 watermarkUtc: DateTime.MinValue,
@@ -125,6 +125,23 @@ namespace Unison.Core.Tests.Helpers
             Assert.Equal(HistoryCatchUpContinueAction.FinishMaxContinues, r.Action);
             Assert.True(r.MadeProgress);
             Assert.Equal(0, r.NextContinueRound);
+        }
+
+        [Fact]
+        public void Low_mobile_budget_continues_after_first_quiet_lot()
+        {
+            HistoryCatchUpContinueResult r = HistoryCatchUpContinueDecision.Decide(
+                newestUtc: Noon.AddHours(1),
+                watermarkUtc: DateTime.MinValue,
+                progressSignals: 4,
+                stillStale: true,
+                stagnantCycles: 0,
+                stagnantStop: 3,
+                continueRound: 0,
+                maxRounds: 12);
+
+            Assert.Equal(HistoryCatchUpContinueAction.Continue, r.Action);
+            Assert.Equal(1, r.NextContinueRound);
         }
 
         [Fact]

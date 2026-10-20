@@ -50,6 +50,8 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly IChatStateStore _chatState;
         private readonly SyncStatusChannel _syncStatus;
         private readonly SyncWorkGate _syncWork;
+        private readonly SyncWorkloadStrategy _workload;
+        private readonly UsyncFailureCooldownBook _usyncFailures;
 
         private DateTime _lastRefreshUtc = DateTime.MinValue;
         private volatile bool _isRunning;
@@ -68,7 +70,9 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             SyncStatusChannel syncStatus,
             SyncWorkGate syncWork,
             IWhatsAppSessionProvider sessions,
-            ChatNameRefresh nameRefresh)
+            ChatNameRefresh nameRefresh,
+            SyncWorkloadStrategy workload,
+            UsyncFailureCooldownBook usyncFailures = null)
         {
             _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
             _nameRefresh = nameRefresh ?? throw new ArgumentNullException(nameof(nameRefresh));
@@ -84,6 +88,8 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             _directory = directory ?? throw new ArgumentNullException(nameof(directory));
             _usync = usync ?? throw new ArgumentNullException(nameof(usync));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
+            _workload = workload ?? throw new ArgumentNullException(nameof(workload));
+            _usyncFailures = usyncFailures ?? UsyncFailureCooldownBook.Default;
         }
 
         public bool IsRunning => _isRunning;
@@ -96,9 +102,11 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         /// </summary>
         public async Task RefreshAsync(bool includeGroups = false, bool force = false)
         {
-            if (_syncWork.IsReplayDrainActive)
+            // force: first-sync list unlock must resolve names while hold/replay would otherwise skip.
+            if (!force && _syncWork.ShouldDeferHeavyLocalWork(out string heavyDeferReason))
             {
-                Debug.WriteLine("[ContactNameResolver] Refresh skipped (replay drain active)");
+                Debug.WriteLine(
+                    "[ContactNameResolver] Refresh skipped (" + heavyDeferReason + ")");
                 return;
             }
 
@@ -194,18 +202,20 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         /// The opportunistic pass, triggered while live messages arrive: finds chats still showing
         /// a bare number and resolves a handful of them.
         /// </summary>
-        public async Task ResolveMissingAsync()
+        public async Task ResolveMissingAsync(bool force = false)
         {
-            if (_syncWork.IsReplayDrainActive)
-            {
-                Debug.WriteLine("[ContactNameResolver] ResolveMissing skipped (replay drain active)");
-                return;
-            }
-
             // Names already on file come first and need no network. Every exit below (refresh
             // running, cooldown, nothing left to ask) used to skip them, so after a sync the list
             // kept numbers the chat screen could already name.
             await _nameRefresh.ApplyAsync();
+
+            // force: first-sync unlock runs names while list hold / replay would otherwise skip.
+            if (!force && _syncWork.ShouldDeferHeavyLocalWork(out string heavyDeferReason))
+            {
+                Debug.WriteLine(
+                    "[ContactNameResolver] ResolveMissing skipped network (" + heavyDeferReason + ")");
+                return;
+            }
 
             if (_isRunning)
             {
@@ -264,20 +274,39 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             if (IsOnCooldown)
             {
                 Debug.WriteLine("[ContactNameResolver] ResolveMissing skipped usync (recent refresh)");
+                _syncStatus.Raise(null);
                 return;
             }
 
-            Debug.WriteLine($"[ContactNameResolver] ResolveMissing found {jidsToResolve.Count} unique JIDs for usync.");
+            DateTime nowUtc = DateTime.UtcNow;
+            var ready = _usyncFailures.FilterReady(jidsToResolve, nowUtc);
+            if (ready.Count == 0)
+            {
+                Debug.WriteLine(
+                    "[ContactNameResolver] ResolveMissing skipped usync (all candidates on failure cooldown)");
+                _syncStatus.Raise(null);
+                return;
+            }
+
+            Debug.WriteLine(
+                $"[ContactNameResolver] ResolveMissing found {jidsToResolve.Count} unique JIDs for usync " +
+                $"({ready.Count} after failure cooldown).");
 
             // Keep this small and opportunistic so it does not monopolize the socket during
-            // reconnect or live sync.
-            var missingList = jidsToResolve
+            // reconnect or live sync. Tier caps come from SyncWorkloadStrategy (Mobile/Low frugal).
+            int maxPerPass = Math.Max(1, _workload.NameResolveMaxPerPass);
+            var missingList = ready
                 .Where(j => !string.IsNullOrWhiteSpace(j))
                 .OrderBy(j => j, StringComparer.OrdinalIgnoreCase)
-                .Take(10)
+                .Take(maxPerPass)
                 .ToList();
 
             await ResolveInChunksAsync(missingList).ConfigureAwait(false);
+
+            // Stamp cooldown even when chunks timed out so the next reconnect does not
+            // immediately re-raise "Resolvendo nomes…" for the same bare numbers.
+            _lastRefreshUtc = DateTime.UtcNow;
+            _syncStatus.Raise(null);
 
             try
             {
@@ -338,9 +367,12 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
         private async Task ResolveInChunksAsync(IList<string> jids)
         {
-            for (int i = 0; i < jids.Count; i += 5)
+            int chunkSize = Math.Max(1, _workload.NameResolveChunkSize);
+            int delayMs = Math.Max(0, _workload.NameResolveInterChunkDelayMs);
+
+            for (int i = 0; i < jids.Count; i += chunkSize)
             {
-                var chunk = jids.Skip(i).Take(5).ToArray();
+                var chunk = jids.Skip(i).Take(chunkSize).ToArray();
 
                 // Each usync can sit for seconds; without a count this whole stretch looked to
                 // the user like the app had stopped doing anything.
@@ -349,12 +381,28 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
                 try
                 {
-                    await _usync.ResolveAsync(chunk);
+                    bool ok = await _usync.ResolveAsync(chunk).ConfigureAwait(false);
+                    if (ok)
+                    {
+                        _usyncFailures.NoteSuccess(chunk);
+                    }
+                    else
+                    {
+                        _usyncFailures.NoteFailure(chunk, DateTime.UtcNow);
+                        Debug.WriteLine(
+                            $"[ContactNameResolver] Usync chunk failed ({chunk.Length} JIDs); cooling down");
+                    }
                 }
                 catch (Exception ex)
                 {
+                    _usyncFailures.NoteFailure(chunk, DateTime.UtcNow);
                     Debug.WriteLine(
                         $"[ContactNameResolver] Usync chunk failed ({chunk.Length} JIDs): {ex.Message}");
+                }
+
+                if (delayMs > 0 && i + chunkSize < jids.Count)
+                {
+                    await Task.Delay(delayMs).ConfigureAwait(false);
                 }
             }
         }
@@ -382,20 +430,35 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
             Debug.WriteLine($"[ContactNameResolver] Retrying {unresolved.Count} unresolved contacts individually");
             int retried = 0;
+            DateTime nowUtc = DateTime.UtcNow;
             foreach (var jid in unresolved)
             {
+                if (_usyncFailures.ShouldSkip(jid, nowUtc))
+                {
+                    continue;
+                }
+
                 try
                 {
                     _syncStatus.Raise(
                         SyncPhaseStatus.Format(SyncPhaseStatus.Names, retried++, unresolved.Count));
-                    await _usync.ResolveAsync(new[] { jid });
+                    bool ok = await _usync.ResolveAsync(new[] { jid }).ConfigureAwait(false);
+                    if (ok)
+                    {
+                        _usyncFailures.NoteSuccess(new[] { jid });
+                    }
+                    else
+                    {
+                        _usyncFailures.NoteFailure(new[] { jid }, DateTime.UtcNow);
+                    }
                 }
                 catch (Exception ex)
                 {
+                    _usyncFailures.NoteFailure(new[] { jid }, DateTime.UtcNow);
                     Debug.WriteLine($"[ContactNameResolver] Individual contact resolve failed for {jid}: {ex.Message}");
                 }
 
-                await Task.Delay(120);
+                await Task.Delay(Math.Max(120, _workload.NameResolveInterChunkDelayMs));
             }
         }
 

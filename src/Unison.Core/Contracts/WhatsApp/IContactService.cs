@@ -110,7 +110,10 @@ namespace Unison.Core.Contracts.WhatsApp
         /// Opportunistic, lightweight scan of chats for still-unresolved display names
         /// (naked JIDs/self markers), triggered from live message handling.
         /// </summary>
-        Task ResolveMissingNamesAsync();
+        /// <param name="force">
+        /// When true, run even while sync traffic would normally defer usync (first-sync list unlock).
+        /// </param>
+        Task ResolveMissingNamesAsync(bool force = false);
 
         /// <summary>
         /// Single-chat avatar refresh with in-session dedup (used by UI on load-failure/visibility/JID-alias discovery).

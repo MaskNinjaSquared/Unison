@@ -2,6 +2,15 @@
 
 Newest first.
 
+## 2.0.12 — first-sync list hold until history + names
+
+Chat list stayed behind `x:Load` until zero-sync is really done: FULL_HISTORY
+catch-up idle, then directory names, then unlock (photos after). Empty StatusV3
+quiet (`sqlite-empty-lot` with `processed=0`) no longer finishes catch-up while
+the first-sync hold is up — Bootstrap/Recent often arrives next. Toast deep-link
+holds the list until the conversation is ready. Avatar network work stays deferred
+until after list release.
+
 ## In-chat camera pick
 
 `AttachCameraCommand` shows `CameraPickView` over the conversation

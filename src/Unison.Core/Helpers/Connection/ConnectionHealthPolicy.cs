@@ -132,6 +132,43 @@ namespace Unison.Core.Helpers
         }
 
         /// <summary>
+        /// Whether the background monitor should skip tearing the socket down, and why.
+        /// </summary>
+        /// <remarks>
+        /// A slow usync IQ or an in-flight FULL_HISTORY catch-up can starve inbound
+        /// keep-alives for tens of seconds on Mobile without the socket being dead.
+        /// Force-reconnect then restarts the same pass and loops the status banner.
+        /// A stalled ordered node queue is never deferred: probes would still succeed
+        /// while user messages never reach the app.
+        /// </remarks>
+        /// <returns>
+        /// A short diagnostic reason when deferring; <c>null</c> when force-reconnect
+        /// may proceed.
+        /// </returns>
+        public static string DeferForceReconnectReason(
+            bool nodeProcessingStalled,
+            bool usyncGateHeld,
+            bool historyCatchUpActive)
+        {
+            if (nodeProcessingStalled)
+            {
+                return null;
+            }
+
+            if (usyncGateHeld)
+            {
+                return "usync-held";
+            }
+
+            if (historyCatchUpActive)
+            {
+                return "history-catch-up";
+            }
+
+            return null;
+        }
+
+        /// <summary>
         /// How long to wait before reconnect attempt number <paramref name="attempt"/>,
         /// counted from zero. Attempts past the end of the ladder all wait the longest
         /// delay rather than growing without bound or wrapping around.

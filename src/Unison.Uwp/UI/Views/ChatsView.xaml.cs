@@ -253,6 +253,8 @@ namespace Unison.Uwp.UI.Views
             }
             finally
             {
+                // Conversation first (or give-up): allow chat-list x:Load to materialize.
+                _shell?.ReleaseDeepLinkListHold("deep-link-detail-done");
                 _openingDeepLink = false;
             }
         }

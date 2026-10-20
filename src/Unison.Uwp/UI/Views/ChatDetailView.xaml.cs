@@ -41,6 +41,8 @@ namespace Unison.Uwp.UI.Views
         private ChatItem _activeChat;
         private ObservableCollection<ChatMessageViewModel> _messages;
         private readonly bool _isWindowsMobile;
+        private readonly MessageBubbleContextGestureGate _bubbleContextGate =
+            new MessageBubbleContextGestureGate();
         public event EventHandler BackRequested;
         private Storyboard _chatDetailInfoSlideStoryboard;
         private bool _chatDetailInfoPaneShown;
@@ -1412,8 +1414,13 @@ namespace Unison.Uwp.UI.Views
 
         public void OnDocumentReadyContextRequested(object sender, RightTappedRoutedEventArgs e)
         {
-            ShowDocumentReadyMenu(sender as FrameworkElement, e?.GetPosition(sender as UIElement) ?? default(Point));
             e.Handled = true;
+            if (!_bubbleContextGate.TryBeginFromRightTap())
+            {
+                return;
+            }
+
+            ShowDocumentReadyMenu(sender as FrameworkElement, e?.GetPosition(sender as UIElement) ?? default(Point));
         }
 
         public void OnDocumentReadyHolding(object sender, HoldingRoutedEventArgs e)
@@ -1423,8 +1430,13 @@ namespace Unison.Uwp.UI.Views
                 return;
             }
 
-            ShowDocumentReadyMenu(sender as FrameworkElement, e.GetPosition(sender as UIElement));
             e.Handled = true;
+            if (!_bubbleContextGate.TryBeginFromHold())
+            {
+                return;
+            }
+
+            ShowDocumentReadyMenu(sender as FrameworkElement, e.GetPosition(sender as UIElement));
         }
 
         public void OnDocumentOverflowClick(object sender, RoutedEventArgs e)
@@ -2858,18 +2870,30 @@ namespace Unison.Uwp.UI.Views
         /// <summary>Invoked from <see cref="Templates.MessageTemplates"/> (external DataTemplate events).</summary>
         public void OnMessageBubbleRightTapped(object sender, RightTappedRoutedEventArgs e)
         {
-            ShowMessageActions(sender as FrameworkElement);
             e.Handled = true;
+            if (!_bubbleContextGate.TryBeginFromRightTap())
+            {
+                return;
+            }
+
+            ShowMessageActions(sender as FrameworkElement);
         }
 
         /// <summary>Invoked from <see cref="Templates.MessageTemplates"/> (external DataTemplate events).</summary>
         public void OnMessageBubbleHolding(object sender, HoldingRoutedEventArgs e)
         {
-            if (e.HoldingState == Windows.UI.Input.HoldingState.Started)
+            if (e.HoldingState != Windows.UI.Input.HoldingState.Started)
             {
-                ShowMessageActions(sender as FrameworkElement);
-                e.Handled = true;
+                return;
             }
+
+            e.Handled = true;
+            if (!_bubbleContextGate.TryBeginFromHold())
+            {
+                return;
+            }
+
+            ShowMessageActions(sender as FrameworkElement);
         }
 
         private void ShowMessageActions(FrameworkElement anchor)
