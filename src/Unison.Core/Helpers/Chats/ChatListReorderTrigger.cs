@@ -1,9 +1,9 @@
 // =============================================================================
 // ChatListReorderTrigger
 //
-// Which ChatItem property change can move a row in the list. Pin is the only
-// thing that outranks recency, so a pin arriving from app-state mid-sync has to
-// reopen the ordering question even though the row itself repaints on its own.
+// Which ChatItem property change can move a row in the list (or change who is
+// nested under a community hub). Pin is the only thing that outranks recency;
+// community link / parent flags change list membership via CommunityListProjector.
 //
 // Mute is deliberately absent: it changes the icon, never the position.
 // =============================================================================
@@ -23,7 +23,9 @@ namespace Unison.Core.Helpers
 
             return string.Equals(propertyName, nameof(ChatItem.IsChatPinned), StringComparison.Ordinal) ||
                    string.Equals(propertyName, nameof(ChatItem.PinnedTimestamp), StringComparison.Ordinal) ||
-                   string.Equals(propertyName, nameof(ChatItem.Status), StringComparison.Ordinal);
+                   string.Equals(propertyName, nameof(ChatItem.Status), StringComparison.Ordinal) ||
+                   string.Equals(propertyName, nameof(ChatItem.LinkedParentJid), StringComparison.Ordinal) ||
+                   string.Equals(propertyName, nameof(ChatItem.IsCommunityParent), StringComparison.Ordinal);
         }
     }
 }

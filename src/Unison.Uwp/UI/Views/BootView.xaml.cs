@@ -25,7 +25,7 @@ namespace Unison.Uwp.UI.Views
 
         private const int MinDwellMs = 3000;
 
-        /// <summary>Matches BootWordmark Opacity BeginTime (ms) — when Unison starts fading in.</summary>
+        /// <summary>Matches BootWordmark Opacity BeginTime (ms) — when "nison" starts fading in.</summary>
         private const int WordmarkBeginMs = 1200;
 
         /// <summary>Approx. splash mark vs short window edge (UWP splash scales with available space).</summary>
@@ -33,7 +33,7 @@ namespace Unison.Uwp.UI.Views
         private const double SplashIconMinDip = 96;
         private const double SplashIconMaxDip = 240;
         private const double IconEndScale = 0.48;
-        private const double IconWordmarkGapDip = 12;
+        private const double IconWordmarkGapDip = -8;
 
         private bool _introStarted;
         private bool _themeBackgroundApplied;
@@ -67,7 +67,7 @@ namespace Unison.Uwp.UI.Views
 
         /// <summary>
         /// Match system splash sizing: mark scales with the shorter window side and clamps.
-        /// Final icon + "Unison" pair is centered as one group (measured widths), not magic offsets.
+        /// Final icon + "nison" pair is centered as one group (logo stands in for the U).
         /// </summary>
         private void UpdateSplashMatchedIconSize()
         {
@@ -106,8 +106,8 @@ namespace Unison.Uwp.UI.Views
             double textW = BootWordmark.ActualWidth;
             if (textW < 1)
             {
-                // Pre-measure fallback for "Unison" + CharacterSpacing before first arrange.
-                textW = BootWordmark.FontSize * 4.4;
+                // Pre-measure fallback for "nison" + CharacterSpacing before first arrange.
+                textW = BootWordmark.FontSize * 3.55;
             }
 
             // Both elements are HorizontalAlignment=Center; TranslateX is offset from screen center.

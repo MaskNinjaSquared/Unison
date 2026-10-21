@@ -10,7 +10,9 @@
     d:DesignWidth="56"
     IsTabStop="False">
 
-    <!-- Status list ring: green = Recent (unviewed), gray = Viewed. Inner plate keeps profile placeholder. -->
+    <!-- Status list ring: green = Recent (unviewed), gray = Viewed.
+         Inner ChatAvatarControl is fallback only; status/profile thumbs use PhotoEllipse
+         with UniformToFill so non-square media fills the circle. -->
     <Grid x:Name="RootGrid" Width="56" Height="56">
         <Ellipse x:Name="Ring"
                  Width="56"
@@ -25,5 +27,19 @@
                                     ShowBorder="False"
                                     HorizontalAlignment="Center"
                                     VerticalAlignment="Center"/>
+        <Ellipse x:Name="PhotoEllipse"
+                 Width="48"
+                 Height="48"
+                 HorizontalAlignment="Center"
+                 VerticalAlignment="Center"
+                 Visibility="Collapsed">
+            <Ellipse.Fill>
+                <ImageBrush x:Name="PhotoBrush"
+                            Stretch="UniformToFill"
+                            AlignmentX="Center"
+                            AlignmentY="Center"
+                            ImageFailed="PhotoBrush_ImageFailed"/>
+            </Ellipse.Fill>
+        </Ellipse>
     </Grid>
 </UserControl>

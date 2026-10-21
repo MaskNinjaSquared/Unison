@@ -9,7 +9,7 @@
       Page + RootGrid start #20C064 (no theme flash under splash).
       When Unison wordmark begins (~1.20s), Page.Background → theme so exit wipe reveals it.
       Frame 0: icon alone, centered — size tracks window short-side (~splash).
-      Intro: icon shrinks + slides left; "Unison" fades in.
+      Intro: icon shrinks + slides left; one jump (same as empty-state); "nison" fades in (logo = U).
       Exit: RootGrid floats up to reveal page theme background.
     -->
     <Grid x:Name="RootGrid" Background="#FF20C064">
@@ -47,6 +47,22 @@
                         <CubicEase EasingMode="EaseOut"/>
                     </DoubleAnimation.EasingFunction>
                 </DoubleAnimation>
+                <!-- After shrink settles: one jump (matches EmptyStateBrandLogo; no device gate). -->
+                <DoubleAnimationUsingKeyFrames Storyboard.TargetName="BootIconTranslate"
+                                               Storyboard.TargetProperty="Y"
+                                               BeginTime="0:0:1.20">
+                    <EasingDoubleKeyFrame KeyTime="0:0:0" Value="0"/>
+                    <EasingDoubleKeyFrame KeyTime="0:0:0.22" Value="-14">
+                        <EasingDoubleKeyFrame.EasingFunction>
+                            <QuadraticEase EasingMode="EaseOut"/>
+                        </EasingDoubleKeyFrame.EasingFunction>
+                    </EasingDoubleKeyFrame>
+                    <EasingDoubleKeyFrame KeyTime="0:0:0.48" Value="0">
+                        <EasingDoubleKeyFrame.EasingFunction>
+                            <BounceEase EasingMode="EaseOut" Bounces="2" Bounciness="3"/>
+                        </EasingDoubleKeyFrame.EasingFunction>
+                    </EasingDoubleKeyFrame>
+                </DoubleAnimationUsingKeyFrames>
                 <!-- After icon settles: fade in wordmark (position set in code to center the pair). -->
                 <DoubleAnimation Storyboard.TargetName="BootWordmark"
                                  Storyboard.TargetProperty="Opacity"
@@ -100,7 +116,7 @@
         </Viewbox>
 
         <TextBlock x:Name="BootWordmark"
-                   Text="Unison"
+                   Text="nison"
                    Foreground="White"
                    FontSize="32"
                    FontFamily="{StaticResource MainFontSemibold}"

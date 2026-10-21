@@ -54,6 +54,11 @@ namespace Unison.Uwp.Data
                 await EnsureColumnAsync("LastMessageId", "TEXT").ConfigureAwait(false);
                 await EnsureColumnAsync("DeletedAtUtc", "DATETIME").ConfigureAwait(false);
                 await EnsureColumnAsync("Status", "INTEGER NOT NULL DEFAULT 0").ConfigureAwait(false);
+                await EnsureColumnAsync("IsCommunityAnnounce", "INTEGER NOT NULL DEFAULT 0")
+                    .ConfigureAwait(false);
+                await EnsureColumnAsync("IsCommunityParent", "INTEGER NOT NULL DEFAULT 0")
+                    .ConfigureAwait(false);
+                await EnsureColumnAsync("LinkedParentJid", "TEXT").ConfigureAwait(false);
                 await _connection.ExecuteAsync(
                         "UPDATE history_chat_preview SET Status = ? WHERE DeletedAtUtc IS NOT NULL",
                         (int)ChatStatus.Deleted)
@@ -133,6 +138,9 @@ namespace Unison.Uwp.Data
                                 Name = model.Name,
                                 LastMessageSendState = (int)model.LastMessageSendState,
                                 IsGroup = model.IsGroup,
+                                IsCommunityAnnounce = model.IsCommunityAnnounce,
+                                IsCommunityParent = model.IsCommunityParent,
+                                LinkedParentJid = model.LinkedParentJid,
                                 LidJid = model.LidJid,
                                 PnJid = model.PnJid
                             };
@@ -167,7 +175,9 @@ namespace Unison.Uwp.Data
                             conn.InsertOrReplace(ToRow(model, carried, status, prior));
                             tipUpdates++;
                             upserted++;
-                            notified.Add(CloneForNotify(model, status));
+                            HistoryChatPreview tipNotify = CloneForNotify(model, status);
+                            ApplyStickyCommunity(tipNotify, prior);
+                            notified.Add(tipNotify);
                             prior.LastMessageTimestampUtc = model.LastMessageTimestampUtc;
                             prior.LastMessageId = model.LastMessageId;
                             CopyAuthorStripIntoSnapshot(prior, model);
@@ -185,9 +195,17 @@ namespace Unison.Uwp.Data
                             string participant = Carry(
                                 model.LastMessageParticipantJid,
                                 prior.LastMessageParticipantJid);
+                            bool communityAnnounce = StickyBool(
+                                model.IsCommunityAnnounce,
+                                prior.IsCommunityAnnounce);
+                            bool communityParent = StickyBool(
+                                model.IsCommunityParent,
+                                prior.IsCommunityParent);
+                            string linkedParent = Carry(model.LinkedParentJid, prior.LinkedParentJid);
                             conn.Execute(
                                 "UPDATE history_chat_preview SET Status = ?, DeletedAtUtc = ?, " +
                                 "UnreadCount = ?, Name = ?, LastMessageSendState = ?, IsGroup = ?, " +
+                                "IsCommunityAnnounce = ?, IsCommunityParent = ?, LinkedParentJid = ?, " +
                                 "LastMessageAuthor = ?, LastMessageSenderName = ?, " +
                                 "LastMessageParticipantJid = ?, LastMessageIsFromMe = ?, " +
                                 "UpdatedAtUtc = ? WHERE Jid = ?",
@@ -197,6 +215,9 @@ namespace Unison.Uwp.Data
                                 model.Name,
                                 (int)model.LastMessageSendState,
                                 model.IsGroup,
+                                communityAnnounce,
+                                communityParent,
+                                linkedParent,
                                 author,
                                 senderName,
                                 participant,
@@ -209,6 +230,9 @@ namespace Unison.Uwp.Data
                             notify.LastMessageAuthor = author;
                             notify.LastMessageSenderName = senderName;
                             notify.LastMessageParticipantJid = participant;
+                            notify.IsCommunityAnnounce = communityAnnounce;
+                            notify.IsCommunityParent = communityParent;
+                            notify.LinkedParentJid = linkedParent;
                             notified.Add(notify);
                             prior.LastMessageAuthor = author;
                             prior.LastMessageSenderName = senderName;
@@ -222,6 +246,13 @@ namespace Unison.Uwp.Data
                         prior.Name = model.Name;
                         prior.LastMessageSendState = (int)model.LastMessageSendState;
                         prior.IsGroup = model.IsGroup;
+                        prior.IsCommunityAnnounce = StickyBool(
+                            model.IsCommunityAnnounce,
+                            prior.IsCommunityAnnounce);
+                        prior.IsCommunityParent = StickyBool(
+                            model.IsCommunityParent,
+                            prior.IsCommunityParent);
+                        prior.LinkedParentJid = Carry(model.LinkedParentJid, prior.LinkedParentJid);
                     }
                 }).ConfigureAwait(false);
             }
@@ -315,7 +346,8 @@ namespace Unison.Uwp.Data
                 var rows = await _connection
                     .QueryAsync<LifecycleSnapshot>(
                         "SELECT Jid, Status, DeletedAtUtc, LastMessageTimestampUtc, LastMessageId, " +
-                        "UnreadCount, Name, LastMessageSendState, IsGroup, LidJid, PnJid, " +
+                        "UnreadCount, Name, LastMessageSendState, IsGroup, IsCommunityAnnounce, " +
+                        "IsCommunityParent, LinkedParentJid, LidJid, PnJid, " +
                         "LastMessageAuthor, LastMessageSenderName, LastMessageParticipantJid, " +
                         "LastMessageIsFromMe " +
                         "FROM history_chat_preview" + WhereJidIn(scope),
@@ -386,6 +418,13 @@ namespace Unison.Uwp.Data
             return prior.UnreadCount != Math.Max(0, model.UnreadCount) ||
                    prior.LastMessageSendState != (int)model.LastMessageSendState ||
                    prior.IsGroup != model.IsGroup ||
+                   (!prior.IsCommunityAnnounce && model.IsCommunityAnnounce) ||
+                   (!prior.IsCommunityParent && model.IsCommunityParent) ||
+                   (!string.IsNullOrWhiteSpace(model.LinkedParentJid) &&
+                    !string.Equals(
+                        prior.LinkedParentJid ?? string.Empty,
+                        model.LinkedParentJid,
+                        StringComparison.OrdinalIgnoreCase)) ||
                    !string.Equals(prior.Name ?? string.Empty, model.Name ?? string.Empty, StringComparison.Ordinal) ||
                    !string.Equals(
                        prior.LastMessageAuthor ?? string.Empty,
@@ -413,6 +452,27 @@ namespace Unison.Uwp.Data
             prior.LastMessageSenderName = model.LastMessageSenderName;
             prior.LastMessageParticipantJid = model.LastMessageParticipantJid;
             prior.LastMessageIsFromMe = model.LastMessageIsFromMe;
+        }
+
+        /// <summary>
+        /// Community flags are written by w:g2 metadata, not history tips. A false incoming
+        /// value means "chunk did not know", not "cleared".
+        /// </summary>
+        private static bool StickyBool(bool incoming, bool stored)
+        {
+            return incoming || stored;
+        }
+
+        private static void ApplyStickyCommunity(HistoryChatPreview notify, LifecycleSnapshot prior)
+        {
+            if (notify == null || prior == null)
+            {
+                return;
+            }
+
+            notify.IsCommunityAnnounce = StickyBool(notify.IsCommunityAnnounce, prior.IsCommunityAnnounce);
+            notify.IsCommunityParent = StickyBool(notify.IsCommunityParent, prior.IsCommunityParent);
+            notify.LinkedParentJid = Carry(notify.LinkedParentJid, prior.LinkedParentJid);
         }
 
         /// <summary>
@@ -447,6 +507,9 @@ namespace Unison.Uwp.Data
                 PnJid = model.PnJid,
                 Name = model.Name,
                 IsGroup = model.IsGroup,
+                IsCommunityAnnounce = model.IsCommunityAnnounce,
+                IsCommunityParent = model.IsCommunityParent,
+                LinkedParentJid = model.LinkedParentJid,
                 Status = status,
                 UnreadCount = model.UnreadCount,
                 IsChatPinned = model.IsChatPinned,
@@ -498,6 +561,12 @@ namespace Unison.Uwp.Data
 
             public bool IsGroup { get; set; }
 
+            public bool IsCommunityAnnounce { get; set; }
+
+            public bool IsCommunityParent { get; set; }
+
+            public string LinkedParentJid { get; set; }
+
             // Carried so a live catalog write does not blank them: the live row builder has
             // no idea what the other half of a PN/LID pair is, only the history sync does.
             public string LidJid { get; set; }
@@ -513,6 +582,28 @@ namespace Unison.Uwp.Data
             public string LastMessageParticipantJid { get; set; }
 
             public bool LastMessageIsFromMe { get; set; }
+        }
+
+        public async Task<HistoryChatPreview> TryGetAsync(string jid)
+        {
+            if (string.IsNullOrWhiteSpace(jid))
+            {
+                return null;
+            }
+
+            await EnsureInitializedAsync().ConfigureAwait(false);
+            HistoryChatPreviewRow row = await _connection
+                .FindAsync<HistoryChatPreviewRow>(jid)
+                .ConfigureAwait(false);
+            if (row == null)
+            {
+                row = await _connection.Table<HistoryChatPreviewRow>()
+                    .Where(r => r.LidJid == jid || r.PnJid == jid)
+                    .FirstOrDefaultAsync()
+                    .ConfigureAwait(false);
+            }
+
+            return ToModel(row);
         }
 
         public async Task<IReadOnlyList<HistoryChatPreview>> GetAllAsync(string syncId = null)
@@ -799,6 +890,10 @@ namespace Unison.Uwp.Data
                 PnJid = Carry(model.PnJid, prior?.PnJid),
                 Name = model.Name,
                 IsGroup = model.IsGroup,
+                // History sync / live tips often omit community metadata; keep what metadata wrote.
+                IsCommunityAnnounce = StickyBool(model.IsCommunityAnnounce, prior?.IsCommunityAnnounce == true),
+                IsCommunityParent = StickyBool(model.IsCommunityParent, prior?.IsCommunityParent == true),
+                LinkedParentJid = Carry(model.LinkedParentJid, prior?.LinkedParentJid),
                 Status = (int)status,
                 UnreadCount = Math.Max(0, model.UnreadCount),
                 LastMessage = model.LastMessage,
@@ -854,6 +949,9 @@ namespace Unison.Uwp.Data
                 PnJid = row.PnJid,
                 Name = row.Name,
                 IsGroup = row.IsGroup,
+                IsCommunityAnnounce = row.IsCommunityAnnounce,
+                IsCommunityParent = row.IsCommunityParent,
+                LinkedParentJid = row.LinkedParentJid,
                 Status = status,
                 UnreadCount = row.UnreadCount,
                 LastMessage = row.LastMessage,

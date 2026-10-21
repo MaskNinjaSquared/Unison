@@ -47,6 +47,20 @@ namespace Unison.Uwp.UI.Controls
                 typeof(ChatListPreviewStrip),
                 new PropertyMetadata(string.Empty, OnLayoutInputsChanged));
 
+        public static readonly DependencyProperty AuthorDetailProperty =
+            DependencyProperty.Register(
+                nameof(AuthorDetail),
+                typeof(string),
+                typeof(ChatListPreviewStrip),
+                new PropertyMetadata(string.Empty, OnLayoutInputsChanged));
+
+        public static readonly DependencyProperty ShowAuthorChevronProperty =
+            DependencyProperty.Register(
+                nameof(ShowAuthorChevron),
+                typeof(bool),
+                typeof(ChatListPreviewStrip),
+                new PropertyMetadata(false, OnLayoutInputsChanged));
+
         public static readonly DependencyProperty MentionedJidsProperty =
             DependencyProperty.Register(
                 nameof(MentionedJids),
@@ -105,6 +119,18 @@ namespace Unison.Uwp.UI.Controls
         {
             get { return (string)GetValue(AuthorProperty); }
             set { SetValue(AuthorProperty, value); }
+        }
+
+        public string AuthorDetail
+        {
+            get { return (string)GetValue(AuthorDetailProperty); }
+            set { SetValue(AuthorDetailProperty, value); }
+        }
+
+        public bool ShowAuthorChevron
+        {
+            get { return (bool)GetValue(ShowAuthorChevronProperty); }
+            set { SetValue(ShowAuthorChevronProperty, value); }
         }
 
         public object MentionedJids
@@ -191,7 +217,14 @@ namespace Unison.Uwp.UI.Controls
                 Kind = preview.Kind;
                 Text = preview.Text;
                 Author = preview.Author;
+                AuthorDetail = preview.AuthorDetail;
+                ShowAuthorChevron = preview.ShowAuthorChevron;
                 MentionedJids = preview.MentionedJids;
+            }
+            else
+            {
+                AuthorDetail = string.Empty;
+                ShowAuthorChevron = false;
             }
 
             ApplyStatusChrome(preview);
@@ -305,6 +338,11 @@ namespace Unison.Uwp.UI.Controls
             }
 
             AuthorBlock.ClearValue(FrameworkElement.MaxWidthProperty);
+            if (AuthorDetailBlock != null)
+            {
+                AuthorDetailBlock.ClearValue(FrameworkElement.MaxWidthProperty);
+            }
+
             KindHost.ClearValue(FrameworkElement.MaxWidthProperty);
             PreviewTextBlock.ClearValue(FrameworkElement.MaxWidthProperty);
 
@@ -317,15 +355,32 @@ namespace Unison.Uwp.UI.Controls
             }
 
             AuthorBlock.Measure(infinite);
+            if (AuthorChevron != null)
+            {
+                AuthorChevron.Measure(infinite);
+            }
+
+            if (AuthorDetailBlock != null)
+            {
+                AuthorDetailBlock.Measure(infinite);
+            }
+
             KindHost.Measure(infinite);
             PreviewTextBlock.Measure(infinite);
 
             bool hasAuthor = AuthorBlock.Visibility == Visibility.Visible &&
                              !string.IsNullOrEmpty(AuthorBlock.Text);
+            bool hasChevron = AuthorChevron != null &&
+                              AuthorChevron.Visibility == Visibility.Visible;
+            bool hasAuthorDetail = AuthorDetailBlock != null &&
+                                   AuthorDetailBlock.Visibility == Visibility.Visible &&
+                                   !string.IsNullOrEmpty(AuthorDetailBlock.Text);
             bool hasChip = Kind != ChatPreviewKind.Text;
             bool hasText = !string.IsNullOrEmpty(PreviewTextBlock.Text);
 
             double authorDesired = hasAuthor ? AuthorBlock.DesiredSize.Width : 0;
+            double chevronDesired = hasChevron ? AuthorChevron.DesiredSize.Width : 0;
+            double detailDesired = hasAuthorDetail ? AuthorDetailBlock.DesiredSize.Width : 0;
             double chipDesired = hasChip ? KindHost.DesiredSize.Width : 0;
             double leftover = System.Math.Max(0, available - statusWidth);
 
@@ -335,15 +390,40 @@ namespace Unison.Uwp.UI.Controls
                 reserveForTrailing = MinTrailingWidth;
             }
 
+            double leadingFixed = chevronDesired;
             double authorWidth = authorDesired;
-            if (hasAuthor)
+            double detailWidth = detailDesired;
+            if (hasAuthor || hasAuthorDetail)
             {
-                double authorMax = System.Math.Max(0, leftover - reserveForTrailing);
-                authorWidth = System.Math.Min(authorDesired, authorMax);
-                AuthorBlock.MaxWidth = authorWidth;
+                double authorBudget = System.Math.Max(
+                    0,
+                    leftover - reserveForTrailing - leadingFixed);
+                // Prefer keeping the group name readable; ellipsize sender detail first.
+                if (hasAuthor && hasAuthorDetail)
+                {
+                    double authorMax = System.Math.Max(authorBudget * 0.55, 48);
+                    authorWidth = System.Math.Min(authorDesired, authorMax);
+                    detailWidth = System.Math.Min(
+                        detailDesired,
+                        System.Math.Max(0, authorBudget - authorWidth));
+                    AuthorBlock.MaxWidth = authorWidth;
+                    AuthorDetailBlock.MaxWidth = detailWidth;
+                }
+                else if (hasAuthor)
+                {
+                    authorWidth = System.Math.Min(authorDesired, authorBudget);
+                    AuthorBlock.MaxWidth = authorWidth;
+                }
+                else
+                {
+                    detailWidth = System.Math.Min(detailDesired, authorBudget);
+                    AuthorDetailBlock.MaxWidth = detailWidth;
+                }
             }
 
-            double remaining = System.Math.Max(0, leftover - authorWidth);
+            double remaining = System.Math.Max(
+                0,
+                leftover - authorWidth - leadingFixed - detailWidth);
             if (hasChip && hasText)
             {
                 double chipWidth = System.Math.Min(chipDesired, remaining);

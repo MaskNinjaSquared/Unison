@@ -13,6 +13,8 @@ namespace Unison.Core.Tests.Helpers
         [InlineData(nameof(ChatItem.IsChatPinned))]
         [InlineData(nameof(ChatItem.PinnedTimestamp))]
         [InlineData(nameof(ChatItem.Status))]
+        [InlineData(nameof(ChatItem.LinkedParentJid))]
+        [InlineData(nameof(ChatItem.IsCommunityParent))]
         public void Order_bearing_properties_require_a_reorder(string propertyName)
         {
             Assert.True(ChatListReorderTrigger.RequiresVisibleReorder(propertyName));

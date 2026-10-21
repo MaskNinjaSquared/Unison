@@ -684,6 +684,11 @@ namespace Unison.Uwp.Shell.WhatsApp.Views
                 return true;
             }
 
+            if (ChatListPart != null && ChatListPart.TryConsumeCommunityHubBack())
+            {
+                return true;
+            }
+
             if (_shell != null &&
                 ((_shell.IsNarrowWindow && _shell.ChatPane == ShellViewModel.PaneNarrowDetail) ||
                  (!_shell.IsNarrowWindow && _shell.HasActiveChat)))

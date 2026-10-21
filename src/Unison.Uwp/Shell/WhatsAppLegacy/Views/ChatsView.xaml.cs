@@ -189,6 +189,11 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         public bool TryHandleBack()
         {
+            if (ChatListPart != null && ChatListPart.TryConsumeCommunityHubBack())
+            {
+                return true;
+            }
+
             if (_shell == null || !_shell.HasActiveChat)
             {
                 return false;

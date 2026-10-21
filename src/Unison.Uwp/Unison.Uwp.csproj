@@ -288,6 +288,7 @@
     <Compile Include="Services\LiveTilesService.cs" />
     <Compile Include="Services\ShortcutService.cs" />
     <Compile Include="Services\RuntimeDiagnosticsService.cs" />
+    <Compile Include="Services\Diagnostics\ChatOpenMetadataProbe.cs" />
     <Compile Include="Services\VerboseLog.cs" />
     <Compile Include="Data\MessageStore.cs" />
     <Compile Include="Data\PersonStore.cs" />
@@ -317,6 +318,12 @@
     </Compile>
     <Compile Include="UI\Controls\LinkPhoneText.xaml.cs">
       <DependentUpon>LinkPhoneText.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Controls\EmptyStateBrandLogo.xaml.cs">
+      <DependentUpon>EmptyStateBrandLogo.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Controls\CommunityAnnouncementsAvatarControl.xaml.cs">
+      <DependentUpon>CommunityAnnouncementsAvatarControl.xaml</DependentUpon>
     </Compile>
     <Compile Include="UI\Controls\ModernProgressRing.xaml.cs">
       <DependentUpon>ModernProgressRing.xaml</DependentUpon>
@@ -455,6 +462,7 @@
     <Compile Include="UI\Helpers\MentionComposerInput.cs" />
     <Compile Include="UI\Helpers\MessageBubbleContextActions.cs" />
     <Compile Include="UI\Helpers\DesktopCursor.cs" />
+    <Compile Include="UI\Helpers\CommunityChatDetailHeader.cs" />
     <Compile Include="UI\Helpers\DesktopCursorKind.cs" />
     <Compile Include="UI\Helpers\RichTextBuilder.cs" />
     <Compile Include="UI\Converters\StringToVisibilityConverter.cs" />
@@ -725,6 +733,14 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="UI\Controls\LinkPhoneText.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Controls\EmptyStateBrandLogo.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Controls\CommunityAnnouncementsAvatarControl.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

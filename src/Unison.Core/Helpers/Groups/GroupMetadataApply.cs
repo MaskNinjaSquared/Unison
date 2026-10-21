@@ -138,6 +138,8 @@ namespace Unison.Core.Helpers
                 }
 
                 ApplyToRow(chat, metadata);
+                // Subject is cached separately (ExtractSubject); pull it onto the row when usable.
+                ApplySyncedLabel(chat);
                 _catalog.Schedule();
             });
         }
@@ -258,12 +260,19 @@ namespace Unison.Core.Helpers
 
         private void ApplyToRow(ChatItem chat, GroupMetadataSnapshot metadata)
         {
-            if (!chat.IsGroup)
+            chat.IsCommunityParent = metadata.IsCommunityParent;
+            if (!metadata.IsCommunityParent && !chat.IsGroup)
             {
                 chat.IsGroup = true;
             }
 
             chat.IsAnnounceOnly = metadata.AnnounceOnly;
+            chat.IsCommunityAnnounce = metadata.IsCommunityAnnounce;
+            if (!string.IsNullOrWhiteSpace(metadata.LinkedParentJid))
+            {
+                chat.LinkedParentJid = metadata.LinkedParentJid;
+            }
+
             chat.MyGroupRole = metadata.MyRole;
             if (metadata.MemberCount > 0)
             {

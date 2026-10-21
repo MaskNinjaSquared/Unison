@@ -228,6 +228,14 @@ namespace Unison.Uwp.Services.WhatsApp.Status
             if (!string.IsNullOrWhiteSpace(downloaded) &&
                 !HistoryMessageMapper.IsThumbCacheUri(downloaded))
             {
+                // Keep the protocol thumb for the list circle when full media lands on
+                // MediaLocalUri (ResolveListThumbUri prefers MediaPosterUri first).
+                if (HistoryMessageMapper.IsThumbCacheUri(status.MediaLocalUri) &&
+                    string.IsNullOrWhiteSpace(status.MediaPosterUri))
+                {
+                    status.MediaPosterUri = status.MediaLocalUri;
+                }
+
                 status.MediaLocalUri = downloaded;
                 if (message.Kind == ChatMessageKind.Video &&
                     !string.IsNullOrWhiteSpace(message.VideoPosterUri))

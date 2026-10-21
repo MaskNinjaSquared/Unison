@@ -87,6 +87,9 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
                 Jid = jid,
                 Subject = subject,
                 AnnounceOnly = IsAnnounceOnly(groupNode),
+                IsCommunityAnnounce = IsCommunityAnnounce(groupNode),
+                IsCommunityParent = IsCommunityParent(groupNode),
+                LinkedParentJid = ReadLinkedParentJid(groupNode),
                 MyRole = ResolveMyRole(groupNode),
                 MemberCount = CountMembers(groupNode),
                 Members = ReadMemberDrafts(groupNode)
@@ -189,6 +192,41 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
         public bool IsAnnounceOnly(BinaryNode groupNode)
         {
             return groupNode?.GetChild("announcement") != null;
+        }
+
+        /// <summary>
+        /// Community default announce channel — same child Baileys / socket parse as
+        /// <c>IsCommunityAnnounce</c> on <c>GroupMetadata</c>.
+        /// </summary>
+        public bool IsCommunityAnnounce(BinaryNode groupNode)
+        {
+            return groupNode?.GetChild("default_sub_group") != null;
+        }
+
+        /// <summary>
+        /// Community parent hub — same child as <c>IsCommunity</c> on socket <c>GroupMetadata</c>.
+        /// </summary>
+        public bool IsCommunityParent(BinaryNode groupNode)
+        {
+            return groupNode?.GetChild("parent") != null;
+        }
+
+        /// <summary>
+        /// Linked community parent JID from <c>linked_parent</c>, completed with <c>@g.us</c>.
+        /// </summary>
+        public string ReadLinkedParentJid(BinaryNode groupNode)
+        {
+            BinaryNode linked = groupNode?.GetChild("linked_parent");
+            if (linked == null)
+            {
+                return null;
+            }
+
+            string raw = linked.GetAttribute("jid")
+                ?? linked.GetAttribute("id")
+                ?? linked.GetAttribute("parent")
+                ?? linked.GetAttribute("linked_parent");
+            return GroupAvatarFallbackJids.NormalizeGroupJid(raw);
         }
 
         /// <summary>

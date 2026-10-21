@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -227,6 +227,9 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="ChatList_FilterDrafts.Text" xml:space="preserve">
     <value>Rascunhos</value>
   </data>
+  <data name="ChatList_FilterCommunities.Text" xml:space="preserve">
+    <value>Comunidades</value>
+  </data>
   <data name="ChatList_RefreshNames.Text" xml:space="preserve">
     <value>Atualizar nomes dos contatos</value>
   </data>
@@ -409,6 +412,15 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   </data>
   <data name="Chat_SelfFallbackName" xml:space="preserve">
     <value>Você</value>
+  </data>
+  <data name="Chat_CommunityAnnouncements" xml:space="preserve">
+    <value>Avisos</value>
+  </data>
+  <data name="Chat_CommunityHubSubtitle" xml:space="preserve">
+    <value>Comunidade · {0} grupos</value>
+  </data>
+  <data name="Chat_CommunityFallbackName" xml:space="preserve">
+    <value>Comunidade</value>
   </data>
   <data name="ChatDetail_PersonalSubtitle.Text" xml:space="preserve">
     <value>Mensagens para mim</value>

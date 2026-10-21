@@ -24,6 +24,7 @@ using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.Uwp.Client;
+using Unison.Uwp.Services;
 using Unison.Uwp.Services.Socket;
 using Unison.Uwp.Services.WhatsApp.Contacts;
 
@@ -53,6 +54,18 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
 
         /// <summary>0 free / 1 busy — overlapping listings each burn a 60s IQ and starve chat open.</summary>
         private int _listingInFlight;
+
+        /// <summary>
+        /// Listing was skipped for catch-up / sync traffic; retry once the next due signal arrives.
+        /// </summary>
+        private int _listingRetryPending;
+
+        /// <summary>
+        /// Groups already asked once this session for <c>linked_parent</c> / <c>parent</c>.
+        /// Stops re-querying ordinary groups that never carry those children.
+        /// </summary>
+        private readonly HashSet<string> _communityLinkProbed =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         internal GroupFacade(
             IWhatsAppService client,
@@ -135,7 +148,45 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
             try
             {
                 var response = await socket.QueryGroupMetadataAsync(canonical);
-                await _apply.ApplyMetadataAsync(canonical, _reader.ReadMetadata(response, canonical));
+                GroupMetadataSnapshot metadata = _reader.ReadMetadata(response, canonical);
+                _communityLinkProbed.Add(canonical);
+
+                // ReadMetadata leaves Subject null by design — extract + cache so community hubs
+                // and ordinary groups leave the "Community" / id placeholder after this refresh.
+                string subject = _reader.ExtractSubject(response, canonical);
+                string priorName = null;
+                await _ui.RunAsync(() =>
+                {
+                    ChatItem row = _chats.Chats.FirstOrDefault(c =>
+                        c != null &&
+                        string.Equals(
+                            _jids.GetCanonicalJid(c.JID),
+                            canonical,
+                            StringComparison.OrdinalIgnoreCase));
+                    priorName = row?.Name;
+                });
+                bool cachedSubject = _apply.TryCacheSyncedSubject(canonical, subject, priorName);
+
+                Debug.WriteLine(
+                    "[GroupFacade] RefreshGroupSendPermissions " + canonical +
+                    " linkedParent=" + (metadata?.LinkedParentJid ?? "-") +
+                    " isCommunityParent=" + (metadata != null && metadata.IsCommunityParent) +
+                    " isCommunityAnnounce=" + (metadata != null && metadata.IsCommunityAnnounce) +
+                    " subject=" + (string.IsNullOrWhiteSpace(subject) ? "-" : "yes"));
+                RuntimeDiagnosticsService.Instance.Write(
+                    "group-meta",
+                    "refresh-apply",
+                    "chat=" + DiagnosticJidMask.Apply(canonical) +
+                    "; linkedParent=" + DiagnosticJidMask.Apply(metadata?.LinkedParentJid) +
+                    "; isCommunityParent=" + (metadata != null && metadata.IsCommunityParent) +
+                    "; isCommunityAnnounce=" + (metadata != null && metadata.IsCommunityAnnounce) +
+                    "; announceOnly=" + (metadata != null && metadata.AnnounceOnly) +
+                    "; subjectCached=" + cachedSubject);
+                await _apply.ApplyMetadataAsync(canonical, metadata);
+                if (cachedSubject)
+                {
+                    await _nameRefresh.ApplyAsync();
+                }
             }
             catch (Exception ex)
             {
@@ -282,15 +333,20 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
             string heavyDeferReason;
             if (_syncWork.ShouldDeferHeavyLocalWork(out heavyDeferReason))
             {
+                Interlocked.Exchange(ref _listingRetryPending, 1);
                 Debug.WriteLine(
-                    "[GroupFacade] QueryAllGroupsAsync skipped (" + heavyDeferReason + ")");
+                    "[GroupFacade] QueryAllGroupsAsync skipped (" + heavyDeferReason +
+                    "); retry armed");
                 return;
             }
 
             string syncTrafficDeferReason;
             if (_syncWork.ShouldDeferAvatarFetch(out syncTrafficDeferReason))
             {
-                Debug.WriteLine("[GroupFacade] QueryAllGroupsAsync skipped (sync traffic active: " + syncTrafficDeferReason + ")");
+                Interlocked.Exchange(ref _listingRetryPending, 1);
+                Debug.WriteLine(
+                    "[GroupFacade] QueryAllGroupsAsync skipped (sync traffic active: " +
+                    syncTrafficDeferReason + "); retry armed");
                 return;
             }
 
@@ -301,8 +357,11 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
                 return;
             }
 
+            bool retryForce = Interlocked.Exchange(ref _listingRetryPending, 0) == 1;
+            bool effectiveForce = force || retryForce;
+
             DateTime nowUtc = DateTime.UtcNow;
-            if (_queryWindow.ShouldSkip(force, nowUtc))
+            if (_queryWindow.ShouldSkip(effectiveForce, nowUtc))
             {
                 Debug.WriteLine(
                     "[GroupFacade] QueryAllGroupsAsync skipped (last pass was " +
@@ -383,10 +442,18 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
                         continue;
                     }
 
+                    string canonical = _jids.GetCanonicalJid(chat.JID);
+                    bool missingCommunityLink =
+                        string.IsNullOrWhiteSpace(chat.LinkedParentJid) &&
+                        !chat.IsCommunityParent &&
+                        !string.IsNullOrWhiteSpace(canonical) &&
+                        !_communityLinkProbed.Contains(canonical);
+
                     if (GroupQuery.NeedsMetadata(
                             chat.IsGroup,
                             chat.JID,
-                            _naming.IsMeaningfulGroupLabel(chat.Name, chat.JID)))
+                            _naming.IsMeaningfulGroupLabel(chat.Name, chat.JID),
+                            missingCommunityLink))
                     {
                         unresolved.Add(chat);
                     }
@@ -418,6 +485,12 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
                 attempts++;
                 _syncStatus.Raise(SyncPhaseStatus.Format(SyncPhaseStatus.Groups, attempts, pending.Count));
 
+                string canonical = _jids.GetCanonicalJid(chat.JID);
+                if (!string.IsNullOrWhiteSpace(canonical))
+                {
+                    _communityLinkProbed.Add(canonical);
+                }
+
                 try
                 {
                     var response = await socket.QueryGroupMetadataAsync(chat.JID);
@@ -427,7 +500,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
                         resolved++;
                     }
 
-                    _ = _apply.ApplyMetadataAsync(chat.JID, _reader.ReadMetadata(response, chat.JID));
+                    await _apply.ApplyMetadataAsync(chat.JID, _reader.ReadMetadata(response, chat.JID));
                 }
                 catch (Exception ex)
                 {

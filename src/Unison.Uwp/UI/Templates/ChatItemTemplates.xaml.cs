@@ -24,9 +24,14 @@ namespace Unison.Uwp.UI.Templates
         /// yet, or a contact that is still just a number. Lives here because it is a function
         /// binding in this template and a static is the only shape x:Bind accepts.
         /// </summary>
-        public static string GetChatDisplayName(string name, ChatKind kind)
+        public static string GetChatDisplayName(string name, ChatKind kind, bool isCommunityAnnounce)
         {
-            var item = new ChatItem { Name = name, Kind = kind };
+            var item = new ChatItem
+            {
+                Name = name,
+                Kind = kind,
+                IsCommunityAnnounce = isCommunityAnnounce
+            };
             IStringResources strings = null;
             try
             {
@@ -37,6 +42,12 @@ namespace Unison.Uwp.UI.Templates
             }
 
             return item.GetNameResolved(strings);
+        }
+
+        /// <summary>Group glyph under the photo for groups and community hubs.</summary>
+        public static bool ShowsGroupAvatar(bool isGroup, ChatKind kind)
+        {
+            return isGroup || kind == ChatKind.Community;
         }
 
         private void ChatContextFlyout_Opening(object sender, object e)

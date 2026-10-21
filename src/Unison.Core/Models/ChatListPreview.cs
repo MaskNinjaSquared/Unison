@@ -11,6 +11,8 @@ namespace Unison.Core.Models
     {
         private string _text = string.Empty;
         private string _author = string.Empty;
+        private string _authorDetail = string.Empty;
+        private bool _showAuthorChevron;
         private ChatPreviewKind _kind;
         private bool _isFromMe;
         private MessageSendState _sendState;
@@ -22,11 +24,34 @@ namespace Unison.Core.Models
             set => Set(ref _text, value ?? string.Empty);
         }
 
-        /// <summary>Group prefix ("Alice: "), empty for 1:1.</summary>
+        /// <summary>
+        /// Strip label before the body: group sender ("Alice: ") or, on a community hub,
+        /// the linked group name that produced the tip.
+        /// </summary>
         public string Author
         {
             get => _author;
             set => Set(ref _author, value ?? string.Empty);
+        }
+
+        /// <summary>
+        /// Community hub only: sender prefix after the chevron ("Alice: " / "You: ").
+        /// Empty on ordinary chats.
+        /// </summary>
+        public string AuthorDetail
+        {
+            get => _authorDetail;
+            set => Set(ref _authorDetail, value ?? string.Empty);
+        }
+
+        /// <summary>
+        /// Community hub: chevron between <see cref="Author"/> (group name) and
+        /// <see cref="AuthorDetail"/> / the message body.
+        /// </summary>
+        public bool ShowAuthorChevron
+        {
+            get => _showAuthorChevron;
+            set => Set(ref _showAuthorChevron, value);
         }
 
         public ChatPreviewKind Kind
@@ -158,6 +183,8 @@ namespace Unison.Core.Models
 
             Text = source.Text;
             Author = source.Author;
+            AuthorDetail = source.AuthorDetail;
+            ShowAuthorChevron = source.ShowAuthorChevron;
             Kind = source.Kind;
             IsFromMe = source.IsFromMe;
             SendState = source.SendState;

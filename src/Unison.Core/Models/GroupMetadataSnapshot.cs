@@ -13,6 +13,21 @@ namespace Unison.Core.Models
 
         public bool AnnounceOnly { get; set; }
 
+        /// <summary>
+        /// Community default announce channel (<c>default_sub_group</c> child on the group node).
+        /// </summary>
+        public bool IsCommunityAnnounce { get; set; }
+
+        /// <summary>
+        /// This node is a community parent (<c>parent</c> child on the group node).
+        /// </summary>
+        public bool IsCommunityParent { get; set; }
+
+        /// <summary>
+        /// Parent community JID when this group is linked (<c>linked_parent</c> attr).
+        /// </summary>
+        public string LinkedParentJid { get; set; }
+
         public GroupParticipantRole MyRole { get; set; }
 
         /// <summary>0 when the reply said nothing usable.</summary>

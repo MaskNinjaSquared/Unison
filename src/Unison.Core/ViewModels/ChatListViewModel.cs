@@ -61,6 +61,7 @@ namespace Unison.Core.ViewModels
         private readonly IShortcutService _shortcutService;
         private readonly IChatStore _chatStore;
         private readonly IChatService _chatService;
+        private readonly IGroupService _groups;
         private readonly IDispatcher _dispatcher;
         private readonly IStringResources _strings;
         private readonly IStatusBarService _statusBar;
@@ -190,6 +191,7 @@ namespace Unison.Core.ViewModels
             INewChatDialogViewModelFactory newChatFactory,
             IJidResolver jids,
             IChatService chatService = null,
+            IGroupService groupService = null,
             ISessionLogger sessionLogger = null,
             IRuntimeDiagnostics diagnostics = null,
             ILocalSettings localSettings = null,
@@ -199,6 +201,7 @@ namespace Unison.Core.ViewModels
         {
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _chatService = chatService;
+            _groups = groupService;
             _sessionLogger = sessionLogger;
             _diagnostics = diagnostics;
             _localSettings = localSettings;
@@ -222,6 +225,7 @@ namespace Unison.Core.ViewModels
             DisplaySync = theme == null || theme.DisplaySyncInChatList;
 
             VisibleChats = new ObservableCollection<ChatItem>();
+            CloseCommunityHubCommand = new RelayCommand(CloseCommunityHub);
 
             // The overlay starts on: a cold start has nothing to show and the alternative is a
             // blank pane. The key is the one the markup used to carry as x:Uid.
@@ -279,6 +283,64 @@ namespace Unison.Core.ViewModels
 
         /// <summary>The rows, already filtered, deduped and ordered. Bind and forget.</summary>
         public ObservableCollection<ChatItem> VisibleChats { get; }
+
+        /// <summary>Community hub open over the list (runtime projection).</summary>
+        public ChatItem ActiveCommunity
+        {
+            get => _activeCommunity;
+            private set
+            {
+                if (ReferenceEquals(_activeCommunity, value))
+                {
+                    return;
+                }
+
+                if (_activeCommunity != null)
+                {
+                    _activeCommunity.PropertyChanged -= ActiveCommunity_PropertyChanged;
+                }
+
+                _activeCommunity = value;
+                if (_activeCommunity != null)
+                {
+                    _activeCommunity.PropertyChanged += ActiveCommunity_PropertyChanged;
+                    CommunityHubPresentation.StampLinkedParentDisplayNames(_activeCommunity);
+                }
+
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(IsCommunityHubOpen));
+                OnPropertyChanged(nameof(ActiveCommunityTitle));
+                OnPropertyChanged(nameof(ActiveCommunitySubtitle));
+            }
+        }
+
+        public bool IsCommunityHubOpen => _activeCommunity != null;
+
+        public string ActiveCommunityTitle =>
+            _activeCommunity == null
+                ? string.Empty
+                : CommunityHubPresentation.ResolveHubTitle(
+                    _activeCommunity,
+                    jid => _contactService.ResolveDisplayName(jid, "community-hub"),
+                    _strings);
+
+        public string ActiveCommunitySubtitle =>
+            _activeCommunity == null
+                ? string.Empty
+                : _activeCommunity.GetCommunitySubtitle(_strings);
+
+        public ICommand CloseCommunityHubCommand { get; }
+
+        private ChatItem _activeCommunity;
+        private readonly Dictionary<string, ChatItem> _syntheticCommunities =
+            new Dictionary<string, ChatItem>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Community hub JIDs already asked for w:g2 subject/avatar this session.
+        /// Avoids re-firing <see cref="IGroupService.RefreshGroupSendPermissionsAsync"/> on every rebuild.
+        /// </summary>
+        private readonly HashSet<string> _communityHubLabelProbed =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         private NotificationCounterWatch _notificationCounter;
 
@@ -662,6 +724,8 @@ namespace Unison.Core.ViewModels
                 _previewHydrateQueue?.Clear();
                 _previewHydrateLoopRunning = false;
             }
+
+            CloseCommunityHub();
         }
 
         // ---------------------------------------------------------------------
@@ -681,6 +745,269 @@ namespace Unison.Core.ViewModels
 
             _lastSelectedChatJid = chat.JID;
             SelectedChat = chat;
+            EnsureCommunityContext(chat);
+        }
+
+        /// <summary>
+        /// True when the row is a community hub — opens the in-list hub instead of chat detail.
+        /// </summary>
+        public bool TryOpenCommunityHub(ChatItem chat)
+        {
+            if (chat == null || (!chat.IsCommunity && !chat.IsCommunityParent))
+            {
+                return false;
+            }
+
+            ActiveCommunity = chat;
+            // Keep SelectedChat when it is already a member of this hub (open conversation).
+            if (SelectedChat == null || !IsMemberOfActiveCommunity(SelectedChat))
+            {
+                ClearSelection();
+            }
+
+            return true;
+        }
+
+        public void CloseCommunityHub()
+        {
+            if (_activeCommunity == null)
+            {
+                return;
+            }
+
+            ActiveCommunity = null;
+        }
+
+        /// <summary>
+        /// Opens a linked group from the hub. Hub stays open with that group as the selection.
+        /// </summary>
+        public void SelectCommunityGroup(ChatItem group)
+        {
+            if (group == null)
+            {
+                return;
+            }
+
+            EnsureCommunityContext(group);
+            OnChatSelected(group);
+        }
+
+        /// <summary>
+        /// Opens the parent community hub when <paramref name="chat"/> is a linked subgroup so
+        /// the open conversation stays inside the hub with that row selected.
+        /// </summary>
+        public bool EnsureCommunityContext(ChatItem chat)
+        {
+            if (chat == null || string.IsNullOrWhiteSpace(chat.LinkedParentJid))
+            {
+                return false;
+            }
+
+            string parentKey = GetCanonical(chat.LinkedParentJid);
+            if (string.IsNullOrWhiteSpace(parentKey))
+            {
+                return false;
+            }
+
+            if (_activeCommunity != null &&
+                string.Equals(GetCanonical(_activeCommunity.JID), parentKey, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            ChatItem hub = FindCommunityHub(parentKey);
+            if (hub == null)
+            {
+                return false;
+            }
+
+            ActiveCommunity = hub;
+            return true;
+        }
+
+        private bool IsMemberOfActiveCommunity(ChatItem chat)
+        {
+            if (chat == null || _activeCommunity == null || string.IsNullOrWhiteSpace(chat.JID))
+            {
+                return false;
+            }
+
+            string key = GetCanonical(chat.JID);
+            foreach (ChatItem member in _activeCommunity.CommunityMembers)
+            {
+                if (member != null &&
+                    string.Equals(GetCanonical(member.JID), key, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return string.Equals(
+                GetCanonical(chat.LinkedParentJid),
+                GetCanonical(_activeCommunity.JID),
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private ChatItem FindCommunityHub(string parentKey)
+        {
+            if (string.IsNullOrWhiteSpace(parentKey))
+            {
+                return null;
+            }
+
+            for (int i = 0; i < VisibleChats.Count; i++)
+            {
+                ChatItem row = VisibleChats[i];
+                if (row != null &&
+                    (row.IsCommunity || row.IsCommunityParent) &&
+                    string.Equals(GetCanonical(row.JID), parentKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    return row;
+                }
+            }
+
+            ChatItem hub = ResolveCatalogByJid(parentKey) ?? GetOrCreateSyntheticCommunity(parentKey);
+            if (hub == null)
+            {
+                return null;
+            }
+
+            var members = new List<ChatItem>();
+            foreach (ChatItem c in _chatState.Chats)
+            {
+                if (c == null || string.IsNullOrWhiteSpace(c.LinkedParentJid))
+                {
+                    continue;
+                }
+
+                if (string.Equals(GetCanonical(c.LinkedParentJid), parentKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    members.Add(c);
+                }
+            }
+
+            if (members.Count > 0)
+            {
+                hub.IsCommunityParent = true;
+                hub.SetCommunityGroups(CommunityHubPresentation.OrderMembers(members));
+                CommunityHubPresentation.ApplyMemberAvatarFallback(hub);
+            }
+
+            return hub;
+        }
+
+        private void EnrichCommunityHubRows(List<ChatItem> rows)
+        {
+            if (rows == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < rows.Count; i++)
+            {
+                ChatItem hub = rows[i];
+                if (hub == null || (!hub.IsCommunityParent && hub.Kind != ChatKind.Community))
+                {
+                    continue;
+                }
+
+                CommunityHubPresentation.ApplyMemberAvatarFallback(hub);
+                if (TryApplyCommunityHubLabel(hub))
+                {
+                    continue;
+                }
+
+                // Parent subject often arrives only via w:g2 — ask once so the list leaves the
+                // "Community" fallback. Synthetic hubs are not in the catalog, so we re-apply
+                // the cached subject onto this instance after the refresh returns.
+                if (_groups == null ||
+                    string.IsNullOrWhiteSpace(hub.JID) ||
+                    _connection == null ||
+                    !_connection.IsConnected)
+                {
+                    continue;
+                }
+
+                string probeKey = GetCanonical(hub.JID);
+                if (string.IsNullOrWhiteSpace(probeKey) || !_communityHubLabelProbed.Add(probeKey))
+                {
+                    continue;
+                }
+
+                ChatItem target = hub;
+                string jid = hub.JID;
+                _ = EnrichCommunityHubLabelAsync(target, jid, probeKey);
+            }
+        }
+
+        private bool TryApplyCommunityHubLabel(ChatItem hub)
+        {
+            if (hub == null)
+            {
+                return false;
+            }
+
+            if (CommunityHubPresentation.IsUsableHubLabel(hub.Name, hub.JID))
+            {
+                CommunityHubPresentation.StampLinkedParentDisplayNames(hub);
+                return true;
+            }
+
+            string label = _contactService.ResolveDisplayName(hub.JID, "community-hub");
+            if (!CommunityHubPresentation.IsUsableHubLabel(label, hub.JID))
+            {
+                return false;
+            }
+
+            hub.Name = label.Trim();
+            CommunityHubPresentation.StampLinkedParentDisplayNames(hub);
+            return true;
+        }
+
+        private void ActiveCommunity_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (e == null)
+            {
+                return;
+            }
+
+            if (e.PropertyName == nameof(ChatItem.Name) ||
+                e.PropertyName == nameof(ChatItem.CommunityGroupCount) ||
+                e.PropertyName == nameof(ChatItem.CommunityMembers))
+            {
+                OnPropertyChanged(nameof(ActiveCommunityTitle));
+                OnPropertyChanged(nameof(ActiveCommunitySubtitle));
+            }
+        }
+
+        private async Task EnrichCommunityHubLabelAsync(ChatItem hub, string jid, string probeKey)
+        {
+            try
+            {
+                await _groups.RefreshGroupSendPermissionsAsync(jid);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatListViewModel] Community hub label refresh failed: " + ex.Message);
+                _communityHubLabelProbed.Remove(probeKey);
+                return;
+            }
+
+            if (_dispatcher == null || hub == null)
+            {
+                return;
+            }
+
+            await _dispatcher.RunAsync(() =>
+            {
+                TryApplyCommunityHubLabel(hub);
+                CommunityHubPresentation.ApplyMemberAvatarFallback(hub);
+                if (ReferenceEquals(_activeCommunity, hub))
+                {
+                    OnPropertyChanged(nameof(ActiveCommunityTitle));
+                    OnPropertyChanged(nameof(ActiveCommunitySubtitle));
+                }
+            });
         }
 
         /// <summary>
@@ -2191,8 +2518,32 @@ namespace Unison.Core.ViewModels
                 source = source.Where(c => MatchesQuery(c, query)).ToList();
             }
 
-            source = ChatListDisplayOrder.SortForDisplay(
-                ChatListDisplayOrder.DeduplicateByCanonicalJid(source, GetCanonical));
+            source = ChatListDisplayOrder.DeduplicateByCanonicalJid(source, GetCanonical);
+            source = CommunityListProjector.Project(
+                source,
+                ResolveCatalogByJid,
+                GetOrCreateSyntheticCommunity,
+                GetCanonical);
+            EnrichCommunityHubRows(source);
+            source = ChatListDisplayOrder.SortForDisplay(source);
+
+            if (_activeCommunity != null)
+            {
+                ChatItem stillOpen = FindProjectedCommunity(_activeCommunity.JID, source);
+                if (stillOpen == null)
+                {
+                    ActiveCommunity = null;
+                }
+                else if (!ReferenceEquals(stillOpen, _activeCommunity))
+                {
+                    ActiveCommunity = stillOpen;
+                }
+                else
+                {
+                    OnPropertyChanged(nameof(ActiveCommunitySubtitle));
+                    OnPropertyChanged(nameof(ActiveCommunityTitle));
+                }
+            }
 
             int moveBudget = PreferFrugalUi
                 ? VisibleRefreshMoveBudgetFrugal
@@ -2340,10 +2691,13 @@ namespace Unison.Core.ViewModels
                     return chat.IsDirect && !IsAddressBookContact(chat);
 
                 case ChatListFilter.Groups:
-                    return chat.IsGroup;
+                    return chat.IsGroup && !chat.IsCommunity && !chat.IsCommunityParent;
 
                 case ChatListFilter.Drafts:
                     return chat.HasDraft;
+
+                case ChatListFilter.Communities:
+                    return chat.IsCommunity || chat.IsCommunityParent;
 
                 default:
                     return true;
@@ -2468,7 +2822,20 @@ namespace Unison.Core.ViewModels
 
             foreach (ChatItem item in items)
             {
-                if (item == null || !MatchesScope(item) || VisibleChats.Contains(item))
+                if (item == null)
+                {
+                    continue;
+                }
+
+                // Community projection must rebuild the visible list as a whole.
+                if (item.IsCommunityParent ||
+                    item.IsCommunity ||
+                    !string.IsNullOrWhiteSpace(item.LinkedParentJid))
+                {
+                    return false;
+                }
+
+                if (!MatchesScope(item) || VisibleChats.Contains(item))
                 {
                     continue;
                 }
@@ -2483,6 +2850,76 @@ namespace Unison.Core.ViewModels
             }
 
             return true;
+        }
+
+        private ChatItem ResolveCatalogByJid(string jid)
+        {
+            if (string.IsNullOrWhiteSpace(jid))
+            {
+                return null;
+            }
+
+            string key = GetCanonical(jid);
+            foreach (ChatItem chat in _chatState.Chats)
+            {
+                if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
+                {
+                    continue;
+                }
+
+                if (string.Equals(GetCanonical(chat.JID), key, StringComparison.OrdinalIgnoreCase))
+                {
+                    return chat;
+                }
+            }
+
+            return null;
+        }
+
+        private ChatItem GetOrCreateSyntheticCommunity(string parentJid)
+        {
+            string key = GetCanonical(parentJid);
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return null;
+            }
+
+            ChatItem existing;
+            if (_syntheticCommunities.TryGetValue(key, out existing) && existing != null)
+            {
+                return existing;
+            }
+
+            var created = new ChatItem
+            {
+                Id = key,
+                JID = key,
+                Status = ChatStatus.Active,
+                IsCommunityParent = true
+            };
+            _syntheticCommunities[key] = created;
+            return created;
+        }
+
+        private static ChatItem FindProjectedCommunity(string jid, List<ChatItem> source)
+        {
+            if (string.IsNullOrWhiteSpace(jid) || source == null)
+            {
+                return null;
+            }
+
+            for (int i = 0; i < source.Count; i++)
+            {
+                ChatItem chat = source[i];
+                if (chat != null &&
+                    (chat.IsCommunity || chat.IsCommunityParent) &&
+                    string.Equals(chat.JID, jid, StringComparison.OrdinalIgnoreCase))
+                {
+                    return chat;
+                }
+            }
+
+            return null;
         }
 
         private void RemoveAll(System.Collections.IList items)
@@ -3193,6 +3630,18 @@ namespace Unison.Core.ViewModels
         /// </summary>
         private void ReorderVisibleChatsInPlace()
         {
+            // Community hubs need CommunityListProjector — a pin-style Move cannot invent
+            // synthetic parents or hide linked children. When any row carries community shape,
+            // fall through to a full refresh (unless the list is still held / batching).
+            if (VisibleHasCommunityShape() &&
+                !_batchRendering &&
+                !IsInSafeMode &&
+                !IsListHeldForSync)
+            {
+                RefreshVisibleChats();
+                return;
+            }
+
             _visibleOrderDirty = false;
 
             if (VisibleChats.Count < 2)
@@ -3227,6 +3676,27 @@ namespace Unison.Core.ViewModels
             {
                 IsRefreshing = false;
             }
+        }
+
+        private bool VisibleHasCommunityShape()
+        {
+            for (int i = 0; i < _chatState.Chats.Count; i++)
+            {
+                ChatItem chat = _chatState.Chats[i];
+                if (chat == null)
+                {
+                    continue;
+                }
+
+                if (chat.IsCommunityParent ||
+                    chat.IsCommunity ||
+                    !string.IsNullOrWhiteSpace(chat.LinkedParentJid))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private void UpdateBatchProgressText()

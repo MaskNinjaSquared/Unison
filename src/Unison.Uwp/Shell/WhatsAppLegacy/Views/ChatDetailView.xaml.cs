@@ -16,6 +16,7 @@ using Unison.Core.ViewModels;
 using Unison.Uwp.Client;
 using Unison.Uwp.Helpers;
 using Unison.Uwp.Services;
+using Unison.Uwp.Services.Diagnostics;
 using Unison.Uwp.Services.WhatsApp;
 using IChatDetailSurface = Unison.Uwp.UI.Views.IChatDetailSurface;
 using Unison.Uwp.UI.Controls;
@@ -1855,7 +1856,15 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 {
                     HeaderAvatar.AvatarUrl = null;
                     HeaderAvatar.IsGroup = false;
+                    HeaderAvatar.Visibility = Visibility.Collapsed;
                 }
+
+                if (HeaderAnnouncementsAvatar != null)
+                {
+                    HeaderAnnouncementsAvatar.AvatarUrl = null;
+                    HeaderAnnouncementsAvatar.Visibility = Visibility.Collapsed;
+                }
+
                 ApplyHeaderActions(isGroup: false, visible: false);
                 return Task.CompletedTask;
             }
@@ -1898,6 +1907,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             {
                 _ = ViewModel.MarkChatOpenedAsync(chat);
             }
+
+            ChatOpenMetadataProbe.WriteAsync(chat);
 
             return Task.CompletedTask;
         }
@@ -2236,7 +2247,10 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return;
             }
 
-            if (e.PropertyName == nameof(ChatItem.Name))
+            if (e.PropertyName == nameof(ChatItem.Name) ||
+                e.PropertyName == nameof(ChatItem.IsCommunityAnnounce) ||
+                e.PropertyName == nameof(ChatItem.LinkedParentJid) ||
+                e.PropertyName == nameof(ChatItem.LinkedParentDisplayName))
             {
                 _ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
                 {
@@ -2271,7 +2285,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             else if (e.PropertyName == nameof(ChatItem.AvatarUrl) ||
                      e.PropertyName == nameof(ChatItem.AvatarHighUrl) ||
                      e.PropertyName == nameof(ChatItem.Kind) ||
-                     e.PropertyName == nameof(ChatItem.IsGroup))
+                     e.PropertyName == nameof(ChatItem.IsGroup) ||
+                     e.PropertyName == nameof(ChatItem.IsCommunityAnnounce))
             {
                 _ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
                 {
@@ -2282,7 +2297,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private void ApplyHeaderAvatar(ChatItem chat)
         {
-            if (HeaderAvatar == null || chat == null)
+            if (chat == null || (HeaderAvatar == null && HeaderAnnouncementsAvatar == null))
             {
                 ApplyHeaderActions(isGroup: false, visible: false);
                 return;
@@ -2291,9 +2306,22 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             bool isGroup = chat.IsGroup
                 || (!string.IsNullOrWhiteSpace(chat.JID)
                     && chat.JID.IndexOf("@g.us", StringComparison.OrdinalIgnoreCase) >= 0);
+            string url = chat.GetAvatarUrl(preferHigh: true);
+            bool announce = chat.IsCommunityAnnounce;
 
-            HeaderAvatar.IsGroup = isGroup;
-            HeaderAvatar.AvatarUrl = chat.GetAvatarUrl(preferHigh: true);
+            if (HeaderAvatar != null)
+            {
+                HeaderAvatar.IsGroup = isGroup;
+                HeaderAvatar.AvatarUrl = url;
+                HeaderAvatar.Visibility = announce ? Visibility.Collapsed : Visibility.Visible;
+            }
+
+            if (HeaderAnnouncementsAvatar != null)
+            {
+                HeaderAnnouncementsAvatar.AvatarUrl = url;
+                HeaderAnnouncementsAvatar.Visibility = announce ? Visibility.Visible : Visibility.Collapsed;
+            }
+
             ApplyHeaderActions(isGroup, visible: true);
         }
 
@@ -2325,6 +2353,19 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return;
             }
 
+            if (CommunityChatDetailHeader.TryShow(
+                    chat,
+                    _strings,
+                    TitleStatusPanel,
+                    CommunityTitlePanel,
+                    CommunityTitleText,
+                    CommunityGroupSubtitleText))
+            {
+                return;
+            }
+
+            CommunityChatDetailHeader.Hide(TitleStatusPanel, CommunityTitlePanel);
+
             bool isGroup = chat.IsGroup
                 || (!string.IsNullOrWhiteSpace(chat.JID)
                     && chat.JID.IndexOf("@g.us", StringComparison.OrdinalIgnoreCase) >= 0);
@@ -2342,7 +2383,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return;
             }
 
-            if (isGroup && !string.IsNullOrWhiteSpace(chat.Name))
+            if (isGroup &&
+                (chat.IsCommunityAnnounce || !string.IsNullOrWhiteSpace(chat.Name)))
             {
                 SetTitlePlain(chat.GetNameResolved(_strings));
                 return;

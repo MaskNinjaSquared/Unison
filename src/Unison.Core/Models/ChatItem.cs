@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using Unison.Core.Contracts;
@@ -35,6 +37,15 @@ namespace Unison.Core.Models
 
         /// <summary>Last-message strip DTO (kind, body, author, outgoing ticks).</summary>
         public ChatListPreview LastPreview => _lastPreview;
+
+        /// <summary>Notifies list bindings after mutating nested <see cref="LastPreview"/> fields.</summary>
+        public void RaiseLastPreviewChanged()
+        {
+            OnPropertyChanged(nameof(LastPreview));
+            OnPropertyChanged(nameof(LastMessage));
+            OnPropertyChanged(nameof(LastMessageAuthor));
+            OnPropertyChanged(nameof(HasLastMessageAuthor));
+        }
 
         public string LastMessage
         {
@@ -315,7 +326,7 @@ namespace Unison.Core.Models
 
         private ChatKind _kind = ChatKind.Direct;
 
-        /// <summary>Direct (1:1), Group, or Personal (chat with yourself).</summary>
+        /// <summary>Direct (1:1), Group, Personal, or Community (reserved).</summary>
         public ChatKind Kind
         {
             get => _kind;
@@ -352,12 +363,22 @@ namespace Unison.Core.Models
         /// <summary>True when this is a normal 1:1 with another person.</summary>
         public bool IsDirect => _kind == ChatKind.Direct;
 
+        /// <summary>True when <see cref="Kind"/> is <see cref="ChatKind.Community"/> (reserved).</summary>
+        public bool IsCommunity => _kind == ChatKind.Community;
+
         /// <summary>
-        /// UI label for list/header. Uses <see cref="IStringResources"/> (DI) for Personal markers.
-        /// Does not mutate <see cref="Name"/>.
+        /// UI label for list/header. Uses <see cref="IStringResources"/> (DI) for Personal markers
+        /// and community-announce “Avisos”. Does not mutate <see cref="Name"/>.
         /// </summary>
         public string GetNameResolved(IStringResources strings)
         {
+            if (IsCommunityAnnounce)
+            {
+                return strings != null
+                    ? strings.Get("Chat_CommunityAnnouncements", "Announcements")
+                    : "Announcements";
+            }
+
             switch (Kind)
             {
                 case ChatKind.Personal:
@@ -374,6 +395,16 @@ namespace Unison.Core.Models
                 case ChatKind.Group:
                     return Name ?? string.Empty;
 
+                case ChatKind.Community:
+                    if (!string.IsNullOrWhiteSpace(Name))
+                    {
+                        return Name;
+                    }
+
+                    return strings != null
+                        ? strings.Get("Chat_CommunityFallbackName", "Community")
+                        : "Community";
+
                 case ChatKind.Direct:
                 default:
                     return Name ?? string.Empty;
@@ -382,10 +413,17 @@ namespace Unison.Core.Models
 
         /// <summary>
         /// Sets <see cref="Kind"/> from JID + self flag (group wins over self).
+        /// Community parents keep <see cref="ChatKind.Community"/> via <see cref="IsCommunityParent"/>.
         /// Strips a persisted “(You)” suffix from <see cref="Name"/> when Personal.
         /// </summary>
         public void ApplyKind(string jid, bool isSelfChat)
         {
+            if (_isCommunityParent)
+            {
+                Kind = ChatKind.Community;
+                return;
+            }
+
             Kind = JidHelper.ResolveKind(jid ?? JID, isSelfChat);
             if (Kind == ChatKind.Personal)
             {
@@ -513,6 +551,172 @@ namespace Unison.Core.Models
             }
         }
 
+        private bool _isCommunityAnnounce;
+        /// <summary>
+        /// Community default announce channel (<c>default_sub_group</c> in w:g2).
+        /// Stays <see cref="ChatKind.Group"/>; UI shows localized “Announcements” / “Avisos”.
+        /// </summary>
+        public bool IsCommunityAnnounce
+        {
+            get => _isCommunityAnnounce;
+            set
+            {
+                if (_isCommunityAnnounce == value) return;
+                _isCommunityAnnounce = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private bool _isCommunityParent;
+        /// <summary>
+        /// Community parent hub (<c>parent</c> in w:g2). Sets <see cref="Kind"/> to
+        /// <see cref="ChatKind.Community"/> while true.
+        /// </summary>
+        public bool IsCommunityParent
+        {
+            get => _isCommunityParent;
+            set
+            {
+                if (_isCommunityParent == value) return;
+                _isCommunityParent = value;
+                OnPropertyChanged();
+                if (value)
+                {
+                    Kind = ChatKind.Community;
+                }
+                else if (_kind == ChatKind.Community)
+                {
+                    Kind = ChatKind.Group;
+                }
+            }
+        }
+
+        private string _linkedParentJid;
+        /// <summary>
+        /// Parent community JID when this chat is a linked subgroup (<c>linked_parent</c>).
+        /// </summary>
+        public string LinkedParentJid
+        {
+            get => _linkedParentJid;
+            set
+            {
+                if (string.Equals(_linkedParentJid, value, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+
+                _linkedParentJid = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private string _linkedParentDisplayName;
+        /// <summary>
+        /// Runtime community title stamped from the hub row for chat-detail headers.
+        /// Not persisted — synthetic parents often never appear in the chat catalog.
+        /// </summary>
+        [Newtonsoft.Json.JsonIgnore]
+        public string LinkedParentDisplayName
+        {
+            get => _linkedParentDisplayName;
+            set
+            {
+                string next = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+                if (string.Equals(_linkedParentDisplayName, next, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                _linkedParentDisplayName = next;
+                OnPropertyChanged();
+            }
+        }
+
+        private readonly ObservableCollection<ChatItem> _communityMembers =
+            new ObservableCollection<ChatItem>();
+
+        /// <summary>
+        /// Runtime-only linked groups under this community hub. Not persisted.
+        /// </summary>
+        [Newtonsoft.Json.JsonIgnore]
+        public ObservableCollection<ChatItem> CommunityMembers => _communityMembers;
+
+        /// <summary>Number of linked groups currently attached to this hub.</summary>
+        [Newtonsoft.Json.JsonIgnore]
+        public int CommunityGroupCount => _communityMembers.Count;
+
+        /// <summary>Accessible count for bindings / subtitle formatting.</summary>
+        public int GetCommunityGroupCount() => _communityMembers.Count;
+
+        /// <summary>Accessible snapshot of linked groups.</summary>
+        public IReadOnlyList<ChatItem> GetCommunityGroups()
+        {
+            if (_communityMembers.Count == 0)
+            {
+                return Array.Empty<ChatItem>();
+            }
+
+            var copy = new List<ChatItem>(_communityMembers.Count);
+            for (int i = 0; i < _communityMembers.Count; i++)
+            {
+                copy.Add(_communityMembers[i]);
+            }
+
+            return copy;
+        }
+
+        /// <summary>
+        /// Hub subtitle: “Community · N groups” (localized via <paramref name="strings"/>).
+        /// </summary>
+        public string GetCommunitySubtitle(IStringResources strings)
+        {
+            int count = GetCommunityGroupCount();
+            string format = strings != null
+                ? strings.Get("Chat_CommunityHubSubtitle", "Community · {0} groups")
+                : "Community · {0} groups";
+            try
+            {
+                return string.Format(format, count);
+            }
+            catch (FormatException)
+            {
+                return format + " " + count;
+            }
+        }
+
+        /// <summary>Replaces the runtime member list and raises count notifications.</summary>
+        public void SetCommunityGroups(IReadOnlyList<ChatItem> groups)
+        {
+            _communityMembers.Clear();
+            if (groups != null)
+            {
+                for (int i = 0; i < groups.Count; i++)
+                {
+                    ChatItem group = groups[i];
+                    if (group != null)
+                    {
+                        _communityMembers.Add(group);
+                    }
+                }
+            }
+
+            OnPropertyChanged(nameof(CommunityMembers));
+            OnPropertyChanged(nameof(CommunityGroupCount));
+        }
+
+        /// <summary>Clears runtime members when this row is no longer a hub in the list.</summary>
+        public void ClearCommunityGroups()
+        {
+            if (_communityMembers.Count == 0)
+            {
+                return;
+            }
+
+            _communityMembers.Clear();
+            OnPropertyChanged(nameof(CommunityMembers));
+            OnPropertyChanged(nameof(CommunityGroupCount));
+        }
+
         private GroupParticipantRole _myGroupRole = GroupParticipantRole.Member;
         /// <summary>
         /// Logged-in user's role in this group (from metadata <c>participant admin=...</c>).
@@ -581,7 +785,12 @@ namespace Unison.Core.Models
 
         private void RaiseChatKindFlagsChanged()
         {
-            Raise(nameof(IsGroup), nameof(IsPersonal), nameof(IsDirect), nameof(IsGroupLockedForMessages));
+            Raise(
+                nameof(IsGroup),
+                nameof(IsPersonal),
+                nameof(IsDirect),
+                nameof(IsCommunity),
+                nameof(IsGroupLockedForMessages));
         }
     }
 }

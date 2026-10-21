@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -227,6 +227,9 @@
   <data name="ChatList_FilterDrafts.Text" xml:space="preserve">
     <value>Чернетки</value>
   </data>
+  <data name="ChatList_FilterCommunities.Text" xml:space="preserve">
+    <value>Спільноти</value>
+  </data>
   <data name="ChatList_RefreshNames.Text" xml:space="preserve">
     <value>Оновити імена контактів</value>
   </data>
@@ -409,6 +412,15 @@
   </data>
   <data name="Chat_SelfFallbackName" xml:space="preserve">
     <value>Ви</value>
+  </data>
+  <data name="Chat_CommunityAnnouncements" xml:space="preserve">
+    <value>Оголошення</value>
+  </data>
+  <data name="Chat_CommunityHubSubtitle" xml:space="preserve">
+    <value>Спільнота · {0} груп</value>
+  </data>
+  <data name="Chat_CommunityFallbackName" xml:space="preserve">
+    <value>Спільнота</value>
   </data>
   <data name="ChatDetail_PersonalSubtitle.Text" xml:space="preserve">
     <value>Повідомлення собі</value>

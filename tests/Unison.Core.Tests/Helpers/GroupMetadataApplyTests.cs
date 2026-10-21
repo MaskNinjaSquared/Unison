@@ -96,6 +96,8 @@ namespace Unison.Core.Tests.Helpers
                 Jid = Group,
                 Subject = "Família",
                 AnnounceOnly = true,
+                IsCommunityAnnounce = true,
+                LinkedParentJid = "120363999999999999@g.us",
                 MyRole = GroupParticipantRole.Admin,
                 MemberCount = 12
             }));
@@ -105,10 +107,14 @@ namespace Unison.Core.Tests.Helpers
             Assert.Equal(1, f.Catalog.Schedules);
             Assert.True(chat.IsGroup);
             Assert.True(chat.IsAnnounceOnly);
+            Assert.True(chat.IsCommunityAnnounce);
+            Assert.Equal("120363999999999999@g.us", chat.LinkedParentJid);
+            Assert.Equal(ChatKind.Group, chat.Kind);
             Assert.Equal(GroupParticipantRole.Admin, chat.MyGroupRole);
             Assert.Equal(12, chat.GroupMemberCount);
             Assert.Equal("Outro", other.Name);
             Assert.False(other.IsAnnounceOnly);
+            Assert.False(other.IsCommunityAnnounce);
         }
 
         [Fact]
@@ -187,13 +193,17 @@ namespace Unison.Core.Tests.Helpers
             await f.Apply.ApplyMetadataAsync("alias@g.us", new GroupMetadataSnapshot
             {
                 AnnounceOnly = true,
+                IsCommunityAnnounce = true,
+                IsCommunityParent = true,
                 MyRole = GroupParticipantRole.SuperAdmin,
                 MemberCount = 7,
                 Members = Drafts("111@s.whatsapp.net")
             });
 
-            Assert.True(chat.IsGroup);
+            Assert.True(chat.IsCommunityParent);
+            Assert.Equal(ChatKind.Community, chat.Kind);
             Assert.True(chat.IsAnnounceOnly);
+            Assert.True(chat.IsCommunityAnnounce);
             Assert.Equal(GroupParticipantRole.SuperAdmin, chat.MyGroupRole);
             Assert.Equal(7, chat.GroupMemberCount);
             Assert.Single(chat.GroupMembers);
