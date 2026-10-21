@@ -117,6 +117,48 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
+        public async Task Image_batch_sends_in_order_and_captions_only_the_first_image()
+        {
+            int sequence = 0;
+            var sender = new OutgoingMediaSend(
+                _host,
+                _jids,
+                _cache,
+                () => At,
+                () => "IMG" + ++sequence);
+
+            IReadOnlyList<ChatMessage> messages = await sender.SendImagesAsync(
+                "555@s.whatsapp.net",
+                new[] { Bytes, new byte[] { 4, 5, 6 } },
+                "look");
+
+            Assert.Equal(new[] { "IMG1", "IMG2" }, messages.Select(message => message.Id));
+            Assert.Equal(new[] { "look", string.Empty }, messages.Select(message => message.Caption));
+            Assert.Equal(new string?[] { "look", null }, _host.ImageCaptions);
+            Assert.Equal(
+                new[]
+                {
+                    "send-image:555@s.whatsapp.net:IMG1",
+                    "send-image:555@s.whatsapp.net:IMG2"
+                },
+                _host.Log.Where(entry => entry.StartsWith("send-image:", StringComparison.Ordinal)));
+            Assert.Equal(2, _cache.Saves.Count);
+        }
+
+        [Fact]
+        public async Task Image_batch_rejects_an_empty_item_before_sending_any_image()
+        {
+            await Assert.ThrowsAsync<ArgumentException>(
+                () => Create().SendImagesAsync(
+                    "555@s.whatsapp.net",
+                    new[] { Bytes, new byte[0] },
+                    "look"));
+
+            Assert.Empty(_host.Log);
+            Assert.Empty(_cache.Saves);
+        }
+
+        [Fact]
         public async Task Empty_audio_is_rejected_without_reconnecting()
         {
             await Assert.ThrowsAsync<ArgumentException>(() => Create().SendAudioAsync("555@s.whatsapp.net", Audio(new byte[0], true)));
@@ -257,6 +299,7 @@ namespace Unison.Core.Tests.Helpers
         private sealed class FakeHost : IOutgoingMessageHost
         {
             public List<string> Log { get; } = new List<string>();
+            public List<string?> ImageCaptions { get; } = new List<string?>();
             public Exception SendError { get; set; }
             public Exception ConnectError { get; set; }
             public Exception ReportedError { get; private set; }
@@ -279,6 +322,7 @@ namespace Unison.Core.Tests.Helpers
 
             public Task SendImageAsync(string jid, byte[] imageBytes, string caption, string messageId)
             {
+                ImageCaptions.Add(caption);
                 Log.Add("send-image:" + jid + ":" + messageId);
                 return Sent();
             }

@@ -663,6 +663,14 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             return _mediaSend.SendImageAsync(jid, imageBytes, caption);
         }
 
+        public Task<IReadOnlyList<ChatMessage>> SendImagesAsync(
+            string jid,
+            IReadOnlyList<byte[]> imageBytes,
+            string caption)
+        {
+            return _mediaSend.SendImagesAsync(jid, imageBytes, caption);
+        }
+
         public async Task<ChatMessage> SendAudioMessageAsync(string jid, byte[] audioBytes, string mimeType, uint durationSeconds, bool isVoiceMessage = false)
         {
             ChatMessage message = await _mediaSend.SendAudioAsync(jid, new OutgoingAudio

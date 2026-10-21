@@ -7,6 +7,7 @@
 // and a transport failure never throws: the failure is the bubble's status.
 // =============================================================================
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Unison.Baileys.Crypto;
 using Unison.Core.Contracts;
@@ -65,6 +66,37 @@ namespace Unison.Core.Helpers
                 ChatPreviewKind.Image,
                 () => _host.SendImageAsync(jid, imageBytes, caption, messageId));
             return message;
+        }
+
+        /// <summary>
+        /// Sends a selected image batch in picker order. Each image has its own WhatsApp
+        /// message and upload, so the caption is deliberately attached only to the first one.
+        /// </summary>
+        public async Task<IReadOnlyList<ChatMessage>> SendImagesAsync(
+            string jid,
+            IReadOnlyList<byte[]> imageBytes,
+            string caption)
+        {
+            if (imageBytes == null || imageBytes.Count == 0)
+            {
+                throw new ArgumentException("At least one image is required", nameof(imageBytes));
+            }
+
+            for (int i = 0; i < imageBytes.Count; i++)
+            {
+                if (imageBytes[i] == null || imageBytes[i].Length == 0)
+                {
+                    throw new ArgumentException("Image payload is empty", nameof(imageBytes));
+                }
+            }
+
+            var messages = new List<ChatMessage>(imageBytes.Count);
+            for (int i = 0; i < imageBytes.Count; i++)
+            {
+                messages.Add(await SendImageAsync(jid, imageBytes[i], i == 0 ? caption : null));
+            }
+
+            return messages;
         }
 
         public async Task<ChatMessage> SendAudioAsync(string jid, OutgoingAudio audio)

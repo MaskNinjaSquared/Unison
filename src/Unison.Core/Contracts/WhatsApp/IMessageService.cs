@@ -76,6 +76,15 @@ namespace Unison.Core.Contracts.WhatsApp
 
         Task SendImageAsync(string jid, byte[] imageBytes, string caption);
 
+        /// <summary>
+        /// Sends selected images in order. The caption belongs to the first image only.
+        /// Each image is independently persisted and can settle as sent or failed.
+        /// </summary>
+        Task<IReadOnlyList<ChatMessage>> SendImagesAsync(
+            string jid,
+            IReadOnlyList<byte[]> imageBytes,
+            string caption);
+
         /// <summary>Sends a recorded/picked audio clip (voice note when isVoiceMessage=true).</summary>
         Task<ChatMessage> SendAudioMessageAsync(string jid, byte[] audioBytes, string mimeType, uint durationSeconds, bool isVoiceMessage = false);
 

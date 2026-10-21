@@ -466,6 +466,9 @@ Disable after diagnosing: keeping it on slows the app.</value>
   </data>  <data name="ChatDetail_SendImage.SecondaryButtonText" xml:space="preserve">
     <value>Cancel</value>
   </data>
+  <data name="ChatDetail_ImageBatchInfo" xml:space="preserve">
+    <value>{0} images ({1} KB)</value>
+  </data>
   <data name="ChatDetail_AudioPlayFailed" xml:space="preserve">
     <value>Could not play this audio.</value>
   </data>
