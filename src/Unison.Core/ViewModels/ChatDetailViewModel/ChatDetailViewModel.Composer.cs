@@ -102,8 +102,7 @@ namespace Unison.Core.ViewModels
             }
         }
 
-        private Task AttachMediaAsync() =>
-            AttachAsync(() => _filePicker.PickChatImageAsync(), SendPickedImageAsync, "image");
+        private Task AttachMediaAsync() => AttachImagesAsync();
 
         private Task AttachAudioAsync() =>
             AttachAsync(() => _filePicker.PickChatAudioAsync(), SendPickedAudioAsync, "audio");
@@ -161,6 +160,39 @@ namespace Unison.Core.ViewModels
                 }
 
                 await send(targetJid, picked);
+            }
+            catch (UnisonUserException ex)
+            {
+                IsSending = false;
+                await PresentUserExceptionAsync(ex, "attach-fail");
+            }
+            catch (Exception ex)
+            {
+                IsSending = false;
+                await PresentUserExceptionAsync(
+                    new AttachmentSendException("Attach failed: " + ex.Message, ex),
+                    "attach-fail");
+            }
+        }
+
+        private async Task AttachImagesAsync()
+        {
+            if (_activeChat == null || _isSending || _isRecording)
+            {
+                return;
+            }
+
+            string targetJid = _activeChat.JID;
+            try
+            {
+                IReadOnlyList<PickedChatMedia> picked = await _filePicker.PickChatImagesAsync();
+                if (picked == null || picked.Count == 0)
+                {
+                    LogSend("attach-cancelled", "kind=image");
+                    return;
+                }
+
+                await SendPickedImagesAsync(targetJid, picked);
             }
             catch (UnisonUserException ex)
             {
@@ -274,18 +306,46 @@ namespace Unison.Core.ViewModels
 
         private async Task SendPickedImageAsync(string targetJid, PickedChatMedia picked)
         {
-            if (!picked.IsImage)
+            await SendPickedImagesAsync(targetJid, new[] { picked });
+        }
+
+        private async Task SendPickedImagesAsync(string targetJid, IReadOnlyList<PickedChatMedia> picked)
+        {
+            if (picked == null || picked.Count == 0)
             {
-                await PresentUserExceptionAsync(
-                    new AttachmentSendException("Unsupported attachment type."),
-                    "attach-unsupported");
                 return;
             }
 
-            string info = string.Format("{0} ({1} KB)", picked.FileName ?? "image", picked.Bytes.Length / 1024);
+            for (int i = 0; i < picked.Count; i++)
+            {
+                if (picked[i] == null ||
+                    !picked[i].IsImage ||
+                    picked[i].Bytes == null ||
+                    picked[i].Bytes.Length == 0)
+                {
+                    await PresentUserExceptionAsync(
+                        new AttachmentSendException("Unsupported attachment type."),
+                        "attach-unsupported");
+                    return;
+                }
+            }
+
+            long totalBytes = picked.Sum(image => (long)image.Bytes.Length);
+            string batchInfoFormat = _strings != null
+                ? _strings.Get("ChatDetail_ImageBatchInfo", "{0} images ({1} KB)")
+                : "{0} images ({1} KB)";
+            string info = picked.Count == 1
+                ? string.Format(
+                    "{0} ({1} KB)",
+                    picked[0].FileName ?? "image",
+                    picked[0].Bytes.Length / 1024)
+                : string.Format(
+                    batchInfoFormat,
+                    picked.Count,
+                    totalBytes / 1024);
             string seedCaption = string.IsNullOrWhiteSpace(MessageText) ? null : MessageText.Trim();
             ImageSendPreviewResult preview = await _dialogs.ShowImageSendPreviewAsync(
-                picked.Bytes,
+                picked[0].Bytes,
                 info,
                 seedCaption);
             if (preview == null || !preview.Confirmed || _activeChat == null)
@@ -297,11 +357,15 @@ namespace Unison.Core.ViewModels
             string caption = string.IsNullOrWhiteSpace(preview.Caption) ? null : preview.Caption.Trim();
             IsSending = true;
             MessageSent?.Invoke(this, EventArgs.Empty);
-            LogSend("image-attach-start", "bytes=" + picked.Bytes.Length);
+            LogSend("image-attach-start", "count=" + picked.Count + "; bytes=" + totalBytes);
             try
             {
-                await _messageService.SendImageAsync(targetJid, picked.Bytes, caption);
-                if (seedCaption != null)
+                await _messageService.SendImagesAsync(
+                    targetJid,
+                    picked.Select(image => image.Bytes).ToList(),
+                    caption);
+                if (!string.IsNullOrWhiteSpace(caption) &&
+                    string.Equals(MessageText?.Trim(), seedCaption, StringComparison.Ordinal))
                 {
                     MessageText = string.Empty;
                 }

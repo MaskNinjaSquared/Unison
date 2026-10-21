@@ -14,6 +14,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Unison.Baileys.Client;
 using Unison.Baileys.Protocol;
 using Unison.Socket.Session;
 using Unison.Socket.WABinary;
@@ -60,11 +61,12 @@ namespace Unison.Socket.UseCases.Profile
         /// <param name="type">"preview" for the thumbnail, "image" for the full-size picture.</param>
         /// <param name="trustedContactToken">
         /// Required by accounts that only reveal their picture to contacts who present a token.
+        /// WhatsApp requires both the opaque bytes and their server-issued timestamp.
         /// </param>
         public async Task<ProfilePictureResult> ExecuteAsync(
             string jid,
             string type = "preview",
-            byte[] trustedContactToken = null,
+            TcTokenData trustedContactToken = null,
             TimeSpan? timeout = null)
         {
             if (string.IsNullOrEmpty(jid))
@@ -81,28 +83,7 @@ namespace Unison.Socket.UseCases.Profile
                 target = jid;
             }
 
-            var pictureChildren = new List<BinaryNode>();
-            if (trustedContactToken != null && trustedContactToken.Length > 0)
-            {
-                pictureChildren.Add(new BinaryNode("tctoken", null, trustedContactToken));
-            }
-
-            var iq = new BinaryNode(
-                "iq",
-                new Dictionary<string, string>
-                {
-                    { "to", WA.S_WHATSAPP_NET },
-                    { "target", target },
-                    { "type", "get" },
-                    { "xmlns", "w:profile:picture" }
-                },
-                new List<BinaryNode>
-                {
-                    new BinaryNode(
-                        "picture",
-                        new Dictionary<string, string> { { "type", type }, { "query", "url" } },
-                        pictureChildren.Count > 0 ? pictureChildren : null)
-                });
+            var iq = BuildQuery(target, type, trustedContactToken);
 
             BinaryNode response;
             try
@@ -143,6 +124,42 @@ namespace Unison.Socket.UseCases.Profile
         {
             var error = response != null ? response.GetChild("error") : null;
             return error != null ? error.GetAttribute("code") : null;
+        }
+
+        internal static BinaryNode BuildQuery(string target, string type, TcTokenData trustedContactToken)
+        {
+            var pictureChildren = new List<BinaryNode>();
+            if (trustedContactToken != null &&
+                trustedContactToken.Token != null &&
+                trustedContactToken.Token.Length > 0 &&
+                trustedContactToken.Timestamp.HasValue &&
+                trustedContactToken.Timestamp.Value > 0)
+            {
+                pictureChildren.Add(new BinaryNode(
+                    "tctoken",
+                    new Dictionary<string, string>
+                    {
+                        { "t", trustedContactToken.Timestamp.Value.ToString() }
+                    },
+                    trustedContactToken.Token));
+            }
+
+            return new BinaryNode(
+                "iq",
+                new Dictionary<string, string>
+                {
+                    { "to", WA.S_WHATSAPP_NET },
+                    { "target", target },
+                    { "type", "get" },
+                    { "xmlns", "w:profile:picture" }
+                },
+                new List<BinaryNode>
+                {
+                    new BinaryNode(
+                        "picture",
+                        new Dictionary<string, string> { { "type", type }, { "query", "url" } },
+                        pictureChildren.Count > 0 ? pictureChildren : null)
+                });
         }
 
         /// <summary>404 means no picture, 406 means it is hidden from us. Neither is an error.</summary>

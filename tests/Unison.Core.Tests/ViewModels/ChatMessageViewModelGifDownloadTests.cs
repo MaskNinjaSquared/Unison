@@ -158,6 +158,10 @@ namespace Unison.Core.Tests.ViewModels
             public Task<ChatMessage> SendTextMessageAsync(string jid, string text) => throw new NotImplementedException();
             public Task<ChatMessage> SendTextMessageAsync(string jid, OutgoingTextMentions message) => throw new NotImplementedException();
             public Task SendImageAsync(string jid, byte[] imageBytes, string caption) => throw new NotImplementedException();
+            public Task<IReadOnlyList<ChatMessage>> SendImagesAsync(
+                string jid,
+                IReadOnlyList<byte[]> imageBytes,
+                string caption) => throw new NotImplementedException();
             public Task<ChatMessage> SendAudioMessageAsync(string jid, byte[] audioBytes, string mimeType, uint durationSeconds, bool isVoiceMessage = false) => throw new NotImplementedException();
             public Task<ChatMessage> SendDocumentAsync(string jid, byte[] documentBytes, string mimeType, string fileName, string caption = null) => throw new NotImplementedException();
             public Task<string> EnsureAudioAvailableAsync(ChatMessage message) => throw new NotImplementedException();

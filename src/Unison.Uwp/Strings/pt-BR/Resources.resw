@@ -466,6 +466,9 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   </data>  <data name="ChatDetail_SendImage.SecondaryButtonText" xml:space="preserve">
     <value>Cancelar</value>
   </data>
+  <data name="ChatDetail_ImageBatchInfo" xml:space="preserve">
+    <value>{0} imagens ({1} KB)</value>
+  </data>
   <data name="ChatDetail_AudioPlayFailed" xml:space="preserve">
     <value>Não foi possível reproduzir este áudio.</value>
   </data>

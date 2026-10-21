@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Unison.Core.Models;
 
@@ -25,6 +26,12 @@ namespace Unison.Core.Contracts
         /// Returns null if the user cancels.
         /// </summary>
         Task<PickedChatMedia> PickChatImageAsync();
+
+        /// <summary>
+        /// Chat composer attach, multiple pictures only (optimized JPEG/PNG bytes).
+        /// Returns null if the user cancels.
+        /// </summary>
+        Task<IReadOnlyList<PickedChatMedia>> PickChatImagesAsync();
 
         /// <summary>
         /// Chat composer attach, audio only. Returns null if the user cancels.
