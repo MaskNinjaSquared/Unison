@@ -265,6 +265,7 @@
     <Compile Include="Services\SocketBrokerCoordinator.cs" />
     <Compile Include="Services\BackgroundAccessService.cs" />
     <Compile Include="Services\AppLifecycleService.cs" />
+    <Compile Include="Services\AppActivationRouter.cs" />
     <Compile Include="Services\UriLauncherService.cs" />
     <Compile Include="Services\FilePickerService.cs" />
     <Compile Include="Services\CopyService.cs" />
