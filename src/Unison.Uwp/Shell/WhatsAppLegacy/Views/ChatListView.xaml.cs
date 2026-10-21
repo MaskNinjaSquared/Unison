@@ -131,8 +131,43 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             }
 
             var strings = App.Services?.GetService<IStringResources>();
-            FilterLabel.Text = strings?.Get("Shell_LegacyAppBar_Filter.Text", "Filter Messages")
+            string fallback = strings?.Get("Shell_LegacyAppBar_Filter.Text", "Filter Messages")
                 ?? "Filter Messages";
+            if (ViewModel == null || !ViewModel.IsFilterActive)
+            {
+                FilterLabel.Text = fallback;
+                return;
+            }
+
+            FilterLabel.Text = ResolveActiveFilterLabel(strings) ?? fallback;
+        }
+
+        private string ResolveActiveFilterLabel(IStringResources strings)
+        {
+            if (ViewModel == null)
+            {
+                return null;
+            }
+
+            switch (ViewModel.ActiveFilter)
+            {
+                case ChatListFilter.Unread:
+                    return strings?.Get("ChatList_FilterUnread.Text", "Unread") ?? "Unread";
+                case ChatListFilter.Favorites:
+                    return strings?.Get("ChatList_FilterFavorites.Text", "Favorites") ?? "Favorites";
+                case ChatListFilter.Contacts:
+                    return strings?.Get("ChatList_FilterContacts.Text", "Contacts") ?? "Contacts";
+                case ChatListFilter.NonContacts:
+                    return strings?.Get("ChatList_FilterNonContacts.Text", "Non-contacts") ?? "Non-contacts";
+                case ChatListFilter.Groups:
+                    return strings?.Get("ChatList_FilterGroups.Text", "Groups") ?? "Groups";
+                case ChatListFilter.Communities:
+                    return strings?.Get("ChatList_FilterCommunities.Text", "Communities") ?? "Communities";
+                case ChatListFilter.Drafts:
+                    return strings?.Get("ChatList_FilterDrafts.Text", "Drafts") ?? "Drafts";
+                default:
+                    return null;
+            }
         }
 
         /// <summary>
@@ -169,12 +204,18 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private MenuFlyoutItem CreateFilterItem(string text, int filter)
         {
-            return new MenuFlyoutItem
+            // Click (not Command): on older UWP builds MenuFlyoutItem.CommandParameter boxing
+            // against RelayCommand<int> CanExecute was flaky and left every item inert.
+            var item = new MenuFlyoutItem { Text = text };
+            item.Click += (s, e) =>
             {
-                Text = text,
-                Command = ViewModel.FilterChatsCommand,
-                CommandParameter = filter
+                var command = ViewModel?.FilterChatsCommand;
+                if (command != null && command.CanExecute(filter))
+                {
+                    command.Execute(filter);
+                }
             };
+            return item;
         }
 
         private void Shell_PropertyChanged(object sender, PropertyChangedEventArgs e)
@@ -264,6 +305,12 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 e.PropertyName == nameof(ChatListViewModel.SelectedChat))
             {
                 SyncCommunityHubSelection();
+            }
+
+            if (e.PropertyName == nameof(ChatListViewModel.ActiveFilter) ||
+                e.PropertyName == nameof(ChatListViewModel.IsFilterActive))
+            {
+                ApplyFilterLabel();
             }
         }
 

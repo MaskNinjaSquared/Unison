@@ -1288,7 +1288,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             }
         }
 
-        private void HeaderAvatar_Tapped(object sender, TappedRoutedEventArgs e)
+        private void HeaderIdentity_Tapped(object sender, TappedRoutedEventArgs e)
         {
             e.Handled = true;
             if (ViewModel?.OpenChatDetailInfoFromAvatarCommand?.CanExecute(null) == true)
@@ -1804,10 +1804,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                         if (ActiveChatGrid.Visibility == Visibility.Visible)
                         {
                             ApplyChatTitle(chat, contacts);
-                            ApplyHeaderAvatar(chat);
-                            ApplyHeaderActions(
-                                isGroup: chat.IsGroup || (chat.JID ?? string.Empty).EndsWith("@g.us", StringComparison.OrdinalIgnoreCase),
-                                visible: true);
+                            ApplyHeaderIdentity(chat);
                         }
                     }
 
@@ -1852,17 +1849,9 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 _displayedPinnedMessage = null;
                 _activePinnedMessages.Clear();
                 _displayedPinnedIndex = 0;
-                if (HeaderAvatar != null)
+                if (HeaderIdentity != null)
                 {
-                    HeaderAvatar.AvatarUrl = null;
-                    HeaderAvatar.IsGroup = false;
-                    HeaderAvatar.Visibility = Visibility.Collapsed;
-                }
-
-                if (HeaderAnnouncementsAvatar != null)
-                {
-                    HeaderAnnouncementsAvatar.AvatarUrl = null;
-                    HeaderAnnouncementsAvatar.Visibility = Visibility.Collapsed;
+                    HeaderIdentity.IsAnnouncements = false;
                 }
 
                 ApplyHeaderActions(isGroup: false, visible: false);
@@ -1883,7 +1872,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             TitleTranslateTransform.Y = 0;
 
             ApplyChatTitle(chat, contacts);
-            ApplyHeaderAvatar(chat);
+            ApplyHeaderIdentity(chat);
 
             if (_scrollViewer == null)
             {
@@ -2290,14 +2279,14 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             {
                 _ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
                 {
-                    ApplyHeaderAvatar(_activeChat);
+                    ApplyHeaderIdentity(_activeChat);
                 });
             }
         }
 
-        private void ApplyHeaderAvatar(ChatItem chat)
+        private void ApplyHeaderIdentity(ChatItem chat)
         {
-            if (chat == null || (HeaderAvatar == null && HeaderAnnouncementsAvatar == null))
+            if (chat == null || HeaderIdentity == null)
             {
                 ApplyHeaderActions(isGroup: false, visible: false);
                 return;
@@ -2306,22 +2295,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             bool isGroup = chat.IsGroup
                 || (!string.IsNullOrWhiteSpace(chat.JID)
                     && chat.JID.IndexOf("@g.us", StringComparison.OrdinalIgnoreCase) >= 0);
-            string url = chat.GetAvatarUrl(preferHigh: true);
-            bool announce = chat.IsCommunityAnnounce;
 
-            if (HeaderAvatar != null)
-            {
-                HeaderAvatar.IsGroup = isGroup;
-                HeaderAvatar.AvatarUrl = url;
-                HeaderAvatar.Visibility = announce ? Visibility.Collapsed : Visibility.Visible;
-            }
-
-            if (HeaderAnnouncementsAvatar != null)
-            {
-                HeaderAnnouncementsAvatar.AvatarUrl = url;
-                HeaderAnnouncementsAvatar.Visibility = announce ? Visibility.Visible : Visibility.Collapsed;
-            }
-
+            HeaderIdentity.IsAnnouncements = chat.IsCommunityAnnounce;
             ApplyHeaderActions(isGroup, visible: true);
         }
 

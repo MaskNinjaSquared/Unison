@@ -36,6 +36,7 @@ namespace Unison.Core.Tests.Helpers
         [InlineData("tip-swapped")]
         [InlineData("tip-swapped:5")]
         [InlineData("TIP-SWAPPED:40")]
+        [InlineData("tip-swapped:12")]
         public void Local_tip_reconcile_does_not_count(string reason)
         {
             Assert.False(HistoryCatchUpProgressSignal.CountsAsLotProgress(reason));

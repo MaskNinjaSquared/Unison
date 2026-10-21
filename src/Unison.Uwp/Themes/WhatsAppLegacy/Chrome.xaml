@@ -47,6 +47,8 @@
             <SolidColorBrush x:Key="ChatDetailWallpaperBackgroundBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="ChatDetailDateSeparatorBackgroundBrush" Color="#FF1A1A1A"/>
             <SolidColorBrush x:Key="ChatDetailHeaderBrush" Color="#FF000000"/>
+            <!-- Community hub strip on the list: grey bar over pure black/white chrome. -->
+            <SolidColorBrush x:Key="CommunityHubHeaderBrush" Color="#FF2C2C2C"/>
             <SolidColorBrush x:Key="ChatListSearchBackgroundBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="ChatListSearchFocusedBackgroundBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="SettingsPageBackgroundBrush" Color="#FF000000"/>
@@ -103,6 +105,7 @@
             <SolidColorBrush x:Key="ChatDetailWallpaperBackgroundBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="ChatDetailDateSeparatorBackgroundBrush" Color="#FF1A1A1A"/>
             <SolidColorBrush x:Key="ChatDetailHeaderBrush" Color="#FF000000"/>
+            <SolidColorBrush x:Key="CommunityHubHeaderBrush" Color="#FF2C2C2C"/>
             <SolidColorBrush x:Key="ChatListSearchBackgroundBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="ChatListSearchFocusedBackgroundBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="SettingsPageBackgroundBrush" Color="#FF000000"/>
@@ -159,6 +162,7 @@
             <SolidColorBrush x:Key="ChatDetailWallpaperBackgroundBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailDateSeparatorBackgroundBrush" Color="#FFF0F0F0"/>
             <SolidColorBrush x:Key="ChatDetailHeaderBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="CommunityHubHeaderBrush" Color="#FFE2E3E3"/>
             <SolidColorBrush x:Key="ChatListSearchBackgroundBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatListSearchFocusedBackgroundBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="SettingsPageBackgroundBrush" Color="#FFFFFFFF"/>

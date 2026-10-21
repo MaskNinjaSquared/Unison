@@ -327,12 +327,14 @@ namespace Unison.Uwp
                 sp.GetRequiredService<JidAliasTable>(),
                 sp.GetRequiredService<ChatStateStore>(),
                 sp.GetRequiredService<ChatRowIndex>(),
-                sp.GetRequiredService<AttachedUiDispatcher>()));
+                sp.GetRequiredService<AttachedUiDispatcher>(),
+                () => sp.GetRequiredService<SyncBudget>().IsFrugal));
             services.AddSingleton(sp => new ChatNameRefresh(
                 sp.GetRequiredService<AttachedUiDispatcher>(),
                 sp.GetRequiredService<IChatStateStore>(),
                 sp.GetRequiredService<ContactDisplayNames>(),
-                sp.GetRequiredService<ISelfMarkerNaming>()));
+                sp.GetRequiredService<ISelfMarkerNaming>(),
+                () => sp.GetRequiredService<SyncBudget>().IsFrugal));
             services.AddSingleton(sp => new StoredChatPreviewRefresh(
                 sp.GetRequiredService<AttachedUiDispatcher>(),
                 sp.GetRequiredService<ChatStateStore>(),

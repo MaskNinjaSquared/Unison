@@ -136,6 +136,8 @@ namespace Unison.Core.ViewModels
         private int PreviewHydrateBatchSize => _workload.PreviewHydrateBatchSize;
         private static readonly TimeSpan VisibleRefreshDebounceGenerous = TimeSpan.FromMilliseconds(80);
         private static readonly TimeSpan VisibleRefreshDebounceFrugal = TimeSpan.FromMilliseconds(320);
+        /// <summary>Longer coalesce after name-apply storms so one refresh covers many titles.</summary>
+        private static readonly TimeSpan NamesAppliedRefreshDebounceFrugal = TimeSpan.FromMilliseconds(480);
         private const int VisibleRefreshMoveBudgetGenerous = 24;
         private const int VisibleRefreshMoveBudgetFrugal = 10;
         private static readonly TimeSpan PreviewHydrateInterval = TimeSpan.FromMilliseconds(40);
@@ -156,6 +158,15 @@ namespace Unison.Core.ViewModels
         /// loop owns the list then, so the reorder waits for its next tick instead of being lost.
         /// </summary>
         private bool _visibleOrderDirty;
+
+        /// <summary>Raw <see cref="SyncPhaseStatus"/> token from history (not localized).</summary>
+        private string _lastSyncPhaseToken;
+
+        /// <summary>
+        /// Frugal devices defer visible reshuffles while names/avatars/groups enrich, then run one
+        /// refresh when the phase clears.
+        /// </summary>
+        private bool _refreshDeferredForEnrichment;
 
         private bool _previewHydrateLoopRunning;
         private readonly object _previewHydrateGate = new object();
@@ -1037,7 +1048,13 @@ namespace Unison.Core.ViewModels
         /// </summary>
         public void OnRowRealized(ChatItem chat)
         {
-            if (chat == null || _batchRendering || IsInSafeMode)
+            if (chat == null || _batchRendering || IsInSafeMode || IsRefreshing)
+            {
+                return;
+            }
+
+            // Frugal: skip avatar I/O while list enrich / reshuffle is already saturating the UI.
+            if (PreferFrugalUi && ListEnrichmentPhase.Matches(_lastSyncPhaseToken))
             {
                 return;
             }
@@ -1549,6 +1566,8 @@ namespace Unison.Core.ViewModels
 
             await _dispatcher.RunAsync(() =>
             {
+                _lastSyncPhaseToken = message;
+
                 if (_batchRendering)
                 {
                     UpdateBatchProgressText();
@@ -1575,6 +1594,13 @@ namespace Unison.Core.ViewModels
                     _ = PresentSyncStatusAsync(resolved, visible: true, source: "IHistoryService:SyncStatus");
                 else
                     _ = PresentSyncStatusAsync(null, visible: false, source: "IHistoryService:SyncStatus");
+
+                // One coalesced reshuffle after names/avatars/groups stop fighting the dispatcher.
+                if (_refreshDeferredForEnrichment && !ListEnrichmentPhase.Matches(message))
+                {
+                    _refreshDeferredForEnrichment = false;
+                    ScheduleRefreshVisibleChats();
+                }
             });
         }
 
@@ -2330,7 +2356,10 @@ namespace Unison.Core.ViewModels
             await _dispatcher.RunAsync(() =>
             {
                 _searchNameCache.Clear();
-                ScheduleRefreshVisibleChats();
+                TimeSpan? namesDelay = PreferFrugalUi
+                    ? NamesAppliedRefreshDebounceFrugal
+                    : (TimeSpan?)null;
+                ScheduleRefreshVisibleChats(namesDelay);
             });
         }
 
@@ -2437,7 +2466,7 @@ namespace Unison.Core.ViewModels
                 // a dispatcher post per preview hydrate would only queue no-ops on the UI thread.
                 if (!IsListHeldForSync)
             {
-                _ = _dispatcher.RunAsync(ScheduleRefreshVisibleChats);
+                _ = _dispatcher.RunAsync(() => ScheduleRefreshVisibleChats());
                 }
 
                 return;
@@ -2455,7 +2484,7 @@ namespace Unison.Core.ViewModels
                 e.PropertyName == nameof(ChatItem.MentionLookup) ||
                 e.PropertyName == nameof(ChatItem.Timestamp))
             {
-                _ = _dispatcher.RunAsync(ScheduleRefreshVisibleChats);
+                _ = _dispatcher.RunAsync(() => ScheduleRefreshVisibleChats());
             }
         }
 
@@ -2463,10 +2492,25 @@ namespace Unison.Core.ViewModels
         // Building the visible list
         // ---------------------------------------------------------------------
 
-        private void ScheduleRefreshVisibleChats()
+        private void ScheduleRefreshVisibleChats(
+            TimeSpan? delayOverride = null,
+            bool allowDuringEnrichment = false)
         {
             if (_batchRendering || IsInSafeMode || IsListHeldForSync)
             {
+                return;
+            }
+
+            // Frugal Mobile: hold reshuffles while background names/avatars/groups enrich so
+            // Move/Insert thrash does not stack on top of PropertyChanged storms. Search and
+            // explicit list-filter changes still refresh so the UI stays responsive.
+            if (!allowDuringEnrichment &&
+                PreferFrugalUi &&
+                string.IsNullOrWhiteSpace(SearchQuery) &&
+                ListEnrichmentPhase.Matches(_lastSyncPhaseToken))
+            {
+                _refreshDeferredForEnrichment = true;
+                _visibleOrderDirty = true;
                 return;
             }
 
@@ -2474,9 +2518,9 @@ namespace Unison.Core.ViewModels
             _refreshContinueCts?.Cancel();
             _refreshCts = new CancellationTokenSource();
             var token = _refreshCts.Token;
-            TimeSpan delay = PreferFrugalUi
+            TimeSpan delay = delayOverride ?? (PreferFrugalUi
                 ? VisibleRefreshDebounceFrugal
-                : VisibleRefreshDebounceGenerous;
+                : VisibleRefreshDebounceGenerous);
 
             Task.Delay(delay, token).ContinueWith(t =>
             {
@@ -2486,8 +2530,9 @@ namespace Unison.Core.ViewModels
         }
 
         /// <summary>
-        /// Rebuilds the visible order in place: apply the active list filter, then the search
-        /// box, collapse PN/LID duplicates, sort pinned first and then by recency.
+        /// Rebuilds the visible order in place: search, collapse PN/LID duplicates, project
+        /// community hubs, then apply the active list filter, sort pinned first and by recency.
+        /// Filter runs after projection so Groups/Communities cannot be undone by hub re-inject.
         /// </summary>
         public void RefreshVisibleChats()
         {
@@ -2508,11 +2553,6 @@ namespace Unison.Core.ViewModels
             string query = SearchQuery?.Trim() ?? string.Empty;
             var source = _chatState.Chats.Where(MatchesScope).ToList();
 
-            if (_activeFilter != ChatListFilter.All)
-            {
-                source = source.Where(MatchesActiveFilter).ToList();
-            }
-
             if (!string.IsNullOrEmpty(query))
             {
                 source = source.Where(c => MatchesQuery(c, query)).ToList();
@@ -2525,6 +2565,12 @@ namespace Unison.Core.ViewModels
                 GetOrCreateSyntheticCommunity,
                 GetCanonical);
             EnrichCommunityHubRows(source);
+
+            if (_activeFilter != ChatListFilter.All)
+            {
+                source = source.Where(MatchesActiveFilter).ToList();
+            }
+
             source = ChatListDisplayOrder.SortForDisplay(source);
 
             if (_activeCommunity != null)
@@ -2658,8 +2704,26 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
+            // Hub overlay covers the whole list in Legacy; close so the filtered rows are visible.
+            if (_activeCommunity != null)
+            {
+                CloseCommunityHub();
+            }
+
             ActiveFilter = next;
-            ScheduleRefreshVisibleChats();
+            _visibleOrderDirty = true;
+
+            // Batch / first-sync hold: ActiveFilter sticks; the next full refresh applies it.
+            if (_batchRendering || IsInSafeMode || IsListHeldForSync)
+            {
+                return;
+            }
+
+            // User-driven: paint immediately — do not sit behind enrichment debounce/hold.
+            _refreshCts?.Cancel();
+            _refreshContinueCts?.Cancel();
+            _refreshDeferredForEnrichment = false;
+            _ = _dispatcher.RunAsync(RefreshVisibleChats);
         }
 
         /// <summary>

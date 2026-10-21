@@ -211,6 +211,9 @@
     <Compile Include="Shell\WhatsAppLegacy\Views\LegacySectionAppBar.xaml.cs">
       <DependentUpon>LegacySectionAppBar.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Shell\WhatsAppLegacy\Controls\LegacyChatDetailHeaderIdentity.xaml.cs">
+      <DependentUpon>LegacyChatDetailHeaderIdentity.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Shell\WhatsAppLegacy\Views\ChatDetailView.xaml.cs">
       <DependentUpon>ChatDetailView.xaml</DependentUpon>
     </Compile>
@@ -957,6 +960,10 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="Shell\WhatsAppLegacy\Views\LegacyChatDetailInfoControl.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Shell\WhatsAppLegacy\Controls\LegacyChatDetailHeaderIdentity.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

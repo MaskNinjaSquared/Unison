@@ -138,6 +138,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _connectionHealthCts = null;
             if (cts == null)
             {
+                StopPeriodicFullHistorySafety(reason);
                 return;
             }
 
@@ -151,6 +152,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             Debug.WriteLine($"[WhatsAppService] Connection health monitor stopped: {reason}");
+            StopPeriodicFullHistorySafety(reason);
         }
 
         private void StartConnectionHealthMonitor(IWhatsAppSocket socket)
@@ -164,6 +166,7 @@ namespace Unison.Uwp.Services.WhatsApp
             var cts = new CancellationTokenSource();
             _connectionHealthCts = cts;
             _connectionHealthTask = Task.Run(() => ConnectionHealthLoopAsync(socket, cts.Token));
+            StartPeriodicFullHistorySafety();
         }
 
         private async Task ConnectionHealthLoopAsync(IWhatsAppSocket socket, CancellationToken token)

@@ -362,6 +362,8 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly object _reconnectStateLock = new object();
         private CancellationTokenSource _connectionHealthCts;
         private Task _connectionHealthTask = Task.CompletedTask;
+        private CancellationTokenSource _periodicFullSafetyCts;
+        private Task _periodicFullSafetyTask = Task.CompletedTask;
         private readonly SemaphoreSlim _initLock = new SemaphoreSlim(1, 1);
         private readonly SemaphoreSlim _persistedUiLoadLock = new SemaphoreSlim(1, 1);
         private volatile bool _persistedUiStateLoaded;
@@ -3414,6 +3416,121 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             return HistoryDispatch.RequestChatPageAsync(normJid, cached, count, triggerReason, DateTime.UtcNow);
+        }
+
+        private void StartPeriodicFullHistorySafety()
+        {
+            StopPeriodicFullHistorySafety("restart");
+            var cts = new CancellationTokenSource();
+            _periodicFullSafetyCts = cts;
+            _periodicFullSafetyTask = Task.Run(() => PeriodicFullHistorySafetyLoopAsync(cts.Token));
+            Debug.WriteLine(
+                "[WhatsAppService] Periodic FULL_HISTORY safety started; intervalMinutes=" +
+                HistoryPeriodicFullSafetyDecision.Interval.TotalMinutes.ToString("F0"));
+        }
+
+        private void StopPeriodicFullHistorySafety(string reason)
+        {
+            var cts = _periodicFullSafetyCts;
+            _periodicFullSafetyCts = null;
+            if (cts == null)
+            {
+                return;
+            }
+
+            try
+            {
+                cts.Cancel();
+                cts.Dispose();
+            }
+            catch
+            {
+            }
+
+            Debug.WriteLine("[WhatsAppService] Periodic FULL_HISTORY safety stopped: " + (reason ?? string.Empty));
+        }
+
+        private async Task PeriodicFullHistorySafetyLoopAsync(CancellationToken token)
+        {
+            while (!token.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(HistoryPeriodicFullSafetyDecision.Interval, token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+
+                try
+                {
+                    await TryPeriodicFullHistorySafetyAsync().ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[WhatsAppService] Periodic FULL_HISTORY safety tick failed: " + ex.Message);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Standby safety: if tips still look owed (or a force-repair latch is set) and no
+        /// FULL lot is in flight, solicit again. Healthy fresh accounts stay quiet.
+        /// </summary>
+        private async Task TryPeriodicFullHistorySafetyAsync()
+        {
+            var socket = _socket;
+            bool socketReady = IsConnected &&
+                               socket != null &&
+                               socket.IsConnected &&
+                               socket.IsHandshakeComplete;
+            bool catchUpActive = IsHistoryCatchUpActive();
+            bool fullClaimed = _historyRequests != null && _historyRequests.IsFullClaimed;
+
+            bool forceRepair = false;
+            try
+            {
+                forceRepair = LocalSettingsAccess.Current.Get<bool>(
+                    LocalSettingsConstants.MessageStoreForceHistoryRepair);
+            }
+            catch
+            {
+            }
+
+            string staleDetail;
+            bool tipStale = TryGetHistoryFreshnessStaleReason(DateTime.UtcNow, out staleDetail);
+
+            if (!HistoryPeriodicFullSafetyDecision.ShouldRequest(
+                    socketReady,
+                    catchUpActive,
+                    fullClaimed,
+                    forceRepair,
+                    tipStale,
+                    out string gateReason))
+            {
+                return;
+            }
+
+            string reason = "periodic-safety:" + gateReason;
+            if (tipStale && !string.IsNullOrWhiteSpace(staleDetail))
+            {
+                reason += ":" + staleDetail;
+            }
+
+            Debug.WriteLine("[WhatsAppService] Periodic FULL_HISTORY safety soliciting (" + reason + ")");
+            RuntimeDiagnosticsService.Instance.Write(
+                "history",
+                "periodic-full-safety",
+                "reason=" + reason);
+
+            // Direct request — not the reconnect floor (that gates on window visibility).
+            bool ok = await RequestFullHistoryOnDemandTrackedAsync(
+                reason,
+                isFreshnessRepair: true).ConfigureAwait(false);
+            Debug.WriteLine(
+                "[WhatsAppService] Periodic FULL_HISTORY safety result ok=" + ok +
+                " (" + reason + ")");
         }
 
         private async Task<bool> RequestFullHistoryOnDemandTrackedAsync(string reason, bool isFreshnessRepair)
