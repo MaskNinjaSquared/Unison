@@ -43,7 +43,7 @@ Raw events on `IWhatsAppService` are **for facades only**. Each facade re-publis
 
 ### Platform contracts (implemented in UWP)
 
-`INavigator`, `IDispatcher`, `IDialogService`, `IFilePicker`, `IAudioRecordingService` / `IAudioRecordingSession`, `IShareService`, `IUriLauncher`, `IVoicePlaybackRoutingService`, `ILocalSettings`, `IStringResources`, `IAppLanguageService`, `IShellThemeService`, `INotificationService`, `ILiveTilesService`, `IShortcutService`, `IStatusBarService`, `ILocationKeepAliveService`, `ILocalContactsService`, `ISocketBrokerService`, `IChatStore`, `IPersonStore`, `IMessageStore`, `IHistoryMessageStore`, `IHistoryStatusStore`.
+`INavigator`, `IDispatcher`, `IDialogService`, `IFilePicker`, `IAudioRecordingService` / `IAudioRecordingSession`, `IShareService`, `IUriLauncher`, `IVoicePlaybackRoutingService`, `ILocalSettings`, `IStringResources`, `IAppLanguageService`, `IShellThemeService`, `INotificationService`, `ILiveTilesService`, `IShortcutService`, `IAppActivationRouter`, `IStatusBarService`, `ILocationKeepAliveService`, `ILocalContactsService`, `ISocketBrokerService`, `IChatStore`, `IPersonStore`, `IMessageStore`, `IHistoryMessageStore`, `IHistoryStatusStore`.
 
 ### Chat kinds (three enums)
 

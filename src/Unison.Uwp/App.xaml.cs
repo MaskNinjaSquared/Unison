@@ -671,6 +671,9 @@ namespace Unison.Uwp
             services.AddTransient<LoginViewModel>();
             services.AddTransient<StartViewModel>();
             services.AddSingleton<ShellViewModel>();
+            services.AddSingleton<IAppActivationRouter>(sp => new AppActivationRouter(
+                sp.GetRequiredService<ShellViewModel>(),
+                sp.GetRequiredService<IRuntimeDiagnostics>()));
             services.AddTransient<ChatListViewModel>();
             services.AddTransient<ChatDetailViewModel>();
             services.AddTransient<StatusListViewModel>();
@@ -774,20 +777,49 @@ namespace Unison.Uwp
                 string scheme = protocolArgs.Uri?.Scheme;
                 if (string.Equals(scheme, PeopleProfileScheme, StringComparison.OrdinalIgnoreCase))
                 {
-                    HandlePeopleProfileActivation(protocolArgs.Uri, args.PreviousExecutionState);
+                    // People "Open profile": ms-contact-profile:?ContactRemoteIds=…
+                    string peopleRemoteId = null;
+                    ActivateWithRouter(
+                        args.PreviousExecutionState,
+                        router =>
+                        {
+                            peopleRemoteId = router.TryReadPeopleRemoteId(protocolArgs.Uri?.Query);
+                            return router.BuildPeopleLaunchArguments(peopleRemoteId, openProfile: true);
+                        },
+                        (router, _) => router.RoutePeopleProfile(
+                            peopleRemoteId,
+                            WasAppAlreadyOpen(args.PreviousExecutionState)));
                     return;
                 }
 
                 if (string.Equals(scheme, PeopleMessageScheme, StringComparison.OrdinalIgnoreCase))
                 {
-                    HandlePeopleMessageActivation(protocolArgs.Uri, args.PreviousExecutionState);
+                    // People "Message": ms-ipmessaging:?ContactRemoteIds=…
+                    string peopleRemoteId = null;
+                    ActivateWithRouter(
+                        args.PreviousExecutionState,
+                        router =>
+                        {
+                            peopleRemoteId = router.TryReadPeopleRemoteId(protocolArgs.Uri?.Query);
+                            return router.BuildPeopleLaunchArguments(peopleRemoteId, openProfile: false);
+                        },
+                        (router, _) => router.RoutePeopleMessage(
+                            peopleRemoteId,
+                            WasAppAlreadyOpen(args.PreviousExecutionState)));
                     return;
                 }
             }
 
             if (args != null && args.Kind == ActivationKind.ContactPanel)
             {
-                HandleContactPanelActivation(args as ContactPanelActivatedEventArgs, args.PreviousExecutionState);
+                var contactArgs = args as ContactPanelActivatedEventArgs;
+                string remoteId = contactArgs?.Contact?.RemoteId;
+                ActivateWithRouter(
+                    args.PreviousExecutionState,
+                    router => router.BuildPeopleLaunchArguments(remoteId, openProfile: true),
+                    (router, _) => router.RouteContactPanel(
+                        remoteId,
+                        WasAppAlreadyOpen(args.PreviousExecutionState)));
                 return;
             }
 
@@ -798,14 +830,6 @@ namespace Unison.Uwp
                 EnsureWindowVisibilityTracking();
 
                 var toastArgs = args as ToastNotificationActivatedEventArgs;
-                // DI + theme before chrome: toast activation skips OnLaunched, so shell
-                // strategy / Theme.xaml / pending "Shell applied" toast must run here.
-                Frame rootFrame = EnsureRootFrame();
-                ApplyShellThemeFromSettings();
-                ConfigureAppChrome();
-                EnsureTitleBarHook();
-                EnsureStatusBarOrientationHook();
-
                 string toastArgument = toastArgs?.Argument ?? string.Empty;
 
                 RuntimeDiagnosticsService.Instance.Write(
@@ -814,17 +838,12 @@ namespace Unison.Uwp
                     "argLength=" + toastArgument.Length +
                     "; hasChat=" + (toastArgument.IndexOf("chat=", StringComparison.OrdinalIgnoreCase) >= 0));
 
-                if (rootFrame.Content == null || !IsKnownRootContent(rootFrame.Content))
-                {
-                    NavigateRootToBoot(toastArgument);
-                }
-
-                HandleActivationArguments(
-                    toastArgument,
-                    args.PreviousExecutionState);
-
-                Window.Current.Activate();
-                ApplyWindowChromeBootstrap();
+                ActivateWithRouter(
+                    args.PreviousExecutionState,
+                    _ => toastArgument,
+                    (router, _) => router.RouteLaunchArguments(
+                        toastArgument,
+                        WasAppAlreadyOpen(args.PreviousExecutionState)));
                 return;
             }
 
@@ -834,126 +853,46 @@ namespace Unison.Uwp
         private const string PeopleMessageScheme = "ms-ipmessaging";
         private const string PeopleProfileScheme = "ms-contact-profile";
 
-        /// <summary>
-        /// People "Message" (contact card annotation with <c>ContactAnnotationOperations.Message</c>)
-        /// activates <c>ms-ipmessaging:?ContactRemoteIds=...</c>. Contact-action activation
-        /// (<c>windows.contact</c>) types are absent from the 22621 SDK contracts.
-        /// </summary>
-        private void HandlePeopleMessageActivation(
-            Uri uri,
-            ApplicationExecutionState previousExecutionState)
+        private static bool WasAppAlreadyOpen(ApplicationExecutionState previousExecutionState)
         {
-            ActivatePeopleDeepLink(
-                uri,
-                previousExecutionState,
-                openProfile: false,
-                lifecycleEvent: "people-message-activated");
+            return previousExecutionState == ApplicationExecutionState.Running ||
+                   previousExecutionState == ApplicationExecutionState.Suspended;
         }
 
         /// <summary>
-        /// People "Open profile" uses <c>ms-contact-profile:?ContactRemoteIds=...</c>
-        /// (declared in the package; same query shape as Message).
+        /// Host chrome + boot navigation, then deep-link routing via <see cref="IAppActivationRouter"/>.
         /// </summary>
-        private void HandlePeopleProfileActivation(
-            Uri uri,
-            ApplicationExecutionState previousExecutionState)
-        {
-            ActivatePeopleDeepLink(
-                uri,
-                previousExecutionState,
-                openProfile: true,
-                lifecycleEvent: "people-profile-activated");
-        }
-
-        private void ActivatePeopleDeepLink(
-            Uri uri,
+        private void ActivateWithRouter(
             ApplicationExecutionState previousExecutionState,
-            bool openProfile,
-            string lifecycleEvent)
+            Func<IAppActivationRouter, string> resolveBootArguments,
+            Action<IAppActivationRouter, string> route)
         {
+            _ = previousExecutionState;
             Frame rootFrame = EnsureRootFrame();
             ApplyShellThemeFromSettings();
             ConfigureAppChrome();
             EnsureTitleBarHook();
             EnsureStatusBarOrientationHook();
 
-            string jid = WindowsContactListPublisher.FromRemoteId(ReadPeopleRemoteId(uri));
-            string arguments = string.Empty;
-            if (!string.IsNullOrWhiteSpace(jid))
+            IAppActivationRouter router = Services?.GetService<IAppActivationRouter>();
+            string navigateArgs = string.Empty;
+            if (router != null && resolveBootArguments != null)
             {
-                string key = openProfile ? "profile" : "chat";
-                arguments = key + "=" + Uri.EscapeDataString(jid);
+                navigateArgs = resolveBootArguments(router) ?? string.Empty;
             }
-
-            RuntimeDiagnosticsService.Instance.Write(
-                "lifecycle",
-                lifecycleEvent,
-                "hasJid=" + (arguments.Length > 0) +
-                "; openProfile=" + openProfile);
 
             if (rootFrame.Content == null || !IsKnownRootContent(rootFrame.Content))
             {
-                NavigateRootToBoot(arguments);
+                NavigateRootToBoot(navigateArgs);
             }
 
-            HandleActivationArguments(arguments, previousExecutionState);
+            if (router != null && route != null)
+            {
+                route(router, navigateArgs);
+            }
 
             Window.Current.Activate();
             ApplyWindowChromeBootstrap();
-        }
-
-        /// <summary>
-        /// People ContactPanel / ContactProfile opens the full-page Profile (not the chat).
-        /// </summary>
-        private void HandleContactPanelActivation(
-            ContactPanelActivatedEventArgs contactArgs,
-            ApplicationExecutionState previousExecutionState)
-        {
-            Frame rootFrame = EnsureRootFrame();
-            ApplyShellThemeFromSettings();
-            ConfigureAppChrome();
-            EnsureTitleBarHook();
-            EnsureStatusBarOrientationHook();
-
-            string remoteId = contactArgs?.Contact?.RemoteId;
-            string jid = WindowsContactListPublisher.FromRemoteId(remoteId);
-            string arguments = string.IsNullOrWhiteSpace(jid)
-                ? string.Empty
-                : "profile=" + Uri.EscapeDataString(jid);
-
-            RuntimeDiagnosticsService.Instance.Write(
-                "lifecycle",
-                "contact-panel-activated",
-                "hasProfile=" + (arguments.Length > 0));
-
-            if (rootFrame.Content == null || !IsKnownRootContent(rootFrame.Content))
-            {
-                NavigateRootToBoot(arguments);
-            }
-
-            HandleActivationArguments(arguments, previousExecutionState);
-
-            Window.Current.Activate();
-            ApplyWindowChromeBootstrap();
-        }
-
-        private static string ReadPeopleRemoteId(Uri uri)
-        {
-            if (uri == null || string.IsNullOrEmpty(uri.Query))
-            {
-                return null;
-            }
-
-            foreach (IWwwFormUrlDecoderEntry entry in new WwwFormUrlDecoder(uri.Query))
-            {
-                if (string.Equals(entry.Name, "ContactRemoteIds", StringComparison.OrdinalIgnoreCase) &&
-                    !string.IsNullOrWhiteSpace(entry.Value))
-                {
-                    return entry.Value.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)[0].Trim();
-                }
-            }
-
-            return null;
         }
 
         /// <summary>Secondary tile / toast <c>chat=</c> or <c>profile=</c> deep link.</summary>
@@ -961,37 +900,9 @@ namespace Unison.Uwp
             string arguments,
             ApplicationExecutionState previousExecutionState)
         {
-            if (string.IsNullOrWhiteSpace(arguments) || Services == null)
-            {
-                return;
-            }
-
-            try
-            {
-                var shell = Services.GetService<ShellViewModel>();
-                if (shell == null)
-                {
-                    return;
-                }
-
-                if (shell.QueueOpenProfileFromActivation(arguments))
-                {
-                    return;
-                }
-
-                // Running/Suspended: list is (or was) already up — open the chat only.
-                // NotRunning/Terminated/ClosedByUser: cold path may delay list until detail loads.
-                bool appWasAlreadyOpen =
-                    previousExecutionState == ApplicationExecutionState.Running ||
-                    previousExecutionState == ApplicationExecutionState.Suspended;
-                bool delayChatList = ChatListDeepLinkSyncUi.ShouldArmListHold(appWasAlreadyOpen);
-
-                shell.QueueOpenChatFromActivation(arguments, delayChatList);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine("[App] HandleActivationArguments: " + ex.Message);
-            }
+            Services?.GetService<IAppActivationRouter>()?.RouteLaunchArguments(
+                arguments,
+                WasAppAlreadyOpen(previousExecutionState));
         }
 
         /// <summary>Creates the root Frame and DI if needed.</summary>

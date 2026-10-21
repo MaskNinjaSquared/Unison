@@ -962,29 +962,25 @@ namespace Unison.Uwp.Services
         }
 
         /// <summary>
-        /// Dedicated queue frame: Unison logo + title. Always appended last so chat/profile/community
-        /// content frames rotate with the brand tile in a loop.
+        /// Dedicated queue frame: opaque Square150 logo + “Unison” on the plate (same bottom band
+        /// as the community name). No circle crop / overlay text — keeps the mark solid.
+        /// Always last in the loop.
         /// </summary>
         private static TileNotification BuildUnisonBrandNotification()
         {
             string logoSrc = EscapeXml(DefaultLogoUri.AbsoluteUri);
             string brand = EscapeXml(UnisonBrandName);
+            // Full-bleed opaque logo (no hint-crop, no stacked text — plate carries the name).
             string logoImage = "<image placement=\"background\" src=\"" + logoSrc + "\"/>";
-            string mediumBody =
-                logoImage +
-                "<text hint-style=\"base\" hint-align=\"center\">" + brand + "</text>";
-            string wideBody =
-                logoImage +
-                "<text hint-style=\"subtitle\" hint-align=\"center\">" + brand + "</text>";
 
             return BuildQueuedTileNotification(
                 smallBody: logoImage,
-                mediumBody: mediumBody,
-                wideBody: wideBody,
-                branding: "none",
-                displayName: null,
+                mediumBody: logoImage,
+                wideBody: logoImage,
+                branding: "name",
+                displayName: brand,
                 queueTag: QueueTagUnison,
-                textStacking: "center");
+                textStacking: null);
         }
 
         private static void RememberCommunityState(CommunityTileState state)
