@@ -155,6 +155,7 @@
     <Compile Include="Services\UsyncGate.cs" />
     <Compile Include="Services\WhatsApp\Contacts\AvatarFetcher.cs" />
     <Compile Include="Services\LocalSettingsService.cs" />
+    <Compile Include="Services\AppActivationRouter.cs" />
     <Compile Include="Services\Socket\WaTransportAdapter.cs" />
     <Compile Include="Services\Socket\IWhatsAppSessionProvider.cs" />
     <Compile Include="Services\WhatsApp\JidResolver.cs" />
