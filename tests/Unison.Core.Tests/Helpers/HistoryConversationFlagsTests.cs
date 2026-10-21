@@ -149,4 +149,34 @@ public class HistoryConversationFlagsTests
         Assert.Equal("Maria", chat.LastMessageSenderName);
         Assert.Equal("Maria: ", chat.LastMessageAuthor);
     }
+
+    [Fact]
+    public void A_meaningful_group_name_is_not_reverted_by_a_history_tip()
+    {
+        // Live rename landed on the row (and GroupSubjects). A later history tip still carries
+        // the old subject; ApplyIfNewer must keep the existing meaningful group title.
+        var preview = new HistoryChatPreview
+        {
+            Jid = "120363000000000001@g.us",
+            Name = "Família Antiga",
+            IsGroup = true,
+            LastMessage = "oi",
+            LastMessageTimestampUtc = DateTime.UtcNow.AddMinutes(1),
+            LastMessageId = "new"
+        };
+        var chat = new ChatItem
+        {
+            JID = preview.Jid,
+            Name = "Família Nova",
+            IsGroup = true,
+            LastMessage = "antes",
+            LastMessageTimestampUtc = DateTime.UtcNow,
+            LastMessageId = "old"
+        };
+
+        HistoryChatPreviewApplier.ApplyIfNewer(preview, chat);
+
+        Assert.Equal("Família Nova", chat.Name);
+        Assert.Equal("oi", chat.LastMessage);
+    }
 }

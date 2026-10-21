@@ -137,7 +137,7 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*" MinWidth="0"/>
                     </Grid.ColumnDefinitions>
-                    <Button Command="{x:Bind ViewModel.CloseCommunityHubCommand, Mode=OneWay}"
+                    <Button Click="CommunityHubBackButton_Click"
                             Style="{StaticResource ModernIconButtonStyle}"
                             VerticalAlignment="Center"
                             Margin="4,0,4,0">

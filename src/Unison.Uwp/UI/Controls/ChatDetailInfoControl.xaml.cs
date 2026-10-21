@@ -166,9 +166,12 @@ namespace Unison.Uwp.UI.Controls
                 AddContactButton.IsEnabled = canAdd && vm.AddContactCommand?.CanExecute(null) == true;
             }
 
+            bool liveTiles = vm.AreLiveTilesAvailable;
+
             if (PinButton != null)
             {
                 bool widgetPinned = vm.IsWidgetPinned;
+                PinButton.Visibility = liveTiles ? Visibility.Visible : Visibility.Collapsed;
                 if (PinButtonLabel != null)
                 {
                     PinButtonLabel.Visibility = widgetPinned ? Visibility.Collapsed : Visibility.Visible;
@@ -179,7 +182,7 @@ namespace Unison.Uwp.UI.Controls
                     UnpinButtonLabel.Visibility = widgetPinned ? Visibility.Visible : Visibility.Collapsed;
                 }
 
-                PinButton.IsEnabled = vm.PinToStartCommand?.CanExecute(null) == true;
+                PinButton.IsEnabled = liveTiles && vm.PinToStartCommand?.CanExecute(null) == true;
             }
 
             if (ChatPinButton != null)

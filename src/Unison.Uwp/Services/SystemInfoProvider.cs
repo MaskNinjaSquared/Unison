@@ -19,6 +19,8 @@ namespace Unison.Uwp.Services
 
         public DeviceCategory GetDeviceCategory() => _deviceCategory.Value;
 
+        public bool LiveTilesCompatible() => DetectLiveTilesCompatible();
+
         private static DeviceCategory DetectDeviceCategory()
         {
             bool mobile = DetectIsMobile();
@@ -63,6 +65,26 @@ namespace Unison.Uwp.Services
             catch
             {
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// Windows 11 (NT build ≥ 22000) removed classic Live Tiles; Start pin options stay on
+        /// Windows 10 / Mobile only. Fail open when AnalyticsInfo is unavailable.
+        /// </summary>
+        public static bool DetectLiveTilesCompatible()
+        {
+
+            try
+            {
+                ulong version = ulong.Parse(AnalyticsInfo.VersionInfo.DeviceFamilyVersion);
+                ulong build = (version & 0x00000000FFFF0000L) >> 16;
+                bool isWindows11 = build >= 22000;
+                return !isWindows11;
+            }
+            catch
+            {
+                return true;
             }
         }
     }

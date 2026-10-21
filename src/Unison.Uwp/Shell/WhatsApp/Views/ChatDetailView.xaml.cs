@@ -928,6 +928,7 @@ namespace Unison.Uwp.Shell.WhatsApp.Views
             ViewModel.RefreshLocalChatState();
             bool muted = ViewModel.ShowUnmuteOption;
             bool widgetPinned = ViewModel.IsWidgetPinned;
+            bool liveTiles = ViewModel.AreLiveTilesAvailable;
             bool archived = ViewModel.ActiveChat?.Status == ChatStatus.Archived;
             bool compactHeader = IsCompactHeaderCallLayout();
             bool canVoiceCall = ViewModel.CanCallPhone;
@@ -948,11 +949,15 @@ namespace Unison.Uwp.Shell.WhatsApp.Views
                 }
                 else if (string.Equals(tag, "widgetPin", StringComparison.Ordinal) && menuItem != null)
                 {
-                    menuItem.Visibility = widgetPinned ? Visibility.Collapsed : Visibility.Visible;
+                    menuItem.Visibility = liveTiles && !widgetPinned
+                        ? Visibility.Visible
+                        : Visibility.Collapsed;
                 }
                 else if (string.Equals(tag, "widgetUnpin", StringComparison.Ordinal) && menuItem != null)
                 {
-                    menuItem.Visibility = widgetPinned ? Visibility.Visible : Visibility.Collapsed;
+                    menuItem.Visibility = liveTiles && widgetPinned
+                        ? Visibility.Visible
+                        : Visibility.Collapsed;
                 }
                 else if (string.Equals(tag, "addContact", StringComparison.Ordinal) && menuItem != null)
                 {

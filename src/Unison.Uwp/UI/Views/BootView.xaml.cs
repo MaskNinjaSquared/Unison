@@ -222,10 +222,13 @@ namespace Unison.Uwp.UI.Views
                 string param = e.Parameter as string;
                 bool postPairing = string.Equals(param, PostPairingParameter, StringComparison.OrdinalIgnoreCase);
 
-                // Queue before Initialize so ChatsView can see PendingOpenChatJid on first load.
+                // Queue before Initialize so Profile/Chats see the pending JID on first load.
                 if (!postPairing)
                 {
-                    shell.QueueOpenChatFromActivation(param);
+                    if (!shell.QueueOpenProfileFromActivation(param))
+                    {
+                        shell.QueueOpenChatFromActivation(param);
+                    }
                 }
 
                 Task dwellTask = Task.Delay(MinDwellMs);

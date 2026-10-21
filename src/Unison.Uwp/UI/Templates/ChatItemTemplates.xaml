@@ -13,6 +13,15 @@
             <Grid.ContextFlyout>
                 <MenuFlyout MenuFlyoutPresenterStyle="{StaticResource ModernMenuFlyoutStyle}"
                             Opening="ChatContextFlyout_Opening">
+                    <MenuFlyoutItem Tag="viewProfile"
+                                   x:Uid="ChatList_ViewProfile"
+                                   Text="View profile"
+                                   Style="{StaticResource ModernMenuFlyoutItemStyle}"
+                                   Click="ViewProfile_Click">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE77B;"/>
+                        </MenuFlyoutItem.Icon>
+                    </MenuFlyoutItem>
                     <MenuFlyoutItem Tag="chatPin"
                                    x:Uid="ChatList_PinChat"
                                    Text="Pin chat"

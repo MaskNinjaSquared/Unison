@@ -61,6 +61,9 @@ namespace Unison.Core.ViewModels
         private bool _statusDetailOpen;
         private ChatItem _pendingChat;
         private string _pendingOpenChatJid;
+        private string _pendingOpenProfileJid;
+        /// <summary>Survives <see cref="ClearPendingOpenProfileJid"/> so Legacy overlay can re-Init.</summary>
+        private string _lastQueuedProfileJid;
         private readonly ChatListDeepLinkHoldGate _deepLinkHold;
         private bool _initialized;
         private bool _eventsHooked;
@@ -339,8 +342,9 @@ namespace Unison.Core.ViewModels
         }
 
         public bool ShowSystemBackButton =>
-            string.Equals(ActiveSection, "debug", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(ActiveSection, "settings", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(ActiveSection, NavigationRoutes.Debug, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(ActiveSection, NavigationRoutes.Settings, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(ActiveSection, NavigationRoutes.Profile, StringComparison.OrdinalIgnoreCase) ||
             (IsNarrowWindow && string.Equals(ChatPane, PaneNarrowDetail, StringComparison.Ordinal)) ||
             (!IsNarrowWindow && HasActiveChat);
 
@@ -420,6 +424,72 @@ namespace Unison.Core.ViewModels
         public string PendingOpenChatJid => _pendingOpenChatJid;
 
         /// <summary>
+        /// JID queued from People ContactPanel / <c>profile=</c> launch.
+        /// Cleared by <see cref="ClearPendingOpenProfileJid"/> after ProfileView loads.
+        /// </summary>
+        public string PendingOpenProfileJid => _pendingOpenProfileJid;
+
+        /// <summary>
+        /// Last queued profile JID (kept after pending is cleared) for shell overlay re-Init.
+        /// </summary>
+        public string LastQueuedProfileJid => _lastQueuedProfileJid;
+
+        /// <summary>
+        /// Queues the full-page Profile for a Windows contact / <c>profile=</c> deep link.
+        /// Returns true when a profile JID was found (caller should not also open a chat).
+        /// </summary>
+        public bool QueueOpenProfileFromActivation(string arguments)
+        {
+            string jid = LaunchActivationHelper.TryGetProfileJid(arguments);
+            if (string.IsNullOrWhiteSpace(jid))
+            {
+                return false;
+            }
+
+            QueueOpenProfile(jid);
+            return true;
+        }
+
+        /// <summary>Opens the full-page Profile for a contact JID (chat list / deep link).</summary>
+        public void QueueOpenProfile(string jid)
+        {
+            if (string.IsNullOrWhiteSpace(jid))
+            {
+                return;
+            }
+
+            _pendingOpenProfileJid = jid.Trim();
+            _lastQueuedProfileJid = _pendingOpenProfileJid;
+            ClearPendingOpenChatJid();
+
+            if (string.Equals(AppSurface, SurfaceConnected, StringComparison.Ordinal))
+            {
+                try
+                {
+                    NavigateToSection(NavigationRoutes.Profile);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[ShellViewModel] Navigate profile failed: " + ex.Message);
+                }
+            }
+
+            OnPropertyChanged(nameof(PendingOpenProfileJid));
+            Debug.WriteLine("[ShellViewModel] Queued open profile: " + _pendingOpenProfileJid);
+        }
+
+        public void ClearPendingOpenProfileJid()
+        {
+            if (_pendingOpenProfileJid == null)
+            {
+                return;
+            }
+
+            _pendingOpenProfileJid = null;
+            OnPropertyChanged(nameof(PendingOpenProfileJid));
+        }
+
+        /// <summary>
         /// Parses activation arguments and queues navigation into the target chat
         /// (narrow → detail pane when open succeeds). Used by secondary tiles and toast clicks.
         /// </summary>
@@ -435,6 +505,9 @@ namespace Unison.Core.ViewModels
             {
                 return;
             }
+
+            ClearPendingOpenProfileJid();
+            _lastQueuedProfileJid = null;
 
             // Prefer navigating onto Chats first so ChatsView is hooked before PropertyChanged.
             if (string.Equals(AppSurface, SurfaceConnected, StringComparison.Ordinal))
@@ -626,7 +699,9 @@ namespace Unison.Core.ViewModels
 
             if (!alreadyConnected)
             {
-                ActiveSection = NavigationRoutes.Chats;
+                ActiveSection = string.IsNullOrWhiteSpace(_pendingOpenProfileJid)
+                    ? NavigationRoutes.Chats
+                    : NavigationRoutes.Profile;
             }
 
             SyncChatPane();
@@ -946,8 +1021,15 @@ namespace Unison.Core.ViewModels
                 {
                     _navigator.NavigateInShellAndClear(NavigationDestination.Archived);
                 }
+                else if (string.Equals(section, NavigationRoutes.Profile, StringComparison.OrdinalIgnoreCase))
+                {
+                    string profileJid = _pendingOpenProfileJid ?? _lastQueuedProfileJid;
+                    _navigator.NavigateInShell(NavigationDestination.Profile, profileJid);
+                }
                 else
                 {
+                    // Legacy pivot shells throw here (chats live in the pivot). ActiveSection
+                    // below still updates; Legacy ShellView dismisses the overlay on that change.
                     _navigator.NavigateInShellAndClear(NavigationDestination.Chats);
                 }
             }
@@ -966,6 +1048,13 @@ namespace Unison.Core.ViewModels
         /// </summary>
         public bool TryHandleShellBack()
         {
+            // Profile is always opened from outside (People / profile=) — back is Home, not stack.
+            if (string.Equals(ActiveSection, NavigationRoutes.Profile, StringComparison.OrdinalIgnoreCase))
+            {
+                NavigateToSection(NavigationRoutes.Chats);
+                return true;
+            }
+
             if (_navigator.CanGoBackInShell)
             {
                 _navigator.GoBackInShell();

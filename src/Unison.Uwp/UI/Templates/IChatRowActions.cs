@@ -12,6 +12,8 @@ namespace Unison.Uwp.UI.Templates
 
         void SetChatPinned(ChatItem chat, bool pinned);
 
+        void ViewProfile(ChatItem chat);
+
         void DeleteChat(ChatItem chat);
 
         void ArchiveChat(ChatItem chat);

@@ -89,7 +89,7 @@ namespace Unison.Core.Helpers
                 return fromDirect;
             }
 
-            return FindAvatarOnPerson(canonical, participantJid, context?.People);
+            return FindAvatarOnPerson(canonical, participantJid, context);
         }
 
         /// <summary>
@@ -145,7 +145,7 @@ namespace Unison.Core.Helpers
                 }
             }
 
-            Person person = TryGetPerson(context?.People, canonical, participantJid);
+            Person person = TryGetPerson(context, canonical, participantJid);
             if (person != null && UsableLabel(person.Name, canonical))
             {
                 return person.Name.Trim();
@@ -268,9 +268,12 @@ namespace Unison.Core.Helpers
             return null;
         }
 
-        private static string FindAvatarOnPerson(string canonical, string participantJid, Contracts.IPersonStore personStore)
+        private static string FindAvatarOnPerson(
+            string canonical,
+            string participantJid,
+            ParticipantResolutionContext context)
         {
-            Person person = TryGetPerson(personStore, canonical, participantJid);
+            Person person = TryGetPerson(context, canonical, participantJid);
             return string.IsNullOrWhiteSpace(person?.AvatarUrl) ? null : person.AvatarUrl;
         }
 
@@ -324,22 +327,71 @@ namespace Unison.Core.Helpers
             return null;
         }
 
-        private static Person TryGetPerson(Contracts.IPersonStore personStore, string canonical, string participantJid)
+        private static Person TryGetPerson(
+            ParticipantResolutionContext context,
+            string canonical,
+            string participantJid)
         {
+            Contracts.IPersonStore personStore = context?.People;
             if (personStore == null)
             {
                 return null;
             }
 
             Person person = personStore.TryGetCached(canonical);
-            if (person == null &&
-                !string.Equals(canonical, participantJid, StringComparison.OrdinalIgnoreCase) &&
-                !string.IsNullOrWhiteSpace(participantJid))
+            if (person != null)
             {
-                person = personStore.TryGetCached(participantJid);
+                return person;
             }
 
-            return person;
+            if (!string.IsNullOrWhiteSpace(participantJid) &&
+                !string.Equals(canonical, participantJid, StringComparison.OrdinalIgnoreCase))
+            {
+                person = personStore.TryGetCached(participantJid);
+                if (person != null)
+                {
+                    return person;
+                }
+            }
+
+            // History / address-book rows are often keyed under the other half of a PN/LID pair.
+            // The strip used to look only at the tip JID, so a name already in SQLite under the
+            // alias never reached FormatListAuthorPrefix and the row stayed on the phone digits.
+            return TryGetPersonViaAlias(personStore, context?.Jids, canonical, participantJid);
+        }
+
+        private static Person TryGetPersonViaAlias(
+            Contracts.IPersonStore personStore,
+            Contracts.IJidResolver jids,
+            string canonical,
+            string participantJid)
+        {
+            if (personStore == null || jids == null)
+            {
+                return null;
+            }
+
+            string alias;
+            if (!string.IsNullOrWhiteSpace(canonical) &&
+                jids.TryGetAlias(canonical, out alias) &&
+                !string.IsNullOrWhiteSpace(alias))
+            {
+                Person person = personStore.TryGetCached(alias);
+                if (person != null)
+                {
+                    return person;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(participantJid) &&
+                !string.Equals(participantJid, canonical, StringComparison.OrdinalIgnoreCase) &&
+                jids.TryGetAlias(participantJid, out alias) &&
+                !string.IsNullOrWhiteSpace(alias))
+            {
+                return personStore.TryGetCached(alias);
+            }
+
+            return null;
         }
 
         private static string ResolveServiceName(ParticipantResolutionContext context, string jid)

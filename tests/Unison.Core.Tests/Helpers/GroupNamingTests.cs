@@ -15,6 +15,7 @@ namespace Unison.Core.Tests.Helpers
         private readonly JidAliasTable _aliases = new JidAliasTable();
         private readonly DisplayNameTable _pushNames = new DisplayNameTable();
         private readonly DisplayNameTable _addressBook = new DisplayNameTable();
+        private readonly DisplayNameTable _subjects = new DisplayNameTable();
 
         private GroupNaming Build()
         {
@@ -22,7 +23,7 @@ namespace Unison.Core.Tests.Helpers
             var markers = new FakeMarkers();
             var names = new ContactDisplayNames(_aliases, _pushNames, _addressBook, new RecordingPersonStore(), markers);
             names.Bind(() => new SelfNameInputs { Id = Me }, null);
-            return new GroupNaming(names, new AliasJids(_aliases), markers, new FakeStrings());
+            return new GroupNaming(names, new AliasJids(_aliases), markers, new FakeStrings(), _subjects);
         }
 
         [Fact]
@@ -48,9 +49,21 @@ namespace Unison.Core.Tests.Helpers
         [Fact]
         public void A_group_row_takes_the_cached_subject()
         {
-            _pushNames.Set(Group, "Família");
+            _subjects.Set(Group, "Família");
 
             Assert.Equal("Família", Build().ResolveChatDisplayName(Group));
+        }
+
+        [Fact]
+        public void A_live_subject_wins_over_address_book_and_push_names()
+        {
+            // AddressBook early-return in ContactDisplayNames used to beat a live rename that
+            // only lived in PushNames / stale AddressBook rows. Prefer GroupSubjects.
+            _subjects.Set(Group, "Família Nova");
+            _pushNames.Set(Group, "Família Antiga");
+            _addressBook.Set(Group, "Família Antiga");
+
+            Assert.Equal("Família Nova", Build().ResolveChatDisplayName(Group));
         }
 
         [Theory]

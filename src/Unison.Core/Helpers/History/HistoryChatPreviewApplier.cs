@@ -353,7 +353,11 @@ namespace Unison.Core.Helpers
                     target.Name,
                     target.JID,
                     target.IsGroup);
-                if (ChatNameReplacement.ShouldReplace(
+                // History tips must not flash-then-revert a live group subject. Live renames go
+                // through GroupMetadataApply / app-state subjects; keeping an existing meaningful
+                // group title here is the race fix for "new name during sync, then old again".
+                if (!(preview.IsGroup && existingMeaningful) &&
+                    ChatNameReplacement.ShouldReplace(
                         target.Name,
                         preview.Name,
                         incomingMeaningful,

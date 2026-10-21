@@ -1224,8 +1224,8 @@ namespace Unison.Uwp.Services.WhatsApp
             var jidResolver = new JidResolver(JidAlias);
             _jids = jidResolver;
             _groupMetadata = new GroupMetadataReader(jidResolver);
-            var groupNaming = new GroupNaming(displayNames, jidResolver, _selfMarkers, new StringResourcesService());
-            _groupApply = new GroupMetadataApply(groupNaming, _ui, this, new GroupRosterWriter(_groupRosterStore, _personStore), jidResolver, _chatState, _chatRows, _chatState.PushNames);
+            var groupNaming = new GroupNaming(displayNames, jidResolver, _selfMarkers, new StringResourcesService(), _chatState.GroupSubjects);
+            _groupApply = new GroupMetadataApply(groupNaming, _ui, this, new GroupRosterWriter(_groupRosterStore, _personStore), jidResolver, _chatState, _chatRows, _chatState.GroupSubjects);
             _receipts = new ReceiptReader(jidResolver);
             _chatState.Chats.CollectionChanged += (s, e) => InvalidateChatRowIndex();
 
@@ -4937,6 +4937,15 @@ namespace Unison.Uwp.Services.WhatsApp
                         {
                             continue;
                         }
+
+                        _chatState.GroupSubjects.Set(entry.Canonical, entry.Name);
+                        if (!string.IsNullOrEmpty(entry.Normalized) &&
+                            !string.Equals(entry.Normalized, entry.Canonical, StringComparison.OrdinalIgnoreCase))
+                        {
+                            _chatState.GroupSubjects.Set(entry.Normalized, entry.Name);
+                        }
+
+                        continue;
                     }
 
                     ContactNames.Set(entry.Canonical, entry.Name);

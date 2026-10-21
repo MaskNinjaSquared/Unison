@@ -1,6 +1,8 @@
 using System.Collections.Generic;
+using Unison.Core.Contracts;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
+using Unison.Core.State;
 using Xunit;
 
 namespace Unison.Core.Tests.Helpers
@@ -148,6 +150,110 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
+        public void ResolveHubTitle_uses_cached_group_subject_before_community_fallback()
+        {
+            var subjects = new DisplayNameTable();
+            subjects.Set(Parent, "Minha Comunidade");
+            GroupNaming naming = BuildGroupNaming(subjects);
+
+            var hub = new ChatItem
+            {
+                JID = Parent,
+                IsCommunityParent = true
+            };
+
+            string title = CommunityHubPresentation.ResolveHubTitle(
+                hub,
+                jid => naming.ResolveChatDisplayName(jid),
+                new FallbackStrings());
+
+            Assert.Equal("Minha Comunidade", title);
+        }
+
+        [Fact]
+        public void TryStampHubLabel_stamps_subject_onto_hub_and_members()
+        {
+            var subjects = new DisplayNameTable();
+            subjects.Set(Parent, "Minha Comunidade");
+            GroupNaming naming = BuildGroupNaming(subjects);
+
+            var hub = new ChatItem { JID = Parent, IsCommunityParent = true };
+            var child = new ChatItem { JID = ChildA, Name = "Geral", LinkedParentJid = Parent };
+            hub.SetCommunityGroups(new[] { child });
+
+            Assert.True(CommunityHubPresentation.TryStampHubLabel(
+                hub,
+                jid => naming.ResolveChatDisplayName(jid)));
+
+            Assert.Equal("Minha Comunidade", hub.Name);
+            Assert.Equal("Minha Comunidade", child.LinkedParentDisplayName);
+        }
+
+        [Fact]
+        public void TryStampHubLabel_returns_false_when_only_community_fallback_would_apply()
+        {
+            GroupNaming naming = BuildGroupNaming(new DisplayNameTable());
+            var hub = new ChatItem { JID = Parent, IsCommunityParent = true };
+
+            Assert.False(CommunityHubPresentation.TryStampHubLabel(
+                hub,
+                jid => naming.ResolveChatDisplayName(jid)));
+            Assert.True(string.IsNullOrWhiteSpace(hub.Name));
+        }
+
+        private static GroupNaming BuildGroupNaming(DisplayNameTable subjects)
+        {
+            var aliases = new JidAliasTable();
+            aliases.BindSelf(() => "5511911112222@s.whatsapp.net", () => null);
+            var markers = new HubMarkers();
+            var names = new ContactDisplayNames(
+                aliases,
+                new DisplayNameTable(),
+                new DisplayNameTable(),
+                new RecordingPersonStore(),
+                markers);
+            names.Bind(() => new SelfNameInputs { Id = "5511911112222@s.whatsapp.net" }, null);
+            return new GroupNaming(
+                names,
+                new HubJids(aliases),
+                markers,
+                new FallbackStrings(),
+                subjects);
+        }
+
+        private sealed class FallbackStrings : IStringResources
+        {
+            public string Get(string key, string fallback = null) =>
+                key == "Chat_CommunityFallbackName" ? "Comunidade" : fallback ?? key;
+        }
+
+        private sealed class HubMarkers : ISelfMarkerNaming
+        {
+            public bool IsMarkerLabel(string label) => false;
+
+            public string StripMarker(string label) => label;
+        }
+
+        private sealed class HubJids : IJidResolver
+        {
+            private readonly JidAliasTable _aliases;
+
+            public HubJids(JidAliasTable aliases) => _aliases = aliases;
+
+            public Profile Self => null;
+
+            public string GetCanonicalJid(string jid) => _aliases.GetCanonicalJid(jid);
+
+            public bool TryGetAlias(string jid, out string alias)
+            {
+                alias = null;
+                return false;
+            }
+
+            public bool IsSelfLinked(string jid) => _aliases.IsSelfLinked(jid);
+        }
+
+        [Fact]
         public void ApplyMemberAvatarFallback_copies_announce_avatar_onto_hub()
         {
             var hub = new ChatItem { JID = Parent, IsCommunityParent = true };
@@ -204,6 +310,54 @@ namespace Unison.Core.Tests.Helpers
             Assert.True(parent.LastPreview.ShowAuthorChevron);
             Assert.Equal("Alice: ", parent.LastPreview.AuthorDetail);
             Assert.Equal("ola", parent.LastMessage);
+        }
+
+        [Fact]
+        public void Project_hub_tip_localizes_announcements_group_label()
+        {
+            var parent = new ChatItem { JID = Parent, Name = "Hub", IsCommunityParent = true };
+            var avisos = new ChatItem
+            {
+                JID = ChildA,
+                Name = "Announcements",
+                LinkedParentJid = Parent,
+                Kind = ChatKind.Group,
+                IsCommunityAnnounce = true,
+                LastMessage = "novo aviso",
+                LastMessageAuthor = "Admin: ",
+                LastMessageTimestampUtc = new System.DateTime(2026, 10, 21, 12, 0, 0, System.DateTimeKind.Utc)
+            };
+
+            CommunityListProjector.Project(
+                new[] { parent, avisos },
+                jid => jid == Parent ? parent : null,
+                jid => null,
+                jid => jid,
+                new AnnounceStrings("Avisos"));
+
+            Assert.Equal("Avisos", parent.LastMessageAuthor);
+            Assert.True(parent.LastPreview.ShowAuthorChevron);
+            Assert.Equal("Admin: ", parent.LastPreview.AuthorDetail);
+        }
+
+        private sealed class AnnounceStrings : Unison.Core.Contracts.IStringResources
+        {
+            private readonly string _avisos;
+
+            public AnnounceStrings(string avisos)
+            {
+                _avisos = avisos;
+            }
+
+            public string Get(string key, string fallback = null)
+            {
+                if (key == "Chat_CommunityAnnouncements")
+                {
+                    return _avisos;
+                }
+
+                return fallback ?? key;
+            }
         }
     }
 }

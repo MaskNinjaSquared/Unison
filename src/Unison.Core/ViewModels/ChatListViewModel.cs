@@ -52,6 +52,11 @@ namespace Unison.Core.ViewModels
         private readonly IMessageService _messageService;
         private readonly IContactService _contactService;
 
+        /// <summary>
+        /// Community hub titles prefer cached group subjects over contact-only lookup.
+        /// </summary>
+        private readonly IGroupNaming _groupNaming;
+
         /// <summary>Transport state for the header line: connecting, open, reconnecting.</summary>
         private readonly IConnectionService _connection;
 
@@ -60,6 +65,7 @@ namespace Unison.Core.ViewModels
 
         private readonly IShortcutService _shortcutService;
         private readonly IChatStore _chatStore;
+        private readonly ISystemInfoProvider _systemInfo;
         private readonly IChatService _chatService;
         private readonly IGroupService _groups;
         private readonly IDispatcher _dispatcher;
@@ -86,6 +92,12 @@ namespace Unison.Core.ViewModels
 
         private CancellationTokenSource _refreshCts;
         private CancellationTokenSource _refreshContinueCts;
+
+        /// <summary>
+        /// Desired visible order held across budgeted continue turns so each slice only Moves
+        /// instead of re-running projection/sort on the UI thread.
+        /// </summary>
+        private List<ChatItem> _pendingVisibleRefreshSource;
         private string _lastSyncBannerLog;
 
         /// <summary>
@@ -203,19 +215,23 @@ namespace Unison.Core.ViewModels
             IJidResolver jids,
             IChatService chatService = null,
             IGroupService groupService = null,
+            IGroupNaming groupNaming = null,
             ISessionLogger sessionLogger = null,
             IRuntimeDiagnostics diagnostics = null,
             ILocalSettings localSettings = null,
             SyncWorkloadStrategy workload = null,
             ChatListInitialPaintGate listPaintGate = null,
-            ChatListDeepLinkHoldGate deepLinkHold = null)
+            ChatListDeepLinkHoldGate deepLinkHold = null,
+            ISystemInfoProvider systemInfo = null)
         {
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _chatService = chatService;
             _groups = groupService;
+            _groupNaming = groupNaming;
             _sessionLogger = sessionLogger;
             _diagnostics = diagnostics;
             _localSettings = localSettings;
+            _systemInfo = systemInfo;
             _workload = workload ?? HighSyncWorkload.Instance;
             _listPaintGate = listPaintGate;
             _deepLinkHold = deepLinkHold;
@@ -256,7 +272,9 @@ namespace Unison.Core.ViewModels
             ResyncConversationsCommand = _resyncConversationsCommand;
             PinChatToStartCommand = new RelayCommand<ChatItem>(
                 chat => _ = ToggleWidgetPinAsync(chat),
-                chat => chat != null && !string.IsNullOrWhiteSpace(chat.JID));
+                chat => AreLiveTilesAvailable &&
+                        chat != null &&
+                        !string.IsNullOrWhiteSpace(chat.JID));
             SetChatPinnedCommand = new RelayCommand<ChatPinRequest>(
                 request => _ = SetChatPinnedAsync(request),
                 request => request?.Chat != null &&
@@ -332,7 +350,7 @@ namespace Unison.Core.ViewModels
                 ? string.Empty
                 : CommunityHubPresentation.ResolveHubTitle(
                     _activeCommunity,
-                    jid => _contactService.ResolveDisplayName(jid, "community-hub"),
+                    ResolveCommunityHubLabel,
                     _strings);
 
         public string ActiveCommunitySubtitle =>
@@ -484,6 +502,12 @@ namespace Unison.Core.ViewModels
 
         /// <summary>Wipes local chats/messages (keeps auth) and re-pulls conversation history.</summary>
         public ICommand ResyncConversationsCommand { get; }
+
+        /// <summary>
+        /// Start Live Tile pin UX (false on Windows 11). Null provider → available.
+        /// </summary>
+        public bool AreLiveTilesAvailable =>
+            _systemInfo == null || _systemInfo.LiveTilesCompatible();
 
         /// <summary>Pins/unpins the chat Start live tile (<see cref="ChatItem.IsWidgetPinned"/>).</summary>
         public ICommand PinChatToStartCommand { get; }
@@ -729,6 +753,7 @@ namespace Unison.Core.ViewModels
 
             _refreshCts?.Cancel();
             _refreshContinueCts?.Cancel();
+            _pendingVisibleRefreshSource = null;
             _batchRendering = false;
             lock (_previewHydrateGate)
             {
@@ -779,6 +804,10 @@ namespace Unison.Core.ViewModels
             return true;
         }
 
+        /// <summary>
+        /// Leaves the hub and drops the member selection. The open conversation lived inside the
+        /// hub list; keeping it selected after the hub is gone left a detail pane with no row.
+        /// </summary>
         public void CloseCommunityHub()
         {
             if (_activeCommunity == null)
@@ -787,6 +816,7 @@ namespace Unison.Core.ViewModels
             }
 
             ActiveCommunity = null;
+            ClearSelection();
         }
 
         /// <summary>
@@ -951,28 +981,25 @@ namespace Unison.Core.ViewModels
             }
         }
 
-        private bool TryApplyCommunityHubLabel(ChatItem hub)
+        private bool TryApplyCommunityHubLabel(ChatItem hub) =>
+            CommunityHubPresentation.TryStampHubLabel(hub, ResolveCommunityHubLabel);
+
+        /// <summary>
+        /// Subjects-first via <see cref="IGroupNaming"/>; contact lookup alone misses GroupSubjects
+        /// and leaves hubs on the localized “Community” fallback.
+        /// </summary>
+        private string ResolveCommunityHubLabel(string jid)
         {
-            if (hub == null)
+            if (_groupNaming != null)
             {
-                return false;
+                string fromGroups = _groupNaming.ResolveChatDisplayName(jid);
+                if (CommunityHubPresentation.IsUsableHubLabel(fromGroups, jid))
+                {
+                    return fromGroups;
+                }
             }
 
-            if (CommunityHubPresentation.IsUsableHubLabel(hub.Name, hub.JID))
-            {
-                CommunityHubPresentation.StampLinkedParentDisplayNames(hub);
-                return true;
-            }
-
-            string label = _contactService.ResolveDisplayName(hub.JID, "community-hub");
-            if (!CommunityHubPresentation.IsUsableHubLabel(label, hub.JID))
-            {
-                return false;
-            }
-
-            hub.Name = label.Trim();
-            CommunityHubPresentation.StampLinkedParentDisplayNames(hub);
-            return true;
+            return _contactService.ResolveDisplayName(jid, "community-hub");
         }
 
         private void ActiveCommunity_PropertyChanged(object sender, PropertyChangedEventArgs e)
@@ -2351,11 +2378,16 @@ namespace Unison.Core.ViewModels
         private async void Contacts_DisplayNamesUpdated(object sender, EventArgs e)
         {
             // Group author strips are recomposed by IChatAuthorProjection (app-lifetime, fires even
-            // when this list is not on screen). Here we only re-render the visible rows.
-            // Drop the search cache on the UI thread, the same thread that reads it.
+            // when this list is not on screen). Titles repaint through ChatItem.Name bindings —
+            // rebuild VisibleChats only when search membership can change (Unigram-style).
             await _dispatcher.RunAsync(() =>
             {
                 _searchNameCache.Clear();
+                if (!ChatListNamesAppliedRefresh.RequiresVisibleRebuild(SearchQuery))
+                {
+                    return;
+                }
+
                 TimeSpan? namesDelay = PreferFrugalUi
                     ? NamesAppliedRefreshDebounceFrugal
                     : (TimeSpan?)null;
@@ -2516,6 +2548,9 @@ namespace Unison.Core.ViewModels
 
             _refreshCts?.Cancel();
             _refreshContinueCts?.Cancel();
+            // A fresh schedule invalidates any in-flight continue; drop the cached order so the
+            // next turn rebuilds projection from the store.
+            _pendingVisibleRefreshSource = null;
             _refreshCts = new CancellationTokenSource();
             var token = _refreshCts.Token;
             TimeSpan delay = delayOverride ?? (PreferFrugalUi
@@ -2525,7 +2560,7 @@ namespace Unison.Core.ViewModels
             Task.Delay(delay, token).ContinueWith(t =>
             {
                 if (t.IsCanceled) return;
-                _ = _dispatcher.RunAsync(RefreshVisibleChats);
+                _ = _dispatcher.RunAsync(() => RefreshVisibleChats());
             });
         }
 
@@ -2533,8 +2568,10 @@ namespace Unison.Core.ViewModels
         /// Rebuilds the visible order in place: search, collapse PN/LID duplicates, project
         /// community hubs, then apply the active list filter, sort pinned first and by recency.
         /// Filter runs after projection so Groups/Communities cannot be undone by hub re-inject.
+        /// Budgeted continues pass <paramref name="reusePendingSource"/> so each slice only
+        /// Moves instead of re-projecting the whole catalogue on the UI thread.
         /// </summary>
-        public void RefreshVisibleChats()
+        public void RefreshVisibleChats(bool reusePendingSource = false)
         {
             if (_batchRendering || IsInSafeMode || IsListHeldForSync)
             {
@@ -2548,6 +2585,65 @@ namespace Unison.Core.ViewModels
                 flush: true);
 
             _visibleOrderDirty = false;
+
+            List<ChatItem> source = null;
+            bool reusedSource = reusePendingSource && _pendingVisibleRefreshSource != null;
+            if (reusedSource)
+            {
+                source = _pendingVisibleRefreshSource;
+            }
+            else
+            {
+                // A full rebuild supersedes any in-flight continue slice.
+                _refreshContinueCts?.Cancel();
+                source = BuildVisibleRefreshSource();
+                _pendingVisibleRefreshSource = source;
+            }
+
+            int moveBudget = PreferFrugalUi
+                ? VisibleRefreshMoveBudgetFrugal
+                : VisibleRefreshMoveBudgetGenerous;
+
+            ChatListVisibleReconcileResult reconcile;
+            IsRefreshing = true;
+            try
+            {
+                reconcile = ChatListVisibleReconcile.Apply(VisibleChats, source, moveBudget);
+            }
+            finally
+            {
+                IsRefreshing = false;
+            }
+
+            RestoreSelection();
+
+            TraceListLifecycle(
+                "refresh-visible-exit",
+                BuildListSnapshot(
+                    "before=" + visibleBefore +
+                    "; source=" + source.Count +
+                    "; mutations=" + reconcile.Mutations +
+                    "; incomplete=" + reconcile.Incomplete +
+                    "; budget=" + moveBudget +
+                    "; reused=" + reusedSource),
+                flush: true);
+
+            if (reconcile.Incomplete)
+            {
+                ScheduleRefreshVisibleChatsContinue();
+            }
+            else
+            {
+                _pendingVisibleRefreshSource = null;
+            }
+        }
+
+        /// <summary>
+        /// Projects the catalogue into the order VisibleChats should show. Expensive on frugal
+        /// ARM — callers must not re-run this on every budgeted continue slice.
+        /// </summary>
+        private List<ChatItem> BuildVisibleRefreshSource()
+        {
             ApplyLocalChatFieldsToScopedChats();
 
             string query = SearchQuery?.Trim() ?? string.Empty;
@@ -2563,7 +2659,8 @@ namespace Unison.Core.ViewModels
                 source,
                 ResolveCatalogByJid,
                 GetOrCreateSyntheticCommunity,
-                GetCanonical);
+                GetCanonical,
+                _strings);
             EnrichCommunityHubRows(source);
 
             if (_activeFilter != ChatListFilter.All)
@@ -2591,78 +2688,7 @@ namespace Unison.Core.ViewModels
                 }
             }
 
-            int moveBudget = PreferFrugalUi
-                ? VisibleRefreshMoveBudgetFrugal
-                : VisibleRefreshMoveBudgetGenerous;
-            int mutations = 0;
-            bool incomplete = false;
-
-            IsRefreshing = true;
-            try
-            {
-                for (int i = 0; i < source.Count; i++)
-                {
-                    var item = source[i];
-                    if (i < VisibleChats.Count && ReferenceEquals(VisibleChats[i], item))
-                    {
-                        continue;
-                    }
-
-                    if (mutations >= moveBudget)
-                    {
-                        incomplete = true;
-                        break;
-                    }
-
-                    int existingIndex = VisibleChats.IndexOf(item);
-                    if (existingIndex >= 0)
-                    {
-                        VisibleChats.Move(existingIndex, i);
-                    }
-                    else
-                    {
-                        VisibleChats.Insert(i, item);
-                    }
-
-                    mutations++;
-                }
-
-                if (!incomplete)
-                {
-                while (VisibleChats.Count > source.Count)
-                {
-                        if (mutations >= moveBudget)
-                        {
-                            incomplete = true;
-                            break;
-                        }
-
-                    VisibleChats.RemoveAt(VisibleChats.Count - 1);
-                        mutations++;
-                    }
-                }
-            }
-            finally
-            {
-                IsRefreshing = false;
-            }
-
-            RestoreSelection();
-
-            TraceListLifecycle(
-                "refresh-visible-exit",
-                BuildListSnapshot(
-                    "before=" + visibleBefore +
-                    "; source=" + source.Count +
-                    "; mutations=" + mutations +
-                    "; incomplete=" + incomplete +
-                    "; budget=" + moveBudget),
-                flush: true);
-
-            if (incomplete)
-            {
-                ScheduleRefreshVisibleChatsContinue();
-            }
+            return source;
         }
 
         /// <summary>
@@ -2681,7 +2707,7 @@ namespace Unison.Core.ViewModels
             Task.Delay(delay, token).ContinueWith(t =>
             {
                 if (t.IsCanceled) return;
-                _ = _dispatcher.RunAsync(RefreshVisibleChats);
+                _ = _dispatcher.RunAsync(() => RefreshVisibleChats(reusePendingSource: true));
             });
         }
 
@@ -2722,8 +2748,9 @@ namespace Unison.Core.ViewModels
             // User-driven: paint immediately — do not sit behind enrichment debounce/hold.
             _refreshCts?.Cancel();
             _refreshContinueCts?.Cancel();
+            _pendingVisibleRefreshSource = null;
             _refreshDeferredForEnrichment = false;
-            _ = _dispatcher.RunAsync(RefreshVisibleChats);
+            _ = _dispatcher.RunAsync(() => RefreshVisibleChats());
         }
 
         /// <summary>

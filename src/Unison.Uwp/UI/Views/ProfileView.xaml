@@ -1,0 +1,207 @@
+<Page
+    x:Class="Unison.Uwp.UI.Views.ProfileView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Unison.Uwp.UI.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    d:DesignHeight="800"
+    d:DesignWidth="400"
+    Background="#01B051">
+
+    <Page.Resources>
+        <SolidColorBrush x:Key="ProfilePageBackgroundBrush" Color="#01B051"/>
+        <SolidColorBrush x:Key="ProfileCommandBarBrush" Color="#019944"/>
+        <SolidColorBrush x:Key="ProfileButtonHoverBrush" Color="#33FFFFFF"/>
+        <SolidColorBrush x:Key="ProfileButtonPressedBrush" Color="#55FFFFFF"/>
+
+        <Style x:Key="ProfileAppBarButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="16,4"/>
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="MinHeight" Value="0"/>
+            <Setter Property="Height" Value="64"/>
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="UseSystemFocusVisuals" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root"
+                                Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}"
+                                HorizontalAlignment="Stretch">
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CommonStates">
+                                    <VisualState x:Name="Normal"/>
+                                    <VisualState x:Name="PointerOver">
+                                        <Storyboard>
+                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Root"
+                                                                           Storyboard.TargetProperty="Background">
+                                                <DiscreteObjectKeyFrame KeyTime="0"
+                                                                        Value="{StaticResource ProfileButtonHoverBrush}"/>
+                                            </ObjectAnimationUsingKeyFrames>
+                                        </Storyboard>
+                                    </VisualState>
+                                    <VisualState x:Name="Pressed">
+                                        <Storyboard>
+                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Root"
+                                                                           Storyboard.TargetProperty="Background">
+                                                <DiscreteObjectKeyFrame KeyTime="0"
+                                                                        Value="{StaticResource ProfileButtonPressedBrush}"/>
+                                            </ObjectAnimationUsingKeyFrames>
+                                        </Storyboard>
+                                    </VisualState>
+                                    <VisualState x:Name="Disabled">
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Root"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="0.45"
+                                                             Duration="0"/>
+                                        </Storyboard>
+                                    </VisualState>
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Content="{TemplateBinding Content}"
+                                              Foreground="{TemplateBinding Foreground}"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Page.Resources>
+
+    <Grid Background="{StaticResource ProfilePageBackgroundBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="64"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Orientation="Horizontal" Margin="8,10,8,0">
+            <Button x:Name="BackButton"
+                    Command="{Binding BackCommand}"
+                    Style="{StaticResource ProfileAppBarButtonStyle}"
+                    Width="40"
+                    Height="40"
+                    Padding="4"
+                    HorizontalAlignment="Left"
+                    ToolTipService.ToolTip="Back">
+                <FontIcon Glyph="&#xE72B;"
+                          FontFamily="{StaticResource IconFont}"
+                          FontSize="16"
+                          Foreground="White"/>
+            </Button>
+            <TextBlock x:Name="TitleLabel"
+                       Margin="8,0,0,0"
+                       VerticalAlignment="Center"
+                       FontSize="20"
+                       FontFamily="{StaticResource MainFontSemibold}"
+                       Foreground="White"
+                       Text="{Binding DisplayTitle}"/>
+        </StackPanel>
+
+        <Grid Grid.Row="1">
+            <controls:ChatDetailUserInfoControl x:Name="UserInfoPanel"
+                                                HorizontalAlignment="Stretch"
+                                                VerticalAlignment="Stretch"/>
+            <ProgressRing x:Name="LoadingRing"
+                          Width="48"
+                          Height="48"
+                          IsActive="False"
+                          Visibility="Collapsed"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"/>
+            <TextBlock x:Name="ErrorLabel"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       Margin="24"
+                       TextWrapping="Wrap"
+                       TextAlignment="Center"
+                       Foreground="White"
+                       Visibility="Collapsed"/>
+        </Grid>
+
+        <Grid Grid.Row="2"
+              Height="64"
+              Background="{StaticResource ProfileCommandBarBrush}">
+            <StackPanel Orientation="Horizontal"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Stretch">
+                <Button x:Name="StartChatButton"
+                        Style="{StaticResource ProfileAppBarButtonStyle}"
+                        Command="{Binding StartChatCommand}"
+                        ToolTipService.ToolTip="Start chat">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Grid Height="28" Width="40" HorizontalAlignment="Center">
+                            <FontIcon Glyph="&#xE8BD;"
+                                      FontFamily="{StaticResource IconFont}"
+                                      FontSize="18"
+                                      Foreground="White"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"/>
+                        </Grid>
+                        <TextBlock x:Uid="Profile_StartChatAppBarLabel"
+                                   Text="Start&#x0a;chat"
+                                   FontSize="10"
+                                   FontFamily="{StaticResource MainFont}"
+                                   Foreground="White"
+                                   Margin="0,2,0,0"
+                                   TextAlignment="Center"
+                                   TextWrapping="Wrap"
+                                   TextLineBounds="Tight"
+                                   MaxWidth="68"
+                                   MaxLines="2"/>
+                    </StackPanel>
+                </Button>
+                <Button x:Name="PinContactButton"
+                        Style="{StaticResource ProfileAppBarButtonStyle}"
+                        Click="PinContactButton_Click"
+                        ToolTipService.ToolTip="Pin contact">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Grid Height="30" Width="40" HorizontalAlignment="Center">
+                            <TextBlock Text="&#xEB16;"
+                                       FontFamily="{StaticResource LegacyIconFont}"
+                                       FontSize="24"
+                                       TextLineBounds="Tight"
+                                       Foreground="White"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                        </Grid>
+                        <TextBlock x:Name="PinContactButtonLabel"
+                                   x:Uid="ChatDetailInfo_PinContactAppBarLabel"
+                                   Text="Pin&#x0a;contact"
+                                   FontSize="10"
+                                   FontFamily="{StaticResource MainFont}"
+                                   Foreground="White"
+                                   Margin="0,2,0,0"
+                                   TextAlignment="Center"
+                                   TextWrapping="Wrap"
+                                   TextLineBounds="Tight"
+                                   MaxWidth="68"
+                                   MaxLines="2"/>
+                        <TextBlock x:Name="UnpinContactButtonLabel"
+                                   x:Uid="ChatDetailInfo_UnpinContactAppBarLabel"
+                                   Text="Unpin&#x0a;contact"
+                                   Visibility="Collapsed"
+                                   FontSize="10"
+                                   FontFamily="{StaticResource MainFont}"
+                                   Foreground="White"
+                                   Margin="0,2,0,0"
+                                   TextAlignment="Center"
+                                   TextWrapping="Wrap"
+                                   TextLineBounds="Tight"
+                                   MaxWidth="68"
+                                   MaxLines="2"/>
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Page>

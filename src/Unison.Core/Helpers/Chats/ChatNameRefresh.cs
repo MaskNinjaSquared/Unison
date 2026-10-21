@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Unison.Core.Contracts;
+using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Models;
 using Unison.Core.State;
 
@@ -12,9 +13,10 @@ namespace Unison.Core.Helpers
     /// </summary>
     /// <remarks>
     /// Run after anything that learns names: a usync answer, the address book, a group listing.
-    /// On frugal devices the work is sliced across dispatcher turns so a single apply cannot hold
-    /// the UI thread for hundreds of PropertyChanged notifications. <see cref="Applied"/> is
-    /// raised once inside the last UI pass (never with zero).
+    /// Group titles go through <see cref="IGroupNaming"/> so a cached subject wins over the
+    /// address book. On frugal devices the work is sliced across dispatcher turns so a single
+    /// apply cannot hold the UI thread for hundreds of PropertyChanged notifications.
+    /// <see cref="Applied"/> is raised once inside the last UI pass (never with zero).
     /// </remarks>
     public sealed class ChatNameRefresh
     {
@@ -26,6 +28,7 @@ namespace Unison.Core.Helpers
         private readonly IDispatcher _ui;
         private readonly IChatStateStore _chats;
         private readonly ContactDisplayNames _names;
+        private readonly IGroupNaming _groupNaming;
         private readonly ISelfMarkerNaming _markers;
         private readonly Func<bool> _preferFrugal;
 
@@ -34,12 +37,14 @@ namespace Unison.Core.Helpers
             IChatStateStore chats,
             ContactDisplayNames names,
             ISelfMarkerNaming markers,
+            IGroupNaming groupNaming,
             Func<bool> preferFrugal = null)
         {
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _chats = chats ?? throw new ArgumentNullException(nameof(chats));
             _names = names ?? throw new ArgumentNullException(nameof(names));
             _markers = markers ?? throw new ArgumentNullException(nameof(markers));
+            _groupNaming = groupNaming ?? throw new ArgumentNullException(nameof(groupNaming));
             _preferFrugal = preferFrugal ?? (() => false);
         }
 
@@ -86,7 +91,7 @@ namespace Unison.Core.Helpers
 
                     totalUpdated += ResolvedNameApply.Apply(
                         batch,
-                        _names.Resolve,
+                        ResolveForApply,
                         IsMeaningful,
                         membersToo: true);
 
@@ -108,6 +113,17 @@ namespace Unison.Core.Helpers
                 start = sliceStart + sliceSize;
                 await Task.Delay(FrugalSliceGap).ConfigureAwait(false);
             }
+        }
+
+        private string ResolveForApply(string jid, string context)
+        {
+            if (string.Equals(context, "chat", StringComparison.Ordinal) &&
+                JidHelper.IsGroupJid(jid))
+            {
+                return _groupNaming.ResolveChatDisplayName(jid);
+            }
+
+            return _names.Resolve(jid, context);
         }
 
         private bool IsMeaningful(string label, string jid, bool isGroup) =>

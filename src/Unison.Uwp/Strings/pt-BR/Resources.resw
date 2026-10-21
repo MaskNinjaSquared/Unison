@@ -514,6 +514,18 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="NewChat_Error" xml:space="preserve">
     <value>Erro: {0}</value>
   </data>
+  <data name="Profile_Title" xml:space="preserve">
+    <value>Perfil</value>
+  </data>
+  <data name="Profile_StartChatAppBarLabel.Text" xml:space="preserve">
+    <value>Iniciar&#x0a;chat</value>
+  </data>
+  <data name="Profile_MissingContact" xml:space="preserve">
+    <value>Contato não encontrado.</value>
+  </data>
+  <data name="Profile_LoadFailed" xml:space="preserve">
+    <value>Não foi possível abrir este perfil.</value>
+  </data>
   <data name="Debug_Title.Text" xml:space="preserve">
     <value>Depuração e logs de protocolo</value>
   </data>
@@ -960,6 +972,9 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="Toast_AppName" xml:space="preserve">
     <value>Unison</value>
   </data>
+  <data name="ChatList_ViewProfile.Text" xml:space="preserve">
+    <value>Ver perfil</value>
+  </data>
   <data name="ChatList_PinChat.Text" xml:space="preserve">
     <value>Fixar conversa</value>
   </data>
@@ -1181,6 +1196,21 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   </data>
   <data name="ChatDetailInfo_UnpinAppBarLabel.Text" xml:space="preserve">
     <value>Desafixar do&#x0a;Início</value>
+  </data>
+  <data name="ChatDetailInfo_PinContactAppBarLabel.Text" xml:space="preserve">
+    <value>Fixar&#x0a;contato</value>
+  </data>
+  <data name="ChatDetailInfo_UnpinContactAppBarLabel.Text" xml:space="preserve">
+    <value>Desafixar&#x0a;contato</value>
+  </data>
+  <data name="Tile_ContactProfileTitle" xml:space="preserve">
+    <value>Perfil de {0}</value>
+  </data>
+  <data name="Tile_ContactNoNewMessages" xml:space="preserve">
+    <value>Nenhuma Nova Mensagem</value>
+  </data>
+  <data name="Tile_ContactHasNewMessages" xml:space="preserve">
+    <value>{0} Novas Mensagens</value>
   </data>
   <data name="ChatDetailInfo_AddContactAppBarLabel.Text" xml:space="preserve">
     <value>Adicionar&#x0a;contato</value>

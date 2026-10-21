@@ -9,7 +9,8 @@ Codepoints (Private Use Area):
   EB05  mic        (composer-mic.png)
   EB06  newchat    (appbar-newchat.png)     speech bubble
   EB07  pin        (appbar-pin.png)         pin conversation
-  EB08  pinstart   (appbar-pin-start.png)   pin to Start menu
+  EB08  pinstart   (appbar-pin-start.png)   pin chat to Start (opens chat)
+  EB16  pincontact (appbar-pin-contact.png) pin contact to Start (opens profile)
   EB09  play       (media-play.png)
   EB0A  pause      (media-pause.png)
   EB0B  download   (media-download.png)
@@ -61,6 +62,7 @@ GLYPHS = [
     ("newchat", 0xEB06, "appbar-newchat.png", 0.90),
     ("pin", 0xEB07, "appbar-pin.png", 0.90),
     ("pinstart", 0xEB08, "appbar-pin-start.png", 0.92),
+    ("pincontact", 0xEB16, "appbar-pin-contact.png", 0.92),
     ("play", 0xEB09, "media-play.png", 0.88),
     ("pause", 0xEB0A, "media-pause.png", 0.88),
     ("download", 0xEB0B, "media-download.png", 0.90),

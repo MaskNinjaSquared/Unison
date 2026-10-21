@@ -6,15 +6,24 @@ namespace Unison.Core.Contracts
 {
     /// <summary>
     /// Cross-platform chat shortcuts (Win SecondaryTile / Android widget / iOS shortcut).
-    /// Win implementation pins a Start tile with contact photo + name, adaptive peek, and badge unread.
+    /// Win: chat Start tiles open the conversation (<c>chat=</c>); contact Start tiles open Profile (<c>profile=</c>).
     /// </summary>
     public interface IShortcutService
     {
-        /// <summary>Pins (or refreshes) a Start shortcut for the chat. Personal and group chats allowed.</summary>
+        /// <summary>Pins (or refreshes) a Start shortcut for the chat. Opens the conversation on tap.</summary>
         Task<bool> PinChatAsync(ChatItem chat);
 
-        /// <summary>Removes the Start shortcut when present.</summary>
+        /// <summary>Removes the chat Start shortcut when present.</summary>
         Task<bool> UnpinChatAsync(string chatJid);
+
+        /// <summary>
+        /// Pins (or refreshes) a Start shortcut for the contact profile.
+        /// Opens the full-page Profile on tap (<c>profile=</c>).
+        /// </summary>
+        Task<bool> PinContactAsync(ChatItem chat);
+
+        /// <summary>Removes the contact Profile Start shortcut when present.</summary>
+        Task<bool> UnpinContactAsync(string chatJid);
 
         /// <summary>
         /// Removes every Start shortcut this app created. Each removal asks the system,
@@ -22,8 +31,11 @@ namespace Unison.Core.Contracts
         /// </summary>
         Task UnpinAllChatsAsync();
 
-        /// <summary>True when a Start shortcut exists for this chat.</summary>
+        /// <summary>True when a chat Start shortcut exists.</summary>
         Task<bool> IsChatPinnedAsync(string chatJid);
+
+        /// <summary>True when a contact Profile Start shortcut exists.</summary>
+        Task<bool> IsContactPinnedAsync(string chatJid);
 
         /// <summary>
         /// Updates badge unread for a pinned chat shortcut only (no-op when not pinned).
@@ -32,8 +44,8 @@ namespace Unison.Core.Contracts
         void UpdateChatUnread(string chatJid, int unreadCount);
 
         /// <summary>
-        /// Updates badge + adaptive live tile (circular peek avatar + preview) for a pinned chat.
-        /// No-op when not pinned.
+        /// Updates badge + adaptive live tile for a pinned chat Start tile.
+        /// Also refreshes a pinned contact Profile tile for the same JID when present.
         /// </summary>
         void UpdatePinnedChatTile(
             string chatJid,
@@ -43,7 +55,7 @@ namespace Unison.Core.Contracts
             string avatarUrl);
 
         /// <summary>
-        /// Reconciles badges/live content for all existing pinned chat shortcuts from current chat state
+        /// Reconciles badges/live content for all existing pinned chat and contact shortcuts
         /// (call on app launch after chats load).
         /// </summary>
         Task RefreshPinnedUnreadAsync(IEnumerable<ChatItem> chats);

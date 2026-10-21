@@ -48,6 +48,8 @@ namespace Unison.Uwp.Services.Themes
                         "WhatsApp Legacy hosts chats/status/archived in the shell pivot, not the overlay frame.");
                 case NavigationDestination.Debug:
                     return typeof(Shell.WhatsAppLegacy.Views.DebugView);
+                case NavigationDestination.Profile:
+                    return typeof(Shell.WhatsAppLegacy.Views.ProfileView);
                 default:
                     return base.ResolveShellPage(destination);
             }
@@ -76,6 +78,12 @@ namespace Unison.Uwp.Services.Themes
             if (content is Shell.WhatsAppLegacy.Views.DebugView)
             {
                 destination = NavigationDestination.Debug;
+                return true;
+            }
+
+            if (content is Shell.WhatsAppLegacy.Views.ProfileView)
+            {
+                destination = NavigationDestination.Profile;
                 return true;
             }
 

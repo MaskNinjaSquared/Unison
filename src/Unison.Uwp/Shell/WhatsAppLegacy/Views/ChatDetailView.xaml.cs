@@ -182,20 +182,20 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         }
 
         /// <summary>
-        /// WhatsApp Legacy: solid page-colored 54px composer + themed mic/send bitmaps.
+        /// WhatsApp Legacy: themed mic/send/attach glyphs. Composer height grows like Unison
+        /// (XAML MinHeight/MaxHeight + Wrap) — do not lock the host to a fixed 54px strip.
         /// </summary>
         private void ApplyLegacyComposerChrome()
         {
-            const double ComposerHeight = 54;
             try
             {
-                // The attach dock shares this grid with the composer. Locking the grid to the
-                // composer height clips the dock to that strip, so only the composer is fixed.
+                // Let the host grow with the TextBox (Unigram-style). A fixed Height here was
+                // clipping multi-line input and forcing MaxHeight=40 / NoWrap on MessageInput.
                 if (ComposerHost != null)
                 {
-                    ComposerHost.Height = ComposerHeight;
-                    ComposerHost.MinHeight = ComposerHeight;
-                    ComposerHost.MaxHeight = ComposerHeight;
+                    ComposerHost.ClearValue(FrameworkElement.HeightProperty);
+                    ComposerHost.ClearValue(FrameworkElement.MaxHeightProperty);
+                    ComposerHost.MinHeight = 54;
                 }
 
                 var bar = ComposerHost?.Parent as FrameworkElement;
@@ -223,52 +223,55 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                         var grid = child as Grid;
                         if (grid != null)
                         {
-                            grid.Padding = new Thickness(8, 0, 8, 0);
-                            grid.Height = ComposerHeight;
+                            grid.Padding = new Thickness(8, 7, 8, 7);
+                            grid.ClearValue(FrameworkElement.HeightProperty);
+                            grid.ClearValue(FrameworkElement.MaxHeightProperty);
+                            grid.MinHeight = 54;
                         }
                     }
                 }
 
                 // Anexo | Texto | Enviar | Áudio — glyphs from LegacyIconFont (EB03/EB04/EB05).
-                // Which attach button is showing is the layout state's decision: the bar on a
-                // phone, the flyout on the desktop. Both carry the same clip glyph, centered.
+                // Bottom-align icons so they stay on the single-line baseline while the box grows.
                 Brush attachBrush = ResolveLegacyBrush("WhatsAppTextHighBrush", Colors.White);
                 if (AttachBarButton != null)
                 {
                     Grid.SetColumn(AttachBarButton, 0);
-                    AttachBarButton.VerticalAlignment = VerticalAlignment.Center;
+                    AttachBarButton.VerticalAlignment = VerticalAlignment.Bottom;
                     ApplyLegacyFontIconButton(AttachBarButton, "\uEB03", attachBrush);
                 }
 
                 if (AttachFlyoutButton != null)
                 {
                     Grid.SetColumn(AttachFlyoutButton, 0);
-                    AttachFlyoutButton.VerticalAlignment = VerticalAlignment.Center;
+                    AttachFlyoutButton.VerticalAlignment = VerticalAlignment.Bottom;
                     ApplyLegacyFontIconButton(AttachFlyoutButton, "\uEB03", attachBrush);
                 }
 
                 if (SendButton != null)
                 {
                     Grid.SetColumn(SendButton, 2);
-                    SendButton.VerticalAlignment = VerticalAlignment.Center;
+                    SendButton.VerticalAlignment = VerticalAlignment.Bottom;
                     ApplyLegacyFontIconButton(SendButton, "\uEB04", ResolveLegacyBrush("WhatsAppTextHighBrush", Colors.White));
                 }
 
                 if (MicButton != null)
                 {
                     Grid.SetColumn(MicButton, 3);
-                    MicButton.VerticalAlignment = VerticalAlignment.Center;
+                    MicButton.VerticalAlignment = VerticalAlignment.Bottom;
                     ApplyLegacyFontIconButton(MicButton, "\uEB05", ResolveLegacyBrush("WhatsAppTextHighBrush", Colors.White));
                 }
 
                 if (MessageInput != null)
                 {
                     Grid.SetColumn(MessageInput, 1);
-                    MessageInput.MinHeight = 32;
-                    MessageInput.MaxHeight = 40;
-                    MessageInput.TextWrapping = TextWrapping.NoWrap;
-                    MessageInput.Padding = new Thickness(8, 6, 8, 6);
-                    MessageInput.VerticalAlignment = VerticalAlignment.Center;
+                    MessageInput.ClearValue(FrameworkElement.HeightProperty);
+                    MessageInput.MinHeight = 40;
+                    MessageInput.MaxHeight = 192;
+                    MessageInput.TextWrapping = TextWrapping.Wrap;
+                    MessageInput.Padding = new Thickness(10, 8, 6, 5);
+                    MessageInput.VerticalAlignment = VerticalAlignment.Bottom;
+                    MessageInput.VerticalContentAlignment = VerticalAlignment.Center;
                 }
 
                 // Header / composer tooltips were English literals; bind them to the same keys
@@ -1314,6 +1317,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             ViewModel.RefreshLocalChatState();
             bool muted = ViewModel.ShowUnmuteOption;
             bool widgetPinned = ViewModel.IsWidgetPinned;
+            bool liveTiles = ViewModel.AreLiveTilesAvailable;
             bool archived = ViewModel.ActiveChat?.Status == ChatStatus.Archived;
             bool compactHeader = IsCompactHeaderCallLayout();
             bool canVoiceCall = ViewModel.CanCallPhone;
@@ -1334,11 +1338,15 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 }
                 else if (string.Equals(tag, "widgetPin", StringComparison.Ordinal) && menuItem != null)
                 {
-                    menuItem.Visibility = widgetPinned ? Visibility.Collapsed : Visibility.Visible;
+                    menuItem.Visibility = liveTiles && !widgetPinned
+                        ? Visibility.Visible
+                        : Visibility.Collapsed;
                 }
                 else if (string.Equals(tag, "widgetUnpin", StringComparison.Ordinal) && menuItem != null)
                 {
-                    menuItem.Visibility = widgetPinned ? Visibility.Visible : Visibility.Collapsed;
+                    menuItem.Visibility = liveTiles && widgetPinned
+                        ? Visibility.Visible
+                        : Visibility.Collapsed;
                 }
                 else if (string.Equals(tag, "addContact", StringComparison.Ordinal) && menuItem != null)
                 {

@@ -235,7 +235,11 @@ namespace Unison.Core.ViewModels
             BackCommand = new RelayCommand(() => BackRequested?.Invoke(this, EventArgs.Empty));
             PinToStartCommand = new RelayCommand(
                 () => _ = ToggleWidgetPinAsync(),
-                () => ActiveChat != null && !string.IsNullOrWhiteSpace(ActiveChat.JID) && _shortcutService != null && _chatStore != null);
+                () => AreLiveTilesAvailable &&
+                      ActiveChat != null &&
+                      !string.IsNullOrWhiteSpace(ActiveChat.JID) &&
+                      _shortcutService != null &&
+                      _chatStore != null);
             DeleteChatCommand = new RelayCommand(
                 () => _ = DeleteActiveChatAsync(),
                 () => CanDeleteActiveChat());
@@ -1044,6 +1048,12 @@ namespace Unison.Core.ViewModels
 
         /// <summary>Whether the Start tile for this chat is pinned (drives pin/unpin menu Visibility).</summary>
         public bool IsWidgetPinned => ActiveChat != null && ActiveChat.IsWidgetPinned;
+
+        /// <summary>
+        /// Start Live Tile pin UX (false on Windows 11). Null provider → available (tests / hosts without SKU).
+        /// </summary>
+        public bool AreLiveTilesAvailable =>
+            _systemInfo == null || _systemInfo.LiveTilesCompatible();
 
         /// <summary>True when mute submenu should show duration options (not unmuted→unmute-only).</summary>
         public bool ShowMuteDurationOptions => ActiveChat != null && !ActiveChat.IsMutedLocally;

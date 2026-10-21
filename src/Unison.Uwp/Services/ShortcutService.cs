@@ -11,20 +11,36 @@ using Windows.UI.Notifications;
 using Windows.UI.StartScreen;
 using Unison.Core.Contracts;
 using Unison.Core.Models;
+using Unison.Uwp.Helpers;
 
 namespace Unison.Uwp.Services
 {
     /// <summary>
     /// WinRT SecondaryTile adapter for <see cref="IShortcutService"/>.
-    /// Live content uses adaptive peek image with circular crop when avatar is local.
+    /// Chat tiles (<c>c_</c>) open the conversation; contact tiles (<c>p_</c>) open Profile.
     /// </summary>
     public sealed class ShortcutService : IShortcutService
     {
         private static readonly Uri DefaultLogoUri =
             new Uri("ms-appx:///Assets/Square150x150Logo.png");
 
+        /// <summary>Segoe MDL2 Message (E8BD) — adaptive text, not a PNG plate.</summary>
+        private const string Mdl2MessageGlyphXml = "&#xE8BD;";
+
+        /// <summary>Segoe MDL2 Contact2 (E77B) — adaptive text, not a PNG plate.</summary>
+        private const string Mdl2ContactGlyphXml = "&#xE77B;";
+
         private const string TileIdPrefix = "c_";
+        private const string ContactTileIdPrefix = "p_";
         private const int PreviewMaxChars = 120;
+
+        /// <summary>
+        /// Distinct tags so <see cref="TileUpdater.EnableNotificationQueue"/> keeps every frame.
+        /// Untagged updates replace each other and the small tile never rotates.
+        /// </summary>
+        private const string QueueTagPhoto = "photo";
+        private const string QueueTagGlyph = "glyph";
+        private const string QueueTagUnread = "unread";
 
         public async Task<bool> PinChatAsync(ChatItem chat)
         {
@@ -35,7 +51,7 @@ namespace Unison.Uwp.Services
 
             string tileId = BuildTileId(chat.JID);
             string displayName = ResolveDisplayName(chat);
-            string arguments = BuildLaunchArgument(chat.JID);
+            string arguments = BuildChatLaunchArgument(chat.JID);
             Uri logo = ResolveLogoUri(chat.GetAvatarUrl(preferHigh: false));
 
             try
@@ -47,8 +63,7 @@ namespace Unison.Uwp.Services
                         DisplayName = displayName,
                         Arguments = arguments
                     };
-                    existing.VisualElements.Square150x150Logo = logo;
-                    existing.VisualElements.ShowNameOnSquare150x150Logo = true;
+                    ApplyChatTileChrome(existing, logo);
                     await existing.UpdateAsync();
                     PushPinnedPresentation(chat);
                     return true;
@@ -63,8 +78,7 @@ namespace Unison.Uwp.Services
                 {
                     DisplayName = displayName
                 };
-                tile.VisualElements.ShowNameOnSquare150x150Logo = true;
-                tile.VisualElements.ForegroundText = ForegroundText.Light;
+                ApplyChatTileChrome(tile, logo);
 
                 bool created = await tile.RequestCreateAsync();
                 if (created)
@@ -77,6 +91,59 @@ namespace Unison.Uwp.Services
             catch (Exception ex)
             {
                 Debug.WriteLine("[ShortcutService] PinChatAsync failed: " + ex.Message);
+                return false;
+            }
+        }
+
+        public async Task<bool> PinContactAsync(ChatItem chat)
+        {
+            if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
+            {
+                return false;
+            }
+
+            string tileId = BuildContactTileId(chat.JID);
+            string displayName = ResolveDisplayName(chat);
+            string arguments = BuildProfileLaunchArgument(chat.JID);
+            Uri logo = ResolveLogoUri(chat.GetAvatarUrl(preferHigh: false));
+
+            try
+            {
+                if (SecondaryTile.Exists(tileId))
+                {
+                    var existing = new SecondaryTile(tileId)
+                    {
+                        DisplayName = displayName,
+                        Arguments = arguments
+                    };
+                    ApplyContactTileChrome(existing, logo);
+                    await existing.UpdateAsync();
+                    PushPinnedContactPresentation(chat);
+                    return true;
+                }
+
+                var tile = new SecondaryTile(
+                    tileId,
+                    displayName,
+                    arguments,
+                    logo,
+                    TileSize.Default)
+                {
+                    DisplayName = displayName
+                };
+                ApplyContactTileChrome(tile, logo);
+
+                bool created = await tile.RequestCreateAsync();
+                if (created)
+                {
+                    PushPinnedContactPresentation(chat);
+                }
+
+                return created;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ShortcutService] PinContactAsync failed: " + ex.Message);
                 return false;
             }
         }
@@ -164,7 +231,8 @@ namespace Unison.Uwp.Services
             {
                 if (tile == null ||
                     string.IsNullOrWhiteSpace(tile.TileId) ||
-                    !tile.TileId.StartsWith(TileIdPrefix, StringComparison.OrdinalIgnoreCase))
+                    (!tile.TileId.StartsWith(TileIdPrefix, StringComparison.OrdinalIgnoreCase) &&
+                     !tile.TileId.StartsWith(ContactTileIdPrefix, StringComparison.OrdinalIgnoreCase)))
                 {
                     continue;
                 }
@@ -179,6 +247,39 @@ namespace Unison.Uwp.Services
                 {
                     Debug.WriteLine("[ShortcutService] UnpinAll " + tile.TileId + " failed: " + ex.Message);
                 }
+            }
+        }
+
+        public async Task<bool> UnpinContactAsync(string chatJid)
+        {
+            if (string.IsNullOrWhiteSpace(chatJid))
+            {
+                return false;
+            }
+
+            string tileId = BuildContactTileId(chatJid);
+            try
+            {
+                if (!SecondaryTile.Exists(tileId))
+                {
+                    return false;
+                }
+
+                try
+                {
+                    TileUpdateManager.CreateTileUpdaterForSecondaryTile(tileId).Clear();
+                    BadgeUpdateManager.CreateBadgeUpdaterForSecondaryTile(tileId).Clear();
+                }
+                catch
+                {
+                }
+
+                return await new SecondaryTile(tileId).RequestDeleteAsync();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ShortcutService] UnpinContactAsync failed: " + ex.Message);
+                return false;
             }
         }
 
@@ -199,6 +300,23 @@ namespace Unison.Uwp.Services
             }
         }
 
+        public Task<bool> IsContactPinnedAsync(string chatJid)
+        {
+            if (string.IsNullOrWhiteSpace(chatJid))
+            {
+                return Task.FromResult(false);
+            }
+
+            try
+            {
+                return Task.FromResult(SecondaryTile.Exists(BuildContactTileId(chatJid)));
+            }
+            catch
+            {
+                return Task.FromResult(false);
+            }
+        }
+
         public void UpdateChatUnread(string chatJid, int unreadCount)
         {
             if (string.IsNullOrWhiteSpace(chatJid))
@@ -206,15 +324,39 @@ namespace Unison.Uwp.Services
                 return;
             }
 
-            string tileId = BuildTileId(chatJid);
             try
             {
-                if (!SecondaryTile.Exists(tileId))
+                string chatTileId = BuildTileId(chatJid);
+                if (SecondaryTile.Exists(chatTileId))
                 {
-                    return;
+                    ApplyBadge(chatTileId, unreadCount);
                 }
 
-                ApplyBadge(tileId, unreadCount);
+                string contactTileId = BuildContactTileId(chatJid);
+                if (SecondaryTile.Exists(contactTileId))
+                {
+                    string displayName = "User";
+                    Uri logo = DefaultLogoUri;
+                    try
+                    {
+                        var existing = new SecondaryTile(contactTileId);
+                        if (!string.IsNullOrWhiteSpace(existing.DisplayName))
+                        {
+                            displayName = existing.DisplayName.Trim();
+                        }
+
+                        if (existing.VisualElements?.Square150x150Logo != null)
+                        {
+                            logo = existing.VisualElements.Square150x150Logo;
+                        }
+                    }
+                    catch
+                    {
+                    }
+
+                    PushContactLiveTiles(contactTileId, displayName, logo, motto: null, unreadCount);
+                    ApplyBadge(contactTileId, unreadCount);
+                }
             }
             catch (Exception ex)
             {
@@ -234,21 +376,24 @@ namespace Unison.Uwp.Services
                 return;
             }
 
-            string tileId = BuildTileId(chatJid);
+            string safeTitle = string.IsNullOrWhiteSpace(title) ? "Chat" : title.Trim();
+            Uri logo = ResolveLogoUri(avatarUrl);
+
             try
             {
-                if (!SecondaryTile.Exists(tileId))
+                string chatTileId = BuildTileId(chatJid);
+                if (SecondaryTile.Exists(chatTileId))
                 {
-                    return;
+                    PushLiveTile(chatTileId, safeTitle, preview, logo);
+                    ApplyBadge(chatTileId, unreadCount);
                 }
 
-                ApplyBadge(tileId, unreadCount);
-                PushLiveTile(
-                    tileId,
-                    string.IsNullOrWhiteSpace(title) ? "Chat" : title.Trim(),
-                    preview,
-                    ResolveLogoUri(avatarUrl),
-                    unreadCount);
+                string contactTileId = BuildContactTileId(chatJid);
+                if (SecondaryTile.Exists(contactTileId))
+                {
+                    PushContactLiveTiles(contactTileId, safeTitle, logo, motto: null, unreadCount);
+                    ApplyBadge(contactTileId, unreadCount);
+                }
             }
             catch (Exception ex)
             {
@@ -274,7 +419,8 @@ namespace Unison.Uwp.Services
                 return;
             }
 
-            var byTileId = new Dictionary<string, ChatItem>(StringComparer.OrdinalIgnoreCase);
+            var byChatTileId = new Dictionary<string, ChatItem>(StringComparer.OrdinalIgnoreCase);
+            var byContactTileId = new Dictionary<string, ChatItem>(StringComparer.OrdinalIgnoreCase);
             if (chats != null)
             {
                 foreach (var chat in chats)
@@ -284,7 +430,8 @@ namespace Unison.Uwp.Services
                         continue;
                     }
 
-                    byTileId[BuildTileId(chat.JID)] = chat;
+                    byChatTileId[BuildTileId(chat.JID)] = chat;
+                    byContactTileId[BuildContactTileId(chat.JID)] = chat;
                 }
             }
 
@@ -295,36 +442,60 @@ namespace Unison.Uwp.Services
                     continue;
                 }
 
-                if (!tile.TileId.StartsWith(TileIdPrefix, StringComparison.OrdinalIgnoreCase))
+                if (tile.TileId.StartsWith(TileIdPrefix, StringComparison.OrdinalIgnoreCase))
                 {
+                    if (byChatTileId.TryGetValue(tile.TileId, out var chat))
+                    {
+                        PushPinnedPresentation(chat);
+                    }
+                    else
+                    {
+                        TryClearBadge(tile.TileId);
+                    }
+
                     continue;
                 }
 
-                if (byTileId.TryGetValue(tile.TileId, out var chat))
+                if (tile.TileId.StartsWith(ContactTileIdPrefix, StringComparison.OrdinalIgnoreCase))
                 {
-                    PushPinnedPresentation(chat);
-                }
-                else
-                {
-                    try
+                    if (byContactTileId.TryGetValue(tile.TileId, out var contactChat))
                     {
-                        BadgeUpdateManager.CreateBadgeUpdaterForSecondaryTile(tile.TileId).Clear();
+                        PushPinnedContactPresentation(contactChat);
                     }
-                    catch
+                    else
                     {
+                        TryClearBadge(tile.TileId);
                     }
                 }
             }
         }
 
-        /// <summary>Stable SecondaryTile id (≤64 chars, alphanumeric + underscore).</summary>
-        public static string BuildTileId(string chatJid)
+        private static void TryClearBadge(string tileId)
+        {
+            try
+            {
+                BadgeUpdateManager.CreateBadgeUpdaterForSecondaryTile(tileId).Clear();
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>Stable SecondaryTile id for chat Start tiles (≤64 chars).</summary>
+        public static string BuildTileId(string chatJid) =>
+            BuildPrefixedTileId(TileIdPrefix, chatJid);
+
+        /// <summary>Stable SecondaryTile id for contact Profile Start tiles.</summary>
+        public static string BuildContactTileId(string chatJid) =>
+            BuildPrefixedTileId(ContactTileIdPrefix, chatJid);
+
+        private static string BuildPrefixedTileId(string prefix, string chatJid)
         {
             string norm = (chatJid ?? string.Empty).Trim().ToLowerInvariant();
             using (var sha = SHA1.Create())
             {
                 byte[] hash = sha.ComputeHash(Encoding.UTF8.GetBytes(norm));
-                var sb = new StringBuilder(TileIdPrefix, TileIdPrefix.Length + 32);
+                var sb = new StringBuilder(prefix, prefix.Length + 32);
                 for (int i = 0; i < 16 && i < hash.Length; i++)
                 {
                     sb.Append(hash[i].ToString("x2"));
@@ -348,12 +519,41 @@ namespace Unison.Uwp.Services
                 preview = chat.LastMessageAuthor.Trim() + ": " + preview.Trim();
             }
 
-            UpdatePinnedChatTile(
-                chat.JID,
-                chat.UnreadCount,
+            string tileId = BuildTileId(chat.JID);
+            if (!SecondaryTile.Exists(tileId))
+            {
+                return;
+            }
+
+            PushLiveTile(
+                tileId,
                 ResolveDisplayName(chat),
                 preview,
-                chat.GetAvatarUrl(preferHigh: false));
+                ResolveLogoUri(chat.GetAvatarUrl(preferHigh: false)));
+            // Badge after content so the queue Clear cannot leave a stale empty counter frame.
+            ApplyBadge(tileId, chat.UnreadCount);
+        }
+
+        private void PushPinnedContactPresentation(ChatItem chat)
+        {
+            if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
+            {
+                return;
+            }
+
+            string tileId = BuildContactTileId(chat.JID);
+            if (!SecondaryTile.Exists(tileId))
+            {
+                return;
+            }
+
+            PushContactLiveTiles(
+                tileId,
+                ResolveDisplayName(chat),
+                ResolveLogoUri(chat.GetAvatarUrl(preferHigh: false)),
+                ResolveContactMotto(chat),
+                chat.UnreadCount);
+            ApplyBadge(tileId, chat.UnreadCount);
         }
 
         private static void ApplyBadge(string tileId, int unreadCount)
@@ -383,63 +583,197 @@ namespace Unison.Uwp.Services
         }
 
         /// <summary>
-        /// Adaptive secondary-tile live content with circular peek avatar (Win10 1511+).
+        /// Chat Start tile (Imgur-style): medium title + preview centered with MDL2 message glyph;
+        /// TileSmall queue rotates photo ↔ MDL2 glyph. Badge carries the unread count.
         /// </summary>
         private static void PushLiveTile(
             string tileId,
             string title,
             string preview,
-            Uri imageUri,
-            int unreadCount)
+            Uri imageUri)
         {
             string safeTitle = EscapeXml(Truncate(title, 40));
             string safePreview = EscapeXml(Truncate(preview, PreviewMaxChars));
             string imageSrc = EscapeXml(imageUri?.AbsoluteUri ?? DefaultLogoUri.AbsoluteUri);
-            bool hasPeekImage = imageUri != null;
 
-            string unreadLine = unreadCount > 0
-                ? EscapeXml(unreadCount == 1 ? "1 unread" : unreadCount + " unread")
-                : string.Empty;
-
-            // Peek + hint-crop=circle animates the avatar in from the top.
-            string peek =
-                hasPeekImage
-                    ? "<image placement=\"peek\" hint-crop=\"circle\" src=\"" + imageSrc + "\"/>"
-                    : string.Empty;
-
-            string mediumBody = string.IsNullOrEmpty(safePreview)
-                ? "<text hint-style=\"body\">" + safeTitle + "</text>"
-                : "<text hint-style=\"caption\">" + safeTitle + "</text>" +
-                  "<text hint-style=\"body\" hint-wrap=\"true\">" + safePreview + "</text>";
-
-            if (!string.IsNullOrEmpty(unreadLine))
-            {
-                mediumBody += "<text hint-style=\"captionSubtle\">" + unreadLine + "</text>";
-            }
-
-            string wideBody =
-                "<text hint-style=\"subtitle\">" + safeTitle + "</text>" +
+            // Medium / wide: vertically centered like Imgur text frames — glyph + name + preview.
+            string mediumBody =
+                "<text hint-style=\"title\" hint-align=\"center\">" + Mdl2MessageGlyphXml + "</text>" +
+                "<text hint-style=\"base\" hint-align=\"center\" hint-maxLines=\"2\">" + safeTitle + "</text>" +
                 (string.IsNullOrEmpty(safePreview)
                     ? string.Empty
-                    : "<text hint-style=\"body\" hint-wrap=\"true\">" + safePreview + "</text>") +
-                (string.IsNullOrEmpty(unreadLine)
-                    ? string.Empty
-                    : "<text hint-style=\"captionSubtle\">" + unreadLine + "</text>");
+                    : "<text hint-style=\"captionSubtle\" hint-align=\"center\" hint-wrap=\"true\" hint-maxLines=\"2\">" +
+                      safePreview + "</text>");
 
-            string largeBody = wideBody;
+            string wideBody =
+                "<text hint-style=\"header\" hint-align=\"center\">" + Mdl2MessageGlyphXml + "</text>" +
+                "<text hint-style=\"subtitle\" hint-align=\"center\" hint-maxLines=\"2\">" + safeTitle + "</text>" +
+                (string.IsNullOrEmpty(safePreview)
+                    ? string.Empty
+                    : "<text hint-style=\"bodySubtle\" hint-align=\"center\" hint-wrap=\"true\">" +
+                      safePreview + "</text>");
+
+            string smallGlyphBody =
+                "<text hint-style=\"title\" hint-align=\"center\">" + Mdl2MessageGlyphXml + "</text>";
+
+            var updater = TileUpdateManager.CreateTileUpdaterForSecondaryTile(tileId);
+            try
+            {
+                updater.EnableNotificationQueue(true);
+                updater.Clear();
+            }
+            catch
+            {
+            }
+
+            // Distinct Tag values — without them the second Update replaces the first and small never cycles.
+            // No displayName strip — title already sits centered in the adaptive body (Imgur-style).
+            updater.Update(BuildQueuedTileNotification(
+                smallBody: "<image placement=\"background\" hint-crop=\"circle\" src=\"" + imageSrc + "\"/>",
+                mediumBody: mediumBody,
+                wideBody: wideBody,
+                branding: "none",
+                displayName: null,
+                queueTag: QueueTagPhoto,
+                textStacking: "center"));
+
+            updater.Update(BuildQueuedTileNotification(
+                smallBody: smallGlyphBody,
+                mediumBody: mediumBody,
+                wideBody: wideBody,
+                branding: "none",
+                displayName: null,
+                queueTag: QueueTagGlyph,
+                textStacking: "center"));
+        }
+
+        private static string BuildChatLaunchArgument(string chatJid) =>
+            "chat=" + Uri.EscapeDataString(chatJid ?? string.Empty);
+
+        private static string BuildProfileLaunchArgument(string chatJid) =>
+            "profile=" + Uri.EscapeDataString(chatJid ?? string.Empty);
+
+        /// <summary>
+        /// Contact Profile Start tile queue (2 frames, Imgur-style):
+        /// 1) round peek photo + MDL2 contact glyph beside the name at the bottom;
+        /// 2) vertically centered “Nenhuma Nova Mensagem” / “N Novas Mensagens”.
+        /// TileSmall rotates photo ↔ MDL2 contact glyph. Badge mirrors unread on both sizes.
+        /// </summary>
+        private static void PushContactLiveTiles(
+            string tileId,
+            string displayName,
+            Uri imageUri,
+            string motto,
+            int unreadCount)
+        {
+            _ = motto;
+            string name = string.IsNullOrWhiteSpace(displayName) ? "User" : displayName.Trim();
+            string safeName = EscapeXml(Truncate(name, 40));
+            string imageSrc = EscapeXml(imageUri?.AbsoluteUri ?? DefaultLogoUri.AbsoluteUri);
+
+            string unreadLine = unreadCount > 0
+                ? EscapeXml(Truncate(
+                    LocalizedStrings.Format("Tile_ContactHasNewMessages", unreadCount.ToString()),
+                    60))
+                : EscapeXml(LocalizedStrings.Get("Tile_ContactNoNewMessages", "No new messages"));
+
+            // Frame 1 — round photo peeks; name + MDL2 Contact2 sit under it.
+            string mediumPhotoName =
+                "<image placement=\"peek\" hint-crop=\"circle\" src=\"" + imageSrc + "\"/>" +
+                "<group>" +
+                "<subgroup hint-weight=\"1\">" +
+                "<text hint-style=\"title\" hint-align=\"center\">" + Mdl2ContactGlyphXml + "</text>" +
+                "</subgroup>" +
+                "<subgroup hint-weight=\"3\">" +
+                "<text hint-style=\"base\" hint-maxLines=\"2\" hint-align=\"left\">" + safeName + "</text>" +
+                "</subgroup>" +
+                "</group>";
+
+            string widePhotoName =
+                "<image placement=\"peek\" hint-crop=\"circle\" src=\"" + imageSrc + "\"/>" +
+                "<group>" +
+                "<subgroup hint-weight=\"1\">" +
+                "<text hint-style=\"header\" hint-align=\"center\">" + Mdl2ContactGlyphXml + "</text>" +
+                "</subgroup>" +
+                "<subgroup hint-weight=\"3\">" +
+                "<text hint-style=\"subtitle\" hint-maxLines=\"2\">" + safeName + "</text>" +
+                "</subgroup>" +
+                "</group>";
+
+            // Frame 2 — unread status centered vertically (Imgur TextStacking.Center).
+            string mediumUnread =
+                "<text hint-style=\"body\" hint-align=\"center\" hint-wrap=\"true\">" + unreadLine + "</text>";
+            string wideUnread =
+                "<text hint-style=\"subtitle\" hint-align=\"center\" hint-wrap=\"true\">" + unreadLine + "</text>";
+
+            string smallGlyphBody =
+                "<text hint-style=\"title\" hint-align=\"center\">" + Mdl2ContactGlyphXml + "</text>";
+
+            var updater = TileUpdateManager.CreateTileUpdaterForSecondaryTile(tileId);
+            try
+            {
+                updater.EnableNotificationQueue(true);
+                updater.Clear();
+            }
+            catch
+            {
+            }
+
+            updater.Update(BuildQueuedTileNotification(
+                smallBody: "<image placement=\"background\" hint-crop=\"circle\" src=\"" + imageSrc + "\"/>",
+                mediumBody: mediumPhotoName,
+                wideBody: widePhotoName,
+                branding: "none",
+                displayName: null,
+                queueTag: QueueTagPhoto,
+                textStacking: null));
+
+            updater.Update(BuildQueuedTileNotification(
+                smallBody: smallGlyphBody,
+                mediumBody: mediumUnread,
+                wideBody: wideUnread,
+                branding: "none",
+                displayName: null,
+                queueTag: QueueTagUnread,
+                textStacking: "center"));
+        }
+
+        private static TileNotification BuildQueuedTileNotification(
+            string smallBody,
+            string mediumBody,
+            string wideBody,
+            string branding,
+            string displayName = null,
+            string queueTag = null,
+            string textStacking = null)
+        {
+            string displayAttr = string.IsNullOrEmpty(displayName)
+                ? string.Empty
+                : " displayName=\"" + displayName + "\"";
+
+            string stackAttr = string.IsNullOrEmpty(textStacking)
+                ? string.Empty
+                : " hint-textStacking=\"" + textStacking + "\"";
+
+            string smallStackAttr = string.IsNullOrEmpty(textStacking)
+                ? string.Empty
+                : " hint-textStacking=\"" + textStacking + "\"";
+
+            // Glyph-only small frames always center vertically.
+            if (smallBody != null &&
+                smallBody.IndexOf("<image", StringComparison.OrdinalIgnoreCase) < 0 &&
+                string.IsNullOrEmpty(smallStackAttr))
+            {
+                smallStackAttr = " hint-textStacking=\"center\"";
+            }
 
             string xml =
                 "<tile>" +
-                "<visual branding=\"name\">" +
-                "<binding template=\"TileMedium\" displayName=\"" + safeTitle + "\">" +
-                peek + mediumBody +
-                "</binding>" +
-                "<binding template=\"TileWide\" displayName=\"" + safeTitle + "\">" +
-                peek + wideBody +
-                "</binding>" +
-                "<binding template=\"TileLarge\" displayName=\"" + safeTitle + "\">" +
-                peek + largeBody +
-                "</binding>" +
+                "<visual branding=\"" + branding + "\">" +
+                "<binding template=\"TileSmall\"" + smallStackAttr + ">" + smallBody + "</binding>" +
+                "<binding template=\"TileMedium\"" + displayAttr + stackAttr + ">" + mediumBody + "</binding>" +
+                "<binding template=\"TileWide\"" + displayAttr + stackAttr + ">" + wideBody + "</binding>" +
+                "<binding template=\"TileLarge\"" + displayAttr + stackAttr + ">" + wideBody + "</binding>" +
                 "</visual>" +
                 "</tile>";
 
@@ -450,21 +784,39 @@ namespace Unison.Uwp.Services
                 ExpirationTime = DateTimeOffset.UtcNow.AddDays(3)
             };
 
-            var updater = TileUpdateManager.CreateTileUpdaterForSecondaryTile(tileId);
-            try
+            if (!string.IsNullOrWhiteSpace(queueTag))
             {
-                updater.EnableNotificationQueue(true);
-            }
-            catch
-            {
+                notification.Tag = queueTag.Length <= 16 ? queueTag : queueTag.Substring(0, 16);
             }
 
-            updater.Update(notification);
+            return notification;
         }
 
-        private static string BuildLaunchArgument(string chatJid)
+        private static void ApplyChatTileChrome(SecondaryTile tile, Uri logo)
         {
-            return "notification=1&chat=" + Uri.EscapeDataString(chatJid ?? string.Empty);
+            tile.VisualElements.Square150x150Logo = logo;
+            tile.VisualElements.Square71x71Logo = logo;
+            // Live adaptive frames own the title (centered); avoid a second name band under the plate.
+            tile.VisualElements.ShowNameOnSquare150x150Logo = false;
+            tile.VisualElements.ForegroundText = ForegroundText.Light;
+        }
+
+        private static void ApplyContactTileChrome(SecondaryTile tile, Uri logo)
+        {
+            tile.VisualElements.Square150x150Logo = logo;
+            tile.VisualElements.Square71x71Logo = logo;
+            // Name + motto live on the adaptive queue, not under the static logo.
+            tile.VisualElements.ShowNameOnSquare150x150Logo = false;
+            tile.VisualElements.ForegroundText = ForegroundText.Light;
+        }
+
+        /// <summary>
+        /// Contact about / "recado". Empty until profile status is synced onto the chat model.
+        /// </summary>
+        private static string ResolveContactMotto(ChatItem chat)
+        {
+            _ = chat;
+            return string.Empty;
         }
 
         private static string ResolveDisplayName(ChatItem chat)

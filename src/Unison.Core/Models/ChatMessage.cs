@@ -16,7 +16,12 @@ namespace Unison.Core.Models
         public string Id 
         { 
             get => _id; 
-            set { _id = value; OnPropertyChanged(); } 
+            set
+            {
+                if (_id == value) return;
+                _id = value;
+                OnPropertyChanged();
+            }
         }
 
         private string _content;
@@ -25,6 +30,7 @@ namespace Unison.Core.Models
             get => _content; 
             set
             {
+                if (_content == value) return;
                 _content = value;
                 OnPropertyChanged();
                 Raise(
@@ -38,7 +44,13 @@ namespace Unison.Core.Models
         public DateTime Timestamp 
         { 
             get => _timestamp; 
-            set { _timestamp = value; OnPropertyChanged(); OnPropertyChanged(nameof(FormattedTime)); } 
+            set
+            {
+                if (_timestamp == value) return;
+                _timestamp = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(FormattedTime));
+            }
         }
 
         private bool _isFromMe;
@@ -331,7 +343,13 @@ namespace Unison.Core.Models
         public uint AudioDurationSeconds
         {
             get => _audioDurationSeconds;
-            set { _audioDurationSeconds = value; OnPropertyChanged(); OnPropertyChanged(nameof(AudioButtonText)); }
+            set
+            {
+                if (_audioDurationSeconds == value) return;
+                _audioDurationSeconds = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(AudioButtonText));
+            }
         }
 
         [JsonIgnore]
@@ -546,6 +564,7 @@ namespace Unison.Core.Models
             get => _videoPosterUri;
             set
             {
+                if (_videoPosterUri == value) return;
                 _videoPosterUri = value;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(HasVideoPoster));
@@ -562,7 +581,12 @@ namespace Unison.Core.Models
         public uint VideoDurationSeconds
         {
             get => _videoDurationSeconds;
-            set { _videoDurationSeconds = value; OnPropertyChanged(); }
+            set
+            {
+                if (_videoDurationSeconds == value) return;
+                _videoDurationSeconds = value;
+                OnPropertyChanged();
+            }
         }
 
         [JsonIgnore]
@@ -689,7 +713,13 @@ namespace Unison.Core.Models
         public string Caption
         {
             get => _caption;
-            set { _caption = value; OnPropertyChanged(); OnPropertyChanged(nameof(HasCaption)); }
+            set
+            {
+                if (_caption == value) return;
+                _caption = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasCaption));
+            }
         }
 
         private string _remoteJid;
@@ -757,14 +787,24 @@ namespace Unison.Core.Models
         public DateTime? PinnedAtUtc
         {
             get => _pinnedAtUtc;
-            set { _pinnedAtUtc = value; OnPropertyChanged(); }
+            set
+            {
+                if (_pinnedAtUtc == value) return;
+                _pinnedAtUtc = value;
+                OnPropertyChanged();
+            }
         }
 
         private DateTime? _pinExpiresAtUtc;
         public DateTime? PinExpiresAtUtc
         {
             get => _pinExpiresAtUtc;
-            set { _pinExpiresAtUtc = value; OnPropertyChanged(); }
+            set
+            {
+                if (_pinExpiresAtUtc == value) return;
+                _pinExpiresAtUtc = value;
+                OnPropertyChanged();
+            }
         }
 
         private List<MessageReaction> _reactions;

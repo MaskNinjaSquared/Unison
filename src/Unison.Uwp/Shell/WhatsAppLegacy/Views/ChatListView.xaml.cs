@@ -46,6 +46,11 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         public event EventHandler MenuClicked;
 
+        /// <summary>
+        /// Hub back (header or system): selection was cleared with the hub — detail must close too.
+        /// </summary>
+        public event EventHandler CommunityHubClosed;
+
         /// <summary>Shell owns search-state chrome; list CommandBar only raises the request.</summary>
         public event EventHandler SearchRequested;
 
@@ -494,8 +499,21 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return false;
             }
 
-            ViewModel.CloseCommunityHub();
+            CloseCommunityHubFromUi();
             return true;
+        }
+
+        private void CommunityHubBackButton_Click(object sender, RoutedEventArgs e)
+        {
+            TryConsumeCommunityHubBack();
+        }
+
+        /// <summary>Leaves the hub, clears the member highlight, and asks the shell to close detail.</summary>
+        private void CloseCommunityHubFromUi()
+        {
+            ViewModel?.CloseCommunityHub();
+            SetSelectionQuiet(null);
+            CommunityHubClosed?.Invoke(this, EventArgs.Empty);
         }
 
         /// <summary>Finds a chat by JID or canonical id, for callers holding a stale instance.</summary>
@@ -598,6 +616,24 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             if (ViewModel.PinChatToStartCommand.CanExecute(chat))
             {
                 ViewModel.PinChatToStartCommand.Execute(chat);
+            }
+        }
+
+        /// <summary>Context flyout on a row: open the contact Profile page.</summary>
+        public void ViewProfile(ChatItem chat)
+        {
+            if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
+            {
+                return;
+            }
+
+            try
+            {
+                App.Services?.GetService<ShellViewModel>()?.QueueOpenProfile(chat.JID);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatListView] ViewProfile failed: " + ex.Message);
             }
         }
 

@@ -199,14 +199,18 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 ChatPinButton.IsEnabled = vm.PinChatCommand?.CanExecute(null) == true;
             }
 
+            bool liveTiles = vm.AreLiveTilesAvailable;
+
             if (PinButton != null)
             {
+                PinButton.Visibility = liveTiles ? Visibility.Visible : Visibility.Collapsed;
                 if (PinCaption != null)
                 {
                     PinCaption.Text = vm.IsWidgetPinned ? "unpin from start" : "pin to start";
+                    PinCaption.Visibility = PinButton.Visibility;
                 }
 
-                PinButton.IsEnabled = vm.PinToStartCommand?.CanExecute(null) == true;
+                PinButton.IsEnabled = liveTiles && vm.PinToStartCommand?.CanExecute(null) == true;
             }
 
             if (DeleteChatButton != null)

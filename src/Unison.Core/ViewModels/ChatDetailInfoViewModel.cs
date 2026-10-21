@@ -42,6 +42,7 @@ namespace Unison.Core.ViewModels
         private readonly IStringResources _strings;
         private readonly IDialogService _dialogs;
         private readonly IUriLauncher _uriLauncher;
+        private readonly ISystemInfoProvider _systemInfo;
         private readonly ChatItem _source;
         private readonly GroupMember _member;
         private readonly bool _isGroup;
@@ -92,7 +93,8 @@ namespace Unison.Core.ViewModels
             IDialogService dialogs = null,
             ParticipantResolutionContext participants = null,
             IUriLauncher uriLauncher = null,
-            IChatStateStore chatState = null)
+            IChatStateStore chatState = null,
+            ISystemInfoProvider systemInfo = null)
         {
             _source = source ?? throw new ArgumentNullException(nameof(source));
             _participants = participants;
@@ -114,6 +116,7 @@ namespace Unison.Core.ViewModels
             _strings = strings;
             _dialogs = dialogs;
             _uriLauncher = uriLauncher;
+            _systemInfo = systemInfo;
 
             _source.PropertyChanged += Source_PropertyChanged;
             if (_member != null)
@@ -139,11 +142,21 @@ namespace Unison.Core.ViewModels
 
             PinToStartCommand = new RelayCommand(
                 () => _ = ToggleWidgetPinAsync(),
-                () => !_isGroupMember &&
+                () => AreLiveTilesAvailable &&
+                      !_isGroupMember &&
                       _source != null &&
                       !string.IsNullOrWhiteSpace(_source.JID) &&
                       _shortcutService != null &&
                       _chatStore != null);
+
+            PinContactToStartCommand = new RelayCommand(
+                () => _ = ToggleContactWidgetPinAsync(),
+                () => AreLiveTilesAvailable &&
+                      !_isGroup &&
+                      !_isGroupMember &&
+                      _source != null &&
+                      !string.IsNullOrWhiteSpace(_source.JID) &&
+                      _shortcutService != null);
 
             PinChatCommand = new RelayCommand(
                 () => _ = ToggleChatPinAsync(),
@@ -186,6 +199,11 @@ namespace Unison.Core.ViewModels
                 }
 
                 _ = _groups.EnsureHighQualityGroupAvatarAsync(_source);
+            }
+
+            if (!_isGroupMember)
+            {
+                _ = SyncContactWidgetPinFromSystemAsync();
             }
         }
 
@@ -317,6 +335,14 @@ namespace Unison.Core.ViewModels
         /// <summary>Start-tile pin state (drives pin/unpin app-bar Visibility).</summary>
         public bool IsWidgetPinned => _source != null && _source.IsWidgetPinned;
 
+        public bool IsContactWidgetPinned => _source != null && _source.IsContactWidgetPinned;
+
+        /// <summary>
+        /// Start Live Tile pin UX (false on Windows 11). Null provider → available.
+        /// </summary>
+        public bool AreLiveTilesAvailable =>
+            _systemInfo == null || _systemInfo.LiveTilesCompatible();
+
         /// <summary>Account chat-list pin state (drives pin/unpin app-bar Visibility).</summary>
         public bool IsChatPinned => _source != null && _source.IsChatPinned;
 
@@ -352,7 +378,11 @@ namespace Unison.Core.ViewModels
         /// <summary>Digit → name map from <see cref="Members"/> for bubble/strip parsers.</summary>
         public IReadOnlyDictionary<string, string> MentionLookup => _source.MentionLookup;
 
+        /// <summary>Pins the conversation Start tile (<c>chat=</c>).</summary>
         public ICommand PinToStartCommand { get; }
+
+        /// <summary>Pins the contact Profile Start tile (<c>profile=</c>).</summary>
+        public ICommand PinContactToStartCommand { get; }
 
         public ICommand PinChatCommand { get; }
 
@@ -1124,6 +1154,11 @@ namespace Unison.Core.ViewModels
                 OnPropertyChanged(nameof(IsWidgetPinned));
                 (PinToStartCommand as RelayCommand)?.RaiseCanExecuteChanged();
             }
+            else if (e.PropertyName == nameof(ChatItem.IsContactWidgetPinned))
+            {
+                OnPropertyChanged(nameof(IsContactWidgetPinned));
+                (PinContactToStartCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            }
             else if (e.PropertyName == nameof(ChatItem.IsChatPinned))
             {
                 OnPropertyChanged(nameof(IsChatPinned));
@@ -1339,7 +1374,78 @@ namespace Unison.Core.ViewModels
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine("[ChatDetailInfoViewModel] Pin failed: " + ex.Message);
+                System.Diagnostics.Debug.WriteLine("[ChatDetailInfoViewModel] Pin chat Start failed: " + ex.Message);
+            }
+        }
+
+        private async Task ToggleContactWidgetPinAsync()
+        {
+            if (_source == null || _shortcutService == null)
+            {
+                return;
+            }
+
+            ChatItem chat = _source;
+            bool nextPinned = !chat.IsContactWidgetPinned;
+            try
+            {
+                bool ok = nextPinned
+                    ? await _shortcutService.PinContactAsync(chat)
+                    : await _shortcutService.UnpinContactAsync(chat.JID);
+
+                if (!ok && nextPinned)
+                {
+                    return;
+                }
+
+                chat.IsContactWidgetPinned = nextPinned;
+
+                if (_dispatcher != null)
+                {
+                    await _dispatcher.RunAsync(() =>
+                    {
+                        OnPropertyChanged(nameof(IsContactWidgetPinned));
+                        (PinContactToStartCommand as RelayCommand)?.RaiseCanExecuteChanged();
+                    });
+                }
+                else
+                {
+                    OnPropertyChanged(nameof(IsContactWidgetPinned));
+                    (PinContactToStartCommand as RelayCommand)?.RaiseCanExecuteChanged();
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[ChatDetailInfoViewModel] Pin contact Start failed: " + ex.Message);
+            }
+        }
+
+        /// <summary>Reconciles <see cref="IsContactWidgetPinned"/> from the live SecondaryTile.</summary>
+        public async Task SyncContactWidgetPinFromSystemAsync()
+        {
+            if (_source == null ||
+                string.IsNullOrWhiteSpace(_source.JID) ||
+                _shortcutService == null)
+            {
+                return;
+            }
+
+            try
+            {
+                bool pinned = await _shortcutService.IsContactPinnedAsync(_source.JID);
+                if (_source.IsContactWidgetPinned == pinned)
+                {
+                    return;
+                }
+
+                _source.IsContactWidgetPinned = pinned;
+                OnPropertyChanged(nameof(IsContactWidgetPinned));
+                (PinContactToStartCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[ChatDetailInfoViewModel] Sync contact pin failed: " + ex.Message);
             }
         }
 

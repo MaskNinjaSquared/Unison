@@ -334,6 +334,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IChatStateStore>(),
                 sp.GetRequiredService<ContactDisplayNames>(),
                 sp.GetRequiredService<ISelfMarkerNaming>(),
+                sp.GetRequiredService<IGroupNaming>(),
                 () => sp.GetRequiredService<SyncBudget>().IsFrugal));
             services.AddSingleton(sp => new StoredChatPreviewRefresh(
                 sp.GetRequiredService<AttachedUiDispatcher>(),
@@ -586,7 +587,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ContactDisplayNames>(),
                 sp.GetRequiredService<IJidResolver>(),
                 sp.GetRequiredService<ISelfMarkerNaming>(),
-                sp.GetRequiredService<IStringResources>()));
+                sp.GetRequiredService<IStringResources>(),
+                sp.GetRequiredService<ChatStateStore>().GroupSubjects));
             services.AddSingleton<IGroupService>(sp => new GroupFacade(
                 sp.GetRequiredService<IWhatsAppService>(),
                 sp.GetRequiredService<IWhatsAppSessionProvider>(),
@@ -603,7 +605,7 @@ namespace Unison.Uwp
                     sp.GetRequiredService<IJidResolver>(),
                     sp.GetRequiredService<IChatStateStore>(),
                     sp.GetRequiredService<ChatRowIndex>(),
-                    sp.GetRequiredService<ChatStateStore>().PushNames),
+                    sp.GetRequiredService<ChatStateStore>().GroupSubjects),
                 new GroupRosterRestore(
                     sp.GetRequiredService<IGroupNaming>(),
                     sp.GetRequiredService<AttachedUiDispatcher>(),
@@ -674,6 +676,7 @@ namespace Unison.Uwp
             services.AddTransient<StatusListViewModel>();
             services.AddTransient<StatusDetailViewModel>();
             services.AddTransient<DebugViewModel>();
+            services.AddTransient<ProfileViewModel>();
             services.AddTransient<NewChatDialogViewModel>();
             services.AddTransient<MessageReactionsViewModel>();
             services.AddTransient<SettingsViewModel>();
@@ -766,10 +769,25 @@ namespace Unison.Uwp
                 "kind=" + (args == null ? "<null>" : args.Kind.ToString()) +
                 "; previousState=" + (args == null ? "<null>" : args.PreviousExecutionState.ToString()));
             RuntimeDiagnosticsService.Instance.StartHealthSampling();
-            if (args is ProtocolActivatedEventArgs protocolArgs &&
-                string.Equals(protocolArgs.Uri?.Scheme, PeopleMessageScheme, StringComparison.OrdinalIgnoreCase))
+            if (args is ProtocolActivatedEventArgs protocolArgs)
             {
-                HandlePeopleMessageActivation(protocolArgs.Uri, args.PreviousExecutionState);
+                string scheme = protocolArgs.Uri?.Scheme;
+                if (string.Equals(scheme, PeopleProfileScheme, StringComparison.OrdinalIgnoreCase))
+                {
+                    HandlePeopleProfileActivation(protocolArgs.Uri, args.PreviousExecutionState);
+                    return;
+                }
+
+                if (string.Equals(scheme, PeopleMessageScheme, StringComparison.OrdinalIgnoreCase))
+                {
+                    HandlePeopleMessageActivation(protocolArgs.Uri, args.PreviousExecutionState);
+                    return;
+                }
+            }
+
+            if (args != null && args.Kind == ActivationKind.ContactPanel)
+            {
+                HandleContactPanelActivation(args as ContactPanelActivatedEventArgs, args.PreviousExecutionState);
                 return;
             }
 
@@ -814,6 +832,7 @@ namespace Unison.Uwp
         }
 
         private const string PeopleMessageScheme = "ms-ipmessaging";
+        private const string PeopleProfileScheme = "ms-contact-profile";
 
         /// <summary>
         /// People "Message" (contact card annotation with <c>ContactAnnotationOperations.Message</c>)
@@ -824,6 +843,34 @@ namespace Unison.Uwp
             Uri uri,
             ApplicationExecutionState previousExecutionState)
         {
+            ActivatePeopleDeepLink(
+                uri,
+                previousExecutionState,
+                openProfile: false,
+                lifecycleEvent: "people-message-activated");
+        }
+
+        /// <summary>
+        /// People "Open profile" uses <c>ms-contact-profile:?ContactRemoteIds=...</c>
+        /// (declared in the package; same query shape as Message).
+        /// </summary>
+        private void HandlePeopleProfileActivation(
+            Uri uri,
+            ApplicationExecutionState previousExecutionState)
+        {
+            ActivatePeopleDeepLink(
+                uri,
+                previousExecutionState,
+                openProfile: true,
+                lifecycleEvent: "people-profile-activated");
+        }
+
+        private void ActivatePeopleDeepLink(
+            Uri uri,
+            ApplicationExecutionState previousExecutionState,
+            bool openProfile,
+            string lifecycleEvent)
+        {
             Frame rootFrame = EnsureRootFrame();
             ApplyShellThemeFromSettings();
             ConfigureAppChrome();
@@ -831,14 +878,53 @@ namespace Unison.Uwp
             EnsureStatusBarOrientationHook();
 
             string jid = WindowsContactListPublisher.FromRemoteId(ReadPeopleRemoteId(uri));
-            string arguments = string.IsNullOrWhiteSpace(jid)
-                ? string.Empty
-                : "chat=" + Uri.EscapeDataString(jid);
+            string arguments = string.Empty;
+            if (!string.IsNullOrWhiteSpace(jid))
+            {
+                string key = openProfile ? "profile" : "chat";
+                arguments = key + "=" + Uri.EscapeDataString(jid);
+            }
 
             RuntimeDiagnosticsService.Instance.Write(
                 "lifecycle",
-                "people-activated",
-                "hasChat=" + (arguments.Length > 0));
+                lifecycleEvent,
+                "hasJid=" + (arguments.Length > 0) +
+                "; openProfile=" + openProfile);
+
+            if (rootFrame.Content == null || !IsKnownRootContent(rootFrame.Content))
+            {
+                NavigateRootToBoot(arguments);
+            }
+
+            HandleActivationArguments(arguments, previousExecutionState);
+
+            Window.Current.Activate();
+            ApplyWindowChromeBootstrap();
+        }
+
+        /// <summary>
+        /// People ContactPanel / ContactProfile opens the full-page Profile (not the chat).
+        /// </summary>
+        private void HandleContactPanelActivation(
+            ContactPanelActivatedEventArgs contactArgs,
+            ApplicationExecutionState previousExecutionState)
+        {
+            Frame rootFrame = EnsureRootFrame();
+            ApplyShellThemeFromSettings();
+            ConfigureAppChrome();
+            EnsureTitleBarHook();
+            EnsureStatusBarOrientationHook();
+
+            string remoteId = contactArgs?.Contact?.RemoteId;
+            string jid = WindowsContactListPublisher.FromRemoteId(remoteId);
+            string arguments = string.IsNullOrWhiteSpace(jid)
+                ? string.Empty
+                : "profile=" + Uri.EscapeDataString(jid);
+
+            RuntimeDiagnosticsService.Instance.Write(
+                "lifecycle",
+                "contact-panel-activated",
+                "hasProfile=" + (arguments.Length > 0));
 
             if (rootFrame.Content == null || !IsKnownRootContent(rootFrame.Content))
             {
@@ -870,7 +956,7 @@ namespace Unison.Uwp
             return null;
         }
 
-        /// <summary>Secondary tile / toast <c>chat=</c> deep link into an existing session.</summary>
+        /// <summary>Secondary tile / toast <c>chat=</c> or <c>profile=</c> deep link.</summary>
         private void HandleActivationArguments(
             string arguments,
             ApplicationExecutionState previousExecutionState)
@@ -882,6 +968,17 @@ namespace Unison.Uwp
 
             try
             {
+                var shell = Services.GetService<ShellViewModel>();
+                if (shell == null)
+                {
+                    return;
+                }
+
+                if (shell.QueueOpenProfileFromActivation(arguments))
+                {
+                    return;
+                }
+
                 // Running/Suspended: list is (or was) already up — open the chat only.
                 // NotRunning/Terminated/ClosedByUser: cold path may delay list until detail loads.
                 bool appWasAlreadyOpen =
@@ -889,8 +986,7 @@ namespace Unison.Uwp
                     previousExecutionState == ApplicationExecutionState.Suspended;
                 bool delayChatList = ChatListDeepLinkSyncUi.ShouldArmListHold(appWasAlreadyOpen);
 
-                var shell = Services.GetService<ShellViewModel>();
-                shell?.QueueOpenChatFromActivation(arguments, delayChatList);
+                shell.QueueOpenChatFromActivation(arguments, delayChatList);
             }
             catch (Exception ex)
             {

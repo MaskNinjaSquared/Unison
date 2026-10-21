@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Unison.Core.Contracts;
 using Unison.Core.Models;
 
 namespace Unison.Core.Helpers
@@ -14,11 +15,13 @@ namespace Unison.Core.Helpers
         /// <param name="resolveParent">Lookup in the full catalog (may be outside <paramref name="source"/>).</param>
         /// <param name="getOrCreateSynthetic">Stable synthetic hub when the parent is missing from catalog.</param>
         /// <param name="getCanonical">JID canonicalizer.</param>
+        /// <param name="strings">Localizes announce-group labels on the hub strip (Avisos / Announcements).</param>
         public static List<ChatItem> Project(
             IReadOnlyList<ChatItem> source,
             Func<string, ChatItem> resolveParent,
             Func<string, ChatItem> getOrCreateSynthetic,
-            Func<string, string> getCanonical)
+            Func<string, string> getCanonical,
+            IStringResources strings = null)
         {
             var result = new List<ChatItem>();
             if (source == null || source.Count == 0)
@@ -79,7 +82,7 @@ namespace Unison.Core.Helpers
                 List<ChatItem> members;
                 if (membersByParent.TryGetValue(key, out members) || chat.IsCommunityParent)
                 {
-                    AttachHub(chat, members);
+                    AttachHub(chat, members, strings);
                     result.Add(chat);
                     emittedParents.Add(key);
                     continue;
@@ -110,7 +113,7 @@ namespace Unison.Core.Helpers
                     continue;
                 }
 
-                AttachHub(parent, pair.Value);
+                AttachHub(parent, pair.Value, strings);
                 result.Add(parent);
                 emittedParents.Add(pair.Key);
             }
@@ -118,7 +121,7 @@ namespace Unison.Core.Helpers
             return result;
         }
 
-        private static void AttachHub(ChatItem hub, List<ChatItem> members)
+        private static void AttachHub(ChatItem hub, List<ChatItem> members, IStringResources strings)
         {
             if (hub == null)
             {
@@ -132,11 +135,11 @@ namespace Unison.Core.Helpers
             CommunityHubPresentation.StampLinkedParentDisplayNames(hub);
             if (ordered != null && ordered.Count > 0)
             {
-                CopyNewestTip(hub, ordered);
+                CopyNewestTip(hub, ordered, strings);
             }
         }
 
-        private static void CopyNewestTip(ChatItem hub, List<ChatItem> members)
+        private static void CopyNewestTip(ChatItem hub, List<ChatItem> members, IStringResources strings)
         {
             ChatItem newest = null;
             DateTime newestTs = DateTime.MinValue;
@@ -168,7 +171,8 @@ namespace Unison.Core.Helpers
             hub.Timestamp = newest.Timestamp;
 
             // Community list strip: "Geral › Alice: …" — group name + chevron + sender prefix.
-            string groupLabel = newest.GetNameResolved(null);
+            // Must pass strings so announce groups resolve to Avisos (pt-BR), not "Announcements".
+            string groupLabel = newest.GetNameResolved(strings);
             if (string.IsNullOrWhiteSpace(groupLabel))
             {
                 groupLabel = (newest.Name ?? string.Empty).Trim();
@@ -187,7 +191,9 @@ namespace Unison.Core.Helpers
                 hub.LastPreview.ShowAuthorChevron = true;
             }
 
-            hub.RaiseLastPreviewChanged();
+            // No RaiseLastPreviewChanged: each field setter / ChatListPreview.Set already
+            // notifies, and the strip hooks nested PropertyChanged. A final raise only
+            // re-applied the same DP values and flashed rows on no-op tip copies.
         }
 
         private static string Canonical(Func<string, string> getCanonical, string jid)

@@ -24,7 +24,37 @@ namespace Unison.Core.Tests.Helpers
             var markers = new FakeMarkers();
             var names = new ContactDisplayNames(_aliases, new DisplayNameTable(), _addressBook, new RecordingPersonStore(), markers);
             names.Bind(() => new SelfNameInputs { Id = Me }, null);
-            return new ChatNameRefresh(ui ?? _ui, _chats, names, markers, () => preferFrugal);
+            return new ChatNameRefresh(
+                ui ?? _ui,
+                _chats,
+                names,
+                markers,
+                new FakeGroupNaming(),
+                () => preferFrugal);
+        }
+
+        [Fact]
+        public async Task A_group_row_takes_the_subject_from_group_naming()
+        {
+            const string group = "120363000000000001@g.us";
+            var chat = new ChatItem { JID = group, Name = "120363000000000001", IsGroup = true };
+            _chats.Chats.Add(chat);
+
+            var markers = new FakeMarkers();
+            var names = new ContactDisplayNames(
+                _aliases,
+                new DisplayNameTable(),
+                _addressBook,
+                new RecordingPersonStore(),
+                markers);
+            names.Bind(() => new SelfNameInputs { Id = Me }, null);
+            var groupNaming = new FakeGroupNaming();
+            groupNaming.ChatNames[group] = "Família Nova";
+            var refresh = new ChatNameRefresh(_ui, _chats, names, markers, groupNaming);
+
+            await refresh.ApplyAsync();
+
+            Assert.Equal("Família Nova", chat.Name);
         }
 
         [Fact]

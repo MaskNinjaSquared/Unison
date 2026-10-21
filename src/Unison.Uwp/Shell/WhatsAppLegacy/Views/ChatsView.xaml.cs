@@ -46,6 +46,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             if (!_hooked)
             {
                 ChatListPart.ConfigureScope(ChatListScope.Active);
+                ChatListPart.CommunityHubClosed += ChatListPart_CommunityHubClosed;
                 if (_shell != null)
                 {
                     _shell.PropertyChanged += Shell_PropertyChanged;
@@ -76,11 +77,27 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private void UnhookShell()
         {
-            if (_shell != null && _hooked)
+            if (_hooked)
             {
-                _shell.PropertyChanged -= Shell_PropertyChanged;
+                if (ChatListPart != null)
+                {
+                    ChatListPart.CommunityHubClosed -= ChatListPart_CommunityHubClosed;
+                }
+
+                if (_shell != null)
+                {
+                    _shell.PropertyChanged -= Shell_PropertyChanged;
+                }
+
                 _hooked = false;
             }
+        }
+
+        private void ChatListPart_CommunityHubClosed(object sender, EventArgs e)
+        {
+            ChatListPart?.ClearSelection();
+            ChatOpenRequested?.Invoke(this, new ChatSelectedEventArgs(null));
+            _shell?.ClearChat();
         }
 
         public void NotifyLocalConversationsCleared()
@@ -189,6 +206,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         public bool TryHandleBack()
         {
+            // Hub back clears selection and raises CommunityHubClosed (closes detail).
             if (ChatListPart != null && ChatListPart.TryConsumeCommunityHubBack())
             {
                 return true;

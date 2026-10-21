@@ -49,10 +49,23 @@ namespace Unison.Uwp.Shell.WhatsApp.Views
         {
             base.OnNavigatedTo(e);
             _shell = App.Services?.GetService<ShellViewModel>();
-            if (_shell != null && !_hooked)
+            if (!_hooked)
             {
-                _shell.PropertyChanged += Shell_PropertyChanged;
-                ChatDetailPart.BackRequested += ChatDetailPart_BackRequested;
+                if (_shell != null)
+                {
+                    _shell.PropertyChanged += Shell_PropertyChanged;
+                }
+
+                if (ChatDetailPart != null)
+                {
+                    ChatDetailPart.BackRequested += ChatDetailPart_BackRequested;
+                }
+
+                if (ChatListPart != null)
+                {
+                    ChatListPart.CommunityHubClosed += ChatListPart_CommunityHubClosed;
+                }
+
                 _hooked = true;
             }
 
@@ -63,10 +76,23 @@ namespace Unison.Uwp.Shell.WhatsApp.Views
         protected override void OnNavigatedFrom(NavigationEventArgs e)
         {
             base.OnNavigatedFrom(e);
-            if (_shell != null && _hooked)
+            if (_hooked)
             {
-                _shell.PropertyChanged -= Shell_PropertyChanged;
-                ChatDetailPart.BackRequested -= ChatDetailPart_BackRequested;
+                if (_shell != null)
+                {
+                    _shell.PropertyChanged -= Shell_PropertyChanged;
+                }
+
+                if (ChatDetailPart != null)
+                {
+                    ChatDetailPart.BackRequested -= ChatDetailPart_BackRequested;
+                }
+
+                if (ChatListPart != null)
+                {
+                    ChatListPart.CommunityHubClosed -= ChatListPart_CommunityHubClosed;
+                }
+
                 _hooked = false;
             }
         }
@@ -512,6 +538,12 @@ namespace Unison.Uwp.Shell.WhatsApp.Views
             catch
             {
             }
+        }
+
+        private void ChatListPart_CommunityHubClosed(object sender, EventArgs e)
+        {
+            // Same teardown as detail Back: hub member is no longer selected.
+            ChatDetailPart_BackRequested(this, EventArgs.Empty);
         }
 
         private async void ChatDetailPart_BackRequested(object sender, EventArgs e)

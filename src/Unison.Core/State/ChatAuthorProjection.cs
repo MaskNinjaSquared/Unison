@@ -84,9 +84,24 @@ namespace Unison.Core.State
 
         public void Refresh() => ScheduleSweep();
 
-        private void OnPersonChanged(object sender, string jid) => ScheduleSweep();
+        private void OnPersonChanged(object sender, string jid)
+        {
+            // A prior warm miss must not block the row once this key (or its alias) lands in SQLite.
+            ForgetWarmAttempts(jid);
+            ScheduleSweep();
+        }
 
-        private void OnDisplayNamesChanged(object sender, EventArgs e) => ScheduleSweep();
+        private void OnDisplayNamesChanged(object sender, EventArgs e)
+        {
+            // Alias pairs often arrive after the first strip warm already missed under the LID.
+            // Without clearing, GetAsync is never retried for the phone JID that holds the name.
+            lock (_gate)
+            {
+                _warmAttempted.Clear();
+            }
+
+            ScheduleSweep();
+        }
 
         /// <summary>
         /// One signal per roster apply, not one per member: a group metadata reply merges names onto
@@ -297,22 +312,7 @@ namespace Unison.Core.State
             {
                 try
                 {
-                    Person person = await _personStore.GetAsync(jid).ConfigureAwait(false);
-                    if (person != null && !string.IsNullOrWhiteSpace(person.Name))
-                    {
-                        loadedAny = true;
-                        continue;
-                    }
-
-                    string canonical = _jids?.GetCanonicalJid(jid);
-                    if (string.IsNullOrWhiteSpace(canonical) ||
-                        string.Equals(canonical, jid, StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
-
-                    person = await _personStore.GetAsync(canonical).ConfigureAwait(false);
-                    if (person != null && !string.IsNullOrWhiteSpace(person.Name))
+                    if (await TryWarmPersonAsync(jid).ConfigureAwait(false))
                     {
                         loadedAny = true;
                     }
@@ -326,6 +326,115 @@ namespace Unison.Core.State
             if (loadedAny)
             {
                 ScheduleSweep();
+            }
+        }
+
+        /// <summary>
+        /// Loads a Person row under the tip JID, its canonical form, the PN/LID alias, or the phone
+        /// index. Tip identity and SQLite keys frequently disagree until aliases are filed.
+        /// </summary>
+        private async Task<bool> TryWarmPersonAsync(string participantJid)
+        {
+            foreach (string key in WarmLookupKeys(participantJid))
+            {
+                Person person = await _personStore.GetAsync(key).ConfigureAwait(false);
+                if (person != null && !string.IsNullOrWhiteSpace(person.Name))
+                {
+                    return true;
+                }
+            }
+
+            string phone = ParticipantStripLabel.ForParticipant(
+                participantJid,
+                _jids?.GetCanonicalJid(participantJid));
+            if (string.IsNullOrEmpty(phone))
+            {
+                return false;
+            }
+
+            IReadOnlyList<Person> byPhone =
+                await _personStore.FindByPhoneAsync(phone).ConfigureAwait(false);
+            if (byPhone == null || byPhone.Count == 0)
+            {
+                return false;
+            }
+
+            bool loaded = false;
+            for (int i = 0; i < byPhone.Count; i++)
+            {
+                Person match = byPhone[i];
+                if (match == null || string.IsNullOrWhiteSpace(match.Name))
+                {
+                    continue;
+                }
+
+                // FindByPhone used to skip the cache; pull by Jid so the next sweep can TryGetCached.
+                if (!string.IsNullOrWhiteSpace(match.Jid))
+                {
+                    await _personStore.GetAsync(match.Jid).ConfigureAwait(false);
+                }
+
+                loaded = true;
+            }
+
+            return loaded;
+        }
+
+        private IEnumerable<string> WarmLookupKeys(string participantJid)
+        {
+            var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            void Add(string value)
+            {
+                string normalized = JidHelper.Normalize(value);
+                if (!string.IsNullOrWhiteSpace(normalized))
+                {
+                    keys.Add(normalized);
+                }
+            }
+
+            Add(participantJid);
+            string canonical = _jids?.GetCanonicalJid(participantJid);
+            Add(canonical);
+
+            string alias;
+            if (_jids != null &&
+                _jids.TryGetAlias(participantJid, out alias))
+            {
+                Add(alias);
+            }
+
+            if (_jids != null &&
+                !string.IsNullOrWhiteSpace(canonical) &&
+                !string.Equals(canonical, participantJid, StringComparison.OrdinalIgnoreCase) &&
+                _jids.TryGetAlias(canonical, out alias))
+            {
+                Add(alias);
+            }
+
+            return keys;
+        }
+
+        private void ForgetWarmAttempts(string jid)
+        {
+            if (string.IsNullOrWhiteSpace(jid))
+            {
+                return;
+            }
+
+            lock (_gate)
+            {
+                _warmAttempted.Remove(jid);
+                string canonical = _jids?.GetCanonicalJid(jid);
+                if (!string.IsNullOrWhiteSpace(canonical))
+                {
+                    _warmAttempted.Remove(canonical);
+                }
+
+                string alias;
+                if (_jids != null && _jids.TryGetAlias(jid, out alias) && !string.IsNullOrWhiteSpace(alias))
+                {
+                    _warmAttempted.Remove(alias);
+                }
             }
         }
 

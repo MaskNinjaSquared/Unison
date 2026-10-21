@@ -157,6 +157,10 @@ namespace Unison.Core.Helpers
         }
 
         /// <summary>Hub / header title: real name first, never the localized “Community” placeholder as a hit.</summary>
+        /// <param name="resolveLabel">
+        /// Prefer <see cref="Contracts.WhatsApp.IGroupNaming.ResolveChatDisplayName"/> so a cached
+        /// group subject wins; contact-only lookup skips <c>GroupSubjects</c> and leaves the fallback.
+        /// </param>
         public static string ResolveHubTitle(
             ChatItem hub,
             Func<string, string> resolveLabel,
@@ -181,6 +185,34 @@ namespace Unison.Core.Helpers
             return strings != null
                 ? strings.Get("Chat_CommunityFallbackName", "Community")
                 : "Community";
+        }
+
+        /// <summary>
+        /// Stamps a usable hub <see cref="ChatItem.Name"/> from <paramref name="resolveLabel"/>
+        /// (subjects-first) and copies it onto linked members. Returns false when nothing usable.
+        /// </summary>
+        public static bool TryStampHubLabel(ChatItem hub, Func<string, string> resolveLabel)
+        {
+            if (hub == null)
+            {
+                return false;
+            }
+
+            if (IsUsableHubLabel(hub.Name, hub.JID))
+            {
+                StampLinkedParentDisplayNames(hub);
+                return true;
+            }
+
+            string label = resolveLabel != null ? resolveLabel(hub.JID) : null;
+            if (!IsUsableHubLabel(label, hub.JID))
+            {
+                return false;
+            }
+
+            hub.Name = label.Trim();
+            StampLinkedParentDisplayNames(hub);
+            return true;
         }
 
         public static bool IsUsableHubLabel(string label, string hubJid)

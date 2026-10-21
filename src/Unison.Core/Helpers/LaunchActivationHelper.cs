@@ -3,15 +3,22 @@ using System;
 namespace Unison.Core.Helpers
 {
     /// <summary>
-    /// Parses secondary-tile / toast launch arguments
-    /// (<c>notification=1&amp;chat={jid}</c>).
+    /// Parses secondary-tile / toast / People launch arguments
+    /// (<c>notification=1&amp;chat={jid}</c> or <c>profile={jid}</c>).
     /// </summary>
     public static class LaunchActivationHelper
     {
         /// <summary>Returns the chat JID from activation arguments, or null.</summary>
-        public static string TryGetChatJid(string arguments)
+        public static string TryGetChatJid(string arguments) =>
+            TryGetArg(arguments, "chat");
+
+        /// <summary>Returns the contact JID for the Profile page, or null.</summary>
+        public static string TryGetProfileJid(string arguments) =>
+            TryGetArg(arguments, "profile");
+
+        private static string TryGetArg(string arguments, string key)
         {
-            if (string.IsNullOrWhiteSpace(arguments))
+            if (string.IsNullOrWhiteSpace(arguments) || string.IsNullOrWhiteSpace(key))
             {
                 return null;
             }
@@ -33,8 +40,8 @@ namespace Unison.Core.Helpers
                     continue;
                 }
 
-                string key = part.Substring(0, eq).Trim();
-                if (!string.Equals(key, "chat", StringComparison.OrdinalIgnoreCase))
+                string partKey = part.Substring(0, eq).Trim();
+                if (!string.Equals(partKey, key, StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }

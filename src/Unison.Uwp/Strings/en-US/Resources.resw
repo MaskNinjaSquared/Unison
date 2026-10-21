@@ -514,6 +514,18 @@ Disable after diagnosing: keeping it on slows the app.</value>
   <data name="NewChat_Error" xml:space="preserve">
     <value>Error: {0}</value>
   </data>
+  <data name="Profile_Title" xml:space="preserve">
+    <value>Profile</value>
+  </data>
+  <data name="Profile_StartChatAppBarLabel.Text" xml:space="preserve">
+    <value>Start&#x0a;chat</value>
+  </data>
+  <data name="Profile_MissingContact" xml:space="preserve">
+    <value>Contact not found.</value>
+  </data>
+  <data name="Profile_LoadFailed" xml:space="preserve">
+    <value>Could not open this profile.</value>
+  </data>
   <data name="Debug_Title.Text" xml:space="preserve">
     <value>Debug &amp; Protocol Logs</value>
   </data>
@@ -960,6 +972,9 @@ Disable after diagnosing: keeping it on slows the app.</value>
   <data name="Toast_AppName" xml:space="preserve">
     <value>Unison</value>
   </data>
+  <data name="ChatList_ViewProfile.Text" xml:space="preserve">
+    <value>View profile</value>
+  </data>
   <data name="ChatList_PinChat.Text" xml:space="preserve">
     <value>Pin chat</value>
   </data>
@@ -1181,6 +1196,21 @@ Disable after diagnosing: keeping it on slows the app.</value>
   </data>
   <data name="ChatDetailInfo_UnpinAppBarLabel.Text" xml:space="preserve">
     <value>Unpin from&#x0a;Start</value>
+  </data>
+  <data name="ChatDetailInfo_PinContactAppBarLabel.Text" xml:space="preserve">
+    <value>Pin&#x0a;contact</value>
+  </data>
+  <data name="ChatDetailInfo_UnpinContactAppBarLabel.Text" xml:space="preserve">
+    <value>Unpin&#x0a;contact</value>
+  </data>
+  <data name="Tile_ContactProfileTitle" xml:space="preserve">
+    <value>{0} Profile</value>
+  </data>
+  <data name="Tile_ContactNoNewMessages" xml:space="preserve">
+    <value>No new messages</value>
+  </data>
+  <data name="Tile_ContactHasNewMessages" xml:space="preserve">
+    <value>{0} New Messages</value>
   </data>
   <data name="ChatDetailInfo_AddContactAppBarLabel.Text" xml:space="preserve">
     <value>Add&#x0a;contact</value>

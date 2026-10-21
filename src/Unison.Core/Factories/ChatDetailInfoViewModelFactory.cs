@@ -24,6 +24,7 @@ namespace Unison.Core.Factories
         private readonly IContactService _contacts;
         private readonly IDialogService _dialogs;
         private readonly IUriLauncher _uriLauncher;
+        private readonly ISystemInfoProvider _systemInfo;
         private readonly ParticipantResolutionContext _participants;
 
         public ChatDetailInfoViewModelFactory(
@@ -41,7 +42,8 @@ namespace Unison.Core.Factories
             IMessageService messages = null,
             IContactService contacts = null,
             IDialogService dialogs = null,
-            IUriLauncher uriLauncher = null)
+            IUriLauncher uriLauncher = null,
+            ISystemInfoProvider systemInfo = null)
         {
             _shortcutService = shortcutService;
             _chatStore = chatStore;
@@ -57,6 +59,7 @@ namespace Unison.Core.Factories
             _contacts = contacts;
             _dialogs = dialogs;
             _uriLauncher = uriLauncher;
+            _systemInfo = systemInfo;
             _participants = new ParticipantResolutionContext(jids, contacts, chatState, personStore);
         }
 
@@ -115,7 +118,8 @@ namespace Unison.Core.Factories
                 _dialogs,
                 _participants,
                 _uriLauncher,
-                _chatState);
+                _chatState,
+                _systemInfo);
         }
     }
 }

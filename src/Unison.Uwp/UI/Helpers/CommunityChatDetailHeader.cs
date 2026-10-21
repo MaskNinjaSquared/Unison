@@ -36,11 +36,13 @@ namespace Unison.Uwp.UI.Helpers
 
             IChatStateStore chats = null;
             IJidResolver jids = null;
+            IGroupNaming groupNaming = null;
             IContactService contacts = null;
             try
             {
                 chats = App.Services?.GetService<IChatStateStore>();
                 jids = App.Services?.GetService<IJidResolver>();
+                groupNaming = App.Services?.GetService<IGroupNaming>();
                 contacts = App.Services?.GetService<IContactService>();
             }
             catch
@@ -59,7 +61,7 @@ namespace Unison.Uwp.UI.Helpers
                     strings,
                     out communityTitle,
                     out groupSubtitle,
-                    jid => contacts?.ResolveDisplayName(jid, "community-header")))
+                    jid => ResolveParentLabel(jid, groupNaming, contacts)))
             {
                 Hide(titleStatusPanel, communityTitlePanel);
                 return false;
@@ -85,6 +87,23 @@ namespace Unison.Uwp.UI.Helpers
             {
                 communityTitlePanel.Visibility = Visibility.Collapsed;
             }
+        }
+
+        private static string ResolveParentLabel(
+            string jid,
+            IGroupNaming groupNaming,
+            IContactService contacts)
+        {
+            if (groupNaming != null)
+            {
+                string fromGroups = groupNaming.ResolveChatDisplayName(jid);
+                if (CommunityHubPresentation.IsUsableHubLabel(fromGroups, jid))
+                {
+                    return fromGroups;
+                }
+            }
+
+            return contacts?.ResolveDisplayName(jid, "community-header");
         }
 
         private static ChatItem FindParent(

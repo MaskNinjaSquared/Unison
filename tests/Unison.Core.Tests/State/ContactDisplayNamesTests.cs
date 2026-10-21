@@ -66,6 +66,24 @@ namespace Unison.Core.Tests.State
         }
 
         [Fact]
+        public void A_lid_finds_a_Person_row_keyed_under_the_phone_JID()
+        {
+            _aliases[AnaLid] = Ana;
+            _people.Cache(Ana, "Ana Souza", PersonSource.Observed);
+
+            Assert.Equal("Ana Souza", Build().Resolve(AnaLid, "sender"));
+        }
+
+        [Fact]
+        public void An_address_book_entry_that_is_only_a_phone_number_is_ignored()
+        {
+            _addressBook.Set(Ana, "5511988887777");
+            _pushNames.Set(Ana, "aninha");
+
+            Assert.Equal("~aninha", Build().Resolve(Ana, "chat"));
+        }
+
+        [Fact]
         public void A_push_name_is_marked_as_unsaved()
         {
             _pushNames.Set(Ana, "aninha");

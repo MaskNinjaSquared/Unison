@@ -16,21 +16,37 @@ namespace Unison.Core.Models
         public string Id
         {
             get => _id;
-            set { _id = value; OnPropertyChanged(); }
+            set
+            {
+                if (_id == value) return;
+                _id = value;
+                OnPropertyChanged();
+            }
         }
 
         private string _jid;
         public string JID
         {
             get => _jid;
-            set { _jid = value; OnPropertyChanged(); }
+            set
+            {
+                if (_jid == value) return;
+                _jid = value;
+                OnPropertyChanged();
+            }
         }
 
         private string _name;
         public string Name
         {
             get => _name;
-            set { _name = value; OnPropertyChanged(); OnPropertyChanged(nameof(Initial)); }
+            set
+            {
+                if (_name == value) return;
+                _name = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(Initial));
+            }
         }
 
         private readonly ChatListPreview _lastPreview = new ChatListPreview();
@@ -117,6 +133,7 @@ namespace Unison.Core.Models
             get => _lastPreview.MentionedJids;
             set
             {
+                if (ReferenceEquals(_lastPreview.MentionedJids, value)) return;
                 _lastPreview.MentionedJids = value;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(LastPreview));
@@ -147,14 +164,24 @@ namespace Unison.Core.Models
         public string Timestamp
         {
             get => _timestamp;
-            set { _timestamp = value; OnPropertyChanged(); }
+            set
+            {
+                if (_timestamp == value) return;
+                _timestamp = value;
+                OnPropertyChanged();
+            }
         }
 
         private DateTime? _lastMessageTimestampUtc;
         public DateTime? LastMessageTimestampUtc
         {
             get => _lastMessageTimestampUtc;
-            set { _lastMessageTimestampUtc = value; OnPropertyChanged(); }
+            set
+            {
+                if (_lastMessageTimestampUtc == value) return;
+                _lastMessageTimestampUtc = value;
+                OnPropertyChanged();
+            }
         }
 
         private string _lastMessageId;
@@ -176,6 +203,7 @@ namespace Unison.Core.Models
             get => _unreadCount;
             set
             {
+                if (_unreadCount == value) return;
                 _unreadCount = value;
                 OnPropertyChanged();
                 RaiseUnreadUiChanged();
@@ -204,7 +232,12 @@ namespace Unison.Core.Models
         public string AvatarUrl
         {
             get => _avatarUrl;
-            set { _avatarUrl = value; OnPropertyChanged(); }
+            set
+            {
+                if (_avatarUrl == value) return;
+                _avatarUrl = value;
+                OnPropertyChanged();
+            }
         }
 
         private string _avatarHighUrl;
@@ -274,9 +307,9 @@ namespace Unison.Core.Models
             get => _groupMembers;
             set
             {
-                _groupMembers = (value != null && value.Count > 0)
-                    ? value
-                    : null;
+                var next = (value != null && value.Count > 0) ? value : null;
+                if (ReferenceEquals(_groupMembers, next)) return;
+                _groupMembers = next;
                 _mentionLookup = MentionLookupBuilder.FromRoster(_groupMembers);
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(HasGroupMembers));
@@ -307,21 +340,36 @@ namespace Unison.Core.Models
         public DateTime? AvatarFetchedAtUtc
         {
             get => _avatarFetchedAtUtc;
-            set { _avatarFetchedAtUtc = value; OnPropertyChanged(); }
+            set
+            {
+                if (_avatarFetchedAtUtc == value) return;
+                _avatarFetchedAtUtc = value;
+                OnPropertyChanged();
+            }
         }
 
         private DateTime? _avatarFetchFailedAtUtc;
         public DateTime? AvatarFetchFailedAtUtc
         {
             get => _avatarFetchFailedAtUtc;
-            set { _avatarFetchFailedAtUtc = value; OnPropertyChanged(); }
+            set
+            {
+                if (_avatarFetchFailedAtUtc == value) return;
+                _avatarFetchFailedAtUtc = value;
+                OnPropertyChanged();
+            }
         }
 
         private string _avatarFetchFailureReason;
         public string AvatarFetchFailureReason
         {
             get => _avatarFetchFailureReason;
-            set { _avatarFetchFailureReason = value; OnPropertyChanged(); }
+            set
+            {
+                if (_avatarFetchFailureReason == value) return;
+                _avatarFetchFailureReason = value;
+                OnPropertyChanged();
+            }
         }
 
         private ChatKind _kind = ChatKind.Direct;
@@ -488,7 +536,7 @@ namespace Unison.Core.Models
         }
 
         private bool _isWidgetPinned;
-        /// <summary>Start live-tile / secondary tile pin (SQLite).</summary>
+        /// <summary>Start live-tile for the conversation (<c>chat=</c> launch).</summary>
         public bool IsWidgetPinned
         {
             get => _isWidgetPinned;
@@ -496,6 +544,22 @@ namespace Unison.Core.Models
             {
                 if (_isWidgetPinned == value) return;
                 _isWidgetPinned = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private bool _isContactWidgetPinned;
+        /// <summary>
+        /// Start live-tile for the contact Profile (<c>profile=</c> launch).
+        /// Synced from the SecondaryTile presence (not SQLite).
+        /// </summary>
+        public bool IsContactWidgetPinned
+        {
+            get => _isContactWidgetPinned;
+            set
+            {
+                if (_isContactWidgetPinned == value) return;
+                _isContactWidgetPinned = value;
                 OnPropertyChanged();
             }
         }

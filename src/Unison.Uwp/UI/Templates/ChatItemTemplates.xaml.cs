@@ -3,6 +3,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
+using Unison.Uwp.Services;
 using Unison.Uwp.UI.Views;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
@@ -69,13 +70,22 @@ namespace Unison.Uwp.UI.Templates
             }
 
             bool muted = chat.IsMutedLocally;
+            bool liveTiles = ResolveLiveTilesCompatible();
             foreach (var item in flyout.Items)
             {
                 var menuItem = item as MenuFlyoutItem;
                 var subItem = item as MenuFlyoutSubItem;
                 string tag = (menuItem?.Tag as string) ?? (subItem?.Tag as string);
 
-                if (string.Equals(tag, "chatPin", StringComparison.Ordinal) && menuItem != null)
+                if (string.Equals(tag, "viewProfile", StringComparison.Ordinal) && menuItem != null)
+                {
+                    bool canViewProfile = !chat.IsGroup &&
+                                          !chat.IsCommunityAnnounce &&
+                                          chat.Kind != ChatKind.Community &&
+                                          !string.IsNullOrWhiteSpace(chat.JID);
+                    menuItem.Visibility = canViewProfile ? Visibility.Visible : Visibility.Collapsed;
+                }
+                else if (string.Equals(tag, "chatPin", StringComparison.Ordinal) && menuItem != null)
                 {
                     menuItem.Visibility = chat.IsChatPinned ? Visibility.Collapsed : Visibility.Visible;
                 }
@@ -85,11 +95,15 @@ namespace Unison.Uwp.UI.Templates
                 }
                 else if (string.Equals(tag, "widgetPin", StringComparison.Ordinal) && menuItem != null)
                 {
-                    menuItem.Visibility = chat.IsWidgetPinned ? Visibility.Collapsed : Visibility.Visible;
+                    menuItem.Visibility = liveTiles && !chat.IsWidgetPinned
+                        ? Visibility.Visible
+                        : Visibility.Collapsed;
                 }
                 else if (string.Equals(tag, "widgetUnpin", StringComparison.Ordinal) && menuItem != null)
                 {
-                    menuItem.Visibility = chat.IsWidgetPinned ? Visibility.Visible : Visibility.Collapsed;
+                    menuItem.Visibility = liveTiles && chat.IsWidgetPinned
+                        ? Visibility.Visible
+                        : Visibility.Collapsed;
                 }
                 else if (string.Equals(tag, "localMuteSub", StringComparison.Ordinal) && subItem != null)
                 {
@@ -125,6 +139,15 @@ namespace Unison.Uwp.UI.Templates
                         ? Visibility.Visible
                         : Visibility.Collapsed;
                 }
+            }
+        }
+
+        private void ViewProfile_Click(object sender, RoutedEventArgs e)
+        {
+            var chat = ResolveChat(sender as FrameworkElement);
+            if (chat != null)
+            {
+                FindChatList(sender)?.ViewProfile(chat);
             }
         }
 
@@ -329,6 +352,23 @@ namespace Unison.Uwp.UI.Templates
             }
 
             return FindInSubtree<IChatRowActions>(Window.Current?.Content as DependencyObject);
+        }
+
+        private static bool ResolveLiveTilesCompatible()
+        {
+            try
+            {
+                var provider = App.Services?.GetService<ISystemInfoProvider>();
+                if (provider != null)
+                {
+                    return provider.LiveTilesCompatible();
+                }
+            }
+            catch
+            {
+            }
+
+            return SystemInfoProvider.DetectLiveTilesCompatible();
         }
 
         private static T FindAncestor<T>(DependencyObject start) where T : class
