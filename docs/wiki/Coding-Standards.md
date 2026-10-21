@@ -117,6 +117,7 @@ src/Unison.Uwp/
 - **Converter** → `Converters/`. Do not put convert logic in the code-behind.
 - Themes → `Themes/Unison/` and `Themes/WhatsApp/` (`Theme.xaml`, `Styles.xaml`, `Controls.xaml`). Use `ThemeResource`, not hardcoded brushes that already exist.
 - Do not put ViewModels in UWP. They stay in `Unison.Core/ViewModels/`.
+- Large ViewModels may use **partials in a named subfolder** (e.g. `ViewModels/ChatListViewModel/*.cs`). Keep the namespace `Unison.Core.ViewModels` — folders are for finding files (same rule as `Helpers/<Domain>/`), not new module boundaries.
 
 ---
 
