@@ -1212,6 +1212,9 @@ Desative depois de diagnosticar: manter ligado deixa o app lento.</value>
   <data name="Tile_ContactHasNewMessages" xml:space="preserve">
     <value>{0} Novas Mensagens</value>
   </data>
+  <data name="Tile_ContactNoMotto" xml:space="preserve">
+    <value>Nenhum Recado do Usuário</value>
+  </data>
   <data name="ChatDetailInfo_AddContactAppBarLabel.Text" xml:space="preserve">
     <value>Adicionar&#x0a;contato</value>
   </data>

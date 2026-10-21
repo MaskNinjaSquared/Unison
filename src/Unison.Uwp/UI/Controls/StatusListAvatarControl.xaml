@@ -10,9 +10,9 @@
     d:DesignWidth="56"
     IsTabStop="False">
 
-    <!-- Status list ring: green = Recent (unviewed), gray = Viewed.
-         Inner ChatAvatarControl is fallback only; status/profile thumbs use PhotoEllipse
-         with UniformToFill so non-square media fills the circle. -->
+    <!-- Same circular photo path as ChatAvatarControl (Creators Update–safe):
+         Ellipse Fill = ImageBrush Stretch=UniformToFill. Do not use UIElement.Clip
+         or Border+Image — those letterbox landscape thumbs on older XAML. -->
     <Grid x:Name="RootGrid" Width="56" Height="56">
         <Ellipse x:Name="Ring"
                  Width="56"

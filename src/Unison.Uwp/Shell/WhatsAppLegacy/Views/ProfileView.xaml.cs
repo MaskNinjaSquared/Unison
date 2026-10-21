@@ -121,7 +121,17 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private void ProfileCommandBar_Loaded(object sender, RoutedEventArgs e)
         {
-            LegacyCommandBarLayout.CenterPrimaryCommands(sender as CommandBar);
+            var bar = sender as CommandBar;
+            if (bar == null)
+            {
+                return;
+            }
+
+            // Desktop: Compact open must overlay upward; Stretch in the bottom Auto row
+            // measures closed and clips the label strip (or opens into empty space below).
+            bar.VerticalAlignment = VerticalAlignment.Bottom;
+            bar.ClearValue(UIElement.ClipProperty);
+            LegacyCommandBarLayout.CenterPrimaryCommands(bar);
         }
 
         private void TearDown()
