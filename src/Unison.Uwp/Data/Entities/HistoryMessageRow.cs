@@ -51,6 +51,8 @@ namespace Unison.Uwp.Data.Entities
 
         public bool IsVoiceNote { get; set; }
 
+        public bool IsAnimated { get; set; }
+
         public bool IsRevoked { get; set; }
 
         public bool IsForwarded { get; set; }

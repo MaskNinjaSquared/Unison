@@ -37,8 +37,8 @@ namespace Unison.Core.Models
 
         /// <summary>
         /// Windows Phone with a 2 GB SKU still reports ~900 MB app limit (High by floor), but the
-        /// High sync cascade (adjacent FULL_HISTORY + parallel enrich) OOMs Creators Mobile.
-        /// Cap Mobile at Low so workload matches 1.8.3-era "one quiet lot, then decorate".
+        /// High sync cascade (60 adjacent FULL_HISTORY + parallel enrich) OOMs Creators Mobile.
+        /// Cap Mobile at Low: limited adjacent pages with enrich deferred while catch-up is up.
         /// </summary>
         public static DeviceCategory CapForMobile(DeviceCategory category, bool isMobile)
         {

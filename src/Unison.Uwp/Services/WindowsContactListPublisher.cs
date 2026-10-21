@@ -145,7 +145,7 @@ namespace Unison.Uwp.Services
                 contact = new Contact();
             }
 
-            string name = (item.DisplayName ?? string.Empty).Trim();
+            string name = PeopleContactDisplayName.ForWindowsPeople(item.DisplayName ?? string.Empty);
             if (string.IsNullOrEmpty(name) || name.IndexOf('@') >= 0)
             {
                 string digits = PhoneNumberHelper.NormalizePhoneDigits(item.PhoneDigits);
@@ -218,12 +218,10 @@ namespace Unison.Uwp.Services
                 annotation.SupportedOperations |= ContactAnnotationOperations.Share;
             }
 
-            if (annotation.ProviderProperties.Count == 0)
-            {
-                string appId = Package.Current.Id.FamilyName + "!App";
-                annotation.ProviderProperties.Add("ContactPanelAppID", appId);
-                annotation.ProviderProperties.Add("ContactShareAppID", appId);
-            }
+            // Always stamp panel IDs — an older annotation without them never shows Profile.
+            string appId = Package.Current.Id.FamilyName + "!App";
+            annotation.ProviderProperties["ContactPanelAppID"] = appId;
+            annotation.ProviderProperties["ContactShareAppID"] = appId;
 
             try
             {

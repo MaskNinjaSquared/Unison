@@ -103,13 +103,13 @@ namespace Unison.Core.Helpers
     /// </summary>
     public static class OutgoingTextSendRetry
     {
-        public const int MaxAttempts = 2;
+        public static int MaxAttempts => ConnectionStabilityExperiment.TextSendMaxAttempts;
 
         public static readonly TimeSpan WriteTimeout = TimeSpan.FromSeconds(15);
 
-        public static readonly TimeSpan RetryDelay = TimeSpan.FromMilliseconds(500);
+        public static TimeSpan RetryDelay => ConnectionStabilityExperiment.TextSendRetryDelay;
 
-        /// <summary>First attempt waits longer for a reconnect; the second does not.</summary>
+        /// <summary>First attempt waits longer for a reconnect; later attempts do not.</summary>
         public static TimeSpan ConnectTimeout(int attempt)
         {
             return attempt <= 1

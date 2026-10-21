@@ -166,5 +166,66 @@ namespace Unison.Core.Tests.Helpers
                 ConnectionHealthProfile.Background.ProbeTimeoutMs < ConnectionHealthPolicy.CheckInterval.TotalMilliseconds,
                 "a probe can outlive the cycle that started it");
         }
+
+        // --- Force-reconnect deferral (usync / catch-up) -----------------------------
+
+        [Fact]
+        public void Force_reconnect_is_not_deferred_when_nothing_is_holding_the_socket()
+        {
+            Assert.Null(
+                ConnectionHealthPolicy.DeferForceReconnectReason(
+                    nodeProcessingStalled: false,
+                    usyncGateHeld: false,
+                    historyCatchUpActive: false));
+        }
+
+        [Fact]
+        public void A_held_usync_lease_defers_force_reconnect()
+        {
+            // Directory IQs can starve keep-alives for tens of seconds on Mobile without
+            // the socket being dead. Tearing down restarts the same name pass.
+            Assert.Equal(
+                "usync-held",
+                ConnectionHealthPolicy.DeferForceReconnectReason(
+                    nodeProcessingStalled: false,
+                    usyncGateHeld: true,
+                    historyCatchUpActive: false));
+        }
+
+        [Fact]
+        public void An_active_history_catch_up_defers_force_reconnect()
+        {
+            // Same silence pattern during FULL_HISTORY: force-reconnect used to clear the
+            // catch-up banner (unlike 1.8) and loop "Synchronizing history…".
+            Assert.Equal(
+                "history-catch-up",
+                ConnectionHealthPolicy.DeferForceReconnectReason(
+                    nodeProcessingStalled: false,
+                    usyncGateHeld: false,
+                    historyCatchUpActive: true));
+        }
+
+        [Fact]
+        public void Usync_defer_wins_when_catch_up_is_also_active()
+        {
+            Assert.Equal(
+                "usync-held",
+                ConnectionHealthPolicy.DeferForceReconnectReason(
+                    nodeProcessingStalled: false,
+                    usyncGateHeld: true,
+                    historyCatchUpActive: true));
+        }
+
+        [Fact]
+        public void A_stalled_node_queue_is_never_deferred()
+        {
+            // Stall means messages will not reach the app even if probes answer. Usync or
+            // catch-up must not keep a dead ordered queue alive.
+            Assert.Null(
+                ConnectionHealthPolicy.DeferForceReconnectReason(
+                    nodeProcessingStalled: true,
+                    usyncGateHeld: true,
+                    historyCatchUpActive: true));
+        }
     }
 }

@@ -76,7 +76,15 @@ namespace Unison.Socket.Groups
             var linkedParent = group.GetChild("linked_parent");
             if (linkedParent != null)
             {
-                metadata.LinkedParent = linkedParent.GetAttribute("jid");
+                // Wire often sends bare numeric id; Baileys prefers attrs.jid when present.
+                string linkedRaw = linkedParent.GetAttribute("jid")
+                    ?? linkedParent.GetAttribute("id");
+                if (!string.IsNullOrEmpty(linkedRaw))
+                {
+                    metadata.LinkedParent = linkedRaw.Contains("@")
+                        ? linkedRaw
+                        : WA.JidEncode(linkedRaw, WA.G_US);
+                }
             }
 
             var ephemeral = group.GetChild("ephemeral");

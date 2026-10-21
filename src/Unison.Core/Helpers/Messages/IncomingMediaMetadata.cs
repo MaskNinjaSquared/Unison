@@ -39,7 +39,7 @@ namespace Unison.Core.Helpers
                 ApplySticker(target, renderInfo.StickerMessage);
             }
 
-            if (renderInfo.IsVideo && renderInfo.VideoMessage != null)
+            if ((renderInfo.IsVideo || renderInfo.IsGif) && renderInfo.VideoMessage != null)
             {
                 ApplyVideo(target, renderInfo.VideoMessage);
             }
@@ -137,7 +137,8 @@ namespace Unison.Core.Helpers
                 return;
             }
 
-            target.Kind = ChatMessageKind.Video;
+            target.Kind = video.GifPlayback ? ChatMessageKind.Gif : ChatMessageKind.Video;
+            target.IsAnimated = video.GifPlayback;
             target.VideoDurationSeconds = video.Seconds;
             target.VideoMimeType = video.Mimetype;
             target.VideoUrl = video.Url;

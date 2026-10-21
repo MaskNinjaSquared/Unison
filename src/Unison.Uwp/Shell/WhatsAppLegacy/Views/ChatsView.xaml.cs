@@ -46,6 +46,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             if (!_hooked)
             {
                 ChatListPart.ConfigureScope(ChatListScope.Active);
+                ChatListPart.CommunityHubClosed += ChatListPart_CommunityHubClosed;
                 if (_shell != null)
                 {
                     _shell.PropertyChanged += Shell_PropertyChanged;
@@ -76,11 +77,27 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         private void UnhookShell()
         {
-            if (_shell != null && _hooked)
+            if (_hooked)
             {
-                _shell.PropertyChanged -= Shell_PropertyChanged;
+                if (ChatListPart != null)
+                {
+                    ChatListPart.CommunityHubClosed -= ChatListPart_CommunityHubClosed;
+                }
+
+                if (_shell != null)
+                {
+                    _shell.PropertyChanged -= Shell_PropertyChanged;
+                }
+
                 _hooked = false;
             }
+        }
+
+        private void ChatListPart_CommunityHubClosed(object sender, EventArgs e)
+        {
+            ChatListPart?.ClearSelection();
+            ChatOpenRequested?.Invoke(this, new ChatSelectedEventArgs(null));
+            _shell?.ClearChat();
         }
 
         public void NotifyLocalConversationsCleared()
@@ -151,16 +168,20 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 if (chat == null)
                 {
                     Debug.WriteLine("[LegacyChats] Deep-link chat not found yet: " + jid);
+                    // OpenDetailAsync never runs — release list hold here.
+                    _shell?.ReleaseDeepLinkListHold("deep-link-not-found");
                     return;
                 }
 
                 _shell.ClearPendingOpenChatJid();
                 ChatListPart?.HighlightChatQuiet(chat);
                 ChatOpenRequested?.Invoke(this, new ChatSelectedEventArgs(chat));
+                // Release after ShellView OpenDetailAsync completes the conversation load.
             }
             catch (Exception ex)
             {
                 Debug.WriteLine("[LegacyChats] Deep-link open failed: " + ex);
+                _shell?.ReleaseDeepLinkListHold("deep-link-failed");
             }
             finally
             {
@@ -185,6 +206,12 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         public bool TryHandleBack()
         {
+            // Hub back clears selection and raises CommunityHubClosed (closes detail).
+            if (ChatListPart != null && ChatListPart.TryConsumeCommunityHubBack())
+            {
+                return true;
+            }
+
             if (_shell == null || !_shell.HasActiveChat)
             {
                 return false;

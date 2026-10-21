@@ -17,10 +17,12 @@ namespace Unison.Core.Helpers
 
             return message.Kind == ChatMessageKind.Image ||
                    message.Kind == ChatMessageKind.Video ||
+                   message.Kind == ChatMessageKind.Gif ||
                    message.Kind == ChatMessageKind.Audio ||
                    message.Kind == ChatMessageKind.Voice ||
                    message.IsImage ||
                    message.IsVideo ||
+                   message.IsGif ||
                    message.IsAudio;
         }
 

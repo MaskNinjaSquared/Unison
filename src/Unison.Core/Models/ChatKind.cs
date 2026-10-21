@@ -12,6 +12,13 @@ namespace Unison.Core.Models
         Group = 1,
 
         /// <summary>Chat with yourself (notes / “Message yourself”).</summary>
-        Personal = 2
+        Personal = 2,
+
+        /// <summary>
+        /// WhatsApp Community parent hub (<c>parent</c> on w:g2).
+        /// Linked subgroups stay <see cref="Group"/> with <c>LinkedParentJid</c>;
+        /// announce channels stay <see cref="Group"/> with <c>IsCommunityAnnounce</c>.
+        /// </summary>
+        Community = 3
     }
 }

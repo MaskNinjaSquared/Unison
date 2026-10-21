@@ -99,7 +99,7 @@
                         <Button x:Name="SentImageOpenButton"
                                 Click="ImageOpenButton_Click"
                                 Style="{StaticResource TransparentMediaButtonStyle}"
-                                x:Load="{x:Bind HasImage, Mode=OneWay}"
+                                x:Load="{x:Bind CanOpenImageViewer, Mode=OneWay}"
                                 HorizontalAlignment="Left"
                                 Margin="0,0,0,6"
                                 Padding="0">
@@ -108,6 +108,14 @@
                                    Stretch="Uniform"
                                    HorizontalAlignment="Left"/>
                         </Button>
+                        <Image x:Name="SentStickerImage"
+                               Source="{x:Bind ImageUri, Mode=OneWay, Converter={StaticResource StringToImageSourceConverter}, ConverterParameter=320}"
+                               MaxWidth="220"
+                               Stretch="Uniform"
+                               HorizontalAlignment="Left"
+                               Margin="0,0,0,6"
+                               IsHitTestVisible="False"
+                               x:Load="{x:Bind ShowStickerImage, Mode=OneWay}"/>
                         <Grid x:Name="SentStickerLoading"
                               Width="96" Height="96" Margin="0,0,0,6"
                               x:Load="{x:Bind ShowStickerLoading, Mode=OneWay}">
@@ -211,6 +219,38 @@
                                                VerticalAlignment="Center"
                                                Margin="4,0,0,0"
                                                Loaded="VideoPlayGlyph_Loaded"/>
+                                </Grid>
+                            </Button>
+                        </Grid>
+                        <Grid x:Name="SentGifSurface"
+                              HorizontalAlignment="Stretch"
+                              VerticalAlignment="Stretch"
+                              Margin="0,0,0,6"
+                              x:Load="{x:Bind ShowGifSurface, Mode=OneWay}">
+                            <controls:AnimationView SourceUri="{x:Bind VideoUri, Mode=OneWay}"
+                                                    Thumbnail="{x:Bind VideoPosterUri, Mode=OneWay, Converter={StaticResource StringToImageSourceConverter}, ConverterParameter=320}"
+                                                    IsPlaying="{x:Bind IsGifPlaying, Mode=TwoWay}"
+                                                    ResumeWhenVisible="{x:Bind ResumeGifWhenVisible, Mode=OneWay}"
+                                                    IsLoopingEnabled="True"
+                                                    HorizontalAlignment="Stretch"
+                                                    VerticalAlignment="Stretch"
+                                                    MinHeight="120"
+                                                    MinWidth="120"/>
+                            <Button Command="{x:Bind PlayGifCommand, Mode=OneWay}"
+                                    Style="{StaticResource MediaHitTargetButtonStyle}"
+                                    HorizontalAlignment="Stretch"
+                                    VerticalAlignment="Stretch"
+                                    Padding="0"
+                                    Visibility="{x:Bind ShowGifPlayButton, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <Grid Width="56" Height="56">
+                                    <Ellipse Fill="#99000000"/>
+                                    <!-- Segoe MDL2 GIF -->
+                                    <TextBlock Text="&#xF4A9;"
+                                               FontFamily="{StaticResource IconFont}"
+                                               FontSize="22"
+                                               Foreground="White"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"/>
                                 </Grid>
                             </Button>
                         </Grid>
@@ -417,6 +457,12 @@
                                            Foreground="{ThemeResource ChatDetailSentMetaBrush}"
                                            VerticalAlignment="Center"
                                            Visibility="{x:Bind IsVideo, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                <TextBlock Text="&#xF4A9;"
+                                           FontFamily="{StaticResource IconFont}"
+                                           FontSize="12"
+                                           Foreground="{ThemeResource ChatDetailSentMetaBrush}"
+                                           VerticalAlignment="Center"
+                                           Visibility="{x:Bind IsGif, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                                 <!-- Same glyph the chat list uses for a sticker preview. -->
                                 <TextBlock Text="&#xF4AA;"
                                            FontFamily="{StaticResource IconFont}"
@@ -633,7 +679,7 @@
                         <Button x:Name="ReceivedImageOpenButton"
                                 Click="ImageOpenButton_Click"
                                 Style="{StaticResource TransparentMediaButtonStyle}"
-                                x:Load="{x:Bind HasImage, Mode=OneWay}"
+                                x:Load="{x:Bind CanOpenImageViewer, Mode=OneWay}"
                                 HorizontalAlignment="Left"
                                 Margin="0,0,0,6"
                                 Padding="0">
@@ -642,6 +688,14 @@
                                    Stretch="Uniform"
                                    HorizontalAlignment="Left"/>
                         </Button>
+                        <Image x:Name="ReceivedStickerImage"
+                               Source="{x:Bind ImageUri, Mode=OneWay, Converter={StaticResource StringToImageSourceConverter}, ConverterParameter=320}"
+                               MaxWidth="220"
+                               Stretch="Uniform"
+                               HorizontalAlignment="Left"
+                               Margin="0,0,0,6"
+                               IsHitTestVisible="False"
+                               x:Load="{x:Bind ShowStickerImage, Mode=OneWay}"/>
                         <Grid x:Name="ReceivedStickerLoading"
                               Width="96" Height="96" Margin="0,0,0,6"
                               x:Load="{x:Bind ShowStickerLoading, Mode=OneWay}">
@@ -741,6 +795,38 @@
                                                VerticalAlignment="Center"
                                                Margin="4,0,0,0"
                                                Loaded="VideoPlayGlyph_Loaded"/>
+                                </Grid>
+                            </Button>
+                        </Grid>
+                        <Grid x:Name="ReceivedGifSurface"
+                              HorizontalAlignment="Stretch"
+                              VerticalAlignment="Stretch"
+                              Margin="0,0,0,6"
+                              x:Load="{x:Bind ShowGifSurface, Mode=OneWay}">
+                            <controls:AnimationView SourceUri="{x:Bind VideoUri, Mode=OneWay}"
+                                                    Thumbnail="{x:Bind VideoPosterUri, Mode=OneWay, Converter={StaticResource StringToImageSourceConverter}, ConverterParameter=320}"
+                                                    IsPlaying="{x:Bind IsGifPlaying, Mode=TwoWay}"
+                                                    ResumeWhenVisible="{x:Bind ResumeGifWhenVisible, Mode=OneWay}"
+                                                    IsLoopingEnabled="True"
+                                                    HorizontalAlignment="Stretch"
+                                                    VerticalAlignment="Stretch"
+                                                    MinHeight="120"
+                                                    MinWidth="120"/>
+                            <Button Command="{x:Bind PlayGifCommand, Mode=OneWay}"
+                                    Style="{StaticResource MediaHitTargetButtonStyle}"
+                                    HorizontalAlignment="Stretch"
+                                    VerticalAlignment="Stretch"
+                                    Padding="0"
+                                    Visibility="{x:Bind ShowGifPlayButton, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <Grid Width="56" Height="56">
+                                    <Ellipse Fill="#99000000"/>
+                                    <!-- Segoe MDL2 GIF -->
+                                    <TextBlock Text="&#xF4A9;"
+                                               FontFamily="{StaticResource IconFont}"
+                                               FontSize="22"
+                                               Foreground="White"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"/>
                                 </Grid>
                             </Button>
                         </Grid>
@@ -944,6 +1030,12 @@
                                            Foreground="{ThemeResource ChatDetailReceivedMetaBrush}"
                                            VerticalAlignment="Center"
                                            Visibility="{x:Bind IsVideo, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                <TextBlock Text="&#xF4A9;"
+                                           FontFamily="{StaticResource IconFont}"
+                                           FontSize="12"
+                                           Foreground="{ThemeResource ChatDetailReceivedMetaBrush}"
+                                           VerticalAlignment="Center"
+                                           Visibility="{x:Bind IsGif, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                                 <!-- Same glyph the chat list uses for a sticker preview. -->
                                 <TextBlock Text="&#xF4AA;"
                                            FontFamily="{StaticResource IconFont}"

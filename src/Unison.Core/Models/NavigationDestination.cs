@@ -21,6 +21,11 @@ namespace Unison.Core.Models
         Favorites = 15,
 
         /// <summary>
+        /// Full-page contact profile (People ContactPanel / <c>profile=</c> deep link).
+        /// </summary>
+        Profile = 16,
+
+        /// <summary>
         /// Tracked as the active section when settings is open; do not pass to
         /// <c>NavigateInShell</c> — use <see cref="Contracts.INavigator.OpenSettings"/>.
         /// </summary>

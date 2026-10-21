@@ -21,10 +21,13 @@ namespace Unison.Core.Models
         /// <summary>1:1 chats that are not in the device address book.</summary>
         NonContacts = 4,
 
-        /// <summary>Group conversations.</summary>
+        /// <summary>Ordinary group conversations (not community hubs).</summary>
         Groups = 5,
 
         /// <summary>Chats with a local draft. Not implemented yet; currently always empty.</summary>
-        Drafts = 6
+        Drafts = 6,
+
+        /// <summary>Community hub rows (<see cref="ChatKind.Community"/>).</summary>
+        Communities = 7
     }
 }

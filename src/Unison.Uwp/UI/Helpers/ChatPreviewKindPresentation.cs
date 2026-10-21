@@ -24,6 +24,8 @@ namespace Unison.Uwp.UI.Helpers
                     return LocalizedStrings.Get("ChatList_PreviewPhoto");
                 case ChatPreviewKind.Video:
                     return LocalizedStrings.Get("ChatList_PreviewVideo");
+                case ChatPreviewKind.Gif:
+                    return LocalizedStrings.Get("ChatList_PreviewGif");
                 case ChatPreviewKind.Sticker:
                     return LocalizedStrings.Get("ChatList_PreviewSticker");
                 case ChatPreviewKind.Voice:

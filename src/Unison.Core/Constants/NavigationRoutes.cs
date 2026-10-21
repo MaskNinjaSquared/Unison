@@ -20,6 +20,7 @@ namespace Unison.Core.Constants
         public const string Status = "status";
         public const string Calls = "calls";
         public const string Favorites = "favorites";
+        public const string Profile = "profile";
         public const string Settings = "settings";
         public const string Debug = "debug";
 
@@ -36,6 +37,7 @@ namespace Unison.Core.Constants
                 case NavigationDestination.Status: return Status;
                 case NavigationDestination.Calls: return Calls;
                 case NavigationDestination.Favorites: return Favorites;
+                case NavigationDestination.Profile: return Profile;
                 case NavigationDestination.Settings: return Settings;
                 case NavigationDestination.Debug: return Debug;
                 default: return null;
@@ -102,6 +104,12 @@ namespace Unison.Core.Constants
             if (string.Equals(key, Favorites, StringComparison.OrdinalIgnoreCase))
             {
                 destination = NavigationDestination.Favorites;
+                return true;
+            }
+
+            if (string.Equals(key, Profile, StringComparison.OrdinalIgnoreCase))
+            {
+                destination = NavigationDestination.Profile;
                 return true;
             }
 

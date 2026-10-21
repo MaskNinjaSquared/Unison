@@ -51,6 +51,9 @@ namespace Unison.Core.Models
         /// <summary>True when audio is a PTT voice note.</summary>
         public bool IsVoiceNote { get; set; }
 
+        /// <summary>True when video is WhatsApp GIF playback (<c>GifPlayback</c>).</summary>
+        public bool IsAnimated { get; set; }
+
         public bool IsRevoked { get; set; }
 
         /// <summary>ContextInfo.isForwarded — independent of <see cref="Kind"/>.</summary>

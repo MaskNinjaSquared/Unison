@@ -10,13 +10,26 @@ using Xunit;
 
 namespace Unison.Core.Tests.Helpers
 {
-    public sealed class OutgoingTextSendTests
+    [Collection(ConnectionStabilityExperimentCollection.Name)]
+    public sealed class OutgoingTextSendTests : IDisposable
     {
         private static readonly DateTime At = new DateTime(2026, 10, 12, 9, 30, 0, DateTimeKind.Utc);
 
         private readonly FakeHost _host = new FakeHost();
         private readonly FakeJids _jids = new FakeJids();
         private readonly List<TimeSpan> _delays = new List<TimeSpan>();
+        private readonly bool _wasEnabled;
+
+        public OutgoingTextSendTests()
+        {
+            _wasEnabled = ConnectionStabilityExperiment.Enabled;
+            ConnectionStabilityExperiment.Enabled = false;
+        }
+
+        public void Dispose()
+        {
+            ConnectionStabilityExperiment.Enabled = _wasEnabled;
+        }
 
         private OutgoingTextSend Create() => new OutgoingTextSend(
             _host,
@@ -171,6 +184,25 @@ namespace Unison.Core.Tests.Helpers
 
             Assert.Equal(ChatMessage.StatusFailed, sent.Status);
             Assert.IsType<InvalidOperationException>(_host.Errors[0]);
+        }
+
+        [Fact]
+        public async Task Experiment_promotes_a_racing_failed_status_when_retry_is_accepted()
+        {
+            ConnectionStabilityExperiment.Enabled = true;
+            _host.StatusAppliedOnAccept = ChatMessage.StatusFailed;
+            _host.Outcomes.Enqueue(new OutgoingSendAttempt
+            {
+                Outcome = OutgoingSendAttemptOutcome.TransportFailure,
+                Error = new IOException("pipe"),
+                TransportToken = new object()
+            });
+            _host.Outcomes.Enqueue(Accepted());
+
+            ChatMessage sent = await Create().SendAsync("555@s.whatsapp.net", "hello");
+
+            Assert.Equal(ChatMessage.StatusSent, sent.Status);
+            Assert.Equal(2, _host.Requests.Count);
         }
 
         private static OutgoingSendAttempt Accepted() =>

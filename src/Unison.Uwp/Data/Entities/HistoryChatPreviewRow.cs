@@ -21,6 +21,15 @@ namespace Unison.Uwp.Data.Entities
 
         public bool IsGroup { get; set; }
 
+        /// <summary>Community default announce channel (<c>default_sub_group</c>).</summary>
+        public bool IsCommunityAnnounce { get; set; }
+
+        /// <summary>Community parent hub (<c>parent</c> on w:g2).</summary>
+        public bool IsCommunityParent { get; set; }
+
+        /// <summary>Parent community JID (<c>linked_parent</c>).</summary>
+        public string LinkedParentJid { get; set; }
+
         /// <summary><see cref="ChatStatus"/> as INTEGER.</summary>
         public int Status { get; set; }
 

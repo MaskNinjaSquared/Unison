@@ -3,7 +3,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!--
       Merged AFTER Themes/WhatsApp/Theme.xaml so ThemeDictionaries win over WhatsApp greys.
-      Icon glyphs live in LegacyIconFont (WhatsAppLegacyIcons.ttf): EB01–EB0F.
+      Icon glyphs live in LegacyIconFont (WhatsAppLegacyIcons.ttf): EB01–EB15.
     -->
     <BitmapImage x:Key="AvatarContactFallbackImage"
                  UriSource="ms-appx:///Assets/WhatsAppLegacy/default-contact-icon.png"/>
@@ -24,6 +24,12 @@
     <x:String x:Key="LegacyGlyphFlash">&#xEB0D;</x:String>
     <x:String x:Key="LegacyGlyphFlashOff">&#xEB0E;</x:String>
     <x:String x:Key="LegacyGlyphFlashAuto">&#xEB0F;</x:String>
+    <x:String x:Key="LegacyGlyphPicture">&#xEB10;</x:String>
+    <x:String x:Key="LegacyGlyphVideo">&#xEB11;</x:String>
+    <x:String x:Key="LegacyGlyphDocument">&#xEB12;</x:String>
+    <x:String x:Key="LegacyGlyphContact">&#xEB13;</x:String>
+    <x:String x:Key="LegacyGlyphAudio">&#xEB14;</x:String>
+    <x:String x:Key="LegacyGlyphLocation">&#xEB15;</x:String>
     <!-- Every LegacyIconFont glyph is centred in its em, so one size per surface keeps them uniform. -->
     <x:Double x:Key="LegacyAppBarGlyphSize">24</x:Double>
     <!-- Compact strip +6 for a 3px air gap above and below the 40px ring (was 48). -->
@@ -41,6 +47,8 @@
             <SolidColorBrush x:Key="ChatDetailWallpaperBackgroundBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="ChatDetailDateSeparatorBackgroundBrush" Color="#FF1A1A1A"/>
             <SolidColorBrush x:Key="ChatDetailHeaderBrush" Color="#FF000000"/>
+            <!-- Community hub strip on the list: grey bar over pure black/white chrome. -->
+            <SolidColorBrush x:Key="CommunityHubHeaderBrush" Color="#FF2C2C2C"/>
             <SolidColorBrush x:Key="ChatListSearchBackgroundBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="ChatListSearchFocusedBackgroundBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="SettingsPageBackgroundBrush" Color="#FF000000"/>
@@ -97,6 +105,7 @@
             <SolidColorBrush x:Key="ChatDetailWallpaperBackgroundBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="ChatDetailDateSeparatorBackgroundBrush" Color="#FF1A1A1A"/>
             <SolidColorBrush x:Key="ChatDetailHeaderBrush" Color="#FF000000"/>
+            <SolidColorBrush x:Key="CommunityHubHeaderBrush" Color="#FF2C2C2C"/>
             <SolidColorBrush x:Key="ChatListSearchBackgroundBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="ChatListSearchFocusedBackgroundBrush" Color="#FF000000"/>
             <SolidColorBrush x:Key="SettingsPageBackgroundBrush" Color="#FF000000"/>
@@ -153,6 +162,7 @@
             <SolidColorBrush x:Key="ChatDetailWallpaperBackgroundBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatDetailDateSeparatorBackgroundBrush" Color="#FFF0F0F0"/>
             <SolidColorBrush x:Key="ChatDetailHeaderBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="CommunityHubHeaderBrush" Color="#FFE2E3E3"/>
             <SolidColorBrush x:Key="ChatListSearchBackgroundBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ChatListSearchFocusedBackgroundBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="SettingsPageBackgroundBrush" Color="#FFFFFFFF"/>

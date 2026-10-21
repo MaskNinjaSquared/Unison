@@ -53,6 +53,9 @@ namespace Unison.Core.Models
 
         public bool IsVoiceNote { get; set; }
 
+        /// <summary>Unused for status rows; required by <see cref="IHistoryMediaFields"/>.</summary>
+        public bool IsAnimated { get; set; }
+
         /// <summary>True after this item was shown in the Status viewer on this device.</summary>
         public bool IsViewed { get; set; }
 

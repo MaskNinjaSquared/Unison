@@ -16,6 +16,7 @@ using Unison.Core.ViewModels;
 using Unison.Uwp.Client;
 using Unison.Uwp.Helpers;
 using Unison.Uwp.Services;
+using Unison.Uwp.Services.Diagnostics;
 using Unison.Uwp.Services.WhatsApp;
 using Unison.Uwp.UI.Controls;
 using Unison.Uwp.UI.Helpers;
@@ -41,6 +42,8 @@ namespace Unison.Uwp.UI.Views
         private ChatItem _activeChat;
         private ObservableCollection<ChatMessageViewModel> _messages;
         private readonly bool _isWindowsMobile;
+        private readonly MessageBubbleContextGestureGate _bubbleContextGate =
+            new MessageBubbleContextGestureGate();
         public event EventHandler BackRequested;
         private Storyboard _chatDetailInfoSlideStoryboard;
         private bool _chatDetailInfoPaneShown;
@@ -1106,6 +1109,7 @@ namespace Unison.Uwp.UI.Views
             ViewModel.RefreshLocalChatState();
             bool muted = ViewModel.ShowUnmuteOption;
             bool widgetPinned = ViewModel.IsWidgetPinned;
+            bool liveTiles = ViewModel.AreLiveTilesAvailable;
             bool archived = ViewModel.ActiveChat?.Status == Unison.Core.Models.ChatStatus.Archived;
             bool compactHeader = IsCompactHeaderCallLayout();
             bool canVoiceCall = ViewModel.CanCallPhone;
@@ -1126,11 +1130,15 @@ namespace Unison.Uwp.UI.Views
                 }
                 else if (string.Equals(tag, "widgetPin", StringComparison.Ordinal) && menuItem != null)
                 {
-                    menuItem.Visibility = widgetPinned ? Visibility.Collapsed : Visibility.Visible;
+                    menuItem.Visibility = liveTiles && !widgetPinned
+                        ? Visibility.Visible
+                        : Visibility.Collapsed;
                 }
                 else if (string.Equals(tag, "widgetUnpin", StringComparison.Ordinal) && menuItem != null)
                 {
-                    menuItem.Visibility = widgetPinned ? Visibility.Visible : Visibility.Collapsed;
+                    menuItem.Visibility = liveTiles && widgetPinned
+                        ? Visibility.Visible
+                        : Visibility.Collapsed;
                 }
                 else if (string.Equals(tag, "addContact", StringComparison.Ordinal) && menuItem != null)
                 {
@@ -1198,7 +1206,7 @@ namespace Unison.Uwp.UI.Views
         {
             var element = sender as FrameworkElement;
             var vm = element?.DataContext as ChatMessageViewModel;
-            if (vm == null || !vm.HasImage)
+            if (vm == null || !vm.CanOpenImageViewer)
             {
                 return;
             }
@@ -1210,7 +1218,7 @@ namespace Unison.Uwp.UI.Views
 
             // W10M: cached .webp ImageUri → PNG display before the viewer opens.
             await vm.EnsureImageReadyAsync(showErrorDialog: false);
-            if (vm.HasImage)
+            if (vm.CanOpenImageViewer)
             {
                 OpenImageViewer(vm);
             }
@@ -1218,7 +1226,7 @@ namespace Unison.Uwp.UI.Views
 
         public async void OpenInfoImage(ChatMessageViewModel vm)
         {
-            if (vm == null)
+            if (vm == null || vm.IsSticker)
             {
                 return;
             }
@@ -1241,7 +1249,7 @@ namespace Unison.Uwp.UI.Views
                     await vm.EnsureImageReadyAsync(showErrorDialog: false);
                 }
 
-                if (vm.HasImage)
+                if (vm.CanOpenImageViewer)
                 {
                     OpenImageViewer(vm);
                 }
@@ -1412,8 +1420,13 @@ namespace Unison.Uwp.UI.Views
 
         public void OnDocumentReadyContextRequested(object sender, RightTappedRoutedEventArgs e)
         {
-            ShowDocumentReadyMenu(sender as FrameworkElement, e?.GetPosition(sender as UIElement) ?? default(Point));
             e.Handled = true;
+            if (!_bubbleContextGate.TryBeginFromRightTap())
+            {
+                return;
+            }
+
+            ShowDocumentReadyMenu(sender as FrameworkElement, e?.GetPosition(sender as UIElement) ?? default(Point));
         }
 
         public void OnDocumentReadyHolding(object sender, HoldingRoutedEventArgs e)
@@ -1423,8 +1436,13 @@ namespace Unison.Uwp.UI.Views
                 return;
             }
 
-            ShowDocumentReadyMenu(sender as FrameworkElement, e.GetPosition(sender as UIElement));
             e.Handled = true;
+            if (!_bubbleContextGate.TryBeginFromHold())
+            {
+                return;
+            }
+
+            ShowDocumentReadyMenu(sender as FrameworkElement, e.GetPosition(sender as UIElement));
         }
 
         public void OnDocumentOverflowClick(object sender, RoutedEventArgs e)
@@ -1639,7 +1657,15 @@ namespace Unison.Uwp.UI.Views
                 {
                     HeaderAvatar.AvatarUrl = null;
                     HeaderAvatar.IsGroup = false;
+                    HeaderAvatar.Visibility = Visibility.Visible;
                 }
+
+                if (HeaderAnnouncementsAvatar != null)
+                {
+                    HeaderAnnouncementsAvatar.AvatarUrl = null;
+                    HeaderAnnouncementsAvatar.Visibility = Visibility.Collapsed;
+                }
+
                 ApplyHeaderActions(isGroup: false, visible: false);
                 return Task.CompletedTask;
             }
@@ -1683,6 +1709,8 @@ namespace Unison.Uwp.UI.Views
                 _ = ViewModel.MarkChatOpenedAsync(chat);
             }
 
+            ChatOpenMetadataProbe.WriteAsync(chat);
+
             return Task.CompletedTask;
         }
 
@@ -1714,6 +1742,20 @@ namespace Unison.Uwp.UI.Views
                     "aborted",
                     chat.JID,
                     "stage=after-yield; reason=" + DescribeChatLoadAbort(token, chat));
+                ViewModel.EndLoadingMessages();
+                return;
+            }
+
+            // Mobile experiment: let NarrowDetail navigation + ProgressBar paint before
+            // SQLite / bubble materialization fights the compositor.
+            if (!await AwaitTimelineMaterializeDelayAsync(token).ConfigureAwait(true) ||
+                _activeChat == null ||
+                !ReferenceEquals(_activeChat, chat))
+            {
+                WriteChatOpenDiagnostics(
+                    "aborted",
+                    chat.JID,
+                    "stage=after-materialize-delay; reason=" + DescribeChatLoadAbort(token, chat));
                 ViewModel.EndLoadingMessages();
                 return;
             }
@@ -1819,6 +1861,34 @@ namespace Unison.Uwp.UI.Views
                 await Task.Delay(48);
             }
         }
+
+        /// <summary>
+        /// Extra Mobile pause after the top ProgressBar shows and before bubbles load.
+        /// Cancelled when the user switches chat. Returns false when aborted.
+        /// </summary>
+        private async Task<bool> AwaitTimelineMaterializeDelayAsync(CancellationToken token)
+        {
+            if (!_isWindowsMobile)
+            {
+                return !token.IsCancellationRequested;
+            }
+
+            try
+            {
+                WriteChatOpenDiagnostics(
+                    "materialize-delay",
+                    _activeChat?.JID,
+                    "ms=" + (int)TimelineMaterializeDelay.TotalMilliseconds);
+                await Task.Delay(TimelineMaterializeDelay, token).ConfigureAwait(true);
+                return !token.IsCancellationRequested && _activeChat != null;
+            }
+            catch (TaskCanceledException)
+            {
+                return false;
+            }
+        }
+
+        private static readonly TimeSpan TimelineMaterializeDelay = TimeSpan.FromSeconds(2);
 
         private string DescribeChatLoadAbort(CancellationToken token, ChatItem chat)
         {
@@ -1978,7 +2048,10 @@ namespace Unison.Uwp.UI.Views
                 return;
             }
 
-            if (e.PropertyName == nameof(ChatItem.Name))
+            if (e.PropertyName == nameof(ChatItem.Name) ||
+                e.PropertyName == nameof(ChatItem.IsCommunityAnnounce) ||
+                e.PropertyName == nameof(ChatItem.LinkedParentJid) ||
+                e.PropertyName == nameof(ChatItem.LinkedParentDisplayName))
             {
                 _ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
                 {
@@ -2013,7 +2086,8 @@ namespace Unison.Uwp.UI.Views
             else if (e.PropertyName == nameof(ChatItem.AvatarUrl) ||
                      e.PropertyName == nameof(ChatItem.AvatarHighUrl) ||
                      e.PropertyName == nameof(ChatItem.Kind) ||
-                     e.PropertyName == nameof(ChatItem.IsGroup))
+                     e.PropertyName == nameof(ChatItem.IsGroup) ||
+                     e.PropertyName == nameof(ChatItem.IsCommunityAnnounce))
             {
                 _ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
                 {
@@ -2024,7 +2098,7 @@ namespace Unison.Uwp.UI.Views
 
         private void ApplyHeaderAvatar(ChatItem chat)
         {
-            if (HeaderAvatar == null || chat == null)
+            if (chat == null || (HeaderAvatar == null && HeaderAnnouncementsAvatar == null))
             {
                 ApplyHeaderActions(isGroup: false, visible: false);
                 return;
@@ -2033,9 +2107,22 @@ namespace Unison.Uwp.UI.Views
             bool isGroup = chat.IsGroup
                 || (!string.IsNullOrWhiteSpace(chat.JID)
                     && chat.JID.IndexOf("@g.us", StringComparison.OrdinalIgnoreCase) >= 0);
+            string url = chat.GetAvatarUrl(preferHigh: true);
+            bool announce = chat.IsCommunityAnnounce;
 
-            HeaderAvatar.IsGroup = isGroup;
-            HeaderAvatar.AvatarUrl = chat.GetAvatarUrl(preferHigh: true);
+            if (HeaderAvatar != null)
+            {
+                HeaderAvatar.IsGroup = isGroup;
+                HeaderAvatar.AvatarUrl = url;
+                HeaderAvatar.Visibility = announce ? Visibility.Collapsed : Visibility.Visible;
+            }
+
+            if (HeaderAnnouncementsAvatar != null)
+            {
+                HeaderAnnouncementsAvatar.AvatarUrl = url;
+                HeaderAnnouncementsAvatar.Visibility = announce ? Visibility.Visible : Visibility.Collapsed;
+            }
+
             ApplyHeaderActions(isGroup, visible: true);
         }
 
@@ -2067,6 +2154,19 @@ namespace Unison.Uwp.UI.Views
                 return;
             }
 
+            if (CommunityChatDetailHeader.TryShow(
+                    chat,
+                    _strings,
+                    TitleStatusPanel,
+                    CommunityTitlePanel,
+                    CommunityTitleText,
+                    CommunityGroupSubtitleText))
+            {
+                return;
+            }
+
+            CommunityChatDetailHeader.Hide(TitleStatusPanel, CommunityTitlePanel);
+
             bool isGroup = chat.IsGroup
                 || (!string.IsNullOrWhiteSpace(chat.JID)
                     && chat.JID.IndexOf("@g.us", StringComparison.OrdinalIgnoreCase) >= 0);
@@ -2084,7 +2184,8 @@ namespace Unison.Uwp.UI.Views
                 return;
             }
 
-            if (isGroup && !string.IsNullOrWhiteSpace(chat.Name))
+            if (isGroup &&
+                (chat.IsCommunityAnnounce || !string.IsNullOrWhiteSpace(chat.Name)))
             {
                 SetTitlePlain(chat.GetNameResolved(_strings));
                 return;
@@ -2858,18 +2959,30 @@ namespace Unison.Uwp.UI.Views
         /// <summary>Invoked from <see cref="Templates.MessageTemplates"/> (external DataTemplate events).</summary>
         public void OnMessageBubbleRightTapped(object sender, RightTappedRoutedEventArgs e)
         {
-            ShowMessageActions(sender as FrameworkElement);
             e.Handled = true;
+            if (!_bubbleContextGate.TryBeginFromRightTap())
+            {
+                return;
+            }
+
+            ShowMessageActions(sender as FrameworkElement);
         }
 
         /// <summary>Invoked from <see cref="Templates.MessageTemplates"/> (external DataTemplate events).</summary>
         public void OnMessageBubbleHolding(object sender, HoldingRoutedEventArgs e)
         {
-            if (e.HoldingState == Windows.UI.Input.HoldingState.Started)
+            if (e.HoldingState != Windows.UI.Input.HoldingState.Started)
             {
-                ShowMessageActions(sender as FrameworkElement);
-                e.Handled = true;
+                return;
             }
+
+            e.Handled = true;
+            if (!_bubbleContextGate.TryBeginFromHold())
+            {
+                return;
+            }
+
+            ShowMessageActions(sender as FrameworkElement);
         }
 
         private void ShowMessageActions(FrameworkElement anchor)

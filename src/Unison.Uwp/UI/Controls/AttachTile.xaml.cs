@@ -10,6 +10,7 @@ namespace Unison.Uwp.UI.Controls
     /// One option in the chat attachment bar: a fixed 150x150 accent tile with a glyph over a
     /// label, at the size Whatsapp used on Windows Phone 8.
     /// Optional <see cref="LocalizationUid"/> loads <c>{uid}.Text</c> into <see cref="Label"/>.
+    /// Prefer <see cref="IconGlyph"/> (font) over <see cref="Glyph"/> (bitmap) when both are set.
     /// </summary>
     public sealed partial class AttachTile : UserControl
     {
@@ -17,6 +18,20 @@ namespace Unison.Uwp.UI.Controls
             DependencyProperty.Register(
                 nameof(Glyph),
                 typeof(ImageSource),
+                typeof(AttachTile),
+                new PropertyMetadata(null, OnGlyphVisualChanged));
+
+        public static readonly DependencyProperty IconGlyphProperty =
+            DependencyProperty.Register(
+                nameof(IconGlyph),
+                typeof(string),
+                typeof(AttachTile),
+                new PropertyMetadata(null, OnGlyphVisualChanged));
+
+        public static readonly DependencyProperty IconFontFamilyProperty =
+            DependencyProperty.Register(
+                nameof(IconFontFamily),
+                typeof(FontFamily),
                 typeof(AttachTile),
                 new PropertyMetadata(null));
 
@@ -48,11 +63,28 @@ namespace Unison.Uwp.UI.Controls
             this.DataContextChanged += (s, e) => ApplyLocalizedLabel();
         }
 
-        /// <summary>White-on-transparent artwork, drawn at 54px.</summary>
+        /// <summary>White-on-transparent artwork, drawn at 54px when <see cref="IconGlyph"/> is empty.</summary>
         public ImageSource Glyph
         {
             get => (ImageSource)GetValue(GlyphProperty);
             set => SetValue(GlyphProperty, value);
+        }
+
+        /// <summary>
+        /// Font glyph (e.g. Legacy <c>EB10</c>/<c>EB11</c>). When set, replaces the bitmap
+        /// <see cref="Glyph"/>.
+        /// </summary>
+        public string IconGlyph
+        {
+            get => (string)GetValue(IconGlyphProperty);
+            set => SetValue(IconGlyphProperty, value);
+        }
+
+        /// <summary>Font for <see cref="IconGlyph"/> (typically <c>LegacyIconFont</c>).</summary>
+        public FontFamily IconFontFamily
+        {
+            get => (FontFamily)GetValue(IconFontFamilyProperty);
+            set => SetValue(IconFontFamilyProperty, value);
         }
 
         /// <summary>Caption fallback text when localization is missing.</summary>
@@ -85,7 +117,29 @@ namespace Unison.Uwp.UI.Controls
         /// </summary>
         public event RoutedEventHandler Invoked;
 
-        private void AttachTile_Loaded(object sender, RoutedEventArgs e) => ApplyLocalizedLabel();
+        private void AttachTile_Loaded(object sender, RoutedEventArgs e)
+        {
+            ApplyLocalizedLabel();
+            SyncGlyphVisual();
+        }
+
+        private static void OnGlyphVisualChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            var tile = d as AttachTile;
+            tile?.SyncGlyphVisual();
+        }
+
+        private void SyncGlyphVisual()
+        {
+            if (GlyphIcon == null || GlyphImage == null)
+            {
+                return;
+            }
+
+            bool useFont = !string.IsNullOrEmpty(IconGlyph);
+            GlyphIcon.Visibility = useFont ? Visibility.Visible : Visibility.Collapsed;
+            GlyphImage.Visibility = useFont ? Visibility.Collapsed : Visibility.Visible;
+        }
 
         private void ApplyLocalizedLabel()
         {

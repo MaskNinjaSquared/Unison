@@ -6,6 +6,7 @@
 // this answers from those timestamps alone. Reason strings stay diagnostic.
 // =============================================================================
 using System;
+using System.Globalization;
 
 namespace Unison.Core.Helpers
 {
@@ -49,7 +50,7 @@ namespace Unison.Core.Helpers
             if (newestNonSelfAge > staleThreshold)
             {
                 reason = "non-self-stale:" + newestNonSelfUtc.ToString("O") +
-                         ":ageMinutes=" + newestNonSelfAge.TotalMinutes.ToString("F1") +
+                         ":ageMinutes=" + FormatAgeMinutes(newestNonSelfAge) +
                          ":newestAny=" + Format(newestAnyUtc);
                 return true;
             }
@@ -67,7 +68,7 @@ namespace Unison.Core.Helpers
                 if (newestGroupAge > staleThreshold)
                 {
                     reason = "group-stale:" + newestGroupUtc.ToString("O") +
-                             ":ageMinutes=" + newestGroupAge.TotalMinutes.ToString("F1") +
+                             ":ageMinutes=" + FormatAgeMinutes(newestGroupAge) +
                              ":newestAny=" + Format(newestAnyUtc) +
                              ":newestNonSelf=" + Format(newestNonSelfUtc);
                     return true;
@@ -78,7 +79,7 @@ namespace Unison.Core.Helpers
             if (newestAnyAge > staleThreshold)
             {
                 reason = "newest-stale:" + newestAnyUtc.ToString("O") +
-                         ":ageMinutes=" + newestAnyAge.TotalMinutes.ToString("F1");
+                         ":ageMinutes=" + FormatAgeMinutes(newestAnyAge);
                 return true;
             }
 
@@ -89,6 +90,15 @@ namespace Unison.Core.Helpers
         private static string Format(DateTime timestamp)
         {
             return timestamp == DateTime.MinValue ? "<none>" : timestamp.ToString("O");
+        }
+
+        /// <summary>
+        /// Always invariant so <see cref="HistoryPostOfflineCatchUpDecision.TryGetAgeMinutes"/>
+        /// can read the token under any UI culture (pt-BR otherwise emits a comma decimal).
+        /// </summary>
+        private static string FormatAgeMinutes(TimeSpan age)
+        {
+            return age.TotalMinutes.ToString("F1", CultureInfo.InvariantCulture);
         }
     }
 }

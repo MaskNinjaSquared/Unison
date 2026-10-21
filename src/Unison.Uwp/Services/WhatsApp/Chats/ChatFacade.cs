@@ -413,9 +413,9 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
                 return;
             }
 
-            // Same side effects the client used to attach: keep the catch-up idle clock alive
-            // and flush the catalogue when a tip actually moved.
-            _offlineReplay.NoteCatchUpProgress("tip-swapped:" + updated);
+            // Tip reconcile is local SQLite noise — do not stamp FULL_HISTORY catch-up
+            // progress (that stuck "Synchronizing history…" on quiet accounts). Still
+            // flush the catalogue when a tip actually moved.
             _offlineReplay.SchedulePersist();
         }
 

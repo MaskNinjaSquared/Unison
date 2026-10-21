@@ -188,11 +188,14 @@
                         Click="AddContactButton_Click"
                         ToolTipService.ToolTip="Add contact">
                     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <FontIcon Glyph="&#xE8FA;"
-                                  FontFamily="{StaticResource IconFont}"
-                                  FontSize="18"
-                                  Foreground="White"
-                                  HorizontalAlignment="Center"/>
+                        <Grid Height="28" Width="40" HorizontalAlignment="Center">
+                            <FontIcon Glyph="&#xE8FA;"
+                                      FontFamily="{StaticResource IconFont}"
+                                      FontSize="18"
+                                      Foreground="White"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"/>
+                        </Grid>
                         <TextBlock x:Name="AddContactButtonLabel"
                                    x:Uid="ChatDetailInfo_AddContactAppBarLabel"
                                    Text="Add&#x0a;contact"
@@ -214,11 +217,14 @@
                         Click="ChatPinButton_Click"
                         ToolTipService.ToolTip="Pin chat">
                     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <FontIcon Glyph="&#xE840;"
-                                  FontFamily="{StaticResource IconFont}"
-                                  FontSize="18"
-                                  Foreground="White"
-                                  HorizontalAlignment="Center"/>
+                        <Grid Height="28" Width="40" HorizontalAlignment="Center">
+                            <FontIcon Glyph="&#xE840;"
+                                      FontFamily="{StaticResource IconFont}"
+                                      FontSize="18"
+                                      Foreground="White"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"/>
+                        </Grid>
                         <TextBlock x:Name="ChatPinButtonLabel"
                                    x:Uid="ChatDetailInfo_PinChatAppBarLabel"
                                    Text="Pin&#x0a;chat"
@@ -253,14 +259,15 @@
                         Click="PinButton_Click"
                         ToolTipService.ToolTip="Pin to Start">
                     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <TextBlock Text="&#xEB08;"
-                                   FontFamily="{StaticResource LegacyIconFont}"
-                                   FontSize="28"
-                                   Margin="1,0,0,0"
-                                   TextLineBounds="Tight"
-                                   Foreground="White"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"/>
+                        <Grid Height="32" Width="40" HorizontalAlignment="Center">
+                            <TextBlock Text="&#xEB08;"
+                                       FontFamily="{StaticResource LegacyIconFont}"
+                                       FontSize="26"
+                                       TextLineBounds="Tight"
+                                       Foreground="White"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                        </Grid>
                         <TextBlock x:Name="PinButtonLabel"
                                    x:Uid="ChatDetailInfo_PinAppBarLabel"
                                    Text="Pin to&#x0a;Start"
@@ -288,7 +295,6 @@
                                    MaxLines="2"/>
                     </StackPanel>
                 </Button>
-                <!-- After the two pin actions: delete chat (1:1 and group). -->
                 <Button x:Name="DeleteChatButton"
                         Style="{StaticResource ChatDetailInfoAppBarButtonStyle}"
                         HorizontalAlignment="Right"
@@ -297,11 +303,14 @@
                         Click="DeleteChatButton_Click"
                         ToolTipService.ToolTip="Delete chat">
                     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <FontIcon Glyph="&#xE74D;"
-                                  FontFamily="{StaticResource IconFont}"
-                                  FontSize="18"
-                                  Foreground="White"
-                                  HorizontalAlignment="Center"/>
+                        <Grid Height="28" Width="40" HorizontalAlignment="Center">
+                            <FontIcon Glyph="&#xE74D;"
+                                      FontFamily="{StaticResource IconFont}"
+                                      FontSize="18"
+                                      Foreground="White"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"/>
+                        </Grid>
                         <TextBlock x:Name="DeleteChatButtonLabel"
                                    x:Uid="ChatDetailInfo_DeleteChatBar"
                                    Text="Delete&#x0a;chat"

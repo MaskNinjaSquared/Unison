@@ -1,0 +1,96 @@
+<Page
+    x:Class="Unison.Uwp.Shell.WhatsAppLegacy.Views.ProfileView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Unison.Uwp.UI.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    d:DesignHeight="800"
+    d:DesignWidth="400"
+    Background="#FF000000"
+    RequestedTheme="Dark">
+
+    <!-- Metro profile: same expansive CommandBar as the chat list (rings + centered primaries). -->
+    <Grid Background="#FF000000">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Grid Margin="12,12,16,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Button x:Name="BackButton"
+                    Command="{Binding BackCommand}"
+                    Style="{StaticResource LegacyBackButtonStyle}"/>
+            <TextBlock x:Name="TitleLabel"
+                       Grid.Column="1"
+                       Margin="20,0,0,0"
+                       VerticalAlignment="Center"
+                       FontSize="22"
+                       FontFamily="{StaticResource MainFontLight}"
+                       Foreground="White"
+                       Text="{Binding DisplayTitle}"/>
+        </Grid>
+
+        <Grid Grid.Row="1">
+            <controls:ChatDetailUserInfoControl x:Name="UserInfoPanel"
+                                                HorizontalAlignment="Stretch"
+                                                VerticalAlignment="Stretch"/>
+            <ProgressRing x:Name="LoadingRing"
+                          Width="48"
+                          Height="48"
+                          IsActive="False"
+                          Visibility="Collapsed"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"/>
+            <TextBlock x:Name="ErrorLabel"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       Margin="24"
+                       TextWrapping="Wrap"
+                       TextAlignment="Center"
+                       Foreground="White"
+                       Visibility="Collapsed"/>
+        </Grid>
+
+        <!-- Bottom-aligned so Compact→Open paints labels upward over the profile (desktop).
+             Stretch + MinHeight host clips / opens downward inside ContentFrame. -->
+        <Grid Grid.Row="2"
+              MinHeight="{StaticResource LegacyCommandBarCompactHeight}"
+              Background="{ThemeResource LegacyCommandBarBackgroundBrush}">
+            <CommandBar x:Name="ProfileCommandBar"
+                        Style="{StaticResource LegacyCommandBarStyle}"
+                        VerticalAlignment="Bottom"
+                        Loaded="ProfileCommandBar_Loaded">
+                <AppBarButton x:Name="StartChatButton"
+                              Style="{StaticResource LegacyAppBarButtonStyle}"
+                              Label="Start chat"
+                              Command="{Binding StartChatCommand}">
+                    <TextBlock Text="&#xEB06;"
+                               FontFamily="{StaticResource LegacyIconFont}"
+                               FontSize="{StaticResource LegacyAppBarGlyphSize}"
+                               TextLineBounds="Tight"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"/>
+                </AppBarButton>
+                <AppBarButton x:Name="PinContactButton"
+                              Style="{StaticResource LegacyAppBarButtonStyle}"
+                              Label="Pin contact"
+                              Click="PinContactButton_Click">
+                    <TextBlock Text="&#xEB16;"
+                               FontFamily="{StaticResource LegacyIconFont}"
+                               FontSize="28"
+                               Margin="2,0,0,0"
+                               TextLineBounds="Tight"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"/>
+                </AppBarButton>
+            </CommandBar>
+        </Grid>
+    </Grid>
+</Page>

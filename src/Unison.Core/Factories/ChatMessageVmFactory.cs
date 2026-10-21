@@ -17,6 +17,9 @@ namespace Unison.Core.Factories
         private readonly IRuntimeDiagnostics _diagnostics;
         private readonly IHistoryMessageStore _history;
         private readonly ICopyService _copy;
+        private readonly IDispatcher _ui;
+        private readonly DeviceCategory _deviceCategory;
+        private readonly IGifPlaybackCoordinator _gifPlayback;
 
         public ChatMessageVmFactory(
             IStringResources strings = null,
@@ -28,7 +31,10 @@ namespace Unison.Core.Factories
             ISessionLogger sessionLogger = null,
             IRuntimeDiagnostics diagnostics = null,
             IHistoryMessageStore history = null,
-            ICopyService copy = null)
+            ICopyService copy = null,
+            IDispatcher ui = null,
+            DeviceCategory? deviceCategory = null,
+            IGifPlaybackCoordinator gifPlayback = null)
         {
             _strings = strings;
             _messages = messages;
@@ -40,6 +46,9 @@ namespace Unison.Core.Factories
             _diagnostics = diagnostics;
             _history = history;
             _copy = copy;
+            _ui = ui;
+            _deviceCategory = deviceCategory ?? DeviceCategory.High;
+            _gifPlayback = gifPlayback;
         }
 
         public ChatMessageViewModel Create(ChatMessage model) =>
@@ -54,6 +63,9 @@ namespace Unison.Core.Factories
                 _sessionLogger,
                 _diagnostics,
                 _history,
-                _copy);
+                _copy,
+                _ui,
+                _deviceCategory,
+                _gifPlayback);
     }
 }

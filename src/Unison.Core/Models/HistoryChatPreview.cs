@@ -18,6 +18,22 @@ namespace Unison.Core.Models
 
         public bool IsGroup { get; set; }
 
+        /// <summary>
+        /// Community default announce channel. Persisted so cold start can show “Avisos”
+        /// without waiting for another w:g2 metadata round-trip.
+        /// </summary>
+        public bool IsCommunityAnnounce { get; set; }
+
+        /// <summary>
+        /// Community parent hub (<c>parent</c> on w:g2). Drives <see cref="ChatKind.Community"/> on hydrate.
+        /// </summary>
+        public bool IsCommunityParent { get; set; }
+
+        /// <summary>
+        /// Parent community JID for a linked subgroup. Empty when unknown / not linked.
+        /// </summary>
+        public string LinkedParentJid { get; set; }
+
         public ChatStatus Status { get; set; } = ChatStatus.Active;
 
         public int UnreadCount { get; set; }

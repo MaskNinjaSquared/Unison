@@ -37,8 +37,10 @@ namespace Unison.Uwp.Services.Themes
 
         public override string ShellBrandName => "Unison";
 
+        // Same unplated glyph as MainView / EmptyStateBrandLogo. BadgeLogo.scale-125 was
+        // invisible or failed to resolve on W10M phones (typical scale 200/400, not 125).
         public override string ShellBrandIcon =>
-            "ms-appx:///Assets/BadgeLogo.scale-125.png";
+            "ms-appx:///Assets/Square44x44Logo.altform-unplated_targetsize-48.png";
 
         public override void SetTitleBar()
         {

@@ -50,7 +50,7 @@
             <FontFamily x:Key="IconFont">ms-appx:///Assets/Fonts/SegoeIcons.ttf#Segoe Fluent Icons</FontFamily>
             <!-- Custom PathIcon geometries (filter EA01, new-chat EA02, check EA03, double-check EA04). Regen: scripts/icons/generate-unison-icons.ps1 -->
             <FontFamily x:Key="UnisonIconFont">ms-appx:///Assets/Fonts/UnisonIcons.ttf#UnisonIcons</FontFamily>
-            <!-- WhatsApp Legacy WP8 icons: EB01 search, EB02 add, EB03 attach, EB04 send, EB05 mic. Regen: scripts/icons/generate-whatsapp-legacy-icons.ps1 -->
+            <!-- WhatsApp Legacy WP8 icons: EB01–EB15 (attach tray EB10–EB15). Regen: scripts/icons/generate-whatsapp-legacy-icons.ps1 -->
             <FontFamily x:Key="LegacyIconFont">ms-appx:///Assets/Fonts/WhatsAppLegacyIcons.ttf#WhatsAppLegacyIcons</FontFamily>
 
             <!-- Branding Colors -->

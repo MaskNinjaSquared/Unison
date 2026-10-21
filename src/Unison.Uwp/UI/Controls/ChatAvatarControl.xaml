@@ -45,6 +45,8 @@
             <Ellipse.Fill>
                 <ImageBrush x:Name="PhotoBrush"
                             Stretch="UniformToFill"
+                            AlignmentX="Center"
+                            AlignmentY="Center"
                             ImageFailed="PhotoBrush_ImageFailed"/>
             </Ellipse.Fill>
         </Ellipse>

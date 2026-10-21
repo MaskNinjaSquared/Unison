@@ -61,6 +61,8 @@ namespace Unison.Core.Models
                     return ChatPreviewKind.Image;
                 case ChatMessageKind.Video:
                     return ChatPreviewKind.Video;
+                case ChatMessageKind.Gif:
+                    return ChatPreviewKind.Gif;
                 case ChatMessageKind.Sticker:
                     return ChatPreviewKind.Sticker;
                 case ChatMessageKind.Voice:

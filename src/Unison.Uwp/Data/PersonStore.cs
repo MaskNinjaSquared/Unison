@@ -122,7 +122,21 @@ namespace Unison.Uwp.Data
                 "SELECT * FROM Person WHERE Phone = ?",
                 phone).ConfigureAwait(false);
 
-            return ToModels(rows);
+            IReadOnlyList<Person> models = ToModels(rows);
+            // Same cache entry GetAsync would create — strip warm and ResolveDisplayName both
+            // read through TryGetCached after a phone-index hit.
+            for (int i = 0; i < models.Count; i++)
+            {
+                Person person = models[i];
+                if (person == null || string.IsNullOrWhiteSpace(person.Jid))
+                {
+                    continue;
+                }
+
+                _cache[NormalizeJid(person.Jid)] = Clone(person);
+            }
+
+            return models;
         }
 
         public async Task<IReadOnlyList<Person>> ListWithPhoneAsync()

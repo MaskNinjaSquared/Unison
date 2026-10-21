@@ -41,12 +41,17 @@ namespace Unison.Core.Tests.State
             Assert.True(low.MaxMessagesPerConversation < high.MaxMessagesPerConversation);
             Assert.True(low.MaterializeHistoryThumbsDuringSync);
             Assert.Equal(2, low.AvatarFetchBatchSize);
-            // Low / Mobile: first quiet lot only (same as Unsupported) — adjacent pages OOMed Creators.
-            Assert.Equal(0, low.MaxFullHistoryCatchUpRounds);
+            // Low / Mobile: limited adjacent pages (defer usync while catch-up is up).
+            Assert.Equal(12, low.MaxFullHistoryCatchUpRounds);
             Assert.Equal(0, unsupported.MaxFullHistoryCatchUpRounds);
-            Assert.True(high.MaxFullHistoryCatchUpRounds > 0);
+            Assert.True(high.MaxFullHistoryCatchUpRounds > low.MaxFullHistoryCatchUpRounds);
+            Assert.Equal(2000, low.HistoryFinalizeQuietMs);
+            Assert.Equal(1000, low.HistoryFullFinalizeDelayMs);
+            Assert.Equal(220, low.HistoryPersistSubBatchSize);
             Assert.True(low.HistoryFinalizeQuietMs < unsupported.HistoryFinalizeQuietMs);
             Assert.True(low.HistoryFinalizeQuietMs > high.HistoryFinalizeQuietMs);
+            Assert.True(low.HistoryPersistSubBatchSize > unsupported.HistoryPersistSubBatchSize);
+            Assert.True(low.HistoryPersistSubBatchSize < high.HistoryPersistSubBatchSize);
         }
 
         [Fact]
@@ -58,8 +63,8 @@ namespace Unison.Core.Tests.State
             Assert.Equal(10240u, s.HistoryStorageQuotaMb);
             Assert.False(s.SerializePostSyncEnrichment);
             Assert.Equal(60, s.MaxFullHistoryCatchUpRounds);
-            Assert.Equal(2800, s.HistoryFinalizeQuietMs);
-            Assert.Equal(900, s.HistoryFullFinalizeDelayMs);
+            Assert.Equal(1000, s.HistoryFinalizeQuietMs);
+            Assert.Equal(700, s.HistoryFullFinalizeDelayMs);
         }
 
         [Fact]
@@ -128,11 +133,12 @@ namespace Unison.Core.Tests.State
         }
 
         [Fact]
-        public void Unsupported_and_Low_skip_adjacent_full_history_pages()
+        public void Unsupported_skips_adjacent_full_history_pages_Low_allows_a_budget()
         {
-            // Cap 0: first quiet lot finishes with FinishMaxContinues — no soft-reconnect cascade.
             Assert.Equal(0, UnsupportedSyncWorkload.Instance.MaxFullHistoryCatchUpRounds);
-            Assert.Equal(0, LowSyncWorkload.Instance.MaxFullHistoryCatchUpRounds);
+            Assert.Equal(12, LowSyncWorkload.Instance.MaxFullHistoryCatchUpRounds);
+            Assert.True(LowSyncWorkload.Instance.MaxFullHistoryCatchUpRounds
+                < HighSyncWorkload.Instance.MaxFullHistoryCatchUpRounds);
         }
 
         [Fact]
@@ -149,6 +155,19 @@ namespace Unison.Core.Tests.State
         {
             Assert.Equal(50, HighSyncWorkload.Instance.InitialUiMessageWindow);
             Assert.Equal(150, HighSyncWorkload.Instance.MaxUiMessageWindow);
+        }
+
+        [Fact]
+        public void Name_resolve_batches_shrink_on_constrained_devices()
+        {
+            Assert.True(UnsupportedSyncWorkload.Instance.NameResolveMaxPerPass
+                <= LowSyncWorkload.Instance.NameResolveMaxPerPass);
+            Assert.True(LowSyncWorkload.Instance.NameResolveMaxPerPass
+                < HighSyncWorkload.Instance.NameResolveMaxPerPass);
+            Assert.True(LowSyncWorkload.Instance.NameResolveChunkSize
+                < HighSyncWorkload.Instance.NameResolveChunkSize);
+            Assert.True(LowSyncWorkload.Instance.NameResolveInterChunkDelayMs
+                > HighSyncWorkload.Instance.NameResolveInterChunkDelayMs);
         }
     }
 }

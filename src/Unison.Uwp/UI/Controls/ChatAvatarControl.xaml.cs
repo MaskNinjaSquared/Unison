@@ -151,6 +151,9 @@ namespace Unison.Uwp.UI.Controls
                 };
                 bitmap.UriSource = new Uri(url);
 
+                PhotoBrush.Stretch = Stretch.UniformToFill;
+                PhotoBrush.AlignmentX = AlignmentX.Center;
+                PhotoBrush.AlignmentY = AlignmentY.Center;
                 PhotoBrush.ImageSource = bitmap;
                 PhotoEllipse.Visibility = Visibility.Visible;
                 _appliedUrl = url;
@@ -178,7 +181,9 @@ namespace Unison.Uwp.UI.Controls
                 FallbackEllipse.Fill = new ImageBrush
                 {
                     ImageSource = image,
-                    Stretch = Stretch.UniformToFill
+                    Stretch = Stretch.UniformToFill,
+                    AlignmentX = AlignmentX.Center,
+                    AlignmentY = AlignmentY.Center
                 };
                 ContactFallbackIcon.Visibility = Visibility.Collapsed;
                 GroupFallbackHost.Visibility = Visibility.Collapsed;

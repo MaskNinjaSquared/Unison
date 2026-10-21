@@ -76,6 +76,15 @@ namespace Unison.Core.Contracts.WhatsApp
 
         Task SendImageAsync(string jid, byte[] imageBytes, string caption);
 
+        /// <summary>
+        /// Sends selected images in order. The caption belongs to the first image only.
+        /// Each image is independently persisted and can settle as sent or failed.
+        /// </summary>
+        Task<IReadOnlyList<ChatMessage>> SendImagesAsync(
+            string jid,
+            IReadOnlyList<byte[]> imageBytes,
+            string caption);
+
         /// <summary>Sends a recorded/picked audio clip (voice note when isVoiceMessage=true).</summary>
         Task<ChatMessage> SendAudioMessageAsync(string jid, byte[] audioBytes, string mimeType, uint durationSeconds, bool isVoiceMessage = false);
 
@@ -88,7 +97,7 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>Downloads + decrypts an image on demand, caching the local URI on the message.</summary>
         Task<string> EnsureImageAvailableAsync(ChatMessage message);
 
-        /// <summary>Downloads + decrypts a video on demand, caching the local URI (+ poster) on the message.</summary>
+        /// <summary>Downloads + decrypts a video or GIF on demand, caching the local URI (+ poster) on the message.</summary>
         Task<string> EnsureVideoAvailableAsync(ChatMessage message);
 
         /// <summary>Downloads + decrypts a document on demand, caching the local URI on the message.</summary>

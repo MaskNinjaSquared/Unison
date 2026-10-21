@@ -20,5 +20,11 @@ namespace Unison.Core.Contracts
         /// and kept for the process: the limit drops while the app is in the background.
         /// </summary>
         DeviceCategory GetDeviceCategory();
+
+        /// <summary>
+        /// True when Start Live Tiles / <c>SecondaryTile</c> pin UX is still useful (Windows 10
+        /// and Mobile). False on Windows 11 (build ≥ 22000), where classic Live Tiles are gone.
+        /// </summary>
+        bool LiveTilesCompatible();
     }
 }

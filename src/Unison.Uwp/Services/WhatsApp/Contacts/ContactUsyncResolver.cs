@@ -40,6 +40,8 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly IDispatcher _ui;
         private readonly ChatNameRefresh _nameRefresh;
         private readonly ChatListAliasMerge _aliasMerge;
+        private readonly SyncWorkGate _syncWork;
+        private readonly IDeferredAvatarResolution _deferredAvatars;
 
         internal ContactUsyncResolver(
             IUsyncAliasHost aliases,
@@ -52,7 +54,9 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             AvatarFetcher avatars,
             IDispatcher ui,
             ChatNameRefresh nameRefresh,
-            ChatListAliasMerge aliasMerge)
+            ChatListAliasMerge aliasMerge,
+            SyncWorkGate syncWork,
+            IDeferredAvatarResolution deferredAvatars)
         {
             _avatars = avatars ?? throw new ArgumentNullException(nameof(avatars));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
@@ -65,14 +69,17 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             _pushNames = pushNames ?? throw new ArgumentNullException(nameof(pushNames));
             _labels = labels ?? throw new ArgumentNullException(nameof(labels));
             _chats = chats ?? throw new ArgumentNullException(nameof(chats));
+            _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
+            _deferredAvatars = deferredAvatars ?? throw new ArgumentNullException(nameof(deferredAvatars));
         }
 
-        public async Task ResolveAsync(IEnumerable<string> jids)
+        /// <summary>Returns false when the IQ timed out or the session was not ready.</summary>
+        public async Task<bool> ResolveAsync(IEnumerable<string> jids)
         {
             List<string> numbers = PickLookupNumbers(jids);
             if (numbers.Count == 0)
             {
-                return;
+                return true;
             }
 
             try
@@ -83,7 +90,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                     if (session == null)
                     {
                         Debug.WriteLine("[ContactUsyncResolver] Skipped (session not connected)");
-                        return;
+                        return false;
                     }
 
                     var useCase = new ResolveContactNamesUseCase(session.Connection);
@@ -103,6 +110,8 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                     {
                         await _nameRefresh.ApplyAsync().ConfigureAwait(false);
                     }
+
+                    return true;
                 }
             }
             catch (Exception ex)
@@ -119,6 +128,8 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 catch
                 {
                 }
+
+                return false;
             }
         }
 
@@ -183,9 +194,18 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             }
 
             // Not awaited: the picture fetch queues behind the same usync gate this pass is holding.
+            // First-sync UI hold: names may land now; CDN pictures wait until chats unlock.
             if (plan.FetchAvatar)
             {
-                _ = FetchAvatarAsync(contact.Jid);
+                string deferReason;
+                if (_syncWork.ShouldDeferAvatarFetch(out deferReason))
+                {
+                    _deferredAvatars.Schedule("usync-avatar-deferred:" + deferReason);
+                }
+                else
+                {
+                    _ = FetchAvatarAsync(contact.Jid);
+                }
             }
 
             return plan.CachesChanged;

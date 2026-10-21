@@ -10,7 +10,9 @@
     d:DesignWidth="56"
     IsTabStop="False">
 
-    <!-- Status list ring: green = Recent (unviewed), gray = Viewed. Inner plate keeps profile placeholder. -->
+    <!-- Same circular photo path as ChatAvatarControl (Creators Update–safe):
+         Ellipse Fill = ImageBrush Stretch=UniformToFill. Do not use UIElement.Clip
+         or Border+Image — those letterbox landscape thumbs on older XAML. -->
     <Grid x:Name="RootGrid" Width="56" Height="56">
         <Ellipse x:Name="Ring"
                  Width="56"
@@ -25,5 +27,19 @@
                                     ShowBorder="False"
                                     HorizontalAlignment="Center"
                                     VerticalAlignment="Center"/>
+        <Ellipse x:Name="PhotoEllipse"
+                 Width="48"
+                 Height="48"
+                 HorizontalAlignment="Center"
+                 VerticalAlignment="Center"
+                 Visibility="Collapsed">
+            <Ellipse.Fill>
+                <ImageBrush x:Name="PhotoBrush"
+                            Stretch="UniformToFill"
+                            AlignmentX="Center"
+                            AlignmentY="Center"
+                            ImageFailed="PhotoBrush_ImageFailed"/>
+            </Ellipse.Fill>
+        </Ellipse>
     </Grid>
 </UserControl>

@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -227,6 +227,9 @@ Disable after diagnosing: keeping it on slows the app.</value>
   <data name="ChatList_FilterDrafts.Text" xml:space="preserve">
     <value>Drafts</value>
   </data>
+  <data name="ChatList_FilterCommunities.Text" xml:space="preserve">
+    <value>Communities</value>
+  </data>
   <data name="ChatList_RefreshNames.Text" xml:space="preserve">
     <value>Refresh contact names</value>
   </data>
@@ -238,6 +241,9 @@ Disable after diagnosing: keeping it on slows the app.</value>
   </data>
   <data name="ChatList_PreviewVideo" xml:space="preserve">
     <value>Video</value>
+  </data>
+  <data name="ChatList_PreviewGif" xml:space="preserve">
+    <value>GIF</value>
   </data>
   <data name="ChatList_PreviewSticker" xml:space="preserve">
     <value>Sticker</value>
@@ -407,6 +413,15 @@ Disable after diagnosing: keeping it on slows the app.</value>
   <data name="Chat_SelfFallbackName" xml:space="preserve">
     <value>You</value>
   </data>
+  <data name="Chat_CommunityAnnouncements" xml:space="preserve">
+    <value>Announcements</value>
+  </data>
+  <data name="Chat_CommunityHubSubtitle" xml:space="preserve">
+    <value>Community · {0} groups</value>
+  </data>
+  <data name="Chat_CommunityFallbackName" xml:space="preserve">
+    <value>Community</value>
+  </data>
   <data name="ChatDetail_PersonalSubtitle.Text" xml:space="preserve">
     <value>Messages to myself</value>
   </data>
@@ -450,6 +465,9 @@ Disable after diagnosing: keeping it on slows the app.</value>
     <value>Add a caption...</value>
   </data>  <data name="ChatDetail_SendImage.SecondaryButtonText" xml:space="preserve">
     <value>Cancel</value>
+  </data>
+  <data name="ChatDetail_ImageBatchInfo" xml:space="preserve">
+    <value>{0} images ({1} KB)</value>
   </data>
   <data name="ChatDetail_AudioPlayFailed" xml:space="preserve">
     <value>Could not play this audio.</value>
@@ -498,6 +516,18 @@ Disable after diagnosing: keeping it on slows the app.</value>
   </data>
   <data name="NewChat_Error" xml:space="preserve">
     <value>Error: {0}</value>
+  </data>
+  <data name="Profile_Title" xml:space="preserve">
+    <value>Profile</value>
+  </data>
+  <data name="Profile_StartChatAppBarLabel.Text" xml:space="preserve">
+    <value>Start&#x0a;chat</value>
+  </data>
+  <data name="Profile_MissingContact" xml:space="preserve">
+    <value>Contact not found.</value>
+  </data>
+  <data name="Profile_LoadFailed" xml:space="preserve">
+    <value>Could not open this profile.</value>
   </data>
   <data name="Debug_Title.Text" xml:space="preserve">
     <value>Debug &amp; Protocol Logs</value>
@@ -945,6 +975,9 @@ Disable after diagnosing: keeping it on slows the app.</value>
   <data name="Toast_AppName" xml:space="preserve">
     <value>Unison</value>
   </data>
+  <data name="ChatList_ViewProfile.Text" xml:space="preserve">
+    <value>View profile</value>
+  </data>
   <data name="ChatList_PinChat.Text" xml:space="preserve">
     <value>Pin chat</value>
   </data>
@@ -1166,6 +1199,24 @@ Disable after diagnosing: keeping it on slows the app.</value>
   </data>
   <data name="ChatDetailInfo_UnpinAppBarLabel.Text" xml:space="preserve">
     <value>Unpin from&#x0a;Start</value>
+  </data>
+  <data name="ChatDetailInfo_PinContactAppBarLabel.Text" xml:space="preserve">
+    <value>Pin&#x0a;contact</value>
+  </data>
+  <data name="ChatDetailInfo_UnpinContactAppBarLabel.Text" xml:space="preserve">
+    <value>Unpin&#x0a;contact</value>
+  </data>
+  <data name="Tile_ContactProfileTitle" xml:space="preserve">
+    <value>{0} Profile</value>
+  </data>
+  <data name="Tile_ContactNoNewMessages" xml:space="preserve">
+    <value>No new messages</value>
+  </data>
+  <data name="Tile_ContactHasNewMessages" xml:space="preserve">
+    <value>{0} New Messages</value>
+  </data>
+  <data name="Tile_ContactNoMotto" xml:space="preserve">
+    <value>No status message</value>
   </data>
   <data name="ChatDetailInfo_AddContactAppBarLabel.Text" xml:space="preserve">
     <value>Add&#x0a;contact</value>

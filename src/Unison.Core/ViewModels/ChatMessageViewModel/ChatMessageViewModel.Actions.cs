@@ -183,7 +183,7 @@ namespace Unison.Core.ViewModels
 
         public async Task<string> EnsureVideoReadyAsync(bool showErrorDialog = true)
         {
-            if (!Model.IsVideo || _messages == null)
+            if (!Model.IsVideoMedia || _messages == null)
             {
                 return null;
             }
@@ -234,11 +234,76 @@ namespace Unison.Core.ViewModels
             {
                 string uri = await EnsureVideoReadyAsync(showErrorDialog: true);
                 LogMedia(string.IsNullOrWhiteSpace(uri) ? "video-download-empty" : "video-download-ok");
+                if (!string.IsNullOrWhiteSpace(uri) && Model.IsGif)
+                {
+                    _gifAutoDownloadFailed = false;
+                }
             }
             finally
             {
                 IsVideoDownloading = false;
                 RaiseMediaCommandsChanged();
+                Raise(nameof(ShowVideoDownloadIcon));
+            }
+        }
+
+        /// <summary>
+        /// High devices fetch WhatsApp GIFs as soon as the bubble is materialized — no tap.
+        /// Low / Unsupported keep the manual download control.
+        /// </summary>
+        private void ScheduleGifAutoDownloadIfNeeded()
+        {
+            if (_gifAutoDownloadStarted || _messages == null)
+            {
+                return;
+            }
+
+            if (_deviceCategory != DeviceCategory.High || !Model.IsGif)
+            {
+                return;
+            }
+
+            if (!Model.NeedsVideoDownload || !Model.CanDownloadVideo)
+            {
+                return;
+            }
+
+            _gifAutoDownloadStarted = true;
+            _gifAutoDownloadTask = AutoDownloadGifAsync();
+        }
+
+        private async Task AutoDownloadGifAsync()
+        {
+            LogMedia("gif-auto-download-start");
+            IsVideoDownloading = true;
+            RaiseMediaCommandsChanged();
+            Raise(nameof(ShowVideoDownloadIcon));
+            await AllowUiPaintAsync();
+            try
+            {
+                string uri = await EnsureVideoReadyAsync(showErrorDialog: false);
+                if (string.IsNullOrWhiteSpace(uri))
+                {
+                    _gifAutoDownloadFailed = true;
+                    LogMedia("gif-auto-download-empty");
+                }
+                else
+                {
+                    _gifAutoDownloadFailed = false;
+                    LogMedia("gif-auto-download-ok");
+                }
+            }
+            catch (Exception ex)
+            {
+                _gifAutoDownloadFailed = true;
+                LogMediaError("gif-auto-download-fail", ex);
+            }
+            finally
+            {
+                IsVideoDownloading = false;
+                RaiseMediaCommandsChanged();
+                Raise(nameof(ShowVideoDownloadIcon));
+                RaiseVideoUiChanged();
             }
         }
 

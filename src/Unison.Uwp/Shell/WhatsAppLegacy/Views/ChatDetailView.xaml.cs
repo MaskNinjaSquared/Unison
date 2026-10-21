@@ -16,6 +16,7 @@ using Unison.Core.ViewModels;
 using Unison.Uwp.Client;
 using Unison.Uwp.Helpers;
 using Unison.Uwp.Services;
+using Unison.Uwp.Services.Diagnostics;
 using Unison.Uwp.Services.WhatsApp;
 using IChatDetailSurface = Unison.Uwp.UI.Views.IChatDetailSurface;
 using Unison.Uwp.UI.Controls;
@@ -43,6 +44,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         private ChatItem _activeChat;
         private ObservableCollection<ChatMessageViewModel> _messages;
         private readonly bool _isWindowsMobile;
+        private readonly MessageBubbleContextGestureGate _bubbleContextGate =
+            new MessageBubbleContextGestureGate();
         public event EventHandler BackRequested;
         private Storyboard _chatDetailInfoSlideStoryboard;
         private bool _chatDetailInfoPaneShown;
@@ -179,20 +182,20 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         }
 
         /// <summary>
-        /// WhatsApp Legacy: solid page-colored 54px composer + themed mic/send bitmaps.
+        /// WhatsApp Legacy: themed mic/send/attach glyphs. Composer height grows like Unison
+        /// (XAML MinHeight/MaxHeight + Wrap) — do not lock the host to a fixed 54px strip.
         /// </summary>
         private void ApplyLegacyComposerChrome()
         {
-            const double ComposerHeight = 54;
             try
             {
-                // The attach dock shares this grid with the composer. Locking the grid to the
-                // composer height clips the dock to that strip, so only the composer is fixed.
+                // Let the host grow with the TextBox (Unigram-style). A fixed Height here was
+                // clipping multi-line input and forcing MaxHeight=40 / NoWrap on MessageInput.
                 if (ComposerHost != null)
                 {
-                    ComposerHost.Height = ComposerHeight;
-                    ComposerHost.MinHeight = ComposerHeight;
-                    ComposerHost.MaxHeight = ComposerHeight;
+                    ComposerHost.ClearValue(FrameworkElement.HeightProperty);
+                    ComposerHost.ClearValue(FrameworkElement.MaxHeightProperty);
+                    ComposerHost.MinHeight = 54;
                 }
 
                 var bar = ComposerHost?.Parent as FrameworkElement;
@@ -220,52 +223,55 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                         var grid = child as Grid;
                         if (grid != null)
                         {
-                            grid.Padding = new Thickness(8, 0, 8, 0);
-                            grid.Height = ComposerHeight;
+                            grid.Padding = new Thickness(8, 7, 8, 7);
+                            grid.ClearValue(FrameworkElement.HeightProperty);
+                            grid.ClearValue(FrameworkElement.MaxHeightProperty);
+                            grid.MinHeight = 54;
                         }
                     }
                 }
 
                 // Anexo | Texto | Enviar | Áudio — glyphs from LegacyIconFont (EB03/EB04/EB05).
-                // Which attach button is showing is the layout state's decision: the bar on a
-                // phone, the flyout on the desktop. Both carry the same clip glyph, centered.
+                // Bottom-align icons so they stay on the single-line baseline while the box grows.
                 Brush attachBrush = ResolveLegacyBrush("WhatsAppTextHighBrush", Colors.White);
                 if (AttachBarButton != null)
                 {
                     Grid.SetColumn(AttachBarButton, 0);
-                    AttachBarButton.VerticalAlignment = VerticalAlignment.Center;
+                    AttachBarButton.VerticalAlignment = VerticalAlignment.Bottom;
                     ApplyLegacyFontIconButton(AttachBarButton, "\uEB03", attachBrush);
                 }
 
                 if (AttachFlyoutButton != null)
                 {
                     Grid.SetColumn(AttachFlyoutButton, 0);
-                    AttachFlyoutButton.VerticalAlignment = VerticalAlignment.Center;
+                    AttachFlyoutButton.VerticalAlignment = VerticalAlignment.Bottom;
                     ApplyLegacyFontIconButton(AttachFlyoutButton, "\uEB03", attachBrush);
                 }
 
                 if (SendButton != null)
                 {
                     Grid.SetColumn(SendButton, 2);
-                    SendButton.VerticalAlignment = VerticalAlignment.Center;
+                    SendButton.VerticalAlignment = VerticalAlignment.Bottom;
                     ApplyLegacyFontIconButton(SendButton, "\uEB04", ResolveLegacyBrush("WhatsAppTextHighBrush", Colors.White));
                 }
 
                 if (MicButton != null)
                 {
                     Grid.SetColumn(MicButton, 3);
-                    MicButton.VerticalAlignment = VerticalAlignment.Center;
+                    MicButton.VerticalAlignment = VerticalAlignment.Bottom;
                     ApplyLegacyFontIconButton(MicButton, "\uEB05", ResolveLegacyBrush("WhatsAppTextHighBrush", Colors.White));
                 }
 
                 if (MessageInput != null)
                 {
                     Grid.SetColumn(MessageInput, 1);
-                    MessageInput.MinHeight = 32;
-                    MessageInput.MaxHeight = 40;
-                    MessageInput.TextWrapping = TextWrapping.NoWrap;
-                    MessageInput.Padding = new Thickness(8, 6, 8, 6);
-                    MessageInput.VerticalAlignment = VerticalAlignment.Center;
+                    MessageInput.ClearValue(FrameworkElement.HeightProperty);
+                    MessageInput.MinHeight = 40;
+                    MessageInput.MaxHeight = 192;
+                    MessageInput.TextWrapping = TextWrapping.Wrap;
+                    MessageInput.Padding = new Thickness(10, 8, 6, 5);
+                    MessageInput.VerticalAlignment = VerticalAlignment.Bottom;
+                    MessageInput.VerticalContentAlignment = VerticalAlignment.Center;
                 }
 
                 // Header / composer tooltips were English literals; bind them to the same keys
@@ -1285,7 +1291,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             }
         }
 
-        private void HeaderAvatar_Tapped(object sender, TappedRoutedEventArgs e)
+        private void HeaderIdentity_Tapped(object sender, TappedRoutedEventArgs e)
         {
             e.Handled = true;
             if (ViewModel?.OpenChatDetailInfoFromAvatarCommand?.CanExecute(null) == true)
@@ -1311,6 +1317,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             ViewModel.RefreshLocalChatState();
             bool muted = ViewModel.ShowUnmuteOption;
             bool widgetPinned = ViewModel.IsWidgetPinned;
+            bool liveTiles = ViewModel.AreLiveTilesAvailable;
             bool archived = ViewModel.ActiveChat?.Status == ChatStatus.Archived;
             bool compactHeader = IsCompactHeaderCallLayout();
             bool canVoiceCall = ViewModel.CanCallPhone;
@@ -1331,11 +1338,15 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 }
                 else if (string.Equals(tag, "widgetPin", StringComparison.Ordinal) && menuItem != null)
                 {
-                    menuItem.Visibility = widgetPinned ? Visibility.Collapsed : Visibility.Visible;
+                    menuItem.Visibility = liveTiles && !widgetPinned
+                        ? Visibility.Visible
+                        : Visibility.Collapsed;
                 }
                 else if (string.Equals(tag, "widgetUnpin", StringComparison.Ordinal) && menuItem != null)
                 {
-                    menuItem.Visibility = widgetPinned ? Visibility.Visible : Visibility.Collapsed;
+                    menuItem.Visibility = liveTiles && widgetPinned
+                        ? Visibility.Visible
+                        : Visibility.Collapsed;
                 }
                 else if (string.Equals(tag, "addContact", StringComparison.Ordinal) && menuItem != null)
                 {
@@ -1403,7 +1414,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         {
             var element = sender as FrameworkElement;
             var vm = element?.DataContext as ChatMessageViewModel;
-            if (vm == null || !vm.HasImage)
+            if (vm == null || !vm.CanOpenImageViewer)
             {
                 return;
             }
@@ -1415,7 +1426,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
             // W10M: cached .webp ImageUri → PNG display before the viewer opens.
             await vm.EnsureImageReadyAsync(showErrorDialog: false);
-            if (vm.HasImage)
+            if (vm.CanOpenImageViewer)
             {
                 OpenImageViewer(vm);
             }
@@ -1423,7 +1434,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         public async void OpenInfoImage(ChatMessageViewModel vm)
         {
-            if (vm == null)
+            if (vm == null || vm.IsSticker)
             {
                 return;
             }
@@ -1446,7 +1457,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                     await vm.EnsureImageReadyAsync(showErrorDialog: false);
                 }
 
-                if (vm.HasImage)
+                if (vm.CanOpenImageViewer)
                 {
                     OpenImageViewer(vm);
                 }
@@ -1617,8 +1628,13 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 
         public void OnDocumentReadyContextRequested(object sender, RightTappedRoutedEventArgs e)
         {
-            ShowDocumentReadyMenu(sender as FrameworkElement, e?.GetPosition(sender as UIElement) ?? default(Point));
             e.Handled = true;
+            if (!_bubbleContextGate.TryBeginFromRightTap())
+            {
+                return;
+            }
+
+            ShowDocumentReadyMenu(sender as FrameworkElement, e?.GetPosition(sender as UIElement) ?? default(Point));
         }
 
         public void OnDocumentReadyHolding(object sender, HoldingRoutedEventArgs e)
@@ -1628,8 +1644,13 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return;
             }
 
-            ShowDocumentReadyMenu(sender as FrameworkElement, e.GetPosition(sender as UIElement));
             e.Handled = true;
+            if (!_bubbleContextGate.TryBeginFromHold())
+            {
+                return;
+            }
+
+            ShowDocumentReadyMenu(sender as FrameworkElement, e.GetPosition(sender as UIElement));
         }
 
         public void OnDocumentOverflowClick(object sender, RoutedEventArgs e)
@@ -1791,10 +1812,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                         if (ActiveChatGrid.Visibility == Visibility.Visible)
                         {
                             ApplyChatTitle(chat, contacts);
-                            ApplyHeaderAvatar(chat);
-                            ApplyHeaderActions(
-                                isGroup: chat.IsGroup || (chat.JID ?? string.Empty).EndsWith("@g.us", StringComparison.OrdinalIgnoreCase),
-                                visible: true);
+                            ApplyHeaderIdentity(chat);
                         }
                     }
 
@@ -1839,11 +1857,11 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 _displayedPinnedMessage = null;
                 _activePinnedMessages.Clear();
                 _displayedPinnedIndex = 0;
-                if (HeaderAvatar != null)
+                if (HeaderIdentity != null)
                 {
-                    HeaderAvatar.AvatarUrl = null;
-                    HeaderAvatar.IsGroup = false;
+                    HeaderIdentity.IsAnnouncements = false;
                 }
+
                 ApplyHeaderActions(isGroup: false, visible: false);
                 return Task.CompletedTask;
             }
@@ -1862,7 +1880,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             TitleTranslateTransform.Y = 0;
 
             ApplyChatTitle(chat, contacts);
-            ApplyHeaderAvatar(chat);
+            ApplyHeaderIdentity(chat);
 
             if (_scrollViewer == null)
             {
@@ -1887,6 +1905,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 _ = ViewModel.MarkChatOpenedAsync(chat);
             }
 
+            ChatOpenMetadataProbe.WriteAsync(chat);
+
             return Task.CompletedTask;
         }
 
@@ -1909,6 +1929,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return;
             }
 
+            ViewModel.BeginLoadingMessages();
             await YieldForChatSurfacePaintAsync();
             if (token.IsCancellationRequested || _activeChat == null ||
                 !ReferenceEquals(_activeChat, chat))
@@ -1917,13 +1938,27 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                     "aborted",
                     chat.JID,
                     "stage=after-yield; reason=" + DescribeChatLoadAbort(token, chat));
+                ViewModel.EndLoadingMessages();
+                return;
+            }
+
+            // Mobile experiment: let NarrowDetail navigation + ProgressBar paint before
+            // SQLite / bubble materialization fights the compositor.
+            if (!await AwaitTimelineMaterializeDelayAsync(token).ConfigureAwait(true) ||
+                _activeChat == null ||
+                !ReferenceEquals(_activeChat, chat))
+            {
+                WriteChatOpenDiagnostics(
+                    "aborted",
+                    chat.JID,
+                    "stage=after-materialize-delay; reason=" + DescribeChatLoadAbort(token, chat));
+                ViewModel.EndLoadingMessages();
                 return;
             }
 
             string requestedJid = Jids.GetCanonicalJid(chat.JID);
             Debug.WriteLine($"[ChatDetailView] Loading messages for {requestedJid}");
 
-            ViewModel.BeginLoadingMessages();
             List<ChatMessage> messages;
             try
             {
@@ -2022,6 +2057,34 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 await Task.Delay(48);
             }
         }
+
+        /// <summary>
+        /// Extra Mobile pause after the top ProgressBar shows and before bubbles load.
+        /// Cancelled when the user switches chat. Returns false when aborted.
+        /// </summary>
+        private async Task<bool> AwaitTimelineMaterializeDelayAsync(CancellationToken token)
+        {
+            if (!_isWindowsMobile)
+            {
+                return !token.IsCancellationRequested;
+            }
+
+            try
+            {
+                WriteChatOpenDiagnostics(
+                    "materialize-delay",
+                    _activeChat?.JID,
+                    "ms=" + (int)TimelineMaterializeDelay.TotalMilliseconds);
+                await Task.Delay(TimelineMaterializeDelay, token).ConfigureAwait(true);
+                return !token.IsCancellationRequested && _activeChat != null;
+            }
+            catch (TaskCanceledException)
+            {
+                return false;
+            }
+        }
+
+        private static readonly TimeSpan TimelineMaterializeDelay = TimeSpan.FromSeconds(2);
 
         private string DescribeChatLoadAbort(CancellationToken token, ChatItem chat)
         {
@@ -2181,7 +2244,10 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return;
             }
 
-            if (e.PropertyName == nameof(ChatItem.Name))
+            if (e.PropertyName == nameof(ChatItem.Name) ||
+                e.PropertyName == nameof(ChatItem.IsCommunityAnnounce) ||
+                e.PropertyName == nameof(ChatItem.LinkedParentJid) ||
+                e.PropertyName == nameof(ChatItem.LinkedParentDisplayName))
             {
                 _ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
                 {
@@ -2216,18 +2282,19 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             else if (e.PropertyName == nameof(ChatItem.AvatarUrl) ||
                      e.PropertyName == nameof(ChatItem.AvatarHighUrl) ||
                      e.PropertyName == nameof(ChatItem.Kind) ||
-                     e.PropertyName == nameof(ChatItem.IsGroup))
+                     e.PropertyName == nameof(ChatItem.IsGroup) ||
+                     e.PropertyName == nameof(ChatItem.IsCommunityAnnounce))
             {
                 _ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
                 {
-                    ApplyHeaderAvatar(_activeChat);
+                    ApplyHeaderIdentity(_activeChat);
                 });
             }
         }
 
-        private void ApplyHeaderAvatar(ChatItem chat)
+        private void ApplyHeaderIdentity(ChatItem chat)
         {
-            if (HeaderAvatar == null || chat == null)
+            if (chat == null || HeaderIdentity == null)
             {
                 ApplyHeaderActions(isGroup: false, visible: false);
                 return;
@@ -2237,8 +2304,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 || (!string.IsNullOrWhiteSpace(chat.JID)
                     && chat.JID.IndexOf("@g.us", StringComparison.OrdinalIgnoreCase) >= 0);
 
-            HeaderAvatar.IsGroup = isGroup;
-            HeaderAvatar.AvatarUrl = chat.GetAvatarUrl(preferHigh: true);
+            HeaderIdentity.IsAnnouncements = chat.IsCommunityAnnounce;
             ApplyHeaderActions(isGroup, visible: true);
         }
 
@@ -2270,6 +2336,19 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return;
             }
 
+            if (CommunityChatDetailHeader.TryShow(
+                    chat,
+                    _strings,
+                    TitleStatusPanel,
+                    CommunityTitlePanel,
+                    CommunityTitleText,
+                    CommunityGroupSubtitleText))
+            {
+                return;
+            }
+
+            CommunityChatDetailHeader.Hide(TitleStatusPanel, CommunityTitlePanel);
+
             bool isGroup = chat.IsGroup
                 || (!string.IsNullOrWhiteSpace(chat.JID)
                     && chat.JID.IndexOf("@g.us", StringComparison.OrdinalIgnoreCase) >= 0);
@@ -2287,7 +2366,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return;
             }
 
-            if (isGroup && !string.IsNullOrWhiteSpace(chat.Name))
+            if (isGroup &&
+                (chat.IsCommunityAnnounce || !string.IsNullOrWhiteSpace(chat.Name)))
             {
                 SetTitlePlain(chat.GetNameResolved(_strings));
                 return;
@@ -3061,18 +3141,30 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         /// <summary>Invoked from <see cref="Templates.MessageTemplates"/> (external DataTemplate events).</summary>
         public void OnMessageBubbleRightTapped(object sender, RightTappedRoutedEventArgs e)
         {
-            ShowMessageActions(sender as FrameworkElement);
             e.Handled = true;
+            if (!_bubbleContextGate.TryBeginFromRightTap())
+            {
+                return;
+            }
+
+            ShowMessageActions(sender as FrameworkElement);
         }
 
         /// <summary>Invoked from <see cref="Templates.MessageTemplates"/> (external DataTemplate events).</summary>
         public void OnMessageBubbleHolding(object sender, HoldingRoutedEventArgs e)
         {
-            if (e.HoldingState == Windows.UI.Input.HoldingState.Started)
+            if (e.HoldingState != Windows.UI.Input.HoldingState.Started)
             {
-                ShowMessageActions(sender as FrameworkElement);
-                e.Handled = true;
+                return;
             }
+
+            e.Handled = true;
+            if (!_bubbleContextGate.TryBeginFromHold())
+            {
+                return;
+            }
+
+            ShowMessageActions(sender as FrameworkElement);
         }
 
         private void ShowMessageActions(FrameworkElement anchor)
@@ -3095,6 +3187,11 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         private void MessageActionsScrim_Tapped(object sender, TappedRoutedEventArgs e)
         {
             e.Handled = true;
+            if (!_bubbleContextGate.ShouldDismissFromScrim(DateTime.UtcNow))
+            {
+                return;
+            }
+
             ViewModel?.DismissMessageActions();
         }
 

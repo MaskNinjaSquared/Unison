@@ -38,6 +38,8 @@ namespace Unison.Core.Helpers
             target.VideoFileEncSha256Base64 = null;
             target.VideoMimeType = null;
             target.VideoDurationSeconds = 0;
+            target.IsAnimated = false;
+            // Kind already Text above; clear GIF flag for any residual animated state.
             target.IsAudio = false;
             target.AudioUri = null;
             target.AudioUrl = null;

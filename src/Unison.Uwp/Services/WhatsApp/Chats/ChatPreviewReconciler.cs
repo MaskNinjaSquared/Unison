@@ -33,26 +33,31 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
         /// Chats applied per UI turn, so a full reconcile (hundreds of chats after the first
         /// sync) does not hold the UI thread in one block.
         /// </summary>
-        private const int UiSliceSize = 24;
+        private const int UiSliceSizeGenerous = 24;
+
+        private const int UiSliceSizeFrugal = 10;
 
         private readonly IHistoryMessageStore _historyMessages;
         private readonly JidAliasTable _aliases;
         private readonly ChatStateStore _chatState;
         private readonly ChatRowIndex _chatRows;
         private readonly IDispatcher _ui;
+        private readonly Func<bool> _preferFrugal;
 
         public ChatPreviewReconciler(
             IHistoryMessageStore historyMessages,
             JidAliasTable aliases,
             ChatStateStore chatState,
             ChatRowIndex chatRows,
-            IDispatcher ui)
+            IDispatcher ui,
+            Func<bool> preferFrugal = null)
         {
             _historyMessages = historyMessages ?? throw new ArgumentNullException(nameof(historyMessages));
             _aliases = aliases ?? throw new ArgumentNullException(nameof(aliases));
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _chatRows = chatRows ?? throw new ArgumentNullException(nameof(chatRows));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
+            _preferFrugal = preferFrugal ?? (() => false);
         }
 
         /// <summary>
@@ -145,26 +150,52 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
                 newestByCanonical.Add(Tuple.Create(canonical, keys, page));
             }
 
+            int uiSlice = _preferFrugal() ? UiSliceSizeFrugal : UiSliceSizeGenerous;
             int updated = 0;
-            for (int start = 0; start < newestByCanonical.Count; start += UiSliceSize)
+            for (int start = 0; start < newestByCanonical.Count; start += uiSlice)
             {
                 int sliceStart = start;
-                int sliceEnd = Math.Min(newestByCanonical.Count, start + UiSliceSize);
+                int sliceEnd = Math.Min(newestByCanonical.Count, start + uiSlice);
+                int sliceSwapped = 0;
+                int sliceKept = 0;
                 await _ui.RunAsync(() =>
                 {
                     for (int i = sliceStart; i < sliceEnd; i++)
                     {
+                        int swapped;
+                        int kept;
                         updated += ApplyTip(
                             newestByCanonical[i].Item1,
                             newestByCanonical[i].Item2,
                             newestByCanonical[i].Item3,
-                            tag);
+                            out swapped,
+                            out kept);
+                        sliceSwapped += swapped;
+                        sliceKept += kept;
                     }
                 }).ConfigureAwait(false);
+
+                if (sliceSwapped > 0)
+                {
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "preview-tip",
+                        "tip-swapped:" + sliceSwapped,
+                        "reason=" + tag + "; slice=" + sliceStart + "-" + sliceEnd);
+                }
+
+                if (sliceKept > 0)
+                {
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "preview-tip",
+                        "kept-old-tip:" + sliceKept,
+                        "reason=" + tag + "; slice=" + sliceStart + "-" + sliceEnd);
+                }
             }
 
             if (updated > 0)
             {
+                // SortInPlace is a no-op when already ordered — still gate on updated so a
+                // no-op reconcile never walks the collection on the UI thread.
                 await _ui.RunAsync(() => ChatDisplayOrder.SortInPlace(_chatState.Chats)).ConfigureAwait(false);
                 Debug.WriteLine("[ChatPreviewReconciler] updated=" + updated + " reason=" + tag);
             }
@@ -191,10 +222,18 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
 
         /// <summary>
         /// UI thread. Applies the newest tip (SQLite page or memory) to every row of one chat.
-        /// Returns how many rows changed.
+        /// Returns how many rows changed; <paramref name="swapped"/> / <paramref name="kept"/>
+        /// feed the aggregated slice diagnostics.
         /// </summary>
-        private int ApplyTip(string canonical, List<string> keys, List<HistoryMessage> page, string tag)
+        private int ApplyTip(
+            string canonical,
+            List<string> keys,
+            List<HistoryMessage> page,
+            out int swapped,
+            out int kept)
         {
+            swapped = 0;
+            kept = 0;
             ChatMessage stored = ChatPreviewTip.PickStoredTip(page, DateTime.UtcNow);
             // Open-chat merge can show a live tip SQLite has not caught up with yet.
             ChatMessage memoryTip = FindNewestInMemory(canonical, keys);
@@ -260,32 +299,11 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
                 if (applied)
                 {
                     updated++;
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "preview-tip",
-                        "tip-swapped",
-                        "reason=" + tag +
-                        "; jid=" + DiagnosticJidMask.Apply(chat.JID) +
-                        "; tipId=" + (best.Id ?? "-") +
-                        "; tipFromMe=" + best.IsFromMe +
-                        "; tipTs=" + ChatMessageOrder.ToComparableUtc(best.Timestamp).ToString("O"));
+                    swapped++;
                 }
                 else
                 {
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "preview-tip",
-                        "kept-old-tip",
-                        "reason=" + tag +
-                        "; jid=" + DiagnosticJidMask.Apply(chat.JID) +
-                        "; stripTs=" + (chat.LastMessageTimestampUtc.HasValue
-                            ? ChatMessageOrder.ToComparableUtc(chat.LastMessageTimestampUtc.Value).ToString("O")
-                            : "-") +
-                        "; stripId=" + (chat.LastMessageId ?? "-") +
-                        "; stripFromMe=" + chat.LastMessageIsFromMe +
-                        "; tipTs=" + ChatMessageOrder.ToComparableUtc(best.Timestamp).ToString("O") +
-                        "; tipId=" + (best.Id ?? "-") +
-                        "; tipFromMe=" + best.IsFromMe +
-                        "; src=" + (ReferenceEquals(best, memoryTip) ? "mem" : "db") +
-                        "; dbRows=" + (page != null ? page.Count : 0));
+                    kept++;
                 }
             }
 

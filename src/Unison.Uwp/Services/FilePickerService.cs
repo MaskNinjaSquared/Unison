@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading.Tasks;
 using Unison.Core.Contracts;
@@ -86,6 +87,39 @@ namespace Unison.Uwp.Services
                 PickerLocationId.PicturesLibrary,
                 PickerViewMode.Thumbnail,
                 "PickChatImage");
+
+        public async Task<IReadOnlyList<PickedChatMedia>> PickChatImagesAsync()
+        {
+            try
+            {
+                var picker = new FileOpenPicker();
+                picker.ViewMode = PickerViewMode.Thumbnail;
+                picker.SuggestedStartLocation = PickerLocationId.PicturesLibrary;
+                foreach (string extension in ImageExtensions)
+                {
+                    picker.FileTypeFilter.Add(extension);
+                }
+
+                var files = await picker.PickMultipleFilesAsync();
+                if (files == null || files.Count == 0)
+                {
+                    return null;
+                }
+
+                var picked = new List<PickedChatMedia>(files.Count);
+                foreach (StorageFile file in files)
+                {
+                    picked.Add(await ReadPickedChatMediaAsync(file));
+                }
+
+                return picked;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[FilePickerService] PickChatImages: " + ex.Message);
+                throw;
+            }
+        }
 
         public Task<PickedChatMedia> PickChatAudioAsync() =>
             PickChatMediaAsync(

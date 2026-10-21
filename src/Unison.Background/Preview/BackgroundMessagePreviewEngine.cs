@@ -354,7 +354,7 @@ namespace Unison.Background
                     value.ImageMessage.Caption);
             if (value.VideoMessage != null)
                 return WithCaption(
-                    "[Video]",
+                    value.VideoMessage.GifPlayback ? "[GIF]" : "[Video]",
                     value.VideoMessage.Caption);
             if (value.DocumentMessage != null)
                 return WithCaption(

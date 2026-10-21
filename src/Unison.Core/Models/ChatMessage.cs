@@ -16,7 +16,12 @@ namespace Unison.Core.Models
         public string Id 
         { 
             get => _id; 
-            set { _id = value; OnPropertyChanged(); } 
+            set
+            {
+                if (_id == value) return;
+                _id = value;
+                OnPropertyChanged();
+            }
         }
 
         private string _content;
@@ -25,6 +30,7 @@ namespace Unison.Core.Models
             get => _content; 
             set
             {
+                if (_content == value) return;
                 _content = value;
                 OnPropertyChanged();
                 Raise(
@@ -38,7 +44,13 @@ namespace Unison.Core.Models
         public DateTime Timestamp 
         { 
             get => _timestamp; 
-            set { _timestamp = value; OnPropertyChanged(); OnPropertyChanged(nameof(FormattedTime)); } 
+            set
+            {
+                if (_timestamp == value) return;
+                _timestamp = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(FormattedTime));
+            }
         }
 
         private bool _isFromMe;
@@ -331,7 +343,13 @@ namespace Unison.Core.Models
         public uint AudioDurationSeconds
         {
             get => _audioDurationSeconds;
-            set { _audioDurationSeconds = value; OnPropertyChanged(); OnPropertyChanged(nameof(AudioButtonText)); }
+            set
+            {
+                if (_audioDurationSeconds == value) return;
+                _audioDurationSeconds = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(AudioButtonText));
+            }
         }
 
         [JsonIgnore]
@@ -361,11 +379,56 @@ namespace Unison.Core.Models
         /// Body text is hidden for audio, images, video, stickers, and documents.
         /// </summary>
         [JsonIgnore]
-        public bool ShowTextContent => !IsRevoked && !IsAudio && !IsImage && !IsVideo && !IsSticker && !IsDocument;
+        public bool ShowTextContent =>
+            !IsRevoked && !IsAudio && !IsImage && !IsVideo && !IsGif && !IsSticker && !IsDocument;
 
         /// <summary>Protocol video message (local file may still be pending download).</summary>
         [JsonIgnore]
         public bool IsVideo => _kind == ChatMessageKind.Video;
+
+        /// <summary>WhatsApp GIF (<c>GifPlayback</c>) — same download path as video, animation UI.</summary>
+        [JsonIgnore]
+        public bool IsGif => _kind == ChatMessageKind.Gif;
+
+        /// <summary>
+        /// Video or GIF: both use the video media envelope (<see cref="VideoUri"/>, keys, MMG).
+        /// </summary>
+        [JsonIgnore]
+        public bool IsVideoMedia => IsVideo || IsGif;
+
+        private bool _isAnimated;
+        /// <summary>
+        /// Persisted GIF flag (history). Prefer <see cref="IsGif"/> / <see cref="Kind"/>;
+        /// kept so Video+IsAnimated rows upgrade to <see cref="ChatMessageKind.Gif"/>.
+        /// </summary>
+        public bool IsAnimated
+        {
+            get => _isAnimated || _kind == ChatMessageKind.Gif;
+            set
+            {
+                if (_isAnimated == value && (!value || _kind == ChatMessageKind.Gif))
+                {
+                    return;
+                }
+
+                _isAnimated = value;
+                if (value && _kind != ChatMessageKind.Gif)
+                {
+                    _kind = ChatMessageKind.Gif;
+                    OnPropertyChanged(nameof(Kind));
+                    RaiseKindDependentChanged();
+                }
+                else if (!value && _kind == ChatMessageKind.Gif)
+                {
+                    _kind = ChatMessageKind.Video;
+                    OnPropertyChanged(nameof(Kind));
+                    RaiseKindDependentChanged();
+                }
+
+                OnPropertyChanged();
+                NotifyVideoDownloadStateChanged();
+            }
+        }
 
         [JsonIgnore]
         public bool IsSticker => _kind == ChatMessageKind.Sticker;
@@ -501,6 +564,7 @@ namespace Unison.Core.Models
             get => _videoPosterUri;
             set
             {
+                if (_videoPosterUri == value) return;
                 _videoPosterUri = value;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(HasVideoPoster));
@@ -517,7 +581,12 @@ namespace Unison.Core.Models
         public uint VideoDurationSeconds
         {
             get => _videoDurationSeconds;
-            set { _videoDurationSeconds = value; OnPropertyChanged(); }
+            set
+            {
+                if (_videoDurationSeconds == value) return;
+                _videoDurationSeconds = value;
+                OnPropertyChanged();
+            }
         }
 
         [JsonIgnore]
@@ -526,9 +595,9 @@ namespace Unison.Core.Models
         [JsonIgnore]
         public bool HasVideoPoster => !string.IsNullOrWhiteSpace(VideoPosterUri);
 
-        /// <summary>Video protocol message without a local file yet — show download placeholder.</summary>
+        /// <summary>Video/GIF protocol message without a local file yet — show download placeholder.</summary>
         [JsonIgnore]
-        public bool NeedsVideoDownload => IsVideo && !HasLocalVideo;
+        public bool NeedsVideoDownload => IsVideoMedia && !HasLocalVideo;
 
         /// <summary>True when persisted media keys allow an on-demand video download.</summary>
         [JsonIgnore]
@@ -545,7 +614,9 @@ namespace Unison.Core.Models
                 nameof(CanDownloadVideo),
                 nameof(HasLocalVideo),
                 nameof(ShowTextContent),
-                nameof(IsVideo));
+                nameof(IsVideo),
+                nameof(IsGif),
+                nameof(IsAnimated));
         }
 
         private string _documentFileName;
@@ -642,7 +713,13 @@ namespace Unison.Core.Models
         public string Caption
         {
             get => _caption;
-            set { _caption = value; OnPropertyChanged(); OnPropertyChanged(nameof(HasCaption)); }
+            set
+            {
+                if (_caption == value) return;
+                _caption = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasCaption));
+            }
         }
 
         private string _remoteJid;
@@ -710,14 +787,24 @@ namespace Unison.Core.Models
         public DateTime? PinnedAtUtc
         {
             get => _pinnedAtUtc;
-            set { _pinnedAtUtc = value; OnPropertyChanged(); }
+            set
+            {
+                if (_pinnedAtUtc == value) return;
+                _pinnedAtUtc = value;
+                OnPropertyChanged();
+            }
         }
 
         private DateTime? _pinExpiresAtUtc;
         public DateTime? PinExpiresAtUtc
         {
             get => _pinExpiresAtUtc;
-            set { _pinExpiresAtUtc = value; OnPropertyChanged(); }
+            set
+            {
+                if (_pinExpiresAtUtc == value) return;
+                _pinExpiresAtUtc = value;
+                OnPropertyChanged();
+            }
         }
 
         private List<MessageReaction> _reactions;
@@ -1088,6 +1175,8 @@ namespace Unison.Core.Models
             Raise(
                 nameof(IsImage),
                 nameof(IsVideo),
+                nameof(IsGif),
+                nameof(IsAnimated),
                 nameof(IsAudio),
                 nameof(IsVoiceMessage),
                 nameof(IsSticker),

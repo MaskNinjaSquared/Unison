@@ -120,6 +120,7 @@ namespace Unison.Background
             {
                 case "image": return "[Image]";
                 case "video": return "[Video]";
+                case "gif": return "[GIF]";
                 case "audio": return "[Audio]";
                 case "ptt": return "[Voice Message]";
                 case "document": return "[Document]";

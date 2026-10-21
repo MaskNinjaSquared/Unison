@@ -84,7 +84,7 @@ namespace Unison.Core.Helpers
             Exception failure = await SendWithRetryAsync(chatJid, message, messageId);
             if (failure == null)
             {
-                if (OutgoingSendSettlement.ShouldPromotePending(bubble.Status))
+                if (OutgoingSendSettlement.ShouldPromoteAfterTransportAccept(bubble.Status))
                 {
                     bubble.Status = SelfChatStatusPolicy.Resolve(
                         ChatMessage.StatusSent,

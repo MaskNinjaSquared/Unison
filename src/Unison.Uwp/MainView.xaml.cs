@@ -203,6 +203,7 @@ namespace Unison.Uwp
             EnsureOrientationHook();
             ApplySystemBackButton();
             ViewModel.RefreshUserInfo();
+            EnsureOpenPendingProfileFromActivation();
             EnsureOpenPendingChatFromActivation();
         }
 
@@ -342,10 +343,33 @@ namespace Unison.Uwp
                     SetPaneOpen(false);
                 }
             }
+            else if (e.PropertyName == nameof(ShellViewModel.PendingOpenProfileJid))
+            {
+                EnsureOpenPendingProfileFromActivation();
+            }
             else if (e.PropertyName == nameof(ShellViewModel.PendingOpenChatJid))
             {
                 // Toast / tile while already in AppShell — ensure Chats is shown and open.
                 EnsureOpenPendingChatFromActivation();
+            }
+        }
+
+        /// <summary>People / <c>profile=</c> deep-link while AppShell is already alive.</summary>
+        private void EnsureOpenPendingProfileFromActivation()
+        {
+            if (ViewModel == null || string.IsNullOrWhiteSpace(ViewModel.PendingOpenProfileJid))
+            {
+                return;
+            }
+
+            try
+            {
+                ViewModel.NavigateToSectionCommand.Execute(NavigationRoutes.Profile);
+                EnsureShellContent();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MainView] EnsureOpenPendingProfileFromActivation: " + ex.Message);
             }
         }
 
@@ -763,7 +787,14 @@ namespace Unison.Uwp
 
             if (SidebarBrandIcon != null && !string.IsNullOrWhiteSpace(theme.ShellBrandIcon))
             {
-                SidebarBrandIcon.Source = new BitmapImage(new Uri(theme.ShellBrandIcon));
+                try
+                {
+                    SidebarBrandIcon.Source = new BitmapImage(new Uri(theme.ShellBrandIcon));
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[MainView] Sidebar brand icon failed: " + ex.Message);
+                }
             }
         }
 

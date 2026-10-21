@@ -67,5 +67,25 @@ namespace Unison.Core.Tests.Helpers
             Assert.False(GroupQuery.NeedsMetadata(isGroup: false, jid: "111@s.whatsapp.net", hasMeaningfulName: false));
             Assert.False(GroupQuery.NeedsMetadata(isGroup: false, jid: null, hasMeaningfulName: false));
         }
+
+        [Fact]
+        public void NeedsMetadata_named_group_still_needs_a_pass_when_community_link_is_missing()
+        {
+            Assert.True(GroupQuery.NeedsMetadata(
+                isGroup: true,
+                jid: "1203@g.us",
+                hasMeaningfulName: true,
+                missingCommunityLink: true));
+            Assert.False(GroupQuery.NeedsMetadata(
+                isGroup: true,
+                jid: "1203@g.us",
+                hasMeaningfulName: true,
+                missingCommunityLink: false));
+            Assert.False(GroupQuery.NeedsMetadata(
+                isGroup: false,
+                jid: "111@s.whatsapp.net",
+                hasMeaningfulName: true,
+                missingCommunityLink: true));
+        }
     }
 }

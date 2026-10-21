@@ -254,17 +254,17 @@ namespace Unison.Uwp.Services.WhatsApp
                 {
                     var active = _activeChat.Jid;
                     var keys = MessagesByChat.ChatJids();
-                    foreach (var key in keys)
-                    {
-                        if (!string.IsNullOrWhiteSpace(active) &&
-                            string.Equals(GetCanonicalJid(key), active, StringComparison.OrdinalIgnoreCase))
+                        foreach (var key in keys)
                         {
-                            continue;
-                        }
+                            if (!string.IsNullOrWhiteSpace(active) &&
+                                string.Equals(GetCanonicalJid(key), active, StringComparison.OrdinalIgnoreCase))
+                            {
+                                continue;
+                            }
 
-                        MessagesByChat.Remove(key);
-                    }
-                });
+                            MessagesByChat.Remove(key);
+                        }
+                    });
 
                 Debug.WriteLine("[Memoria] Caches inativos de mensagens liberados");
             }
@@ -362,6 +362,8 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly object _reconnectStateLock = new object();
         private CancellationTokenSource _connectionHealthCts;
         private Task _connectionHealthTask = Task.CompletedTask;
+        private CancellationTokenSource _periodicFullSafetyCts;
+        private Task _periodicFullSafetyTask = Task.CompletedTask;
         private readonly SemaphoreSlim _initLock = new SemaphoreSlim(1, 1);
         private readonly SemaphoreSlim _persistedUiLoadLock = new SemaphoreSlim(1, 1);
         private volatile bool _persistedUiStateLoaded;
@@ -414,6 +416,12 @@ namespace Unison.Uwp.Services.WhatsApp
         private volatile bool _freshnessReconnectFallbackInProgress = false;
         private readonly HistoryCatchUpContinuation _catchUp = new HistoryCatchUpContinuation();
         private DateTime _lastCatchUpContinueUtc = DateTime.MinValue;
+        private readonly SemaphoreSlim _historyHydrationLock = new SemaphoreSlim(1, 1);
+        private int _historyHydrationActive;
+        private DateTime _lastHydrationFallbackUtc = DateTime.MinValue;
+        private DateTime _hydrationDayAnchorUtc = DateTime.MinValue;
+        private int _hydrationDayAttempts;
+        private CancellationTokenSource _hydrationDayRetryCts;
         // Default retry delay for the deferred background-resolution pass (names+avatars+groups).
         private static readonly TimeSpan AvatarFetchNextBatchDelay = TimeSpan.FromSeconds(20);
         private DateTime _replayDrainCompletedUtc = DateTime.MinValue;
@@ -424,7 +432,7 @@ namespace Unison.Uwp.Services.WhatsApp
             TimeSpan.FromSeconds(120),
             TimeSpan.FromSeconds(240)
         };
-
+        
         // Debounce timer for persisting data (5 seconds)
         private System.Threading.Timer _persistTimer;
         private readonly object _persistLock = new object();
@@ -471,6 +479,16 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         private int _sqliteHistoryConversationsAccumulated;
         private int _sqliteHistoryFinalizeGeneration;
+        /// <summary>
+        /// First-sync quiet deferred <c>IsCompleted</c> because FULL_HISTORY catch-up still
+        /// owes pages — list hold / DisplayRequest stay until catch-up finishes and names resolve.
+        /// </summary>
+        private bool _firstSyncListReleaseDeferred;
+        /// <summary>True from the first active initial-sync publish until list <c>IsCompleted</c>.</summary>
+        private bool _firstSyncListHoldOwned;
+        /// <summary>After the first-sync list unlock this session — reconnect chunks must not re-arm it.</summary>
+        private bool _firstSyncListAlreadyReleased;
+        private int _firstSyncUnlockInFlight;
         private int SqliteHistoryFinalizeQuietMs =>
             Math.Max(200, _workload.HistoryFinalizeQuietMs);
 
@@ -490,6 +508,12 @@ namespace Unison.Uwp.Services.WhatsApp
         public bool IsTransportReady =>
             _socket != null &&
             _socket.IsHandshakeComplete;
+
+        /// <summary>
+        /// True while FULL_HISTORY catch-up is owed or its banner is up. Used by
+        /// <see cref="SyncWorkGate"/> so post-reconnect enrichment can step aside.
+        /// </summary>
+        public bool IsHistoryCatchUpInProgress => IsHistoryCatchUpActive();
 
         private bool IsReplayDrainActive => ShouldDeferReconnectReplayWork();
 
@@ -533,6 +557,13 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </summary>
         private void NoteFullHistoryCatchUpProgress(string reason)
         {
+            // Local tip reconcile must not refresh the idle clock or bump lot signals —
+            // otherwise a quiet account loops "Synchronizing history…" forever.
+            if (HistoryCatchUpProgressSignal.IsLocalTipNoise(reason))
+            {
+                return;
+            }
+
             if (!IsHistoryCatchUpBannerActive &&
                 !_historyRequests.IsFullClaimed &&
                 string.IsNullOrWhiteSpace(_historyRequests.FullRequestId))
@@ -707,16 +738,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly AliasFollowUpQueue _aliasFollowUps = new AliasFollowUpQueue();
         private readonly object _aliasFollowUpTimerGate = new object();
         private CancellationTokenSource _aliasFollowUpCts;
-        private sealed class HistoryBackfillCandidate
-        {
-            public string Jid { get; set; }
-            public bool IsGroup { get; set; }
-            public int MessageCount { get; set; }
-            public int ListIndex { get; set; }
-            public bool IsStale { get; set; }
-            public DateTime LastMessageTimestamp { get; set; }
-            public string SelectionReason { get; set; }
-        }
         /// <summary>Per-chat and full-history requests sent and still owed. Shared with <c>HistoryFacade</c>.</summary>
         private readonly HistoryOnDemandRegistry _historyRequests;
         private HistoryOnDemandDispatch _historyDispatch;
@@ -862,12 +883,15 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private readonly MissingMessageLedger _missing = new MissingMessageLedger();
         private PlaceholderResendDispatch _placeholderResends;
-        private static readonly TimeSpan HistoryBackfillCooldown = TimeSpan.FromHours(2);
         private static readonly TimeSpan HistoryBackfillStaleThreshold = TimeSpan.FromHours(8);
         private static readonly TimeSpan HistoryFreshnessStaleThreshold = TimeSpan.FromMinutes(30);
         private static readonly TimeSpan FullHistoryRepairCooldown = TimeSpan.FromHours(6);
         private static readonly TimeSpan FreshnessReconnectFallbackCooldown = TimeSpan.FromMinutes(20);
-        private const int HistoryBackfillMaxStaleTopChats = 20;
+        private static readonly TimeSpan HistoryHydrationSettleBudget = TimeSpan.FromSeconds(25);
+        private const int HistoryBackfillMaxStaleTopChats = 40;
+        private const int HistoryHydrationBatchSize = 10;
+        private const int HistoryHydrationPageSize = 50;
+        private const int HistoryHydrationMaxPagesPerChat = 5;
         private static readonly TimeSpan PlaceholderResendDispatchDelay = TimeSpan.FromSeconds(5);
         private static readonly TimeSpan PlaceholderResendResponseTimeout = TimeSpan.FromSeconds(15);
         private static readonly TimeSpan PlaceholderResendDrainDelay = TimeSpan.FromSeconds(4);
@@ -911,7 +935,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 Id = me.Id,
                 Lid = me.Lid,
                 CredentialsName = NormalizeSelfNameCandidate(me.Name, NormalizeJid(me.Id), NormalizeJid(me.Lid)),
-                Phone = CurrentUserPhone,
+            Phone = CurrentUserPhone,
                 AvatarUrl = me.AvatarUrl
             };
         }
@@ -989,8 +1013,8 @@ namespace Unison.Uwp.Services.WhatsApp
 
         public string CurrentConnectionStatus { get; private set; }
         private void PublishInitialSyncProgress(bool active, bool completed, int processed, int total, string stage)
-        {
-            RuntimeDiagnosticsService.Instance.Write(
+                    {
+                        RuntimeDiagnosticsService.Instance.Write(
                 "history",
                 completed ? "initial-sync-safe-mode-complete" : "initial-sync-safe-mode-progress",
                 "active=" + active +
@@ -999,6 +1023,18 @@ namespace Unison.Uwp.Services.WhatsApp
                 "; stage=" + (stage ?? string.Empty) +
                 "; gcMb=" + (GC.GetTotalMemory(false) / (1024 * 1024)));
 
+            if (active && !completed && !_firstSyncListAlreadyReleased)
+            {
+                _firstSyncListHoldOwned = true;
+            }
+
+            if (completed)
+            {
+                _firstSyncListAlreadyReleased = true;
+                _firstSyncListHoldOwned = false;
+                _firstSyncListReleaseDeferred = false;
+            }
+
             _initialSync.Publish(active, completed, processed, total, stage);
 
             // Crash window: force disk so the completed line survives if the list materialize kills us.
@@ -1006,6 +1042,93 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 _ = RuntimeDiagnosticsService.Instance.FlushAsync("history:initial-sync-complete");
             }
+        }
+
+        private bool IsFirstSyncListHoldInProgress =>
+            !_firstSyncListAlreadyReleased &&
+            (_initialSync.IsActive || _firstSyncListReleaseDeferred || _firstSyncListHoldOwned);
+
+        /// <summary>
+        /// First-sync unlock order: persist/catch-up already idle → resolve names →
+        /// <c>IsCompleted</c> (list x:Load) → network photos. Never paints the list on raw JIDs.
+        /// </summary>
+        private void RequestFirstSyncListReleaseAfterNames(string stage, int processed, int total)
+        {
+            if (!HistoryFirstSyncListHoldDecision.ShouldResolveNamesBeforeListRelease(
+                    IsFirstSyncListHoldInProgress))
+            {
+                PublishInitialSyncProgress(false, true, processed, total, stage);
+                return;
+            }
+
+            if (Interlocked.Exchange(ref _firstSyncUnlockInFlight, 1) != 0)
+            {
+                Debug.WriteLine(
+                    "[WhatsAppService] First-sync list unlock already in flight (" + stage + ")");
+                return;
+            }
+
+            _firstSyncListReleaseDeferred = true;
+            PublishInitialSyncProgress(true, false, processed, Math.Max(processed, 1), stage + "-names");
+
+            RuntimeDiagnosticsService.Instance.Write(
+                "history",
+                "first-sync-names-before-list",
+                "stage=" + (stage ?? string.Empty) + "; processed=" + processed);
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    // force: SyncWorkGate would skip names while first-sync hold / replay is up.
+                    await ResolveMissingNamesAsync(force: true).ConfigureAwait(false);
+                    await RefreshContactNamesAsync(includeGroups: false, force: true)
+                        .ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine(
+                        "[WhatsAppService] First-sync names before list failed: " + ex.Message);
+                    RuntimeDiagnosticsService.Instance.RecordException(
+                        "history",
+                        "first-sync-names-before-list-failed",
+                        ex,
+                        "stage=" + (stage ?? string.Empty));
+                }
+                finally
+                {
+                    try
+                    {
+                        PublishInitialSyncProgress(
+                            false,
+                            true,
+                            processed,
+                            Math.Max(processed, 1),
+                            stage);
+                        _sqliteHistoryConversationsAccumulated = 0;
+                        ScheduleDeferredProfilePictureResolution(
+                            "after-first-sync-unlock:" + (stage ?? string.Empty),
+                            TimeSpan.FromSeconds(2));
+                        Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 0);
+                        TrySchedulePostMessageEnrichment(
+                            "after-first-sync-names:" + (stage ?? string.Empty));
+                    }
+                    finally
+                    {
+                        Interlocked.Exchange(ref _firstSyncUnlockInFlight, 0);
+                    }
+                }
+            });
+        }
+
+        private void ResetFirstSyncListHoldFlags(string reason)
+        {
+            _firstSyncListReleaseDeferred = false;
+            _firstSyncListHoldOwned = false;
+            _firstSyncListAlreadyReleased = false;
+            Interlocked.Exchange(ref _firstSyncUnlockInFlight, 0);
+            Debug.WriteLine(
+                "[WhatsAppService] First-sync list hold flags reset (" + (reason ?? string.Empty) + ")");
         }
 
         public event EventHandler<BinaryNode> OnLinkCodeCompanionReg;
@@ -1101,8 +1224,8 @@ namespace Unison.Uwp.Services.WhatsApp
             var jidResolver = new JidResolver(JidAlias);
             _jids = jidResolver;
             _groupMetadata = new GroupMetadataReader(jidResolver);
-            var groupNaming = new GroupNaming(displayNames, jidResolver, _selfMarkers, new StringResourcesService());
-            _groupApply = new GroupMetadataApply(groupNaming, _ui, this, new GroupRosterWriter(_groupRosterStore, _personStore), jidResolver, _chatState, _chatRows, _chatState.PushNames);
+            var groupNaming = new GroupNaming(displayNames, jidResolver, _selfMarkers, new StringResourcesService(), _chatState.GroupSubjects);
+            _groupApply = new GroupMetadataApply(groupNaming, _ui, this, new GroupRosterWriter(_groupRosterStore, _personStore), jidResolver, _chatState, _chatRows, _chatState.GroupSubjects);
             _receipts = new ReceiptReader(jidResolver);
             _chatState.Chats.CollectionChanged += (s, e) => InvalidateChatRowIndex();
 
@@ -1516,6 +1639,23 @@ namespace Unison.Uwp.Services.WhatsApp
                         return;
                     }
 
+                    // Catch-up still owed: keep the socket free for chronological backlog.
+                    // Full preview tip-scan + usync enrichment wait until FinishHistoryCatchUp.
+                    string catchUpDeferReason = HistoryCatchUpLocalWorkPolicy.DeferReason(
+                        IsHistoryCatchUpActive());
+                    if (catchUpDeferReason != null)
+                    {
+                        Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 1);
+                        RuntimeDiagnosticsService.Instance.Write(
+                            "startup",
+                            "post-replay-maintenance-deferred",
+                            "reason=" + catchUpDeferReason + "; offlineCount=" + offlineCount);
+                        Debug.WriteLine(
+                            "[WhatsAppService] Post-replay maintenance deferred (" +
+                            catchUpDeferReason + "; offlineCount=" + offlineCount + ")");
+                        return;
+                    }
+
                     // Always realign list Last Message from SQLite after offline drain settles —
                     // memory MessagesByChat is often empty for chats the user never opened.
                     // Defer while the first list paint is still releasing rows (Mobile crash window).
@@ -1537,7 +1677,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         catch (OperationCanceledException)
                         {
                             RaiseSyncStatus(null);
-                            return;
+                        return;
                         }
                         catch (Exception exReconcile)
                         {
@@ -1597,6 +1737,21 @@ namespace Unison.Uwp.Services.WhatsApp
                 Debug.WriteLine(
                     "[WhatsAppService] Post-message enrichment deferred until heavy history finishes (" +
                     reason + ")");
+                    return;
+                }
+
+            string catchUpDeferReason = HistoryCatchUpLocalWorkPolicy.DeferReason(
+                IsHistoryCatchUpActive());
+            if (catchUpDeferReason != null)
+            {
+                Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 1);
+                Debug.WriteLine(
+                    "[WhatsAppService] Post-message enrichment deferred (" + catchUpDeferReason +
+                    "; " + reason + ")");
+                RuntimeDiagnosticsService.Instance.Write(
+                    "startup",
+                    "post-message-enrichment-deferred",
+                    "reason=" + (reason ?? string.Empty) + "; " + catchUpDeferReason);
                 return;
             }
 
@@ -1606,8 +1761,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 Debug.WriteLine(
                     "[WhatsAppService] Post-message enrichment armed for after FULL_HISTORY (" +
                     reason + ")");
-                return;
-            }
+                    return;
+                }
 
             if (_listPaintGate != null && !_listPaintGate.IsReleased)
             {
@@ -1615,12 +1770,12 @@ namespace Unison.Uwp.Services.WhatsApp
                 Debug.WriteLine(
                     "[WhatsAppService] Post-message enrichment deferred until chat list paint (" +
                     reason + ")");
-                RuntimeDiagnosticsService.Instance.Write(
+                    RuntimeDiagnosticsService.Instance.Write(
                     "startup",
                     "post-message-enrichment-deferred-list-paint",
                     "reason=" + (reason ?? string.Empty));
-                return;
-            }
+                    return;
+                }
 
             SchedulePostMessageEnrichment(reason);
         }
@@ -1629,8 +1784,8 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             if (Interlocked.Exchange(ref _enrichmentAwaitingListPaint, 0) != 1)
             {
-                return;
-            }
+                        return;
+                    }
 
             TrySchedulePostMessageEnrichment("list-paint-released");
         }
@@ -1642,8 +1797,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 Debug.WriteLine(
                     "[WhatsAppService] Post-message enrichment already started this session (" +
                     reason + ")");
-                return;
-            }
+                    return;
+                }
 
             Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 0);
 
@@ -1658,7 +1813,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _postMessageEnrichmentCts = cts;
 
             Debug.WriteLine("[WhatsAppService] Scheduling post-message enrichment (" + reason + ")");
-            RuntimeDiagnosticsService.Instance.Write(
+                        RuntimeDiagnosticsService.Instance.Write(
                 "startup",
                 "post-message-enrichment-scheduled",
                 "reason=" + reason);
@@ -1673,8 +1828,8 @@ namespace Unison.Uwp.Services.WhatsApp
                         !Unison.Uwp.App.IsWindowVisible)
                     {
                         RaiseSyncStatus(null);
-                        return;
-                    }
+                                return;
+                            }
 
                     using (TraceStartupPhase("post-replay-names"))
                     {
@@ -1686,8 +1841,8 @@ namespace Unison.Uwp.Services.WhatsApp
                         !Unison.Uwp.App.IsWindowVisible)
                     {
                         RaiseSyncStatus(null);
-                        return;
-                    }
+                    return;
+                }
 
                     using (TraceStartupPhase("post-replay-contacts"))
                     {
@@ -1697,9 +1852,9 @@ namespace Unison.Uwp.Services.WhatsApp
                     if (_workload.SerializePostSyncEnrichment)
                     {
                         await RunSerializedPostSyncEnrichmentAsync(quiet, token).ConfigureAwait(false);
-                    }
-                    else
-                    {
+                }
+                else
+                {
                         TriggerBackgroundResolution();
                     }
 
@@ -1713,7 +1868,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
                 catch (Exception ex)
                 {
-                    RuntimeDiagnosticsService.Instance.RecordException(
+                RuntimeDiagnosticsService.Instance.RecordException(
                         "startup",
                         "post-message-enrichment-failed",
                         ex,
@@ -1775,10 +1930,10 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private void ReleaseEnrichmentAfterHeavyHistory(string reason)
         {
-            // Keep names/avatars/groups deferred while catch-up still wants adjacent lots —
-            // starting enrich on the first InitialBootstrap chunk (1.8.3-era gap that High
-            // workload made fatal on Mobile) races the next FULL_HISTORY page.
-            if (IsHistoryCatchUpActive() && CatchUpContinueMaxRounds > 0)
+            // Keep names/avatars/groups deferred while catch-up is still owed — including Low
+            // (MaxFullHistoryCatchUpRounds == 0). Starting enrich mid catch-up races usync
+            // against chronological offline / FULL_HISTORY delivery on Mobile.
+            if (HistoryCatchUpLocalWorkPolicy.ShouldDeferHeavyLocalWork(IsHistoryCatchUpActive()))
             {
                 Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 1);
                 Debug.WriteLine(
@@ -1813,16 +1968,16 @@ namespace Unison.Uwp.Services.WhatsApp
                 _offlineReplayFlushTimer = new System.Threading.Timer(async _ =>
             {
                 if (!_pendingMessages.TryClaimFlush())
-                {
-                    return;
-                }
+            {
+                return;
+            }
 
                 try
                 {
                     await FlushOfflineReplayMessagesAsync("message-batch-idle");
-                }
-                catch (Exception ex)
-                {
+            }
+            catch (Exception ex)
+            {
                     Debug.WriteLine($"[WhatsAppService] Non-fatal message batch flush failure: {ex.Message}");
                 }
                 }, null, (int)OfflineReplayFlushInterval.TotalMilliseconds, Timeout.Infinite);
@@ -1927,8 +2082,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 "sqlite-started:" + type + ":conversations=" + Math.Max(0, conversationCount));
             if (type.IndexOf("OnDemand", StringComparison.OrdinalIgnoreCase) >= 0)
             {
-                return;
-            }
+                    return;
+                }
 
             int count = Math.Max(0, conversationCount);
             int processed = Math.Max(_sqliteHistoryConversationsAccumulated, 0);
@@ -1936,8 +2091,8 @@ namespace Unison.Uwp.Services.WhatsApp
             // apply owns the next sqlite-finalized (otherwise Continue fires on processed=0).
             Interlocked.Increment(ref _sqliteHistoryFinalizeGeneration);
             PublishInitialSyncProgress(
-                true,
-                false,
+                        true,
+                            false,
                 processed,
                 0,
                 count > 0 ? "sqlite-starting" : "sqlite-starting-empty");
@@ -1947,30 +2102,58 @@ namespace Unison.Uwp.Services.WhatsApp
             int generation,
             int delayMs,
             int processedAtSchedule)
-        {
-            try
-            {
+                    {
+                        try
+                        {
                 await Task.Delay(Math.Max(200, delayMs)).ConfigureAwait(false);
                 if (generation != Volatile.Read(ref _sqliteHistoryFinalizeGeneration))
-                {
-                    return;
-                }
+                    {
+                        return;
+                    }
 
                 int processed = Math.Max(processedAtSchedule, _sqliteHistoryConversationsAccumulated);
                 int total = Math.Max(processed, 1);
-                PublishInitialSyncProgress(false, true, processed, total, "sqlite-finalized");
-                _sqliteHistoryConversationsAccumulated = 0;
 
                 // Paginated FULL_HISTORY catch-up: a quiet SQLite lot must not clear the
                 // in-flight request and kill the banner — that made the watchdog exit with
                 // request-cleared before DecideCatchUpAfterIdleBatch could solicit the next
                 // page, so only one bounce ever ran. Hand the lot to the continue decision
                 // instead (same path as idle/hard-timeout).
+                //
+                // Also: do not Publish IsCompleted (list hold / DisplayRequest) while the
+                // first-sync hold is still up and catch-up still owes work — that painted
+                // chats early with sync still running in the background.
                 bool catchUpBanner = IsHistoryCatchUpActive();
                 bool handOffCatchUp = _historyRequests.TryHandOffQuietLot(
                     catchUpBanner,
                     out string lotRequestId,
                     out HistoryOnDemandRequest lotRequest);
+                bool enrichmentAwaiting =
+                    Interlocked.CompareExchange(ref _enrichmentAwaitingHeavyHistory, 0, 0) == 1;
+                bool firstSyncInProgress = IsFirstSyncListHoldInProgress;
+                bool deferListRelease = HistoryFirstSyncListHoldDecision.ShouldDeferInitialSyncCompleted(
+                    firstSyncInProgress,
+                    handOffCatchUp,
+                    catchUpBanner,
+                    enrichmentAwaiting);
+
+                if (deferListRelease)
+                {
+                    PublishInitialSyncProgress(true, false, processed, total, "sqlite-quiet-catch-up");
+                    _firstSyncListReleaseDeferred = true;
+                }
+                else if (HistoryFirstSyncListHoldDecision.ShouldResolveNamesBeforeListRelease(
+                    firstSyncInProgress))
+                {
+                    // Catch-up idle: resolve names while hold stays up, then IsCompleted + photos.
+                    RequestFirstSyncListReleaseAfterNames("sqlite-finalized", processed, total);
+                }
+                else
+                {
+                    PublishInitialSyncProgress(false, true, processed, total, "sqlite-finalized");
+                    _sqliteHistoryConversationsAccumulated = 0;
+                }
+
                 bool lotAckAccepted = lotRequest?.AckAccepted ?? false;
                 int lotProgressSignals = lotRequest?.ProgressSignalCount ?? 0;
                 string lotTrigger = lotRequest?.TriggerReason ?? "sqlite-lot-quiet";
@@ -1982,23 +2165,41 @@ namespace Unison.Uwp.Services.WhatsApp
                         (lotRequestId ?? "<none>") +
                         ", signals=" + lotProgressSignals +
                         ", processed=" + processed +
-                        ", banner=" + (IsHistoryCatchUpBannerActive));
+                        ", banner=" + (IsHistoryCatchUpBannerActive) +
+                        ", deferListRelease=" + deferListRelease);
                     RuntimeDiagnosticsService.Instance.Write(
                         "history",
                         "catch-up-sqlite-lot-quiet",
                         "requestId=" + (lotRequestId ?? string.Empty) +
                         "; signals=" + lotProgressSignals +
                         "; delayMs=" + delayMs +
-                        "; processed=" + processed);
+                        "; processed=" + processed +
+                        "; deferListRelease=" + deferListRelease);
 
                     // Empty StatusV3 quiet must not solicit the next FULL_HISTORY page.
+                    // During first-sync hold, also must not finish catch-up / unlock the list —
+                    // Bootstrap/Recent often arrives after this empty quiet.
                     if (processed <= 0)
                     {
                         RuntimeDiagnosticsService.Instance.Write(
                             "history",
                             "catch-up-sqlite-lot-quiet-skip-empty",
-                            "requestId=" + (lotRequestId ?? string.Empty));
-                        FinishHistoryCatchUpContinue("sqlite-empty-lot", releaseEnrichment: true);
+                            "requestId=" + (lotRequestId ?? string.Empty) +
+                            "; firstSyncHold=" + firstSyncInProgress);
+                        if (HistoryFirstSyncListHoldDecision.ShouldFinishCatchUpOnEmptyQuietLot(
+                            firstSyncInProgress,
+                            processed))
+                        {
+                            FinishHistoryCatchUpContinue("sqlite-empty-lot", releaseEnrichment: true);
+                        }
+                        else
+                        {
+                            RuntimeDiagnosticsService.Instance.Write(
+                                "history",
+                                "catch-up-sqlite-lot-quiet-keep-hold",
+                                "requestId=" + (lotRequestId ?? string.Empty) +
+                                "; reason=first-sync-awaiting-bootstrap");
+                        }
                     }
                     else
                     {
@@ -2009,9 +2210,9 @@ namespace Unison.Uwp.Services.WhatsApp
                             "sqlite-lot-quiet:" + (lotTrigger ?? string.Empty),
                             delayMs);
                     }
-                }
-                else
-                {
+                                }
+                                else
+                                {
                     ClearFullHistoryOnDemandRequestState("sqlite-finalized");
                     EndHistoryCatchUpBanner("sqlite-finalized");
                 }
@@ -2020,11 +2221,21 @@ namespace Unison.Uwp.Services.WhatsApp
                 // list strip matches SQLite even when preview rows lagged or skipped fromMe.
                 // Skip while the list is still materializing — ChatListViewModel + post-replay
                 // already reconcile; doubling tip-swaps on Mobile overlapped the paint storm.
+                // Also skip while catch-up still wants another lot — full tip-scan steals CPU
+                // from chronological backlog (326 chats on a stale companion).
                 if (_listPaintGate != null && !_listPaintGate.IsReleased)
                 {
                     RuntimeDiagnosticsService.Instance.Write(
                         "preview-tip",
                         "reconcile-deferred-list-paint",
+                        "reason=history-quiet");
+                }
+                else if (HistoryCatchUpLocalWorkPolicy.ShouldDeferHeavyLocalWork(
+                    IsHistoryCatchUpActive()))
+                {
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "preview-tip",
+                        "reconcile-deferred-catch-up",
                         "reason=history-quiet");
                 }
                 else
@@ -2144,7 +2355,7 @@ namespace Unison.Uwp.Services.WhatsApp
             int updated = await _previewReconciler.ReconcileAsync(chatJids, reason).ConfigureAwait(false);
             if (updated > 0)
             {
-                NoteFullHistoryCatchUpProgress("tip-swapped:" + updated);
+                // tip-swapped is local — NoteFullHistoryCatchUpProgress ignores it; skip the call.
                 SchedulePersist();
             }
         }
@@ -2202,10 +2413,10 @@ namespace Unison.Uwp.Services.WhatsApp
                 if (UseFrugalSyncBudget)
                 {
                     if (!Unison.Uwp.App.IsWindowVisible)
-                    {
-                        RuntimeDiagnosticsService.Instance.Write(
-                            "startup",
-                            "deferred-maintenance-skipped",
+                {
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "startup",
+                        "deferred-maintenance-skipped",
                             "reason=visibility");
                         return;
                     }
@@ -2216,9 +2427,9 @@ namespace Unison.Uwp.Services.WhatsApp
                             "startup",
                             "deferred-maintenance-skipped",
                             "reason=memory; level=" +
-                            Windows.System.MemoryManager.AppMemoryUsageLevel);
+                        Windows.System.MemoryManager.AppMemoryUsageLevel);
                         RaiseSyncStatus(null);
-                        return;
+                    return;
                     }
                 }
 
@@ -2271,7 +2482,9 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
                 }
 
-                if (Chats.Count > 0 && !UseFrugalSyncBudget)
+                if (Chats.Count > 0 &&
+                    !UseFrugalSyncBudget &&
+                    !HistoryCatchUpLocalWorkPolicy.ShouldDeferHeavyLocalWork(IsHistoryCatchUpActive()))
                 {
                     _ = ResolveMissingNamesAsync();
                 }
@@ -2404,6 +2617,21 @@ namespace Unison.Uwp.Services.WhatsApp
                         return;
                     }
 
+                    string catchUpDeferReason = HistoryCatchUpLocalWorkPolicy.DeferReason(
+                        IsHistoryCatchUpActive());
+                    if (catchUpDeferReason != null)
+                    {
+                        Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 1);
+                        Debug.WriteLine(
+                            "[WhatsAppService] TriggerBackgroundResolution deferred (" +
+                            catchUpDeferReason + ")");
+                        RuntimeDiagnosticsService.Instance.Write(
+                            "startup",
+                            "background-resolution-deferred",
+                            "reason=" + catchUpDeferReason);
+                        return;
+                    }
+
                     string profilePictureDeferReason;
                     if (ShouldDeferProfilePictureFetch(out profilePictureDeferReason))
                     {
@@ -2416,7 +2644,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     RaiseSyncStatus(SyncPhaseStatus.Format(SyncPhaseStatus.Names));
                     using (TraceStartupPhase("background-names"))
                     {
-                        await ResolveMissingNamesAsync();
+                    await ResolveMissingNamesAsync();
                     }
 
                     if (ShouldDeferProfilePictureFetch(out profilePictureDeferReason))
@@ -2551,13 +2779,13 @@ namespace Unison.Uwp.Services.WhatsApp
                             "history",
                             "catch-up-watchdog-exit",
                             "requestId=" + state.RequestId + "; reason=request-cleared");
-                        return;
-                    }
+                return;
+            }
 
                     if (exit.Outcome != HistoryCatchUpWatchdogOutcome.Idle)
-                    {
-                        return;
-                    }
+                {
+                    return;
+                }
 
                     HistoryOnDemandRequest last = exit.LastTick.Request;
                     DecideCatchUpAfterIdleBatch(
@@ -2732,11 +2960,32 @@ namespace Unison.Uwp.Services.WhatsApp
                     return;
 
                 case HistoryCatchUpContinueAction.FinishStagnantProgress:
+                    if (stillStale)
+                    {
+                        // Mobile cap may stop mid-backlog; latch so the next session resumes.
+                        TryMarkForceHistoryRepairPending("stagnant-progress-still-stale");
+                    }
+
                     FinishHistoryCatchUpContinue("stagnant-progress", releaseEnrichment: true);
+                    if (stillStale)
+                    {
+                        _ = RunHydrationFallbackPipelineAsync("stagnant-progress");
+                    }
+
                     return;
 
                 case HistoryCatchUpContinueAction.FinishMaxContinues:
+                    if (stillStale)
+                    {
+                        TryMarkForceHistoryRepairPending("max-continues-still-stale");
+                    }
+
                     FinishHistoryCatchUpContinue("max-continues", releaseEnrichment: true);
+                    if (stillStale)
+                    {
+                        _ = RunHydrationFallbackPipelineAsync("max-continues");
+                    }
+
                     return;
             }
 
@@ -2767,20 +3016,20 @@ namespace Unison.Uwp.Services.WhatsApp
                     Debug.WriteLine(
                         "[WhatsAppService] Adjacent FULL_HISTORY skipped; catch-up already finished (" +
                         reason + ")");
-                    return;
-                }
+                return;
+            }
 
                 if (_suppressReconnect || _authState == null || !_authState.Registered)
-                {
+            {
                     FinishHistoryCatchUpContinue("adjacent-aborted", releaseEnrichment: true);
-                    return;
-                }
+                return;
+            }
 
                 Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 1);
 
                 if (_socket != null && _socket.IsHandshakeComplete && IsConnected)
-                {
-                    Debug.WriteLine(
+            {
+                Debug.WriteLine(
                         "[WhatsAppService] Adjacent FULL_HISTORY on live socket: " + reason);
                     RuntimeDiagnosticsService.Instance.Write(
                         "history",
@@ -2792,9 +3041,9 @@ namespace Unison.Uwp.Services.WhatsApp
                         reason,
                         isFreshnessRepair: true).ConfigureAwait(false);
                     if (ok)
-                    {
-                        return;
-                    }
+            {
+                return;
+            }
 
                     Debug.WriteLine(
                         "[WhatsAppService] Adjacent FULL_HISTORY live request failed; soft-reconnect fallback.");
@@ -2837,6 +3086,20 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
+            // Quiet-finalize may have deferred IsCompleted while catch-up pages still ran —
+            // names, then list unlock, then photos (not on the first quiet).
+            if (IsFirstSyncListHoldInProgress)
+            {
+                int processed = Math.Max(
+                    _sqliteHistoryConversationsAccumulated,
+                    _initialSync.ProcessedConversations);
+                RequestFirstSyncListReleaseAfterNames(
+                    "catch-up-finish:" + (reason ?? string.Empty),
+                    processed,
+                    Math.Max(processed, 1));
+                return;
+            }
+
             ScheduleDeferredProfilePictureResolution(
                 "catch-up-finish:" + (reason ?? string.Empty),
                 TimeSpan.FromSeconds(5));
@@ -2864,8 +3127,8 @@ namespace Unison.Uwp.Services.WhatsApp
             if (_suppressReconnect)
             {
                 FinishHistoryCatchUpContinue("continue-suppress", releaseEnrichment: true);
-                return;
-            }
+                    return;
+                }
 
             if (_authState == null || !_authState.Registered)
             {
@@ -2926,8 +3189,8 @@ namespace Unison.Uwp.Services.WhatsApp
                     if (tipLooksFresh && !catchUpActive)
                     {
                         FinishHistoryCatchUpContinue("fresh-before-continue", releaseEnrichment: true);
-                        return;
-                    }
+                return;
+            }
 
                     Debug.WriteLine(
                         "[WhatsAppService] Starting catch-up continue reconnect: staleReason=" +
@@ -2989,6 +3252,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 nowUtc - _lastFreshnessReconnectFallbackUtc < FreshnessReconnectFallbackCooldown)
             {
                 Debug.WriteLine($"[WhatsAppService] Freshness reconnect fallback skipped: cooldown active, last={_lastFreshnessReconnectFallbackUtc:O}, cooldownMinutes={FreshnessReconnectFallbackCooldown.TotalMinutes:F0}, trigger={triggerReason}");
+                // High FULL/reconnect cooldown and nothing arrived — hydrate per-JID, then retry FULL.
+                _ = RunHydrationFallbackPipelineAsync("freshness-cooldown:" + triggerReason);
                 return;
             }
 
@@ -3153,6 +3418,121 @@ namespace Unison.Uwp.Services.WhatsApp
             return HistoryDispatch.RequestChatPageAsync(normJid, cached, count, triggerReason, DateTime.UtcNow);
         }
 
+        private void StartPeriodicFullHistorySafety()
+        {
+            StopPeriodicFullHistorySafety("restart");
+            var cts = new CancellationTokenSource();
+            _periodicFullSafetyCts = cts;
+            _periodicFullSafetyTask = Task.Run(() => PeriodicFullHistorySafetyLoopAsync(cts.Token));
+            Debug.WriteLine(
+                "[WhatsAppService] Periodic FULL_HISTORY safety started; intervalMinutes=" +
+                HistoryPeriodicFullSafetyDecision.Interval.TotalMinutes.ToString("F0"));
+        }
+
+        private void StopPeriodicFullHistorySafety(string reason)
+        {
+            var cts = _periodicFullSafetyCts;
+            _periodicFullSafetyCts = null;
+            if (cts == null)
+            {
+                return;
+            }
+
+            try
+            {
+                cts.Cancel();
+                cts.Dispose();
+            }
+            catch
+            {
+            }
+
+            Debug.WriteLine("[WhatsAppService] Periodic FULL_HISTORY safety stopped: " + (reason ?? string.Empty));
+        }
+
+        private async Task PeriodicFullHistorySafetyLoopAsync(CancellationToken token)
+        {
+            while (!token.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(HistoryPeriodicFullSafetyDecision.Interval, token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+
+                try
+                {
+                    await TryPeriodicFullHistorySafetyAsync().ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[WhatsAppService] Periodic FULL_HISTORY safety tick failed: " + ex.Message);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Standby safety: if tips still look owed (or a force-repair latch is set) and no
+        /// FULL lot is in flight, solicit again. Healthy fresh accounts stay quiet.
+        /// </summary>
+        private async Task TryPeriodicFullHistorySafetyAsync()
+        {
+            var socket = _socket;
+            bool socketReady = IsConnected &&
+                               socket != null &&
+                               socket.IsConnected &&
+                               socket.IsHandshakeComplete;
+            bool catchUpActive = IsHistoryCatchUpActive();
+            bool fullClaimed = _historyRequests != null && _historyRequests.IsFullClaimed;
+
+            bool forceRepair = false;
+            try
+            {
+                forceRepair = LocalSettingsAccess.Current.Get<bool>(
+                    LocalSettingsConstants.MessageStoreForceHistoryRepair);
+            }
+            catch
+            {
+            }
+
+            string staleDetail;
+            bool tipStale = TryGetHistoryFreshnessStaleReason(DateTime.UtcNow, out staleDetail);
+
+            if (!HistoryPeriodicFullSafetyDecision.ShouldRequest(
+                    socketReady,
+                    catchUpActive,
+                    fullClaimed,
+                    forceRepair,
+                    tipStale,
+                    out string gateReason))
+            {
+                return;
+            }
+
+            string reason = "periodic-safety:" + gateReason;
+            if (tipStale && !string.IsNullOrWhiteSpace(staleDetail))
+            {
+                reason += ":" + staleDetail;
+            }
+
+            Debug.WriteLine("[WhatsAppService] Periodic FULL_HISTORY safety soliciting (" + reason + ")");
+            RuntimeDiagnosticsService.Instance.Write(
+                "history",
+                "periodic-full-safety",
+                "reason=" + reason);
+
+            // Direct request — not the reconnect floor (that gates on window visibility).
+            bool ok = await RequestFullHistoryOnDemandTrackedAsync(
+                reason,
+                isFreshnessRepair: true).ConfigureAwait(false);
+            Debug.WriteLine(
+                "[WhatsAppService] Periodic FULL_HISTORY safety result ok=" + ok +
+                " (" + reason + ")");
+        }
+
         private async Task<bool> RequestFullHistoryOnDemandTrackedAsync(string reason, bool isFreshnessRepair)
         {
             HistoryFullRequestResult result = await HistoryDispatch.RequestFullAsync(
@@ -3178,8 +3558,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 "; freshnessRepair=" + isFreshnessRepair +
                 "; idleAbortMs=" + (int)FullHistoryCatchUpIdleAbort.TotalMilliseconds +
                 "; hardTimeoutMs=" + (int)FullHistoryOnDemandResponseTimeout.TotalMilliseconds);
-            if (isFreshnessRepair)
-            {
+                    if (isFreshnessRepair)
+                    {
                 BeginHistoryCatchUpBanner(reason);
             }
 
@@ -3206,6 +3586,32 @@ namespace Unison.Uwp.Services.WhatsApp
             return RequestFullHistoryOnDemandTrackedAsync(
                 string.IsNullOrWhiteSpace(reason) ? "manual-full-history" : reason,
                 isFreshnessRepair: true);
+        }
+
+        /// <summary>
+        /// Leaves a latch so the next session / offline-complete path can resume FULL_HISTORY
+        /// after Mobile hits its adjacent-page cap while tips are still owed.
+        /// </summary>
+        private void TryMarkForceHistoryRepairPending(string reason)
+        {
+            try
+            {
+                LocalSettingsAccess.Current.Set(
+                    LocalSettingsConstants.MessageStoreForceHistoryRepair,
+                    true);
+                Debug.WriteLine(
+                    "[WhatsAppService] MessageStoreForceHistoryRepair set (" + (reason ?? string.Empty) + ")");
+                RuntimeDiagnosticsService.Instance.Write(
+                    "history",
+                    "force-history-repair-latched",
+                    "reason=" + (reason ?? string.Empty));
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "[WhatsAppService] Failed to set MessageStoreForceHistoryRepair (" +
+                    (reason ?? string.Empty) + "): " + ex.Message);
+            }
         }
 
         /// <summary>
@@ -3322,6 +3728,28 @@ namespace Unison.Uwp.Services.WhatsApp
 
             DateTime newestStoredMessageUtc = GetNewestStoredMessageUtc();
             string newestText = FormatFreshnessTimestamp(newestStoredMessageUtc);
+            TimeSpan? tipAge = newestStoredMessageUtc == DateTime.MinValue
+                ? (TimeSpan?)null
+                : nowUtc - newestStoredMessageUtc;
+
+            // Any remaining freshness stale after offline drain → FULL_HISTORY. A former
+            // mild-age skip (empty offline + tip under 6h) left companions stuck after a
+            // partial tip replay; quiet-account cost is preferred over that stall.
+            if (!HistoryPostOfflineCatchUpDecision.ShouldRequestFullHistory(
+                    offlineCount,
+                    stillStale: true,
+                    staleReason,
+                    tipAge))
+            {
+                Debug.WriteLine(
+                    "[WhatsAppService] Post-offline freshness not stale; skipping FULL_HISTORY " +
+                    "(staleReason=" + staleReason + ", newestStored=" + newestText +
+                    ", tipAgeMinutes=" + (tipAge.HasValue ? tipAge.Value.TotalMinutes.ToString("F1") : "<none>") +
+                    ", offlineCount=" + offlineCount + ", catchUpActive=" + catchUpActive + ")");
+                FinishHistoryCatchUpContinue("offline-empty-age-stale", releaseEnrichment: true);
+                return;
+            }
+
             Debug.WriteLine($"[WhatsAppService] Post-offline freshness check remains stale after normal replay: staleReason={staleReason}, newestStored={newestText}, offlineCount={offlineCount}. Requesting FULL_HISTORY_SYNC_ON_DEMAND before name/group enrichment.");
 
             Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 1);
@@ -3392,10 +3820,387 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        private async Task StartBackgroundHistoryBackfillAsync()
+        /// <summary>
+        /// After FULL_HISTORY quiet fails while tips stay stale: per-JID ON_DEMAND hydration
+        /// (Pending → syncing → HasMore/Synced), then natural FULL_HISTORY again. Day retries
+        /// keep going until tips look fresh (max 5 / day, every 3h).
+        /// </summary>
+        private async Task RunHydrationFallbackPipelineAsync(string reason)
         {
-            Debug.WriteLine("[WhatsAppService] Automatic background history backfill disabled. Reconnect recovery requests FULL_HISTORY only when post-offline freshness is stale; name/group enrichment waits for that catch-up.");
-            await Task.CompletedTask;
+            try
+            {
+                string staleReason;
+                bool stillStale = TryGetHistoryFreshnessStaleReason(DateTime.UtcNow, out staleReason);
+                HistoryHydrationFallbackAction start =
+                    HistoryHydrationFallbackDecision.AfterFullCatchUpFinished(
+                        stillStale,
+                        Volatile.Read(ref _historyHydrationActive) != 0);
+                if (start != HistoryHydrationFallbackAction.StartPerChatHydration)
+                {
+                    Debug.WriteLine(
+                        "[WhatsAppService] Hydration fallback skipped (" + reason +
+                        "): action=" + start + ", stillStale=" + stillStale);
+                    return;
+                }
+
+                NoteHydrationDayAttempt(DateTime.UtcNow);
+                RuntimeDiagnosticsService.Instance.Write(
+                    "history",
+                    "hydration-fallback-start",
+                    "reason=" + (reason ?? string.Empty) +
+                    "; stale=" + (staleReason ?? string.Empty));
+
+                int requested = await StartBackgroundHistoryBackfillAsync(reason).ConfigureAwait(false);
+                stillStale = TryGetHistoryFreshnessStaleReason(DateTime.UtcNow, out staleReason);
+                HistoryHydrationFallbackAction next =
+                    HistoryHydrationFallbackDecision.AfterPerChatHydration(stillStale);
+
+                Debug.WriteLine(
+                    "[WhatsAppService] Hydration fallback settled: requested=" + requested +
+                    ", stillStale=" + stillStale + ", next=" + next + ", trigger=" + reason);
+
+                if (next == HistoryHydrationFallbackAction.RetryFullHistory)
+                {
+                    _ = RequestReconnectHistoryCatchUpAsync(
+                        "hydration-then-full:" + (reason ?? string.Empty));
+                }
+
+                ScheduleHydrationDayRetryIfNeeded(reason);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "[WhatsAppService] Hydration fallback failed (" + reason + "): " + ex.Message);
+                RuntimeDiagnosticsService.Instance.RecordException(
+                    "history",
+                    "hydration-fallback-failed",
+                    ex,
+                    reason);
+            }
+        }
+
+        private void NoteHydrationDayAttempt(DateTime nowUtc)
+        {
+            if (_hydrationDayAnchorUtc == DateTime.MinValue ||
+                nowUtc.Date != _hydrationDayAnchorUtc.Date)
+            {
+                _hydrationDayAnchorUtc = nowUtc.Date;
+                _hydrationDayAttempts = 0;
+            }
+
+            _hydrationDayAttempts++;
+            _lastHydrationFallbackUtc = nowUtc;
+        }
+
+        private void ScheduleHydrationDayRetryIfNeeded(string reason)
+        {
+            string staleReason;
+            bool stillStale = TryGetHistoryFreshnessStaleReason(DateTime.UtcNow, out staleReason);
+            if (!stillStale ||
+                _hydrationDayAttempts >= HistoryHydrationFallbackDecision.DefaultMaxDayAttempts)
+            {
+                return;
+            }
+
+            CancellationTokenSource prior = Interlocked.Exchange(ref _hydrationDayRetryCts, null);
+            try { prior?.Cancel(); } catch { }
+            try { prior?.Dispose(); } catch { }
+
+            var cts = new CancellationTokenSource();
+            _hydrationDayRetryCts = cts;
+            TimeSpan delay = HistoryHydrationFallbackDecision.DefaultDayRetryInterval;
+            Debug.WriteLine(
+                "[WhatsAppService] Hydration day retry armed in " + delay.TotalHours.ToString("F1") +
+                "h (attempt=" + _hydrationDayAttempts + "/" +
+                HistoryHydrationFallbackDecision.DefaultMaxDayAttempts +
+                ", trigger=" + reason + ")");
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(delay, cts.Token).ConfigureAwait(false);
+                    if (cts.IsCancellationRequested)
+                    {
+                        return;
+                    }
+
+                    string again;
+                    if (!TryGetHistoryFreshnessStaleReason(DateTime.UtcNow, out again))
+                    {
+                        return;
+                    }
+
+                    await RunHydrationFallbackPipelineAsync(
+                            "day-retry:" + (reason ?? string.Empty))
+                        .ConfigureAwait(false);
+                }
+                catch (TaskCanceledException)
+                {
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine(
+                        "[WhatsAppService] Hydration day retry failed: " + ex.Message);
+                }
+            });
+        }
+
+        /// <summary>
+        /// Per-JID HISTORY_SYNC_ON_DEMAND pass: ledger Pending/InFlight/HasMore/Synced until
+        /// pages stop growing or a silent batch aborts. Returns how many requests went out.
+        /// </summary>
+        private async Task<int> StartBackgroundHistoryBackfillAsync(string reason)
+        {
+            if (!await _historyHydrationLock.WaitAsync(0).ConfigureAwait(false))
+            {
+                Debug.WriteLine("[WhatsAppService] History hydration skipped: already running (" + reason + ")");
+                return 0;
+            }
+
+            Interlocked.Exchange(ref _historyHydrationActive, 1);
+            try
+            {
+                if (!IsConnected)
+                {
+                    Debug.WriteLine("[WhatsAppService] History hydration skipped: not connected (" + reason + ")");
+                    return 0;
+                }
+
+                IReadOnlyList<HistoryBackfillCandidate> selected =
+                    BuildHistoryHydrationCandidates(DateTime.UtcNow);
+                if (selected.Count == 0)
+                {
+                    Debug.WriteLine("[WhatsAppService] History hydration: no stale chats with cursor (" + reason + ")");
+                    return 0;
+                }
+
+                var ledger = new HistoryBackfillLedger(HistoryHydrationMaxPagesPerChat);
+                ledger.Enqueue(selected);
+                Debug.WriteLine(
+                    "[WhatsAppService] History hydration starting: chats=" + selected.Count +
+                    " batchSize=" + HistoryHydrationBatchSize +
+                    " maxPages=" + HistoryHydrationMaxPagesPerChat +
+                    " reason=" + reason);
+                RuntimeDiagnosticsService.Instance.Write(
+                    "history",
+                    "hydration-backfill-start",
+                    "reason=" + (reason ?? string.Empty) +
+                    "; chats=" + selected.Count +
+                    "; batchSize=" + HistoryHydrationBatchSize +
+                    "; maxPages=" + HistoryHydrationMaxPagesPerChat);
+
+                int requested = 0;
+                int batchIndex = 0;
+                while (ledger.HasWorkRemaining && IsConnected)
+                {
+                    batchIndex++;
+                    IReadOnlyList<HistoryBackfillLedgerEntry> batch = ledger.TakeBatch(
+                        HistoryHydrationBatchSize,
+                        GetHistoryHydrationMessageCount);
+                    if (batch.Count == 0)
+                    {
+                        break;
+                    }
+
+                    var sentJids = new List<string>(batch.Count);
+                    for (int i = 0; i < batch.Count; i++)
+                    {
+                        if (!IsConnected)
+                        {
+                            break;
+                        }
+
+                        HistoryBackfillLedgerEntry entry = batch[i];
+                        if (entry == null || string.IsNullOrWhiteSpace(entry.Jid))
+                        {
+                            continue;
+                        }
+
+                        string normJid = NormalizeJid(entry.Jid);
+                        if (ledger.TryGet(normJid, out HistoryBackfillLedgerEntry live))
+                        {
+                            live.BaselineCount = GetHistoryHydrationMessageCount(normJid);
+                        }
+
+                        bool sent = await RequestHistoryOnDemandIfNeededAsync(
+                                normJid,
+                                HistoryHydrationPageSize,
+                                "hydration:batch" + batchIndex + ":" + reason)
+                            .ConfigureAwait(false);
+                        if (sent)
+                        {
+                            ledger.NoteRequestSent(normJid);
+                            sentJids.Add(normJid);
+                            requested++;
+                        }
+                        else
+                        {
+                            ledger.MarkSynced(normJid);
+                        }
+                    }
+
+                    await WaitForHistoryHydrationSettleAsync().ConfigureAwait(false);
+
+                    int outcomeAckSilent = 0;
+                    int outcomeRamGrew = 0;
+                    int outcomeNoAck = 0;
+                    int outcomeRejected = 0;
+                    for (int i = 0; i < sentJids.Count; i++)
+                    {
+                        string jid = sentJids[i];
+                        int afterRam = GetHistoryHydrationMessageCount(jid);
+                        int baselineRam = 0;
+                        if (ledger.TryGet(jid, out HistoryBackfillLedgerEntry before) && before != null)
+                        {
+                            baselineRam = before.BaselineCount;
+                        }
+
+                        var obs = new HistoryBackfillFlightObservation
+                        {
+                            HadRequest = true,
+                            AckAccepted = true,
+                            BaselineRam = baselineRam,
+                            AfterRam = afterRam,
+                            ChunkApplied = afterRam > baselineRam
+                        };
+                        HistoryBackfillFlightOutcome outcome =
+                            HistoryBackfillFlightClassifier.Classify(obs);
+                        switch (outcome)
+                        {
+                            case HistoryBackfillFlightOutcome.RamGrew:
+                                outcomeRamGrew++;
+                                break;
+                            case HistoryBackfillFlightOutcome.AckSilent:
+                            case HistoryBackfillFlightOutcome.ChunkNoRamGrowth:
+                                outcomeAckSilent++;
+                                break;
+                            case HistoryBackfillFlightOutcome.NoAck:
+                                outcomeNoAck++;
+                                break;
+                            case HistoryBackfillFlightOutcome.Rejected:
+                                outcomeRejected++;
+                                break;
+                        }
+
+                        ledger.CompleteFlight(jid, afterRam, outcome);
+                    }
+
+                    for (int i = 0; i < batch.Count; i++)
+                    {
+                        HistoryBackfillLedgerEntry entry = batch[i];
+                        if (entry != null && entry.State == HistoryBackfillChatState.InFlight)
+                        {
+                            ledger.CompleteFlight(
+                                entry.Jid,
+                                GetHistoryHydrationMessageCount(entry.Jid));
+                        }
+                    }
+
+                    bool silentAbort = HistoryBackfillAbortDecision.ShouldAbortAfterSilentBatch(
+                        sentJids.Count,
+                        outcomeAckSilent,
+                        outcomeNoAck,
+                        outcomeRejected,
+                        outcomeRamGrew);
+                    HistoryBackfillContinueAction cont = HistoryBackfillContinueDecision.Decide(
+                        ledger.HasWorkRemaining,
+                        silentAbort);
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "history",
+                        "hydration-backfill-batch",
+                        "batch=" + batchIndex +
+                        "; sent=" + sentJids.Count +
+                        "; ramGrew=" + outcomeRamGrew +
+                        "; hasMore=" + ledger.CountInState(HistoryBackfillChatState.HasMore) +
+                        "; action=" + cont);
+                    if (cont != HistoryBackfillContinueAction.Continue)
+                    {
+                        break;
+                    }
+                }
+
+                Debug.WriteLine(
+                    "[WhatsAppService] History hydration done: requested=" + requested +
+                    " synced=" + ledger.CountInState(HistoryBackfillChatState.Synced) +
+                    " hasMoreLeft=" + ledger.CountInState(HistoryBackfillChatState.HasMore) +
+                    " failed=" + ledger.CountInState(HistoryBackfillChatState.Failed));
+                return requested;
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _historyHydrationActive, 0);
+                _historyHydrationLock.Release();
+            }
+        }
+
+        private IReadOnlyList<HistoryBackfillCandidate> BuildHistoryHydrationCandidates(DateTime nowUtc)
+        {
+            var snapshots = new List<HistoryBackfillChatSnapshot>(Chats.Count);
+            for (int i = 0; i < Chats.Count; i++)
+            {
+                ChatItem chat = Chats[i];
+                if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
+                {
+                    continue;
+                }
+
+                string jid = NormalizeJid(chat.JID);
+                int messageCount = GetHistoryHydrationMessageCount(jid);
+                // ON_DEMAND needs an oldest-message cursor — skip empty timelines.
+                if (messageCount <= 0)
+                {
+                    continue;
+                }
+
+                DateTime tipUtc = chat.LastMessageTimestampUtc ?? DateTime.MinValue;
+                if (tipUtc != DateTime.MinValue && tipUtc.Kind != DateTimeKind.Utc)
+                {
+                    tipUtc = tipUtc.ToUniversalTime();
+                }
+
+                snapshots.Add(new HistoryBackfillChatSnapshot
+                {
+                    Jid = jid,
+                    IsGroup = IsGroupJid(jid),
+                    ListIndex = i,
+                    LastMessageUtc = tipUtc,
+                    MessageCount = messageCount
+                });
+            }
+
+            return HistoryBackfillSelection.SelectTopStale(
+                snapshots,
+                nowUtc,
+                HistoryBackfillStaleThreshold,
+                HistoryBackfillMaxStaleTopChats);
+        }
+
+        private int GetHistoryHydrationMessageCount(string jid)
+        {
+            if (string.IsNullOrWhiteSpace(jid))
+            {
+                return 0;
+            }
+
+            return MessagesByChat.TryGet(jid, out var list) && list != null ? list.Count : 0;
+        }
+
+        private async Task WaitForHistoryHydrationSettleAsync()
+        {
+            var elapsed = Stopwatch.StartNew();
+            while (elapsed.Elapsed < HistoryHydrationSettleBudget && IsConnected)
+            {
+                if (_historyRequests.ChatsInFlight == 0)
+                {
+                    await Task.Delay(400).ConfigureAwait(false);
+                    if (_historyRequests.ChatsInFlight == 0)
+                    {
+                        return;
+                    }
+                }
+
+                await Task.Delay(500).ConfigureAwait(false);
+            }
         }
 
         /// <summary>
@@ -3942,7 +4747,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         return alias;
                     }
 
-                    return null;
+                return null;
                 });
         }
 
@@ -4132,6 +4937,15 @@ namespace Unison.Uwp.Services.WhatsApp
                         {
                             continue;
                         }
+
+                        _chatState.GroupSubjects.Set(entry.Canonical, entry.Name);
+                        if (!string.IsNullOrEmpty(entry.Normalized) &&
+                            !string.Equals(entry.Normalized, entry.Canonical, StringComparison.OrdinalIgnoreCase))
+                        {
+                            _chatState.GroupSubjects.Set(entry.Normalized, entry.Name);
+                        }
+
+                        continue;
                     }
 
                     ContactNames.Set(entry.Canonical, entry.Name);
@@ -4366,8 +5180,8 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             ContactLabelResult result = _contactLabels.Sanitize(label, contextJid);
 
-            if (!string.IsNullOrEmpty(contextJid))
-            {
+                if (!string.IsNullOrEmpty(contextJid))
+                {
                 LogContactLabelDecision(result, contextJid);
             }
 
@@ -4417,19 +5231,19 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             ChatListDeduperResult result = await _deduper.RunAsync(reason ?? "client").ConfigureAwait(false);
             if (result.Merged <= 0 && result.NormalizedKeys <= 0)
-            {
-                return;
-            }
+                    {
+                        return;
+                    }
 
             Debug.WriteLine(
                 $"[WhatsAppService] Deduplicated {result.Merged} duplicate chat entries and normalized " +
                 $"{result.NormalizedKeys} message caches (reason={reason})");
-            OnDisplayNamesUpdated?.Invoke(this, EventArgs.Empty);
-            SchedulePersist();
+                        OnDisplayNamesUpdated?.Invoke(this, EventArgs.Empty);
+                        SchedulePersist();
             if (result.Merged > 0)
-            {
+                        {
                 _ = PersistChatIdentityStateAsync("dedupe:" + reason);
-            }
+                        }
         }
 
         private static string FormatTimestamp(DateTime msgTime)
@@ -4447,18 +5261,18 @@ namespace Unison.Uwp.Services.WhatsApp
         private Task ApplyResolvedNamesToChatsAsync() => _nameRefresh.ApplyAsync();
 
         private void OnChatNamesApplied(object sender, int updated)
-        {
-            Debug.WriteLine($"[WhatsAppService] Applied resolved display names to {updated} chats");
+                    {
+                        Debug.WriteLine($"[WhatsAppService] Applied resolved display names to {updated} chats");
             RuntimeDiagnosticsService.Instance.Write("names", "list-names-applied", "count=" + updated);
-            OnDisplayNamesUpdated?.Invoke(this, EventArgs.Empty);
+                        OnDisplayNamesUpdated?.Invoke(this, EventArgs.Empty);
         }
 
         /// <summary>Delegates to <see cref="IContactService"/>; this class only supplies the client primitives.</summary>
-        private Task ResolveMissingNamesAsync()
+        private Task ResolveMissingNamesAsync(bool force = false)
         {
-            return _contactService?.ResolveMissingNamesAsync() ?? Task.CompletedTask;
+            return _contactService?.ResolveMissingNamesAsync(force) ?? Task.CompletedTask;
         }
-
+    
         public bool TryFileUsyncAlias(string userJid, string lidJid, out bool wasAlreadyAliased)
         {
             UsyncAliasFilingResult result = _usyncAliases.TryFile(userJid, lidJid);

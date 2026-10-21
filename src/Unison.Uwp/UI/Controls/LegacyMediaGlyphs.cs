@@ -13,6 +13,12 @@ namespace Unison.Uwp.UI.Controls
         public const string Pause = "\uEB0A";
         public const string Download = "\uEB0B";
         public const string Stop = "\uEB0C";
+        public const string Picture = "\uEB10";
+        public const string Video = "\uEB11";
+        public const string Document = "\uEB12";
+        public const string Contact = "\uEB13";
+        public const string Audio = "\uEB14";
+        public const string Location = "\uEB15";
 
         public static FontFamily IconFont
         {

@@ -18,13 +18,43 @@ namespace Unison.Core.Tests.Helpers
         private readonly ChatStateStore _chats = new ChatStateStore(new CountingDispatcher());
         private readonly CountingDispatcher _ui = new CountingDispatcher();
 
-        private ChatNameRefresh Build(IDispatcher ui = null)
+        private ChatNameRefresh Build(IDispatcher ui = null, bool preferFrugal = false)
         {
             _aliases.BindSelf(() => Me, () => null);
             var markers = new FakeMarkers();
             var names = new ContactDisplayNames(_aliases, new DisplayNameTable(), _addressBook, new RecordingPersonStore(), markers);
             names.Bind(() => new SelfNameInputs { Id = Me }, null);
-            return new ChatNameRefresh(ui ?? _ui, _chats, names, markers);
+            return new ChatNameRefresh(
+                ui ?? _ui,
+                _chats,
+                names,
+                markers,
+                new FakeGroupNaming(),
+                () => preferFrugal);
+        }
+
+        [Fact]
+        public async Task A_group_row_takes_the_subject_from_group_naming()
+        {
+            const string group = "120363000000000001@g.us";
+            var chat = new ChatItem { JID = group, Name = "120363000000000001", IsGroup = true };
+            _chats.Chats.Add(chat);
+
+            var markers = new FakeMarkers();
+            var names = new ContactDisplayNames(
+                _aliases,
+                new DisplayNameTable(),
+                _addressBook,
+                new RecordingPersonStore(),
+                markers);
+            names.Bind(() => new SelfNameInputs { Id = Me }, null);
+            var groupNaming = new FakeGroupNaming();
+            groupNaming.ChatNames[group] = "Família Nova";
+            var refresh = new ChatNameRefresh(_ui, _chats, names, markers, groupNaming);
+
+            await refresh.ApplyAsync();
+
+            Assert.Equal("Família Nova", chat.Name);
         }
 
         [Fact]
@@ -71,6 +101,29 @@ namespace Unison.Core.Tests.Helpers
             await refresh.ApplyAsync();
 
             Assert.True(raisedInPass);
+        }
+
+        [Fact]
+        public async Task Frugal_apply_slices_across_ui_passes_and_announces_once()
+        {
+            int total = ChatNameRefresh.FrugalUiSliceSize + 5;
+            for (int i = 0; i < total; i++)
+            {
+                string jid = "551190000" + i.ToString("D4") + "@s.whatsapp.net";
+                _chats.Chats.Add(new ChatItem { JID = jid, Name = "551190000" + i.ToString("D4") });
+                _addressBook.Set(jid, "Nome " + i);
+            }
+
+            var refresh = Build(preferFrugal: true);
+            var applied = new List<int>();
+            refresh.Applied += (s, count) => applied.Add(count);
+
+            await refresh.ApplyAsync();
+
+            Assert.Equal(2, _ui.Passes);
+            Assert.Equal(new[] { total }, applied);
+            Assert.Equal("Nome 0", _chats.Chats[0].Name);
+            Assert.Equal("Nome " + (total - 1), _chats.Chats[total - 1].Name);
         }
 
         private sealed class FlagDispatcher : IDispatcher

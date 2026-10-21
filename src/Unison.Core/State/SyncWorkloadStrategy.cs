@@ -87,6 +87,15 @@ namespace Unison.Core.State
         /// <summary>Wait before the next roster batch of the same group.</summary>
         public abstract int GroupRosterNextBatchDelaySeconds { get; }
 
+        /// <summary>Max unnamed direct JIDs one opportunistic name pass may ask about.</summary>
+        public abstract int NameResolveMaxPerPass { get; }
+
+        /// <summary>JIDs per usync IQ during name resolution.</summary>
+        public abstract int NameResolveChunkSize { get; }
+
+        /// <summary>Pause between usync chunks so keep-alives can land on Mobile.</summary>
+        public abstract int NameResolveInterChunkDelayMs { get; }
+
         /// <summary>Pacing while <see cref="SyncBudget.IsFrugal"/> is true.</summary>
         protected abstract SyncPacing FrugalPacing { get; }
 
@@ -160,6 +169,12 @@ namespace Unison.Core.State
 
         public override int GroupRosterNextBatchDelaySeconds => 40;
 
+        public override int NameResolveMaxPerPass => 4;
+
+        public override int NameResolveChunkSize => 2;
+
+        public override int NameResolveInterChunkDelayMs => 800;
+
         protected override SyncPacing FrugalPacing { get; } = new SyncPacing(4000, 8000, 45, 3);
 
         protected override SyncPacing GenerousPacing { get; } = new SyncPacing(1000, 1800, 35, 2);
@@ -183,7 +198,9 @@ namespace Unison.Core.State
 
         public override int MaxUiMessageWindow => 80;
 
-        public override int HistoryPersistSubBatchSize => 150;
+        // Slightly above the old 150: Mobile (capped to Low) spends less wall time in
+        // SQLite round-trips without approaching High's 500-row transactions.
+        public override int HistoryPersistSubBatchSize => 220;
 
         public override bool MaterializeHistoryThumbsDuringSync => true;
 
@@ -201,14 +218,16 @@ namespace Unison.Core.State
 
         public override int PostSyncEnrichmentQuietSeconds => 8;
 
-        // First quiet lot is enough on 1 GB / Mobile — adjacent FULL_HISTORY pages after
-        // InitialBootstrap were killing Creators (enrich + next lot in parallel). High keeps
-        // pagination; Unsupported already used zero.
-        public override int MaxFullHistoryCatchUpRounds => 0;
+        // Limited adjacent FULL_HISTORY pages on Mobile / 1 GB. Zero stopped catch-up after the
+        // first quiet lot while Meta still owed days of history. Cap well below High's 60 and
+        // rely on HistoryCatchUpLocalWorkPolicy deferring usync/avatars while the banner is up.
+        public override int MaxFullHistoryCatchUpRounds => 12;
 
-        public override int HistoryFinalizeQuietMs => 4500;
+        // Shorter than the old 4.5s: Meta gaps are usually sub-second; 2s still covers a
+        // late chunk on slow Mobile without leaving the banner up for dead time.
+        public override int HistoryFinalizeQuietMs => 2000;
 
-        public override int HistoryFullFinalizeDelayMs => 1500;
+        public override int HistoryFullFinalizeDelayMs => 1000;
 
         public override int GroupMetadataBatchSize => 12;
 
@@ -219,6 +238,12 @@ namespace Unison.Core.State
         public override int GroupRosterInterRequestDelayMs => 900;
 
         public override int GroupRosterNextBatchDelaySeconds => 30;
+
+        public override int NameResolveMaxPerPass => 6;
+
+        public override int NameResolveChunkSize => 3;
+
+        public override int NameResolveInterChunkDelayMs => 500;
 
         protected override SyncPacing FrugalPacing { get; } = new SyncPacing(3000, 6000, 45, 3);
 
@@ -263,9 +288,9 @@ namespace Unison.Core.State
 
         public override int MaxFullHistoryCatchUpRounds => 60;
 
-        public override int HistoryFinalizeQuietMs => 2800;
+        public override int HistoryFinalizeQuietMs => 1000;
 
-        public override int HistoryFullFinalizeDelayMs => 900;
+        public override int HistoryFullFinalizeDelayMs => 700;
 
         public override int GroupMetadataBatchSize => 25;
 
@@ -276,6 +301,12 @@ namespace Unison.Core.State
         public override int GroupRosterInterRequestDelayMs => 900;
 
         public override int GroupRosterNextBatchDelaySeconds => 20;
+
+        public override int NameResolveMaxPerPass => 10;
+
+        public override int NameResolveChunkSize => 5;
+
+        public override int NameResolveInterChunkDelayMs => 120;
 
         protected override SyncPacing FrugalPacing { get; } = new SyncPacing(3000, 6000, 45, 3);
 

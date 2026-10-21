@@ -156,6 +156,14 @@
                                     <FontIcon Glyph="&#xE716;" FontFamily="{StaticResource IconFont}" Foreground="White"/>
                                 </MenuFlyoutItem.Icon>
                             </MenuFlyoutItem>
+                            <MenuFlyoutItem x:Uid="ChatList_FilterCommunities" Text="Communities"
+                                            Command="{Binding FilterChatsCommand}"
+                                            CommandParameter="7"
+                                            Style="{StaticResource ModernMenuFlyoutItemStyle}">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE902;" FontFamily="{StaticResource IconFont}" Foreground="White"/>
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
                             <MenuFlyoutItem x:Uid="ChatList_FilterDrafts" Text="Drafts"
                                             Command="{Binding FilterChatsCommand}"
                                             CommandParameter="6"
@@ -228,6 +236,71 @@
                            Text="{x:Bind ViewModel.LoadingOverlayText, Mode=OneWay}"
                            FontSize="14" Foreground="{ThemeResource WhatsAppTextMediumBrush}" Margin="0,16,0,0" HorizontalAlignment="Center" FontFamily="{StaticResource MainFont}"/>
             </StackPanel>
+        </Grid>
+
+        <!-- Community hub: covers the list chrome; DataContext stays the list VM. -->
+        <Grid x:Name="CommunityHubPanel"
+              Grid.RowSpan="3"
+              Visibility="{x:Bind ViewModel.IsCommunityHubOpen, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
+              Background="{ThemeResource ChatListBackgroundBrush}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <Grid Background="{ThemeResource ChatListSearchBackgroundBrush}"
+                  Padding="4,10,16,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*" MinWidth="0"/>
+                </Grid.ColumnDefinitions>
+
+                <Button Click="CommunityHubBackButton_Click"
+                        Style="{StaticResource ModernIconButtonStyle}"
+                        VerticalAlignment="Center"
+                        Margin="4,0,4,0">
+                    <FontIcon Glyph="&#xE72B;"
+                              FontFamily="{StaticResource IconFont}"
+                              FontSize="18"
+                              Foreground="{ThemeResource WhatsAppTextHighBrush}"/>
+                </Button>
+
+                <controls:ChatAvatarControl Grid.Column="1"
+                                            Width="48" Height="48"
+                                            Size="48"
+                                            ShowBorder="True"
+                                            IsGroup="True"
+                                            VerticalAlignment="Center"
+                                            Margin="4,0,12,0"
+                                            AvatarUrl="{Binding ActiveCommunity.AvatarUrl}"/>
+
+                <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                    <TextBlock Text="{x:Bind ViewModel.ActiveCommunityTitle, Mode=OneWay}"
+                               FontSize="18"
+                               FontFamily="{StaticResource MainFontSemibold}"
+                               FontWeight="SemiBold"
+                               Foreground="{ThemeResource WhatsAppTextHighBrush}"
+                               TextWrapping="NoWrap"
+                               TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Text="{x:Bind ViewModel.ActiveCommunitySubtitle, Mode=OneWay}"
+                               Margin="0,2,0,0"
+                               FontSize="13"
+                               FontFamily="{StaticResource MainFont}"
+                               Foreground="{ThemeResource ChatListSecondaryTextBrush}"
+                               TextWrapping="NoWrap"
+                               TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+            </Grid>
+
+            <ListView x:Name="CommunityHubList"
+                      Grid.Row="1"
+                      ItemsSource="{Binding ActiveCommunity.CommunityMembers}"
+                      ItemTemplate="{StaticResource ChatItemTemplate}"
+                      ItemContainerStyle="{StaticResource WhatsAppChatListItemStyle}"
+                      SelectionMode="Single"
+                      SelectionChanged="CommunityHubList_SelectionChanged"
+                      ShowsScrollingPlaceholders="False"/>
         </Grid>
     </Grid>
 </UserControl>

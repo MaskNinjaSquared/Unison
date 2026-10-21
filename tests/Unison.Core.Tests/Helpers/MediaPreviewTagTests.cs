@@ -103,6 +103,7 @@ namespace Unison.Core.Tests.Helpers
         [Theory]
         [InlineData(ChatPreviewKind.Image, "[Image]")]
         [InlineData(ChatPreviewKind.Video, "[Video]")]
+        [InlineData(ChatPreviewKind.Gif, "[GIF]")]
         [InlineData(ChatPreviewKind.Sticker, "[Sticker]")]
         [InlineData(ChatPreviewKind.Document, "[Document]")]
         [InlineData(ChatPreviewKind.Voice, "[Voice Message]")]

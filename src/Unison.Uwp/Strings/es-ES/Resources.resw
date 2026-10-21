@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
     <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
@@ -168,6 +168,9 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   <data name="ChatList_FilterDrafts.Text" xml:space="preserve">
     <value>Borradores</value>
   </data>
+  <data name="ChatList_FilterCommunities.Text" xml:space="preserve">
+    <value>Comunidades</value>
+  </data>
   <data name="ChatList_RefreshNames.Text" xml:space="preserve">
     <value>Actualizar nombres de contactos</value>
   </data>
@@ -179,6 +182,9 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   </data>
   <data name="ChatList_PreviewVideo" xml:space="preserve">
     <value>Vídeo</value>
+  </data>
+  <data name="ChatList_PreviewGif" xml:space="preserve">
+    <value>GIF</value>
   </data>
   <data name="ChatList_PreviewSticker" xml:space="preserve">
     <value>Sticker</value>
@@ -347,6 +353,15 @@ Desactívalo tras el diagnóstico: mantenerlo activo ralentiza la aplicación.</
   </data>
   <data name="Chat_SelfFallbackName" xml:space="preserve">
     <value>Tú</value>
+  </data>
+  <data name="Chat_CommunityAnnouncements" xml:space="preserve">
+    <value>Anuncios</value>
+  </data>
+  <data name="Chat_CommunityHubSubtitle" xml:space="preserve">
+    <value>Comunidad · {0} grupos</value>
+  </data>
+  <data name="Chat_CommunityFallbackName" xml:space="preserve">
+    <value>Comunidad</value>
   </data>
   <data name="ChatDetail_PersonalSubtitle.Text" xml:space="preserve">
     <value>Mensajes para mí</value>

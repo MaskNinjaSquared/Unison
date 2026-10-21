@@ -8,9 +8,10 @@ using Windows.UI.Xaml.Input;
 namespace Unison.Uwp.UI.Views
 {
     /// <summary>
-    /// Shared surface API for WhatsApp (<see cref="ChatDetailView"/>) and
-    /// Unison (<c>Shell.Unison.Views.ChatDetailView</c>) conversation panes.
-    /// Visual trees stay separate (W10M); hosts/templates resolve via this contract.
+    /// Shared surface API for conversation panes:
+    /// <c>Shell.WhatsApp.Views.ChatDetailView</c> (MenuFlyout attach),
+    /// <c>Shell.Unison.Views.ChatDetailView</c> (tile tray + flyout),
+    /// and Legacy. Visual trees stay separate; hosts/templates resolve via this contract.
     /// </summary>
     internal interface IChatDetailSurface
     {

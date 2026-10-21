@@ -20,11 +20,15 @@ namespace Unison.Uwp.Services
     public sealed class UsyncGate : IUsyncGate
     {
         private readonly SemaphoreSlim _gate = new SemaphoreSlim(1, 1);
+        private int _held;
+
+        public bool IsHeld => Volatile.Read(ref _held) > 0;
 
         public async Task<IDisposable> AcquireAsync(CancellationToken token = default(CancellationToken))
         {
             await _gate.WaitAsync(token).ConfigureAwait(false);
-            return new Lease(_gate);
+            Interlocked.Increment(ref _held);
+            return new Lease(_gate, () => Interlocked.Decrement(ref _held));
         }
 
         /// <summary>
@@ -34,10 +38,12 @@ namespace Unison.Uwp.Services
         private sealed class Lease : IDisposable
         {
             private SemaphoreSlim _gate;
+            private Action _onRelease;
 
-            internal Lease(SemaphoreSlim gate)
+            internal Lease(SemaphoreSlim gate, Action onRelease)
             {
                 _gate = gate;
+                _onRelease = onRelease;
             }
 
             public void Dispose()
@@ -58,6 +64,14 @@ namespace Unison.Uwp.Services
                 catch (SemaphoreFullException ex)
                 {
                     Debug.WriteLine("[UsyncGate] Release past capacity: " + ex.Message);
+                }
+                finally
+                {
+                    var onRelease = Interlocked.Exchange(ref _onRelease, null);
+                    if (onRelease != null)
+                    {
+                        onRelease();
+                    }
                 }
             }
         }

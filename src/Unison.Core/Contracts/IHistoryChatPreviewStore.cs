@@ -24,6 +24,12 @@ namespace Unison.Core.Contracts
 
         Task<IReadOnlyList<HistoryChatPreview>> GetAllAsync(string syncId = null);
 
+        /// <summary>
+        /// One preview row for <paramref name="jid"/> (primary key, or LidJid / PnJid alias),
+        /// or null when absent. Includes tombstoned rows so open diagnostics can see them.
+        /// </summary>
+        Task<HistoryChatPreview> TryGetAsync(string jid);
+
         Task<int> CountAsync(string syncId = null);
 
         /// <summary>Clears all preview rows (wipe / resync epoch rotate).</summary>

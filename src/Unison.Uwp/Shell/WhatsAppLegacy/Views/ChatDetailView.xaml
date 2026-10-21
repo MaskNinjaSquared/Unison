@@ -3,6 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:Unison.Uwp.Shell.WhatsAppLegacy.Views"
+    xmlns:legacyControls="using:Unison.Uwp.Shell.WhatsAppLegacy.Controls"
     xmlns:controls="using:Unison.Uwp.UI.Controls"
     xmlns:reply="using:Unison.Uwp.UI.Controls.Reply"
     xmlns:helpers="using:Unison.Uwp.UI.Helpers"
@@ -239,18 +240,17 @@
                         <TextBlock Text="&#xE72B;" FontFamily="{StaticResource IconFont}" FontSize="18"/>
                     </Button>
 
-                    <controls:ChatAvatarControl x:Name="HeaderAvatar"
-                                                Grid.Column="1"
-                                                Size="40"
-                                                Width="40" Height="40"
-                                                ShowBorder="True"
-                                                Visibility="Collapsed"
-                                                VerticalAlignment="Center"
-                                                Margin="0,0,6,0"
-                                                helpers:DesktopCursor.CursorKind="Hand"
-                                                Tapped="HeaderAvatar_Tapped"/>
+                    <!-- Legacy: no contact/group photo — Avisos glyph only via dedicated control. -->
+                    <legacyControls:LegacyChatDetailHeaderIdentity x:Name="HeaderIdentity"
+                                                                   Grid.Column="1"
+                                                                   Size="40"
+                                                                   Width="40" Height="40"
+                                                                   VerticalAlignment="Center"
+                                                                   Margin="0,0,6,0"
+                                                                   helpers:DesktopCursor.CursorKind="Hand"
+                                                                   Tapped="HeaderIdentity_Tapped"/>
 
-                    <!-- Name + status only (avatar has its own tap → OpenChatDetailInfoFromAvatarCommand). -->
+                    <!-- Name + status (identity tap → OpenChatDetailInfoFromAvatarCommand when Avisos). -->
                     <Button x:Name="HeaderInfoButton"
                             Grid.Column="2"
                             Click="HeaderInfoButton_Click"
@@ -262,21 +262,34 @@
                             HorizontalContentAlignment="Left"
                             VerticalAlignment="Stretch"
                             VerticalContentAlignment="Center">
-                        <StackPanel x:Name="TitleStatusPanel" VerticalAlignment="Center" Margin="0,0,8,0"
-                                    HorizontalAlignment="Left">
-                            <StackPanel.RenderTransform>
-                                <TranslateTransform x:Name="TitleTranslateTransform" Y="0"/>
-                            </StackPanel.RenderTransform>
-                            <TextBlock x:Name="ChatTitleText" x:Uid="ChatDetail_SelectChat" Text="Select a chat" FontSize="18"
-                                       FontFamily="{StaticResource MainFontSemibold}" FontWeight="SemiBold"
-                                       Foreground="{ThemeResource ChatDetailHeaderTitleBrush}"
-                                       TextTrimming="CharacterEllipsis"/>
-                            <TextBlock x:Name="ChatStatusText" Text="" FontSize="13"
-                                       FontFamily="{StaticResource MainFont}"
-                                       Foreground="{ThemeResource ChatDetailHeaderStatusBrush}" Opacity="0"
-                                       Visibility="Collapsed"
-                                       TextTrimming="CharacterEllipsis"/>
-                        </StackPanel>
+                        <Grid VerticalAlignment="Center" Margin="0,0,8,0" HorizontalAlignment="Left">
+                            <StackPanel x:Name="TitleStatusPanel" VerticalAlignment="Center"
+                                        HorizontalAlignment="Left">
+                                <StackPanel.RenderTransform>
+                                    <TranslateTransform x:Name="TitleTranslateTransform" Y="0"/>
+                                </StackPanel.RenderTransform>
+                                <TextBlock x:Name="ChatTitleText" x:Uid="ChatDetail_SelectChat" Text="Select a chat" FontSize="18"
+                                           FontFamily="{StaticResource MainFontSemibold}" FontWeight="SemiBold"
+                                           Foreground="{ThemeResource ChatDetailHeaderTitleBrush}"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock x:Name="ChatStatusText" Text="" FontSize="13"
+                                           FontFamily="{StaticResource MainFont}"
+                                           Foreground="{ThemeResource ChatDetailHeaderStatusBrush}" Opacity="0"
+                                           Visibility="Collapsed"
+                                           TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                            <StackPanel x:Name="CommunityTitlePanel" VerticalAlignment="Center"
+                                        HorizontalAlignment="Left" Visibility="Collapsed">
+                                <TextBlock x:Name="CommunityTitleText" Text="" FontSize="18"
+                                           FontFamily="{StaticResource MainFontSemibold}" FontWeight="SemiBold"
+                                           Foreground="{ThemeResource ChatDetailHeaderTitleBrush}"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock x:Name="CommunityGroupSubtitleText" Text="" FontSize="13"
+                                           FontFamily="{StaticResource MainFont}"
+                                           Foreground="{ThemeResource ChatDetailHeaderStatusBrush}"
+                                           TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                        </Grid>
                     </Button>
 
                     <!-- Contact actions (1:1 chats) — disabled until call/contact commands exist -->
@@ -716,7 +729,7 @@
                                                 Style="{StaticResource ModernMenuFlyoutItemStyle}"
                                                 Command="{Binding AttachCameraCommand}">
                                     <MenuFlyoutItem.Icon>
-                                        <FontIcon Glyph="&#xE722;" FontFamily="{StaticResource IconFont}"/>
+                                        <FontIcon Glyph="&#xEB10;" FontFamily="{StaticResource LegacyIconFont}"/>
                                     </MenuFlyoutItem.Icon>
                                 </MenuFlyoutItem>
                                 <MenuFlyoutItem x:Uid="ChatDetail_AttachFile"
@@ -724,7 +737,7 @@
                                                 Style="{StaticResource ModernMenuFlyoutItemStyle}"
                                                 Command="{Binding AttachFileCommand}">
                                     <MenuFlyoutItem.Icon>
-                                        <FontIcon Glyph="&#xE8A5;" FontFamily="{StaticResource IconFont}"/>
+                                        <FontIcon Glyph="&#xEB12;" FontFamily="{StaticResource LegacyIconFont}"/>
                                     </MenuFlyoutItem.Icon>
                                 </MenuFlyoutItem>
                                 <MenuFlyoutItem x:Uid="ChatDetail_AttachContact"
@@ -732,7 +745,7 @@
                                                 Style="{StaticResource ModernMenuFlyoutItemStyle}"
                                                 Command="{Binding AttachContactCommand}">
                                     <MenuFlyoutItem.Icon>
-                                        <FontIcon Glyph="&#xE77B;" FontFamily="{StaticResource IconFont}"/>
+                                        <FontIcon Glyph="&#xEB13;" FontFamily="{StaticResource LegacyIconFont}"/>
                                     </MenuFlyoutItem.Icon>
                                 </MenuFlyoutItem>
                                 <MenuFlyoutItem x:Uid="ChatDetail_AttachMedia"
@@ -740,7 +753,7 @@
                                                 Style="{StaticResource ModernMenuFlyoutItemStyle}"
                                                 Command="{Binding AttachMediaCommand}">
                                     <MenuFlyoutItem.Icon>
-                                        <FontIcon Glyph="&#xEB9F;" FontFamily="{StaticResource IconFont}"/>
+                                        <FontIcon Glyph="&#xEB11;" FontFamily="{StaticResource LegacyIconFont}"/>
                                     </MenuFlyoutItem.Icon>
                                 </MenuFlyoutItem>
                                 <MenuFlyoutItem x:Uid="ChatDetail_AttachAudio"
@@ -748,7 +761,7 @@
                                                 Style="{StaticResource ModernMenuFlyoutItemStyle}"
                                                 Command="{Binding AttachAudioCommand}">
                                     <MenuFlyoutItem.Icon>
-                                        <FontIcon Glyph="&#xE8D6;" FontFamily="{StaticResource IconFont}"/>
+                                        <FontIcon Glyph="&#xEB14;" FontFamily="{StaticResource LegacyIconFont}"/>
                                     </MenuFlyoutItem.Icon>
                                 </MenuFlyoutItem>
                                 <MenuFlyoutItem x:Uid="ChatDetail_AttachLocation"
@@ -756,7 +769,7 @@
                                                 Style="{StaticResource ModernMenuFlyoutItemStyle}"
                                                 Command="{Binding AttachLocationCommand}">
                                     <MenuFlyoutItem.Icon>
-                                        <FontIcon Glyph="&#xE707;" FontFamily="{StaticResource IconFont}"/>
+                                        <FontIcon Glyph="&#xEB15;" FontFamily="{StaticResource LegacyIconFont}"/>
                                     </MenuFlyoutItem.Icon>
                                 </MenuFlyoutItem>
                             </MenuFlyout>
@@ -933,42 +946,48 @@
                             </Grid.ColumnDefinitions>
 
                             <controls:AttachTile Grid.Row="0" Grid.Column="0"
-                                                 Glyph="ms-appx:///Assets/Attach/inline-picture.png"
+                                                 IconGlyph="&#xEB10;"
+                                                 IconFontFamily="{StaticResource LegacyIconFont}"
                                                  Label="Camera"
                                                  LocalizationUid="ChatDetail_AttachCameraTile"
                                                  Command="{Binding AttachCameraCommand}"
                                                  Invoked="AttachTile_Invoked"/>
 
                             <controls:AttachTile Grid.Row="0" Grid.Column="1"
-                                                 Glyph="ms-appx:///Assets/Attach/inline-doc.png"
+                                                 IconGlyph="&#xEB12;"
+                                                 IconFontFamily="{StaticResource LegacyIconFont}"
                                                  Label="File"
                                                  LocalizationUid="ChatDetail_AttachFileTile"
                                                  Command="{Binding AttachFileCommand}"
                                                  Invoked="AttachTile_Invoked"/>
 
                             <controls:AttachTile Grid.Row="0" Grid.Column="2"
-                                                 Glyph="ms-appx:///Assets/Attach/inline-contact.png"
+                                                 IconGlyph="&#xEB13;"
+                                                 IconFontFamily="{StaticResource LegacyIconFont}"
                                                  Label="Contact"
                                                  LocalizationUid="ChatDetail_AttachContactTile"
                                                  Command="{Binding AttachContactCommand}"
                                                  Invoked="AttachTile_Invoked"/>
 
                             <controls:AttachTile Grid.Row="1" Grid.Column="0"
-                                                 Glyph="ms-appx:///Assets/Attach/inline-video.png"
+                                                 IconGlyph="&#xEB11;"
+                                                 IconFontFamily="{StaticResource LegacyIconFont}"
                                                  Label="Media"
                                                  LocalizationUid="ChatDetail_AttachMediaTile"
                                                  Command="{Binding AttachMediaCommand}"
                                                  Invoked="AttachTile_Invoked"/>
 
                             <controls:AttachTile Grid.Row="1" Grid.Column="1"
-                                                 Glyph="ms-appx:///Assets/Attach/inline-audio.png"
+                                                 IconGlyph="&#xEB14;"
+                                                 IconFontFamily="{StaticResource LegacyIconFont}"
                                                  Label="Audio"
                                                  LocalizationUid="ChatDetail_AttachAudioTile"
                                                  Command="{Binding AttachAudioCommand}"
                                                  Invoked="AttachTile_Invoked"/>
 
                             <controls:AttachTile Grid.Row="1" Grid.Column="2"
-                                                 Glyph="ms-appx:///Assets/Attach/inline-location.png"
+                                                 IconGlyph="&#xEB15;"
+                                                 IconFontFamily="{StaticResource LegacyIconFont}"
                                                  Label="Location"
                                                  LocalizationUid="ChatDetail_AttachLocationTile"
                                                  Command="{Binding AttachLocationCommand}"
@@ -1125,7 +1144,16 @@
                         ToolTipService.ToolTip="Back">
                     <FontIcon Glyph="&#xE72B;" FontFamily="{StaticResource IconFont}" FontSize="16"/>
                 </Button>
-                <TextBlock x:Uid="ChatDetail_Empty" Text="Select a chat to start messaging" Foreground="{ThemeResource ChatDetailMutedTextBrush}" FontSize="16" FontFamily="{StaticResource MainFont}" TextAlignment="Center"/>
+                <controls:EmptyStateBrandLogo/>
+                <TextBlock x:Uid="ChatDetail_Empty"
+                           Text="Select a chat to start messaging"
+                           Foreground="{ThemeResource ChatDetailMutedTextBrush}"
+                           FontSize="16"
+                           FontFamily="{StaticResource MainFont}"
+                           HorizontalAlignment="Center"
+                           TextAlignment="Center"
+                           TextWrapping="WrapWholeWords"
+                           MaxWidth="360"/>
             </StackPanel>
         </Grid>
 

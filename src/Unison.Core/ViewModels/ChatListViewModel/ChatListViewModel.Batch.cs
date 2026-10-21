@@ -1,0 +1,639 @@
+using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Collections.Specialized;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows.Input;
+using Unison.Core.Constants;
+using Unison.Core.Contracts;
+using Unison.Core.Contracts.WhatsApp;
+using Unison.Core.Factories;
+using Unison.Core.Helpers;
+using Unison.Core.Models;
+using Unison.Core.State;
+
+namespace Unison.Core.ViewModels
+{
+    public partial class ChatListViewModel
+    {
+        // ---------------------------------------------------------------------
+        // Batch rendering
+        // ---------------------------------------------------------------------
+
+        /// <summary>Banner and counts only â€” no VisibleChats mutations yet.</summary>
+        private void ShowSyncProgressOnly(int processed, int total)
+        {
+            _batchProcessed = Math.Max(_batchProcessed, Math.Max(0, processed));
+            _batchTotal = Math.Max(_batchTotal, Math.Max(0, total));
+            IsLoadingOverlayVisible = true;
+            if (IsDeepLinkHeldPreferLoading)
+            {
+                ShowDeepLinkLoadingOverlay();
+                return;
+            }
+
+            UpdateBatchProgressText();
+        }
+
+        private void BeginBatchRendering(int processed, int total, int visibleTarget)
+        {
+            bool fresh = !_batchRendering || _batchCompleted;
+            _batchRendering = true;
+            _batchCompleted = false;
+            if (fresh)
+            {
+                _batchProcessed = Math.Max(0, processed);
+                _batchTotal = Math.Max(0, total);
+            }
+            else
+            {
+            _batchProcessed = Math.Max(_batchProcessed, processed);
+            _batchTotal = Math.Max(_batchTotal, total);
+            }
+
+            // Never clamped to the store count: this event is raised before the chunk's previews
+            // are persisted, so on the first chunk the store is still empty and clamping pinned
+            // the target at zero - which left the list frozen at one batch until the whole sync
+            // finalized. The release pace is bounded by the per-turn budget, not by this number.
+            RaiseVisibleTarget(Math.Max(visibleTarget, processed));
+
+            IsLoadingOverlayVisible = VisibleChats.Count == 0;
+            UpdateBatchProgressText();
+            TraceListLifecycle(
+                "begin-batch",
+                BuildListSnapshot("fresh=" + fresh + "; argTarget=" + visibleTarget),
+                flush: true);
+            EnsureBatchLoop();
+        }
+
+        /// <summary>
+        /// Grows the ceiling on how many rows may be on screen. Monotonic: a later event that
+        /// knows less than an earlier one must not shrink the list back.
+        /// </summary>
+        private void RaiseVisibleTarget(int candidate)
+        {
+            int target = Math.Max(_chatState.Chats.Count, Math.Max(BatchSize, candidate));
+            if (target > _batchVisibleTarget)
+            {
+                _batchVisibleTarget = target;
+            }
+        }
+
+        private void EnsureBatchLoop()
+        {
+            if (_batchLoopRunning)
+            {
+                return;
+            }
+
+            _batchLoopRunning = true;
+            TraceListLifecycle("batch-loop-start", BuildListSnapshot());
+            _ = RunBatchLoopAsync();
+        }
+
+        private async Task RunBatchLoopAsync()
+        {
+            try
+            {
+                // Held: stop polling; the completion event restarts the loop.
+                while (_batchRendering && !IsListHeldForSync)
+                {
+                    await Task.Delay(BatchInterval).ConfigureAwait(false);
+                    await _dispatcher.RunAsync(ReleaseNextBatch);
+                }
+
+                TraceListLifecycle(
+                    "batch-loop-exit",
+                    BuildListSnapshot("stillBatch=" + _batchRendering + "; held=" + IsListHeldForSync));
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[ChatListViewModel] Batch render loop failed: " + ex.Message);
+                _diagnostics?.RecordException("chat-list-lifecycle", "batch-loop-failed", ex, BuildListSnapshot());
+                if (_diagnostics != null)
+                {
+                    _ = _diagnostics.FlushAsync("chat-list:batch-loop-failed");
+                }
+            }
+            finally
+            {
+                _batchLoopRunning = false;
+            }
+        }
+
+        /// <summary>
+        /// Moves at most one batch of conversations from the store onto the screen, newest first,
+        /// and stops the loop once everything the source holds is visible.
+        /// </summary>
+        private void ReleaseNextBatch()
+        {
+            if (!_batchRendering || IsListHeldForSync)
+            {
+                return;
+            }
+
+            _postSyncReleaseTicks++;
+            int tick = _postSyncReleaseTicks;
+            bool logTick = tick <= 3 || (tick % 5) == 0 || _batchCompleted;
+            if (logTick)
+            {
+                TraceListLifecycle(
+                    "release-tick-enter",
+                    BuildListSnapshot("tick=" + tick),
+                    flush: tick <= 2 || _batchCompleted);
+            }
+
+            // Pin/mute live in ChatStore, not history_chat_preview. Apply before sorting so
+            // pinned rows are not released mid-list and only "jump up" after opening a chat.
+            ApplyLocalChatFieldsToScopedChats();
+
+            int scopedCount = _chatState.Chats.Count(MatchesScope);
+            if (!_batchCompleted && VisibleChats.Count >= scopedCount)
+            {
+                // Tips keep updating while the list is already full; still keep pin order.
+                ReorderVisibleChatsInPlace();
+                // Hydrate can stall with pending=True forever; once every scoped row is on
+                // screen after the hold, open the enrich gate and finish the batch next tick.
+                if (!IsListHeldForSync && !IsInSafeMode)
+                {
+                    if (!HasPendingPreviewHydrate())
+                    {
+                        _batchCompleted = true;
+                        TraceListLifecycle("batch-complete-visible-caught-up", BuildListSnapshot());
+                    }
+                    else
+                    {
+                        NotifyListPaintReleased("visible-caught-up-hydrate-pending");
+                    }
+                }
+
+                return;
+            }
+
+            var source = ChatListDisplayOrder.SortForDisplay(
+                _chatState.Chats.Where(c =>
+                    c != null &&
+                    !string.IsNullOrWhiteSpace(c.JID) &&
+                    MatchesScope(c)));
+
+            int desiredCount = _batchCompleted
+                ? source.Count
+                : Math.Min(source.Count, Math.Max(_batchVisibleTarget, BatchSize));
+
+            var visibleCanonical = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var visible in VisibleChats)
+            {
+                if (visible == null) continue;
+                visibleCanonical.Add(GetCanonical(visible.JID));
+            }
+
+            var budget = Stopwatch.StartNew();
+            int added = 0;
+            foreach (var chat in source)
+            {
+                if (VisibleChats.Count >= desiredCount)
+                {
+                    break;
+                }
+
+                // A fixed count either starves a fast machine or stalls a slow one. Release one
+                // batch unconditionally, then keep going while this turn still has time, so the
+                // list fills as fast as the device allows without eating an input frame.
+                if (added >= BatchSize && budget.ElapsedMilliseconds >= BatchBudgetMs)
+                {
+                    break;
+                }
+
+                if (!visibleCanonical.Add(GetCanonical(chat.JID)))
+                {
+                    continue;
+                }
+
+                VisibleChats.Add(chat);
+                added++;
+            }
+
+            if (VisibleChats.Count > 0)
+            {
+                IsLoadingOverlayVisible = false;
+            }
+
+            // A pin that landed on a row already on screen cannot move it by itself: the release
+            // loop only appends. Without this the conversation sat wherever its tip put it until
+            // the sync finished.
+            if (_visibleOrderDirty)
+            {
+                ReorderVisibleChatsInPlace();
+            }
+
+            if (logTick)
+            {
+                TraceListLifecycle(
+                    "release-tick-exit",
+                    BuildListSnapshot(
+                        "tick=" + tick +
+                        "; added=" + added +
+                        "; desired=" + desiredCount +
+                        "; scoped=" + scopedCount +
+                        "; ms=" + budget.ElapsedMilliseconds),
+                    flush: tick <= 2 || _batchCompleted);
+            }
+
+            if (!_batchCompleted)
+            {
+                if (added > 0)
+                {
+                    UpdateBatchProgressText();
+                }
+
+                return;
+            }
+
+            int uniqueSourceCount = source
+                .Select(c => GetCanonical(c.JID))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count();
+            if (VisibleChats.Count < uniqueSourceCount)
+            {
+                TraceListLifecycle(
+                    "release-awaiting-full",
+                    BuildListSnapshot(
+                        "unique=" + uniqueSourceCount + "; visible=" + VisibleChats.Count),
+                    flush: true);
+                return;
+            }
+
+            TraceListLifecycle("batch-complete-before-refresh", BuildListSnapshot(), flush: true);
+            _batchRendering = false;
+            _batchCompleted = false;
+            RefreshVisibleChats();
+            TraceListLifecycle("batch-complete-after-refresh", BuildListSnapshot(), flush: true);
+
+            // Safe mode can outlive the batch loop, and the full refresh above is gated on it. The
+            // in-place reorder is not, so a pin that arrived late still reaches the top.
+            if (_visibleOrderDirty)
+            {
+                ReorderVisibleChatsInPlace();
+            }
+            _ = PresentSyncStatusAsync(null, visible: false, source: "IHistoryService:batch-complete");
+            IsLoadingOverlayVisible = false;
+            TraceListLifecycle("batch-complete-done", BuildListSnapshot(), flush: true);
+            NotifyListPaintReleased("batch-complete-done");
+        }
+
+        private void NotifyListPaintReleased(string reason)
+        {
+            if (_listPaintGate == null)
+            {
+                return;
+            }
+
+            TraceListLifecycle("list-paint-gate-release", BuildListSnapshot("reason=" + reason), flush: true);
+            _listPaintGate.MarkReleased(reason);
+        }
+
+        /// <summary>
+        /// Loads ChatStore pin/mute onto every scoped row before SortForDisplay / VisibleChats.
+        /// </summary>
+        private void ApplyLocalChatFieldsToScopedChats()
+        {
+            if (_chatStore == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < _chatState.Chats.Count; i++)
+            {
+                ChatItem chat = _chatState.Chats[i];
+                if (chat == null || string.IsNullOrWhiteSpace(chat.JID) || !MatchesScope(chat))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    _chatStore.ApplyTo(chat);
+                    TryApplyCanonicalPinFallback(chat);
+
+                    // History / app-state can pin the row in memory before ChatStore has a known
+                    // pin under this exact JID. Mirror it into the cache so the next ApplyTo
+                    // (another batch tick) cannot treat a mute-only stub as "not pinned".
+                    if (chat.IsChatPinned)
+                    {
+                        RememberPinnedUnderAliases(chat.JID, true);
+                    }
+
+                    if (chat.MutedUntil != null)
+                    {
+                        _chatStore.RememberMutedUntil(chat.JID, chat.MutedUntil);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        "[ChatListViewModel] ApplyTo (batch) failed: " + ex.Message);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Pin may be stored under the PN while the list row is still a LID (or the reverse).
+        /// <see cref="IJidResolver.GetCanonicalJid"/> alone is not enough: when the row is already
+        /// the canonical PN, the pin often lives under the LID alias from <c>pin_v1</c>.
+        /// </summary>
+        private void TryApplyCanonicalPinFallback(ChatItem chat)
+        {
+            if (chat == null || _chatStore == null)
+            {
+                return;
+            }
+
+            ChatLocalState exact = _chatStore.TryGetCached(chat.JID);
+            // An explicit unpin under this exact JID wins over any alias.
+            if (exact != null && exact.Knows(ChatLocalStateFields.Pin) && !exact.IsChatPinned)
+            {
+                return;
+            }
+
+            IReadOnlyList<string> keys = ChatPinStoreKeys.For(chat.JID, _jids);
+            for (int i = 0; i < keys.Count; i++)
+            {
+                string key = keys[i];
+                if (string.Equals(
+                        JidHelper.Normalize(key),
+                        JidHelper.Normalize(chat.JID),
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                ChatLocalState alt = _chatStore.TryGetCached(key);
+                if (alt == null || !alt.Knows(ChatLocalStateFields.Pin) || !alt.IsChatPinned)
+                {
+                    continue;
+                }
+
+                if (!chat.IsChatPinned)
+                {
+                    chat.IsChatPinned = true;
+                    if (chat.PinnedTimestamp == null || chat.PinnedTimestamp == 0)
+                    {
+                        chat.PinnedTimestamp = 1;
+                    }
+
+                    RememberPinnedUnderAliases(chat.JID, true);
+                }
+
+                break;
+            }
+
+            for (int i = 0; i < keys.Count; i++)
+            {
+                string key = keys[i];
+                if (string.Equals(
+                        JidHelper.Normalize(key),
+                        JidHelper.Normalize(chat.JID),
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                ChatLocalState alt = _chatStore.TryGetCached(key);
+                if (alt == null)
+                {
+                    continue;
+                }
+
+                if (!chat.IsWidgetPinned &&
+                    alt.Knows(ChatLocalStateFields.WidgetPin) &&
+                    alt.IsWidgetPinned)
+                {
+                    chat.IsWidgetPinned = true;
+                }
+
+                if (chat.MutedUntil == null &&
+                    !(exact != null && exact.Knows(ChatLocalStateFields.Mute)) &&
+                    alt.Knows(ChatLocalStateFields.Mute) &&
+                    alt.MutedUntil != null)
+                {
+                    chat.MutedUntil = alt.MutedUntil;
+                    _chatStore.RememberMutedUntil(chat.JID, alt.MutedUntil);
+                }
+            }
+        }
+
+        private void RememberPinnedUnderAliases(string jid, bool pinned)
+        {
+            if (_chatStore == null)
+            {
+                return;
+            }
+
+            IReadOnlyList<string> keys = ChatPinStoreKeys.For(jid, _jids);
+            for (int i = 0; i < keys.Count; i++)
+            {
+                _chatStore.RememberChatPinned(keys[i], pinned);
+            }
+        }
+
+        /// <summary>
+        /// Writes the pin / mute the history Conversation carried into the durable store.
+        /// Without this the icons appear for one session and vanish on the next launch.
+        /// </summary>
+        private void PersistHistoryLocalFlags(ChatItem chat, HistoryChatPreview preview)
+        {
+            if (chat == null || preview == null || _chatStore == null || string.IsNullOrWhiteSpace(chat.JID))
+            {
+                return;
+            }
+
+            if (preview.IsChatPinned.HasValue)
+            {
+                // Cache under PN and LID so ApplyTo on either address cannot miss the pin.
+                RememberPinnedUnderAliases(chat.JID, preview.IsChatPinned.Value);
+                if (!string.IsNullOrWhiteSpace(preview.LidJid))
+                {
+                    _chatStore.RememberChatPinned(preview.LidJid, preview.IsChatPinned.Value);
+                }
+
+                if (!string.IsNullOrWhiteSpace(preview.PnJid))
+                {
+                    _chatStore.RememberChatPinned(preview.PnJid, preview.IsChatPinned.Value);
+                }
+
+                _ = PersistHistoryPinnedAsync(chat.JID, preview.IsChatPinned.Value);
+                if (!string.IsNullOrWhiteSpace(preview.LidJid))
+                {
+                    _ = PersistHistoryPinnedAsync(preview.LidJid, preview.IsChatPinned.Value);
+                }
+
+                if (!string.IsNullOrWhiteSpace(preview.PnJid))
+                {
+                    _ = PersistHistoryPinnedAsync(preview.PnJid, preview.IsChatPinned.Value);
+                }
+            }
+
+            if (preview.AppliesMute)
+            {
+                _chatStore.RememberMutedUntil(chat.JID, preview.MutedUntil);
+                _ = PersistHistoryMuteAsync(chat.JID, preview.MutedUntil);
+            }
+        }
+
+        private async Task PersistHistoryPinnedAsync(string jid, bool pinned)
+        {
+            try
+            {
+                IReadOnlyList<string> keys = ChatPinStoreKeys.For(jid, _jids);
+                for (int i = 0; i < keys.Count; i++)
+                {
+                    await _chatStore.SetChatPinnedAsync(keys[i], pinned).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[ChatListViewModel] Persist history pin failed: " + ex.Message);
+            }
+        }
+
+        private async Task PersistHistoryMuteAsync(string jid, long? mutedUntil)
+        {
+            try
+            {
+                await _chatStore.SetMutedUntilAsync(jid, mutedUntil).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[ChatListViewModel] Persist history mute failed: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Re-sorts <see cref="VisibleChats"/> during batch/sync without clearing the list â€”
+        /// keeps pinned conversations at the top while tips keep arriving.
+        /// </summary>
+        private void ReorderVisibleChatsInPlace()
+        {
+            // Community hubs need CommunityListProjector â€” a pin-style Move cannot invent
+            // synthetic parents or hide linked children. When any row carries community shape,
+            // fall through to a full refresh (unless the list is still held / batching).
+            if (VisibleHasCommunityShape() &&
+                !_batchRendering &&
+                !IsInSafeMode &&
+                !IsListHeldForSync)
+            {
+                RefreshVisibleChats();
+                return;
+            }
+
+            _visibleOrderDirty = false;
+
+            if (VisibleChats.Count < 2)
+            {
+                return;
+            }
+
+            ApplyLocalChatFieldsToScopedChats();
+
+            var desired = ChatListDisplayOrder.SortForDisplay(
+                VisibleChats.Where(c => c != null && !string.IsNullOrWhiteSpace(c.JID)));
+
+            IsRefreshing = true;
+            try
+            {
+                for (int i = 0; i < desired.Count; i++)
+                {
+                    ChatItem item = desired[i];
+                    if (i < VisibleChats.Count && ReferenceEquals(VisibleChats[i], item))
+                    {
+                        continue;
+                    }
+
+                    int existingIndex = VisibleChats.IndexOf(item);
+                    if (existingIndex >= 0 && existingIndex != i)
+                    {
+                        VisibleChats.Move(existingIndex, i);
+                    }
+                }
+            }
+            finally
+            {
+                IsRefreshing = false;
+            }
+        }
+
+        private bool VisibleHasCommunityShape()
+        {
+            for (int i = 0; i < _chatState.Chats.Count; i++)
+            {
+                ChatItem chat = _chatState.Chats[i];
+                if (chat == null)
+                {
+                    continue;
+                }
+
+                if (chat.IsCommunityParent ||
+                    chat.IsCommunity ||
+                    !string.IsNullOrWhiteSpace(chat.LinkedParentJid))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private void UpdateBatchProgressText()
+        {
+            if (IsDeepLinkHeldPreferLoading)
+            {
+                ShowDeepLinkLoadingOverlay();
+                return;
+            }
+
+            if (_batchCompleted)
+            {
+                _ = PresentSyncStatusAsync(_strings.Get("ChatList_SyncDone"), visible: true);
+                LoadingOverlayText = _strings.Get("ChatList_Organizing");
+                return;
+            }
+
+            // Counts rows, not conversations. The sync figure climbed into the hundreds while the
+            // list showed twenty, because it measured what the chunk carried rather than what
+            // reached the screen - which is the part the user is actually waiting on.
+            int shown = VisibleChats.Count;
+            int available = Math.Max(_chatState.Chats.Count, shown);
+
+            string text = available > 0
+                ? FormatString("ChatList_SyncProgress", shown, available)
+                : FormatString("ChatList_SyncProgressCount", _batchProcessed);
+
+            _ = PresentSyncStatusAsync(text, visible: true);
+            LoadingOverlayText = text;
+        }
+
+        /// <summary>
+        /// A resource string with its placeholders filled. Falls back to the raw string when it
+        /// does not match the arguments, so a bad translation shows something rather than throwing
+        /// in the middle of a sync.
+        /// </summary>
+        private string FormatString(string key, params object[] args)
+        {
+            string format = _strings.Get(key);
+            try
+            {
+                return string.Format(format, args);
+            }
+            catch (FormatException)
+            {
+                return format;
+            }
+        }
+    }
+}

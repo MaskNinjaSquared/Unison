@@ -30,6 +30,8 @@ namespace Unison.Core.State
 
         private readonly DisplayNameTable _addressBookNames = new DisplayNameTable();
 
+        private readonly DisplayNameTable _groupSubjects = new DisplayNameTable();
+
         public ChatStateStore(IDispatcher dispatcher)
         {
             if (dispatcher == null)
@@ -124,6 +126,15 @@ namespace Unison.Core.State
         public DisplayNameTable AddressBookNames
         {
             get { return _addressBookNames; }
+        }
+
+        /// <summary>
+        /// Group subjects from metadata / app-state. Preferred over address-book and push names for
+        /// <c>@g.us</c> rows so a live rename is not wiped by contact-directory or history tips.
+        /// </summary>
+        public DisplayNameTable GroupSubjects
+        {
+            get { return _groupSubjects; }
         }
 
         public void NotifyMessagesChanged(string chatJid)

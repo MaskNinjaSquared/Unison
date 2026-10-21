@@ -9,7 +9,8 @@ Codepoints (Private Use Area):
   EB05  mic        (composer-mic.png)
   EB06  newchat    (appbar-newchat.png)     speech bubble
   EB07  pin        (appbar-pin.png)         pin conversation
-  EB08  pinstart   (appbar-pin-start.png)   pin to Start menu
+  EB08  pinstart   (appbar-pin-start.png)   pin chat to Start (opens chat)
+  EB16  pincontact (appbar-pin-contact.png) pin contact to Start (opens profile)
   EB09  play       (media-play.png)
   EB0A  pause      (media-pause.png)
   EB0B  download   (media-download.png)
@@ -17,6 +18,12 @@ Codepoints (Private Use Area):
   EB0D  flash      (cam-flash.png)          flash on
   EB0E  flashoff   (cam-flash-off.png)      flash off
   EB0F  flashauto  (cam-flash-auto.png)     flash auto (reserved; not on chrome yet)
+  EB10  picture    (attach-picture.png)     attach camera / photo tile
+  EB11  video      (attach-video.png)       attach media / video tile
+  EB12  document   (attach-doc.png)         attach file tile
+  EB13  contact    (attach-contact.png)     attach contact tile
+  EB14  audio      (attach-audio.png)       attach audio tile
+  EB15  location   (attach-location.png)    attach location tile
 
 Ink is read from alpha only (source colour is ignored; XAML sets Foreground).
 Each glyph is cropped to its own ink and fitted into the same square box,
@@ -55,6 +62,7 @@ GLYPHS = [
     ("newchat", 0xEB06, "appbar-newchat.png", 0.90),
     ("pin", 0xEB07, "appbar-pin.png", 0.90),
     ("pinstart", 0xEB08, "appbar-pin-start.png", 0.92),
+    ("pincontact", 0xEB16, "appbar-pin-contact.png", 0.92),
     ("play", 0xEB09, "media-play.png", 0.88),
     ("pause", 0xEB0A, "media-pause.png", 0.88),
     ("download", 0xEB0B, "media-download.png", 0.90),
@@ -62,6 +70,12 @@ GLYPHS = [
     ("flash", 0xEB0D, "cam-flash.png", 0.90),
     ("flashoff", 0xEB0E, "cam-flash-off.png", 0.90),
     ("flashauto", 0xEB0F, "cam-flash-auto.png", 0.90),
+    ("picture", 0xEB10, "attach-picture.png", 0.92),
+    ("video", 0xEB11, "attach-video.png", 0.92),
+    ("document", 0xEB12, "attach-doc.png", 0.92),
+    ("contact", 0xEB13, "attach-contact.png", 0.92),
+    ("audio", 0xEB14, "attach-audio.png", 0.92),
+    ("location", 0xEB15, "attach-location.png", 0.92),
 ]
 
 

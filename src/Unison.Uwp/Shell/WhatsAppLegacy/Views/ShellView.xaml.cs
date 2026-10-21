@@ -23,7 +23,8 @@ using Unison.Uwp.UI.Views;
 namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
 {
     /// <summary>
-    /// Legacy shell: pivot hosts each section after its index is opened. The frame is only settings and debug.
+    /// Legacy shell: pivot hosts each section after its index is opened.
+    /// ContentFrame is Settings / Debug / Profile overlay only.
     /// </summary>
     public sealed partial class ShellView : Page
     {
@@ -57,6 +58,8 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
         private StatusView _statusSection;
         private int _sectionLoadGeneration;
         private readonly bool _isWindowsMobile;
+        /// <summary>Last People / profile= JID — survives ClearPending before the overlay mounts.</summary>
+        private string _profileOverlayJid;
 
         public ShellView()
         {
@@ -96,10 +99,15 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             }
 
             SystemNavigationManager.GetForCurrentView().BackRequested += ShellView_BackRequested;
+            // Capture People / profile= JID before LoadSection yields or ClearPending races.
+            CapturePendingProfileJid();
             LoadSection(ReadSelectedTag(), force: true);
             ApplySearchState(false);
             ApplyShellChrome();
             ApplyDetailLayout();
+            EnsureOpenPendingProfileFromActivation();
+            // LoadSection yields — open Profile again after the pivot settles so it cannot win the race.
+            _ = Dispatcher.RunAsync(CoreDispatcherPriority.Low, EnsureOpenPendingProfileFromActivation);
             // The header strip is created with the template, which can land after this pass.
             _ = Dispatcher.RunAsync(CoreDispatcherPriority.Low, () => InsetPivotHeaders(SectionPivot));
         }
@@ -221,6 +229,27 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return true;
             }
 
+            if (_overlayOpen && IsLegacyProfilePage(ContentFrame?.Content))
+            {
+                var profile = ContentFrame.Content as ProfileView;
+                if (profile?.DataContext is ProfileViewModel profileVm &&
+                    profileVm.BackCommand != null &&
+                    profileVm.BackCommand.CanExecute(null))
+                {
+                    profileVm.BackCommand.Execute(null);
+                }
+                else
+                {
+                    DismissOverlay();
+                    if (_shell != null)
+                    {
+                        _shell.ActiveSection = NavigationRoutes.Chats;
+                    }
+                }
+
+                return true;
+            }
+
             return false;
         }
 
@@ -231,10 +260,21 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 string section = _shell.ActiveSection;
                 if (IsPivotSection(section))
                 {
+                    // Leaving Profile/Settings/Debug: dismiss overlay, keep pivot host.
                     DismissOverlay();
                     LoadSection(section, force: false);
                 }
+                else if (string.Equals(section, NavigationRoutes.Profile, StringComparison.OrdinalIgnoreCase))
+                {
+                    EnsureOpenPendingProfileFromActivation();
+                }
 
+                return;
+            }
+
+            if (e.PropertyName == nameof(ShellViewModel.PendingOpenProfileJid))
+            {
+                EnsureOpenPendingProfileFromActivation();
                 return;
             }
 
@@ -248,6 +288,118 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 ApplyShellChrome();
                 ApplyDetailLayout();
             }
+        }
+
+        private void CapturePendingProfileJid()
+        {
+            if (_shell == null)
+            {
+                return;
+            }
+
+            string jid = _shell.PendingOpenProfileJid;
+            if (string.IsNullOrWhiteSpace(jid))
+            {
+                jid = _shell.LastQueuedProfileJid;
+            }
+
+            if (!string.IsNullOrWhiteSpace(jid))
+            {
+                _profileOverlayJid = jid.Trim();
+            }
+        }
+
+        private void EnsureOpenPendingProfileFromActivation()
+        {
+            if (_shell == null)
+            {
+                return;
+            }
+
+            CapturePendingProfileJid();
+            string openJid = _profileOverlayJid;
+
+            // ActiveSection==profile alone is not enough — navigating without a JID mounts an empty
+            // ProfileView, and Frame then ignores a later Navigate to the same page type with the JID.
+            if (string.IsNullOrWhiteSpace(openJid))
+            {
+                if (IsLegacyProfilePage(ContentFrame?.Content))
+                {
+                    _overlayOpen = true;
+                    ApplyShellChrome();
+                }
+
+                return;
+            }
+
+            OpenProfileOverlay(openJid);
+        }
+
+        /// <summary>
+        /// Mounts Legacy Profile on the overlay frame directly (same ContentFrame as Settings/Debug).
+        /// Avoids NavigateToSection(Chats) races and UI.Views.ProfileView type mismatches.
+        /// </summary>
+        private void OpenProfileOverlay(string jid)
+        {
+            if (ContentFrame == null || string.IsNullOrWhiteSpace(jid))
+            {
+                return;
+            }
+
+            jid = jid.Trim();
+            _profileOverlayJid = jid;
+
+            try
+            {
+                if (ContentFrame.Content is ProfileView openProfile)
+                {
+                    _ = openProfile.InitAsync(jid);
+                    _overlayOpen = true;
+                    ApplyShellChrome();
+                    SyncActiveSectionProfile();
+                    return;
+                }
+
+                // Navigate this frame directly — guarantees Legacy ProfileView, not UI.Views.
+                bool ok = ContentFrame.Navigate(typeof(ProfileView), jid);
+                Debug.WriteLine(
+                    "[WhatsAppLegacy] OpenProfileOverlay navigate=" + ok +
+                    " content=" + (ContentFrame.Content?.GetType().FullName ?? "null") +
+                    " jid=" + jid);
+
+                // Always Init explicitly: OnNavigatedTo can race, and a prior empty Navigate
+                // would leave the same page type mounted without a JID parameter.
+                if (ContentFrame.Content is ProfileView page)
+                {
+                    _ = page.InitAsync(jid);
+                }
+
+                _overlayOpen = IsLegacyProfilePage(ContentFrame.Content) || ContentFrame.Content != null;
+                ApplyShellChrome();
+                SyncActiveSectionProfile();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[WhatsAppLegacy] OpenProfileOverlay: " + ex.Message);
+            }
+        }
+
+        private void SyncActiveSectionProfile()
+        {
+            if (_shell != null &&
+                !string.Equals(_shell.ActiveSection, NavigationRoutes.Profile, StringComparison.OrdinalIgnoreCase))
+            {
+                _shell.ActiveSection = NavigationRoutes.Profile;
+            }
+        }
+
+        private static bool IsLegacyProfilePage(object content) => content is ProfileView;
+
+        private static bool IsOverlaySection(string section)
+        {
+            return string.Equals(section, NavigationRoutes.Profile, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(section, NavigationRoutes.Settings, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(section, NavigationRoutes.Debug, StringComparison.OrdinalIgnoreCase);
         }
 
         private void ApplyShellChrome()
@@ -623,6 +775,11 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             {
                 Debug.WriteLine("[WhatsAppLegacy] OpenDetail: " + ex.Message);
             }
+            finally
+            {
+                // Toast deep-link: conversation first, then chat-list x:Load.
+                _shell?.ReleaseDeepLinkListHold("deep-link-detail-done");
+            }
         }
 
         private bool IsSameConversation(ChatItem active, ChatItem chat)
@@ -684,7 +841,9 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return;
             }
 
-            _overlayOpen = content is SettingsView || content is DebugView;
+            _overlayOpen = content is SettingsView
+                || content is DebugView
+                || IsLegacyProfilePage(content);
             if (_overlayOpen && _detailOpen)
             {
                 _ = CloseDetailAsync();
@@ -991,14 +1150,29 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                 return;
             }
 
+            // Cold start may open Profile while the pivot still materializes "chats".
+            // Never overwrite an overlay section — that dismissed Profile immediately.
             if (_shell != null &&
-                !string.Equals(_shell.ActiveSection, tag, StringComparison.OrdinalIgnoreCase))
+                !string.Equals(_shell.ActiveSection, tag, StringComparison.OrdinalIgnoreCase) &&
+                !IsOverlaySection(_shell.ActiveSection))
             {
                 _shell.ActiveSection = tag;
             }
 
             HookListChromeFromContent();
-            ApplyShellChrome();
+
+            // Pivot load finished after a yield — re-open Profile if that is still the target.
+            if (_shell != null &&
+                (IsOverlaySection(_shell.ActiveSection) ||
+                 !string.IsNullOrWhiteSpace(_shell.PendingOpenProfileJid) ||
+                 !string.IsNullOrWhiteSpace(_profileOverlayJid)))
+            {
+                EnsureOpenPendingProfileFromActivation();
+            }
+            else
+            {
+                ApplyShellChrome();
+            }
         }
 
         /// <summary>
@@ -1164,6 +1338,7 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
             }
 
             _overlayOpen = false;
+            _profileOverlayJid = null;
             if (ContentFrame != null)
             {
                 ContentFrame.Visibility = Visibility.Collapsed;
@@ -1411,7 +1586,10 @@ namespace Unison.Uwp.Shell.WhatsAppLegacy.Views
                     await Task.Delay(100);
                 }
 
-                _shell?.QueueOpenChatFromActivation("chat=" + Uri.EscapeDataString(jid));
+                // In-app tile/toast while shell is up: never delay the chat list.
+                _shell?.QueueOpenChatFromActivation(
+                    "chat=" + Uri.EscapeDataString(jid),
+                    delayChatListUntilConversationReady: false);
             }
             catch (Exception ex)
             {

@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -227,6 +227,9 @@ Nach der Diagnose deaktivieren: Wenn es aktiviert bleibt, wird die App langsamer
   <data name="ChatList_FilterDrafts.Text" xml:space="preserve">
     <value>Entwürfe</value>
   </data>
+  <data name="ChatList_FilterCommunities.Text" xml:space="preserve">
+    <value>Communitys</value>
+  </data>
   <data name="ChatList_RefreshNames.Text" xml:space="preserve">
     <value>Kontaktnamen aktualisieren</value>
   </data>
@@ -238,6 +241,9 @@ Nach der Diagnose deaktivieren: Wenn es aktiviert bleibt, wird die App langsamer
   </data>
   <data name="ChatList_PreviewVideo" xml:space="preserve">
     <value>Video</value>
+  </data>
+  <data name="ChatList_PreviewGif" xml:space="preserve">
+    <value>GIF</value>
   </data>
   <data name="ChatList_PreviewSticker" xml:space="preserve">
     <value>Sticker</value>
@@ -406,6 +412,15 @@ Nach der Diagnose deaktivieren: Wenn es aktiviert bleibt, wird die App langsamer
   </data>
   <data name="Chat_SelfFallbackName" xml:space="preserve">
     <value>Du</value>
+  </data>
+  <data name="Chat_CommunityAnnouncements" xml:space="preserve">
+    <value>Ankündigungen</value>
+  </data>
+  <data name="Chat_CommunityHubSubtitle" xml:space="preserve">
+    <value>Community · {0} Gruppen</value>
+  </data>
+  <data name="Chat_CommunityFallbackName" xml:space="preserve">
+    <value>Community</value>
   </data>
   <data name="ChatDetail_PersonalSubtitle.Text" xml:space="preserve">
     <value>Nachrichten an mich selbst</value>

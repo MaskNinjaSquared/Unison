@@ -1,21 +1,29 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
+using Unison.Core.Contracts;
+using Unison.Core.Helpers;
+using Unison.Core.Models;
 using Unison.Core.ViewModels;
 using Windows.ApplicationModel;
 using Windows.Devices.Enumeration;
+using Windows.Graphics.Imaging;
 using Windows.Media.Capture;
 using Windows.Media.MediaProperties;
 using Windows.Storage.Streams;
 using Windows.UI.Core;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Media;
 
 namespace Unison.Uwp.UI.Views
 {
     /// <summary>
     /// In-chat camera overlay. Owns <see cref="MediaCapture"/> / <see cref="CaptureElement"/>;
     /// chrome and photo bytes go through <see cref="CameraPickViewModel"/>.
+    /// Preview / still orientation go through <see cref="ICameraOrientationService"/>.
     /// </summary>
     /// <remarks>
     /// WinRT <c>IAsyncAction</c> / <c>IAsyncOperation</c> are awaited without
@@ -26,14 +34,21 @@ namespace Unison.Uwp.UI.Views
     /// </remarks>
     public sealed partial class CameraPickView : UserControl
     {
+        // MF_MT_VIDEO_ROTATION — same GUID as CameraStarterKit / Unigram.
+        private static readonly Guid PreviewRotationKey =
+            new Guid("C380465D-2271-428C-9B83-ECEA3B4A85C1");
+
         private static readonly object ClosedDataContext = new object();
 
         private CameraPickViewModel _viewModel;
         private MediaCapture _mediaCapture;
+        private ICameraOrientationService _orientationService;
+        private ICameraOrientationSession _orientationSession;
         private IReadOnlyList<DeviceInformation> _cameras;
         private int _cameraIndex;
         private bool _isStarting;
         private bool _lifecycleHooked;
+        private bool? _isWindowsMobile;
         private double _previewAspect = 3.0 / 4.0;
 
         public CameraPickView()
@@ -288,20 +303,189 @@ namespace Unison.Uwp.UI.Views
         {
             await StopPreviewAsync();
 
-            var capture = new MediaCapture();
-            var settings = new MediaCaptureInitializationSettings
-            {
-                VideoDeviceId = deviceId,
-                StreamingCaptureMode = StreamingCaptureMode.Video,
-                PhotoCaptureSource = PhotoCaptureSource.VideoPreview
-            };
+            DeviceInformation device = FindCamera(deviceId);
+            CameraEnclosureInfo enclosure = MapEnclosure(device);
+            ICameraOrientationService orientation = ResolveOrientationService();
+            ICameraOrientationSession session = orientation?.Bind(enclosure);
 
-            await capture.InitializeAsync(settings);
-            _mediaCapture = capture;
-            PreviewElement.Source = capture;
-            await capture.StartPreviewAsync();
-            UpdatePreviewAspectFromCapture();
-            LayoutPreviewHost();
+            var capture = new MediaCapture();
+            try
+            {
+                var settings = new MediaCaptureInitializationSettings
+                {
+                    VideoDeviceId = deviceId,
+                    StreamingCaptureMode = StreamingCaptureMode.Video,
+                    PhotoCaptureSource = PhotoCaptureSource.VideoPreview
+                };
+
+                await capture.InitializeAsync(settings);
+                _mediaCapture = capture;
+                _orientationSession = session;
+                session = null;
+                if (_orientationSession != null)
+                {
+                    _orientationSession.Changed += OrientationSession_Changed;
+                }
+
+                PreviewElement.Source = capture;
+                PreviewElement.FlowDirection =
+                    _orientationSession != null && _orientationSession.ShouldMirrorPreview
+                        ? FlowDirection.RightToLeft
+                        : FlowDirection.LeftToRight;
+                await capture.StartPreviewAsync();
+                await SetPreviewRotationAsync();
+                UpdateChromeOrientation();
+                UpdatePreviewAspectFromCapture();
+                LayoutPreviewHost();
+            }
+            catch
+            {
+                if (session != null)
+                {
+                    session.Dispose();
+                }
+
+                if (ReferenceEquals(_mediaCapture, capture))
+                {
+                    _mediaCapture = null;
+                    DisposeOrientationSession();
+                }
+
+                capture.Dispose();
+                throw;
+            }
+        }
+
+        private DeviceInformation FindCamera(string deviceId)
+        {
+            if (_cameras == null || string.IsNullOrEmpty(deviceId))
+            {
+                return null;
+            }
+
+            for (int i = 0; i < _cameras.Count; i++)
+            {
+                if (string.Equals(_cameras[i].Id, deviceId, StringComparison.Ordinal))
+                {
+                    return _cameras[i];
+                }
+            }
+
+            return null;
+        }
+
+        private static CameraEnclosureInfo MapEnclosure(DeviceInformation device)
+        {
+            if (device?.EnclosureLocation == null)
+            {
+                return new CameraEnclosureInfo(CameraEnclosurePanel.Unknown, 0);
+            }
+
+            Windows.Devices.Enumeration.EnclosureLocation location = device.EnclosureLocation;
+            CameraEnclosurePanel panel;
+            switch (location.Panel)
+            {
+                case Windows.Devices.Enumeration.Panel.Front:
+                    panel = CameraEnclosurePanel.Front;
+                    break;
+                case Windows.Devices.Enumeration.Panel.Back:
+                    panel = CameraEnclosurePanel.Back;
+                    break;
+                default:
+                    panel = CameraEnclosurePanel.Unknown;
+                    break;
+            }
+
+            return new CameraEnclosureInfo(
+                panel,
+                (int)location.RotationAngleInDegreesClockwise);
+        }
+
+        private ICameraOrientationService ResolveOrientationService()
+        {
+            if (_orientationService != null)
+            {
+                return _orientationService;
+            }
+
+            try
+            {
+                _orientationService = App.Services?.GetService<ICameraOrientationService>();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[CameraPickView] Orientation service: " + ex.Message);
+            }
+
+            return _orientationService;
+        }
+
+        private async void OrientationSession_Changed(object sender, CameraOrientationChangedEventArgs e)
+        {
+            try
+            {
+                if (e != null && e.UpdatePreview)
+                {
+                    await SetPreviewRotationAsync();
+                }
+
+                await Dispatcher.RunAsync(
+                    CoreDispatcherPriority.Normal,
+                    UpdateChromeOrientation);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[CameraPickView] OrientationChanged: " + ex.Message);
+            }
+        }
+
+        private async Task SetPreviewRotationAsync()
+        {
+            MediaCapture capture = _mediaCapture;
+            ICameraOrientationSession session = _orientationSession;
+            if (capture == null || session == null || session.IsExternalCamera)
+            {
+                return;
+            }
+
+            try
+            {
+                int degrees = session.GetPreviewRotationClockwiseDegrees();
+                var props = capture.VideoDeviceController.GetMediaStreamProperties(
+                    MediaStreamType.VideoPreview);
+                props.Properties[PreviewRotationKey] = degrees;
+                await capture.SetEncodingPropertiesAsync(
+                    MediaStreamType.VideoPreview,
+                    props,
+                    null);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[CameraPickView] SetPreviewRotation: " + ex.Message);
+            }
+        }
+
+        private void UpdateChromeOrientation()
+        {
+            ICameraOrientationSession session = _orientationSession;
+            double angle = session == null
+                ? 0
+                : session.GetUiRotationClockwiseDegrees();
+            var transform = new RotateTransform { Angle = angle };
+            if (CaptureButton != null)
+            {
+                CaptureButton.RenderTransform = transform;
+                CaptureButton.RenderTransformOrigin = new Windows.Foundation.Point(0.5, 0.5);
+            }
+
+            if (BackButton != null)
+            {
+                BackButton.RenderTransform = transform;
+                BackButton.RenderTransformOrigin = new Windows.Foundation.Point(0.5, 0.5);
+            }
         }
 
         private void RootGrid_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -332,8 +516,9 @@ namespace Unison.Uwp.UI.Views
         }
 
         /// <summary>
-        /// Fits the preview grid inside the available area while keeping the capture aspect
-        /// (Windows Camera letterbox behaviour).
+        /// Desktop: letterbox the preview to the capture aspect.
+        /// Mobile: full-bleed host so <see cref="CaptureElement"/> UniformToFill crops like
+        /// the Windows Camera app; the JPEG is cropped to the same viewport after capture.
         /// </summary>
         private void LayoutPreviewHost()
         {
@@ -349,6 +534,13 @@ namespace Unison.Uwp.UI.Views
                 return;
             }
 
+            if (IsWindowsMobile())
+            {
+                PreviewHost.Width = availableWidth;
+                PreviewHost.Height = availableHeight;
+                return;
+            }
+
             double width = availableWidth;
             double height = width / _previewAspect;
             if (height > availableHeight)
@@ -361,9 +553,31 @@ namespace Unison.Uwp.UI.Views
             PreviewHost.Height = height;
         }
 
+        private bool IsWindowsMobile()
+        {
+            if (_isWindowsMobile.HasValue)
+            {
+                return _isWindowsMobile.Value;
+            }
+
+            try
+            {
+                _isWindowsMobile = App.Services?.GetService<ISystemInfoProvider>()?.IsMobile() == true;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[CameraPickView] IsMobile: " + ex.Message);
+                _isWindowsMobile = false;
+            }
+
+            return _isWindowsMobile == true;
+        }
+
         private async Task StopPreviewAsync()
         {
             PreviewElement.Source = null;
+            DisposeOrientationSession();
             MediaCapture capture = _mediaCapture;
             _mediaCapture = null;
             if (capture == null)
@@ -381,6 +595,19 @@ namespace Unison.Uwp.UI.Views
             }
 
             capture.Dispose();
+        }
+
+        private void DisposeOrientationSession()
+        {
+            ICameraOrientationSession session = _orientationSession;
+            _orientationSession = null;
+            if (session == null)
+            {
+                return;
+            }
+
+            session.Changed -= OrientationSession_Changed;
+            session.Dispose();
         }
 
         private async Task SwitchCameraAsync()
@@ -479,6 +706,8 @@ namespace Unison.Uwp.UI.Views
                 }
 
                 ApplyFlash();
+                double viewportWidth = PreviewHost?.ActualWidth ?? 0;
+                double viewportHeight = PreviewHost?.ActualHeight ?? 0;
                 using (var stream = new InMemoryRandomAccessStream())
                 {
                     await capture.CapturePhotoToStreamAsync(
@@ -492,6 +721,22 @@ namespace Unison.Uwp.UI.Views
 
                     stream.Seek(0);
                     byte[] bytes = await ReadStreamBytesAsync(stream);
+                    // PhotoCaptureSource.VideoPreview already encodes with the preview
+                    // stream rotation. Do NOT stamp sensor-based EXIF on top — that was
+                    // flipping Mobile portrait stills 180° vs the live preview.
+                    int previewRotation = _orientationSession != null
+                        ? _orientationSession.GetPreviewRotationClockwiseDegrees()
+                        : 0;
+                    bytes = await CropJpegToPreviewViewportAsync(
+                        bytes,
+                        viewportWidth,
+                        viewportHeight,
+                        previewRotation);
+                    if (vm.IsCancelled)
+                    {
+                        return;
+                    }
+
                     vm.ReportPhoto(bytes);
                 }
             }
@@ -506,6 +751,178 @@ namespace Unison.Uwp.UI.Views
                 {
                     vm.IsBusy = false;
                 }
+            }
+        }
+
+        /// <summary>
+        /// Re-encodes the JPEG to the same center crop UniformToFill shows in
+        /// <see cref="PreviewHost"/> (1:1 with the live preview framing).
+        /// </summary>
+        private static async Task<byte[]> CropJpegToPreviewViewportAsync(
+            byte[] jpegBytes,
+            double viewportWidth,
+            double viewportHeight,
+            int previewRotationClockwiseDegrees)
+        {
+            if (jpegBytes == null || jpegBytes.Length == 0 ||
+                viewportWidth <= 0 || viewportHeight <= 0)
+            {
+                return jpegBytes;
+            }
+
+            try
+            {
+                using (var input = new InMemoryRandomAccessStream())
+                {
+                    await input.WriteAsync(jpegBytes.AsBuffer());
+                    input.Seek(0);
+
+                    BitmapDecoder decoder = await BitmapDecoder.CreateAsync(input);
+                    CameraPhotoExifOrientation jpegExif = await ReadJpegExifOrientationAsync(decoder);
+                    bool bakePreview = CameraOrientationMath.ShouldBakePreviewRotation(
+                        previewRotationClockwiseDegrees,
+                        jpegExif,
+                        (int)decoder.PixelWidth,
+                        (int)decoder.PixelHeight);
+                    int bakeDegrees = bakePreview
+                        ? CameraOrientationMath.NormalizeClockwiseDegrees(
+                            previewRotationClockwiseDegrees)
+                        : 0;
+                    BitmapRotation bakeRotation = ToBitmapRotation(bakeDegrees);
+
+                    int sourceWidth;
+                    int sourceHeight;
+                    ExifOrientationMode exifMode;
+                    if (bakePreview)
+                    {
+                        // No usable EXIF — rotate like the live preview, then crop.
+                        exifMode = ExifOrientationMode.IgnoreExifOrientation;
+                        if (bakeDegrees == 90 || bakeDegrees == 270)
+                        {
+                            sourceWidth = (int)decoder.PixelHeight;
+                            sourceHeight = (int)decoder.PixelWidth;
+                        }
+                        else
+                        {
+                            sourceWidth = (int)decoder.PixelWidth;
+                            sourceHeight = (int)decoder.PixelHeight;
+                        }
+                    }
+                    else
+                    {
+                        exifMode = ExifOrientationMode.RespectExifOrientation;
+                        sourceWidth = (int)decoder.OrientedPixelWidth;
+                        sourceHeight = (int)decoder.OrientedPixelHeight;
+                    }
+
+                    CameraPreviewCropMath.PixelRect crop =
+                        CameraPreviewCropMath.ComputeUniformToFillCrop(
+                            sourceWidth,
+                            sourceHeight,
+                            viewportWidth,
+                            viewportHeight);
+
+                    bool cropIsFull = crop.Width > 0 &&
+                        crop.Height > 0 &&
+                        crop.CoversSource(sourceWidth, sourceHeight);
+                    if ((crop.Width <= 0 || crop.Height <= 0 || cropIsFull) && !bakePreview)
+                    {
+                        return jpegBytes;
+                    }
+
+                    var transform = new BitmapTransform
+                    {
+                        Rotation = bakeRotation
+                    };
+                    if (crop.Width > 0 && crop.Height > 0 && !cropIsFull)
+                    {
+                        transform.Bounds = new BitmapBounds
+                        {
+                            X = (uint)crop.X,
+                            Y = (uint)crop.Y,
+                            Width = (uint)crop.Width,
+                            Height = (uint)crop.Height
+                        };
+                    }
+                    else
+                    {
+                        crop = new CameraPreviewCropMath.PixelRect(
+                            0,
+                            0,
+                            sourceWidth,
+                            sourceHeight);
+                    }
+
+                    PixelDataProvider pixels = await decoder.GetPixelDataAsync(
+                        BitmapPixelFormat.Bgra8,
+                        BitmapAlphaMode.Ignore,
+                        transform,
+                        exifMode,
+                        ColorManagementMode.DoNotColorManage);
+
+                    using (var output = new InMemoryRandomAccessStream())
+                    {
+                        BitmapEncoder encoder = await BitmapEncoder.CreateAsync(
+                            BitmapEncoder.JpegEncoderId,
+                            output);
+                        encoder.SetPixelData(
+                            BitmapPixelFormat.Bgra8,
+                            BitmapAlphaMode.Ignore,
+                            (uint)crop.Width,
+                            (uint)crop.Height,
+                            decoder.DpiX,
+                            decoder.DpiY,
+                            pixels.DetachPixelData());
+                        await encoder.FlushAsync();
+                        output.Seek(0);
+                        return await ReadStreamBytesAsync(output);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[CameraPickView] CropJpeg: " + ex.Message);
+                return jpegBytes;
+            }
+        }
+
+        private static async Task<CameraPhotoExifOrientation> ReadJpegExifOrientationAsync(
+            BitmapDecoder decoder)
+        {
+            try
+            {
+                var names = new[] { "System.Photo.Orientation" };
+                BitmapPropertySet props =
+                    await decoder.BitmapProperties.GetPropertiesAsync(names);
+                if (props != null &&
+                    props.ContainsKey("System.Photo.Orientation") &&
+                    props["System.Photo.Orientation"].Value is ushort value)
+                {
+                    return (CameraPhotoExifOrientation)value;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[CameraPickView] ReadExif: " + ex.Message);
+            }
+
+            return CameraPhotoExifOrientation.Normal;
+        }
+
+        private static BitmapRotation ToBitmapRotation(int clockwiseDegrees)
+        {
+            switch (CameraOrientationMath.NormalizeClockwiseDegrees(clockwiseDegrees))
+            {
+                case 90:
+                    return BitmapRotation.Clockwise90Degrees;
+                case 180:
+                    return BitmapRotation.Clockwise180Degrees;
+                case 270:
+                    return BitmapRotation.Clockwise270Degrees;
+                default:
+                    return BitmapRotation.None;
             }
         }
 

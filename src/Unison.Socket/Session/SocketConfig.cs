@@ -33,6 +33,26 @@ namespace Unison.Socket.Session
         /// <summary>Extra slack before declaring the connection lost, as in rc14.</summary>
         public TimeSpan KeepAliveGrace { get; set; } = TimeSpan.FromSeconds(5);
 
+        /// <summary>
+        /// When non-zero, KeepAlive death requires at least this much silence even if
+        /// <see cref="KeepAliveInterval"/> + <see cref="KeepAliveGrace"/> is shorter.
+        /// Host sets this from the connection-stability experiment.
+        /// </summary>
+        public TimeSpan KeepAliveSilenceFloor { get; set; } = TimeSpan.Zero;
+
+        /// <summary>
+        /// When true, KeepAlive only pings while IQ waiters are outstanding instead of
+        /// declaring the connection lost.
+        /// </summary>
+        public bool KeepAliveDeferWhilePendingQueries { get; set; }
+
+        /// <summary>
+        /// When false, a query waiter timeout is tagged <see cref="DisconnectReason.ConnectionClosed"/>
+        /// instead of <see cref="DisconnectReason.ConnectionLost"/> so a slow usync does not look
+        /// like a stream 408 in logs. Default true matches rc14 / pre-experiment behaviour.
+        /// </summary>
+        public bool TreatQueryTimeoutAsConnectionLost { get; set; } = true;
+
         public TimeSpan DefaultQueryTimeout { get; set; } = TimeSpan.FromSeconds(60);
 
         public TimeSpan QrTimeout { get; set; } = TimeSpan.FromSeconds(60);

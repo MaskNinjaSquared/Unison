@@ -21,6 +21,7 @@ namespace Unison.Core.Helpers
     {
         public const string Image = "[Image]";
         public const string Video = "[Video]";
+        public const string Gif = "[GIF]";
         public const string Sticker = "[Sticker]";
         public const string Document = "[Document]";
 
@@ -90,6 +91,8 @@ namespace Unison.Core.Helpers
                     return Image;
                 case ChatPreviewKind.Video:
                     return Video;
+                case ChatPreviewKind.Gif:
+                    return Gif;
                 case ChatPreviewKind.Sticker:
                     return Sticker;
                 case ChatPreviewKind.Document:

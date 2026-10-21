@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:Unison.Uwp.Shell.WhatsAppLegacy.Views"
     xmlns:controls="using:Unison.Uwp.UI.Controls"
+    xmlns:toolkit="using:Microsoft.Toolkit.Uwp.UI.Controls"
     Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
     RequestedTheme="Dark">
 
@@ -35,10 +36,11 @@
                         Margin="0,5,10,-10"
                         
                         VerticalAlignment="Center">
-                <Image Width="40" Height="40"
-                       Stretch="Uniform"
-                       Source="ms-appx:///Assets/CustomTiles/WhatsAppLegacy.png"
-                       VerticalAlignment="Center"/>
+                <toolkit:ImageEx Width="40" Height="40"
+                                 Stretch="Uniform"
+                                 Source="ms-appx:///Assets/CustomTiles/WhatsAppLegacy.png"
+                                 IsCacheEnabled="True"
+                                 VerticalAlignment="Center"/>
                 <TextBlock x:Name="BrandTitle"
                            x:Uid="Shell_LegacyBrand"
                            Text="WHATSAPP LEGACY"

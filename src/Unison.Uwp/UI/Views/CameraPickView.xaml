@@ -39,7 +39,7 @@
           Background="Black"
           SizeChanged="RootGrid_SizeChanged">
 
-        <!-- Letterboxed preview: sized to the capture aspect ratio inside the available area. -->
+        <!-- Preview host: letterbox on desktop; full-bleed + UniformToFill crop on Mobile. -->
         <Grid x:Name="PreviewHost"
               HorizontalAlignment="Center"
               VerticalAlignment="Center"

@@ -46,6 +46,11 @@ namespace Unison.Uwp.UI.Views
 
         public event EventHandler MenuClicked;
 
+        /// <summary>
+        /// Hub back (header or system): selection was cleared with the hub — detail must close too.
+        /// </summary>
+        public event EventHandler CommunityHubClosed;
+
         private bool _hooked;
 
         /// <summary>
@@ -113,6 +118,7 @@ namespace Unison.Uwp.UI.Views
             ViewModel.OpenChatRequested += ViewModel_OpenChatRequested;
             ViewModel.BeforeLocalConversationsCleared += ViewModel_BeforeLocalConversationsCleared;
             ViewModel.SelectionRestored += ViewModel_SelectionRestored;
+            ViewModel.PropertyChanged += ViewModel_PropertyChanged;
             ViewModel.Attach();
         }
 
@@ -129,7 +135,23 @@ namespace Unison.Uwp.UI.Views
             ViewModel.OpenChatRequested -= ViewModel_OpenChatRequested;
             ViewModel.BeforeLocalConversationsCleared -= ViewModel_BeforeLocalConversationsCleared;
             ViewModel.SelectionRestored -= ViewModel_SelectionRestored;
+            ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
             ViewModel.Detach();
+        }
+
+        private void ViewModel_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e == null)
+            {
+                return;
+            }
+
+            if (e.PropertyName == nameof(ChatListViewModel.ActiveCommunity) ||
+                e.PropertyName == nameof(ChatListViewModel.IsCommunityHubOpen) ||
+                e.PropertyName == nameof(ChatListViewModel.SelectedChat))
+            {
+                SyncCommunityHubSelection();
+            }
         }
 
         // ---------------------------------------------------------------------
@@ -158,14 +180,102 @@ namespace Unison.Uwp.UI.Views
                 return;
             }
 
+            if (ViewModel.TryOpenCommunityHub(chat))
+            {
+                SetSelectionQuiet(null);
+                SyncCommunityHubSelection();
+                return;
+            }
+
             ViewModel.OnChatSelected(chat);
+            if (ViewModel.IsCommunityHubOpen)
+            {
+                SetSelectionQuiet(null);
+                SyncCommunityHubSelection();
+            }
+
             ChatSelected?.Invoke(this, new ChatSelectedEventArgs(chat));
+        }
+
+        private void CommunityHubList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_suppressSelectionChanged || ViewModel == null)
+            {
+                return;
+            }
+
+            var list = sender as ListView;
+            var group = list?.SelectedItem as ChatItem;
+            if (group == null)
+            {
+                return;
+            }
+
+            ViewModel.SelectCommunityGroup(group);
+            // Keep hub open and this row selected (do not clear SelectedItem).
+            ChatSelected?.Invoke(this, new ChatSelectedEventArgs(group));
         }
 
         private void ViewModel_SelectionRestored(object sender, ChatItem chat)
         {
-            SetSelectionQuiet(chat);
+            if (chat != null &&
+                !string.IsNullOrWhiteSpace(chat.LinkedParentJid) &&
+                ViewModel?.EnsureCommunityContext(chat) == true)
+            {
+                SetSelectionQuiet(null);
+                SyncCommunityHubSelection();
+            }
+            else
+            {
+                SetSelectionQuiet(chat);
+            }
+
             ChatSelected?.Invoke(this, new ChatSelectedEventArgs(chat));
+        }
+
+        private void SyncCommunityHubSelection()
+        {
+            if (CommunityHubList == null || ViewModel == null || !ViewModel.IsCommunityHubOpen)
+            {
+                return;
+            }
+
+            ChatItem wanted = ViewModel.SelectedChat;
+            ChatItem match = null;
+            if (wanted != null && ViewModel.ActiveCommunity?.CommunityMembers != null)
+            {
+                string jid = wanted.JID ?? string.Empty;
+                foreach (ChatItem member in ViewModel.ActiveCommunity.CommunityMembers)
+                {
+                    if (member == null)
+                    {
+                        continue;
+                    }
+
+                    if (ReferenceEquals(member, wanted) ||
+                        string.Equals(member.JID, jid, StringComparison.OrdinalIgnoreCase))
+                    {
+                        match = member;
+                        break;
+                    }
+                }
+            }
+
+            if (ReferenceEquals(CommunityHubList.SelectedItem, match))
+            {
+                return;
+            }
+
+            bool previous = _suppressSelectionChanged;
+            _suppressSelectionChanged = true;
+            try
+            {
+                CommunityHubList.SelectedItem = match;
+            }
+            finally
+            {
+                _suppressSelectionChanged = previous;
+            }
         }
 
         private void SetSelectionQuiet(ChatItem chat)
@@ -195,6 +305,16 @@ namespace Unison.Uwp.UI.Views
                 return;
             }
 
+            if (ViewModel != null &&
+                !string.IsNullOrWhiteSpace(chat.LinkedParentJid) &&
+                ViewModel.EnsureCommunityContext(chat))
+            {
+                ViewModel.OnChatSelected(chat);
+                SetSelectionQuiet(null);
+                SyncCommunityHubSelection();
+                return;
+            }
+
             ViewModel?.EnsureVisible(chat);
             SetSelectionQuiet(chat);
         }
@@ -204,6 +324,31 @@ namespace Unison.Uwp.UI.Views
         {
             ViewModel?.ClearSelection();
             SetSelectionQuiet(null);
+        }
+
+        /// <summary>Closes the community hub when open; used by system Back before leaving the list.</summary>
+        public bool TryConsumeCommunityHubBack()
+        {
+            if (ViewModel?.IsCommunityHubOpen != true)
+            {
+                return false;
+            }
+
+            CloseCommunityHubFromUi();
+            return true;
+        }
+
+        private void CommunityHubBackButton_Click(object sender, RoutedEventArgs e)
+        {
+            TryConsumeCommunityHubBack();
+        }
+
+        /// <summary>Leaves the hub, clears the member highlight, and asks the shell to close detail.</summary>
+        private void CloseCommunityHubFromUi()
+        {
+            ViewModel?.CloseCommunityHub();
+            SetSelectionQuiet(null);
+            CommunityHubClosed?.Invoke(this, EventArgs.Empty);
         }
 
         /// <summary>Finds a chat by JID or canonical id, for callers holding a stale instance.</summary>
@@ -306,6 +451,24 @@ namespace Unison.Uwp.UI.Views
             if (ViewModel.PinChatToStartCommand.CanExecute(chat))
             {
                 ViewModel.PinChatToStartCommand.Execute(chat);
+            }
+        }
+
+        /// <summary>Context flyout on a row: open the contact Profile page.</summary>
+        public void ViewProfile(ChatItem chat)
+        {
+            if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
+            {
+                return;
+            }
+
+            try
+            {
+                App.Services?.GetService<ShellViewModel>()?.QueueOpenProfile(chat.JID);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[ChatListView] ViewProfile failed: " + ex.Message);
             }
         }
 

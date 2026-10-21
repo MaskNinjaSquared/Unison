@@ -278,16 +278,32 @@ namespace Unison.Uwp
                     sp.GetRequiredService<ActiveChat>(),
                     () => settings.Get<bool>(LocalSettingsConstants.ShowSyncStatus));
             });
-            // The socket is read lazily: the client takes this gate in its constructor.
-            services.AddSingleton(sp => new SyncWorkGate(
-                sp.GetRequiredService<HistoryOnDemandRegistry>(),
-                () => ((WhatsAppService)sp.GetRequiredService<IWhatsAppService>()).Socket?.IsAwaitingInitialSync ?? false));
             // The client publishes first-sync progress; HistoryFacade and the budget read it.
             services.AddSingleton<InitialSyncProgressState>();
+            // The socket is read lazily: the client takes this gate in its constructor.
+            // Avatar network fetch also waits on first-sync list hold / safe mode (WhatsApp:
+            // unlock chats, then load photos).
+            services.AddSingleton(sp => new SyncWorkGate(
+                sp.GetRequiredService<HistoryOnDemandRegistry>(),
+                () => ((WhatsAppService)sp.GetRequiredService<IWhatsAppService>()).Socket?.IsAwaitingInitialSync ?? false,
+                () => ((WhatsAppService)sp.GetRequiredService<IWhatsAppService>()).IsHistoryCatchUpInProgress,
+                () =>
+                {
+                    IHistoryService history = sp.GetService<IHistoryService>();
+                    if (history != null && history.IsAwaitingFirstHistorySync)
+                    {
+                        return true;
+                    }
+
+                    return sp.GetService<InitialSyncProgressState>()?.IsActive == true;
+                }));
             // Enrichment waits until the chat list finishes its first post-sync paint.
             services.AddSingleton<ChatListInitialPaintGate>();
+            // Toast/tile: hold chat-list x:Load until the conversation pane has loaded.
+            services.AddSingleton<ChatListDeepLinkHoldGate>();
             // Hold DisplayRequest for the first-sync list hold; HistoryFacade calls Hold/Release.
             services.AddSingleton<IDisplayKeepAwakeService, DisplayKeepAwakeService>();
+            services.AddSingleton<ICameraOrientationService, CameraOrientationService>();
             services.AddSingleton<SelfProfileState>();
             // Memory tier once: drives history caps, list release, avatars and the phone's quota ask.
             services.AddSingleton(sp =>
@@ -311,12 +327,15 @@ namespace Unison.Uwp
                 sp.GetRequiredService<JidAliasTable>(),
                 sp.GetRequiredService<ChatStateStore>(),
                 sp.GetRequiredService<ChatRowIndex>(),
-                sp.GetRequiredService<AttachedUiDispatcher>()));
+                sp.GetRequiredService<AttachedUiDispatcher>(),
+                () => sp.GetRequiredService<SyncBudget>().IsFrugal));
             services.AddSingleton(sp => new ChatNameRefresh(
                 sp.GetRequiredService<AttachedUiDispatcher>(),
                 sp.GetRequiredService<IChatStateStore>(),
                 sp.GetRequiredService<ContactDisplayNames>(),
-                sp.GetRequiredService<ISelfMarkerNaming>()));
+                sp.GetRequiredService<ISelfMarkerNaming>(),
+                sp.GetRequiredService<IGroupNaming>(),
+                () => sp.GetRequiredService<SyncBudget>().IsFrugal));
             services.AddSingleton(sp => new StoredChatPreviewRefresh(
                 sp.GetRequiredService<AttachedUiDispatcher>(),
                 sp.GetRequiredService<ChatStateStore>(),
@@ -473,7 +492,25 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IChatStateStore>(),
                 sp.GetRequiredService<ISystemInfoProvider>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>()));
-            services.AddSingleton<IChatMessageVmFactory, ChatMessageVmFactory>();
+            // AttachedUiDispatcher (not IDispatcher/DispatcherService): PropertyChanged from the
+            // incoming pump must marshal onto the live frame dispatcher, or IsRevoked/HasReactions
+            // bindings throw RPC_E_WRONG_THREAD on Mobile.
+            services.AddSingleton<IGifPlaybackCoordinator>(sp => new GifPlaybackCoordinator(
+                sp.GetRequiredService<ISystemInfoProvider>().GetDeviceCategory()));
+            services.AddSingleton<IChatMessageVmFactory>(sp => new ChatMessageVmFactory(
+                sp.GetService<IStringResources>(),
+                sp.GetService<IMessageService>(),
+                sp.GetService<IDialogService>(),
+                sp.GetService<IUriLauncher>(),
+                sp.GetService<IFilePicker>(),
+                sp.GetService<IAudioExportService>(),
+                sp.GetService<ISessionLogger>(),
+                sp.GetService<IRuntimeDiagnostics>(),
+                sp.GetService<IHistoryMessageStore>(),
+                sp.GetService<ICopyService>(),
+                sp.GetRequiredService<AttachedUiDispatcher>(),
+                sp.GetRequiredService<ISystemInfoProvider>().GetDeviceCategory(),
+                sp.GetRequiredService<IGifPlaybackCoordinator>()));
             services.AddSingleton<IChatDetailInfoViewModelFactory, ChatDetailInfoViewModelFactory>();
             services.AddSingleton<INewChatDialogViewModelFactory, NewChatDialogViewModelFactory>();
             services.AddSingleton<ILocalContactsService, LocalContactsService>();
@@ -550,7 +587,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ContactDisplayNames>(),
                 sp.GetRequiredService<IJidResolver>(),
                 sp.GetRequiredService<ISelfMarkerNaming>(),
-                sp.GetRequiredService<IStringResources>()));
+                sp.GetRequiredService<IStringResources>(),
+                sp.GetRequiredService<ChatStateStore>().GroupSubjects));
             services.AddSingleton<IGroupService>(sp => new GroupFacade(
                 sp.GetRequiredService<IWhatsAppService>(),
                 sp.GetRequiredService<IWhatsAppSessionProvider>(),
@@ -567,7 +605,7 @@ namespace Unison.Uwp
                     sp.GetRequiredService<IJidResolver>(),
                     sp.GetRequiredService<IChatStateStore>(),
                     sp.GetRequiredService<ChatRowIndex>(),
-                    sp.GetRequiredService<ChatStateStore>().PushNames),
+                    sp.GetRequiredService<ChatStateStore>().GroupSubjects),
                 new GroupRosterRestore(
                     sp.GetRequiredService<IGroupNaming>(),
                     sp.GetRequiredService<AttachedUiDispatcher>(),
@@ -633,11 +671,15 @@ namespace Unison.Uwp
             services.AddTransient<LoginViewModel>();
             services.AddTransient<StartViewModel>();
             services.AddSingleton<ShellViewModel>();
+            services.AddSingleton<IAppActivationRouter>(sp => new AppActivationRouter(
+                sp.GetRequiredService<ShellViewModel>(),
+                sp.GetRequiredService<IRuntimeDiagnostics>()));
             services.AddTransient<ChatListViewModel>();
             services.AddTransient<ChatDetailViewModel>();
             services.AddTransient<StatusListViewModel>();
             services.AddTransient<StatusDetailViewModel>();
             services.AddTransient<DebugViewModel>();
+            services.AddTransient<ProfileViewModel>();
             services.AddTransient<NewChatDialogViewModel>();
             services.AddTransient<MessageReactionsViewModel>();
             services.AddTransient<SettingsViewModel>();
@@ -719,7 +761,7 @@ namespace Unison.Uwp
                 return;
             }
 
-            HandleActivationArguments(e.Arguments);
+            HandleActivationArguments(e.Arguments, e.PreviousExecutionState);
         }
 
         protected override void OnActivated(IActivatedEventArgs args)
@@ -730,10 +772,54 @@ namespace Unison.Uwp
                 "kind=" + (args == null ? "<null>" : args.Kind.ToString()) +
                 "; previousState=" + (args == null ? "<null>" : args.PreviousExecutionState.ToString()));
             RuntimeDiagnosticsService.Instance.StartHealthSampling();
-            if (args is ProtocolActivatedEventArgs protocolArgs &&
-                string.Equals(protocolArgs.Uri?.Scheme, PeopleMessageScheme, StringComparison.OrdinalIgnoreCase))
+            if (args is ProtocolActivatedEventArgs protocolArgs)
             {
-                HandlePeopleMessageActivation(protocolArgs.Uri);
+                string scheme = protocolArgs.Uri?.Scheme;
+                if (string.Equals(scheme, PeopleProfileScheme, StringComparison.OrdinalIgnoreCase))
+                {
+                    // People "Open profile": ms-contact-profile:?ContactRemoteIds=…
+                    string peopleRemoteId = null;
+                    ActivateWithRouter(
+                        args.PreviousExecutionState,
+                        router =>
+                        {
+                            peopleRemoteId = router.TryReadPeopleRemoteId(protocolArgs.Uri?.Query);
+                            return router.BuildPeopleLaunchArguments(peopleRemoteId, openProfile: true);
+                        },
+                        (router, _) => router.RoutePeopleProfile(
+                            peopleRemoteId,
+                            WasAppAlreadyOpen(args.PreviousExecutionState)));
+                    return;
+                }
+
+                if (string.Equals(scheme, PeopleMessageScheme, StringComparison.OrdinalIgnoreCase))
+                {
+                    // People "Message": ms-ipmessaging:?ContactRemoteIds=…
+                    string peopleRemoteId = null;
+                    ActivateWithRouter(
+                        args.PreviousExecutionState,
+                        router =>
+                        {
+                            peopleRemoteId = router.TryReadPeopleRemoteId(protocolArgs.Uri?.Query);
+                            return router.BuildPeopleLaunchArguments(peopleRemoteId, openProfile: false);
+                        },
+                        (router, _) => router.RoutePeopleMessage(
+                            peopleRemoteId,
+                            WasAppAlreadyOpen(args.PreviousExecutionState)));
+                    return;
+                }
+            }
+
+            if (args != null && args.Kind == ActivationKind.ContactPanel)
+            {
+                var contactArgs = args as ContactPanelActivatedEventArgs;
+                string remoteId = contactArgs?.Contact?.RemoteId;
+                ActivateWithRouter(
+                    args.PreviousExecutionState,
+                    router => router.BuildPeopleLaunchArguments(remoteId, openProfile: true),
+                    (router, _) => router.RouteContactPanel(
+                        remoteId,
+                        WasAppAlreadyOpen(args.PreviousExecutionState)));
                 return;
             }
 
@@ -744,14 +830,6 @@ namespace Unison.Uwp
                 EnsureWindowVisibilityTracking();
 
                 var toastArgs = args as ToastNotificationActivatedEventArgs;
-                // DI + theme before chrome: toast activation skips OnLaunched, so shell
-                // strategy / Theme.xaml / pending "Shell applied" toast must run here.
-                Frame rootFrame = EnsureRootFrame();
-                ApplyShellThemeFromSettings();
-                ConfigureAppChrome();
-                EnsureTitleBarHook();
-                EnsureStatusBarOrientationHook();
-
                 string toastArgument = toastArgs?.Argument ?? string.Empty;
 
                 RuntimeDiagnosticsService.Instance.Write(
@@ -760,15 +838,12 @@ namespace Unison.Uwp
                     "argLength=" + toastArgument.Length +
                     "; hasChat=" + (toastArgument.IndexOf("chat=", StringComparison.OrdinalIgnoreCase) >= 0));
 
-                if (rootFrame.Content == null || !IsKnownRootContent(rootFrame.Content))
-                {
-                    NavigateRootToBoot(toastArgument);
-                }
-
-                HandleActivationArguments(toastArgument);
-
-                Window.Current.Activate();
-                ApplyWindowChromeBootstrap();
+                ActivateWithRouter(
+                    args.PreviousExecutionState,
+                    _ => toastArgument,
+                    (router, _) => router.RouteLaunchArguments(
+                        toastArgument,
+                        WasAppAlreadyOpen(args.PreviousExecutionState)));
                 return;
             }
 
@@ -776,77 +851,58 @@ namespace Unison.Uwp
         }
 
         private const string PeopleMessageScheme = "ms-ipmessaging";
+        private const string PeopleProfileScheme = "ms-contact-profile";
+
+        private static bool WasAppAlreadyOpen(ApplicationExecutionState previousExecutionState)
+        {
+            return previousExecutionState == ApplicationExecutionState.Running ||
+                   previousExecutionState == ApplicationExecutionState.Suspended;
+        }
 
         /// <summary>
-        /// People "Message" (contact card annotation with <c>ContactAnnotationOperations.Message</c>)
-        /// activates <c>ms-ipmessaging:?ContactRemoteIds=...</c>. Contact-action activation
-        /// (<c>windows.contact</c>) types are absent from the 22621 SDK contracts.
+        /// Host chrome + boot navigation, then deep-link routing via <see cref="IAppActivationRouter"/>.
         /// </summary>
-        private void HandlePeopleMessageActivation(Uri uri)
+        private void ActivateWithRouter(
+            ApplicationExecutionState previousExecutionState,
+            Func<IAppActivationRouter, string> resolveBootArguments,
+            Action<IAppActivationRouter, string> route)
         {
+            _ = previousExecutionState;
             Frame rootFrame = EnsureRootFrame();
             ApplyShellThemeFromSettings();
             ConfigureAppChrome();
             EnsureTitleBarHook();
             EnsureStatusBarOrientationHook();
 
-            string jid = WindowsContactListPublisher.FromRemoteId(ReadPeopleRemoteId(uri));
-            string arguments = string.IsNullOrWhiteSpace(jid)
-                ? string.Empty
-                : "chat=" + Uri.EscapeDataString(jid);
-
-            RuntimeDiagnosticsService.Instance.Write(
-                "lifecycle",
-                "people-activated",
-                "hasChat=" + (arguments.Length > 0));
+            IAppActivationRouter router = Services?.GetService<IAppActivationRouter>();
+            string navigateArgs = string.Empty;
+            if (router != null && resolveBootArguments != null)
+            {
+                navigateArgs = resolveBootArguments(router) ?? string.Empty;
+            }
 
             if (rootFrame.Content == null || !IsKnownRootContent(rootFrame.Content))
             {
-                NavigateRootToBoot(arguments);
+                NavigateRootToBoot(navigateArgs);
             }
 
-            HandleActivationArguments(arguments);
+            if (router != null && route != null)
+            {
+                route(router, navigateArgs);
+            }
 
             Window.Current.Activate();
             ApplyWindowChromeBootstrap();
         }
 
-        private static string ReadPeopleRemoteId(Uri uri)
+        /// <summary>Secondary tile / toast <c>chat=</c> or <c>profile=</c> deep link.</summary>
+        private void HandleActivationArguments(
+            string arguments,
+            ApplicationExecutionState previousExecutionState)
         {
-            if (uri == null || string.IsNullOrEmpty(uri.Query))
-            {
-                return null;
-            }
-
-            foreach (IWwwFormUrlDecoderEntry entry in new WwwFormUrlDecoder(uri.Query))
-            {
-                if (string.Equals(entry.Name, "ContactRemoteIds", StringComparison.OrdinalIgnoreCase) &&
-                    !string.IsNullOrWhiteSpace(entry.Value))
-                {
-                    return entry.Value.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)[0].Trim();
-                }
-            }
-
-            return null;
-        }
-
-        /// <summary>Secondary tile / toast <c>chat=</c> deep link into an existing session.</summary>
-        private void HandleActivationArguments(string arguments)
-        {
-            if (string.IsNullOrWhiteSpace(arguments) || Services == null)
-            {
-                return;
-            }
-
-            try
-            {
-                var shell = Services.GetService<ShellViewModel>();
-                shell?.QueueOpenChatFromActivation(arguments);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine("[App] HandleActivationArguments: " + ex.Message);
-            }
+            Services?.GetService<IAppActivationRouter>()?.RouteLaunchArguments(
+                arguments,
+                WasAppAlreadyOpen(previousExecutionState));
         }
 
         /// <summary>Creates the root Frame and DI if needed.</summary>

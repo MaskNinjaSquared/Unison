@@ -139,7 +139,7 @@
                            Height="50"
                            Stretch="Uniform"
                            HorizontalAlignment="Center"/>
-                    <TextBlock Text="Unison"
+                    <TextBlock Text="nison"
                                Margin="10,8,0,0"
                                FontSize="35"
                                FontFamily="{StaticResource MainFontSemibold}"

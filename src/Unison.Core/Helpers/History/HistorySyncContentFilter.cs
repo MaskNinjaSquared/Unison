@@ -474,6 +474,7 @@ namespace Unison.Core.Helpers
         {
             if (kind == ChatPreviewKind.Image ||
                 kind == ChatPreviewKind.Video ||
+                kind == ChatPreviewKind.Gif ||
                 kind == ChatPreviewKind.Sticker ||
                 kind == ChatPreviewKind.Voice ||
                 kind == ChatPreviewKind.Document)

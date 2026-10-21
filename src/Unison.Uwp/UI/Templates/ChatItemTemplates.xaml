@@ -13,6 +13,15 @@
             <Grid.ContextFlyout>
                 <MenuFlyout MenuFlyoutPresenterStyle="{StaticResource ModernMenuFlyoutStyle}"
                             Opening="ChatContextFlyout_Opening">
+                    <MenuFlyoutItem Tag="viewProfile"
+                                   x:Uid="ChatList_ViewProfile"
+                                   Text="View profile"
+                                   Style="{StaticResource ModernMenuFlyoutItemStyle}"
+                                   Click="ViewProfile_Click">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon FontFamily="{StaticResource IconFont}" Glyph="&#xE77B;"/>
+                        </MenuFlyoutItem.Icon>
+                    </MenuFlyoutItem>
                     <MenuFlyoutItem Tag="chatPin"
                                    x:Uid="ChatList_PinChat"
                                    Text="Pin chat"
@@ -137,7 +146,15 @@
                                         HorizontalAlignment="Left"
                                         VerticalAlignment="Center"
                                         AvatarUrl="{x:Bind GetAvatarUrl(AvatarUrl, AvatarHighUrl), Mode=OneWay}"
-                                        IsGroup="{x:Bind IsGroup, Mode=OneWay}"/>
+                                        IsGroup="{x:Bind templates:ChatItemTemplates.ShowsGroupAvatar(IsGroup, Kind), Mode=OneWay}"
+                                        Visibility="{x:Bind IsCommunityAnnounce, Mode=OneWay, Converter={StaticResource InvertedBooleanToVisibilityConverter}}"/>
+            <controls:CommunityAnnouncementsAvatarControl Width="48" Height="48"
+                                                          Size="48"
+                                                          ShowBorder="True"
+                                                          HorizontalAlignment="Left"
+                                                          VerticalAlignment="Center"
+                                                          AvatarUrl="{x:Bind GetAvatarUrl(AvatarUrl, AvatarHighUrl), Mode=OneWay}"
+                                                          Visibility="{x:Bind IsCommunityAnnounce, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
 
             <Grid Grid.Column="1" VerticalAlignment="Center" Margin="12,0,12,0">
                 <Grid.RowDefinitions>
@@ -145,7 +162,7 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
                 <TextBlock Grid.Row="0"
-                           Text="{x:Bind templates:ChatItemTemplates.GetChatDisplayName(Name, Kind), Mode=OneWay}"
+                           Text="{x:Bind templates:ChatItemTemplates.GetChatDisplayName(Name, Kind, IsCommunityAnnounce), Mode=OneWay}"
                            FontSize="18"
                            FontFamily="{StaticResource MainFontSemibold}"
                            FontWeight="SemiBold"

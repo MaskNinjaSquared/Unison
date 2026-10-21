@@ -2,6 +2,37 @@
 
 Newest first.
 
+## 2.0.19 — per-JID hydration fallback after empty FULL_HISTORY
+
+When FULL_HISTORY catch-up finishes stagnant/empty (or freshness reconnect is on
+cooldown) and tips stay stale, hydrate via per-chat `HISTORY_SYNC_ON_DEMAND`
+(ledger Pending → InFlight → HasMore/Synced), then solicit FULL_HISTORY again.
+Day retries: every 3 hours, max 5 attempts, until tips look up-to-date.
+
+## 2.0.18 — legacy attach icons + toast deep-link sync UI
+
+WhatsApp Legacy attach tiles use dedicated glyphs (picture, video, doc, audio,
+contact, location). Toast/tile cold open keeps only "Preparing conversations…"
+on the list until the conversation loads — "Synchronizing…" is deferred and
+flushed after deep-link release (warm toast only hides the sync line, no overlay).
+
+## 2.0.13 — camera preview orientation on Mobile
+
+In-chat camera preview and stills were sideways on portrait-first phones because
+`MediaCapture` had no enclosure / display rotation. `ICameraOrientationService`
+(Core math + UWP WinRT sensors) applies `MF_MT_VIDEO_ROTATION`, mirrors the front
+camera, and stamps JPEG EXIF — same path as Unigram / CameraStarterKit. Desktop
+webcams stay unrotated.
+
+## 2.0.12 — first-sync list hold until history + names
+
+Chat list stayed behind `x:Load` until zero-sync is really done: FULL_HISTORY
+catch-up idle, then directory names, then unlock (photos after). Empty StatusV3
+quiet (`sqlite-empty-lot` with `processed=0`) no longer finishes catch-up while
+the first-sync hold is up — Bootstrap/Recent often arrives next. Toast deep-link
+holds the list until the conversation is ready. Avatar network work stays deferred
+until after list release.
+
 ## In-chat camera pick
 
 `AttachCameraCommand` shows `CameraPickView` over the conversation

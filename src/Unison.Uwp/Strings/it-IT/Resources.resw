@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -227,6 +227,9 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
   <data name="ChatList_FilterDrafts.Text" xml:space="preserve">
     <value>Bozze</value>
   </data>
+  <data name="ChatList_FilterCommunities.Text" xml:space="preserve">
+    <value>Community</value>
+  </data>
   <data name="ChatList_RefreshNames.Text" xml:space="preserve">
     <value>Aggiorna nomi contatti</value>
   </data>
@@ -238,6 +241,9 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
   </data>
   <data name="ChatList_PreviewVideo" xml:space="preserve">
     <value>Video</value>
+  </data>
+  <data name="ChatList_PreviewGif" xml:space="preserve">
+    <value>GIF</value>
   </data>
   <data name="ChatList_PreviewSticker" xml:space="preserve">
     <value>Sticker</value>
@@ -394,6 +400,15 @@ Disabilita dopo la diagnosi: lasciarlo attivo rallenta l'app.</value>
   </data>
   <data name="Chat_SelfFallbackName" xml:space="preserve">
     <value>Tu</value>
+  </data>
+  <data name="Chat_CommunityAnnouncements" xml:space="preserve">
+    <value>Annunci</value>
+  </data>
+  <data name="Chat_CommunityHubSubtitle" xml:space="preserve">
+    <value>Community · {0} gruppi</value>
+  </data>
+  <data name="Chat_CommunityFallbackName" xml:space="preserve">
+    <value>Community</value>
   </data>
   <data name="ChatDetail_PersonalSubtitle.Text" xml:space="preserve">
     <value>Messaggi a me stesso</value>

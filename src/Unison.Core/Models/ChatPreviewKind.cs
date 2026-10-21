@@ -12,6 +12,8 @@ namespace Unison.Core.Models
         Voice = 4,
         Document = 5,
         Reaction = 6,
-        Revoked = 7
+        Revoked = 7,
+        /// <summary>WhatsApp GIF playback (video envelope with <c>GifPlayback</c>).</summary>
+        Gif = 8
     }
 }

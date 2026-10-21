@@ -59,7 +59,10 @@ namespace Unison.Core.Helpers
             {
                 Jid = jid,
                 Name = chat.Name,
-                IsGroup = chat.IsGroup || JidHelper.IsGroupJid(jid),
+                IsGroup = chat.IsGroup || chat.IsCommunity || JidHelper.IsGroupJid(jid),
+                IsCommunityAnnounce = chat.IsCommunityAnnounce,
+                IsCommunityParent = chat.IsCommunityParent || chat.Kind == ChatKind.Community,
+                LinkedParentJid = chat.LinkedParentJid,
                 Status = chat.Status,
                 UnreadCount = Math.Max(0, chat.UnreadCount),
                 LastMessage = chat.LastMessage,
@@ -117,7 +120,7 @@ namespace Unison.Core.Helpers
                 UnreadCount = Math.Max(0, preview.UnreadCount),
                 Status = preview.Status
             };
-            chat.IsGroup = preview.IsGroup;
+            ApplyCommunityFields(preview, chat);
             return chat;
         }
         /// <summary>
@@ -171,9 +174,29 @@ namespace Unison.Core.Helpers
                 Status = preview.Status,
                 Timestamp = WhatsAppMapper.FormatTimestamp(preview.LastMessageTimestampUtc, yesterdayLabel)
             };
-            chat.IsGroup = preview.IsGroup;
+            ApplyCommunityFields(preview, chat);
             ApplyLocalFlags(preview, chat);
             return chat;
+        }
+
+        /// <summary>
+        /// Restores group / community-parent kind and link fields from a catalog row.
+        /// Parent flag wins over <see cref="HistoryChatPreview.IsGroup"/>.
+        /// </summary>
+        private static void ApplyCommunityFields(HistoryChatPreview preview, ChatItem chat)
+        {
+            if (preview == null || chat == null)
+            {
+                return;
+            }
+
+            chat.IsCommunityAnnounce = preview.IsCommunityAnnounce;
+            chat.LinkedParentJid = preview.LinkedParentJid;
+            chat.IsCommunityParent = preview.IsCommunityParent;
+            if (!preview.IsCommunityParent)
+            {
+                chat.IsGroup = preview.IsGroup;
+            }
         }
 
         /// <summary>
@@ -330,7 +353,11 @@ namespace Unison.Core.Helpers
                     target.Name,
                     target.JID,
                     target.IsGroup);
-                if (ChatNameReplacement.ShouldReplace(
+                // History tips must not flash-then-revert a live group subject. Live renames go
+                // through GroupMetadataApply / app-state subjects; keeping an existing meaningful
+                // group title here is the race fix for "new name during sync, then old again".
+                if (!(preview.IsGroup && existingMeaningful) &&
+                    ChatNameReplacement.ShouldReplace(
                         target.Name,
                         preview.Name,
                         incomingMeaningful,
@@ -426,9 +453,30 @@ namespace Unison.Core.Helpers
                 changed = true;
             }
 
-            if (preview.IsGroup && !target.IsGroup)
+            if (preview.IsCommunityParent)
+            {
+                if (!target.IsCommunityParent)
+                {
+                    target.IsCommunityParent = true;
+                    changed = true;
+                }
+            }
+            else if (preview.IsGroup && !target.IsGroup && !target.IsCommunityParent)
             {
                 target.IsGroup = true;
+                changed = true;
+            }
+
+            if (preview.IsCommunityAnnounce != target.IsCommunityAnnounce)
+            {
+                target.IsCommunityAnnounce = preview.IsCommunityAnnounce;
+                changed = true;
+            }
+
+            if (!string.IsNullOrWhiteSpace(preview.LinkedParentJid) &&
+                !string.Equals(target.LinkedParentJid, preview.LinkedParentJid, StringComparison.OrdinalIgnoreCase))
+            {
+                target.LinkedParentJid = preview.LinkedParentJid;
                 changed = true;
             }
 

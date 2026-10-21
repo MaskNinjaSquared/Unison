@@ -14,6 +14,7 @@ namespace Unison.Uwp.UI.TemplateSelectors
         public DataTemplate TextTemplate { get; set; }
         public DataTemplate ImageTemplate { get; set; }
         public DataTemplate VideoTemplate { get; set; }
+        public DataTemplate GifTemplate { get; set; }
         public DataTemplate StickerTemplate { get; set; }
         public DataTemplate VoiceTemplate { get; set; }
         public DataTemplate DocumentTemplate { get; set; }
@@ -42,6 +43,8 @@ namespace Unison.Uwp.UI.TemplateSelectors
                     return ImageTemplate ?? TextTemplate;
                 case ChatPreviewKind.Video:
                     return VideoTemplate ?? TextTemplate;
+                case ChatPreviewKind.Gif:
+                    return GifTemplate ?? TextTemplate;
                 case ChatPreviewKind.Sticker:
                     return StickerTemplate ?? TextTemplate;
                 case ChatPreviewKind.Voice:

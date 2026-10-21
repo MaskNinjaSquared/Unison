@@ -252,6 +252,16 @@
                                                 Margin="0,0,6,0"
                                                 helpers:DesktopCursor.CursorKind="Hand"
                                                 Tapped="HeaderAvatar_Tapped"/>
+                    <controls:CommunityAnnouncementsAvatarControl x:Name="HeaderAnnouncementsAvatar"
+                                                                  Grid.Column="1"
+                                                                  Size="40"
+                                                                  Width="40" Height="40"
+                                                                  ShowBorder="True"
+                                                                  VerticalAlignment="Center"
+                                                                  Margin="0,0,6,0"
+                                                                  Visibility="Collapsed"
+                                                                  helpers:DesktopCursor.CursorKind="Hand"
+                                                                  Tapped="HeaderAvatar_Tapped"/>
 
                     <!-- Name + status only (avatar has its own tap → OpenChatDetailInfoFromAvatarCommand). -->
                     <Button x:Name="HeaderInfoButton"
@@ -265,21 +275,36 @@
                             HorizontalContentAlignment="Left"
                             VerticalAlignment="Stretch"
                             VerticalContentAlignment="Center">
-                        <StackPanel x:Name="TitleStatusPanel" VerticalAlignment="Center" Margin="0,0,8,0"
-                                    HorizontalAlignment="Left">
-                            <StackPanel.RenderTransform>
-                                <TranslateTransform x:Name="TitleTranslateTransform" Y="0"/>
-                            </StackPanel.RenderTransform>
-                            <TextBlock x:Name="ChatTitleText" x:Uid="ChatDetail_SelectChat" Text="Select a chat" FontSize="18"
-                                       FontFamily="{StaticResource MainFontSemibold}" FontWeight="SemiBold"
-                                       Foreground="{ThemeResource ChatDetailHeaderTitleBrush}"
-                                       TextTrimming="CharacterEllipsis"/>
-                            <TextBlock x:Name="ChatStatusText" Text="" FontSize="13"
-                                       FontFamily="{StaticResource MainFont}"
-                                       Foreground="{ThemeResource ChatDetailHeaderStatusBrush}" Opacity="0"
-                                       Visibility="Collapsed"
-                                       TextTrimming="CharacterEllipsis"/>
-                        </StackPanel>
+                        <Grid VerticalAlignment="Center" Margin="0,0,8,0" HorizontalAlignment="Left">
+                            <!-- Normal: title + presence/status -->
+                            <StackPanel x:Name="TitleStatusPanel" VerticalAlignment="Center"
+                                        HorizontalAlignment="Left">
+                                <StackPanel.RenderTransform>
+                                    <TranslateTransform x:Name="TitleTranslateTransform" Y="0"/>
+                                </StackPanel.RenderTransform>
+                                <TextBlock x:Name="ChatTitleText" x:Uid="ChatDetail_SelectChat" Text="Select a chat" FontSize="18"
+                                           FontFamily="{StaticResource MainFontSemibold}" FontWeight="SemiBold"
+                                           Foreground="{ThemeResource ChatDetailHeaderTitleBrush}"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock x:Name="ChatStatusText" Text="" FontSize="13"
+                                           FontFamily="{StaticResource MainFont}"
+                                           Foreground="{ThemeResource ChatDetailHeaderStatusBrush}" Opacity="0"
+                                           Visibility="Collapsed"
+                                           TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                            <!-- Linked community group: community name + group name -->
+                            <StackPanel x:Name="CommunityTitlePanel" VerticalAlignment="Center"
+                                        HorizontalAlignment="Left" Visibility="Collapsed">
+                                <TextBlock x:Name="CommunityTitleText" Text="" FontSize="18"
+                                           FontFamily="{StaticResource MainFontSemibold}" FontWeight="SemiBold"
+                                           Foreground="{ThemeResource ChatDetailHeaderTitleBrush}"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock x:Name="CommunityGroupSubtitleText" Text="" FontSize="13"
+                                           FontFamily="{StaticResource MainFont}"
+                                           Foreground="{ThemeResource ChatDetailHeaderStatusBrush}"
+                                           TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                        </Grid>
                     </Button>
 
                     <!-- Contact actions (1:1 chats) — disabled until call/contact commands exist -->
@@ -714,7 +739,7 @@
                                                 Style="{StaticResource ModernMenuFlyoutItemStyle}"
                                                 Command="{Binding AttachCameraCommand}">
                                     <MenuFlyoutItem.Icon>
-                                        <FontIcon Glyph="&#xE722;" FontFamily="{StaticResource IconFont}"/>
+                                        <FontIcon Glyph="&#xEB10;" FontFamily="{StaticResource LegacyIconFont}"/>
                                     </MenuFlyoutItem.Icon>
                                 </MenuFlyoutItem>
                                 <MenuFlyoutItem x:Uid="ChatDetail_AttachFile"
@@ -722,7 +747,7 @@
                                                 Style="{StaticResource ModernMenuFlyoutItemStyle}"
                                                 Command="{Binding AttachFileCommand}">
                                     <MenuFlyoutItem.Icon>
-                                        <FontIcon Glyph="&#xE8A5;" FontFamily="{StaticResource IconFont}"/>
+                                        <FontIcon Glyph="&#xEB12;" FontFamily="{StaticResource LegacyIconFont}"/>
                                     </MenuFlyoutItem.Icon>
                                 </MenuFlyoutItem>
                                 <MenuFlyoutItem x:Uid="ChatDetail_AttachContact"
@@ -730,7 +755,7 @@
                                                 Style="{StaticResource ModernMenuFlyoutItemStyle}"
                                                 Command="{Binding AttachContactCommand}">
                                     <MenuFlyoutItem.Icon>
-                                        <FontIcon Glyph="&#xE77B;" FontFamily="{StaticResource IconFont}"/>
+                                        <FontIcon Glyph="&#xEB13;" FontFamily="{StaticResource LegacyIconFont}"/>
                                     </MenuFlyoutItem.Icon>
                                 </MenuFlyoutItem>
                                 <MenuFlyoutItem x:Uid="ChatDetail_AttachMedia"
@@ -738,7 +763,7 @@
                                                 Style="{StaticResource ModernMenuFlyoutItemStyle}"
                                                 Command="{Binding AttachMediaCommand}">
                                     <MenuFlyoutItem.Icon>
-                                        <FontIcon Glyph="&#xEB9F;" FontFamily="{StaticResource IconFont}"/>
+                                        <FontIcon Glyph="&#xEB11;" FontFamily="{StaticResource LegacyIconFont}"/>
                                     </MenuFlyoutItem.Icon>
                                 </MenuFlyoutItem>
                                 <MenuFlyoutItem x:Uid="ChatDetail_AttachAudio"
@@ -746,7 +771,7 @@
                                                 Style="{StaticResource ModernMenuFlyoutItemStyle}"
                                                 Command="{Binding AttachAudioCommand}">
                                     <MenuFlyoutItem.Icon>
-                                        <FontIcon Glyph="&#xE8D6;" FontFamily="{StaticResource IconFont}"/>
+                                        <FontIcon Glyph="&#xEB14;" FontFamily="{StaticResource LegacyIconFont}"/>
                                     </MenuFlyoutItem.Icon>
                                 </MenuFlyoutItem>
                                 <MenuFlyoutItem x:Uid="ChatDetail_AttachLocation"
@@ -754,7 +779,7 @@
                                                 Style="{StaticResource ModernMenuFlyoutItemStyle}"
                                                 Command="{Binding AttachLocationCommand}">
                                     <MenuFlyoutItem.Icon>
-                                        <FontIcon Glyph="&#xE707;" FontFamily="{StaticResource IconFont}"/>
+                                        <FontIcon Glyph="&#xEB15;" FontFamily="{StaticResource LegacyIconFont}"/>
                                     </MenuFlyoutItem.Icon>
                                 </MenuFlyoutItem>
                             </MenuFlyout>
@@ -1043,7 +1068,16 @@
                         ToolTipService.ToolTip="Back">
                     <FontIcon Glyph="&#xE72B;" FontFamily="{StaticResource IconFont}" FontSize="16"/>
                 </Button>
-                <TextBlock x:Uid="ChatDetail_Empty" Text="Select a chat to start messaging" Foreground="{ThemeResource ChatDetailMutedTextBrush}" FontSize="16" FontFamily="{StaticResource MainFont}" TextAlignment="Center"/>
+                <controls:EmptyStateBrandLogo/>
+                <TextBlock x:Uid="ChatDetail_Empty"
+                           Text="Select a chat to start messaging"
+                           Foreground="{ThemeResource ChatDetailMutedTextBrush}"
+                           FontSize="16"
+                           FontFamily="{StaticResource MainFont}"
+                           HorizontalAlignment="Center"
+                           TextAlignment="Center"
+                           TextWrapping="WrapWholeWords"
+                           MaxWidth="360"/>
             </StackPanel>
         </Grid>
 
