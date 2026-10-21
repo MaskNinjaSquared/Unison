@@ -76,6 +76,9 @@ namespace Unison.Uwp.Client
         /// </summary>
         private static readonly TimeSpan CloseTimeout = TimeSpan.FromSeconds(3);
 
+        private const long TrustedContactTokenBucketDurationSeconds = 604800;
+        private const int TrustedContactTokenBucketCount = 4;
+
         private readonly AuthState _authState;
         private readonly FileKeyStore _keyStore;
         private readonly bool _reuseLoadedKeyState;
@@ -952,7 +955,15 @@ namespace Unison.Uwp.Client
             try
             {
                 var fetch = new Unison.Socket.UseCases.Profile.FetchProfilePictureUrlUseCase(session.Connection);
-                var result = await fetch.ExecuteAsync(jid, type).ConfigureAwait(false);
+                var token = await GetValidProfilePictureTokenAsync(jid).ConfigureAwait(false);
+                var result = await fetch.ExecuteAsync(jid, type, token).ConfigureAwait(false);
+
+                if (token != null &&
+                    string.Equals(result.FailureReason, "401", StringComparison.OrdinalIgnoreCase))
+                {
+                    await ClearProfilePictureTokenAsync(jid).ConfigureAwait(false);
+                    result = await fetch.ExecuteAsync(jid, type).ConfigureAwait(false);
+                }
 
                 return new ProfilePictureResult
                 {
@@ -960,7 +971,7 @@ namespace Unison.Uwp.Client
                     TargetJid = jid,
                     TokenLookupJid = jid,
                     IsNotFound = result.IsNotFound,
-                    FailureReason = result.IsNotFound ? "not-found" : null
+                    FailureReason = result.IsNotFound ? "not-found" : result.FailureReason
                 };
             }
             catch (TimeoutException)
@@ -980,6 +991,67 @@ namespace Unison.Uwp.Client
                     FailureReason = ex.GetBaseException().Message
                 };
             }
+        }
+
+        private async Task<TcTokenData> GetValidProfilePictureTokenAsync(string jid)
+        {
+            var normalized = JidUtils.NormalizedUser(jid);
+            if (!JidUtils.IsAnyPn(normalized) && !JidUtils.IsAnyLid(normalized))
+            {
+                return null;
+            }
+
+            var token = await _keyStore.GetTcTokenAsync(normalized).ConfigureAwait(false);
+            if (token == null || token.Token == null || token.Token.Length == 0)
+            {
+                return null;
+            }
+
+            if (!IsTrustedContactTokenExpired(token.Timestamp))
+            {
+                return token;
+            }
+
+            await _keyStore.SetTcTokenAsync(normalized, new TcTokenData
+            {
+                SenderTimestamp = token.SenderTimestamp
+            }).ConfigureAwait(false);
+            Diag.W("[Bridge] Cleared expired trusted-contact token for " + normalized);
+            return null;
+        }
+
+        private async Task ClearProfilePictureTokenAsync(string jid)
+        {
+            var normalized = JidUtils.NormalizedUser(jid);
+            if (!JidUtils.IsAnyPn(normalized) && !JidUtils.IsAnyLid(normalized))
+            {
+                return;
+            }
+
+            var token = await _keyStore.GetTcTokenAsync(normalized).ConfigureAwait(false);
+            if (token == null || token.Token == null || token.Token.Length == 0)
+            {
+                return;
+            }
+
+            await _keyStore.SetTcTokenAsync(normalized, new TcTokenData
+            {
+                SenderTimestamp = token.SenderTimestamp
+            }).ConfigureAwait(false);
+            Diag.W("[Bridge] Cleared rejected trusted-contact token for " + normalized);
+        }
+
+        private static bool IsTrustedContactTokenExpired(long? timestamp)
+        {
+            if (!timestamp.HasValue || timestamp.Value <= 0)
+            {
+                return true;
+            }
+
+            long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            long currentBucket = now / TrustedContactTokenBucketDurationSeconds;
+            long cutoffBucket = currentBucket - (TrustedContactTokenBucketCount - 1);
+            return timestamp.Value < cutoffBucket * TrustedContactTokenBucketDurationSeconds;
         }
 
         /// <summary>
@@ -1935,12 +2007,22 @@ namespace Unison.Uwp.Client
         private async Task ApplyAppStateAsync(WaEventBatch batch)
         {
             IList<ChatUpdate> chats;
-            var chatChanged = ChatSettingsChanged;
-            if (chatChanged != null && batch.TryGet(WaEventKind.ChatsUpdate, out chats))
+            if (batch.TryGet(WaEventKind.ChatsUpdate, out chats))
             {
                 foreach (var chat in chats)
                 {
-                    await chatChanged(chat).ConfigureAwait(false);
+                    await StoreTcTokenAsync(
+                        chat.Id,
+                        chat.TcToken,
+                        chat.TcTokenTimestamp,
+                        chat.TcTokenSenderTimestamp,
+                        "app-state privacy token").ConfigureAwait(false);
+
+                    var chatChanged = ChatSettingsChanged;
+                    if (chatChanged != null)
+                    {
+                        await chatChanged(chat).ConfigureAwait(false);
+                    }
                 }
             }
 
