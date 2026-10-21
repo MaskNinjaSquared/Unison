@@ -10,6 +10,8 @@ namespace Unison.Uwp.UI.Controls
 {
     /// <summary>
     /// Status list circle: thumb/avatar with a green (Recent) or gray (Viewed) ring.
+    /// Photo path mirrors <see cref="ChatAvatarControl"/> (Ellipse + ImageBrush UniformToFill)
+    /// so landscape video thumbs cover and crop on Creators Update the same way chat avatars do.
     /// </summary>
     public sealed partial class StatusListAvatarControl : UserControl
     {
@@ -109,8 +111,8 @@ namespace Unison.Uwp.UI.Controls
                 return;
             }
 
-            // Fallback plate/glyph stays on InnerAvatar; never hand it the status thumb URL
-            // (ChatAvatarControl photo path was letterboxing non-square media in the ring).
+            // Glyph fallback only — do not route status thumbs through ChatAvatarControl
+            // (keeps one photo path: Ellipse/ImageBrush, same as the chat list).
             if (InnerAvatar != null)
             {
                 InnerAvatar.AvatarUrl = null;
@@ -125,6 +127,7 @@ namespace Unison.Uwp.UI.Controls
                 return;
             }
 
+            // Ellipse must already be sized (ApplySize) before the brush measures UniformToFill.
             double inner = PhotoEllipse.Width > 0 ? PhotoEllipse.Width : 48d;
             int decodeWidth = Math.Max(48, (int)Math.Round(inner));
 
@@ -141,6 +144,7 @@ namespace Unison.Uwp.UI.Controls
 
             try
             {
+                // Same order as ChatAvatarControl: DecodePixel* before UriSource, then Stretch.
                 var bitmap = new BitmapImage
                 {
                     DecodePixelType = DecodePixelType.Logical,
@@ -193,7 +197,7 @@ namespace Unison.Uwp.UI.Controls
         private void ApplySize()
         {
             double outer = Size > 0 ? Size : 56d;
-            double inner = System.Math.Max(24d, outer - 8d);
+            double inner = Math.Max(24d, outer - 8d);
             if (RootGrid != null)
             {
                 RootGrid.Width = outer;
@@ -219,7 +223,6 @@ namespace Unison.Uwp.UI.Controls
                 PhotoEllipse.Height = inner;
             }
 
-            // Size change may need a fresh decode width for the same URL.
             if (!string.IsNullOrWhiteSpace(AvatarUrl))
             {
                 ApplyPhoto();

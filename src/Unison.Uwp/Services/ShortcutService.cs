@@ -24,16 +24,21 @@ namespace Unison.Uwp.Services
         private static readonly Uri DefaultLogoUri =
             new Uri("ms-appx:///Assets/Square150x150Logo.png");
 
+        private static readonly Uri ChatBalloonUri =
+            new Uri("ms-appx:///Assets/Tiles/chat-balloon.png");
+
+        private static readonly Uri ProfileGlyphUri =
+            new Uri("ms-appx:///Assets/Tiles/profile-glyph.png");
+
         /// <summary>
-        /// Adaptive tiles paint with Segoe UI, not MDL2 — use emoji (same approach as Imgur).
+        /// Adaptive tiles paint with Segoe UI, not MDL2 — emoji only for medium chat chrome.
         /// </summary>
         private const string TileMessageEmoji = "💬";
-
-        private const string TileContactEmoji = "👤";
 
         private const string TileIdPrefix = "c_";
         private const string ContactTileIdPrefix = "p_";
         private const int PreviewMaxChars = 120;
+        private const int MottoMaxChars = 80;
 
         /// <summary>
         /// Distinct tags so <see cref="TileUpdater.EnableNotificationQueue"/> keeps every frame.
@@ -385,7 +390,8 @@ namespace Unison.Uwp.Services
                 string chatTileId = BuildTileId(chatJid);
                 if (SecondaryTile.Exists(chatTileId))
                 {
-                    PushLiveTile(chatTileId, safeTitle, preview, logo);
+                    // Group vs DM only affects the small glyph asset; unknown → treat as group balloon.
+                    PushLiveTile(chatTileId, safeTitle, preview, logo, isGroup: true);
                     ApplyBadge(chatTileId, unreadCount);
                 }
 
@@ -530,7 +536,8 @@ namespace Unison.Uwp.Services
                 tileId,
                 ResolveDisplayName(chat),
                 preview,
-                ResolveLogoUri(chat.GetAvatarUrl(preferHigh: false)));
+                ResolveLogoUri(chat.GetAvatarUrl(preferHigh: false)),
+                chat.IsGroup);
             // Badge after content so the queue Clear cannot leave a stale empty counter frame.
             ApplyBadge(tileId, chat.UnreadCount);
         }
@@ -584,20 +591,23 @@ namespace Unison.Uwp.Services
         }
 
         /// <summary>
-        /// Chat Start tile (Imgur-style): medium title + preview centered with message emoji;
-        /// TileSmall queue rotates photo ↔ emoji. Badge carries the unread count.
+        /// Chat Start tile: medium title + preview centered with message emoji;
+        /// TileSmall rotates photo ↔ speech balloon (groups / chat pins). Badge = unread.
         /// </summary>
         private static void PushLiveTile(
             string tileId,
             string title,
             string preview,
-            Uri imageUri)
+            Uri imageUri,
+            bool isGroup)
         {
+            _ = isGroup; // Balloon is the small-tile glyph for every chat pin (esp. groups).
             string safeTitle = EscapeXml(Truncate(title, 40));
             string safePreview = EscapeXml(Truncate(preview, PreviewMaxChars));
             string imageSrc = EscapeXml(imageUri?.AbsoluteUri ?? DefaultLogoUri.AbsoluteUri);
+            string balloonSrc = EscapeXml(ChatBalloonUri.AbsoluteUri);
 
-            // Medium / wide: vertically centered like Imgur text frames — emoji + name + preview.
+            // Medium / wide: vertically centered — emoji + name + preview.
             string mediumBody =
                 "<text hint-style=\"title\" hint-align=\"center\">" + TileMessageEmoji + "</text>" +
                 "<text hint-style=\"base\" hint-align=\"center\" hint-maxLines=\"2\">" + safeTitle + "</text>" +
@@ -614,8 +624,8 @@ namespace Unison.Uwp.Services
                     : "<text hint-style=\"bodySubtle\" hint-align=\"center\" hint-wrap=\"true\">" +
                       safePreview + "</text>");
 
-            string smallGlyphBody =
-                "<text hint-style=\"title\" hint-align=\"center\">" + TileMessageEmoji + "</text>";
+            string smallBalloonBody =
+                "<image placement=\"background\" src=\"" + balloonSrc + "\"/>";
 
             var updater = TileUpdateManager.CreateTileUpdaterForSecondaryTile(tileId);
             try
@@ -628,7 +638,6 @@ namespace Unison.Uwp.Services
             }
 
             // Distinct Tag values — without them the second Update replaces the first and small never cycles.
-            // No displayName strip — title already sits centered in the adaptive body (Imgur-style).
             updater.Update(BuildQueuedTileNotification(
                 smallBody: "<image placement=\"background\" hint-crop=\"circle\" src=\"" + imageSrc + "\"/>",
                 mediumBody: mediumBody,
@@ -639,7 +648,7 @@ namespace Unison.Uwp.Services
                 textStacking: "center"));
 
             updater.Update(BuildQueuedTileNotification(
-                smallBody: smallGlyphBody,
+                smallBody: smallBalloonBody,
                 mediumBody: mediumBody,
                 wideBody: wideBody,
                 branding: "none",
@@ -655,10 +664,10 @@ namespace Unison.Uwp.Services
             "profile=" + Uri.EscapeDataString(chatJid ?? string.Empty);
 
         /// <summary>
-        /// Contact Profile Start tile queue (2 frames, Imgur-style):
-        /// 1) round peek photo + contact emoji beside the name at the bottom;
-        /// 2) vertically centered “Nenhuma Nova Mensagem” / “N Novas Mensagens”.
-        /// TileSmall rotates photo ↔ contact emoji. Badge mirrors unread on both sizes.
+        /// Contact Profile Start tile queue (2 frames):
+        /// 1) centered about/recado (or “Nenhum Recado…”); name on the tile plate bottom;
+        /// 2) centered unread line; name on the plate bottom again.
+        /// TileSmall rotates photo ↔ profile silhouette. Badge mirrors unread on both sizes.
         /// </summary>
         private static void PushContactLiveTiles(
             string tileId,
@@ -667,10 +676,15 @@ namespace Unison.Uwp.Services
             string motto,
             int unreadCount)
         {
-            _ = motto;
             string name = string.IsNullOrWhiteSpace(displayName) ? "User" : displayName.Trim();
             string safeName = EscapeXml(Truncate(name, 40));
             string imageSrc = EscapeXml(imageUri?.AbsoluteUri ?? DefaultLogoUri.AbsoluteUri);
+            string glyphSrc = EscapeXml(ProfileGlyphUri.AbsoluteUri);
+
+            string mottoLine = string.IsNullOrWhiteSpace(motto)
+                ? LocalizedStrings.Get("Tile_ContactNoMotto", "No status message")
+                : Truncate(motto.Trim(), MottoMaxChars);
+            string safeMotto = EscapeXml(mottoLine);
 
             string unreadLine = unreadCount > 0
                 ? EscapeXml(Truncate(
@@ -678,37 +692,22 @@ namespace Unison.Uwp.Services
                     60))
                 : EscapeXml(LocalizedStrings.Get("Tile_ContactNoNewMessages", "No new messages"));
 
-            // Frame 1 — round photo peeks; name + contact emoji sit under it.
-            string mediumPhotoName =
-                "<image placement=\"peek\" hint-crop=\"circle\" src=\"" + imageSrc + "\"/>" +
-                "<group>" +
-                "<subgroup hint-weight=\"1\">" +
-                "<text hint-style=\"title\" hint-align=\"center\">" + TileContactEmoji + "</text>" +
-                "</subgroup>" +
-                "<subgroup hint-weight=\"3\">" +
-                "<text hint-style=\"base\" hint-maxLines=\"2\" hint-align=\"left\">" + safeName + "</text>" +
-                "</subgroup>" +
-                "</group>";
+            // Frame 1 — about/recado centered; displayName branding puts the contact name on the plate.
+            string mediumMotto =
+                "<text hint-style=\"body\" hint-align=\"center\" hint-wrap=\"true\" hint-maxLines=\"4\">" +
+                safeMotto + "</text>";
+            string wideMotto =
+                "<text hint-style=\"subtitle\" hint-align=\"center\" hint-wrap=\"true\" hint-maxLines=\"4\">" +
+                safeMotto + "</text>";
 
-            string widePhotoName =
-                "<image placement=\"peek\" hint-crop=\"circle\" src=\"" + imageSrc + "\"/>" +
-                "<group>" +
-                "<subgroup hint-weight=\"1\">" +
-                "<text hint-style=\"header\" hint-align=\"center\">" + TileContactEmoji + "</text>" +
-                "</subgroup>" +
-                "<subgroup hint-weight=\"3\">" +
-                "<text hint-style=\"subtitle\" hint-maxLines=\"2\">" + safeName + "</text>" +
-                "</subgroup>" +
-                "</group>";
-
-            // Frame 2 — unread status centered vertically (Imgur TextStacking.Center).
+            // Frame 2 — unread status centered (same name branding).
             string mediumUnread =
                 "<text hint-style=\"body\" hint-align=\"center\" hint-wrap=\"true\">" + unreadLine + "</text>";
             string wideUnread =
                 "<text hint-style=\"subtitle\" hint-align=\"center\" hint-wrap=\"true\">" + unreadLine + "</text>";
 
             string smallGlyphBody =
-                "<text hint-style=\"title\" hint-align=\"center\">" + TileContactEmoji + "</text>";
+                "<image placement=\"background\" src=\"" + glyphSrc + "\"/>";
 
             var updater = TileUpdateManager.CreateTileUpdaterForSecondaryTile(tileId);
             try
@@ -720,21 +719,22 @@ namespace Unison.Uwp.Services
             {
             }
 
+            // branding=name → name band on the tile itself (bottom), not inside adaptive text.
             updater.Update(BuildQueuedTileNotification(
                 smallBody: "<image placement=\"background\" hint-crop=\"circle\" src=\"" + imageSrc + "\"/>",
-                mediumBody: mediumPhotoName,
-                wideBody: widePhotoName,
-                branding: "none",
-                displayName: null,
+                mediumBody: mediumMotto,
+                wideBody: wideMotto,
+                branding: "name",
+                displayName: safeName,
                 queueTag: QueueTagPhoto,
-                textStacking: null));
+                textStacking: "center"));
 
             updater.Update(BuildQueuedTileNotification(
                 smallBody: smallGlyphBody,
                 mediumBody: mediumUnread,
                 wideBody: wideUnread,
-                branding: "none",
-                displayName: null,
+                branding: "name",
+                displayName: safeName,
                 queueTag: QueueTagUnread,
                 textStacking: "center"));
         }
@@ -806,13 +806,14 @@ namespace Unison.Uwp.Services
         {
             tile.VisualElements.Square150x150Logo = logo;
             tile.VisualElements.Square71x71Logo = logo;
-            // Name + motto live on the adaptive queue, not under the static logo.
+            // Live frames use branding=name; keep static plate nameless to avoid double bands.
             tile.VisualElements.ShowNameOnSquare150x150Logo = false;
             tile.VisualElements.ForegroundText = ForegroundText.Light;
         }
 
         /// <summary>
-        /// Contact about / "recado". Empty until profile status is synced onto the chat model.
+        /// Contact about / "recado". Empty until profile status is synced onto the chat model
+        /// (tile then shows <c>Tile_ContactNoMotto</c>).
         /// </summary>
         private static string ResolveContactMotto(ChatItem chat)
         {

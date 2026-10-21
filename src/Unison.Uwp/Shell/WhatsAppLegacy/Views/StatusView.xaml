@@ -63,14 +63,19 @@
                               MenuClicked="StatusListPart_MenuClicked"
                               AuthorSelected="StatusListPart_AuthorSelected"/>
 
-        <!-- Right edge of the list, desktop only — same hairline as ShellView chats. -->
-        <Border x:Name="ListDesktopDivider"
-                Width="1"
-                HorizontalAlignment="Right"
-                VerticalAlignment="Stretch"
-                Background="{ThemeResource ChatDetailInputBarTopBorderBrush}"
-                Visibility="Collapsed"
-                IsHitTestVisible="False"/>
+        <!-- Right edge of the list, desktop only — vertical hairline with top/bottom gap
+             (not full-bleed). Tune Margin to move the gap; StrokeThickness for weight. -->
+        <Line x:Name="ListDesktopDivider"
+              X1="0" Y1="0"
+              X2="0" Y2="1"
+              Stretch="Fill"
+              StrokeThickness="1"
+              Stroke="{ThemeResource ChatDetailInputBarTopBorderBrush}"
+              HorizontalAlignment="Right"
+              VerticalAlignment="Stretch"
+              Margin="0,98,0,144"
+              Visibility="Collapsed"
+              IsHitTestVisible="False"/>
 
         <views:StatusDetailView x:Name="StatusDetailPart" Grid.Column="1"/>
 

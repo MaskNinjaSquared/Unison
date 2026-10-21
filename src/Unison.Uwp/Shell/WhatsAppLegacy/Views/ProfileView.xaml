@@ -58,12 +58,14 @@
                        Visibility="Collapsed"/>
         </Grid>
 
-        <!-- Same host + LegacyCommandBarStyle as ChatListView (expandable labels, centered icons). -->
+        <!-- Bottom-aligned so Compact→Open paints labels upward over the profile (desktop).
+             Stretch + MinHeight host clips / opens downward inside ContentFrame. -->
         <Grid Grid.Row="2"
               MinHeight="{StaticResource LegacyCommandBarCompactHeight}"
               Background="{ThemeResource LegacyCommandBarBackgroundBrush}">
             <CommandBar x:Name="ProfileCommandBar"
                         Style="{StaticResource LegacyCommandBarStyle}"
+                        VerticalAlignment="Bottom"
                         Loaded="ProfileCommandBar_Loaded">
                 <AppBarButton x:Name="StartChatButton"
                               Style="{StaticResource LegacyAppBarButtonStyle}"
