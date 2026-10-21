@@ -24,11 +24,12 @@ namespace Unison.Uwp.Services
         private static readonly Uri DefaultLogoUri =
             new Uri("ms-appx:///Assets/Square150x150Logo.png");
 
-        /// <summary>Segoe MDL2 Message (E8BD) — adaptive text, not a PNG plate.</summary>
-        private const string Mdl2MessageGlyphXml = "&#xE8BD;";
+        /// <summary>
+        /// Adaptive tiles paint with Segoe UI, not MDL2 — use emoji (same approach as Imgur).
+        /// </summary>
+        private const string TileMessageEmoji = "💬";
 
-        /// <summary>Segoe MDL2 Contact2 (E77B) — adaptive text, not a PNG plate.</summary>
-        private const string Mdl2ContactGlyphXml = "&#xE77B;";
+        private const string TileContactEmoji = "👤";
 
         private const string TileIdPrefix = "c_";
         private const string ContactTileIdPrefix = "p_";
@@ -583,8 +584,8 @@ namespace Unison.Uwp.Services
         }
 
         /// <summary>
-        /// Chat Start tile (Imgur-style): medium title + preview centered with MDL2 message glyph;
-        /// TileSmall queue rotates photo ↔ MDL2 glyph. Badge carries the unread count.
+        /// Chat Start tile (Imgur-style): medium title + preview centered with message emoji;
+        /// TileSmall queue rotates photo ↔ emoji. Badge carries the unread count.
         /// </summary>
         private static void PushLiveTile(
             string tileId,
@@ -596,9 +597,9 @@ namespace Unison.Uwp.Services
             string safePreview = EscapeXml(Truncate(preview, PreviewMaxChars));
             string imageSrc = EscapeXml(imageUri?.AbsoluteUri ?? DefaultLogoUri.AbsoluteUri);
 
-            // Medium / wide: vertically centered like Imgur text frames — glyph + name + preview.
+            // Medium / wide: vertically centered like Imgur text frames — emoji + name + preview.
             string mediumBody =
-                "<text hint-style=\"title\" hint-align=\"center\">" + Mdl2MessageGlyphXml + "</text>" +
+                "<text hint-style=\"title\" hint-align=\"center\">" + TileMessageEmoji + "</text>" +
                 "<text hint-style=\"base\" hint-align=\"center\" hint-maxLines=\"2\">" + safeTitle + "</text>" +
                 (string.IsNullOrEmpty(safePreview)
                     ? string.Empty
@@ -606,7 +607,7 @@ namespace Unison.Uwp.Services
                       safePreview + "</text>");
 
             string wideBody =
-                "<text hint-style=\"header\" hint-align=\"center\">" + Mdl2MessageGlyphXml + "</text>" +
+                "<text hint-style=\"header\" hint-align=\"center\">" + TileMessageEmoji + "</text>" +
                 "<text hint-style=\"subtitle\" hint-align=\"center\" hint-maxLines=\"2\">" + safeTitle + "</text>" +
                 (string.IsNullOrEmpty(safePreview)
                     ? string.Empty
@@ -614,7 +615,7 @@ namespace Unison.Uwp.Services
                       safePreview + "</text>");
 
             string smallGlyphBody =
-                "<text hint-style=\"title\" hint-align=\"center\">" + Mdl2MessageGlyphXml + "</text>";
+                "<text hint-style=\"title\" hint-align=\"center\">" + TileMessageEmoji + "</text>";
 
             var updater = TileUpdateManager.CreateTileUpdaterForSecondaryTile(tileId);
             try
@@ -655,9 +656,9 @@ namespace Unison.Uwp.Services
 
         /// <summary>
         /// Contact Profile Start tile queue (2 frames, Imgur-style):
-        /// 1) round peek photo + MDL2 contact glyph beside the name at the bottom;
+        /// 1) round peek photo + contact emoji beside the name at the bottom;
         /// 2) vertically centered “Nenhuma Nova Mensagem” / “N Novas Mensagens”.
-        /// TileSmall rotates photo ↔ MDL2 contact glyph. Badge mirrors unread on both sizes.
+        /// TileSmall rotates photo ↔ contact emoji. Badge mirrors unread on both sizes.
         /// </summary>
         private static void PushContactLiveTiles(
             string tileId,
@@ -677,12 +678,12 @@ namespace Unison.Uwp.Services
                     60))
                 : EscapeXml(LocalizedStrings.Get("Tile_ContactNoNewMessages", "No new messages"));
 
-            // Frame 1 — round photo peeks; name + MDL2 Contact2 sit under it.
+            // Frame 1 — round photo peeks; name + contact emoji sit under it.
             string mediumPhotoName =
                 "<image placement=\"peek\" hint-crop=\"circle\" src=\"" + imageSrc + "\"/>" +
                 "<group>" +
                 "<subgroup hint-weight=\"1\">" +
-                "<text hint-style=\"title\" hint-align=\"center\">" + Mdl2ContactGlyphXml + "</text>" +
+                "<text hint-style=\"title\" hint-align=\"center\">" + TileContactEmoji + "</text>" +
                 "</subgroup>" +
                 "<subgroup hint-weight=\"3\">" +
                 "<text hint-style=\"base\" hint-maxLines=\"2\" hint-align=\"left\">" + safeName + "</text>" +
@@ -693,7 +694,7 @@ namespace Unison.Uwp.Services
                 "<image placement=\"peek\" hint-crop=\"circle\" src=\"" + imageSrc + "\"/>" +
                 "<group>" +
                 "<subgroup hint-weight=\"1\">" +
-                "<text hint-style=\"header\" hint-align=\"center\">" + Mdl2ContactGlyphXml + "</text>" +
+                "<text hint-style=\"header\" hint-align=\"center\">" + TileContactEmoji + "</text>" +
                 "</subgroup>" +
                 "<subgroup hint-weight=\"3\">" +
                 "<text hint-style=\"subtitle\" hint-maxLines=\"2\">" + safeName + "</text>" +
@@ -707,7 +708,7 @@ namespace Unison.Uwp.Services
                 "<text hint-style=\"subtitle\" hint-align=\"center\" hint-wrap=\"true\">" + unreadLine + "</text>";
 
             string smallGlyphBody =
-                "<text hint-style=\"title\" hint-align=\"center\">" + Mdl2ContactGlyphXml + "</text>";
+                "<text hint-style=\"title\" hint-align=\"center\">" + TileContactEmoji + "</text>";
 
             var updater = TileUpdateManager.CreateTileUpdaterForSecondaryTile(tileId);
             try
