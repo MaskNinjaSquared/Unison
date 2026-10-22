@@ -191,6 +191,7 @@ Do in order. Each phase has a done check.
 | Live history map / usync alias file | `HistoryLiveMessageMapper`, `UsyncAliasFiling` | — |
 | History listable / render / participant | `HistorySyncContentFilter`, `MessageRenderReader` (+ `MessageRenderInfo`), `WebMessageParticipant`, `MessageKeyAltJidScan` | `ProtoMessageUnwrap` stays in Core for `ChatMessageMapper`; `MediaPreviewTag` stays (presentation) |
 | History row map / list tip | `HistoryMessageMapper`, `ChatPreviewTip` | `MessageTimestampValidity` / `LegacyDeletedPreview` stay (State + `ChatPreviewNormalizer`); `ChatMessageOrder` stays (State / VMs) |
+| Deep-link list UI / reorder / timeline merge | `ChatListDeepLinkSyncUi`, `ChatListNamesAppliedRefresh`, `ChatListReorderTrigger`, `ChatTimelineLiveMerge`; `IChatService` / `IMessageService` APIs | `ChatTimelineMergeMode` stays in Core; `ListEnrichmentPhase` / `SyncPhaseStatus` stay (State + list localize) |
 
 **Inventory note (Phase C remainder):** a Core-helpers scan that tagged ~15 as MOVE_NOW (VM/State/Models = 0) over-counted. Several were freed by extracting `ProtoMessageUnwrap` so Core mappers no longer import the history filter. Still blocked: `NameLookupCandidates` ← `PushNameLookup`; `GroupIdPlaceholder` ← `CommunityHubPresentation`; `MessageTimestampValidity` / `LegacyDeletedPreview` ← State + `ChatPreviewTip`; `OutgoingFailureClassification` / `ConnectionStabilityExperiment` stay with `OutgoingSendAttemptOutcome` on contracts. Real remaining Phase C work is **NEEDS_CUT** (VM → façade) and **KEEP_STATE_COUPLED**.
 
