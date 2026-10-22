@@ -165,9 +165,9 @@ namespace Unison.Core.ViewModels
 
                     // Self-chat / dual-key overlap: SQLite can return a page already on screen.
                     // Advance past that tip once so scroll-up is not stuck with prepended=0.
-                    if (TimelineLoadMorePage.IsDuplicateOnlyPage(older.Count, prepended))
+                    if (_messageService.IsTimelineDuplicateOnlyPage(older.Count, prepended))
                     {
-                        ChatMessage tip = TimelineLoadMorePage.OldestTip(older);
+                        ChatMessage tip = _messageService.OldestTimelinePageTip(older);
                         if (tip != null)
                         {
                             older = await _messageService.LoadMoreMessagesAsync(

@@ -523,7 +523,8 @@ namespace Unison.Core.ViewModels
             int at;
             string query;
             int length;
-            if (!MentionSearch.TryReadToken(text, caret, out at, out query, out length))
+            if (_messageService == null ||
+                !_messageService.TryReadMentionToken(text, caret, out at, out query, out length))
             {
                 CloseMentionMenu();
                 return;
@@ -538,7 +539,7 @@ namespace Unison.Core.ViewModels
             string detail = _strings != null
                 ? _strings.Get("ChatDetail_MentionEveryoneDetail", "Mention all group members")
                 : "Mention all group members";
-            IReadOnlyList<MentionChoice> rows = MentionSearch.Search(
+            IReadOnlyList<MentionChoice> rows = _messageService.SearchMentionChoices(
                 ActiveChat.GroupMembers,
                 query,
                 everyone,

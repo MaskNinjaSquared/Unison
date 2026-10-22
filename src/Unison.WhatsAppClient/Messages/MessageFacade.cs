@@ -353,6 +353,42 @@ namespace Unison.WhatsAppClient.Messages
             return ChatPreviewMessageFactory.IsPreviewFallbackId(id);
         }
 
+        /// <inheritdoc />
+        public bool TryReadMentionToken(string text, int caret, out int at, out string query, out int length)
+        {
+            return MentionSearch.TryReadToken(text, caret, out at, out query, out length);
+        }
+
+        /// <inheritdoc />
+        public IReadOnlyList<MentionChoice> SearchMentionChoices(
+            IEnumerable<GroupMember> members,
+            string query,
+            string everyoneLabel,
+            string everyoneDetail,
+            string everyoneAvatarUrl,
+            Func<GroupMember, bool> exclude = null)
+        {
+            return MentionSearch.Search(
+                members,
+                query,
+                everyoneLabel,
+                everyoneDetail,
+                everyoneAvatarUrl,
+                exclude);
+        }
+
+        /// <inheritdoc />
+        public bool IsTimelineDuplicateOnlyPage(int returnedCount, int prependedCount)
+        {
+            return TimelineLoadMorePage.IsDuplicateOnlyPage(returnedCount, prependedCount);
+        }
+
+        /// <inheritdoc />
+        public ChatMessage OldestTimelinePageTip(IList<ChatMessage> chronologicalPage)
+        {
+            return TimelineLoadMorePage.OldestTip(chronologicalPage);
+        }
+
         public async Task<List<ChatMessage>> LoadChatMediaIndexAsync(string jid, int limit = 400)
         {
             var result = new List<ChatMessage>();

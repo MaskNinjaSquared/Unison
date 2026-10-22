@@ -81,6 +81,28 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>True when <paramref name="id"/> was minted by <see cref="TryCreatePreviewFallback"/>.</summary>
         bool IsPreviewFallbackMessageId(string id);
 
+        /// <summary>
+        /// The @ at <paramref name="caret"/> when it starts a mention token (groups composer).
+        /// </summary>
+        bool TryReadMentionToken(string text, int caret, out int at, out string query, out int length);
+
+        /// <summary>@ menu rows: Everyone on top, then roster matches.</summary>
+        IReadOnlyList<MentionChoice> SearchMentionChoices(
+            IEnumerable<GroupMember> members,
+            string query,
+            string everyoneLabel,
+            string everyoneDetail,
+            string everyoneAvatarUrl,
+            Func<GroupMember, bool> exclude = null);
+
+        /// <summary>
+        /// True when a load-more page returned rows already on screen (cursor overlap).
+        /// </summary>
+        bool IsTimelineDuplicateOnlyPage(int returnedCount, int prependedCount);
+
+        /// <summary>Oldest row of a chronological page — cursor for the next load-more.</summary>
+        ChatMessage OldestTimelinePageTip(IList<ChatMessage> chronologicalPage);
+
         /// <summary>Asks the phone for older messages for an open chat.</summary>
         Task<bool> EnsureHistoryOnDemandAsync(string jid, int count);
 

@@ -158,6 +158,24 @@ namespace Unison.Core.Tests.ViewModels
             public void CopyReactionState(ChatMessage target, ChatMessage source) { }
             public ChatMessage TryCreatePreviewFallback(ChatItem chat, string selfDisplayName = null) => null;
             public bool IsPreviewFallbackMessageId(string id) => false;
+            public bool TryReadMentionToken(string text, int caret, out int at, out string query, out int length)
+            {
+                at = -1;
+                query = string.Empty;
+                length = 0;
+                return false;
+            }
+
+            public IReadOnlyList<MentionChoice> SearchMentionChoices(
+                IEnumerable<GroupMember> members,
+                string query,
+                string everyoneLabel,
+                string everyoneDetail,
+                string everyoneAvatarUrl,
+                Func<GroupMember, bool> exclude = null) => Array.Empty<MentionChoice>();
+
+            public bool IsTimelineDuplicateOnlyPage(int returnedCount, int prependedCount) => false;
+            public ChatMessage OldestTimelinePageTip(IList<ChatMessage> chronologicalPage) => null;
             public Task<bool> EnsureHistoryOnDemandAsync(string jid, int count) => throw new NotImplementedException();
             public bool IsHistoryOnDemandPending(string jid) => false;
             public Task<ChatMessage> SendTextMessageAsync(string jid, string text) => throw new NotImplementedException();

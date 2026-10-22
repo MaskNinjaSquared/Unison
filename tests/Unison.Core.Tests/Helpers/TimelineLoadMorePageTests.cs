@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using Unison.Core.Helpers;
 using Unison.Core.Models;
+using Unison.WhatsAppClient.Helpers;
 using Xunit;
 
 namespace Unison.Core.Tests.Helpers
