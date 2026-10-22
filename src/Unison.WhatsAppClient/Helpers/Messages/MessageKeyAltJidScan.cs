@@ -7,7 +7,6 @@
 // remoteJidAlt.
 // =============================================================================
 using System.Text;
-using Unison.Core.Helpers;
 
 namespace Unison.WhatsAppClient.Helpers
 {
