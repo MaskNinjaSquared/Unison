@@ -123,10 +123,7 @@ namespace Unison.Core.ViewModels
         /// Per open-chat lookup of group participant labels/avatars (plus 1:1 indexes).
         /// Owned for the VM lifetime; roster hooks detach on uninitialize without Dispose.
         /// </summary>
-        private readonly GroupParticipantLookup _participants;
-
-        /// <summary>What participant resolution is allowed to reach. Shared with the lookup above.</summary>
-        private readonly ParticipantResolutionContext _participantContext;
+        private readonly IGroupParticipantLookup _participants;
 
         /// <summary>Which JIDs are the same person (PN vs LID).</summary>
         private readonly IJidResolver _jids;
@@ -185,8 +182,6 @@ namespace Unison.Core.ViewModels
             _sessionLogger = sessionLogger;
             _diagnostics = diagnostics;
             _authorProjection = authorProjection;
-
-            _participantContext = new ParticipantResolutionContext(jids, contactService, chatState, personStore);
 
             // Open-chat bubble budget follows memory tier (not DeviceFamily): Unsupported/Low keep
             // the old Mobile 30/80 window; High keeps the desktop 50/150.
@@ -300,7 +295,11 @@ namespace Unison.Core.ViewModels
                 () => _ = CallPhoneAsync(),
                 () => CanCallPhone);
 
-            _participants = new GroupParticipantLookup(_participantContext, SelfListDisplayName);
+            _participants = _groupService != null
+                ? _groupService.CreateOpenChatParticipantLookup(SelfListDisplayName)
+                : new GroupParticipantLookup(
+                    new ParticipantResolutionContext(jids, contactService, chatState, personStore),
+                    SelfListDisplayName);
             _participants.ParticipantAvatarChanged += OnParticipantAvatarChanged;
         }
 
@@ -932,7 +931,7 @@ namespace Unison.Core.ViewModels
 
         private void Contacts_DisplayNamesUpdated(object sender, EventArgs e)
         {
-            GroupParticipantLookup.InvalidateDirectChatIndex();
+            _groupService?.InvalidateParticipantDirectChatIndex();
 
             if (_dispatcher != null)
             {

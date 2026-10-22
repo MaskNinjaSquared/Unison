@@ -105,7 +105,6 @@ namespace Unison.Core.ViewModels
                 member,
                 participantJid ?? member.Jid ?? member.Lid ?? member.PhoneNumber,
                 ActiveChat,
-                _participantContext,
                 nameHint);
 
             ShowInfoPane(_infoFactory.CreateGroupMember(ActiveChat, member));

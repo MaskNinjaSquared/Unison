@@ -685,7 +685,7 @@ namespace Unison.Core.ViewModels
 
         /// <summary>
         /// Timeline scan: true when the quoted message id matches an outgoing bubble on screen.
-        /// Self-JID checks live in <see cref="GroupParticipantLookup"/>.
+        /// Self-JID checks live in <see cref="IGroupParticipantLookup"/>.
         /// </summary>
         private bool QuotedMessageIdIsFromMe(string quotedId)
         {
