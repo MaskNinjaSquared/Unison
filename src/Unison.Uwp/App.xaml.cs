@@ -736,6 +736,7 @@ namespace Unison.Uwp
             services.AddSingleton<ShellViewModel>();
             services.AddSingleton<IAppActivationRouter>(sp => new AppActivationRouter(
                 sp.GetRequiredService<ShellViewModel>(),
+                sp.GetRequiredService<IChatService>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>()));
             services.AddTransient<ChatListViewModel>();
             services.AddTransient<ChatDetailViewModel>();

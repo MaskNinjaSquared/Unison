@@ -1,7 +1,7 @@
 using System;
 using System.Diagnostics;
 using Unison.Core.Contracts;
-using Unison.Core.Helpers;
+using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.ViewModels;
 using Windows.Foundation;
 
@@ -14,11 +14,16 @@ namespace Unison.Uwp.Services
     public sealed class AppActivationRouter : IAppActivationRouter
     {
         private readonly ShellViewModel _shell;
+        private readonly IChatService _chats;
         private readonly IRuntimeDiagnostics _diagnostics;
 
-        public AppActivationRouter(ShellViewModel shell, IRuntimeDiagnostics diagnostics)
+        public AppActivationRouter(
+            ShellViewModel shell,
+            IChatService chats,
+            IRuntimeDiagnostics diagnostics)
         {
             _shell = shell ?? throw new ArgumentNullException(nameof(shell));
+            _chats = chats ?? throw new ArgumentNullException(nameof(chats));
             _diagnostics = diagnostics;
         }
 
@@ -38,7 +43,7 @@ namespace Unison.Uwp.Services
 
                 // Running/Suspended: list is (or was) already up — open the chat only.
                 // NotRunning/Terminated/ClosedByUser: cold path may delay list until detail loads.
-                bool delayChatList = ChatListDeepLinkSyncUi.ShouldArmListHold(appWasAlreadyOpen);
+                bool delayChatList = _chats.ShouldArmDeepLinkListHold(appWasAlreadyOpen);
                 _shell.QueueOpenChatFromActivation(arguments, delayChatList);
             }
             catch (Exception ex)
