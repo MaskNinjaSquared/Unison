@@ -182,6 +182,27 @@ Do in order. Each phase has a done check.
 - Prefer deleting the compatibility client once ConnectionFacade + SocketBridge cover lifecycle.
 - Done when: solution layout matches the target diagram; Background still references **only** `Unison.Baileys`.
 
+### Phase E (future) — client-owned public I/O
+
+**Not** Phase C/D work. Long-term goal: `Unison.WhatsAppClient` publishable / reusable without dragging Unison UI models — a portable WhatsApp **policy** library whose **entry and exit** types live on the client (or a thin contracts package next to it), not on Unison.Core ViewModel-shaped models.
+
+Until E ships, façades **keep** returning Core `Models` / `Contracts` (dependency arrow `WhatsAppClient` → `Core` stays). That is portable vs WinRT; it is **not** yet portable vs Unison’s app domain.
+
+| Now (C/D) | Later (E) |
+|---|---|
+| `IMessageService.Send…` takes/returns Core `ChatMessage` / strings already in Core contracts | Client DTOs / request–response records on the client surface (`SendTextRequest`, `ChatMessageDto`, …) |
+| Core ViewModels call `I*` in Core; implementation is WhatsAppClient | Core (or a host mapper) maps client I/O ↔ Core models at the composition root / thin adapter |
+| One enum vocabulary in Core (`ChatPreviewKind`, …) | Client may expose its own wire-facing or policy-facing enums **only where the concept diverges**; prefer shared primitives (`string` jid, `DateTime`, status codes) over mirrored enum pairs |
+
+**How to grow toward E without a big-bang rewrite**
+
+1. Do **not** duplicate enums or models during C/D “because E is coming”.
+2. Prefer **new** façade methods to take explicit parameter objects (still Core types today if that is what contracts use).
+3. When cutting a VM → domain-helper call, put policy on the façade and leave presentation (`ChatPreviewNormalizer`) in Core — that seam is what E will map across later.
+4. A dedicated E pass then: move or wrap `Contracts/WhatsApp` I/O onto the client assembly; leave Core with presentation models + mappers; WhatsAppClient drops the Core **models** reference if contracts no longer need them (Core may still be referenced for nothing, or only via an optional adapter package).
+
+**Done when (E):** a second host can reference WhatsAppClient + Socket + Baileys and speak only client I/O types — no `Unison.Core` ViewModels/models required to call the client.
+
 ---
 
 ## Non-goals
@@ -191,6 +212,7 @@ Do in order. Each phase has a done check.
 - A second WhatsApp client implemented in parallel with `WhatsAppService`.
 - Cold restore of a broker-owned socket after process death (still not wired; see [Background broker](Background-Broker) / [Migration](Migration)).
 - Merging Application into Baileys or Socket.
+- **During C/D:** dual Core↔client model/enum trees for the same concept (deferred to Phase E; see above).
 
 ---
 
@@ -214,6 +236,7 @@ Do in order. Each phase has a done check.
 | B | Extraction wiki phase 4 target surface; no policy growth on `IWhatsAppService` |
 | C | `Unison.WhatsAppClient` builds as `netstandard2.0` with no WinRT |
 | D | UWP is host-only; Background → Baileys only (unchanged rule) |
+| E | Client public I/O types owned by WhatsAppClient (or sibling contracts); Core maps at the host edge; second host can call client without Core UI models |
 
 ---
 
