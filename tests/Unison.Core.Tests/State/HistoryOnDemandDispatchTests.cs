@@ -237,7 +237,7 @@ namespace Unison.Core.Tests.State
                 return Task.FromResult(stanzaId);
             }
 
-            public Task<string> RequestFullHistoryAsync(string stanzaId)
+            public Task<string> RequestFullHistoryAsync(string stanzaId, string requestId = null)
             {
                 if (ThrowOnSend)
                 {

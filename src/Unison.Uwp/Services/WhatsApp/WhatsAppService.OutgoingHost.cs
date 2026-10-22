@@ -17,7 +17,8 @@ namespace Unison.Uwp.Services.WhatsApp
     /// Implemented explicitly so none of it shows on the client's own surface: the only way in
     /// is the <see cref="IOutgoingMessageHost"/> registration, and the only caller is the
     /// façade. Each member is one step the old send methods took inline; the order they run
-    /// in is decided by <see cref="OutgoingTextSend"/> and <see cref="OutgoingMediaSend"/>.
+    /// in is decided by <see cref="Unison.WhatsAppClient.Helpers.OutgoingTextSend"/> and
+    /// <see cref="Unison.WhatsAppClient.Helpers.OutgoingMediaSend"/>.
     /// </remarks>
     public partial class WhatsAppService : IOutgoingMessageHost
     {

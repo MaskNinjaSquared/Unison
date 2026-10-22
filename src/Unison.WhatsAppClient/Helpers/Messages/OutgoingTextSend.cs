@@ -12,9 +12,10 @@ using System.Threading.Tasks;
 using Unison.Baileys.Crypto;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
+using Unison.Core.Helpers;
 using Unison.Core.Models;
 
-namespace Unison.Core.Helpers
+namespace Unison.WhatsAppClient.Helpers
 {
     public sealed class OutgoingTextSend
     {
