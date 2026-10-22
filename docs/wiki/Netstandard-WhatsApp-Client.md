@@ -180,7 +180,7 @@ Do in order. Each phase has a done check.
 | Group roster rules | `GroupRosterRules`; `IGroupService.MemberMatches` / `MembershipPersonKeys` | Info pane no longer imports the helper |
 | Labels / media / Status UI | `MeaningfulChatLabel`, `ChatMediaFilter`, `StatusMediaDisplay`, `StatusItemDiagnostics` | `GroupIdPlaceholder` stays in Core (community presentation); VMs use `IContactService` / `IMessageService` / `IStatusService` |
 | Pin aliases / preview fallback | `ChatPinStoreKeys`, `ChatPreviewMessageFactory`; `IChatService.ApplyLocalStateAliasFallback` / `RememberPinnedUnderAliases`; `IMessageService.CopyReactionState` / `TryCreatePreviewFallback` | List batch + detail no longer import those helpers; `CopyReactionState` body still on `HistoryMessageMapper` |
-| Mute deadlines / delete confirm / member resolve | `ChatDeletionPrompt`; `IChatService` mute deadlines + `ConfirmAndDeleteAsync`; `IGroupService.EnrichMember` / `ResolveMemberAvatar` / `ResolveMemberDisplayName` | `ChatMuteHelper` stays in Core (`ChatItem` / `ChatLocalState`); `GroupParticipantResolver` stays (State + lookup); UWP list templates still mint mute deadlines locally |
+| Mute deadlines / delete confirm / member resolve | `ChatDeletionPrompt`; `IChatService` mute deadlines + `ConfirmAndDeleteAsync`; `IGroupService.EnrichMember` / `ResolveMemberAvatar` / `ResolveMemberDisplayName` | `ChatMuteHelper` stays in Core (`ChatItem` / `ChatLocalState`); `GroupParticipantResolver` stays (State + lookup); list-row mute flyout uses `IChatService` deadlines |
 
 ### Phase D — UWP as host only
 

@@ -212,17 +212,31 @@ namespace Unison.Uwp.UI.Templates
             var chat = ResolveChat(element);
             string tag = element?.Tag as string;
             long? until = null;
+            IChatService chats = null;
+            try
+            {
+                chats = App.Services?.GetService<IChatService>();
+            }
+            catch
+            {
+            }
+
+            if (chats == null)
+            {
+                return;
+            }
+
             if (string.Equals(tag, "mute8h", StringComparison.Ordinal))
             {
-                until = ChatMuteHelper.FromNow(ChatMuteHelper.EightHours);
+                until = chats.MuteUntilEightHoursFromNow();
             }
             else if (string.Equals(tag, "mute1w", StringComparison.Ordinal))
             {
-                until = ChatMuteHelper.FromNow(ChatMuteHelper.OneWeek);
+                until = chats.MuteUntilOneWeekFromNow();
             }
             else if (string.Equals(tag, "muteForever", StringComparison.Ordinal))
             {
-                until = ChatMuteHelper.ForeverUnixSeconds;
+                until = chats.MuteForeverUnixSeconds;
             }
 
             if (until.HasValue)
