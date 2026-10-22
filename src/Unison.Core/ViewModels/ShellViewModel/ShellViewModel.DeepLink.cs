@@ -98,7 +98,7 @@ namespace Unison.Core.ViewModels
             }
 
             _pendingOpenChatJid = jid.Trim();
-            bool armHold = ChatListDeepLinkSyncUi.ShouldArmListHold(
+            bool armHold = _chatService.ShouldArmDeepLinkListHold(
                 appWasAlreadyOpen: !delayChatListUntilConversationReady);
             if (armHold)
             {

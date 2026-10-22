@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Proto;
+using Unison.Core.Helpers;
 using Unison.Core.Models;
 
 namespace Unison.Core.Contracts.WhatsApp
@@ -102,6 +103,16 @@ namespace Unison.Core.Contracts.WhatsApp
 
         /// <summary>Oldest row of a chronological page — cursor for the next load-more.</summary>
         ChatMessage OldestTimelinePageTip(IList<ChatMessage> chronologicalPage);
+
+        /// <summary>
+        /// How a live recent-page reload lands on the open timeline (follow end / rejoin / hold scroll).
+        /// </summary>
+        ChatTimelineMergeMode ChooseTimelineMergeMode(bool followingEnd, bool isDetachedFromEnd);
+
+        /// <summary>
+        /// Whether a live row may insert while the window may be detached from the newest messages.
+        /// </summary>
+        bool ShouldInsertLiveTimelineRow(DateTime timestamp, DateTime? newestShown, bool isDetachedFromEnd);
 
         /// <summary>Asks the phone for older messages for an open chat.</summary>
         Task<bool> EnsureHistoryOnDemandAsync(string jid, int count);

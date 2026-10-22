@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Proto;
 using Unison.Core.Contracts.WhatsApp;
+using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.ViewModels;
 
@@ -176,6 +177,13 @@ namespace Unison.Core.Tests.ViewModels
 
             public bool IsTimelineDuplicateOnlyPage(int returnedCount, int prependedCount) => false;
             public ChatMessage OldestTimelinePageTip(IList<ChatMessage> chronologicalPage) => null;
+            public ChatTimelineMergeMode ChooseTimelineMergeMode(bool followingEnd, bool isDetachedFromEnd) =>
+                ChatTimelineLiveMerge.Choose(followingEnd, isDetachedFromEnd);
+            public bool ShouldInsertLiveTimelineRow(
+                DateTime timestamp,
+                DateTime? newestShown,
+                bool isDetachedFromEnd) =>
+                ChatTimelineLiveMerge.ShouldInsert(timestamp, newestShown, isDetachedFromEnd);
             public Task<bool> EnsureHistoryOnDemandAsync(string jid, int count) => throw new NotImplementedException();
             public bool IsHistoryOnDemandPending(string jid) => false;
             public Task<ChatMessage> SendTextMessageAsync(string jid, string text) => throw new NotImplementedException();

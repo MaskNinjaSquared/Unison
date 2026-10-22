@@ -644,7 +644,7 @@ namespace Unison.Core.ViewModels
         private bool IsDeepLinkHeld => _deepLinkHold != null && _deepLinkHold.IsHeld;
 
         private bool IsDeepLinkHeldPreferLoading =>
-            ChatListDeepLinkSyncUi.ShouldPreferLoadingOverlay(IsDeepLinkHeld, _listEverMaterialized);
+            _chatService.ShouldPreferDeepLinkLoadingOverlay(IsDeepLinkHeld, _listEverMaterialized);
 
         private void DeepLinkHold_Changed(object sender, EventArgs e)
         {

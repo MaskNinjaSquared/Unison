@@ -389,6 +389,21 @@ namespace Unison.WhatsAppClient.Messages
             return TimelineLoadMorePage.OldestTip(chronologicalPage);
         }
 
+        /// <inheritdoc />
+        public ChatTimelineMergeMode ChooseTimelineMergeMode(bool followingEnd, bool isDetachedFromEnd)
+        {
+            return ChatTimelineLiveMerge.Choose(followingEnd, isDetachedFromEnd);
+        }
+
+        /// <inheritdoc />
+        public bool ShouldInsertLiveTimelineRow(
+            DateTime timestamp,
+            DateTime? newestShown,
+            bool isDetachedFromEnd)
+        {
+            return ChatTimelineLiveMerge.ShouldInsert(timestamp, newestShown, isDetachedFromEnd);
+        }
+
         public async Task<List<ChatMessage>> LoadChatMediaIndexAsync(string jid, int limit = 400)
         {
             var result = new List<ChatMessage>();

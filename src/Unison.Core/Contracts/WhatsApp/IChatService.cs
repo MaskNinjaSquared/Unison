@@ -187,5 +187,28 @@ namespace Unison.Core.Contracts.WhatsApp
             string query,
             Func<string> resolveChatName,
             Func<string, string> resolveMentionName);
+
+        /// <summary>
+        /// Cold toast/tile may hold the chat list until the conversation loads; warm activation must not.
+        /// </summary>
+        bool ShouldArmDeepLinkListHold(bool appWasAlreadyOpen);
+
+        /// <summary>Hide SyncStatusPanel / status-bar sync line while a cold deep-link hold is active.</summary>
+        bool ShouldSuppressDeepLinkSyncBanner(bool deepLinkHeld);
+
+        /// <summary>
+        /// Prefer ChatList_Loading over sync-progress copy on the full-list overlay (cold toast only).
+        /// </summary>
+        bool ShouldPreferDeepLinkLoadingOverlay(bool deepLinkHeld, bool listAlreadyMaterialized);
+
+        /// <summary>
+        /// After mass display-name apply, rebuild VisibleChats only when search membership can change.
+        /// </summary>
+        bool RequiresNamesAppliedVisibleRebuild(string searchQuery);
+
+        /// <summary>
+        /// Which <see cref="ChatItem"/> property change can move a row (pin / recency / community link).
+        /// </summary>
+        bool RequiresVisibleReorder(string propertyName);
     }
 }

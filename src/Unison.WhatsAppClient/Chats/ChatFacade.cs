@@ -1366,5 +1366,25 @@ namespace Unison.WhatsAppClient.Chats
         {
             return ChatListQuery.Matches(chat, query, resolveChatName, resolveMentionName);
         }
+
+        /// <inheritdoc />
+        public bool ShouldArmDeepLinkListHold(bool appWasAlreadyOpen) =>
+            ChatListDeepLinkSyncUi.ShouldArmListHold(appWasAlreadyOpen);
+
+        /// <inheritdoc />
+        public bool ShouldSuppressDeepLinkSyncBanner(bool deepLinkHeld) =>
+            ChatListDeepLinkSyncUi.ShouldSuppressSyncBanner(deepLinkHeld);
+
+        /// <inheritdoc />
+        public bool ShouldPreferDeepLinkLoadingOverlay(bool deepLinkHeld, bool listAlreadyMaterialized) =>
+            ChatListDeepLinkSyncUi.ShouldPreferLoadingOverlay(deepLinkHeld, listAlreadyMaterialized);
+
+        /// <inheritdoc />
+        public bool RequiresNamesAppliedVisibleRebuild(string searchQuery) =>
+            ChatListNamesAppliedRefresh.RequiresVisibleRebuild(searchQuery);
+
+        /// <inheritdoc />
+        public bool RequiresVisibleReorder(string propertyName) =>
+            ChatListReorderTrigger.RequiresVisibleReorder(propertyName);
     }
 }

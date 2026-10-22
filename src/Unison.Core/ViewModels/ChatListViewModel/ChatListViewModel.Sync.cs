@@ -45,7 +45,7 @@ namespace Unison.Core.ViewModels
             }
 
             // Toast/tile: conversation first â€” stash sync line and keep Loading until release.
-            if (ChatListDeepLinkSyncUi.ShouldSuppressSyncBanner(IsDeepLinkHeld))
+            if (_chatService.ShouldSuppressDeepLinkSyncBanner(IsDeepLinkHeld))
             {
                 _pendingDeepLinkSyncMessage = message;
                 _pendingDeepLinkSyncVisible = visible && !string.IsNullOrEmpty(message);
@@ -854,7 +854,7 @@ namespace Unison.Core.ViewModels
             await _dispatcher.RunAsync(() =>
             {
                 _searchNameCache.Clear();
-                if (!ChatListNamesAppliedRefresh.RequiresVisibleRebuild(SearchQuery))
+                if (!_chatService.RequiresNamesAppliedVisibleRebuild(SearchQuery))
                 {
                     return;
                 }
@@ -958,7 +958,7 @@ namespace Unison.Core.ViewModels
             // preview and timestamp change is what created the dispatcher backlog during history
             // sync, so only the two things that can change the *order* or the *membership* of the
             // list get to trigger a refresh.
-            if (ChatListReorderTrigger.RequiresVisibleReorder(e.PropertyName))
+            if (_chatService.RequiresVisibleReorder(e.PropertyName))
             {
                 // App-state delivers pins while history sync is still filling the list, and the
                 // debounced refresh is suppressed for the whole of it. Mark the order stale so the

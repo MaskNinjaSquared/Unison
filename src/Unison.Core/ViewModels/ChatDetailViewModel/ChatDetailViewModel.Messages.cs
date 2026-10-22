@@ -358,7 +358,9 @@ namespace Unison.Core.ViewModels
                 return false;
             }
 
-            ChatTimelineMergeMode mode = ChatTimelineLiveMerge.Choose(followingEnd, IsDetachedFromEnd);
+            ChatTimelineMergeMode mode = _messageService.ChooseTimelineMergeMode(
+                followingEnd,
+                IsDetachedFromEnd);
             if (mode == ChatTimelineMergeMode.RejoinEnd)
             {
                 RejoinTimelineEnd(serviceMessages, requestedJid);
@@ -399,7 +401,10 @@ namespace Unison.Core.ViewModels
                     continue;
                 }
 
-                if (!ChatTimelineLiveMerge.ShouldInsert(msg.Timestamp, newestShown, IsDetachedFromEnd))
+                if (!_messageService.ShouldInsertLiveTimelineRow(
+                        msg.Timestamp,
+                        newestShown,
+                        IsDetachedFromEnd))
                 {
                     continue;
                 }
