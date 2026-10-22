@@ -9,13 +9,10 @@ using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.State;
-using Unison.Socket.Abstractions;
-using Unison.Uwp.Client;
-using Unison.Uwp.Services.Socket;
-using Unison.Uwp.Services;
+using Unison.WhatsAppClient.Abstractions;
 using Unison.WhatsAppClient.Helpers;
 
-namespace Unison.Uwp.Services.WhatsApp.Messages
+namespace Unison.WhatsAppClient.Messages
 {
     /// <summary>
     /// Message facade: Person upsert, domain <see cref="ChatMessage"/> construction, then WA transport.
@@ -36,16 +33,16 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
         private readonly IChatStore _chatStore;
         private readonly OutgoingTextSend _textSend;
         private readonly OutgoingMediaSend _mediaSend;
-        private readonly MediaAvailability _availability;
+        private readonly IMediaAvailability _availability;
         private readonly IChatCatalogPersistence _catalog;
-        private readonly IWhatsAppSessionProvider _sessions;
+        private readonly IMessageWireActions _wire;
         private readonly IOutgoingMessageHost _outgoingHost;
         private readonly IRuntimeDiagnostics _diagnostics;
         private readonly int _sqlOpenPageSize;
         private readonly int _sqlLoadMorePageSize;
         private readonly int _thinTimelineThreshold;
 
-        internal MessageFacade(
+        public MessageFacade(
             IPersonStore personStore,
             IWhatsAppService whatsAppService,
             IAppStateLocalHost localAppState,
@@ -57,12 +54,9 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             INotificationService notifications,
             IOutgoingMessageHost outgoingHost,
             IMediaCache mediaCache,
-            MediaDerivationService derivation,
-            MediaDownloadGate downloadGate,
-            IMediaDownloadHost mediaHost,
-            IEncryptedMediaDownloader mediaDownloader,
+            IMediaAvailability availability,
             IChatCatalogPersistence catalog,
-            IWhatsAppSessionProvider sessions,
+            IMessageWireActions wire,
             IChatStore chatStore = null,
             IChatStateStore chatState = null,
             ISystemInfoProvider systemInfo = null,
@@ -80,7 +74,8 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                 ?? throw new ArgumentNullException(nameof(historyMessageStore));
             _notifications = notifications ?? throw new ArgumentNullException(nameof(notifications));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
-            _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
+            _wire = wire ?? throw new ArgumentNullException(nameof(wire));
+            _availability = availability ?? throw new ArgumentNullException(nameof(availability));
             _chatStore = chatStore;
             _chatState = chatState;
             _outgoingHost = outgoingHost ?? throw new ArgumentNullException(nameof(outgoingHost));
@@ -90,15 +85,6 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                 _outgoingHost,
                 _jids,
                 mediaCache ?? throw new ArgumentNullException(nameof(mediaCache)));
-            _availability = new MediaAvailability(
-                _whatsAppService,
-                mediaHost ?? throw new ArgumentNullException(nameof(mediaHost)),
-                mediaDownloader ?? throw new ArgumentNullException(nameof(mediaDownloader)),
-                _jids,
-                mediaCache,
-                derivation ?? throw new ArgumentNullException(nameof(derivation)),
-                downloadGate ?? throw new ArgumentNullException(nameof(downloadGate)),
-                _catalog);
             // systemInfo kept in the ctor for DI compatibility; page sizes match desktop on all devices.
             _ = systemInfo;
 
@@ -118,13 +104,12 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
 
         public Task SubscribeToPresenceAsync(string jid)
         {
-            IWhatsAppSocket socket = _sessions.Socket;
-            if (string.IsNullOrWhiteSpace(jid) || socket == null || !socket.IsConnected)
+            if (string.IsNullOrWhiteSpace(jid) || !_wire.CanSubscribePresence)
             {
                 return Task.CompletedTask;
             }
 
-            return socket.PresenceSubscribeAsync(jid);
+            return _wire.PresenceSubscribeAsync(jid);
         }
 
         private static void Relay(Action raise, string name)
@@ -746,8 +731,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                 throw new ArgumentException("A valid message is required", nameof(message));
             }
 
-            IWhatsAppSocket socket = _sessions.Socket;
-            if (socket == null)
+            if (!_wire.CanSendPin)
             {
                 throw new InvalidOperationException("Not connected: the message pin was not sent.");
             }
@@ -766,7 +750,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                 key.Participant = message.ParticipantJid;
             }
 
-            await socket.SendPinInChatMessageAsync(canonical, key, pin, durationSeconds);
+            await _wire.SendPinInChatMessageAsync(canonical, key, pin, durationSeconds);
             MessagePinWindow window = MessagePinWindow.FromLocal(pin, durationSeconds, DateTime.UtcNow);
             await _localAppState.ApplyMessagePinAsync(
                 canonical, message.Id, pin, window.PinnedAtUtc, window.ExpiresAtUtc);

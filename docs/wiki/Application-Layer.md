@@ -69,13 +69,16 @@ Unison.WhatsAppClient/          (netstandard — portable façades)
   Groups/GroupMetadataReader.cs
   Connection/ConnectionFacade.cs
   History/HistoryFacade.cs
+  Messages/MessageFacade.cs
   Abstractions/IChatAccountActions.cs
   Abstractions/IGroupWireActions.cs
   Abstractions/IGroupAvatarActions.cs
+  Abstractions/IMessageWireActions.cs
   Helpers/…                   domain policy helpers (closed batches from Core)
 
 Unison.Uwp/Services/WhatsApp/
-  Messages/MessageFacade.cs
+  Messages/BridgeMessageWireActions.cs
+  Messages/MediaAvailability.cs
   Chats/BridgeChatAccountActions.cs
   Groups/BridgeGroupWireActions.cs
   Groups/BridgeGroupAvatarActions.cs

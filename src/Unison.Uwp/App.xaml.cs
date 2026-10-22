@@ -46,6 +46,7 @@ using Unison.Uwp.Services.WhatsApp.Messages;
 using Unison.Uwp.Services.WhatsApp.Status;
 using Unison.WhatsAppClient.Groups;
 using Unison.WhatsAppClient.History;
+using Unison.WhatsAppClient.Messages;
 using Unison.WhatsAppClient.Status;
 using AppSessionProvider = Unison.WhatsAppClient.Abstractions.IWhatsAppSessionProvider;
 using AppProfileFacade = Unison.WhatsAppClient.Profiles.ProfileFacade;
@@ -491,6 +492,17 @@ namespace Unison.Uwp
                 new DelegateSocketLog(line => Diag.W("[Media] " + line))));
             services.AddSingleton(sp => new MediaDownloadGate(
                 () => ((WhatsAppService)sp.GetRequiredService<IWhatsAppService>()).UsesSingleMediaDownloadSlot));
+            services.AddSingleton<IMediaAvailability>(sp => new MediaAvailability(
+                sp.GetRequiredService<IWhatsAppService>(),
+                sp.GetRequiredService<IMediaDownloadHost>(),
+                sp.GetRequiredService<IEncryptedMediaDownloader>(),
+                sp.GetRequiredService<IJidResolver>(),
+                sp.GetRequiredService<IMediaCache>(),
+                sp.GetRequiredService<MediaDerivationService>(),
+                sp.GetRequiredService<MediaDownloadGate>(),
+                sp.GetRequiredService<IChatCatalogPersistence>()));
+            services.AddSingleton<IMessageWireActions>(sp => new BridgeMessageWireActions(
+                sp.GetRequiredService<UwpSessionProvider>()));
             services.AddSingleton<IMessageService>(sp => new MessageFacade(
                 sp.GetRequiredService<IPersonStore>(),
                 sp.GetRequiredService<IWhatsAppService>(),
@@ -503,12 +515,9 @@ namespace Unison.Uwp
                 sp.GetRequiredService<INotificationService>(),
                 sp.GetRequiredService<IOutgoingMessageHost>(),
                 sp.GetRequiredService<IMediaCache>(),
-                sp.GetRequiredService<MediaDerivationService>(),
-                sp.GetRequiredService<MediaDownloadGate>(),
-                sp.GetRequiredService<IMediaDownloadHost>(),
-                sp.GetRequiredService<IEncryptedMediaDownloader>(),
+                sp.GetRequiredService<IMediaAvailability>(),
                 sp.GetRequiredService<IChatCatalogPersistence>(),
-                sp.GetRequiredService<UwpSessionProvider>(),
+                sp.GetRequiredService<IMessageWireActions>(),
                 sp.GetRequiredService<IChatStore>(),
                 sp.GetRequiredService<IChatStateStore>(),
                 sp.GetRequiredService<ISystemInfoProvider>(),

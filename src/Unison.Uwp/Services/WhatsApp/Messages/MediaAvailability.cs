@@ -19,7 +19,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
     /// document share one gate with the live hydrate path, so two taps cannot fetch at once
     /// on a phone.
     /// </summary>
-    internal sealed class MediaAvailability
+    internal sealed class MediaAvailability : IMediaAvailability
     {
         private readonly IWhatsAppService _client;
         private readonly IMediaDownloadHost _host;
