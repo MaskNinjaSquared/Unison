@@ -47,6 +47,7 @@ using Unison.WhatsAppClient.Status;
 using AppSessionProvider = Unison.WhatsAppClient.Abstractions.IWhatsAppSessionProvider;
 using AppProfileFacade = Unison.WhatsAppClient.Profiles.ProfileFacade;
 using UwpSessionProvider = Unison.Uwp.Services.Socket.IWhatsAppSessionProvider;
+using Unison.WhatsAppClient.Abstractions;
 using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp
@@ -566,8 +567,10 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IAppLifecycle>()));
             services.AddSingleton<IOfflineReplayHost>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+            services.AddSingleton<IChatAccountActions>(sp => new BridgeChatAccountActions(
+                sp.GetRequiredService<IWhatsAppSessionProvider>()));
             services.AddSingleton<IChatService>(sp => new ChatFacade(
-                sp.GetRequiredService<IWhatsAppSessionProvider>(),
+                sp.GetRequiredService<IChatAccountActions>(),
                 sp.GetRequiredService<IAppStateLocalHost>(),
                 sp.GetRequiredService<IJidResolver>(),
                 sp.GetRequiredService<IChatStateStore>(),

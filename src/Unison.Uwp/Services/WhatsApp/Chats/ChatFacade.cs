@@ -31,7 +31,7 @@ using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.Socket.AppState;
 using Unison.Socket.UseCases.Messages;
-using Unison.Uwp.Services.Socket;
+using Unison.WhatsAppClient.Abstractions;
 using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp.Chats
@@ -51,7 +51,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
         /// </summary>
         private const int MaxDeleteRangeMessages = 5;
 
-        private readonly IWhatsAppSessionProvider _sessions;
+        private readonly IChatAccountActions _account;
         private readonly IAppStateLocalHost _localAppState;
         private readonly IJidResolver _jids;
         private readonly IChatStateStore _chatState;
@@ -77,8 +77,8 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
         private static readonly TimeSpan OfflineReplayTipThrottle = TimeSpan.FromMilliseconds(180);
 
         internal ChatFacade(
-            IWhatsAppSessionProvider sessions,
-            IAppStateLocalHost localAppState,
+            IChatAccountActions account,
+            IAppStateLocalHost localAppState;
             IJidResolver jids,
             IChatStateStore chatState,
             ChatRowIndex chatRows,
@@ -98,12 +98,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             IStringResources strings,
             IRuntimeDiagnostics diagnostics = null)
         {
-            if (sessions == null)
-            {
-                throw new ArgumentNullException(nameof(sessions));
-            }
-
-            _sessions = sessions;
+            _account = account ?? throw new ArgumentNullException(nameof(account));
             _localAppState = localAppState ?? throw new ArgumentNullException(nameof(localAppState));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
@@ -155,8 +150,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
 
             await _localAppState.ApplyChatPinAsync(canonicalJid, pinned).ConfigureAwait(false);
 
-            var socket = _sessions.Socket;
-            if (socket == null)
+            if (!_account.IsAvailable)
             {
                 Debug.WriteLine("[ChatFacade] Pin kept locally: no socket to tell the account");
                 return;
@@ -164,7 +158,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
 
             try
             {
-                await socket.SetChatPinnedAsync(canonicalJid, pinned).ConfigureAwait(false);
+                await _account.SetPinnedAsync(canonicalJid, pinned).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -175,8 +169,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
                     "chatJid=" + chat.JID +
                     "; canonicalJid=" + canonicalJid +
                     "; requestedPinned=" + pinned +
-                    "; previousPinned=" + wasPinned +
-                    "; socket=" + socket.GetType().FullName;
+                    "; previousPinned=" + wasPinned;
 
                 Debug.WriteLine(
                     "[ChatFacade] Pin failed; " + details + Environment.NewLine + ex);
@@ -222,8 +215,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             // row carrying a count this one no longer has.
             await ClearUnreadForChatAsync(jid).ConfigureAwait(false);
 
-            var socket = _sessions.Socket;
-            if (socket == null || unread <= 0)
+            if (!_account.IsAvailable || unread <= 0)
             {
                 return;
             }
@@ -239,10 +231,10 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
                 var incoming = recent.Where(m => !m.IsFromMe).ToList();
                 if (incoming.Count > 0)
                 {
-                    await socket.MarkMessagesReadAsync(incoming.Select(ToReceiptTarget)).ConfigureAwait(false);
+                    await _account.MarkMessagesReadAsync(incoming.Select(ToReceiptTarget)).ConfigureAwait(false);
                 }
 
-                await socket.MarkChatReadAsync(jid, recent.Select(m => ToRangeMessage(jid, m))).ConfigureAwait(false);
+                await _account.MarkChatReadAsync(jid, recent.Select(m => ToRangeMessage(jid, m))).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -266,12 +258,11 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             // and after the local wipe there is nothing left to describe.
             var range = CollectTail(jid, MaxDeleteRangeMessages);
 
-            var socket = _sessions.Socket;
-            if (socket != null && range.Count > 0)
+            if (_account.IsAvailable && range.Count > 0)
             {
                 try
                 {
-                    await socket
+                    await _account
                         .DeleteChatAsync(jid, range.Select(m => ToRangeMessage(jid, m)))
                         .ConfigureAwait(false);
                 }
@@ -283,8 +274,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
                     var details =
                         "chatJid=" + chat.JID +
                         "; canonicalJid=" + jid +
-                        "; rangeCount=" + range.Count +
-                        "; socket=" + socket.GetType().FullName;
+                        "; rangeCount=" + range.Count;
 
                     Debug.WriteLine("[ChatFacade] Delete failed; " + details + Environment.NewLine + ex);
                     DiagRecordException(
