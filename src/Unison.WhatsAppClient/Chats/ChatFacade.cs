@@ -34,7 +34,7 @@ using Unison.Socket.UseCases.Messages;
 using Unison.WhatsAppClient.Abstractions;
 using Unison.WhatsAppClient.Helpers;
 
-namespace Unison.Uwp.Services.WhatsApp.Chats
+namespace Unison.WhatsAppClient.Chats
 {
     public sealed class ChatFacade : IChatService
     {
@@ -76,9 +76,9 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
         /// <summary>Short enough that the first recovered chat shows while a long replay continues.</summary>
         private static readonly TimeSpan OfflineReplayTipThrottle = TimeSpan.FromMilliseconds(180);
 
-        internal ChatFacade(
+        public ChatFacade(
             IChatAccountActions account,
-            IAppStateLocalHost localAppState;
+            IAppStateLocalHost localAppState,
             IJidResolver jids,
             IChatStateStore chatState,
             ChatRowIndex chatRows,
@@ -293,7 +293,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
                 // here and the phone keeps it.
                 Debug.WriteLine(
                     "[ChatFacade] Delete kept local: " +
-                    (socket == null ? "no socket" : "no messages to build the range with"));
+                    (!_account.IsAvailable ? "no socket" : "no messages to build the range with"));
             }
 
             await _localAppState.ApplyChatDeletionAsync(jid).ConfigureAwait(false);

@@ -22,7 +22,7 @@ using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.WhatsAppClient.Helpers;
 
-namespace Unison.Uwp.Services.WhatsApp.Chats
+namespace Unison.WhatsAppClient.Chats
 {
     public sealed class ChatPreviewReconciler
     {

@@ -63,12 +63,15 @@ Registered in `App.ConfigureServices`. Do not recreate leftover `MessageService`
 Unison.WhatsAppClient/          (netstandard — portable façades)
   Profiles/ProfileFacade.cs
   Status/StatusFacade.cs
+  Chats/ChatFacade.cs
+  Chats/ChatPreviewReconciler.cs
+  Abstractions/IChatAccountActions.cs
   Helpers/…                   domain policy helpers (closed batches from Core)
 
 Unison.Uwp/Services/WhatsApp/
   Connection/ConnectionFacade.cs
   Messages/MessageFacade.cs
-  Chats/ChatFacade.cs
+  Chats/BridgeChatAccountActions.cs
   Contacts/ContactFacade.cs
     ContactDirectory.cs      Socket use cases + LidMappingStore
     AddressBookOverlay.cs    device contacts → Person

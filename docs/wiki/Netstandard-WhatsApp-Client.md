@@ -158,7 +158,7 @@ Do in order. Each phase has a done check.
 
 **Scaffold (started):** project is named **`Unison.WhatsAppClient`** (not `Unison.Application`) — under namespace `Unison.*`, an `Application` assembly name collides with XAML `Application`. In `Unison.slnx` with Core + Socket refs; UWP references it.
 
-**Façade moves:** `ProfileFacade` → `Unison.WhatsAppClient/Profiles/`. `StatusFacade` → `Unison.WhatsAppClient/Status/` (thumbs via `IStatusThumbnailMaterializer` / `WinRtStatusThumbnailMaterializer`). Portable `IWhatsAppSessionProvider` is in `Unison.WhatsAppClient/Abstractions/`; UWP `BridgeSessionProvider` implements the bridge-extended interface (adds `IWhatsAppSocket`). Other façades remain under `Unison.Uwp/Services/WhatsApp/` until moved the same way.
+**Façade moves:** `ProfileFacade` → `Profiles/`. `StatusFacade` → `Status/` (thumbs via `IStatusThumbnailMaterializer`). `ChatFacade` + `ChatPreviewReconciler` → `Chats/` (pin/read/delete via `IChatAccountActions` / `BridgeChatAccountActions`). Portable `IWhatsAppSessionProvider` is in `Abstractions/`; UWP `BridgeSessionProvider` extends it with `IWhatsAppSocket`. Other façades remain under `Unison.Uwp/Services/WhatsApp/` until moved the same way.
 
 **Helpers:** do **not** dump the whole `Unison.Core/Helpers` tree. Domain helpers that were **only** consumed by UWP (`WhatsAppService` / façades) + tests may move into `Unison.WhatsAppClient/Helpers/{History|Chats|…}` (namespace `Unison.WhatsAppClient.Helpers`) in closed batches — Core must not reference WhatsAppClient. Helpers still used by Core ViewModels/State stay until those call sites go through façade contracts. Presentation helpers stay in Core.
 

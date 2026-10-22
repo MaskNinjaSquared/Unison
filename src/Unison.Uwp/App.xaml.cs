@@ -36,6 +36,7 @@ using Unison.Uwp.Services.Network;
 using Unison.Uwp.Services.Socket;
 using Unison.Uwp.Services.WhatsApp;
 using Unison.Uwp.Services.WhatsApp.Chats;
+using Unison.WhatsAppClient.Chats;
 using Unison.Uwp.Services.WhatsApp.Connection;
 using Unison.Uwp.Services.WhatsApp.Contacts;
 using Unison.Uwp.Services.WhatsApp.Diagnostics;
