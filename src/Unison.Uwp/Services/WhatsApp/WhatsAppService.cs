@@ -39,7 +39,7 @@ using Unison.Uwp.Services.WhatsApp.Chats;
 using Unison.WhatsAppClient.Chats;
 using Unison.Uwp.Services.WhatsApp.Contacts;
 using Unison.WhatsAppClient.Groups;
-using Unison.Uwp.Services.WhatsApp.Messages;
+using Unison.WhatsAppClient.Messages;
 using Unison.Socket.UseCases.Contacts;
 using Unison.Uwp.Helpers;
 using Microsoft.Extensions.DependencyInjection;

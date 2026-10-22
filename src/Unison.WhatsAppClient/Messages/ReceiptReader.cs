@@ -14,33 +14,31 @@ using System.Collections.Generic;
 using Unison.Baileys.Protocol;
 using Unison.Core.Contracts;
 using Unison.Core.Helpers;
-using Unison.Core.Models;
-using Unison.Uwp.Client;
 using Unison.WhatsAppClient.Helpers;
 
-namespace Unison.Uwp.Services.WhatsApp.Messages
+namespace Unison.WhatsAppClient.Messages
 {
     /// <summary>What a <c>&lt;receipt&gt;</c> node says, once.</summary>
-    internal sealed class ReceiptFacts
+    public sealed class ReceiptFacts
     {
-        internal string Status { get; set; }
+        public string Status { get; set; }
 
         /// <summary>The root id plus every <c>item</c> descendant; a receipt can ack a batch.</summary>
-        internal ICollection<string> MessageIds { get; set; }
+        public ICollection<string> MessageIds { get; set; }
 
-        internal string ChatJid { get; set; }
+        public string ChatJid { get; set; }
 
         /// <summary>Canonical, and empty for direct chats.</summary>
-        internal string Participant { get; set; }
+        public string Participant { get; set; }
 
-        internal bool IsGroup { get; set; }
+        public bool IsGroup { get; set; }
     }
 
-    internal sealed class ReceiptReader
+    public sealed class ReceiptReader
     {
         private readonly IJidResolver _jids;
 
-        internal ReceiptReader(IJidResolver jids)
+        public ReceiptReader(IJidResolver jids)
         {
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
         }
@@ -50,14 +48,14 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
         /// recognise. Unknown types are dropped rather than promoted to delivered, matching the
         /// official mapping — a wrong tick is worse than a late one.
         /// </summary>
-        internal ReceiptFacts Read(BinaryNode node)
+        public ReceiptFacts Read(BinaryNode node)
         {
             if (node?.Attrs == null)
             {
                 return null;
             }
 
-            string receiptType = node.Attrs.GetDictionaryValueOrDefault("type", string.Empty);
+            string receiptType = AttrOrEmpty(node, "type");
             if (string.Equals(receiptType, "retry", StringComparison.OrdinalIgnoreCase))
             {
                 return null;
@@ -70,23 +68,24 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             }
 
             var ids = new HashSet<string>(StringComparer.Ordinal);
-            if (node.Attrs.TryGetValue("id", out var rootId) && !string.IsNullOrWhiteSpace(rootId))
+            string rootId;
+            if (node.Attrs.TryGetValue("id", out rootId) && !string.IsNullOrWhiteSpace(rootId))
             {
                 ids.Add(rootId);
             }
 
             foreach (var item in node.FindAllDescendants("item"))
             {
+                string itemId;
                 if (item?.Attrs != null &&
-                    item.Attrs.TryGetValue("id", out var itemId) &&
+                    item.Attrs.TryGetValue("id", out itemId) &&
                     !string.IsNullOrWhiteSpace(itemId))
                 {
                     ids.Add(itemId);
                 }
             }
 
-            string chatJid = JidHelper.Normalize(
-                node.Attrs.GetDictionaryValueOrDefault("from", string.Empty));
+            string chatJid = JidHelper.Normalize(AttrOrEmpty(node, "from"));
 
             return new ReceiptFacts
             {
@@ -95,8 +94,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                 ChatJid = chatJid,
                 IsGroup = !string.IsNullOrWhiteSpace(chatJid) &&
                           chatJid.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase),
-                Participant = _jids.GetCanonicalJid(JidHelper.Normalize(
-                    node.Attrs.GetDictionaryValueOrDefault("participant", string.Empty)))
+                Participant = _jids.GetCanonicalJid(JidHelper.Normalize(AttrOrEmpty(node, "participant")))
             };
         }
 
@@ -113,7 +111,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
         /// account here would set a target no set of receipts can ever meet, and the group would
         /// simply never show as read.
         /// </summary>
-        internal int? CountRecipients(BinaryNode groupMetadataResponse)
+        public int? CountRecipients(BinaryNode groupMetadataResponse)
         {
             BinaryNode groupNode =
                 groupMetadataResponse?.GetChild("group") ??
@@ -131,7 +129,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
                     continue;
                 }
 
-                string jid = participantNode.Attrs.GetDictionaryValueOrDefault("jid", string.Empty);
+                string jid = AttrOrEmpty(participantNode, "jid");
                 if (string.IsNullOrWhiteSpace(jid))
                 {
                     continue;
@@ -145,6 +143,14 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             }
 
             return recipients.Count;
+        }
+
+        private static string AttrOrEmpty(BinaryNode node, string key)
+        {
+            string value;
+            return node.Attrs != null && node.Attrs.TryGetValue(key, out value) && value != null
+                ? value
+                : string.Empty;
         }
     }
 }

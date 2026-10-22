@@ -36,7 +36,7 @@ using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.State;
 using Unison.Socket.UseCases.Contacts;
 using Unison.Uwp.Helpers;
-using Unison.Uwp.Services.WhatsApp.Messages;
+using Unison.WhatsAppClient.Messages;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Unison.Uwp.Services.WhatsApp
