@@ -21,7 +21,7 @@ using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.WhatsAppClient.Helpers;
 
-namespace Unison.Uwp.Services.WhatsApp.Contacts
+namespace Unison.WhatsAppClient.Contacts
 {
     internal sealed class AddressBookOverlay
     {

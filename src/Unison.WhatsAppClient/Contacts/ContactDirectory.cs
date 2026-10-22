@@ -15,9 +15,9 @@ using Unison.Socket.Session;
 using Unison.Socket.Signal;
 using Unison.Socket.UseCases.Contacts;
 using Unison.Socket.UseCases.Groups;
-using Unison.Uwp.Services.Socket;
+using Unison.WhatsAppClient.Abstractions;
 
-namespace Unison.Uwp.Services.WhatsApp.Contacts
+namespace Unison.WhatsAppClient.Contacts
 {
     internal enum ContactLookupOutcome
     {

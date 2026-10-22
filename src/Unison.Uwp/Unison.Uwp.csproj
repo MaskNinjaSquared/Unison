@@ -158,14 +158,7 @@
     <Compile Include="Services\Socket\WaTransportAdapter.cs" />
     <Compile Include="Services\Socket\IWhatsAppSessionProvider.cs" />
     <Compile Include="Services\WhatsApp\JidResolver.cs" />
-    <Compile Include="Services\WhatsApp\Contacts\ContactFacade.cs" />
-    <Compile Include="Services\WhatsApp\Contacts\AddressBookOverlay.cs" />
-    <Compile Include="Services\WhatsApp\Contacts\ChatAvatarPolicy.cs" />
     <Compile Include="Services\WhatsApp\Contacts\ChatAvatarFetch.cs" />
-    <Compile Include="Services\WhatsApp\Contacts\GroupRosterPolicy.cs" />
-    <Compile Include="Services\WhatsApp\Contacts\ContactDirectory.cs" />
-    <Compile Include="Services\WhatsApp\Contacts\ContactNameResolver.cs" />
-    <Compile Include="Services\WhatsApp\Contacts\ContactUsyncResolver.cs" />
     <Compile Include="Services\WhatsApp\Chats\BridgeChatAccountActions.cs" />
     <Compile Include="Services\WhatsApp\Groups\BridgeGroupWireActions.cs" />
     <Compile Include="Services\WhatsApp\Groups\BridgeGroupAvatarActions.cs" />

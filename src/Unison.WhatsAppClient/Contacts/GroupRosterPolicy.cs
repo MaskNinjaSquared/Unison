@@ -20,9 +20,9 @@ using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.State;
-using Unison.Uwp.Services.Socket;
+using Unison.WhatsAppClient.Abstractions;
 
-namespace Unison.Uwp.Services.WhatsApp.Contacts
+namespace Unison.WhatsAppClient.Contacts
 {
     internal sealed class GroupRosterPolicy
     {

@@ -21,11 +21,10 @@ using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.State;
-using Unison.Uwp.Helpers;
-using Unison.Uwp.Services.Socket;
+using Unison.WhatsAppClient.Abstractions;
 using Unison.WhatsAppClient.Helpers;
 
-namespace Unison.Uwp.Services.WhatsApp.Contacts
+namespace Unison.WhatsAppClient.Contacts
 {
     internal sealed class ContactNameResolver
     {
@@ -331,7 +330,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 bool isNaked = PlaceholderChatLabel.IsPlaceholder(
                     chat.Name,
                     chat.JID,
-                    SelfChatDisplayHelper.IsSelfMarkerLabel(chat.Name));
+                    SelfChatNaming.IsSelfMarkerLabel(chat.Name));
                 if (!isNaked)
                 {
                     continue;

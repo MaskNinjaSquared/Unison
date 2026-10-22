@@ -24,11 +24,10 @@ using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.State;
-using Unison.Uwp.Services;
-using Unison.Uwp.Services.Socket;
+using Unison.WhatsAppClient.Abstractions;
 using Unison.WhatsAppClient.Helpers;
 
-namespace Unison.Uwp.Services.WhatsApp.Contacts
+namespace Unison.WhatsAppClient.Contacts
 {
     internal sealed class ChatAvatarPolicy
     {
@@ -48,7 +47,8 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly IDispatcher _ui;
         private readonly IChatCatalogPersistence _catalog;
         private readonly IJidResolver _jids;
-        private readonly ChatAvatarFetch _fetch;
+        private readonly IChatAvatarFetch _fetch;
+        private readonly IRuntimeDiagnostics _diagnostics;
 
         private readonly object _requestLock = new object();
         private readonly HashSet<string> _inFlight = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -62,7 +62,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         internal ChatAvatarPolicy(
             IDeferredAvatarResolution deferredAvatars,
             IJidResolver jids,
-            ChatAvatarFetch fetch,
+            IChatAvatarFetch fetch,
             IDispatcher ui,
             IChatCatalogPersistence catalog,
             IChatStateStore chatState,
@@ -71,7 +71,8 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             IWhatsAppSessionProvider sessions,
             SyncBudget syncBudget,
             SyncWorkloadStrategy workload,
-            InitialSyncProgressState initialSync)
+            InitialSyncProgressState initialSync,
+            IRuntimeDiagnostics diagnostics = null)
         {
             _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
             _syncBudget = syncBudget ?? throw new ArgumentNullException(nameof(syncBudget));
@@ -85,6 +86,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             _deferredAvatars = deferredAvatars ?? throw new ArgumentNullException(nameof(deferredAvatars));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _fetch = fetch ?? throw new ArgumentNullException(nameof(fetch));
+            _diagnostics = diagnostics;
         }
 
         public Task HydrateCachedAsync(string reason)
@@ -213,7 +215,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             {
                 try
                 {
-                    RuntimeDiagnosticsService.Instance.Write(
+                    _diagnostics?.Write(
                         "chat-list-lifecycle",
                         "avatar-request",
                         "n=" + avatarReq +
@@ -222,7 +224,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                         "; gcMb=" + (GC.GetTotalMemory(false) / (1024 * 1024)));
                     if (avatarReq <= 3)
                     {
-                        _ = RuntimeDiagnosticsService.Instance.FlushAsync("chat-list:avatar-request");
+                        _ = _diagnostics?.FlushAsync("chat-list:avatar-request");
                     }
                 }
                 catch

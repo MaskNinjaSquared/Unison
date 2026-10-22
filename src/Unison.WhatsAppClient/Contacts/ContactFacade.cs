@@ -27,10 +27,10 @@ using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.Core.Constants;
 using Unison.Socket.Signal;
-using Unison.Uwp.Services.Socket;
+using Unison.WhatsAppClient.Abstractions;
 using Unison.WhatsAppClient.Helpers;
 
-namespace Unison.Uwp.Services.WhatsApp.Contacts
+namespace Unison.WhatsAppClient.Contacts
 {
     public sealed class ContactFacade : IContactService
     {
@@ -60,7 +60,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private int _lastWindowsPublishCount;
         private int _windowsPublishBusy;
 
-        internal ContactFacade(
+        public ContactFacade(
             IWhatsAppSessionProvider sessions,
             ILocalContactsService localContacts,
             IPersonStore personStore,
@@ -70,9 +70,9 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             IJidResolver jids,
             IUsyncGate usyncGate,
             IGroupService groups,
-            AvatarFetcher avatars,
+            IAvatarFetchActions avatarFetch,
+            IChatAvatarFetch chatAvatarFetch,
             IChatStateStore chats,
-            IAvatarReport avatarReport,
             IAvatarCache avatarCache,
             JidAliasTable aliases,
             DisplayNameTable pushNames,
@@ -90,7 +90,8 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             ChatListAliasMerge aliasMerge,
             IDeferredAvatarResolution deferredAvatars,
             IUsyncAliasHost usyncAliases,
-            IAppLifecycle lifecycle)
+            IAppLifecycle lifecycle,
+            IRuntimeDiagnostics diagnostics = null)
         {
             _displayNames = displayNames ?? throw new ArgumentNullException(nameof(displayNames));
             _nameRefresh = nameRefresh ?? throw new ArgumentNullException(nameof(nameRefresh));
@@ -105,9 +106,9 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             if (lidMappings == null) throw new ArgumentNullException(nameof(lidMappings));
             if (usyncGate == null) throw new ArgumentNullException(nameof(usyncGate));
             if (groups == null) throw new ArgumentNullException(nameof(groups));
-            if (avatars == null) throw new ArgumentNullException(nameof(avatars));
+            if (avatarFetch == null) throw new ArgumentNullException(nameof(avatarFetch));
+            if (chatAvatarFetch == null) throw new ArgumentNullException(nameof(chatAvatarFetch));
             _chatState = chats ?? throw new ArgumentNullException(nameof(chats));
-            if (avatarReport == null) throw new ArgumentNullException(nameof(avatarReport));
             if (avatarCache == null) throw new ArgumentNullException(nameof(avatarCache));
 
             _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
@@ -131,12 +132,13 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 pushNames,
                 labels,
                 chats,
-                avatars,
+                avatarFetch,
                 ui,
                 nameRefresh,
                 aliasMerge,
                 syncWork,
-                deferredAvatars);
+                deferredAvatars,
+                diagnostics);
             _names = new ContactNameResolver(
                 whatsAppService,
                 _addressBook,
@@ -156,7 +158,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             _avatars = new ChatAvatarPolicy(
                 deferredAvatars ?? throw new ArgumentNullException(nameof(deferredAvatars)),
                 jids,
-                new ChatAvatarFetch(sessions, groups, jids, chats, avatarReport, avatars, avatarCache, ui, catalog),
+                chatAvatarFetch,
                 ui,
                 catalog,
                 chats,
@@ -165,7 +167,8 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 sessions,
                 syncBudget,
                 workload ?? throw new ArgumentNullException(nameof(workload)),
-                initialSync);
+                initialSync,
+                diagnostics);
             _roster = new GroupRosterPolicy(groups, this, jids, ui, catalog, chats, syncWork, sessions, workload);
 
             // Both live as long as the app does, so there is nothing to unhook from.

@@ -70,10 +70,15 @@ Unison.WhatsAppClient/          (netstandard — portable façades)
   Connection/ConnectionFacade.cs
   History/HistoryFacade.cs
   Messages/MessageFacade.cs
+  Contacts/ContactFacade.cs
+    ContactDirectory.cs / AddressBookOverlay / ContactNameResolver /
+    ContactUsyncResolver / ChatAvatarPolicy / GroupRosterPolicy
   Abstractions/IChatAccountActions.cs
   Abstractions/IGroupWireActions.cs
   Abstractions/IGroupAvatarActions.cs
   Abstractions/IMessageWireActions.cs
+  Abstractions/IAvatarFetchActions.cs
+  Abstractions/IChatAvatarFetch.cs
   Helpers/…                   domain policy helpers (closed batches from Core)
 
 Unison.Uwp/Services/WhatsApp/
@@ -82,11 +87,8 @@ Unison.Uwp/Services/WhatsApp/
   Chats/BridgeChatAccountActions.cs
   Groups/BridgeGroupWireActions.cs
   Groups/BridgeGroupAvatarActions.cs
-  Contacts/ContactFacade.cs
-    ContactDirectory.cs      Socket use cases + LidMappingStore
-    AddressBookOverlay.cs    device contacts → Person
-    ContactNameResolver.cs   throttle / cooldown
-    ChatAvatarPolicy.cs      dedup / backoff (fetch still on the client)
+  Contacts/AvatarFetcher.cs
+  Contacts/ChatAvatarFetch.cs
   History/HistoryThumbnailMaterializer.cs
   History/WinRtHistoryMessageThumbnailMaterializer.cs
   Status/WinRtStatusThumbnailMaterializer.cs

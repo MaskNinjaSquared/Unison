@@ -21,9 +21,10 @@ using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.State;
 using Unison.Socket.UseCases.Contacts;
+using Unison.WhatsAppClient.Abstractions;
 using Unison.WhatsAppClient.Helpers;
 
-namespace Unison.Uwp.Services.WhatsApp.Contacts
+namespace Unison.WhatsAppClient.Contacts
 {
     internal sealed class ContactUsyncResolver
     {
@@ -37,12 +38,13 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly DisplayNameTable _pushNames;
         private readonly ContactLabelSanitizer _labels;
         private readonly IChatStateStore _chats;
-        private readonly AvatarFetcher _avatars;
+        private readonly IAvatarFetchActions _avatars;
         private readonly IDispatcher _ui;
         private readonly ChatNameRefresh _nameRefresh;
         private readonly ChatListAliasMerge _aliasMerge;
         private readonly SyncWorkGate _syncWork;
         private readonly IDeferredAvatarResolution _deferredAvatars;
+        private readonly IRuntimeDiagnostics _diagnostics;
 
         internal ContactUsyncResolver(
             IUsyncAliasHost aliases,
@@ -52,12 +54,13 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             DisplayNameTable pushNames,
             ContactLabelSanitizer labels,
             IChatStateStore chats,
-            AvatarFetcher avatars,
+            IAvatarFetchActions avatars,
             IDispatcher ui,
             ChatNameRefresh nameRefresh,
             ChatListAliasMerge aliasMerge,
             SyncWorkGate syncWork,
-            IDeferredAvatarResolution deferredAvatars)
+            IDeferredAvatarResolution deferredAvatars,
+            IRuntimeDiagnostics diagnostics = null)
         {
             _avatars = avatars ?? throw new ArgumentNullException(nameof(avatars));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
@@ -72,6 +75,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             _chats = chats ?? throw new ArgumentNullException(nameof(chats));
             _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
             _deferredAvatars = deferredAvatars ?? throw new ArgumentNullException(nameof(deferredAvatars));
+            _diagnostics = diagnostics;
         }
 
         /// <summary>Returns false when the IQ timed out or the session was not ready.</summary>
@@ -120,7 +124,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
                 Debug.WriteLine("[ContactUsyncResolver] Resolve failed: " + ex);
                 try
                 {
-                    RuntimeDiagnosticsService.Instance.RecordException(
+                    _diagnostics?.RecordException(
                         "contacts",
                         "resolve-contacts-failed",
                         ex,

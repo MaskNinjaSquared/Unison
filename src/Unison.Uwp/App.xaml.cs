@@ -44,6 +44,7 @@ using Unison.Uwp.Services.WhatsApp.Groups;
 using Unison.Uwp.Services.WhatsApp.History;
 using Unison.Uwp.Services.WhatsApp.Messages;
 using Unison.Uwp.Services.WhatsApp.Status;
+using Unison.WhatsAppClient.Contacts;
 using Unison.WhatsAppClient.Groups;
 using Unison.WhatsAppClient.History;
 using Unison.WhatsAppClient.Messages;
@@ -552,8 +553,19 @@ namespace Unison.Uwp
 
             services.AddSingleton<IAvatarReport>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
-            services.AddSingleton<IContactService>(sp => new ContactFacade(
+            services.AddSingleton<IAvatarFetchActions>(sp => sp.GetRequiredService<AvatarFetcher>());
+            services.AddSingleton<IChatAvatarFetch>(sp => new ChatAvatarFetch(
                 sp.GetRequiredService<UwpSessionProvider>(),
+                sp.GetRequiredService<IGroupService>(),
+                sp.GetRequiredService<IJidResolver>(),
+                sp.GetRequiredService<IChatStateStore>(),
+                sp.GetRequiredService<IAvatarReport>(),
+                sp.GetRequiredService<AvatarFetcher>(),
+                sp.GetRequiredService<IAvatarCache>(),
+                sp.GetRequiredService<AttachedUiDispatcher>(),
+                sp.GetRequiredService<IChatCatalogPersistence>()));
+            services.AddSingleton<IContactService>(sp => new ContactFacade(
+                sp.GetRequiredService<AppSessionProvider>(),
                 sp.GetRequiredService<ILocalContactsService>(),
                 sp.GetRequiredService<IPersonStore>(),
                 sp.GetRequiredService<IWhatsAppService>(),
@@ -562,9 +574,9 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IJidResolver>(),
                 sp.GetRequiredService<IUsyncGate>(),
                 sp.GetRequiredService<IGroupService>(),
-                sp.GetRequiredService<AvatarFetcher>(),
+                sp.GetRequiredService<IAvatarFetchActions>(),
+                sp.GetRequiredService<IChatAvatarFetch>(),
                 sp.GetRequiredService<IChatStateStore>(),
-                sp.GetRequiredService<IAvatarReport>(),
                 sp.GetRequiredService<IAvatarCache>(),
                 sp.GetRequiredService<JidAliasTable>(),
                 sp.GetRequiredService<ChatStateStore>().PushNames,
@@ -582,7 +594,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ChatListAliasMerge>(),
                 sp.GetRequiredService<IDeferredAvatarResolution>(),
                 sp.GetRequiredService<IUsyncAliasHost>(),
-                sp.GetRequiredService<IAppLifecycle>()));
+                sp.GetRequiredService<IAppLifecycle>(),
+                sp.GetRequiredService<IRuntimeDiagnostics>()));
             services.AddSingleton<IOfflineReplayHost>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IChatAccountActions>(sp => new BridgeChatAccountActions(

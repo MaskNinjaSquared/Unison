@@ -9,9 +9,10 @@ using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.Uwp.Client;
-using Unison.Uwp.Services.Socket;
+using Unison.WhatsAppClient.Abstractions;
 using Unison.WhatsAppClient.Groups;
 using Unison.WhatsAppClient.Helpers;
+using UwpSessionProvider = Unison.Uwp.Services.Socket.IWhatsAppSessionProvider;
 
 namespace Unison.Uwp.Services.WhatsApp.Contacts
 {
@@ -19,13 +20,13 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
     /// Fetches a chat picture and writes it on the row, including a group's parent or sibling
     /// when the group itself has none.
     /// </summary>
-    internal sealed class ChatAvatarFetch
+    internal sealed class ChatAvatarFetch : IChatAvatarFetch
     {
         private const string GroupAvatarFallbackMissReason = "group-avatar-fallback-miss";
 
         private readonly IDispatcher _ui;
         private readonly IChatCatalogPersistence _catalog;
-        private readonly IWhatsAppSessionProvider _sessions;
+        private readonly UwpSessionProvider _sessions;
         private readonly IGroupService _groups;
         private readonly IJidResolver _jids;
         private readonly IChatStateStore _chats;
@@ -35,7 +36,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly GroupMetadataReader _reader;
 
         public ChatAvatarFetch(
-            IWhatsAppSessionProvider sessions,
+            UwpSessionProvider sessions,
             IGroupService groups,
             IJidResolver jids,
             IChatStateStore chats,
