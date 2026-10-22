@@ -1,8 +1,9 @@
 using System;
 using System.Collections.Generic;
+using Unison.Core.Helpers;
 using Unison.Core.Models;
 
-namespace Unison.Core.Helpers
+namespace Unison.WhatsAppClient.Helpers
 {
     /// <summary>
     /// Maps a live <see cref="ChatMessage"/> onto SQLite history rows (send/receive/outbox).
