@@ -32,6 +32,7 @@ using Unison.Socket.Signal;
 using Unison.Uwp.Client;
 using Unison.Uwp.Data;
 using Unison.Uwp.Services;
+using Unison.Uwp.Services.Network;
 using Unison.Uwp.Services.Socket;
 using Unison.Uwp.Services.WhatsApp;
 using Unison.Uwp.Services.WhatsApp.Chats;
@@ -42,9 +43,11 @@ using Unison.Uwp.Services.WhatsApp.Groups;
 using Unison.Uwp.Services.WhatsApp.History;
 using Unison.Uwp.Services.WhatsApp.Messages;
 using Unison.Uwp.Services.WhatsApp.Status;
+using Unison.WhatsAppClient.Status;
 using AppSessionProvider = Unison.WhatsAppClient.Abstractions.IWhatsAppSessionProvider;
 using AppProfileFacade = Unison.WhatsAppClient.Profiles.ProfileFacade;
 using UwpSessionProvider = Unison.Uwp.Services.Socket.IWhatsAppSessionProvider;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp
 {
@@ -448,11 +451,13 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ChatListInitialPaintGate>()));
             services.AddSingleton<IHistoryService>(sp => sp.GetRequiredService<HistoryFacade>());
 
+            services.AddSingleton<IStatusThumbnailMaterializer, WinRtStatusThumbnailMaterializer>();
             services.AddSingleton(sp => new StatusFacade(
                 sp.GetRequiredService<IHistoryStatusStore>(),
                 sp.GetRequiredService<IPersonStore>(),
                 sp.GetRequiredService<IMessageService>(),
                 sp.GetRequiredService<IWhatsAppService>(),
+                sp.GetRequiredService<IStatusThumbnailMaterializer>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>()));
             services.AddSingleton<IStatusService>(sp => sp.GetRequiredService<StatusFacade>());
 
@@ -557,7 +562,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ChatNameRefresh>(),
                 sp.GetRequiredService<ChatListAliasMerge>(),
                 sp.GetRequiredService<IDeferredAvatarResolution>(),
-                sp.GetRequiredService<IUsyncAliasHost>()));
+                sp.GetRequiredService<IUsyncAliasHost>(),
+                sp.GetRequiredService<IAppLifecycle>()));
             services.AddSingleton<IOfflineReplayHost>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IChatService>(sp => new ChatFacade(
@@ -651,6 +657,7 @@ namespace Unison.Uwp
             services.AddSingleton<IReactionMapper, ReactionMapper>();
             services.AddSingleton<IChatMessageMapper, ChatMessageMapper>();
             services.AddSingleton<IStringResources, StringResourcesService>();
+            services.AddSingleton<INetworkAccess, WinRtNetworkAccess>();
             services.AddSingleton<IConnectionService>(sp => new ConnectionFacade(
                 sp.GetRequiredService<ILocalSettings>(),
                 sp.GetRequiredService<INotificationService>(),
@@ -660,7 +667,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IShortcutService>(),
                 sp.GetRequiredService<ILiveTilesService>(),
                 sp.GetRequiredService<IShellThemeService>(),
-                sp.GetRequiredService<IStartupUiHost>()));
+                sp.GetRequiredService<IStartupUiHost>(),
+                sp.GetRequiredService<INetworkAccess>()));
             services.AddSingleton<ISystemInfoProvider, SystemInfoProvider>();
             services.AddSingleton<IStatusBarService, StatusBarService>();
             services.AddSingleton<ILocationKeepAliveService, LocationKeepAliveService>();

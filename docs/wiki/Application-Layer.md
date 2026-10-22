@@ -60,6 +60,11 @@ Raw events on `IWhatsAppService` are **for facades only**. Each facade re-publis
 Registered in `App.ConfigureServices`. Do not recreate leftover `MessageService` / `ContactService` / `ConnectionService` / `ProfileService` next to the façades.
 
 ```
+Unison.WhatsAppClient/          (netstandard — portable façades)
+  Profiles/ProfileFacade.cs
+  Status/StatusFacade.cs
+  Helpers/…                   domain policy helpers (closed batches from Core)
+
 Unison.Uwp/Services/WhatsApp/
   Connection/ConnectionFacade.cs
   Messages/MessageFacade.cs
@@ -69,11 +74,10 @@ Unison.Uwp/Services/WhatsApp/
     AddressBookOverlay.cs    device contacts → Person
     ContactNameResolver.cs   throttle / cooldown
     ChatAvatarPolicy.cs      dedup / backoff (fetch still on the client)
-  Profiles/ProfileFacade.cs
   History/HistoryFacade.cs
-  Status/StatusFacade.cs
   Groups/GroupFacade.cs
   Groups/GroupMetadataReader.cs
+  Status/WinRtStatusThumbnailMaterializer.cs
   Diagnostics/DebugSendService.cs
   WhatsAppService.cs         compatibility client (partial)
   WhatsAppService.*.cs       Connection / Media / Groups / Avatars / Identity /
@@ -92,7 +96,7 @@ Owns **when** names and avatars refresh (cooldown, batches, per-session dedup). 
 
 ### StatusFacade
 
-Reads `history_status` (written by `HistoryFacade` from history chunks). Groups unexpired items by author for the Status list; serves oldest→newest items to the viewer; downloads media via `IMessageService.EnsureImage/VideoAvailableAsync`. Live `status@broadcast` messages are ingested here and **must not** become `ChatItem`s.
+Lives in `Unison.WhatsAppClient`. Reads `history_status` (written by `HistoryFacade` from history chunks). Groups unexpired items by author for the Status list; serves oldest→newest items to the viewer; downloads media via `IMessageService.EnsureImage/VideoAvailableAsync`. Live `status@broadcast` messages are ingested here and **must not** become `ChatItem`s. Poster/thumb bytes go through `IStatusThumbnailMaterializer` (UWP adapter).
 
 `IStatusService.StatusUpdated` fires when the store changes. ViewModels talk to `IStatusService` (names/avatars are resolved on the façade via `IPersonStore`), not to `IWhatsAppService` for Status.
 

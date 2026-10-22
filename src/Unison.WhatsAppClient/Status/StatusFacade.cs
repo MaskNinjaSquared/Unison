@@ -13,27 +13,30 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
-using Unison.Uwp.Services.WhatsApp.History;
+using Unison.WhatsAppClient.Helpers;
 
-namespace Unison.Uwp.Services.WhatsApp.Status
+namespace Unison.WhatsAppClient.Status
 {
     public sealed class StatusFacade : IStatusService
     {
         private readonly IHistoryStatusStore _store;
         private readonly IPersonStore _people;
         private readonly IMessageService _messages;
+        private readonly IStatusThumbnailMaterializer _thumbs;
         private readonly IRuntimeDiagnostics _diagnostics;
 
-        internal StatusFacade(
+        public StatusFacade(
             IHistoryStatusStore store,
             IPersonStore people,
             IMessageService messages,
             IWhatsAppService client,
+            IStatusThumbnailMaterializer thumbs,
             IRuntimeDiagnostics diagnostics = null)
         {
             _store = store ?? throw new ArgumentNullException(nameof(store));
             _people = people ?? throw new ArgumentNullException(nameof(people));
             _messages = messages ?? throw new ArgumentNullException(nameof(messages));
+            _thumbs = thumbs ?? throw new ArgumentNullException(nameof(thumbs));
             _diagnostics = diagnostics;
             if (client == null)
             {
@@ -339,9 +342,7 @@ namespace Unison.Uwp.Services.WhatsApp.Status
 
             try
             {
-                await HistoryThumbnailMaterializer.MaterializeStatusThumbsAsync(
-                        new List<HistoryStatus> { item })
-                    .ConfigureAwait(false);
+                await _thumbs.MaterializeAsync(new List<HistoryStatus> { item }).ConfigureAwait(false);
             }
             catch (Exception ex)
             {

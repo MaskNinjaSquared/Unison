@@ -139,6 +139,8 @@ Do in order. Each phase has a done check.
 - Touch: façade files under `src/Unison.Uwp/Services/WhatsApp/` that still `using Windows.*` (e.g. `ContactFacade`, `ConnectionFacade`, media path helpers).
 - Done when: no new WinRT types are required on the façade public surface; remaining WinRT is only in adapters/stores/transport.
 
+**Façades (done on this branch):** `ConnectionFacade` asks `INetworkAccess` (`WinRtNetworkAccess` holds `NetworkInformation`). `ContactFacade` waits for People-card return via `IAppLifecycle.WaitUntilForegroundAsync` (no `Window` / `CoreApplication`). Façade `.cs` files under `Services/WhatsApp/**` no longer `using Windows.*`. Remaining WinRT on the client / media helpers / stores is Phase A follow-up or stays in adapters until those types move.
+
 ### Phase B — Finish WhatsAppService extraction (phases 3 and 4)
 
 - Follow [WhatsAppService-Extraction](WhatsAppService-Extraction): move remaining clusters; then connection-only client (`Initialize` / connect / resume / suspend / broker / shutdown).
@@ -156,9 +158,11 @@ Do in order. Each phase has a done check.
 
 **Scaffold (started):** project is named **`Unison.WhatsAppClient`** (not `Unison.Application`) — under namespace `Unison.*`, an `Application` assembly name collides with XAML `Application`. In `Unison.slnx` with Core + Socket refs; UWP references it.
 
-**First façade move:** `ProfileFacade` lives in `Unison.WhatsAppClient/Profiles/`. Portable `IWhatsAppSessionProvider` is in `Unison.WhatsAppClient/Abstractions/`; UWP `BridgeSessionProvider` implements the bridge-extended interface (adds `IWhatsAppSocket`). Other façades remain under `Unison.Uwp/Services/WhatsApp/` until moved the same way.
+**Façade moves:** `ProfileFacade` → `Unison.WhatsAppClient/Profiles/`. `StatusFacade` → `Unison.WhatsAppClient/Status/` (thumbs via `IStatusThumbnailMaterializer` / `WinRtStatusThumbnailMaterializer`). Portable `IWhatsAppSessionProvider` is in `Unison.WhatsAppClient/Abstractions/`; UWP `BridgeSessionProvider` implements the bridge-extended interface (adds `IWhatsAppSocket`). Other façades remain under `Unison.Uwp/Services/WhatsApp/` until moved the same way.
 
-**Helpers:** do **not** bulk-move `Unison.Core/Helpers` — nearly all are also referenced from Core ViewModels/State. Move domain helpers **with** each façade; Core must not reference WhatsAppClient.
+**Helpers:** do **not** dump the whole `Unison.Core/Helpers` tree. Domain helpers that were **only** consumed by UWP (`WhatsAppService` / façades) + tests may move into `Unison.WhatsAppClient/Helpers/{History|Chats|…}` (namespace `Unison.WhatsAppClient.Helpers`) in closed batches — Core must not reference WhatsAppClient. Helpers still used by Core ViewModels/State stay until those call sites go through façade contracts. Presentation helpers stay in Core.
+
+**First closed batch (done on this branch):** ~91 pure policy helpers under `History|Chats|Contacts|Groups|Messages|Connection|Diagnostics` that had no Core ViewModel/State inbound refs. Call sites take `using Unison.WhatsAppClient.Helpers`. Left in Core when coupled to contracts/State (e.g. `OutgoingFailureClassification` / `OutgoingSendAttemptOutcome`, `HistoryCatchUpContinueDecision`, mappers used by VMs).
 
 ### Phase D — UWP as host only
 

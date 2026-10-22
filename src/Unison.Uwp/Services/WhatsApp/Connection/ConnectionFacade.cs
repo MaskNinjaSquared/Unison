@@ -9,7 +9,7 @@ using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Uwp.Services;
 using Unison.Uwp.Services.Socket;
-using Windows.Networking.Connectivity;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp.Connection
 {
@@ -28,6 +28,7 @@ namespace Unison.Uwp.Services.WhatsApp.Connection
         private readonly ILiveTilesService _liveTiles;
         private readonly IShellThemeService _shellTheme;
         private readonly IStartupUiHost _startupUi;
+        private readonly INetworkAccess _network;
         private IWhatsAppService _whatsApp;
         private int _handlingRelink;
 
@@ -40,7 +41,8 @@ namespace Unison.Uwp.Services.WhatsApp.Connection
             IShortcutService shortcuts,
             ILiveTilesService liveTiles,
             IShellThemeService shellTheme,
-            IStartupUiHost startupUi)
+            IStartupUiHost startupUi,
+            INetworkAccess network)
         {
             _localSettings = localSettings ?? throw new ArgumentNullException(nameof(localSettings));
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
@@ -51,33 +53,12 @@ namespace Unison.Uwp.Services.WhatsApp.Connection
             _liveTiles = liveTiles ?? throw new ArgumentNullException(nameof(liveTiles));
             _shellTheme = shellTheme ?? throw new ArgumentNullException(nameof(shellTheme));
             _startupUi = startupUi ?? throw new ArgumentNullException(nameof(startupUi));
+            _network = network ?? throw new ArgumentNullException(nameof(network));
         }
 
         public event EventHandler<ConnectionEndedEventArgs> ConnectionEnded;
 
-        public bool HasInternetAccess
-        {
-            get
-            {
-                try
-                {
-                    var profile = NetworkInformation.GetInternetConnectionProfile();
-                    if (profile == null)
-                    {
-                        return false;
-                    }
-
-                    var level = profile.GetNetworkConnectivityLevel();
-                    return level == NetworkConnectivityLevel.InternetAccess ||
-                           level == NetworkConnectivityLevel.ConstrainedInternetAccess;
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine("[ConnectionFacade] HasInternetAccess failed: " + ex.Message);
-                    return true;
-                }
-            }
-        }
+        public bool HasInternetAccess => _network.HasInternetAccess;
 
         public bool AutoUnlinkOnLogoutEnabled =>
             _localSettings.Get<bool>(LocalSettingsConstants.AutoUnlinkOnLogoutEnabled);

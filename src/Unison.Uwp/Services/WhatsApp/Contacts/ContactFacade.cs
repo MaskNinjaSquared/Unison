@@ -28,9 +28,7 @@ using Unison.Core.State;
 using Unison.Core.Constants;
 using Unison.Socket.Signal;
 using Unison.Uwp.Services.Socket;
-using Windows.ApplicationModel.Core;
-using Windows.UI.Core;
-using Windows.UI.Xaml;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp.Contacts
 {
@@ -43,6 +41,7 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
         private readonly IJidResolver _jids;
         private readonly ILocalContactsService _localContacts;
         private readonly ILocalSettings _localSettings;
+        private readonly IAppLifecycle _lifecycle;
         private readonly JidAliasTable _aliases;
         private readonly DisplayNameTable _pushNames;
         private readonly DisplayNameTable _addressBookNames;
@@ -90,10 +89,12 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
             ChatNameRefresh nameRefresh,
             ChatListAliasMerge aliasMerge,
             IDeferredAvatarResolution deferredAvatars,
-            IUsyncAliasHost usyncAliases)
+            IUsyncAliasHost usyncAliases,
+            IAppLifecycle lifecycle)
         {
             _displayNames = displayNames ?? throw new ArgumentNullException(nameof(displayNames));
             _nameRefresh = nameRefresh ?? throw new ArgumentNullException(nameof(nameRefresh));
+            _lifecycle = lifecycle ?? throw new ArgumentNullException(nameof(lifecycle));
             if (selfMarkers == null) throw new ArgumentNullException(nameof(selfMarkers));
             if (syncStatus == null) throw new ArgumentNullException(nameof(syncStatus));
             if (syncWork == null) throw new ArgumentNullException(nameof(syncWork));
@@ -379,60 +380,26 @@ namespace Unison.Uwp.Services.WhatsApp.Contacts
 
         /// <summary>
         /// The People UI is shown and forgotten. Refreshing the agenda on the UI thread in the
-        /// same turn dismisses the Windows 11 flyout. Wait until this window is foreground again
-        /// (user closed the full card, or came back from People).
+        /// same turn dismisses the Windows 11 flyout. Wait until the window is foreground again
+        /// (user closed the full card, or came back from People) via <see cref="IAppLifecycle"/>.
         /// </summary>
         private void ScheduleOverlayRefreshWhenAppForegrounded()
         {
-            var dispatcher = CoreApplication.MainView?.CoreWindow?.Dispatcher;
-            if (dispatcher == null)
-            {
-                HookOverlayRefreshOnActivated();
-                return;
-            }
-
-            _ = dispatcher.RunAsync(CoreDispatcherPriority.Normal, HookOverlayRefreshOnActivated);
+            _ = RefreshOverlayAfterForegroundAsync();
         }
 
-        private void HookOverlayRefreshOnActivated()
+        private async Task RefreshOverlayAfterForegroundAsync()
         {
-            Window window;
             try
             {
-                window = Window.Current;
+                await _lifecycle.WaitUntilForegroundAsync().ConfigureAwait(false);
+                await RefreshPhoneContactOverlayAsync(force: true).ConfigureAwait(false);
+                DisplayNamesUpdated?.Invoke(this, EventArgs.Empty);
             }
-            catch
+            catch (Exception ex)
             {
-                window = null;
+                Debug.WriteLine("[ContactFacade] Overlay refresh after People card failed: " + ex.Message);
             }
-
-            if (window == null)
-            {
-                return;
-            }
-
-            WindowActivatedEventHandler handler = null;
-            handler = async (sender, args) =>
-            {
-                if (args == null ||
-                    args.WindowActivationState == CoreWindowActivationState.Deactivated)
-                {
-                    return;
-                }
-
-                window.Activated -= handler;
-                try
-                {
-                    await RefreshPhoneContactOverlayAsync(force: true).ConfigureAwait(false);
-                    DisplayNamesUpdated?.Invoke(this, EventArgs.Empty);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine("[ContactFacade] Overlay refresh after People card failed: " + ex.Message);
-                }
-            };
-
-            window.Activated += handler;
         }
 
         private string ResolvePhone(string jid, string phoneDigits)
