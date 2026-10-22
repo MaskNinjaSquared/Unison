@@ -165,6 +165,7 @@
     <Compile Include="Services\WhatsApp\History\WinRtHistoryMessageThumbnailMaterializer.cs" />
     <Compile Include="Services\WhatsApp\Status\WinRtStatusThumbnailMaterializer.cs" />
     <Compile Include="Services\Network\WinRtNetworkAccess.cs" />
+    <Compile Include="Services\WinRtAppMemoryInfo.cs" />
     <Compile Include="Services\WhatsApp\Messages\BridgeMessageWireActions.cs" />
     <Compile Include="Services\WhatsApp\Messages\MediaAvailability.cs" />
     <Compile Include="Services\Socket\DelegateSocketLog.cs" />

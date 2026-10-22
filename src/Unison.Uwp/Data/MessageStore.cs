@@ -15,6 +15,7 @@ using Unison.Core.Models;
 using Unison.Uwp.Helpers;
 using Unison.Uwp.Services;
 using Unison.Uwp.Services.WhatsApp;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Data
 {
