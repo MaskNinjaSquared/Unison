@@ -10,6 +10,7 @@ using Unison.Uwp.Client;
 using Unison.Core.Helpers;
 using Unison.Core.Mappers;
 using Unison.Core.Models;
+using Unison.WhatsAppClient.Helpers;
 using Unison.Baileys.Protocol;
 using Unison.Uwp.Data;
 using Unison.Baileys.Crypto;

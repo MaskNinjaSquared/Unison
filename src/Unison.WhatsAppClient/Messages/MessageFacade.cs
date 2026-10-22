@@ -335,6 +335,24 @@ namespace Unison.WhatsAppClient.Messages
             return ChatMediaFilter.IsDocument(message);
         }
 
+        /// <inheritdoc />
+        public void CopyReactionState(ChatMessage target, ChatMessage source)
+        {
+            HistoryMessageMapper.CopyReactionState(target, source);
+        }
+
+        /// <inheritdoc />
+        public ChatMessage TryCreatePreviewFallback(ChatItem chat, string selfDisplayName = null)
+        {
+            return ChatPreviewMessageFactory.TryCreate(chat, selfDisplayName);
+        }
+
+        /// <inheritdoc />
+        public bool IsPreviewFallbackMessageId(string id)
+        {
+            return ChatPreviewMessageFactory.IsPreviewFallbackId(id);
+        }
+
         public async Task<List<ChatMessage>> LoadChatMediaIndexAsync(string jid, int limit = 400)
         {
             var result = new List<ChatMessage>();

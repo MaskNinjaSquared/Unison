@@ -155,6 +155,9 @@ namespace Unison.Core.Tests.ViewModels
             public Task<List<ChatMessage>> LoadChatMediaIndexAsync(string jid, int limit = 400) => throw new NotImplementedException();
             public bool IsChatInfoMedia(ChatMessage message) => false;
             public bool IsChatInfoDocument(ChatMessage message) => false;
+            public void CopyReactionState(ChatMessage target, ChatMessage source) { }
+            public ChatMessage TryCreatePreviewFallback(ChatItem chat, string selfDisplayName = null) => null;
+            public bool IsPreviewFallbackMessageId(string id) => false;
             public Task<bool> EnsureHistoryOnDemandAsync(string jid, int count) => throw new NotImplementedException();
             public bool IsHistoryOnDemandPending(string jid) => false;
             public Task<ChatMessage> SendTextMessageAsync(string jid, string text) => throw new NotImplementedException();

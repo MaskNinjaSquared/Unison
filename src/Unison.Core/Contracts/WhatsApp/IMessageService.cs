@@ -69,6 +69,18 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>True when the row belongs on the chat-info Files pivot.</summary>
         bool IsChatInfoDocument(ChatMessage message);
 
+        /// <summary>Copies reaction aggregates from a reloaded row onto one already on screen.</summary>
+        void CopyReactionState(ChatMessage target, ChatMessage source);
+
+        /// <summary>
+        /// Ephemeral bubble from list-preview fields when history has not arrived yet.
+        /// Never persist these rows.
+        /// </summary>
+        ChatMessage TryCreatePreviewFallback(ChatItem chat, string selfDisplayName = null);
+
+        /// <summary>True when <paramref name="id"/> was minted by <see cref="TryCreatePreviewFallback"/>.</summary>
+        bool IsPreviewFallbackMessageId(string id);
+
         /// <summary>Asks the phone for older messages for an open chat.</summary>
         Task<bool> EnsureHistoryOnDemandAsync(string jid, int count);
 

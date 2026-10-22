@@ -1,8 +1,9 @@
 using System;
 using System.Collections.Generic;
 using Unison.Core.Contracts;
+using Unison.Core.Helpers;
 
-namespace Unison.Core.Helpers
+namespace Unison.WhatsAppClient.Helpers
 {
     /// <summary>
     /// Every address one person is filed under: the row JID, its canonical form, and the

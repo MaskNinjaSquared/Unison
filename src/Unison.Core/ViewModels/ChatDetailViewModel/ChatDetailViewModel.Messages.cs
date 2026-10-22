@@ -289,7 +289,8 @@ namespace Unison.Core.ViewModels
                     continue;
                 }
 
-                if (model.IsPreviewFallback || ChatPreviewMessageFactory.IsPreviewFallbackId(model.Id))
+                if (model.IsPreviewFallback ||
+                    (_messageService != null && _messageService.IsPreviewFallbackMessageId(model.Id)))
                 {
                     RemoveTimelineAt(i);
                 }
@@ -322,7 +323,7 @@ namespace Unison.Core.ViewModels
 
             string targetJid = string.IsNullOrWhiteSpace(requestedJid) ? chat.JID : requestedJid;
             string selfName = _strings?.Get("Chat_SelfFallbackName", "You") ?? "You";
-            ChatMessage fallback = ChatPreviewMessageFactory.TryCreate(chat, selfName);
+            ChatMessage fallback = _messageService?.TryCreatePreviewFallback(chat, selfName);
             if (fallback != null)
             {
                 if (isGroup &&
@@ -475,7 +476,7 @@ namespace Unison.Core.ViewModels
         }
 
         /// <summary>Copies the fields a reload can carry forward onto a row already on screen.</summary>
-        private static void ApplyLiveFieldsTo(ChatMessage target, ChatMessage source)
+        private void ApplyLiveFieldsTo(ChatMessage target, ChatMessage source)
         {
             if (target == null || source == null)
             {
@@ -489,7 +490,7 @@ namespace Unison.Core.ViewModels
             target.PinExpiresAtUtc = source.PinExpiresAtUtc;
             target.RemoteJid = source.RemoteJid;
             target.ParticipantJid = source.ParticipantJid;
-            HistoryMessageMapper.CopyReactionState(target, source);
+            _messageService?.CopyReactionState(target, source);
             if (source.IsRevoked)
             {
                 target.Content = source.Content;

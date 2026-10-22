@@ -1174,8 +1174,14 @@ namespace Unison.WhatsAppClient.Chats
             }
         }
 
-        private void RememberPinnedUnderAliases(string jid, bool pinned)
+        /// <inheritdoc />
+        public void RememberPinnedUnderAliases(string jid, bool pinned)
         {
+            if (string.IsNullOrWhiteSpace(jid))
+            {
+                return;
+            }
+
             IReadOnlyList<string> keys = ChatPinStoreKeys.For(jid, _jids);
             for (int i = 0; i < keys.Count; i++)
             {
@@ -1183,42 +1189,16 @@ namespace Unison.WhatsAppClient.Chats
             }
         }
 
-        private async Task PersistHistoryPinnedAsync(string jid, bool pinned)
+        /// <inheritdoc />
+        public void ApplyLocalStateAliasFallback(ChatItem chat)
         {
-            try
-            {
-                IReadOnlyList<string> keys = ChatPinStoreKeys.For(jid, _jids);
-                for (int i = 0; i < keys.Count; i++)
-                {
-                    await _chatStore.SetChatPinnedAsync(keys[i], pinned).ConfigureAwait(false);
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[ChatFacade] Persist history pin failed: " + ex.Message);
-            }
-        }
-
-        private async Task PersistHistoryMuteAsync(string jid, long? mutedUntil)
-        {
-            try
-            {
-                await _chatStore.SetMutedUntilAsync(jid, mutedUntil).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[ChatFacade] Persist history mute failed: " + ex.Message);
-            }
-        }
-
-        private void TryApplyCanonicalPinFallback(ChatItem chat)
-        {
-            if (chat == null)
+            if (chat == null || string.IsNullOrWhiteSpace(chat.JID))
             {
                 return;
             }
 
             ChatLocalState exact = _chatStore.TryGetCached(chat.JID);
+            // An explicit unpin under this exact JID wins over any alias.
             if (exact != null && exact.Knows(ChatLocalStateFields.Pin) && !exact.IsChatPinned)
             {
                 return;
@@ -1253,8 +1233,75 @@ namespace Unison.WhatsAppClient.Chats
                     RememberPinnedUnderAliases(chat.JID, true);
                 }
 
-                return;
+                break;
             }
+
+            for (int i = 0; i < keys.Count; i++)
+            {
+                string key = keys[i];
+                if (string.Equals(
+                        JidHelper.Normalize(key),
+                        JidHelper.Normalize(chat.JID),
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                ChatLocalState alt = _chatStore.TryGetCached(key);
+                if (alt == null)
+                {
+                    continue;
+                }
+
+                if (!chat.IsWidgetPinned &&
+                    alt.Knows(ChatLocalStateFields.WidgetPin) &&
+                    alt.IsWidgetPinned)
+                {
+                    chat.IsWidgetPinned = true;
+                }
+
+                if (chat.MutedUntil == null &&
+                    !(exact != null && exact.Knows(ChatLocalStateFields.Mute)) &&
+                    alt.Knows(ChatLocalStateFields.Mute) &&
+                    alt.MutedUntil != null)
+                {
+                    chat.MutedUntil = alt.MutedUntil;
+                    _chatStore.RememberMutedUntil(chat.JID, alt.MutedUntil);
+                }
+            }
+        }
+
+        private async Task PersistHistoryPinnedAsync(string jid, bool pinned)
+        {
+            try
+            {
+                IReadOnlyList<string> keys = ChatPinStoreKeys.For(jid, _jids);
+                for (int i = 0; i < keys.Count; i++)
+                {
+                    await _chatStore.SetChatPinnedAsync(keys[i], pinned).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatFacade] Persist history pin failed: " + ex.Message);
+            }
+        }
+
+        private async Task PersistHistoryMuteAsync(string jid, long? mutedUntil)
+        {
+            try
+            {
+                await _chatStore.SetMutedUntilAsync(jid, mutedUntil).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatFacade] Persist history mute failed: " + ex.Message);
+            }
+        }
+
+        private void TryApplyCanonicalPinFallback(ChatItem chat)
+        {
+            ApplyLocalStateAliasFallback(chat);
         }
     }
 }

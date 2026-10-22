@@ -135,5 +135,14 @@ namespace Unison.Core.Contracts.WhatsApp
             ChatItem chat,
             string requestedJid,
             IReadOnlyList<ChatMessage> visibleMessages);
+
+        /// <summary>
+        /// When the row's exact JID cache has no pin/mute, copies those flags from PN/LID alias
+        /// store keys onto the row (and remembers pin under every alias).
+        /// </summary>
+        void ApplyLocalStateAliasFallback(ChatItem chat);
+
+        /// <summary>Caches the account pin under every PN/LID spelling of <paramref name="jid"/>.</summary>
+        void RememberPinnedUnderAliases(string jid, bool pinned);
     }
 }
