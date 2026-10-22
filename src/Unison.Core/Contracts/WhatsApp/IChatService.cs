@@ -126,5 +126,14 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         HistoryChatPreviewHydrateResult ApplyHistoryChatPreviewHydrate(
             HistoryChatPreviewHydrateRequest request);
+
+        /// <summary>
+        /// Corrects the chat's list strip from the timeline just opened, then asks the store for a
+        /// reconcile in case SQLite holds something newer. Must run on the UI thread.
+        /// </summary>
+        void SyncListStripFromTimeline(
+            ChatItem chat,
+            string requestedJid,
+            IReadOnlyList<ChatMessage> visibleMessages);
     }
 }

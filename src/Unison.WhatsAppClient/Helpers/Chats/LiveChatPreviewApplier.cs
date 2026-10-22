@@ -14,7 +14,9 @@ using System.Collections.Generic;
 using Unison.Core.Mappers;
 using Unison.Core.Models;
 
-namespace Unison.Core.Helpers
+using Unison.Core.Helpers;
+
+namespace Unison.WhatsAppClient.Helpers
 {
     public static class LiveChatPreviewApplier
     {

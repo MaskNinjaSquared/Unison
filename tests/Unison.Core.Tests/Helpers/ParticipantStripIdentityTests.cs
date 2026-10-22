@@ -2,6 +2,7 @@
 // Tests for ParticipantStripIdentity — LID vs PN for the group strip tip.
 // =============================================================================
 using Unison.Core.Helpers;
+using Unison.WhatsAppClient.Helpers;
 using Xunit;
 
 namespace Unison.Core.Tests.Helpers

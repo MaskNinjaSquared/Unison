@@ -298,78 +298,14 @@ namespace Unison.Core.ViewModels
 
         /// <summary>
         /// Corrects the chat's list row from the timeline just opened, then asks the store for a
-        /// reconcile in case SQLite holds something newer. See <see cref="TimelineListStrip"/>.
+        /// reconcile in case SQLite holds something newer.
         /// </summary>
         public void SyncListStripFromTimeline(
             ChatItem chat,
             string requestedJid,
             IReadOnlyList<ChatMessage> visibleMessages)
         {
-            if (chat == null)
-            {
-                return;
-            }
-
-            ChatMessage tip = TimelineListStrip.PickTip(visibleMessages);
-            if (tip == null)
-            {
-                _ = _chatService?.ReconcileChatPreviewsFromSqliteAsync(new[] { requestedJid }, "chat-open-empty");
-                return;
-            }
-
-            bool isGroup = chat.IsGroup ||
-                (chat.JID ?? string.Empty).EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
-            string rawPreview = ChatPreviewNormalizer.FormatListPreview(tip, isGroup);
-            string stripParticipant = isGroup
-                ? ParticipantStripIdentity.PreferForDisplay(
-                    tip.ParticipantJid,
-                    _jids.GetCanonicalJid(tip.ParticipantJid))
-                : null;
-            string authorPrefix = ChatPreviewNormalizer.FormatListAuthorPrefix(
-                tip,
-                isGroup,
-                _strings?.Get("Chat_SelfFallbackName", "You") ?? "You",
-                stripParticipant);
-            ChatPreviewNormalizer.Normalize(
-                rawPreview,
-                ChatPreviewNormalizer.InferKindFromMessage(tip),
-                out var previewKind,
-                out var preview);
-            MessageSendState sendState = HistoryLiveMessageMapper.FromStatus(tip.Status, tip.IsFromMe);
-            string senderName = tip.IsFromMe ? null : tip.SenderName;
-
-            if (TimelineListStrip.ShouldReplace(chat, tip, preview, previewKind, authorPrefix, sendState))
-            {
-                DateTime tipUtc = WhatsAppMapper.ToUtc(tip.Timestamp);
-                chat.LastMessage = preview;
-                chat.LastMessageAuthor = authorPrefix;
-                chat.LastMessageKind = previewKind;
-                chat.LastMessageMentionedJids = tip.MentionedJids != null && tip.MentionedJids.Count > 0
-                    ? new List<string>(tip.MentionedJids)
-                    : null;
-                chat.LastMessageIsFromMe = tip.IsFromMe;
-                chat.LastMessageSendState = sendState;
-                chat.LastMessageId = tip.Id;
-                chat.LastMessageTimestampUtc = tipUtc;
-                chat.Timestamp = WhatsAppMapper.FormatTimestamp(
-                    tip.Timestamp,
-                    _strings?.Get("Common_Yesterday", "Yesterday") ?? "Yesterday");
-                LiveChatPreviewApplier.ApplyAuthorParts(chat, stripParticipant, senderName, authorPrefix);
-                _chatService?.PersistChatListRows(new[] { chat });
-                System.Diagnostics.Debug.WriteLine(
-                    "[ChatDetailViewModel] List preview from newest tip id=" + (tip.Id ?? "?") +
-                    " fromMe=" + tip.IsFromMe + " ts=" + tipUtc.ToString("O"));
-            }
-            else if (isGroup &&
-                     !string.IsNullOrWhiteSpace(tip.Id) &&
-                     string.Equals(chat.LastMessageId, tip.Id, StringComparison.Ordinal))
-            {
-                // Same tip the bubble just named — promote author without moving the strip time.
-                LiveChatPreviewApplier.ApplyAuthorParts(chat, stripParticipant, senderName, authorPrefix);
-                _chatService?.PersistChatListRows(new[] { chat });
-            }
-
-            _ = _chatService?.ReconcileChatPreviewsFromSqliteAsync(new[] { requestedJid }, "chat-open");
+            _chatService?.SyncListStripFromTimeline(chat, requestedJid, visibleMessages);
         }
 
         /// <summary>

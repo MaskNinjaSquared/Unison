@@ -328,6 +328,18 @@ namespace Unison.WhatsAppClient.Groups
             };
         }
 
+        /// <inheritdoc />
+        public bool MemberMatches(GroupMember member, string candidateJid)
+        {
+            return GroupRosterRules.MemberMatches(member, candidateJid, _jids);
+        }
+
+        /// <inheritdoc />
+        public IReadOnlyList<string> MembershipPersonKeys(GroupMember member)
+        {
+            return GroupRosterRules.MembershipPersonKeys(member, _jids);
+        }
+
         public Task QueryAllGroupsAsync() => QueryAllGroupsAsync(false);
 
         public async Task QueryAllGroupsAsync(bool force)

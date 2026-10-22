@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using Unison.Core.Contracts;
 using Unison.Core.Models;
 
-namespace Unison.Core.Helpers
+using Unison.Core.Helpers;
+
+namespace Unison.WhatsAppClient.Helpers
 {
     /// <summary>
     /// The decisions a group roster goes through on its way to and from the row: copying it for

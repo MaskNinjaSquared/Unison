@@ -6,6 +6,7 @@
 // =============================================================================
 using System;
 using Unison.Core.Helpers;
+using Unison.WhatsAppClient.Helpers;
 using Unison.Core.Models;
 using Xunit;
 

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Unison.Core.Models;
@@ -54,5 +55,16 @@ namespace Unison.Core.Contracts.WhatsApp
         /// UI thread.
         /// </summary>
         void ApplyGroupMemberAvatarOutcome(string memberJid, GroupMemberAvatarFetchResult result);
+
+        /// <summary>
+        /// Whether <paramref name="member"/> is the same person as <paramref name="candidateJid"/>
+        /// under PN/LID aliasing.
+        /// </summary>
+        bool MemberMatches(GroupMember member, string candidateJid);
+
+        /// <summary>
+        /// Person-store keys under which groups-in-common memberships were written for this member.
+        /// </summary>
+        IReadOnlyList<string> MembershipPersonKeys(GroupMember member);
     }
 }

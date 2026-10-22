@@ -176,6 +176,8 @@ Do in order. Each phase has a done check.
 | Chat row pick | `ChatRowAvatarLookup`, `DuplicateChatRowPick` | — |
 | Quotes | `QuotedContext` | `MessageRenderReader` / `HistorySyncContentFilter` stay in Core |
 | History list hydrate | `HistoryChatPreviewApplier`; `IChatService.ApplyHistoryChatPreviewHydrate` | VM only wires PropertyChanged + batch UI; `ChatPreviewNormalizer` stays in Core |
+| Open-chat strip | `TimelineListStrip`, `LiveChatPreviewApplier`, `ParticipantStripIdentity`; `IChatService.SyncListStripFromTimeline` | Detail VM delegates to façade |
+| Group roster rules | `GroupRosterRules`; `IGroupService.MemberMatches` / `MembershipPersonKeys` | Info pane no longer imports the helper |
 
 ### Phase D — UWP as host only
 

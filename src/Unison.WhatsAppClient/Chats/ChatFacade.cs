@@ -395,6 +395,78 @@ namespace Unison.WhatsAppClient.Chats
             }
         }
 
+        /// <inheritdoc />
+        public void SyncListStripFromTimeline(
+            ChatItem chat,
+            string requestedJid,
+            IReadOnlyList<ChatMessage> visibleMessages)
+        {
+            if (chat == null)
+            {
+                return;
+            }
+
+            string yesterday = _strings.Get("Common_Yesterday", "Yesterday");
+            string selfLabel = _strings.Get("Chat_SelfFallbackName", "You");
+            ChatMessage tip = TimelineListStrip.PickTip(visibleMessages);
+            if (tip == null)
+            {
+                _ = ReconcileChatPreviewsFromSqliteAsync(new[] { requestedJid }, "chat-open-empty");
+                return;
+            }
+
+            bool isGroup = chat.IsGroup ||
+                (chat.JID ?? string.Empty).EndsWith("@g.us", StringComparison.OrdinalIgnoreCase);
+            string rawPreview = ChatPreviewNormalizer.FormatListPreview(tip, isGroup);
+            string stripParticipant = isGroup
+                ? ParticipantStripIdentity.PreferForDisplay(
+                    tip.ParticipantJid,
+                    _jids.GetCanonicalJid(tip.ParticipantJid))
+                : null;
+            string authorPrefix = ChatPreviewNormalizer.FormatListAuthorPrefix(
+                tip,
+                isGroup,
+                selfLabel,
+                stripParticipant);
+            ChatPreviewNormalizer.Normalize(
+                rawPreview,
+                ChatPreviewNormalizer.InferKindFromMessage(tip),
+                out var previewKind,
+                out var preview);
+            MessageSendState sendState = HistoryLiveMessageMapper.FromStatus(tip.Status, tip.IsFromMe);
+            string senderName = tip.IsFromMe ? null : tip.SenderName;
+
+            if (TimelineListStrip.ShouldReplace(chat, tip, preview, previewKind, authorPrefix, sendState))
+            {
+                DateTime tipUtc = WhatsAppMapper.ToUtc(tip.Timestamp);
+                chat.LastMessage = preview;
+                chat.LastMessageAuthor = authorPrefix;
+                chat.LastMessageKind = previewKind;
+                chat.LastMessageMentionedJids = tip.MentionedJids != null && tip.MentionedJids.Count > 0
+                    ? new List<string>(tip.MentionedJids)
+                    : null;
+                chat.LastMessageIsFromMe = tip.IsFromMe;
+                chat.LastMessageSendState = sendState;
+                chat.LastMessageId = tip.Id;
+                chat.LastMessageTimestampUtc = tipUtc;
+                chat.Timestamp = WhatsAppMapper.FormatTimestamp(tip.Timestamp, yesterday);
+                LiveChatPreviewApplier.ApplyAuthorParts(chat, stripParticipant, senderName, authorPrefix);
+                PersistChatListRows(new[] { chat });
+                Debug.WriteLine(
+                    "[ChatFacade] List preview from newest tip id=" + (tip.Id ?? "?") +
+                    " fromMe=" + tip.IsFromMe + " ts=" + tipUtc.ToString("O"));
+            }
+            else if (isGroup &&
+                     !string.IsNullOrWhiteSpace(tip.Id) &&
+                     string.Equals(chat.LastMessageId, tip.Id, StringComparison.Ordinal))
+            {
+                LiveChatPreviewApplier.ApplyAuthorParts(chat, stripParticipant, senderName, authorPrefix);
+                PersistChatListRows(new[] { chat });
+            }
+
+            _ = ReconcileChatPreviewsFromSqliteAsync(new[] { requestedJid }, "chat-open");
+        }
+
         public void PersistChatListRows(IList<ChatItem> chats)
         {
             if (chats == null || chats.Count == 0)

@@ -1,6 +1,8 @@
 using System;
 
-namespace Unison.Core.Helpers
+using Unison.Core.Helpers;
+
+namespace Unison.WhatsAppClient.Helpers
 {
     /// <summary>
     /// Which JID the group list strip should resolve against when the envelope carries both a
