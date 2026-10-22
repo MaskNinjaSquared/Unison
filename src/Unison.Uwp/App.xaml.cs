@@ -334,6 +334,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ChatStateStore>(),
                 sp.GetRequiredService<ChatRowIndex>(),
                 sp.GetRequiredService<AttachedUiDispatcher>(),
+                sp.GetRequiredService<IStringResources>(),
+                sp.GetRequiredService<IRuntimeDiagnostics>(),
                 () => sp.GetRequiredService<SyncBudget>().IsFrugal));
             services.AddSingleton(sp => new ChatNameRefresh(
                 sp.GetRequiredService<AttachedUiDispatcher>(),

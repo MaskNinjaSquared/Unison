@@ -20,7 +20,6 @@ using Unison.Core.Contracts;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.State;
-using Unison.Uwp.Helpers;
 using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp.Chats
@@ -43,6 +42,8 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
         private readonly ChatStateStore _chatState;
         private readonly ChatRowIndex _chatRows;
         private readonly IDispatcher _ui;
+        private readonly IStringResources _strings;
+        private readonly IRuntimeDiagnostics _diagnostics;
         private readonly Func<bool> _preferFrugal;
 
         public ChatPreviewReconciler(
@@ -51,6 +52,8 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             ChatStateStore chatState,
             ChatRowIndex chatRows,
             IDispatcher ui,
+            IStringResources strings,
+            IRuntimeDiagnostics diagnostics = null,
             Func<bool> preferFrugal = null)
         {
             _historyMessages = historyMessages ?? throw new ArgumentNullException(nameof(historyMessages));
@@ -58,6 +61,8 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _chatRows = chatRows ?? throw new ArgumentNullException(nameof(chatRows));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
+            _strings = strings ?? throw new ArgumentNullException(nameof(strings));
+            _diagnostics = diagnostics;
             _preferFrugal = preferFrugal ?? (() => false);
         }
 
@@ -116,7 +121,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
                 }).ConfigureAwait(false);
             }
 
-            RuntimeDiagnosticsService.Instance.Write(
+            DiagWrite(
                 "preview-tip",
                 "reconcile-begin",
                 "reason=" + tag + "; requested=" + (chatJids != null ? chatJids.Count : -1) +
@@ -140,7 +145,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
                 List<HistoryMessage> page = await ReadStoredPageAsync(canonical, keys).ConfigureAwait(false);
                 if (page == null)
                 {
-                    RuntimeDiagnosticsService.Instance.Write(
+                    DiagWrite(
                         "preview-tip",
                         "db-empty",
                         "reason=" + tag + "; jid=" + DiagnosticJidMask.Apply(canonical) +
@@ -178,7 +183,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
 
                 if (sliceSwapped > 0)
                 {
-                    RuntimeDiagnosticsService.Instance.Write(
+                    DiagWrite(
                         "preview-tip",
                         "tip-swapped:" + sliceSwapped,
                         "reason=" + tag + "; slice=" + sliceStart + "-" + sliceEnd);
@@ -186,7 +191,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
 
                 if (sliceKept > 0)
                 {
-                    RuntimeDiagnosticsService.Instance.Write(
+                    DiagWrite(
                         "preview-tip",
                         "kept-old-tip:" + sliceKept,
                         "reason=" + tag + "; slice=" + sliceStart + "-" + sliceEnd);
@@ -248,9 +253,9 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             ChatListStrip strip = ChatListStrip.FromMessage(
                 best,
                 isGroup,
-                LocalizedStrings.Get("Chat_SelfFallbackName", "You"),
+                _strings.Get("Chat_SelfFallbackName", "You"),
                 _aliases.GetCanonicalJid(best.ParticipantJid));
-            string yesterday = LocalizedStrings.Get("Common_Yesterday", "Yesterday");
+            string yesterday = _strings.Get("Common_Yesterday", "Yesterday");
 
             int updated = 0;
             foreach (var chat in _chatRows.FindConversation(canonical))
@@ -369,6 +374,14 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             }
 
             return ChatPreviewTip.PickNewestReconcileCandidate(candidates, DateTime.UtcNow);
+        }
+
+        private void DiagWrite(string category, string eventName, string details = null)
+        {
+            if (_diagnostics != null)
+            {
+                _diagnostics.Write(category, eventName, details);
+            }
         }
 
         private List<string> ExpandKeys(string jid)
