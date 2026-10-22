@@ -188,6 +188,9 @@ Do in order. Each phase has a done check.
 | Mentions / load-more page | `MentionSearch`, `TimelineLoadMorePage`; `IMessageService` mention + duplicate-page APIs | `ChatMessageOrder` stays in Core (State / mappers); `ComposerMentionDraft` stays until composer cut |
 | Unread / app-state flags / preview age | `ChatUnreadTally`, `AppStateChatMutation` (+ `ChatFlagChange`), `ChatPreviewStaleness` | — |
 | Chat title replace / invite-subject blacklist | `ChatNameReplacement`, `GroupNameSyncBlacklist` | — |
+| Live history map / usync alias file | `HistoryLiveMessageMapper`, `UsyncAliasFiling` | — |
+
+**Inventory note (Phase C remainder):** a Core-helpers scan that tagged ~15 as MOVE_NOW (VM/State/Models = 0) over-counted. Most still have **Core inbound** from mappers, State, or presentation (`HistorySyncContentFilter` ← `ChatMessageMapper` / `MessageRenderReader`; `NameLookupCandidates` ← `PushNameLookup`; `GroupIdPlaceholder` ← `CommunityHubPresentation`; `MessageTimestampValidity` / `LegacyDeletedPreview` ← State + `ChatPreviewTip`; `OutgoingFailureClassification` / `ConnectionStabilityExperiment` stay with `OutgoingSendAttemptOutcome` on contracts). Real remaining Phase C work is **NEEDS_CUT** (VM → façade) and **KEEP_STATE_COUPLED**, not a bulk MOVE_NOW dump.
 
 ### Phase D — UWP as host only
 
