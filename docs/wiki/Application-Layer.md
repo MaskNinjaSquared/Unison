@@ -23,19 +23,19 @@ Unison.Core/
 
 ### WhatsApp contracts
 
-| Interface | Facade (UWP) | Responsibility |
+| Interface | Implementation | Responsibility |
 |---|---|---|
-| `IJidResolver` | `JidResolver` | Canonical JID + PN/LID alias lookup (wraps the client table until it moves) |
-| `IConnectionService` | `ConnectionFacade` | Pairing (QR / code), disconnect policy, server logout, session wipe, startup order (`InitializeConnectionStateAsync`, `IsRegisteredAsync`, `EnsureConnectedAsync`, `LoadPersistedUiStateAsync`, `StartDeferredStartupMaintenance`, `IsConnected`) |
-| `IMessageService` | `MessageFacade` | Send, on-demand media, message pin, reactions, `GetChatMessage`, new chat |
-| `IChatService` | `ChatFacade` | Account pin/unpin (app-state) + mark-read, active chat, unread total, list-row persist + SQLite preview reconcile |
-| `IGroupService` | `GroupFacade` | Group listing, send-permission refresh, roster hydrate, the full-size group picture and member pictures |
-| `IContactService` | `ContactFacade` | Address-book overlay, name refresh, avatar policy, phone search, People add-contact card, optional Unison `UserDataAccount` in People |
-| `IProfileService` | `ProfileFacade` | “Me” hydrate + profile picture IQ |
-| `IHistoryService` | `HistoryFacade` | Sync status, chunks, on-demand full resync, initial-sync counters + frugal budget |
-| `IStatusService` | `StatusFacade` | Active Status authors/items, live status@broadcast ingest, on-demand media |
-| `IDebugSendService` | `DebugSendService` | File-watch test send (`#if DEBUG`) |
-| `IWhatsAppService` | `WhatsAppService` | Compatibility client (socket, in-memory chats, persist) |
+| `IJidResolver` | `JidResolver` (UWP) | Canonical JID + PN/LID alias lookup (wraps the client table until it moves) |
+| `IConnectionService` | `ConnectionFacade` (WhatsAppClient) | Pairing (QR / code), disconnect policy, server logout, session wipe, startup order (`InitializeConnectionStateAsync`, `IsRegisteredAsync`, `EnsureConnectedAsync`, `LoadPersistedUiStateAsync`, `StartDeferredStartupMaintenance`, `IsConnected`) |
+| `IMessageService` | `MessageFacade` (WhatsAppClient) | Send, on-demand media, message pin, reactions, `GetChatMessage`, new chat |
+| `IChatService` | `ChatFacade` (WhatsAppClient) | Account pin/unpin (app-state) + mark-read, active chat, unread total, list-row persist + SQLite preview reconcile |
+| `IGroupService` | `GroupFacade` (WhatsAppClient) | Group listing, send-permission refresh, roster hydrate, the full-size group picture and member pictures |
+| `IContactService` | `ContactFacade` (WhatsAppClient) | Address-book overlay, name refresh, avatar policy, phone search, People add-contact card, optional Unison `UserDataAccount` in People |
+| `IProfileService` | `ProfileFacade` (WhatsAppClient) | “Me” hydrate + profile picture IQ |
+| `IHistoryService` | `HistoryFacade` (WhatsAppClient) | Sync status, chunks, on-demand full resync, initial-sync counters + frugal budget |
+| `IStatusService` | `StatusFacade` (WhatsAppClient) | Active Status authors/items, live status@broadcast ingest, on-demand media |
+| `IDebugSendService` | `DebugSendService` (UWP) | File-watch test send (`#if DEBUG`) |
+| `IWhatsAppService` | `WhatsAppService` (UWP) | Compatibility client (socket, in-memory chats, persist) |
 
 `IPairingService` stays in `Contracts/` (not under `WhatsApp/`). Login talks to `IConnectionService`, which owns pairing.
 

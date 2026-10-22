@@ -164,6 +164,15 @@ Do in order. Each phase has a done check.
 
 **First closed batch (done on this branch):** ~91 pure policy helpers under `History|Chats|Contacts|Groups|Messages|Connection|Diagnostics` that had no Core ViewModel/State inbound refs. Call sites take `using Unison.WhatsAppClient.Helpers`. Left in Core when coupled to contracts/State (e.g. `OutgoingFailureClassification` / `OutgoingSendAttemptOutcome`, `HistoryCatchUpContinueDecision`, mappers used by VMs).
 
+**Follow-on closed batches (done on this branch):**
+
+| Batch | Moved into `Unison.WhatsAppClient` | Left in Core / UWP |
+|---|---|---|
+| Outgoing send | `OutgoingTextSend`, `OutgoingMediaSend` | Retry/settlement types (`OutgoingTextSendRetry`, …) stay in Core (contracts + tests share them) |
+| Receipts | `ReceiptReader` / `ReceiptFacts` (was UWP; Attrs via `TryGetValue`) | `WhatsAppService.Receipts` still mutates ticks |
+| Group apply | `GroupMetadataApply`, `GroupRosterWriter` | `GroupRosterRules` / naming blacklist stay in Core (ViewModels) |
+| History builders | `HistoryMessageBuilder`, `HistoryMediaFiller` | `HistorySyncContentFilter` stays in Core (mappers / quoted context / live pump) |
+
 ### Phase D — UWP as host only
 
 - UWP = XAML + adapters + DI + thin connection host if anything remains of `WhatsAppService`.

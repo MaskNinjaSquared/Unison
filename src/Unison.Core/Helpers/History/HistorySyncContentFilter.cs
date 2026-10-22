@@ -7,7 +7,7 @@ namespace Unison.Core.Helpers
 {
     /// <summary>
     /// Mirrors legacy history-sync filters: skip revoke/protocol/pin/reaction envelopes as
-    /// timeline rows (those become SQLite side effects in <see cref="HistoryMessageBuilder"/>)
+    /// timeline rows (those become SQLite side effects in HistoryMessageBuilder)
     /// and skip rows with no renderable body.
     /// </summary>
     public static class HistorySyncContentFilter

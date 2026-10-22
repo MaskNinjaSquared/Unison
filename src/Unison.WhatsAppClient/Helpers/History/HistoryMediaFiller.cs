@@ -1,8 +1,9 @@
 using System;
 using Proto;
+using Unison.Core.Helpers;
 using Unison.Core.Models;
 
-namespace Unison.Core.Helpers
+namespace Unison.WhatsAppClient.Helpers
 {
     /// <summary>
     /// Copies media key / path / URL from a history envelope onto SQLite rows.
