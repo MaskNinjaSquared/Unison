@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using Unison.Core.Models;
 
-namespace Unison.Core.Helpers
+namespace Unison.WhatsAppClient.Helpers
 {
     /// <summary>
     /// Files a cache clean will remove. Already-deleted rows never arrive here.
