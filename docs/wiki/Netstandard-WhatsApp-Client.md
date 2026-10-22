@@ -172,6 +172,9 @@ Do in order. Each phase has a done check.
 | Receipts | `ReceiptReader` / `ReceiptFacts` (was UWP; Attrs via `TryGetValue`) | `WhatsAppService.Receipts` still mutates ticks |
 | Group apply | `GroupMetadataApply`, `GroupRosterWriter` | `GroupRosterRules` / naming blacklist stay in Core (ViewModels) |
 | History builders | `HistoryMessageBuilder`, `HistoryMediaFiller` | `HistorySyncContentFilter` stays in Core (mappers / quoted context / live pump) |
+| Outgoing support | `OutgoingChatMessage`, `OutgoingDocumentKinds`, `OutgoingMessageId`, `OutgoingSendSettlement`, `MediaFileExtensions` | `OutgoingFailureClassification` / `OutgoingSendAttemptOutcome` stay in Core (contracts) |
+| Chat row pick | `ChatRowAvatarLookup`, `DuplicateChatRowPick` | — |
+| Quotes | `QuotedContext` | `MessageRenderReader` / `HistorySyncContentFilter` stay in Core |
 
 ### Phase D — UWP as host only
 
