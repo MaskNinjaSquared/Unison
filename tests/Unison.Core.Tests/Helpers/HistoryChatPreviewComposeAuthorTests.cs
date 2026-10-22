@@ -1,8 +1,8 @@
 // =============================================================================
 // ComposeAuthor / ToChatItem — strip must survive cold start when only a LID is stored.
 // =============================================================================
-using Unison.Core.Helpers;
 using Unison.Core.Models;
+using Unison.WhatsAppClient.Helpers;
 using Xunit;
 
 namespace Unison.Core.Tests.Helpers

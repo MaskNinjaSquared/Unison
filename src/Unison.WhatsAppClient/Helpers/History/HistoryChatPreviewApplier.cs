@@ -1,9 +1,10 @@
 using System;
 using System.Collections.Generic;
-using Unison.Core.Models;
+using Unison.Core.Helpers;
 using Unison.Core.Mappers;
+using Unison.Core.Models;
 
-namespace Unison.Core.Helpers
+namespace Unison.WhatsAppClient.Helpers
 {
     /// <summary>
     /// Maps <see cref="HistoryChatPreview"/> rows onto <see cref="ChatItem"/> for list hydrate (phase 2).

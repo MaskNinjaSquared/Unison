@@ -175,6 +175,7 @@ Do in order. Each phase has a done check.
 | Outgoing support | `OutgoingChatMessage`, `OutgoingDocumentKinds`, `OutgoingMessageId`, `OutgoingSendSettlement`, `MediaFileExtensions` | `OutgoingFailureClassification` / `OutgoingSendAttemptOutcome` stay in Core (contracts) |
 | Chat row pick | `ChatRowAvatarLookup`, `DuplicateChatRowPick` | — |
 | Quotes | `QuotedContext` | `MessageRenderReader` / `HistorySyncContentFilter` stay in Core |
+| History list hydrate | `HistoryChatPreviewApplier`; `IChatService.ApplyHistoryChatPreviewHydrate` | VM only wires PropertyChanged + batch UI; `ChatPreviewNormalizer` stays in Core |
 
 ### Phase D — UWP as host only
 
