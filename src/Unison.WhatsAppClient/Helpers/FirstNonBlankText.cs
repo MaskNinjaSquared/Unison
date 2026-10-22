@@ -4,7 +4,7 @@
 // The first usable string in a list of fallbacks, trimmed. Blank and missing
 // entries are skipped rather than returned as empty.
 // =============================================================================
-namespace Unison.Core.Helpers
+namespace Unison.WhatsAppClient.Helpers
 {
     public static class FirstNonBlankText
     {
