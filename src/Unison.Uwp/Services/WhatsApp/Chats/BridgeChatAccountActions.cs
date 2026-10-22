@@ -9,16 +9,16 @@ using System.Threading.Tasks;
 using Unison.Socket.AppState;
 using Unison.Socket.UseCases.Messages;
 using Unison.Uwp.Client;
-using Unison.Uwp.Services.Socket;
 using Unison.WhatsAppClient.Abstractions;
+using UwpSessionProvider = Unison.Uwp.Services.Socket.IWhatsAppSessionProvider;
 
 namespace Unison.Uwp.Services.WhatsApp.Chats
 {
     public sealed class BridgeChatAccountActions : IChatAccountActions
     {
-        private readonly IWhatsAppSessionProvider _sessions;
+        private readonly UwpSessionProvider _sessions;
 
-        public BridgeChatAccountActions(IWhatsAppSessionProvider sessions)
+        public BridgeChatAccountActions(UwpSessionProvider sessions)
         {
             _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
         }

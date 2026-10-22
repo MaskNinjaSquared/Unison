@@ -263,7 +263,7 @@ namespace Unison.Uwp
             // Reaches the socket through the session provider's lazy accessor, so building it here
             // does not resolve the client it will eventually be handed to.
             services.AddSingleton(sp => new AvatarFetcher(
-                sp.GetRequiredService<IWhatsAppSessionProvider>(),
+                sp.GetRequiredService<UwpSessionProvider>(),
                 sp.GetRequiredService<IUsyncGate>(),
                 sp.GetRequiredService<IAvatarCache>()));
             // One index for the client and ChatFacade: the client re-keys rows in place and
@@ -407,7 +407,7 @@ namespace Unison.Uwp
 #if DEBUG
             // Dev-only tooling: file-watch based debug send. Never attached/started in Release.
             services.AddSingleton<IDebugSendService>(sp => new DebugSendService(
-                sp.GetRequiredService<IWhatsAppSessionProvider>(),
+                sp.GetRequiredService<UwpSessionProvider>(),
                 sp.GetRequiredService<IMessageService>(),
                 sp.GetRequiredService<IJidResolver>()));
 #endif
@@ -432,7 +432,7 @@ namespace Unison.Uwp
             services.AddSingleton<IHistorySyncHost>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton(sp => new HistoryFacade(
-                sp.GetRequiredService<IWhatsAppSessionProvider>(),
+                sp.GetRequiredService<UwpSessionProvider>(),
                 sp.GetRequiredService<IWhatsAppService>(),
                 sp.GetRequiredService<IConversationResyncHost>(),
                 sp.GetRequiredService<IHistorySyncHost>(),
@@ -502,7 +502,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IMediaDownloadHost>(),
                 sp.GetRequiredService<IEncryptedMediaDownloader>(),
                 sp.GetRequiredService<IChatCatalogPersistence>(),
-                sp.GetRequiredService<IWhatsAppSessionProvider>(),
+                sp.GetRequiredService<UwpSessionProvider>(),
                 sp.GetRequiredService<IChatStore>(),
                 sp.GetRequiredService<IChatStateStore>(),
                 sp.GetRequiredService<ISystemInfoProvider>(),
@@ -538,7 +538,7 @@ namespace Unison.Uwp
             services.AddSingleton<IAvatarReport>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IContactService>(sp => new ContactFacade(
-                sp.GetRequiredService<IWhatsAppSessionProvider>(),
+                sp.GetRequiredService<UwpSessionProvider>(),
                 sp.GetRequiredService<ILocalContactsService>(),
                 sp.GetRequiredService<IPersonStore>(),
                 sp.GetRequiredService<IWhatsAppService>(),
@@ -571,7 +571,7 @@ namespace Unison.Uwp
             services.AddSingleton<IOfflineReplayHost>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IChatAccountActions>(sp => new BridgeChatAccountActions(
-                sp.GetRequiredService<IWhatsAppSessionProvider>()));
+                sp.GetRequiredService<UwpSessionProvider>()));
             services.AddSingleton<IChatService>(sp => new ChatFacade(
                 sp.GetRequiredService<IChatAccountActions>(),
                 sp.GetRequiredService<IAppStateLocalHost>(),
@@ -612,7 +612,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ChatStateStore>().GroupSubjects));
             services.AddSingleton<IGroupService>(sp => new GroupFacade(
                 sp.GetRequiredService<IWhatsAppService>(),
-                sp.GetRequiredService<IWhatsAppSessionProvider>(),
+                sp.GetRequiredService<UwpSessionProvider>(),
                 sp.GetRequiredService<IGroupNaming>(),
                 sp.GetRequiredService<IChatStateStore>(),
                 sp.GetRequiredService<IJidResolver>(),
@@ -671,7 +671,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ILocalSettings>(),
                 sp.GetRequiredService<INotificationService>(),
                 sp.GetRequiredService<IStringResources>(),
-                sp.GetRequiredService<IWhatsAppSessionProvider>(),
+                sp.GetRequiredService<UwpSessionProvider>(),
                 sp.GetRequiredService<ILocalContactsService>(),
                 sp.GetRequiredService<IShortcutService>(),
                 sp.GetRequiredService<ILiveTilesService>(),
