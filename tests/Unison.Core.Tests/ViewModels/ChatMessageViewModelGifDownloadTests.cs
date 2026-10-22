@@ -153,6 +153,8 @@ namespace Unison.Core.Tests.ViewModels
             public Task<List<ChatMessage>> LoadRecentMessagesForSyncAsync(string jid) => throw new NotImplementedException();
             public Task<List<ChatMessage>> LoadMoreMessagesAsync(string jid, DateTime? beforeUtc = null, string beforeMessageId = null) => throw new NotImplementedException();
             public Task<List<ChatMessage>> LoadChatMediaIndexAsync(string jid, int limit = 400) => throw new NotImplementedException();
+            public bool IsChatInfoMedia(ChatMessage message) => false;
+            public bool IsChatInfoDocument(ChatMessage message) => false;
             public Task<bool> EnsureHistoryOnDemandAsync(string jid, int count) => throw new NotImplementedException();
             public bool IsHistoryOnDemandPending(string jid) => false;
             public Task<ChatMessage> SendTextMessageAsync(string jid, string text) => throw new NotImplementedException();

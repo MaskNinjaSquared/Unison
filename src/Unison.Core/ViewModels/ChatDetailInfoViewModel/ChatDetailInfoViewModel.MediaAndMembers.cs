@@ -359,11 +359,11 @@ namespace Unison.Core.ViewModels
                             continue;
                         }
 
-                        if (ChatMediaFilter.IsDocument(message))
+                        if (_messages != null && _messages.IsChatInfoDocument(message))
                         {
                             files.Add(message);
                         }
-                        else if (ChatMediaFilter.IsMedia(message))
+                        else if (_messages != null && _messages.IsChatInfoMedia(message))
                         {
                             media.Add(message);
                         }

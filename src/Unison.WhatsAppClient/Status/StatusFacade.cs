@@ -296,6 +296,30 @@ namespace Unison.WhatsAppClient.Status
             }
         }
 
+        /// <inheritdoc />
+        public string ResolveMediaDisplayUri(string downloadedUri, HistoryStatus item)
+        {
+            return StatusMediaDisplay.ResolveUri(downloadedUri, item);
+        }
+
+        /// <inheritdoc />
+        public bool ShowStatusAsVideo(ChatPreviewKind kind, string displayUri)
+        {
+            return StatusMediaDisplay.ShowAsVideo(kind, displayUri);
+        }
+
+        /// <inheritdoc />
+        public bool ShowStatusAsImage(ChatPreviewKind kind, string displayUri)
+        {
+            return StatusMediaDisplay.ShowAsImage(kind, displayUri);
+        }
+
+        /// <inheritdoc />
+        public string DescribeStatusItem(HistoryStatus item, int index = -1)
+        {
+            return StatusItemDiagnostics.DescribeItem(item, index);
+        }
+
         /// <summary>
         /// Not awaited by the client on purpose: the store serialises its own writes and distinct
         /// status rows are independent upserts, so there is no order to preserve here.

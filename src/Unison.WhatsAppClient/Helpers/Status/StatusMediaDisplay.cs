@@ -1,6 +1,8 @@
 using Unison.Core.Models;
 
-namespace Unison.Core.Helpers
+using Unison.Core.Helpers;
+
+namespace Unison.WhatsAppClient.Helpers
 {
     /// <summary>
     /// Picks what the Status viewer should show: full media when downloaded, else protocol thumb.

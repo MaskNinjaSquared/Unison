@@ -3,7 +3,9 @@ using System.Text;
 using Proto;
 using Unison.Core.Models;
 
-namespace Unison.Core.Helpers
+using Unison.Core.Helpers;
+
+namespace Unison.WhatsAppClient.Helpers
 {
     /// <summary>
     /// Compact Status metadata lines for runtime diagnostics (open / ingest / media).

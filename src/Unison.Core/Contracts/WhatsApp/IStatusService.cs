@@ -31,5 +31,19 @@ namespace Unison.Core.Contracts.WhatsApp
         /// Records that this Status item was shown in the viewer (local <see cref="StatusViewState"/>).
         /// </summary>
         Task MarkViewedAsync(string authorJid, string messageId);
+
+        /// <summary>
+        /// URI the Status viewer should bind: downloaded media, else poster/thumb already on disk.
+        /// </summary>
+        string ResolveMediaDisplayUri(string downloadedUri, HistoryStatus item);
+
+        /// <summary>True when the viewer should use a video surface for this URI.</summary>
+        bool ShowStatusAsVideo(ChatPreviewKind kind, string displayUri);
+
+        /// <summary>True when the viewer should use an image surface for this URI.</summary>
+        bool ShowStatusAsImage(ChatPreviewKind kind, string displayUri);
+
+        /// <summary>Compact Status metadata line for runtime diagnostics.</summary>
+        string DescribeStatusItem(HistoryStatus item, int index = -1);
     }
 }

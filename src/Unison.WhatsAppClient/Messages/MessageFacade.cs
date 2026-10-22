@@ -323,6 +323,18 @@ namespace Unison.WhatsAppClient.Messages
             return new List<string>(ChatPinStoreKeys.For(jid, _jids));
         }
 
+        /// <inheritdoc />
+        public bool IsChatInfoMedia(ChatMessage message)
+        {
+            return ChatMediaFilter.IsMedia(message);
+        }
+
+        /// <inheritdoc />
+        public bool IsChatInfoDocument(ChatMessage message)
+        {
+            return ChatMediaFilter.IsDocument(message);
+        }
+
         public async Task<List<ChatMessage>> LoadChatMediaIndexAsync(string jid, int limit = 400)
         {
             var result = new List<ChatMessage>();

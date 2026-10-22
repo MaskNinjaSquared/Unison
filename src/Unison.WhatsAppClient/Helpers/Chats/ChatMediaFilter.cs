@@ -1,6 +1,6 @@
 using Unison.Core.Models;
 
-namespace Unison.Core.Helpers
+namespace Unison.WhatsAppClient.Helpers
 {
     /// <summary>
     /// Classifies a message for the chat-info panes: Media (photo / video / audio) vs Files.

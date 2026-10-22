@@ -185,7 +185,7 @@ namespace Unison.Core.ViewModels
                     "author=" + authorJid + "; count=" + _items.Count + "; gen=" + generation);
                 for (int i = 0; i < _items.Count; i++)
                 {
-                    LogStatus("open-item", StatusItemDiagnostics.DescribeItem(_items[i], i));
+                    LogStatus("open-item", _status.DescribeStatusItem(_items[i], i));
                 }
 
                 if (_items.Count == 0)
@@ -406,7 +406,7 @@ namespace Unison.Core.ViewModels
 
             LogStatus(
                 "show",
-                StatusItemDiagnostics.DescribeItem(item, _index) +
+                _status.DescribeStatusItem(item, _index) +
                 "; wantVideo=" + isVideo +
                 "; wantImage=" + isImage);
 
@@ -432,9 +432,9 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
-            string displayUri = StatusMediaDisplay.ResolveUri(uri, item);
-            bool showVideo = StatusMediaDisplay.ShowAsVideo(item.Kind, displayUri);
-            bool showImage = StatusMediaDisplay.ShowAsImage(item.Kind, displayUri);
+            string displayUri = _status.ResolveMediaDisplayUri(uri, item);
+            bool showVideo = _status.ShowStatusAsVideo(item.Kind, displayUri);
+            bool showImage = _status.ShowStatusAsImage(item.Kind, displayUri);
 
             await _dispatcher.RunAsync(() =>
             {

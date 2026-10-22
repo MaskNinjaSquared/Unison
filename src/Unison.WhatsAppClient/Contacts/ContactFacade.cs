@@ -230,6 +230,25 @@ namespace Unison.WhatsAppClient.Contacts
             return _displayNames.Resolve(jid, context);
         }
 
+        /// <inheritdoc />
+        public string ResolvePlaceholderChatName(string jid)
+        {
+            string name = ResolveDisplayName(jid, "profile") ?? string.Empty;
+            if (MeaningfulChatLabel.IsMeaningful(name, jid, isGroup: false))
+            {
+                return name;
+            }
+
+            string fallback = jid ?? string.Empty;
+            int at = fallback.IndexOf('@');
+            if (at > 0)
+            {
+                fallback = fallback.Substring(0, at);
+            }
+
+            return fallback;
+        }
+
         /// <summary>
         /// Handed out read-only. The overlay is rebuilt wholesale by the address-book pass, and a
         /// caller that could write to it would be writing into state the next pass discards.

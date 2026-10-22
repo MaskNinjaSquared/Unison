@@ -30,6 +30,12 @@ namespace Unison.Core.Contracts.WhatsApp
         string ResolveDisplayName(string jid, string context);
 
         /// <summary>
+        /// Label for a placeholder 1:1 row: a meaningful display name, or the phone digits when
+        /// the resolver only had a JID / masked stand-in.
+        /// </summary>
+        string ResolvePlaceholderChatName(string jid);
+
+        /// <summary>
         /// JID → the name this device's address book has for that person. Empty until the overlay
         /// has been read; a chat with no entry here falls back to the push name.
         /// </summary>

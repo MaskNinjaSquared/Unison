@@ -63,6 +63,12 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         Task<System.Collections.Generic.List<ChatMessage>> LoadChatMediaIndexAsync(string jid, int limit = 400);
 
+        /// <summary>True when the row belongs on the chat-info Media pivot (not stickers).</summary>
+        bool IsChatInfoMedia(ChatMessage message);
+
+        /// <summary>True when the row belongs on the chat-info Files pivot.</summary>
+        bool IsChatInfoDocument(ChatMessage message);
+
         /// <summary>Asks the phone for older messages for an open chat.</summary>
         Task<bool> EnsureHistoryOnDemandAsync(string jid, int count);
 
