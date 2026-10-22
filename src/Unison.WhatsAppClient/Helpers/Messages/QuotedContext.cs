@@ -1,8 +1,9 @@
 using System;
 using System.Collections.Generic;
+using Unison.Core.Helpers;
 using Unison.Core.Models;
 
-namespace Unison.Core.Helpers
+namespace Unison.WhatsAppClient.Helpers
 {
     /// <summary>
     /// Everything a bubble needs from a message's <see cref="Proto.ContextInfo"/>: what it quotes,
