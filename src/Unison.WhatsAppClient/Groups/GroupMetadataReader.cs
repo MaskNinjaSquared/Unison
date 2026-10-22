@@ -7,7 +7,7 @@
 //
 // This half is pure: give it a BinaryNode, get back a GroupMetadataSnapshot.
 // No socket, no chat state, no dispatcher. Putting it on the rows is
-// GroupMetadataApply (Core).
+// GroupMetadataApply.
 // =============================================================================
 using System;
 using System.Collections.Generic;

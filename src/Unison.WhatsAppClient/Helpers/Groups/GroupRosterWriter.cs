@@ -12,7 +12,7 @@ using System.Threading.Tasks;
 using Unison.Core.Contracts;
 using Unison.Core.Models;
 
-namespace Unison.Core.Helpers
+namespace Unison.WhatsAppClient.Helpers
 {
     public sealed class GroupRosterWriter
     {
