@@ -10,8 +10,8 @@ Agents: read this before adding a view, service, façade, or socket use case.
 
 | Project | May reference | Must not |
 |---|---|---|
-| `Unison.Core` | `Unison.Baileys` | XAML, WinRT, `Unison.Uwp`, `Unison.Application` |
-| `Unison.Application` | `Unison.Core`, `Unison.Socket` | XAML, WinRT, `Unison.Uwp` |
+| `Unison.Core` | `Unison.Baileys` | XAML, WinRT, `Unison.Uwp`, `Unison.WhatsAppClient` |
+| `Unison.WhatsAppClient` | `Unison.Core`, `Unison.Socket` | XAML, WinRT, `Unison.Uwp` |
 | `Unison.Socket` | `Unison.Baileys` | WinRT, SQLite, Core ViewModels |
 | `Unison.Baileys` | NuGet only | Other Unison projects |
 | `Unison.Background` | `Unison.Baileys` | Core, Socket, Application, XAML |

@@ -72,7 +72,7 @@ Style: TDLib-like — the UWP **handler** (composition root) creates WinRT adapt
 flowchart TB
   Host["UWP Handler / DI"]
   Adapters["Adapters WinRT"]
-  AppLib["Unison.Application netstandard"]
+  AppLib["Unison.WhatsAppClient netstandard"]
   Socket["Unison.Socket"]
   Baileys["Unison.Baileys"]
   Bg["Unison.Background"]
@@ -86,7 +86,7 @@ flowchart TB
   Bg --> Baileys
 ```
 
-| Stays in UWP | Moves to `Unison.Application` (`netstandard2.0`) | Stays in Socket / Baileys |
+| Stays in UWP | Moves to `Unison.WhatsAppClient` (`netstandard2.0`) | Stays in Socket / Baileys |
 |---|---|---|
 | XAML, shell, `App.ConfigureServices` | Facades (`ConnectionFacade`, `MessageFacade`, …) | `WhatsAppSession`, use cases, modules |
 | `StreamSocketWebSocketTransport`, `MessageWebSocketTransport`, `WaTransportAdapter` | Policy helpers today under `Services/WhatsApp/` (once WinRT-free) | Noise, Signal, binary, proto |
@@ -100,7 +100,7 @@ During extraction, pure rules left UWP for `Unison.Core` only because Core was a
 
 Target split:
 
-| `Unison.Core` (app domain) | `Unison.Application` (WhatsApp client policy) |
+| `Unison.Core` (app domain) | `Unison.WhatsAppClient` (WhatsApp client policy) |
 |---|---|
 | Contracts, models, ViewModels | Facades + their auxiliary services |
 | **Presentation** helpers only (`RelayCommand`, bubble/link layout, UI formatting, …) | **Domain** helpers that implement façade policy (moved out of Core) |
@@ -116,7 +116,7 @@ Baileys (+ Socket) stay the protocol stack — separate from this app-domain Cor
 2. Do **not** merge Socket + Baileys into one project in this refactor (optional NuGet packaging / rename is a later note only).
 3. Do **not** stand up a second parallel client beside `WhatsAppService` — shrink and move.
 4. Inject **ports** (`IWaTransport`, factory, `IDispatcher`, stores), not WinRT types, into Application.
-5. [WhatsAppService extraction](WhatsAppService-Extraction) phases 3 → 4 remain the mechanical prerequisite before moving types into `Unison.Application`.
+5. [WhatsAppService extraction](WhatsAppService-Extraction) phases 3 → 4 remain the mechanical prerequisite before moving types into `Unison.WhatsAppClient`.
 6. Core keeps **presentation** helpers; **domain** helpers leave Core for Application alongside façades.
 
 ### UWP handler
@@ -144,9 +144,9 @@ Do in order. Each phase has a done check.
 - Follow [WhatsAppService-Extraction](WhatsAppService-Extraction): move remaining clusters; then connection-only client (`Initialize` / connect / resume / suspend / broker / shutdown).
 - Done when: ViewModels and façades do not need the god client for policy; `IWhatsAppService` (or successor) is lifecycle + façade-only raw events; `Attach*` orchestration into the client is gone.
 
-### Phase C — Create `Unison.Application`
+### Phase C — Create `Unison.WhatsAppClient`
 
-- Add `Unison.Application` (`netstandard2.0`) to the solution.
+- Add `Unison.WhatsAppClient` (`netstandard2.0`) to the solution.
 - References: `Unison.Core`, `Unison.Socket` (and thus Baileys transitively as today).
 - Move façades + WinRT-free policy helpers from UWP into this project.
 - Move **domain** helpers from `Unison.Core/Helpers` into Application **with the owning façade**; leave presentation helpers in Core.
@@ -154,7 +154,11 @@ Do in order. Each phase has a done check.
 - UWP keeps adapter implementations and registers them in DI.
 - Done when: Application builds with **zero** `Windows.*` / WinRT; Core `Helpers` no longer hosts WhatsApp client policy; UWP still runs against the same contracts.
 
-**Scaffold (started):** `src/Unison.Application/` is in `Unison.slnx` with Core + Socket references and an `AssemblyMarker` only. UWP does **not** reference it yet — façades still live under `Unison.Uwp/Services/WhatsApp/`.
+**Scaffold (started):** project is named **`Unison.WhatsAppClient`** (not `Unison.Application`) — under namespace `Unison.*`, an `Application` assembly name collides with XAML `Application`. In `Unison.slnx` with Core + Socket refs; UWP references it.
+
+**First façade move:** `ProfileFacade` lives in `Unison.WhatsAppClient/Profiles/`. Portable `IWhatsAppSessionProvider` is in `Unison.WhatsAppClient/Abstractions/`; UWP `BridgeSessionProvider` implements the bridge-extended interface (adds `IWhatsAppSocket`). Other façades remain under `Unison.Uwp/Services/WhatsApp/` until moved the same way.
+
+**Helpers:** do **not** bulk-move `Unison.Core/Helpers` — nearly all are also referenced from Core ViewModels/State. Move domain helpers **with** each façade; Core must not reference WhatsAppClient.
 
 ### Phase D — UWP as host only
 
@@ -192,11 +196,11 @@ Do in order. Each phase has a done check.
 |---|---|
 | A | Façade public API free of WinRT; adapters own `Windows.*` |
 | B | Extraction wiki phase 4 target surface; no policy growth on `IWhatsAppService` |
-| C | `Unison.Application` builds as `netstandard2.0` with no WinRT |
+| C | `Unison.WhatsAppClient` builds as `netstandard2.0` with no WinRT |
 | D | UWP is host-only; Background → Baileys only (unchanged rule) |
 
 ---
 
 ## After this page
 
-Implementation work starts on a **code** branch after phase A/B progress, not by editing `src/` on the docs branch that introduced this page. Update [Architecture](Architecture) project graph when `Unison.Application` actually lands.
+Implementation work starts on a **code** branch after phase A/B progress, not by editing `src/` on the docs branch that introduced this page. Update [Architecture](Architecture) project graph when `Unison.WhatsAppClient` actually lands.

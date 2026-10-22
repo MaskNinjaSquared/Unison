@@ -20,7 +20,7 @@
     <PackageCertificateThumbprint>
     </PackageCertificateThumbprint>
     <!-- APPX4001: declare bundle platforms explicitly -->
-    <AppxBundlePlatforms>arm</AppxBundlePlatforms>
+    <AppxBundlePlatforms>x64|arm</AppxBundlePlatforms>
     <!-- PRI257: avoid NuGet satellite assemblies overriding app default language -->
     <AppxGeneratePrisForPortableLibrariesEnabled>false</AppxGeneratePrisForPortableLibrariesEnabled>
     <!-- Prefer 64-bit ILC; can avoid some 1.7.6 Analysis NREs -->
@@ -176,7 +176,6 @@
     <Compile Include="Services\WhatsApp\Status\StatusFacade.cs" />
     <Compile Include="Services\WhatsApp\Messages\MessageFacade.cs" />
     <Compile Include="Services\WhatsApp\Messages\MediaAvailability.cs" />
-    <Compile Include="Services\WhatsApp\Profiles\ProfileFacade.cs" />
     <Compile Include="Services\Socket\DelegateSocketLog.cs" />
     <Compile Include="Services\Socket\SocketSliceProbe.cs" />
     <Compile Include="Services\Socket\SignalRepositoryAdapter.cs" />
@@ -1217,6 +1216,10 @@
     <ProjectReference Include="..\Unison.Socket\Unison.Socket.csproj">
       <Project>{3F5C1A82-9D4E-4B67-8C31-2E7A6B0D9F14}</Project>
       <Name>Unison.Socket</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Unison.WhatsAppClient\Unison.WhatsAppClient.csproj">
+      <Project>{B7E4C291-5A8F-4D3E-9C16-0F2A8E7D4B51}</Project>
+      <Name>Unison.WhatsAppClient</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>

@@ -41,8 +41,10 @@ using Unison.Uwp.Services.WhatsApp.Diagnostics;
 using Unison.Uwp.Services.WhatsApp.Groups;
 using Unison.Uwp.Services.WhatsApp.History;
 using Unison.Uwp.Services.WhatsApp.Messages;
-using Unison.Uwp.Services.WhatsApp.Profiles;
 using Unison.Uwp.Services.WhatsApp.Status;
+using AppSessionProvider = Unison.WhatsAppClient.Abstractions.IWhatsAppSessionProvider;
+using AppProfileFacade = Unison.WhatsAppClient.Profiles.ProfileFacade;
+using UwpSessionProvider = Unison.Uwp.Services.Socket.IWhatsAppSessionProvider;
 
 namespace Unison.Uwp
 {
@@ -403,11 +405,15 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IJidResolver>()));
 #endif
             // The connection is a SocketBridge, so there is always a session to hand out.
-            services.AddSingleton<IWhatsAppSessionProvider>(sp => new BridgeSessionProvider(
+            // UWP façades take the bridge-extended provider; Application façades take the portable one.
+            services.AddSingleton<BridgeSessionProvider>(sp => new BridgeSessionProvider(
                 () => ((WhatsAppService)sp.GetRequiredService<IWhatsAppService>()).Socket));
+            services.AddSingleton<UwpSessionProvider>(sp => sp.GetRequiredService<BridgeSessionProvider>());
+            services.AddSingleton<AppSessionProvider>(
+                sp => sp.GetRequiredService<BridgeSessionProvider>());
 
-            services.AddSingleton<IProfileService>(sp => new ProfileFacade(
-                sp.GetRequiredService<IWhatsAppSessionProvider>(),
+            services.AddSingleton<IProfileService>(sp => new AppProfileFacade(
+                sp.GetRequiredService<AppSessionProvider>(),
                 sp.GetRequiredService<IWhatsAppService>(),
                 sp.GetRequiredService<SelfProfileState>(),
                 sp.GetRequiredService<IAvatarCache>()));

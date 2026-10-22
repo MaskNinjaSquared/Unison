@@ -7,20 +7,21 @@
 // The split it demonstrates: the UseCase talks to the wire and returns raw data
 // (a picture URL); the facade turns that into the app's world - downloading and
 // caching the avatar, filling in a display name, persisting the result. Protocol
-// knowledge stays portable in Unison.Socket, platform knowledge stays here.
+// knowledge stays portable in Unison.Socket, platform knowledge stays behind ports
+// (IAvatarCache, IWhatsAppSessionProvider).
 // =============================================================================
 using System;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
+using Unison.WhatsAppClient.Abstractions;
 using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.Socket.UseCases.Profile;
-using Unison.Uwp.Services.Socket;
 
-namespace Unison.Uwp.Services.WhatsApp.Profiles
+namespace Unison.WhatsAppClient.Profiles
 {
     public sealed class ProfileFacade : IProfileService
     {
@@ -30,7 +31,7 @@ namespace Unison.Uwp.Services.WhatsApp.Profiles
         private readonly IAvatarCache _avatarCache;
 
         /// <param name="connection">Only for reconnecting and for knowing when a session opened.</param>
-        internal ProfileFacade(
+        public ProfileFacade(
             IWhatsAppSessionProvider sessions,
             IWhatsAppService connection,
             SelfProfileState self,

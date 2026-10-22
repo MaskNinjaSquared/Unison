@@ -43,7 +43,7 @@ The **Unison.Socket** stack (Baileys **7.0.0-rc14**) is now the foundation for W
 Unison.slnx
 ├── src/Unison.Uwp            UWP app, views, DI adapters, SocketBridge
 ├── src/Unison.Core           Contracts, models, ViewModels (no XAML)
-├── src/Unison.Application    Facades + domain helpers (scaffold; phase C)
+├── src/Unison.WhatsAppClient    Facades + domain helpers (scaffold; phase C)
 ├── src/Unison.Socket         WhatsApp session / protocol (netstandard2.0)
 ├── src/Unison.Baileys        Noise, Signal, binary XML, protobuf, crypto
 └── src/Unison.Background     Out-of-process SocketActivity task
