@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <RootNamespace>Unison.Application</RootNamespace>
+    <AssemblyName>Unison.Application</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Unison.Core\Unison.Core.csproj" />
+    <ProjectReference Include="..\Unison.Socket\Unison.Socket.csproj" />
+  </ItemGroup>
+
+</Project>

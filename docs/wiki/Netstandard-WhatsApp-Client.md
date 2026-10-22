@@ -154,6 +154,8 @@ Do in order. Each phase has a done check.
 - UWP keeps adapter implementations and registers them in DI.
 - Done when: Application builds with **zero** `Windows.*` / WinRT; Core `Helpers` no longer hosts WhatsApp client policy; UWP still runs against the same contracts.
 
+**Scaffold (started):** `src/Unison.Application/` is in `Unison.slnx` with Core + Socket references and an `AssemblyMarker` only. UWP does **not** reference it yet — façades still live under `Unison.Uwp/Services/WhatsApp/`.
+
 ### Phase D — UWP as host only
 
 - UWP = XAML + adapters + DI + thin connection host if anything remains of `WhatsAppService`.

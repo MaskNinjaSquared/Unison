@@ -14,8 +14,9 @@ Unison is split so that **WhatsApp protocol and session** live in a portable lib
 
 ```mermaid
 flowchart TB
-    Uwp["Unison.Uwp<br/>UWP app, facades, SocketBridge"]
+    Uwp["Unison.Uwp<br/>UWP app, facades today, SocketBridge"]
     Core["Unison.Core<br/>contracts, models, ViewModels"]
+    App["Unison.Application<br/>facades + domain helpers scaffold"]
     Socket["Unison.Socket<br/>session, use cases, events"]
     Baileys["Unison.Baileys<br/>Noise, Signal, binary XML, proto"]
     Bg["Unison.Background<br/>SocketActivity task"]
@@ -24,6 +25,8 @@ flowchart TB
     Uwp --> Socket
     Uwp --> Baileys
     Uwp --> Bg
+    App --> Core
+    App --> Socket
     Core --> Baileys
     Socket --> Baileys
     Bg --> Baileys
@@ -31,11 +34,12 @@ flowchart TB
 
 | Project | Target | Role |
 |---|---|---|
-| `Unison.Uwp` | UAP 10.0.16299+ | App, views, DI, stores, `SocketBridge` |
-| `Unison.Core` | netstandard2.0 | Contracts, models, ViewModels, helpers |
+| `Unison.Uwp` | UAP 10.0.16299+ | App, views, DI, stores, `SocketBridge` (façades still here until phase C move) |
+| `Unison.Core` | netstandard2.0 | Contracts, models, ViewModels, presentation helpers |
+| `Unison.Application` | netstandard2.0 | Facades + domain helpers (scaffold; see [Netstandard WhatsApp client](Netstandard-WhatsApp-Client)) |
 | `Unison.Socket` | netstandard2.0 | Baileys 7.0.0-rc14 session and protocol |
 | `Unison.Baileys` | netstandard2.0 | Crypto, Noise, Signal, protobuf, `AuthState` |
-| `Unison.Background` | UAP winmdobj | Out-of-process broker; **no** Core / Socket reference |
+| `Unison.Background` | UAP winmdobj | Out-of-process broker; **no** Core / Socket / Application reference |
 
 Solution file: `Unison.slnx`. Ignore the nested stub `src/Unison.Socket/Unison.Socket/` (empty WinUI project). The real library is `src/Unison.Socket/Unison.Socket.csproj`.
 

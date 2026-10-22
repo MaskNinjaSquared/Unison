@@ -10,17 +10,20 @@ Agents: read this before adding a view, service, façade, or socket use case.
 
 | Project | May reference | Must not |
 |---|---|---|
-| `Unison.Core` | `Unison.Baileys` | XAML, WinRT, `Unison.Uwp` |
+| `Unison.Core` | `Unison.Baileys` | XAML, WinRT, `Unison.Uwp`, `Unison.Application` |
+| `Unison.Application` | `Unison.Core`, `Unison.Socket` | XAML, WinRT, `Unison.Uwp` |
 | `Unison.Socket` | `Unison.Baileys` | WinRT, SQLite, Core ViewModels |
 | `Unison.Baileys` | NuGet only | Other Unison projects |
-| `Unison.Background` | `Unison.Baileys` | Core, Socket, XAML |
+| `Unison.Background` | `Unison.Baileys` | Core, Socket, Application, XAML |
 | `Unison.Uwp` | All of the above | Protocol logic that belongs in Socket |
 
-- Contracts and ViewModels live in **Core**.
+- Contracts and ViewModels live in **Core** (presentation helpers only under `Helpers/`).
+- WhatsApp façades and **domain** helpers live in **Application** (scaffold today; move is [Netstandard WhatsApp client](Netstandard-WhatsApp-Client) phase C).
 - WinRT implementations live in **UWP** (`Services/`, `Data/`, `Transport/`, `UI/`).
 - WhatsApp wire logic lives in **Socket** (`UseCases/`, `Session/`, modules).
 - `ConnectionHandler` never calls a use case and never holds chats/messages.
 - Reconnect policy stays in the UWP host (`ConnectionUpdate`).
+- Core must not reference Application (ViewModels use façade **contracts**, not Application types).
 
 ---
 
