@@ -5,8 +5,8 @@ namespace Unison.Core.Contracts.WhatsApp
     /// identity when the pair touches it.
     /// </summary>
     /// <remarks>
-    /// Table policy and the two-way write are <c>UsyncAliasFiling</c> in Core. This port is
-    /// only the socket registration and auth-state heal the client still owns.
+    /// Table policy and the two-way write are <c>UsyncAliasFiling</c> in WhatsAppClient.
+    /// This port is only the socket registration and auth-state heal the client still owns.
     /// </remarks>
     public interface IUsyncAliasHost
     {

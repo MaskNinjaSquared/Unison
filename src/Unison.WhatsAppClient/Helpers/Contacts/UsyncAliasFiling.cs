@@ -1,6 +1,7 @@
+using Unison.Core.Helpers;
 using Unison.Core.State;
 
-namespace Unison.Core.Helpers
+namespace Unison.WhatsAppClient.Helpers
 {
     /// <summary>
     /// Files a usync LID/phone pair into the alias table when the policy accepts it.
