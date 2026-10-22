@@ -70,6 +70,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
         private readonly ChatListAliasMerge _aliasMerge;
         private readonly ISelfMarkerNaming _selfMarkers;
         private readonly IStringResources _strings;
+        private readonly IRuntimeDiagnostics _diagnostics;
         private readonly OfflineReplayTips _offlineReplayTips;
 
         /// <summary>Short enough that the first recovered chat shows while a long replay continues.</summary>
@@ -94,7 +95,8 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             IChatIdentityPersistence identity,
             ChatListAliasMerge aliasMerge,
             ISelfMarkerNaming selfMarkers,
-            IStringResources strings)
+            IStringResources strings,
+            IRuntimeDiagnostics diagnostics = null)
         {
             if (sessions == null)
             {
@@ -120,6 +122,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             _aliasMerge = aliasMerge ?? throw new ArgumentNullException(nameof(aliasMerge));
             _selfMarkers = selfMarkers ?? throw new ArgumentNullException(nameof(selfMarkers));
             _strings = strings ?? throw new ArgumentNullException(nameof(strings));
+            _diagnostics = diagnostics;
             _offlineReplayTips = new OfflineReplayTips(
                 _jids,
                 _offlineReplay,
@@ -177,7 +180,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
 
                 Debug.WriteLine(
                     "[ChatFacade] Pin failed; " + details + Environment.NewLine + ex);
-                RuntimeDiagnosticsService.Instance.RecordException(
+                DiagRecordException(
                     "app-state",
                     "chat-pin-patch-failed",
                     ex,
@@ -193,7 +196,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
                     Debug.WriteLine(
                         "[ChatFacade] Pin rollback failed; " + rollbackDetails +
                         Environment.NewLine + rollbackEx);
-                    RuntimeDiagnosticsService.Instance.RecordException(
+                    DiagRecordException(
                         "app-state",
                         "chat-pin-rollback-failed",
                         rollbackEx,
@@ -284,7 +287,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
                         "; socket=" + socket.GetType().FullName;
 
                     Debug.WriteLine("[ChatFacade] Delete failed; " + details + Environment.NewLine + ex);
-                    RuntimeDiagnosticsService.Instance.RecordException(
+                    DiagRecordException(
                         "app-state",
                         "chat-delete-patch-failed",
                         ex,
@@ -649,7 +652,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
                     _notifications.UpdateBadge(totalUnread);
                 }
 
-                RuntimeDiagnosticsService.Instance.Write(
+                DiagWrite(
                     "messages",
                     "offline-summary-applied",
                     "reason=" + (reason ?? string.Empty) +
@@ -799,6 +802,26 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             }
 
             return chat;
+        }
+
+        private void DiagWrite(string category, string eventName, string details = null)
+        {
+            if (_diagnostics != null)
+            {
+                _diagnostics.Write(category, eventName, details);
+            }
+        }
+
+        private void DiagRecordException(
+            string category,
+            string eventName,
+            Exception exception,
+            string details = null)
+        {
+            if (_diagnostics != null)
+            {
+                _diagnostics.RecordException(category, eventName, exception, details);
+            }
         }
 
         private string ResolveName(string jid, string context) => _contacts.ResolveDisplayName(jid, context);
