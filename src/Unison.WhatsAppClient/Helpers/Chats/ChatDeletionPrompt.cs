@@ -16,7 +16,7 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Models;
 
-namespace Unison.Core.Helpers
+namespace Unison.WhatsAppClient.Helpers
 {
     public static class ChatDeletionPrompt
     {

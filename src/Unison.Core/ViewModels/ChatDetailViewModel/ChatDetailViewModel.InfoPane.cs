@@ -101,7 +101,7 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
-            GroupParticipantResolver.EnrichMember(
+            _groupService?.EnrichMember(
                 member,
                 participantJid ?? member.Jid ?? member.Lid ?? member.PhoneNumber,
                 ActiveChat,

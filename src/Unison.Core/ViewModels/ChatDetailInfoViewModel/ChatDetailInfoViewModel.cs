@@ -176,6 +176,7 @@ namespace Unison.Core.ViewModels
                 enabled => _ = SetNotificationsEnabledAsync(enabled),
                 _ => !_isGroupMember &&
                      _chatStore != null &&
+                     _chatService != null &&
                      !string.IsNullOrWhiteSpace(_source?.JID));
 
             AddContactCommand = new RelayCommand(
@@ -250,7 +251,7 @@ namespace Unison.Core.ViewModels
 
         public string AvatarUrl =>
             _isGroupMember
-                ? (GroupParticipantResolver.ResolveAvatar(
+                ? (_groups?.ResolveMemberAvatar(
                     _member?.Jid ?? _member?.Lid ?? _member?.PhoneNumber,
                     _source,
                     _participants,
@@ -264,7 +265,7 @@ namespace Unison.Core.ViewModels
                 if (_isGroupMember)
                 {
                     string jid = _member?.Jid ?? _member?.Lid ?? _member?.PhoneNumber;
-                    return GroupParticipantResolver.ResolveDisplayName(
+                    return _groups?.ResolveMemberDisplayName(
                         jid,
                         _source,
                         _participants,

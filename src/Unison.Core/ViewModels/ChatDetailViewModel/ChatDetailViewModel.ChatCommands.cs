@@ -189,7 +189,8 @@ namespace Unison.Core.ViewModels
         {
             return ActiveChat != null &&
                    !string.IsNullOrWhiteSpace(ActiveChat.JID) &&
-                   _chatStore != null;
+                   _chatStore != null &&
+                   _chatService != null;
         }
 
         private bool CanDeleteActiveChat()
@@ -205,11 +206,8 @@ namespace Unison.Core.ViewModels
         /// </summary>
         private async Task DeleteActiveChatAsync()
         {
-            bool deleted = await ChatDeletionPrompt.ConfirmAndDeleteAsync(
-                ActiveChat,
-                _chatService,
-                _dialogs,
-                _strings);
+            bool deleted = _chatService != null &&
+                await _chatService.ConfirmAndDeleteAsync(ActiveChat);
 
             if (deleted)
             {

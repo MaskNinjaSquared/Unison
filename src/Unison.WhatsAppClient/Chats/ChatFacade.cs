@@ -71,6 +71,7 @@ namespace Unison.WhatsAppClient.Chats
         private readonly ChatListAliasMerge _aliasMerge;
         private readonly ISelfMarkerNaming _selfMarkers;
         private readonly IStringResources _strings;
+        private readonly IDialogService _dialogs;
         private readonly IRuntimeDiagnostics _diagnostics;
         private readonly OfflineReplayTips _offlineReplayTips;
 
@@ -98,6 +99,7 @@ namespace Unison.WhatsAppClient.Chats
             ChatListAliasMerge aliasMerge,
             ISelfMarkerNaming selfMarkers,
             IStringResources strings,
+            IDialogService dialogs = null,
             IRuntimeDiagnostics diagnostics = null)
         {
             _account = account ?? throw new ArgumentNullException(nameof(account));
@@ -120,6 +122,7 @@ namespace Unison.WhatsAppClient.Chats
             _aliasMerge = aliasMerge ?? throw new ArgumentNullException(nameof(aliasMerge));
             _selfMarkers = selfMarkers ?? throw new ArgumentNullException(nameof(selfMarkers));
             _strings = strings ?? throw new ArgumentNullException(nameof(strings));
+            _dialogs = dialogs;
             _diagnostics = diagnostics;
             _offlineReplayTips = new OfflineReplayTips(
                 _jids,
@@ -1302,6 +1305,27 @@ namespace Unison.WhatsAppClient.Chats
         private void TryApplyCanonicalPinFallback(ChatItem chat)
         {
             ApplyLocalStateAliasFallback(chat);
+        }
+
+        /// <inheritdoc />
+        public long MuteUntilEightHoursFromNow()
+        {
+            return ChatMuteHelper.FromNow(ChatMuteHelper.EightHours);
+        }
+
+        /// <inheritdoc />
+        public long MuteUntilOneWeekFromNow()
+        {
+            return ChatMuteHelper.FromNow(ChatMuteHelper.OneWeek);
+        }
+
+        /// <inheritdoc />
+        public long MuteForeverUnixSeconds => ChatMuteHelper.ForeverUnixSeconds;
+
+        /// <inheritdoc />
+        public Task<bool> ConfirmAndDeleteAsync(ChatItem chat)
+        {
+            return ChatDeletionPrompt.ConfirmAndDeleteAsync(chat, this, _dialogs, _strings);
         }
     }
 }

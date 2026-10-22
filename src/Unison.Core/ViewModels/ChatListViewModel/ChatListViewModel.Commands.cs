@@ -483,11 +483,8 @@ namespace Unison.Core.ViewModels
         /// </summary>
         private async Task DeleteChatAsync(ChatItem chat)
         {
-            bool deleted = await ChatDeletionPrompt.ConfirmAndDeleteAsync(
-                chat,
-                _chatService,
-                _dialogService,
-                _strings);
+            bool deleted = _chatService != null &&
+                await _chatService.ConfirmAndDeleteAsync(chat);
 
             if (deleted)
             {

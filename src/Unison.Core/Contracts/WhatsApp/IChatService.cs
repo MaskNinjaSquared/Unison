@@ -144,5 +144,20 @@ namespace Unison.Core.Contracts.WhatsApp
 
         /// <summary>Caches the account pin under every PN/LID spelling of <paramref name="jid"/>.</summary>
         void RememberPinnedUnderAliases(string jid, bool pinned);
+
+        /// <summary>Unix-seconds mute deadline eight hours from now (UTC).</summary>
+        long MuteUntilEightHoursFromNow();
+
+        /// <summary>Unix-seconds mute deadline one week from now (UTC).</summary>
+        long MuteUntilOneWeekFromNow();
+
+        /// <summary>Sentinel unix seconds for "mute forever" (year 2999 UTC).</summary>
+        long MuteForeverUnixSeconds { get; }
+
+        /// <summary>
+        /// Confirms with the user, then deletes the conversation for the account everywhere.
+        /// Returns true only when the delete ran (not cancelled / not refused).
+        /// </summary>
+        Task<bool> ConfirmAndDeleteAsync(ChatItem chat);
     }
 }

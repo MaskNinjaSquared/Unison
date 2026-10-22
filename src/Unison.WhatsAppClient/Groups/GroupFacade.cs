@@ -340,6 +340,52 @@ namespace Unison.WhatsAppClient.Groups
             return GroupRosterRules.MembershipPersonKeys(member, _jids);
         }
 
+        /// <inheritdoc />
+        public void EnrichMember(
+            GroupMember member,
+            string participantJid,
+            ChatItem groupChat,
+            ParticipantResolutionContext context,
+            string nameHint = null)
+        {
+            GroupParticipantResolver.EnrichMember(
+                member,
+                participantJid,
+                groupChat,
+                context,
+                nameHint);
+        }
+
+        /// <inheritdoc />
+        public string ResolveMemberAvatar(
+            string participantJid,
+            ChatItem groupChat,
+            ParticipantResolutionContext context,
+            GroupMember rosterMember = null)
+        {
+            return GroupParticipantResolver.ResolveAvatar(
+                participantJid,
+                groupChat,
+                context,
+                rosterMember);
+        }
+
+        /// <inheritdoc />
+        public string ResolveMemberDisplayName(
+            string participantJid,
+            ChatItem groupChat,
+            ParticipantResolutionContext context,
+            string nameHint = null,
+            GroupMember rosterMember = null)
+        {
+            return GroupParticipantResolver.ResolveDisplayName(
+                participantJid,
+                groupChat,
+                context,
+                nameHint,
+                rosterMember);
+        }
+
         public Task QueryAllGroupsAsync() => QueryAllGroupsAsync(false);
 
         public async Task QueryAllGroupsAsync(bool force)

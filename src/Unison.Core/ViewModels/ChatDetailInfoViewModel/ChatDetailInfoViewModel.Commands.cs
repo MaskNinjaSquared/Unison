@@ -48,7 +48,10 @@ namespace Unison.Core.ViewModels
 
         private async Task SetNotificationsEnabledAsync(bool enabled)
         {
-            if (_chatStore == null || _source == null || string.IsNullOrWhiteSpace(_source.JID))
+            if (_chatStore == null ||
+                _chatService == null ||
+                _source == null ||
+                string.IsNullOrWhiteSpace(_source.JID))
             {
                 return;
             }
@@ -58,7 +61,7 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
-            long? mutedUntil = enabled ? (long?)null : ChatMuteHelper.ForeverUnixSeconds;
+            long? mutedUntil = enabled ? (long?)null : _chatService.MuteForeverUnixSeconds;
             ChatItem chat = _source;
             try
             {
@@ -96,11 +99,8 @@ namespace Unison.Core.ViewModels
 
         private async Task DeleteChatAsync()
         {
-            bool deleted = await ChatDeletionPrompt.ConfirmAndDeleteAsync(
-                _source,
-                _chatService,
-                _dialogs,
-                _strings);
+            bool deleted = _chatService != null &&
+                await _chatService.ConfirmAndDeleteAsync(_source);
 
             if (deleted)
             {

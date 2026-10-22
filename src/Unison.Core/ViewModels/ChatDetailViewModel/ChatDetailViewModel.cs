@@ -274,13 +274,13 @@ namespace Unison.Core.ViewModels
                 () => _ = PinSelectedAsync(false, 0),
                 () => _messageActions.CanUnpin);
             MuteFor8HoursCommand = new RelayCommand(
-                () => _ = SetLocalMuteAsync(ChatMuteHelper.FromNow(ChatMuteHelper.EightHours)),
+                () => _ = SetLocalMuteAsync(_chatService.MuteUntilEightHoursFromNow()),
                 () => CanMuteActiveChat());
             MuteFor1WeekCommand = new RelayCommand(
-                () => _ = SetLocalMuteAsync(ChatMuteHelper.FromNow(ChatMuteHelper.OneWeek)),
+                () => _ = SetLocalMuteAsync(_chatService.MuteUntilOneWeekFromNow()),
                 () => CanMuteActiveChat());
             MuteForeverCommand = new RelayCommand(
-                () => _ = SetLocalMuteAsync(ChatMuteHelper.ForeverUnixSeconds),
+                () => _ = SetLocalMuteAsync(_chatService.MuteForeverUnixSeconds),
                 () => CanMuteActiveChat());
             UnmuteLocalCommand = new RelayCommand(
                 () => _ = SetLocalMuteAsync(null),
