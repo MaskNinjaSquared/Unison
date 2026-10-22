@@ -634,9 +634,9 @@ namespace Unison.Core.ViewModels
         /// <summary>
         /// The first history sync persists before any row reaches the screen, so the UI thread is
         /// not fighting that bulk SQLite write. Toast deep-link also delays first materialize until
-        /// the conversation has loaded. See <see cref="ChatListSyncHold"/>.
+        /// the conversation has loaded.
         /// </summary>
-        private bool IsListHeldForSync => ChatListSyncHold.ShouldHoldRows(
+        private bool IsListHeldForSync => _chatService.ShouldHoldChatListRows(
             _history.IsAwaitingFirstHistorySync,
             _deepLinkHold != null && _deepLinkHold.IsHeld,
             _listEverMaterialized);

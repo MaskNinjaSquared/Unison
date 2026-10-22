@@ -1386,5 +1386,15 @@ namespace Unison.WhatsAppClient.Chats
         /// <inheritdoc />
         public bool RequiresVisibleReorder(string propertyName) =>
             ChatListReorderTrigger.RequiresVisibleReorder(propertyName);
+
+        /// <inheritdoc />
+        public bool ShouldHoldChatListRows(
+            bool isAwaitingFirstHistorySync,
+            bool deepLinkDetailFirst,
+            bool listAlreadyMaterialized) =>
+            ChatListSyncHold.ShouldHoldRows(
+                isAwaitingFirstHistorySync,
+                deepLinkDetailFirst,
+                listAlreadyMaterialized);
     }
 }

@@ -1,7 +1,7 @@
 // =============================================================================
 // Tests for ChatListSyncHold.
 // =============================================================================
-using Unison.Core.Helpers;
+using Unison.WhatsAppClient.Helpers;
 using Xunit;
 
 namespace Unison.Core.Tests.Helpers

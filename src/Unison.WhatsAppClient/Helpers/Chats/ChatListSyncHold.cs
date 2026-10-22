@@ -11,7 +11,7 @@
 // archive) creates rows right after login, seconds before the initial-sync
 // state turns on. Waiting for that state let those few rows show up first.
 // =============================================================================
-namespace Unison.Core.Helpers
+namespace Unison.WhatsAppClient.Helpers
 {
     public static class ChatListSyncHold
     {

@@ -210,5 +210,13 @@ namespace Unison.Core.Contracts.WhatsApp
         /// Which <see cref="ChatItem"/> property change can move a row (pin / recency / community link).
         /// </summary>
         bool RequiresVisibleReorder(string propertyName);
+
+        /// <summary>
+        /// True when the chat-list control must not be created yet (first history sync or cold deep-link).
+        /// </summary>
+        bool ShouldHoldChatListRows(
+            bool isAwaitingFirstHistorySync,
+            bool deepLinkDetailFirst,
+            bool listAlreadyMaterialized);
     }
 }
