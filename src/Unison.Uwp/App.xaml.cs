@@ -400,7 +400,8 @@ namespace Unison.Uwp
                     sp.GetRequiredService<ChatListDeduper>(),
                     sp.GetRequiredService<UsyncAliasFiling>(),
                     sp.GetRequiredService<ChatListInitialPaintGate>(),
-                    sp.GetRequiredService<IAppMemoryInfo>()));
+                    sp.GetRequiredService<IAppMemoryInfo>(),
+                    sp.GetRequiredService<ILocalSettings>()));
             // The send flow lives on MessageFacade; the timeline caches and the socket it writes
             // through are still the client's, reached only through this narrow port.
             services.AddSingleton<IOutgoingMessageHost>(

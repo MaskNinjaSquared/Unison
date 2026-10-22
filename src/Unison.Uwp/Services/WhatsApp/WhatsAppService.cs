@@ -16,11 +16,7 @@ using Unison.Baileys.Crypto;
 using Unison.Uwp.Transport;
 using Proto;
 using Google.Protobuf;
-using Windows.UI.Core;
 using System.Threading;
-using Windows.Storage;
-using Windows.ApplicationModel.Core;
-using Windows.Networking.Sockets;
 using System.Runtime.InteropServices.WindowsRuntime;
 
 using System.ComponentModel;
@@ -61,19 +57,14 @@ namespace Unison.Uwp.Services.WhatsApp
             var args = new PropertyChangedEventArgs(propertyName);
             try
             {
-                var dispatcher = CoreApplication.MainView?.CoreWindow?.Dispatcher;
-                if (dispatcher != null && !dispatcher.HasThreadAccess)
-                {
-                    _ = dispatcher.RunAsync(CoreDispatcherPriority.Low, () => handler(this, args));
-                    return;
-                }
+                // AttachedUiDispatcher runs inline on the UI thread and posts otherwise —
+                // same contract as CoreApplication.MainView.Dispatcher without naming WinRT here.
+                _ui.Post(() => handler(this, args));
             }
             catch
             {
-                return;
+                // No dispatcher / teardown: drop the notification rather than crash a worker.
             }
-
-            handler(this, args);
         }
 
         private static volatile bool _suppressReplayDiagnostics;
@@ -173,6 +164,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly IChatStore _chatStore;
         private readonly bool _isWindowsMobile;
         private readonly IAppMemoryInfo _appMemory;
+        private readonly ILocalSettings _localSettings;
 
         /// <summary>Wired from App DI so history sync goes through MessageFacade (Person upsert + domain mapping).</summary>
         public void AttachMessageService(IMessageService messageService)
@@ -1166,7 +1158,8 @@ namespace Unison.Uwp.Services.WhatsApp
             ChatListDeduper deduper,
             UsyncAliasFiling usyncAliases,
             ChatListInitialPaintGate listPaintGate = null,
-            IAppMemoryInfo appMemory = null)
+            IAppMemoryInfo appMemory = null,
+            ILocalSettings localSettings = null)
         {
             if (chatState == null)
             {
@@ -1184,6 +1177,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _chatStore = chatStore ?? throw new ArgumentNullException(nameof(chatStore));
             _isWindowsMobile = systemInfo.IsMobile();
             _appMemory = appMemory ?? new WinRtAppMemoryInfo();
+            _localSettings = localSettings;
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _previewReconciler = previewReconciler ?? throw new ArgumentNullException(nameof(previewReconciler));
             _nameRefresh = nameRefresh ?? throw new ArgumentNullException(nameof(nameRefresh));
@@ -1276,11 +1270,12 @@ namespace Unison.Uwp.Services.WhatsApp
             ChatListDeduper deduper,
             UsyncAliasFiling usyncAliases,
             ChatListInitialPaintGate listPaintGate = null,
-            IAppMemoryInfo appMemory = null)
+            IAppMemoryInfo appMemory = null,
+            ILocalSettings localSettings = null)
         {
             return _instance ?? (_instance = new WhatsAppService(
                 chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
-                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, previewReconciler, nameRefresh, storedPreviews, deduper, usyncAliases, listPaintGate, appMemory));
+                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, previewReconciler, nameRefresh, storedPreviews, deduper, usyncAliases, listPaintGate, appMemory, localSettings));
         }
 
         /// <summary>

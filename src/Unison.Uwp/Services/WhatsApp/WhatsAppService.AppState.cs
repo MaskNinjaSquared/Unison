@@ -17,11 +17,7 @@ using Unison.Baileys.Crypto;
 using Unison.Uwp.Transport;
 using Proto;
 using Google.Protobuf;
-using Windows.UI.Core;
 using System.Threading;
-using Windows.Storage;
-using Windows.ApplicationModel.Core;
-using Windows.Networking.Sockets;
 using System.Runtime.InteropServices.WindowsRuntime;
 
 using System.ComponentModel;

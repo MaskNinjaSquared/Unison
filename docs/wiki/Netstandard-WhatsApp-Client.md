@@ -141,7 +141,7 @@ Do in order. Each phase has a done check.
 
 **Façades (done on this branch):** `ConnectionFacade` asks `INetworkAccess` (`WinRtNetworkAccess` holds `NetworkInformation`). `ContactFacade` waits for People-card return via `IAppLifecycle.WaitUntilForegroundAsync` (no `Window` / `CoreApplication`). Façade `.cs` files under `Services/WhatsApp/**` no longer `using Windows.*`.
 
-**Client follow-up (this branch):** `MediaAvailability` no longer `using Windows.*` — document length goes through `IMediaCache.TryGetLengthBytesAsync` (`MediaCacheService` holds `StorageFile`). Startup quiet / memory headroom and `StartupPhaseTrace` use `IAppMemoryInfo` (`WinRtAppMemoryInfo`); `SyncBudget` low-memory probe likewise. Remaining WinRT on other `WhatsAppService` partials / stores / transport stays until Phase B shrinks the compatibility client (adapters).
+**Client follow-up (this branch):** `MediaAvailability` no longer `using Windows.*` — document length goes through `IMediaCache.TryGetLengthBytesAsync` (`MediaCacheService` holds `StorageFile`). Startup quiet / memory headroom and `StartupPhaseTrace` use `IAppMemoryInfo` (`WinRtAppMemoryInfo`); `SyncBudget` low-memory probe likewise. Reconnect-toast suppress uses `ILocalSettings`; `OnPropertyChanged` marshals via `AttachedUiDispatcher` (no `CoreApplication`). Dead `using Windows.*` stripped from `WhatsAppService` partials. Remaining WinRT on stores / transport / DEBUG harness / other client IO stays until Phase B (adapters).
 
 ### Phase B — Finish WhatsAppService extraction (phases 3 and 4)
 

@@ -16,11 +16,7 @@ using Unison.Baileys.Crypto;
 using Unison.Uwp.Transport;
 using Proto;
 using Google.Protobuf;
-using Windows.UI.Core;
 using System.Threading;
-using Windows.Storage;
-using Windows.ApplicationModel.Core;
-using Windows.Networking.Sockets;
 using System.Runtime.InteropServices.WindowsRuntime;
 
 using System.ComponentModel;
@@ -115,12 +111,16 @@ namespace Unison.Uwp.Services.WhatsApp
         /// Writes the suppress flag used by the background toast presenter (winmd cannot
         /// expose new helpers on the internal presenter to this project).
         /// </summary>
-        private static void SetSuppressReconnectToast(bool suppress)
+        private void SetSuppressReconnectToast(bool suppress)
         {
             try
             {
-                ApplicationData.Current.LocalSettings.Values[
-                    LocalSettingsConstants.SuppressReconnectToast] = suppress;
+                if (_localSettings == null)
+                {
+                    return;
+                }
+
+                _localSettings.Set(LocalSettingsConstants.SuppressReconnectToast, suppress);
             }
             catch (Exception ex)
             {
