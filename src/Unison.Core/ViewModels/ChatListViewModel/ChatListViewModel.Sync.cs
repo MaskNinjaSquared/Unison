@@ -746,10 +746,6 @@ namespace Unison.Core.ViewModels
                 _previewHydrateLoopRunning = false;
             }
 
-            // Nothing left to hydrate: drop the index rather than hold every ChatItem alive.
-            _hydrateIndex = null;
-            _hydrateIndexChatCount = -1;
-
             if (!_batchRendering)
             {
                 return;
@@ -788,143 +784,48 @@ namespace Unison.Core.ViewModels
 
         private void ApplyPreviewHydrateSlice(IReadOnlyList<HistoryChatPreview> rows, string yesterday)
         {
-            if (rows == null || rows.Count == 0)
+            if (rows == null || rows.Count == 0 || _chatService == null)
             {
                 return;
             }
 
-            Dictionary<string, ChatItem> index = RentChatJidIndex();
-            var toAdd = new List<ChatItem>();
-            int updated = 0;
             string selfLabel = _strings != null
                 ? _strings.Get("Chat_SelfFallbackName", "You")
                 : "You";
 
-            foreach (var preview in rows)
+            HistoryChatPreviewHydrateResult applied = _chatService.ApplyHistoryChatPreviewHydrate(
+                new HistoryChatPreviewHydrateRequest
+                {
+                    Rows = rows,
+                    YesterdayLabel = yesterday,
+                    SelfDisplayName = selfLabel
+                });
+
+            IReadOnlyList<ChatItem> created = applied?.CreatedChats;
+            int createdCount = applied != null ? applied.CreatedCount : 0;
+            int updated = applied != null ? applied.UpdatedCount : 0;
+
+            if (created != null)
             {
-                if (preview == null || string.IsNullOrWhiteSpace(preview.Jid))
+                for (int i = 0; i < created.Count; i++)
                 {
-                    continue;
-                }
-
-                if (!HistoryChatPreviewApplier.IsListable(preview))
-                {
-                    // Conversation carried pin/mute but no listable tip â€” still land flags in ChatStore
-                    // so a later tip hydrate / ApplyTo can show the pin icon.
-                    if (preview.IsChatPinned.HasValue || preview.AppliesMute)
-                    {
-                        ChatItem flagTarget = FindChatInIndex(index, preview);
-                        if (flagTarget != null)
-                        {
-                            HistoryChatPreviewApplier.ApplyLocalFlags(preview, flagTarget);
-                            PersistHistoryLocalFlags(flagTarget, preview);
-                            TryApplyCanonicalPinFallback(flagTarget);
-                            updated++;
-                        }
-                        else
-                        {
-                            PersistHistoryLocalFlags(
-                                new ChatItem { JID = preview.Jid },
-                                preview);
-                        }
-                    }
-
-                    continue;
-                }
-
-                ChatItem existing = FindChatInIndex(index, preview);
-                if (existing == null)
-                {
-                    ChatItem created = HistoryChatPreviewApplier.ToChatItem(preview, yesterday, selfLabel);
-                    if (created == null)
+                    ChatItem chat = created[i];
+                    if (chat == null)
                     {
                         continue;
                     }
 
-                    try
-                    {
-                        _chatStore?.ApplyTo(created);
-                        // History Conversation pin/mute after ApplyTo: the store must not wipe
-                        // flags the phone just sent, and those flags have to reach ChatStore too.
-                        HistoryChatPreviewApplier.ApplyLocalFlags(preview, created);
-                        if (preview.IsChatPinned.HasValue || preview.AppliesMute)
-                        {
-                            PersistHistoryLocalFlags(created, preview);
-                        }
-
-                        TryApplyCanonicalPinFallback(created);
-                    }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine(
-                            "[ChatListViewModel] ApplyTo (preview create) failed: " + ex.Message);
-                    }
-
-                    created.PropertyChanged -= ChatItem_PropertyChanged;
-                    created.PropertyChanged += ChatItem_PropertyChanged;
-                    toAdd.Add(created);
-                    IndexChat(index, created);
-                }
-                else
-                {
-                    bool bodyChanged = HistoryChatPreviewApplier.ApplyIfNewer(
-                        preview,
-                        existing,
-                        yesterday,
-                        selfLabel);
-                    bool flagsChanged = false;
-                    try
-                    {
-                        // Do not ApplyTo here on tip updates. ChatStore may still lack the pin/mute
-                        // history just wrote onto the row (async persist), and re-applying the
-                        // stale cache was clearing IsChatPinned / MutedUntil while tips arrived.
-                        // Batch release and RefreshVisibleChats already call ApplyTo when ordering.
-                        if (bodyChanged)
-                        {
-                            updated++;
-                        }
-
-                        // Flags apply even when the tip did not move â€” that was the whole miss:
-                        // a pinned chat whose last message was already on the list never got the pin.
-                        HistoryChatPreviewApplier.ApplyLocalFlags(preview, existing);
-                        flagsChanged = preview.IsChatPinned.HasValue || preview.AppliesMute;
-                        if (flagsChanged)
-                        {
-                            PersistHistoryLocalFlags(existing, preview);
-                            if (!bodyChanged)
-                            {
-                                updated++;
-                            }
-                        }
-
-                        if (bodyChanged || flagsChanged)
-                        {
-                            TryApplyCanonicalPinFallback(existing);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine(
-                            "[ChatListViewModel] ApplyTo (preview update) failed: " + ex.Message);
-                    }
+                    chat.PropertyChanged -= ChatItem_PropertyChanged;
+                    chat.PropertyChanged += ChatItem_PropertyChanged;
                 }
             }
-
-            foreach (var chat in toAdd)
-            {
-                _chatState.Chats.Add(chat);
-            }
-
-            // The rows just added are already in the index, so keep it rather than paying for a
-            // rebuild on the next slice.
-            _hydrateIndexChatCount = _chatState.Chats.Count;
 
             // Outside the mutation check on purpose: on a reconnect every preview can be older
             // than what is already in memory, so nothing is added or updated - and gating the
             // ceiling on a mutation left the list stuck at one batch for the whole session.
             RaiseVisibleTarget(_chatState.Chats.Count);
 
-            if (toAdd.Count > 0 || updated > 0)
+            if (createdCount > 0 || updated > 0)
             {
                 _batchRendering = true;
                 _batchProcessed = Math.Max(_batchProcessed, _chatState.Chats.Count);
@@ -936,88 +837,13 @@ namespace Unison.Core.ViewModels
                 IsLoadingOverlayVisible = VisibleChats.Count == 0;
                 UpdateBatchProgressText();
                 // Tip-only updates leave VisibleChats full; still re-pin order this turn.
-                if (updated > 0 && toAdd.Count == 0 && VisibleChats.Count > 0)
+                if (updated > 0 && createdCount == 0 && VisibleChats.Count > 0)
                 {
                     ReorderVisibleChatsInPlace();
                 }
 
                 EnsureBatchLoop();
             }
-        }
-
-        /// <summary>
-        /// The JID index for this hydrate slice, rebuilt only when the store changed behind us.
-        /// A stale hit can at worst create a duplicate row, which both the visible-set dedupe in
-        /// <see cref="ReleaseNextBatch"/> and <see cref="ChatListDisplayOrder.DeduplicateByCanonicalJid"/> absorb.
-        /// </summary>
-        private Dictionary<string, ChatItem> RentChatJidIndex()
-        {
-            if (_hydrateIndex != null && _hydrateIndexChatCount == _chatState.Chats.Count)
-            {
-                return _hydrateIndex;
-            }
-
-            _hydrateIndex = BuildChatJidIndex();
-            _hydrateIndexChatCount = _chatState.Chats.Count;
-            return _hydrateIndex;
-        }
-
-        private Dictionary<string, ChatItem> BuildChatJidIndex()
-        {
-            var index = new Dictionary<string, ChatItem>(StringComparer.OrdinalIgnoreCase);
-            foreach (var chat in _chatState.Chats)
-            {
-                IndexChat(index, chat);
-            }
-
-            return index;
-        }
-
-        private static void IndexChat(Dictionary<string, ChatItem> index, ChatItem chat)
-        {
-            if (index == null || chat == null || string.IsNullOrWhiteSpace(chat.JID))
-            {
-                return;
-            }
-
-            string key = JidHelper.Normalize(chat.JID);
-            if (!string.IsNullOrWhiteSpace(key) && !index.ContainsKey(key))
-            {
-                index[key] = chat;
-            }
-        }
-
-        private static ChatItem FindChatInIndex(Dictionary<string, ChatItem> index, HistoryChatPreview preview)
-        {
-            if (index == null || preview == null)
-            {
-                return null;
-            }
-
-            ChatItem found;
-            if (TryIndexLookup(index, preview.Jid, out found) ||
-                TryIndexLookup(index, preview.LidJid, out found) ||
-                TryIndexLookup(index, preview.PnJid, out found))
-            {
-                return found;
-            }
-
-            return null;
-        }
-
-        private static bool TryIndexLookup(
-            Dictionary<string, ChatItem> index,
-            string jid,
-            out ChatItem chat)
-        {
-            chat = null;
-            if (string.IsNullOrWhiteSpace(jid))
-            {
-                return false;
-            }
-
-            string key = JidHelper.Normalize(jid);
-            return !string.IsNullOrWhiteSpace(key) && index.TryGetValue(key, out chat);
         }
 
         private async void Contacts_DisplayNamesUpdated(object sender, EventArgs e)

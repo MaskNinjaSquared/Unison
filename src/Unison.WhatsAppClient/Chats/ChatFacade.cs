@@ -62,6 +62,7 @@ namespace Unison.WhatsAppClient.Chats
         private readonly INotificationService _notifications;
         private readonly IDispatcher _ui;
         private readonly IChatCatalogPersistence _catalog;
+        private readonly IChatStore _chatStore;
         private readonly IShortcutService _shortcuts;
         private readonly StoredChatPreviewRefresh _storedPreviews;
         private readonly ChatPreviewReconciler _sqlitePreviews;
@@ -88,6 +89,7 @@ namespace Unison.WhatsAppClient.Chats
             INotificationService notifications,
             IDispatcher ui,
             IChatCatalogPersistence catalog,
+            IChatStore chatStore,
             IShortcutService shortcuts,
             StoredChatPreviewRefresh storedPreviews,
             ChatPreviewReconciler sqlitePreviews,
@@ -109,6 +111,7 @@ namespace Unison.WhatsAppClient.Chats
             _notifications = notifications;
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
+            _chatStore = chatStore ?? throw new ArgumentNullException(nameof(chatStore));
             _shortcuts = shortcuts ?? throw new ArgumentNullException(nameof(shortcuts));
             _storedPreviews = storedPreviews ?? throw new ArgumentNullException(nameof(storedPreviews));
             _sqlitePreviews = sqlitePreviews ?? throw new ArgumentNullException(nameof(sqlitePreviews));
@@ -875,6 +878,311 @@ namespace Unison.WhatsAppClient.Chats
             var utc = Unison.Core.Mappers.WhatsAppMapper.ToUtc(timestamp);
 
             return new DateTimeOffset(utc).ToUnixTimeSeconds();
+        }
+
+        /// <inheritdoc />
+        public HistoryChatPreviewHydrateResult ApplyHistoryChatPreviewHydrate(
+            HistoryChatPreviewHydrateRequest request)
+        {
+            var result = new HistoryChatPreviewHydrateResult
+            {
+                CreatedChats = Array.Empty<ChatItem>()
+            };
+            if (request?.Rows == null || request.Rows.Count == 0)
+            {
+                return result;
+            }
+
+            string yesterday = request.YesterdayLabel;
+            string selfLabel = string.IsNullOrWhiteSpace(request.SelfDisplayName)
+                ? "You"
+                : request.SelfDisplayName;
+            var index = BuildHydrateIndex();
+            var created = new List<ChatItem>();
+            int updated = 0;
+
+            foreach (HistoryChatPreview preview in request.Rows)
+            {
+                if (preview == null || string.IsNullOrWhiteSpace(preview.Jid))
+                {
+                    continue;
+                }
+
+                if (!HistoryChatPreviewApplier.IsListable(preview))
+                {
+                    if (preview.IsChatPinned.HasValue || preview.AppliesMute)
+                    {
+                        ChatItem flagTarget = FindInHydrateIndex(index, preview);
+                        if (flagTarget != null)
+                        {
+                            HistoryChatPreviewApplier.ApplyLocalFlags(preview, flagTarget);
+                            PersistHistoryLocalFlags(flagTarget, preview);
+                            TryApplyCanonicalPinFallback(flagTarget);
+                            updated++;
+                        }
+                        else
+                        {
+                            PersistHistoryLocalFlags(
+                                new ChatItem { JID = preview.Jid },
+                                preview);
+                        }
+                    }
+
+                    continue;
+                }
+
+                ChatItem existing = FindInHydrateIndex(index, preview);
+                if (existing == null)
+                {
+                    ChatItem row = HistoryChatPreviewApplier.ToChatItem(preview, yesterday, selfLabel);
+                    if (row == null)
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        _chatStore.ApplyTo(row);
+                        HistoryChatPreviewApplier.ApplyLocalFlags(preview, row);
+                        if (preview.IsChatPinned.HasValue || preview.AppliesMute)
+                        {
+                            PersistHistoryLocalFlags(row, preview);
+                        }
+
+                        TryApplyCanonicalPinFallback(row);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine("[ChatFacade] ApplyTo (preview create) failed: " + ex.Message);
+                    }
+
+                    _chatState.Chats.Add(row);
+                    created.Add(row);
+                    IndexHydrateChat(index, row);
+                }
+                else
+                {
+                    bool bodyChanged = HistoryChatPreviewApplier.ApplyIfNewer(
+                        preview,
+                        existing,
+                        yesterday,
+                        selfLabel);
+                    try
+                    {
+                        if (bodyChanged)
+                        {
+                            updated++;
+                        }
+
+                        HistoryChatPreviewApplier.ApplyLocalFlags(preview, existing);
+                        bool flagsChanged = preview.IsChatPinned.HasValue || preview.AppliesMute;
+                        if (flagsChanged)
+                        {
+                            PersistHistoryLocalFlags(existing, preview);
+                            if (!bodyChanged)
+                            {
+                                updated++;
+                            }
+                        }
+
+                        if (bodyChanged || flagsChanged)
+                        {
+                            TryApplyCanonicalPinFallback(existing);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine("[ChatFacade] ApplyTo (preview update) failed: " + ex.Message);
+                    }
+                }
+            }
+
+            result.CreatedCount = created.Count;
+            result.UpdatedCount = updated;
+            result.CreatedChats = created;
+            return result;
+        }
+
+        private Dictionary<string, ChatItem> BuildHydrateIndex()
+        {
+            var index = new Dictionary<string, ChatItem>(StringComparer.OrdinalIgnoreCase);
+            foreach (ChatItem chat in _chatState.Chats)
+            {
+                IndexHydrateChat(index, chat);
+            }
+
+            return index;
+        }
+
+        private static void IndexHydrateChat(Dictionary<string, ChatItem> index, ChatItem chat)
+        {
+            if (index == null || chat == null || string.IsNullOrWhiteSpace(chat.JID))
+            {
+                return;
+            }
+
+            string key = JidHelper.Normalize(chat.JID);
+            if (!string.IsNullOrWhiteSpace(key) && !index.ContainsKey(key))
+            {
+                index[key] = chat;
+            }
+        }
+
+        private static ChatItem FindInHydrateIndex(
+            Dictionary<string, ChatItem> index,
+            HistoryChatPreview preview)
+        {
+            if (index == null || preview == null)
+            {
+                return null;
+            }
+
+            ChatItem found;
+            if (TryHydrateLookup(index, preview.Jid, out found) ||
+                TryHydrateLookup(index, preview.LidJid, out found) ||
+                TryHydrateLookup(index, preview.PnJid, out found))
+            {
+                return found;
+            }
+
+            return null;
+        }
+
+        private static bool TryHydrateLookup(
+            Dictionary<string, ChatItem> index,
+            string jid,
+            out ChatItem chat)
+        {
+            chat = null;
+            if (string.IsNullOrWhiteSpace(jid))
+            {
+                return false;
+            }
+
+            string key = JidHelper.Normalize(jid);
+            return !string.IsNullOrWhiteSpace(key) && index.TryGetValue(key, out chat);
+        }
+
+        private void PersistHistoryLocalFlags(ChatItem chat, HistoryChatPreview preview)
+        {
+            if (chat == null || preview == null || string.IsNullOrWhiteSpace(chat.JID))
+            {
+                return;
+            }
+
+            if (preview.IsChatPinned.HasValue)
+            {
+                RememberPinnedUnderAliases(chat.JID, preview.IsChatPinned.Value);
+                if (!string.IsNullOrWhiteSpace(preview.LidJid))
+                {
+                    _chatStore.RememberChatPinned(preview.LidJid, preview.IsChatPinned.Value);
+                }
+
+                if (!string.IsNullOrWhiteSpace(preview.PnJid))
+                {
+                    _chatStore.RememberChatPinned(preview.PnJid, preview.IsChatPinned.Value);
+                }
+
+                _ = PersistHistoryPinnedAsync(chat.JID, preview.IsChatPinned.Value);
+                if (!string.IsNullOrWhiteSpace(preview.LidJid))
+                {
+                    _ = PersistHistoryPinnedAsync(preview.LidJid, preview.IsChatPinned.Value);
+                }
+
+                if (!string.IsNullOrWhiteSpace(preview.PnJid))
+                {
+                    _ = PersistHistoryPinnedAsync(preview.PnJid, preview.IsChatPinned.Value);
+                }
+            }
+
+            if (preview.AppliesMute)
+            {
+                _chatStore.RememberMutedUntil(chat.JID, preview.MutedUntil);
+                _ = PersistHistoryMuteAsync(chat.JID, preview.MutedUntil);
+            }
+        }
+
+        private void RememberPinnedUnderAliases(string jid, bool pinned)
+        {
+            IReadOnlyList<string> keys = ChatPinStoreKeys.For(jid, _jids);
+            for (int i = 0; i < keys.Count; i++)
+            {
+                _chatStore.RememberChatPinned(keys[i], pinned);
+            }
+        }
+
+        private async Task PersistHistoryPinnedAsync(string jid, bool pinned)
+        {
+            try
+            {
+                IReadOnlyList<string> keys = ChatPinStoreKeys.For(jid, _jids);
+                for (int i = 0; i < keys.Count; i++)
+                {
+                    await _chatStore.SetChatPinnedAsync(keys[i], pinned).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatFacade] Persist history pin failed: " + ex.Message);
+            }
+        }
+
+        private async Task PersistHistoryMuteAsync(string jid, long? mutedUntil)
+        {
+            try
+            {
+                await _chatStore.SetMutedUntilAsync(jid, mutedUntil).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatFacade] Persist history mute failed: " + ex.Message);
+            }
+        }
+
+        private void TryApplyCanonicalPinFallback(ChatItem chat)
+        {
+            if (chat == null)
+            {
+                return;
+            }
+
+            ChatLocalState exact = _chatStore.TryGetCached(chat.JID);
+            if (exact != null && exact.Knows(ChatLocalStateFields.Pin) && !exact.IsChatPinned)
+            {
+                return;
+            }
+
+            IReadOnlyList<string> keys = ChatPinStoreKeys.For(chat.JID, _jids);
+            for (int i = 0; i < keys.Count; i++)
+            {
+                string key = keys[i];
+                if (string.Equals(
+                        JidHelper.Normalize(key),
+                        JidHelper.Normalize(chat.JID),
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                ChatLocalState alt = _chatStore.TryGetCached(key);
+                if (alt == null || !alt.Knows(ChatLocalStateFields.Pin) || !alt.IsChatPinned)
+                {
+                    continue;
+                }
+
+                if (!chat.IsChatPinned)
+                {
+                    chat.IsChatPinned = true;
+                    if (chat.PinnedTimestamp == null || chat.PinnedTimestamp == 0)
+                    {
+                        chat.PinnedTimestamp = 1;
+                    }
+
+                    RememberPinnedUnderAliases(chat.JID, true);
+                }
+
+                return;
+            }
         }
     }
 }

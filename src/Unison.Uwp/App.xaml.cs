@@ -612,6 +612,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<INotificationService>(),
                 sp.GetRequiredService<AttachedUiDispatcher>(),
                 sp.GetRequiredService<IChatCatalogPersistence>(),
+                sp.GetRequiredService<IChatStore>(),
                 sp.GetRequiredService<IShortcutService>(),
                 sp.GetRequiredService<StoredChatPreviewRefresh>(),
                 sp.GetRequiredService<ChatPreviewReconciler>(),

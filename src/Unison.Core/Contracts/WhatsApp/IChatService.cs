@@ -118,5 +118,13 @@ namespace Unison.Core.Contracts.WhatsApp
         /// callers that need the list settled first.
         /// </summary>
         void RequestChatListDedup(string reason);
+
+        /// <summary>
+        /// Applies one history-sync preview slice onto the in-memory list: create missing rows,
+        /// update tips when newer, apply pin/mute flags into the row and durable store.
+        /// Must run on the UI thread (list mutations). Presentation batching stays with the caller.
+        /// </summary>
+        HistoryChatPreviewHydrateResult ApplyHistoryChatPreviewHydrate(
+            HistoryChatPreviewHydrateRequest request);
     }
 }

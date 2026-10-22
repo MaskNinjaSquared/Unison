@@ -185,14 +185,6 @@ namespace Unison.Core.ViewModels
         private List<HistoryChatPreview> _previewHydrateQueue;
 
         /// <summary>
-        /// JID lookup reused across the slices of one hydrate drain. Rebuilding it per slice made
-        /// the drain quadratic on the store size, all of it on the UI thread. Held only while the
-        /// queue is draining; <see cref="_hydrateIndexChatCount"/> is the staleness check.
-        /// </summary>
-        private Dictionary<string, ChatItem> _hydrateIndex;
-        private int _hydrateIndexChatCount = -1;
-
-        /// <summary>
         /// Builds a fresh <see cref="NewChatDialogViewModel"/> per New Chat dialog
         /// (clean phone/error state).
         /// </summary>
