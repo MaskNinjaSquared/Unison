@@ -92,5 +92,25 @@ namespace Unison.Core.Contracts.WhatsApp
             ParticipantResolutionContext context,
             string nameHint = null,
             GroupMember rosterMember = null);
+
+        /// <summary>
+        /// Drops the shared 1:1 name/avatar index used by open-chat participant lookups
+        /// (call after a mass display-name update).
+        /// </summary>
+        void InvalidateParticipantDirectChatIndex();
+
+        /// <summary>
+        /// Open-chat participant name/avatar cache for the conversation pane (one per detail VM).
+        /// </summary>
+        IGroupParticipantLookup CreateOpenChatParticipantLookup(System.Func<string> selfDisplayLabel);
+
+        /// <summary>
+        /// Fills empty avatar / display name using the façade's resolution context (no caller-built context).
+        /// </summary>
+        void EnrichMember(
+            GroupMember member,
+            string participantJid,
+            ChatItem groupChat,
+            string nameHint = null);
     }
 }

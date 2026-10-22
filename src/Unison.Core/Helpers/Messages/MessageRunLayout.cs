@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Mappers;
 using Unison.Core.Models;
 
@@ -16,7 +17,7 @@ namespace Unison.Core.Helpers
             IList<ChatMessage> messages,
             bool isGroup,
             ChatItem groupChat,
-            GroupParticipantLookup lookup,
+            IGroupParticipantLookup lookup,
             string todayLabel,
             string yesterdayLabel,
             Func<string, bool> quotedIdIsFromMe)
