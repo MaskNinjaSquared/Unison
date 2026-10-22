@@ -6,6 +6,7 @@ using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.ViewModels;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Core.Tests.ViewModels
 {

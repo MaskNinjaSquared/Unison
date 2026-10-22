@@ -2,7 +2,7 @@
 // Tests for ChatListNamesAppliedRefresh.
 // Mass name apply must not rebuild the visible list unless search membership can change.
 // =============================================================================
-using Unison.Core.Helpers;
+using Unison.WhatsAppClient.Helpers;
 using Xunit;
 
 namespace Unison.Core.Tests.Helpers

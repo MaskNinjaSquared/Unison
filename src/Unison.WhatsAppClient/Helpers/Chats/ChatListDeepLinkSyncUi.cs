@@ -6,7 +6,7 @@
 // (process Running/Suspended, list already painted) must not arm the hold or
 // suppress sync UI: just open the chat.
 // =============================================================================
-namespace Unison.Core.Helpers
+namespace Unison.WhatsAppClient.Helpers
 {
     public static class ChatListDeepLinkSyncUi
     {
