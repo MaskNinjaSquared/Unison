@@ -404,6 +404,23 @@ namespace Unison.WhatsAppClient.Messages
             return ChatTimelineLiveMerge.ShouldInsert(timestamp, newestShown, isDetachedFromEnd);
         }
 
+        /// <inheritdoc />
+        public void SortTimelineInPlace(List<ChatMessage> list)
+        {
+            ChatMessageOrder.SortInPlace(list);
+        }
+
+        /// <inheritdoc />
+        public int FindTimelineInsertIndex(
+            int count,
+            Func<int, DateTime> getTimestamp,
+            Func<int, string> getId,
+            DateTime timestamp,
+            string id)
+        {
+            return ChatMessageOrder.FindInsertIndex(count, getTimestamp, getId, timestamp, id);
+        }
+
         public async Task<List<ChatMessage>> LoadChatMediaIndexAsync(string jid, int limit = 400)
         {
             var result = new List<ChatMessage>();

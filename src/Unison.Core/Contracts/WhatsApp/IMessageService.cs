@@ -114,6 +114,21 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         bool ShouldInsertLiveTimelineRow(DateTime timestamp, DateTime? newestShown, bool isDetachedFromEnd);
 
+        /// <summary>
+        /// Protocol timestamp then id — same order the message store persists. Mutates <paramref name="list"/>.
+        /// </summary>
+        void SortTimelineInPlace(List<ChatMessage> list);
+
+        /// <summary>
+        /// Index for inserting a row into an already-ordered timeline window (timestamp, then id).
+        /// </summary>
+        int FindTimelineInsertIndex(
+            int count,
+            Func<int, DateTime> getTimestamp,
+            Func<int, string> getId,
+            DateTime timestamp,
+            string id);
+
         /// <summary>Asks the phone for older messages for an open chat.</summary>
         Task<bool> EnsureHistoryOnDemandAsync(string jid, int count);
 

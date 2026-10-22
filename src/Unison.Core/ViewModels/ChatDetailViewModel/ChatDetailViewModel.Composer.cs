@@ -764,7 +764,7 @@ namespace Unison.Core.ViewModels
                 return null;
             }
 
-            int index = ChatMessageOrder.FindInsertIndex(
+            int index = _messageService.FindTimelineInsertIndex(
                 Messages.Count,
                 i => Messages[i]?.Timestamp ?? DateTime.MinValue,
                 i => Messages[i]?.Id,

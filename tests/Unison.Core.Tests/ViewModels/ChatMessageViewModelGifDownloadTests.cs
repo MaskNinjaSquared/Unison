@@ -185,6 +185,15 @@ namespace Unison.Core.Tests.ViewModels
                 DateTime? newestShown,
                 bool isDetachedFromEnd) =>
                 ChatTimelineLiveMerge.ShouldInsert(timestamp, newestShown, isDetachedFromEnd);
+            public void SortTimelineInPlace(List<ChatMessage> list) =>
+                ChatMessageOrder.SortInPlace(list);
+            public int FindTimelineInsertIndex(
+                int count,
+                Func<int, DateTime> getTimestamp,
+                Func<int, string> getId,
+                DateTime timestamp,
+                string id) =>
+                ChatMessageOrder.FindInsertIndex(count, getTimestamp, getId, timestamp, id);
             public Task<bool> EnsureHistoryOnDemandAsync(string jid, int count) => throw new NotImplementedException();
             public bool IsHistoryOnDemandPending(string jid) => false;
             public Task<ChatMessage> SendTextMessageAsync(string jid, string text) => throw new NotImplementedException();

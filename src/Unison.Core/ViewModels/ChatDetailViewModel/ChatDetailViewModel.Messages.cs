@@ -434,7 +434,7 @@ namespace Unison.Core.ViewModels
         private void RejoinTimelineEnd(IList<ChatMessage> serviceMessages, string requestedJid)
         {
             var latest = serviceMessages.Where(m => m != null).ToList();
-            ChatMessageOrder.SortInPlace(latest);
+            _messageService.SortTimelineInPlace(latest);
             if (latest.Count > InitialUiMessageWindow)
             {
                 latest.RemoveRange(0, latest.Count - InitialUiMessageWindow);
