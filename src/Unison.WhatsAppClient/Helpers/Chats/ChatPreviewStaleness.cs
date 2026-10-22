@@ -11,8 +11,9 @@
 // conversation going backwards.
 // =============================================================================
 using System;
+using Unison.Core.Helpers;
 
-namespace Unison.Core.Helpers
+namespace Unison.WhatsAppClient.Helpers
 {
     public static class ChatPreviewStaleness
     {

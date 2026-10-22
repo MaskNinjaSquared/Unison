@@ -186,6 +186,7 @@ Do in order. Each phase has a done check.
 | List order / community hubs | `ChatListDisplayOrder`, `CommunityListProjector`; `IChatService.SortChatsForDisplay` / `DeduplicateChatsByCanonicalJid` / `ProjectCommunityList` | `ChatListVisibleReconcile` stays in Core (UI collection mutate); `CommunityHubPresentation` stays (presentation) |
 | List search | `ChatListQuery`; `IChatService.MatchesChatListQuery` | `MentionLookupBuilder` stays in Core (shared strip/search labels) |
 | Mentions / load-more page | `MentionSearch`, `TimelineLoadMorePage`; `IMessageService` mention + duplicate-page APIs | `ChatMessageOrder` stays in Core (State / mappers); `ComposerMentionDraft` stays until composer cut |
+| Unread / app-state flags / preview age | `ChatUnreadTally`, `AppStateChatMutation` (+ `ChatFlagChange`), `ChatPreviewStaleness` | — |
 
 ### Phase D — UWP as host only
 

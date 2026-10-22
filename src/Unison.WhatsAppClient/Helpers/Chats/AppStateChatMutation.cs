@@ -14,7 +14,7 @@ using System;
 using System.Collections.Generic;
 using Unison.Core.Models;
 
-namespace Unison.Core.Helpers
+namespace Unison.WhatsAppClient.Helpers
 {
     /// <summary>
     /// The flags one app-state mutation carries. Each is absent when the mutation did

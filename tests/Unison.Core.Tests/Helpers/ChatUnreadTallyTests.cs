@@ -7,8 +7,8 @@
 // real drift once already in this refactor, so they are now one function.
 // =============================================================================
 using System.Collections.Generic;
-using Unison.Core.Helpers;
 using Unison.Core.Models;
+using Unison.WhatsAppClient.Helpers;
 using Xunit;
 
 namespace Unison.Core.Tests.Helpers
