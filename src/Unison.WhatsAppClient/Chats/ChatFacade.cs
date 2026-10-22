@@ -1356,5 +1356,15 @@ namespace Unison.WhatsAppClient.Chats
                 getCanonical,
                 _strings);
         }
+
+        /// <inheritdoc />
+        public bool MatchesChatListQuery(
+            ChatItem chat,
+            string query,
+            Func<string> resolveChatName,
+            Func<string, string> resolveMentionName)
+        {
+            return ChatListQuery.Matches(chat, query, resolveChatName, resolveMentionName);
+        }
     }
 }

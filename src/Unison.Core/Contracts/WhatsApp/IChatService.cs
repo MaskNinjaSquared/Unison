@@ -178,5 +178,14 @@ namespace Unison.Core.Contracts.WhatsApp
             Func<string, ChatItem> resolveParent,
             Func<string, ChatItem> getOrCreateSynthetic,
             Func<string, string> getCanonical);
+
+        /// <summary>
+        /// Whether a list row matches the search box (title, strip, JID, mention labels).
+        /// </summary>
+        bool MatchesChatListQuery(
+            ChatItem chat,
+            string query,
+            Func<string> resolveChatName,
+            Func<string, string> resolveMentionName);
     }
 }

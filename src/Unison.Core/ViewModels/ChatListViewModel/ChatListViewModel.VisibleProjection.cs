@@ -339,11 +339,12 @@ namespace Unison.Core.ViewModels
 
         private bool MatchesQuery(ChatItem chat, string query)
         {
-            return ChatListQuery.Matches(
-                chat,
-                query,
-                () => CachedSearchName(chat?.JID, "search"),
-                jid => CachedSearchName(jid, "mention"));
+            return _chatService != null &&
+                   _chatService.MatchesChatListQuery(
+                       chat,
+                       query,
+                       () => CachedSearchName(chat?.JID, "search"),
+                       jid => CachedSearchName(jid, "mention"));
         }
 
         /// <summary>

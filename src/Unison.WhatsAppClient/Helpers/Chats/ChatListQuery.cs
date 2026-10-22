@@ -14,9 +14,10 @@
 using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
+using Unison.Core.Helpers;
 using Unison.Core.Models;
 
-namespace Unison.Core.Helpers
+namespace Unison.WhatsAppClient.Helpers
 {
     public static class ChatListQuery
     {
