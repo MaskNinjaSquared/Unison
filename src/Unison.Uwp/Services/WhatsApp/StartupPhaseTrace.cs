@@ -1,6 +1,6 @@
 using System;
 using System.Diagnostics;
-using Windows.System;
+using Unison.Core.Contracts;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
@@ -12,20 +12,22 @@ namespace Unison.Uwp.Services.WhatsApp
     {
         private readonly string _phase;
         private readonly Stopwatch _elapsed;
-        private readonly AppMemoryUsageLevel _entryLevel;
+        private readonly string _entryLevel;
+        private readonly IAppMemoryInfo _memory;
         private bool _closed;
 
-        internal StartupPhaseTrace(string phase)
+        internal StartupPhaseTrace(string phase, IAppMemoryInfo memory)
         {
             _phase = phase ?? string.Empty;
-            _entryLevel = MemoryManager.AppMemoryUsageLevel;
+            _memory = memory;
+            _entryLevel = memory?.UsageLevel ?? string.Empty;
             _elapsed = Stopwatch.StartNew();
 
             RuntimeDiagnosticsService.Instance.Write(
                 "startup-phase",
                 _phase + ":begin",
                 "memory=" + _entryLevel +
-                "; bytes=" + MemoryManager.AppMemoryUsage);
+                "; bytes=" + (memory?.UsageBytes ?? 0UL));
         }
 
         public void Dispose()
@@ -41,9 +43,9 @@ namespace Unison.Uwp.Services.WhatsApp
                 "startup-phase",
                 _phase + ":end",
                 "elapsedMs=" + _elapsed.ElapsedMilliseconds +
-                "; memory=" + MemoryManager.AppMemoryUsageLevel +
+                "; memory=" + (_memory?.UsageLevel ?? string.Empty) +
                 "; entryMemory=" + _entryLevel +
-                "; bytes=" + MemoryManager.AppMemoryUsage);
+                "; bytes=" + (_memory?.UsageBytes ?? 0UL));
         }
     }
 }

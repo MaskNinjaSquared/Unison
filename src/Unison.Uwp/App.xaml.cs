@@ -218,6 +218,7 @@ namespace Unison.Uwp
             services.AddSingleton<IStartTilePinService, StartTilePinService>();
             services.AddSingleton<IMediaDiskUsageService, MediaDiskUsageService>();
             services.AddSingleton<ILocalSettings, LocalSettingsService>();
+            services.AddSingleton<IAppMemoryInfo, WinRtAppMemoryInfo>();
             services.AddSingleton<ShellThemeService>();
             services.AddSingleton<IShellThemeService>(sp => sp.GetRequiredService<ShellThemeService>());
             services.AddSingleton<Unison.Uwp.Services.Themes.IShellNavigationStrategy>(
@@ -330,7 +331,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<InitialSyncProgressState>(),
                 sp.GetRequiredService<SyncWorkGate>(),
                 sp.GetRequiredService<HistoryOnDemandRegistry>(),
-                () => Windows.System.MemoryManager.AppMemoryUsageLevel == Windows.System.AppMemoryUsageLevel.Low,
+                () => sp.GetRequiredService<IAppMemoryInfo>().IsLow,
                 sp.GetRequiredService<ISystemInfoProvider>().IsMobile(),
                 sp.GetRequiredService<SyncWorkloadStrategy>()));
             services.AddSingleton(sp => new ChatPreviewReconciler(
@@ -398,7 +399,8 @@ namespace Unison.Uwp
                     sp.GetRequiredService<StoredChatPreviewRefresh>(),
                     sp.GetRequiredService<ChatListDeduper>(),
                     sp.GetRequiredService<UsyncAliasFiling>(),
-                    sp.GetRequiredService<ChatListInitialPaintGate>()));
+                    sp.GetRequiredService<ChatListInitialPaintGate>(),
+                    sp.GetRequiredService<IAppMemoryInfo>()));
             // The send flow lives on MessageFacade; the timeline caches and the socket it writes
             // through are still the client's, reached only through this narrow port.
             services.AddSingleton<IOutgoingMessageHost>(

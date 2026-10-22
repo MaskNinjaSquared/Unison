@@ -172,6 +172,7 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly IGroupRosterStore _groupRosterStore;
         private readonly IChatStore _chatStore;
         private readonly bool _isWindowsMobile;
+        private readonly IAppMemoryInfo _appMemory;
 
         /// <summary>Wired from App DI so history sync goes through MessageFacade (Person upsert + domain mapping).</summary>
         public void AttachMessageService(IMessageService messageService)
@@ -1164,7 +1165,8 @@ namespace Unison.Uwp.Services.WhatsApp
             StoredChatPreviewRefresh storedPreviews,
             ChatListDeduper deduper,
             UsyncAliasFiling usyncAliases,
-            ChatListInitialPaintGate listPaintGate = null)
+            ChatListInitialPaintGate listPaintGate = null,
+            IAppMemoryInfo appMemory = null)
         {
             if (chatState == null)
             {
@@ -1181,6 +1183,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _groupRosterStore = groupRosterStore ?? throw new ArgumentNullException(nameof(groupRosterStore));
             _chatStore = chatStore ?? throw new ArgumentNullException(nameof(chatStore));
             _isWindowsMobile = systemInfo.IsMobile();
+            _appMemory = appMemory ?? new WinRtAppMemoryInfo();
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _previewReconciler = previewReconciler ?? throw new ArgumentNullException(nameof(previewReconciler));
             _nameRefresh = nameRefresh ?? throw new ArgumentNullException(nameof(nameRefresh));
@@ -1272,11 +1275,12 @@ namespace Unison.Uwp.Services.WhatsApp
             StoredChatPreviewRefresh storedPreviews,
             ChatListDeduper deduper,
             UsyncAliasFiling usyncAliases,
-            ChatListInitialPaintGate listPaintGate = null)
+            ChatListInitialPaintGate listPaintGate = null,
+            IAppMemoryInfo appMemory = null)
         {
             return _instance ?? (_instance = new WhatsAppService(
                 chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
-                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, previewReconciler, nameRefresh, storedPreviews, deduper, usyncAliases, listPaintGate));
+                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, previewReconciler, nameRefresh, storedPreviews, deduper, usyncAliases, listPaintGate, appMemory));
         }
 
         /// <summary>

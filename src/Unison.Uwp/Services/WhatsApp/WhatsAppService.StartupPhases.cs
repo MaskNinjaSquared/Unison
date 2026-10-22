@@ -3,7 +3,6 @@ using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using Unison.Core.Helpers;
-using Windows.System;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
@@ -88,7 +87,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 "; waitedMs=" + (long)elapsed.Elapsed.TotalMilliseconds +
                 "; budgetMs=" + (long)budget.TotalMilliseconds +
                 "; frugal=" + UseFrugalSyncBudget +
-                "; memory=" + MemoryManager.AppMemoryUsageLevel);
+                "; memory=" + _appMemory.UsageLevel);
 
             if (token.IsCancellationRequested)
             {
@@ -112,7 +111,7 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             for (int attempt = 0; attempt <= MemoryRetryBackoff.Length; attempt++)
             {
-                if (MemoryManager.AppMemoryUsageLevel == AppMemoryUsageLevel.Low)
+                if (_appMemory.IsLow)
                 {
                     return !token.IsCancellationRequested;
                 }
@@ -128,7 +127,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     "memory-retry",
                     "reason=" + (reason ?? string.Empty) +
                     "; attempt=" + (attempt + 1) +
-                    "; level=" + MemoryManager.AppMemoryUsageLevel);
+                    "; level=" + _appMemory.UsageLevel);
 
                 try
                 {
@@ -149,7 +148,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 "startup-phase",
                 "memory-abandoned",
                 "reason=" + (reason ?? string.Empty) +
-                "; level=" + MemoryManager.AppMemoryUsageLevel);
+                "; level=" + _appMemory.UsageLevel);
             return false;
         }
 
@@ -157,9 +156,9 @@ namespace Unison.Uwp.Services.WhatsApp
         /// Brackets a startup phase in the runtime journal with its duration and the memory level
         /// at both ends, so an exported report shows where the seconds went.
         /// </summary>
-        private static IDisposable TraceStartupPhase(string phase)
+        private IDisposable TraceStartupPhase(string phase)
         {
-            return new StartupPhaseTrace(phase);
+            return new StartupPhaseTrace(phase, _appMemory);
         }
     }
 }
