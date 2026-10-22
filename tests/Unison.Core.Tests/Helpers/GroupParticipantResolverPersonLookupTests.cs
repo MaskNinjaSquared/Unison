@@ -87,6 +87,8 @@ namespace Unison.Core.Tests.Helpers
 
             public string ResolveDisplayName(string jid, string context) => _name;
 
+            public bool IsSelf(string jid) => false;
+
             public string ResolvePlaceholderChatName(string jid) => _name;
 
             public IReadOnlyDictionary<string, string> PhoneContactNamesByJid { get; } =

@@ -30,6 +30,11 @@ namespace Unison.Core.Contracts.WhatsApp
         string ResolveDisplayName(string jid, string context);
 
         /// <summary>
+        /// True when <paramref name="jid"/> is the logged-in account (PN, LID, or matching phone digits).
+        /// </summary>
+        bool IsSelf(string jid);
+
+        /// <summary>
         /// Label for a placeholder 1:1 row: a meaningful display name, or the phone digits when
         /// the resolver only had a JID / masked stand-in.
         /// </summary>

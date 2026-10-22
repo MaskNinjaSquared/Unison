@@ -560,12 +560,12 @@ namespace Unison.Core.ViewModels
 
         private bool IsCurrentMember(GroupMember member)
         {
-            if (member == null || _jids == null)
+            if (member == null || _contactService == null)
             {
                 return false;
             }
 
-            if (SelfIdentity.IsSelf(member.Jid, _jids) || SelfIdentity.IsSelf(member.Lid, _jids))
+            if (_contactService.IsSelf(member.Jid) || _contactService.IsSelf(member.Lid))
             {
                 return true;
             }
@@ -581,7 +581,7 @@ namespace Unison.Core.ViewModels
                 phone = phone + "@s.whatsapp.net";
             }
 
-            return SelfIdentity.IsSelf(phone, _jids);
+            return _contactService.IsSelf(phone);
         }
 
         public void MoveMentionSelection(int delta)

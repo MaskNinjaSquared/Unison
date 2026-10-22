@@ -231,6 +231,9 @@ namespace Unison.WhatsAppClient.Contacts
         }
 
         /// <inheritdoc />
+        public bool IsSelf(string jid) => SelfIdentity.IsSelf(jid, _jids);
+
+        /// <inheritdoc />
         public string ResolvePlaceholderChatName(string jid)
         {
             string name = ResolveDisplayName(jid, "profile") ?? string.Empty;
