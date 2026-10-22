@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Unison.Core.Models;
 
-namespace Unison.Core.Helpers
+namespace Unison.WhatsAppClient.Helpers
 {
     /// <summary>
     /// Chat-list row ordering: PN/LID dedupe then pin / timestamp / name sort.

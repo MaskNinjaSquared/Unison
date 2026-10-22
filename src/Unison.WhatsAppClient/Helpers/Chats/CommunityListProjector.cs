@@ -1,9 +1,10 @@
 using System;
 using System.Collections.Generic;
 using Unison.Core.Contracts;
+using Unison.Core.Helpers;
 using Unison.Core.Models;
 
-namespace Unison.Core.Helpers
+namespace Unison.WhatsAppClient.Helpers
 {
     /// <summary>
     /// Collapses linked subgroups under a <see cref="ChatKind.Community"/> row for the chat list.

@@ -159,5 +159,24 @@ namespace Unison.Core.Contracts.WhatsApp
         /// Returns true only when the delete ran (not cancelled / not refused).
         /// </summary>
         Task<bool> ConfirmAndDeleteAsync(ChatItem chat);
+
+        /// <summary>Pin / timestamp / name order for the conversation list.</summary>
+        List<ChatItem> SortChatsForDisplay(IEnumerable<ChatItem> source);
+
+        /// <summary>
+        /// One row per person while the same conversation may exist under PN and LID.
+        /// </summary>
+        List<ChatItem> DeduplicateChatsByCanonicalJid(
+            IEnumerable<ChatItem> source,
+            Func<string, string> getCanonical);
+
+        /// <summary>
+        /// Collapses linked subgroups under a community hub row for the chat list.
+        /// </summary>
+        List<ChatItem> ProjectCommunityList(
+            IReadOnlyList<ChatItem> source,
+            Func<string, ChatItem> resolveParent,
+            Func<string, ChatItem> getOrCreateSynthetic,
+            Func<string, string> getCanonical);
     }
 }

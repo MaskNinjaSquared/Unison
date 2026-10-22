@@ -154,13 +154,17 @@ namespace Unison.Core.ViewModels
                 source = source.Where(c => MatchesQuery(c, query)).ToList();
             }
 
-            source = ChatListDisplayOrder.DeduplicateByCanonicalJid(source, GetCanonical);
-            source = CommunityListProjector.Project(
+            if (_chatService == null)
+            {
+                return source;
+            }
+
+            source = _chatService.DeduplicateChatsByCanonicalJid(source, GetCanonical);
+            source = _chatService.ProjectCommunityList(
                 source,
                 ResolveCatalogByJid,
                 GetOrCreateSyntheticCommunity,
-                GetCanonical,
-                _strings);
+                GetCanonical);
             EnrichCommunityHubRows(source);
 
             if (_activeFilter != ChatListFilter.All)
@@ -168,7 +172,7 @@ namespace Unison.Core.ViewModels
                 source = source.Where(MatchesActiveFilter).ToList();
             }
 
-            source = ChatListDisplayOrder.SortForDisplay(source);
+            source = _chatService.SortChatsForDisplay(source);
 
             if (_activeCommunity != null)
             {
@@ -544,7 +548,12 @@ namespace Unison.Core.ViewModels
             }
 
             // Pin-aware index â€” mirroring raw Chats order after Move(0) put unpinned tips on top.
-            var ordered = ChatListDisplayOrder.SortForDisplay(
+            if (_chatService == null)
+            {
+                return false;
+            }
+
+            var ordered = _chatService.SortChatsForDisplay(
                 _chatState.Chats.Where(c => c != null && MatchesScope(c)));
             int targetIndex = -1;
             for (int i = 0; i < ordered.Count; i++)

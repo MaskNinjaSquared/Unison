@@ -1327,5 +1327,34 @@ namespace Unison.WhatsAppClient.Chats
         {
             return ChatDeletionPrompt.ConfirmAndDeleteAsync(chat, this, _dialogs, _strings);
         }
+
+        /// <inheritdoc />
+        public List<ChatItem> SortChatsForDisplay(IEnumerable<ChatItem> source)
+        {
+            return ChatListDisplayOrder.SortForDisplay(source);
+        }
+
+        /// <inheritdoc />
+        public List<ChatItem> DeduplicateChatsByCanonicalJid(
+            IEnumerable<ChatItem> source,
+            Func<string, string> getCanonical)
+        {
+            return ChatListDisplayOrder.DeduplicateByCanonicalJid(source, getCanonical);
+        }
+
+        /// <inheritdoc />
+        public List<ChatItem> ProjectCommunityList(
+            IReadOnlyList<ChatItem> source,
+            Func<string, ChatItem> resolveParent,
+            Func<string, ChatItem> getOrCreateSynthetic,
+            Func<string, string> getCanonical)
+        {
+            return CommunityListProjector.Project(
+                source,
+                resolveParent,
+                getOrCreateSynthetic,
+                getCanonical,
+                _strings);
+        }
     }
 }

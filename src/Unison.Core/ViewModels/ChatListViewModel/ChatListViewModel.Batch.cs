@@ -174,11 +174,13 @@ namespace Unison.Core.ViewModels
                 return;
             }
 
-            var source = ChatListDisplayOrder.SortForDisplay(
-                _chatState.Chats.Where(c =>
-                    c != null &&
-                    !string.IsNullOrWhiteSpace(c.JID) &&
-                    MatchesScope(c)));
+            var scoped = _chatState.Chats.Where(c =>
+                c != null &&
+                !string.IsNullOrWhiteSpace(c.JID) &&
+                MatchesScope(c));
+            var source = _chatService != null
+                ? _chatService.SortChatsForDisplay(scoped)
+                : scoped.ToList();
 
             int desiredCount = _batchCompleted
                 ? source.Count
@@ -367,8 +369,10 @@ namespace Unison.Core.ViewModels
 
             ApplyLocalChatFieldsToScopedChats();
 
-            var desired = ChatListDisplayOrder.SortForDisplay(
-                VisibleChats.Where(c => c != null && !string.IsNullOrWhiteSpace(c.JID)));
+            var desired = _chatService != null
+                ? _chatService.SortChatsForDisplay(
+                    VisibleChats.Where(c => c != null && !string.IsNullOrWhiteSpace(c.JID)))
+                : VisibleChats.Where(c => c != null && !string.IsNullOrWhiteSpace(c.JID)).ToList();
 
             IsRefreshing = true;
             try

@@ -181,6 +181,7 @@ Do in order. Each phase has a done check.
 | Labels / media / Status UI | `MeaningfulChatLabel`, `ChatMediaFilter`, `StatusMediaDisplay`, `StatusItemDiagnostics` | `GroupIdPlaceholder` stays in Core (community presentation); VMs use `IContactService` / `IMessageService` / `IStatusService` |
 | Pin aliases / preview fallback | `ChatPinStoreKeys`, `ChatPreviewMessageFactory`; `IChatService.ApplyLocalStateAliasFallback` / `RememberPinnedUnderAliases`; `IMessageService.CopyReactionState` / `TryCreatePreviewFallback` | List batch + detail no longer import those helpers; `CopyReactionState` body still on `HistoryMessageMapper` |
 | Mute deadlines / delete confirm / member resolve | `ChatDeletionPrompt`; `IChatService` mute deadlines + `ConfirmAndDeleteAsync`; `IGroupService.EnrichMember` / `ResolveMemberAvatar` / `ResolveMemberDisplayName` | `ChatMuteHelper` stays in Core (`ChatItem` / `ChatLocalState`); `GroupParticipantResolver` stays (State + lookup); list-row mute flyout uses `IChatService` deadlines |
+| List order / community hubs | `ChatListDisplayOrder`, `CommunityListProjector`; `IChatService.SortChatsForDisplay` / `DeduplicateChatsByCanonicalJid` / `ProjectCommunityList` | `ChatListQuery` / `ChatListVisibleReconcile` stay in Core (search + UI collection mutate); `CommunityHubPresentation` stays (presentation) |
 
 ### Phase D — UWP as host only
 
