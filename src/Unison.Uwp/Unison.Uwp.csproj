@@ -169,8 +169,8 @@
     <Compile Include="Services\WhatsApp\Chats\BridgeChatAccountActions.cs" />
     <Compile Include="Services\WhatsApp\Groups\BridgeGroupWireActions.cs" />
     <Compile Include="Services\WhatsApp\Groups\BridgeGroupAvatarActions.cs" />
-    <Compile Include="Services\WhatsApp\History\HistoryFacade.cs" />
     <Compile Include="Services\WhatsApp\History\HistoryThumbnailMaterializer.cs" />
+    <Compile Include="Services\WhatsApp\History\WinRtHistoryMessageThumbnailMaterializer.cs" />
     <Compile Include="Services\WhatsApp\Status\WinRtStatusThumbnailMaterializer.cs" />
     <Compile Include="Services\Network\WinRtNetworkAccess.cs" />
     <Compile Include="Services\WhatsApp\Messages\MessageFacade.cs" />
@@ -263,6 +263,7 @@
     <Compile Include="Services\SocketBrokerCoordinator.cs" />
     <Compile Include="Services\BackgroundAccessService.cs" />
     <Compile Include="Services\AppLifecycleService.cs" />
+    <Compile Include="Services\AppVisibilityService.cs" />
     <Compile Include="Services\AppActivationRouter.cs" />
     <Compile Include="Services\UriLauncherService.cs" />
     <Compile Include="Services\FilePickerService.cs" />

@@ -45,6 +45,7 @@ using Unison.Uwp.Services.WhatsApp.History;
 using Unison.Uwp.Services.WhatsApp.Messages;
 using Unison.Uwp.Services.WhatsApp.Status;
 using Unison.WhatsAppClient.Groups;
+using Unison.WhatsAppClient.History;
 using Unison.WhatsAppClient.Status;
 using AppSessionProvider = Unison.WhatsAppClient.Abstractions.IWhatsAppSessionProvider;
 using AppProfileFacade = Unison.WhatsAppClient.Profiles.ProfileFacade;
@@ -432,8 +433,10 @@ namespace Unison.Uwp
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IHistorySyncHost>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+            services.AddSingleton<IStatusThumbnailMaterializer, WinRtStatusThumbnailMaterializer>();
+            services.AddSingleton<IHistoryMessageThumbnailMaterializer, WinRtHistoryMessageThumbnailMaterializer>();
             services.AddSingleton(sp => new HistoryFacade(
-                sp.GetRequiredService<UwpSessionProvider>(),
+                sp.GetRequiredService<AppSessionProvider>(),
                 sp.GetRequiredService<IWhatsAppService>(),
                 sp.GetRequiredService<IConversationResyncHost>(),
                 sp.GetRequiredService<IHistorySyncHost>(),
@@ -453,10 +456,12 @@ namespace Unison.Uwp
                 sp.GetRequiredService<INotificationService>(),
                 sp.GetRequiredService<IStringResources>(),
                 sp.GetRequiredService<IDisplayKeepAwakeService>(),
-                sp.GetRequiredService<ChatListInitialPaintGate>()));
+                sp.GetRequiredService<ChatListInitialPaintGate>(),
+                sp.GetRequiredService<IAppVisibility>(),
+                sp.GetRequiredService<IHistoryMessageThumbnailMaterializer>(),
+                sp.GetRequiredService<IStatusThumbnailMaterializer>()));
             services.AddSingleton<IHistoryService>(sp => sp.GetRequiredService<HistoryFacade>());
 
-            services.AddSingleton<IStatusThumbnailMaterializer, WinRtStatusThumbnailMaterializer>();
             services.AddSingleton(sp => new StatusFacade(
                 sp.GetRequiredService<IHistoryStatusStore>(),
                 sp.GetRequiredService<IPersonStore>(),
@@ -492,7 +497,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IAppStateLocalHost>(),
                 sp.GetRequiredService<IChatMessageMapper>(),
                 sp.GetRequiredService<IReactionMapper>(),
-                sp.GetRequiredService<HistoryFacade>(),
+                sp.GetRequiredService<IHistoryService>(),
                 sp.GetRequiredService<IHistoryMessageStore>(),
                 sp.GetRequiredService<IJidResolver>(),
                 sp.GetRequiredService<INotificationService>(),
@@ -660,6 +665,7 @@ namespace Unison.Uwp
             services.AddSingleton<ISocketBrokerService>(_ => SocketBrokerCoordinator.Instance);
             services.AddSingleton<IBackgroundAccessService, BackgroundAccessService>();
             services.AddSingleton<IAppLifecycle, AppLifecycleService>();
+            services.AddSingleton<IAppVisibility, AppVisibilityService>();
             services.AddSingleton<IBackgroundAccessPrompt, BackgroundAccessPrompt>();
             services.AddSingleton<IUriLauncher, UriLauncherService>();
             services.AddSingleton<ICopyService, CopyService>();

@@ -12,7 +12,6 @@ using Unison.Core.State;
 using Unison.Socket.Abstractions;
 using Unison.Uwp.Client;
 using Unison.Uwp.Services.Socket;
-using Unison.Uwp.Services.WhatsApp.History;
 using Unison.Uwp.Services;
 using Unison.WhatsAppClient.Helpers;
 
@@ -29,7 +28,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
         private readonly IAppStateLocalHost _localAppState;
         private readonly IChatMessageMapper _chatMessageMapper;
         private readonly IReactionMapper _reactionMapper;
-        private readonly HistoryFacade _history;
+        private readonly IHistoryService _history;
         private readonly IHistoryMessageStore _historyMessageStore;
         private readonly IJidResolver _jids;
         private readonly IChatStateStore _chatState;
@@ -52,7 +51,7 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
             IAppStateLocalHost localAppState,
             IChatMessageMapper chatMessageMapper,
             IReactionMapper reactionMapper,
-            HistoryFacade history,
+            IHistoryService history,
             IHistoryMessageStore historyMessageStore,
             IJidResolver jids,
             INotificationService notifications,

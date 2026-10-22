@@ -68,6 +68,7 @@ Unison.WhatsAppClient/          (netstandard — portable façades)
   Groups/GroupFacade.cs
   Groups/GroupMetadataReader.cs
   Connection/ConnectionFacade.cs
+  History/HistoryFacade.cs
   Abstractions/IChatAccountActions.cs
   Abstractions/IGroupWireActions.cs
   Abstractions/IGroupAvatarActions.cs
@@ -83,7 +84,8 @@ Unison.Uwp/Services/WhatsApp/
     AddressBookOverlay.cs    device contacts → Person
     ContactNameResolver.cs   throttle / cooldown
     ChatAvatarPolicy.cs      dedup / backoff (fetch still on the client)
-  History/HistoryFacade.cs
+  History/HistoryThumbnailMaterializer.cs
+  History/WinRtHistoryMessageThumbnailMaterializer.cs
   Status/WinRtStatusThumbnailMaterializer.cs
   Diagnostics/DebugSendService.cs
   WhatsAppService.cs         compatibility client (partial)

@@ -109,5 +109,15 @@ namespace Unison.Core.Contracts.WhatsApp
         /// in-flight gate so another request can go out.
         /// </summary>
         Task<bool> RequestFullHistoryOnDemandAsync(string reason = null, bool force = false);
+
+        /// <summary>
+        /// Asks the phone for the page of <paramref name="jid"/> older than the oldest message
+        /// in memory. True when a request went out.
+        /// </summary>
+        Task<bool> EnsureChatPageAsync(string jid, int count);
+
+        /// <summary>A page was asked for <paramref name="jid"/> and has not landed yet.</summary>
+        bool IsChatPagePending(string jid);
     }
 }
+

@@ -31,11 +31,10 @@ using Unison.Core.State;
 using Unison.Socket.Events;
 using Unison.Socket.Session;
 using Unison.Socket.Sync;
-using Unison.Uwp.Client;
-using Unison.Uwp.Services.Socket;
+using Unison.WhatsAppClient.Abstractions;
 using Unison.WhatsAppClient.Helpers;
 
-namespace Unison.Uwp.Services.WhatsApp.History
+namespace Unison.WhatsAppClient.History
 {
     public sealed class HistoryFacade : IHistoryService
     {
@@ -54,6 +53,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
         private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(2);
 
         private readonly IWhatsAppSessionProvider _sessions;
+        private readonly IHistoryOnDemandSocket _onDemandSocket;
         private readonly IWhatsAppService _appState;
         private readonly IConversationResyncHost _resync;
         private readonly IHistorySyncHost _historySync;
@@ -74,6 +74,9 @@ namespace Unison.Uwp.Services.WhatsApp.History
         private readonly SyncWorkloadStrategy _workload;
         private readonly IDisplayKeepAwakeService _displayKeepAwake;
         private readonly ChatListInitialPaintGate _listPaintGate;
+        private readonly IAppVisibility _visibility;
+        private readonly IHistoryMessageThumbnailMaterializer _messageThumbs;
+        private readonly IStatusThumbnailMaterializer _statusThumbs;
 
         /// <summary>
         /// Session-scoped: one toast after repeated background history lots. Not reset until
@@ -90,7 +93,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
         private volatile bool _awaitingFirstHistorySync;
         private volatile bool _firstHistorySyncCompletedThisSession;
 
-        internal HistoryFacade(
+        public HistoryFacade(
             IWhatsAppSessionProvider sessions,
             IWhatsAppService appState,
             IConversationResyncHost resync,
@@ -111,7 +114,10 @@ namespace Unison.Uwp.Services.WhatsApp.History
             INotificationService notifications = null,
             IStringResources strings = null,
             IDisplayKeepAwakeService displayKeepAwake = null,
-            ChatListInitialPaintGate listPaintGate = null)
+            ChatListInitialPaintGate listPaintGate = null,
+            IAppVisibility visibility = null,
+            IHistoryMessageThumbnailMaterializer messageThumbs = null,
+            IStatusThumbnailMaterializer statusThumbs = null)
         {
             if (sessions == null)
             {
@@ -134,6 +140,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
             }
 
             _sessions = sessions;
+            _onDemandSocket = onDemandSocket ?? throw new ArgumentNullException(nameof(onDemandSocket));
             _appState = appState;
             _resync = resync ?? throw new ArgumentNullException(nameof(resync));
             _historySync = historySync ?? throw new ArgumentNullException(nameof(historySync));
@@ -142,7 +149,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
             _onDemandRequests = onDemandRequests ?? throw new ArgumentNullException(nameof(onDemandRequests));
             _onDemand = new HistoryOnDemandDispatch(
                 onDemandRequests,
-                onDemandSocket ?? throw new ArgumentNullException(nameof(onDemandSocket)),
+                _onDemandSocket,
                 line => Debug.WriteLine("[HistoryFacade] " + line));
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
@@ -157,6 +164,9 @@ namespace Unison.Uwp.Services.WhatsApp.History
             _strings = strings;
             _displayKeepAwake = displayKeepAwake;
             _listPaintGate = listPaintGate;
+            _visibility = visibility;
+            _messageThumbs = messageThumbs;
+            _statusThumbs = statusThumbs;
 
             // Both live as long as the app does, so there is nothing to unhook from.
             _syncStatus.Changed += (s, status) =>
@@ -359,7 +369,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
         private void NoteBackgroundHistorySyncBounce()
         {
             // Foreground already shows the catch-up banner; do not spend the one-toast budget.
-            if (Unison.Uwp.App.IsWindowVisible)
+            if (_visibility != null && _visibility.IsWindowVisible)
             {
                 return;
             }
@@ -657,8 +667,10 @@ namespace Unison.Uwp.Services.WhatsApp.History
             {
                 try
                 {
-                    await HistoryThumbnailMaterializer.MaterializeMessageThumbsAsync(batch.Messages)
-                        .ConfigureAwait(false);
+                    if (_messageThumbs != null)
+                    {
+                        await _messageThumbs.MaterializeAsync(batch.Messages).ConfigureAwait(false);
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -691,10 +703,13 @@ namespace Unison.Uwp.Services.WhatsApp.History
                 }
             }
 
+            IReadOnlyList<string> jids = chatJids.Count == 0
+                ? Array.Empty<string>()
+                : (IReadOnlyList<string>)chatJids.ToList();
             return new PersistMessagesResult
             {
                 Upserted = upserted,
-                ChatJids = chatJids.Count == 0 ? Array.Empty<string>() : chatJids.ToList()
+                ChatJids = jids
             };
         }
 
@@ -740,9 +755,12 @@ namespace Unison.Uwp.Services.WhatsApp.History
 
             try
             {
-                await HistoryThumbnailMaterializer.MaterializeStatusThumbsAsync(
-                        rows as IList<HistoryStatus> ?? new List<HistoryStatus>(rows))
-                    .ConfigureAwait(false);
+                if (_statusThumbs != null)
+                {
+                    await _statusThumbs.MaterializeAsync(
+                            rows as IList<HistoryStatus> ?? new List<HistoryStatus>(rows))
+                        .ConfigureAwait(false);
+                }
             }
             catch (Exception ex)
             {
@@ -839,8 +857,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
         /// </summary>
         public async Task ResyncConversationsAsync(IProgress<ConversationResyncPhase> progress = null)
         {
-            var socket = _sessions.Socket;
-            if (socket == null)
+            if (_sessions.Current == null || !_onDemandSocket.IsReady)
             {
                 // No socket to correlate an answer through. The service's own resync knows how to
                 // force a fresh transport first, which is the one thing worth trying from here.
@@ -866,16 +883,15 @@ namespace Unison.Uwp.Services.WhatsApp.History
                 return;
             }
 
-            // Re-read both: connecting may well have replaced the session we checked above.
-            socket = _sessions.Socket;
+            // Re-read: connecting may well have replaced the session we checked above.
             var session = _sessions.Current;
-            if (socket == null || session == null)
+            if (session == null || !_onDemandSocket.IsReady)
             {
                 _syncStatus.Raise("Could not start history download. Try again.");
                 return;
             }
 
-            var answered = await RequestAndAwaitHistoryAsync(socket, session).ConfigureAwait(false);
+            var answered = await RequestAndAwaitHistoryAsync(session).ConfigureAwait(false);
             if (answered)
             {
                 // The latch only exists to make a later connection retry a request that was never
@@ -897,7 +913,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
 
             try
             {
-                NotificationService.Instance.ClearAll();
+                _notifications?.ClearAll();
             }
             catch (Exception ex)
             {
@@ -953,7 +969,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
         /// <summary>
         /// Sends the request and waits for the history it produces, rather than for a fixed time.
         /// </summary>
-        private async Task<bool> RequestAndAwaitHistoryAsync(IWhatsAppSocket socket, WhatsAppSession session)
+        private async Task<bool> RequestAndAwaitHistoryAsync(WhatsAppSession session)
         {
             var requestId = Guid.NewGuid().ToString("N");
             var completed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -983,7 +999,7 @@ namespace Unison.Uwp.Services.WhatsApp.History
             {
                 try
                 {
-                    await socket.RequestFullHistorySyncOnDemandAsync(null, requestId).ConfigureAwait(false);
+                    await _onDemandSocket.RequestFullHistoryAsync(null, requestId).ConfigureAwait(false);
                     Debug.WriteLine("[ConversationResync] Requested a full history sync, requestId=" + requestId);
 
                     return await WaitForChunksAsync(completed.Task, () => Interlocked.Read(ref lastChunkTicks))

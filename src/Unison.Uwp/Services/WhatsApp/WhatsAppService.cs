@@ -3406,8 +3406,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 count,
                 stanzaId);
 
-        Task<string> IHistoryOnDemandSocket.RequestFullHistoryAsync(string stanzaId) =>
-            _socket.RequestFullHistorySyncOnDemandAsync(stanzaId);
+        Task<string> IHistoryOnDemandSocket.RequestFullHistoryAsync(string stanzaId, string requestId) =>
+            _socket.RequestFullHistorySyncOnDemandAsync(stanzaId, requestId);
 
         private Task<bool> RequestHistoryOnDemandIfNeededAsync(string normJid, int count, string triggerReason = null)
         {
