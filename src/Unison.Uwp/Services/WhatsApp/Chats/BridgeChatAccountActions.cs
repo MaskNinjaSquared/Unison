@@ -14,7 +14,11 @@ using UwpSessionProvider = Unison.Uwp.Services.Socket.IWhatsAppSessionProvider;
 
 namespace Unison.Uwp.Services.WhatsApp.Chats
 {
-    public sealed class BridgeChatAccountActions : IChatAccountActions
+    /// <summary>
+    /// Internal: constructor takes the UWP bridge provider (<c>internal</c>), so this type
+    /// cannot be public without widening that interface.
+    /// </summary>
+    internal sealed class BridgeChatAccountActions : IChatAccountActions
     {
         private readonly UwpSessionProvider _sessions;
 
