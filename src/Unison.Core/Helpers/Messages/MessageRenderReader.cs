@@ -61,7 +61,7 @@ namespace Unison.Core.Helpers
         /// <param name="log">Optional diagnostics sink; the reader itself decides nothing by it.</param>
         public static MessageRenderInfo Read(Proto.Message msg, Action<string> log = null)
         {
-            Proto.Message unwrapped = HistorySyncContentFilter.Unwrap(msg);
+            Proto.Message unwrapped = ProtoMessageUnwrap.Run(msg);
             if (unwrapped == null)
             {
                 return null;

@@ -485,46 +485,7 @@ namespace Unison.Core.Helpers
             return !string.IsNullOrWhiteSpace(text);
         }
 
-        public static Message Unwrap(Message message)
-        {
-            Message current = message;
-            for (int i = 0; i < 5 && current != null; i++)
-            {
-                Message inner = Inner(current);
-                if (inner == null)
-                {
-                    break;
-                }
-
-                current = inner;
-            }
-
-            return current;
-        }
-
-        private static Message Inner(Message current)
-        {
-            if (current == null)
-            {
-                return null;
-            }
-
-            // Baileys normalizeMessageContent future-proof wrappers, plus DeviceSentMessage
-            // (self-echo) and Status mention shells that wrap the real image/video payload.
-            return current.DeviceSentMessage?.Message
-                ?? current.EphemeralMessage?.Message
-                ?? current.ViewOnceMessage?.Message
-                ?? current.DocumentWithCaptionMessage?.Message
-                ?? current.ViewOnceMessageV2?.Message
-                ?? current.ViewOnceMessageV2Extension?.Message
-                ?? current.EditedMessage?.Message
-                ?? current.AssociatedChildMessage?.Message
-                ?? current.GroupStatusMessage?.Message
-                ?? current.GroupStatusMessageV2?.Message
-                ?? current.StatusMentionMessage?.Message
-                ?? current.GroupStatusMentionMessage?.Message
-                ?? current.GroupMentionedMessage?.Message;
-        }
+        public static Message Unwrap(Message message) => ProtoMessageUnwrap.Run(message);
 
         /// <summary>
         /// What this envelope says, for the one caller that decides whether it can be listed.

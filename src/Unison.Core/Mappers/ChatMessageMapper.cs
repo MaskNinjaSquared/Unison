@@ -96,7 +96,7 @@ namespace Unison.Core.Mappers
 
         private static Message UnwrapMessage(Message msg)
         {
-            return HistorySyncContentFilter.Unwrap(msg);
+            return ProtoMessageUnwrap.Run(msg);
         }
     }
 }
