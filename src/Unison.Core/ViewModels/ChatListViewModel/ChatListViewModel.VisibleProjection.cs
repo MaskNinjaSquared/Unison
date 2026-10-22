@@ -108,7 +108,7 @@ namespace Unison.Core.ViewModels
             IsRefreshing = true;
             try
             {
-                reconcile = _chatService.ReconcileVisibleChats(VisibleChats, source, moveBudget);
+                reconcile = ChatListVisibleReconcile.Apply(VisibleChats, source, moveBudget);
             }
             finally
             {

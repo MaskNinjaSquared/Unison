@@ -12,9 +12,7 @@
 // =============================================================================
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Threading.Tasks;
-using Unison.Core.Helpers;
 using Unison.Core.Models;
 
 namespace Unison.Core.Contracts.WhatsApp
@@ -225,13 +223,5 @@ namespace Unison.Core.Contracts.WhatsApp
         /// True while sync status is still enriching the list (names / avatars / groups / settling / low-memory).
         /// </summary>
         bool MatchesListEnrichmentPhase(string syncStatus);
-
-        /// <summary>
-        /// Applies a desired row order onto <paramref name="visible"/> within a Move/Insert/Remove budget.
-        /// </summary>
-        ChatListVisibleReconcileResult ReconcileVisibleChats(
-            ObservableCollection<ChatItem> visible,
-            IList<ChatItem> desired,
-            int moveBudget);
     }
 }

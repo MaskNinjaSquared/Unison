@@ -20,7 +20,6 @@
 // =============================================================================
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
@@ -1401,12 +1400,5 @@ namespace Unison.WhatsAppClient.Chats
         /// <inheritdoc />
         public bool MatchesListEnrichmentPhase(string syncStatus) =>
             ListEnrichmentPhase.Matches(syncStatus);
-
-        /// <inheritdoc />
-        public ChatListVisibleReconcileResult ReconcileVisibleChats(
-            ObservableCollection<ChatItem> visible,
-            IList<ChatItem> desired,
-            int moveBudget) =>
-            ChatListVisibleReconcile.Apply(visible, desired, moveBudget);
     }
 }

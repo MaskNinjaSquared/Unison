@@ -1,17 +1,29 @@
 // =============================================================================
 // ChatListVisibleReconcile
 //
-// Applies a desired ChatItem order onto VisibleChats with a Move/Insert/Remove
-// budget so one dispatcher turn cannot thrash the ListView. The caller may keep
-// the same desired list across turns (continue) without rebuilding projection.
+// Presentation: applies a desired ChatItem order onto VisibleChats with a
+// Move/Insert/Remove budget so one dispatcher turn cannot thrash the ListView.
+// Stays in Core with other UI-collection helpers — not WhatsApp client policy.
 // =============================================================================
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using Unison.Core.Helpers;
 using Unison.Core.Models;
 
-namespace Unison.WhatsAppClient.Helpers
+namespace Unison.Core.Helpers
 {
+    public sealed class ChatListVisibleReconcileResult
+    {
+        public ChatListVisibleReconcileResult(int mutations, bool incomplete)
+        {
+            Mutations = mutations;
+            Incomplete = incomplete;
+        }
+
+        public int Mutations { get; }
+
+        public bool Incomplete { get; }
+    }
+
     public static class ChatListVisibleReconcile
     {
         public static ChatListVisibleReconcileResult Apply(

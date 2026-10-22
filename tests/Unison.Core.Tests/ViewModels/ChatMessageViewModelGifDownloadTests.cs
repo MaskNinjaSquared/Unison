@@ -158,8 +158,6 @@ namespace Unison.Core.Tests.ViewModels
             public bool IsChatInfoMedia(ChatMessage message) => false;
             public bool IsChatInfoDocument(ChatMessage message) => false;
             public void CopyReactionState(ChatMessage target, ChatMessage source) { }
-            public IList<ReactionChip> BuildReactionChips(IEnumerable<MessageReaction> reactions) =>
-                Array.Empty<ReactionChip>();
             public ChatMessage TryCreatePreviewFallback(ChatItem chat, string selfDisplayName = null) => null;
             public bool IsPreviewFallbackMessageId(string id) => false;
             public bool TryReadMentionToken(string text, int caret, out int at, out string query, out int length)
