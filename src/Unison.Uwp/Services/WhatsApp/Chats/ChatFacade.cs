@@ -31,7 +31,6 @@ using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.Socket.AppState;
 using Unison.Socket.UseCases.Messages;
-using Unison.Uwp.Helpers;
 using Unison.Uwp.Services.Socket;
 using Unison.WhatsAppClient.Helpers;
 
@@ -69,6 +68,8 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
         private readonly ChatListDeduper _deduper;
         private readonly IChatIdentityPersistence _identity;
         private readonly ChatListAliasMerge _aliasMerge;
+        private readonly ISelfMarkerNaming _selfMarkers;
+        private readonly IStringResources _strings;
         private readonly OfflineReplayTips _offlineReplayTips;
 
         /// <summary>Short enough that the first recovered chat shows while a long replay continues.</summary>
@@ -91,7 +92,9 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             ChatPreviewReconciler sqlitePreviews,
             ChatListDeduper deduper,
             IChatIdentityPersistence identity,
-            ChatListAliasMerge aliasMerge)
+            ChatListAliasMerge aliasMerge,
+            ISelfMarkerNaming selfMarkers,
+            IStringResources strings)
         {
             if (sessions == null)
             {
@@ -115,6 +118,8 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
             _deduper = deduper ?? throw new ArgumentNullException(nameof(deduper));
             _identity = identity ?? throw new ArgumentNullException(nameof(identity));
             _aliasMerge = aliasMerge ?? throw new ArgumentNullException(nameof(aliasMerge));
+            _selfMarkers = selfMarkers ?? throw new ArgumentNullException(nameof(selfMarkers));
+            _strings = strings ?? throw new ArgumentNullException(nameof(strings));
             _offlineReplayTips = new OfflineReplayTips(
                 _jids,
                 _offlineReplay,
@@ -443,7 +448,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
                     return;
                 }
 
-                string yesterday = LocalizedStrings.Get("Common_Yesterday", "Yesterday");
+                string yesterday = _strings.Get("Common_Yesterday", "Yesterday");
                 MessageSendState sendState = isFromMe
                     ? MessageSendState.Sent
                     : MessageSendState.NotApplicable;
@@ -717,7 +722,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
                 if (PlaceholderChatLabel.IsPlaceholder(
                         chat.Name,
                         chat.JID,
-                        SelfChatDisplayHelper.IsSelfMarkerLabel(chat.Name)))
+                        _selfMarkers.IsMarkerLabel(chat.Name)))
                 {
                     IContactService contacts = _contacts;
                     if (contacts != null)
@@ -729,7 +734,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
 
             chat.ApplyKind(chat.JID, _jids.IsSelfLinked(chat.JID));
 
-            string yesterday = LocalizedStrings.Get("Common_Yesterday", "Yesterday");
+            string yesterday = _strings.Get("Common_Yesterday", "Yesterday");
             if (timestamp != DateTime.MinValue)
             {
                 LiveChatPreviewApplier.ApplyIfNewer(
@@ -774,7 +779,7 @@ namespace Unison.Uwp.Services.WhatsApp.Chats
                 PlaceholderChatLabel.IsPlaceholder(
                     chat.Name,
                     jid,
-                    SelfChatDisplayHelper.IsSelfMarkerLabel(chat.Name)))
+                    _selfMarkers.IsMarkerLabel(chat.Name)))
             {
                 string resolvedChatName = ResolveName(jid, "chat");
                 if (!string.IsNullOrEmpty(resolvedChatName) && !resolvedChatName.Contains("@"))

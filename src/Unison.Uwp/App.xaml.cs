@@ -583,7 +583,9 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ChatPreviewReconciler>(),
                 sp.GetRequiredService<ChatListDeduper>(),
                 sp.GetRequiredService<IChatIdentityPersistence>(),
-                sp.GetRequiredService<ChatListAliasMerge>()));
+                sp.GetRequiredService<ChatListAliasMerge>(),
+                sp.GetRequiredService<ISelfMarkerNaming>(),
+                sp.GetRequiredService<IStringResources>()));
             // After IChatService: the projection persists resolved strip rows so cold start keeps names.
             services.AddSingleton<IChatAuthorProjection>(sp => new ChatAuthorProjection(
                 sp.GetRequiredService<IChatStateStore>(),
