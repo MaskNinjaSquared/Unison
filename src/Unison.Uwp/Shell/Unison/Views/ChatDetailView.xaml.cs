@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.ObjectModel;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -34,6 +34,7 @@ using System.Threading.Tasks;
 using System.Linq;
 using Windows.UI.Xaml.Media;
 using UiViews = global::Unison.Uwp.UI.Views;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Shell.Unison.Views
 {

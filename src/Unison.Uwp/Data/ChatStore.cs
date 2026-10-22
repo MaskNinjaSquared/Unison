@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -11,6 +11,7 @@ using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.Uwp.Data.Entities;
 using Windows.Storage;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Data
 {

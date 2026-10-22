@@ -33,6 +33,7 @@ using Unison.Socket.AppState;
 using Unison.Socket.UseCases.Messages;
 using Unison.Uwp.Helpers;
 using Unison.Uwp.Services.Socket;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp.Chats
 {

@@ -1,5 +1,6 @@
 using Unison.Core.Helpers;
 using Unison.Core.Models;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Core.Tests.Helpers;
 

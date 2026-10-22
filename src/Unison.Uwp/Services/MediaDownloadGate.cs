@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Unison.Core.Helpers;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services
 {

@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Unison.Core\Unison.Core.csproj" />
     <ProjectReference Include="..\..\src\Unison.Socket\Unison.Socket.csproj" />
+    <ProjectReference Include="..\..\src\Unison.WhatsAppClient\Unison.WhatsAppClient.csproj" />
   </ItemGroup>
 
 </Project>

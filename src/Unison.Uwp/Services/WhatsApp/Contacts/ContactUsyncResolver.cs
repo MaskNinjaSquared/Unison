@@ -21,6 +21,7 @@ using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.State;
 using Unison.Socket.UseCases.Contacts;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp.Contacts
 {

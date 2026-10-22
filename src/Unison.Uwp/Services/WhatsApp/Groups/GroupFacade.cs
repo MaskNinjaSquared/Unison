@@ -27,6 +27,7 @@ using Unison.Uwp.Client;
 using Unison.Uwp.Services;
 using Unison.Uwp.Services.Socket;
 using Unison.Uwp.Services.WhatsApp.Contacts;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp.Groups
 {

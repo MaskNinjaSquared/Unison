@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Unison.Baileys.Protocol;
 using Unison.Core.Helpers;
 using Xunit;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Core.Tests.Helpers
 {

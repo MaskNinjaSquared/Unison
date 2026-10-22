@@ -14,6 +14,7 @@ using Unison.Baileys.Protocol;
 using Unison.Baileys.Client;
 using Unison.Core.Helpers;
 using Unison.Uwp.Services.WhatsApp;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services
 {

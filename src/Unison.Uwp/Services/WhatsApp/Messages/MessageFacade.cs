@@ -14,6 +14,7 @@ using Unison.Uwp.Client;
 using Unison.Uwp.Services.Socket;
 using Unison.Uwp.Services.WhatsApp.History;
 using Unison.Uwp.Services;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp.Messages
 {

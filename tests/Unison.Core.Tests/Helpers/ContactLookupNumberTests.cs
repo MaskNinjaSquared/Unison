@@ -1,4 +1,5 @@
 using Unison.Core.Helpers;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Core.Tests.Helpers;
 

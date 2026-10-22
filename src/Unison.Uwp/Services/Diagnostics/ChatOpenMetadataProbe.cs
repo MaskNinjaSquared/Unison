@@ -10,6 +10,7 @@ using Unison.Socket.Groups;
 using Unison.Socket.Models;
 using Unison.Uwp.Client;
 using Unison.Uwp.Services.Socket;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.Diagnostics
 {

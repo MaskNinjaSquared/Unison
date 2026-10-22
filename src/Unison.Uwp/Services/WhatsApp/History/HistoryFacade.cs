@@ -33,6 +33,7 @@ using Unison.Socket.Session;
 using Unison.Socket.Sync;
 using Unison.Uwp.Client;
 using Unison.Uwp.Services.Socket;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp.History
 {

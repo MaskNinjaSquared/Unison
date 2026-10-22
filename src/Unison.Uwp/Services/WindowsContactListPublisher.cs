@@ -12,6 +12,7 @@ using Windows.ApplicationModel.Contacts;
 using Windows.ApplicationModel.UserDataAccounts;
 using Windows.Foundation.Metadata;
 using Windows.Storage;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services
 {

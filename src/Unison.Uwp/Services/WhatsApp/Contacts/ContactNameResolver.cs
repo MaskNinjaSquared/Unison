@@ -23,6 +23,7 @@ using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.Uwp.Helpers;
 using Unison.Uwp.Services.Socket;
+using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp.Contacts
 {
