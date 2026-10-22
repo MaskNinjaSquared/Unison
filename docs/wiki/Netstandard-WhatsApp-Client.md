@@ -81,7 +81,7 @@ flowchart TB
   Host --> AppLib
   Adapters -->|"IWaTransport IDispatcher stores broker"| AppLib
   AppLib --> Socket
-  AppLib --> CoreContracts["Unison.Core contracts / VMs / state"]
+  AppLib --> CoreApp["Unison.Core app domain"]
   Socket --> Baileys
   Bg --> Baileys
 ```
@@ -90,9 +90,25 @@ flowchart TB
 |---|---|---|
 | XAML, shell, `App.ConfigureServices` | Facades (`ConnectionFacade`, `MessageFacade`, …) | `WhatsAppSession`, use cases, modules |
 | `StreamSocketWebSocketTransport`, `MessageWebSocketTransport`, `WaTransportAdapter` | Policy helpers today under `Services/WhatsApp/` (once WinRT-free) | Noise, Signal, binary, proto |
-| SQLite / file store implementations | Orchestration that today still lives in `WhatsAppService` partials after extraction | — |
-| People / contacts WinRT, toasts, tiles, broker task registration | — | — |
+| SQLite / file store implementations | **Domain helpers** now parked in `Unison.Core/Helpers` because they were pure (usync filing, outgoing send, incoming timeline, history decisions, group apply, …) — same package as the façades they serve | — |
+| People / contacts WinRT, toasts, tiles, broker task registration | Orchestration that today still lives in `WhatsAppService` partials after extraction | — |
 | Transport **factory** + broker readiness | Calls `IWaTransport.TransferToBrokerAsync` / reclaim via session — never owns `StreamSocket` | `IWaTransport` definition |
+
+### Core vs Application (helpers)
+
+During extraction, pure rules left UWP for `Unison.Core` only because Core was already `netstandard`. That made Core a **purity dump**, not a deliberate app-domain boundary.
+
+Target split:
+
+| `Unison.Core` (app domain) | `Unison.Application` (WhatsApp client policy) |
+|---|---|
+| Contracts, models, ViewModels | Facades + their auxiliary services |
+| **Presentation** helpers only (`RelayCommand`, bubble/link layout, UI formatting, …) | **Domain** helpers that implement façade policy (moved out of Core) |
+| ViewModels talk to façade **contracts**, not to domain helpers | Owns the rules that today sit under `Core/Helpers/Chats|Messages|Contacts|History|Groups|…` when those are client policy |
+
+Do **not** move the entire `Helpers` tree in one dump. Move **with the owning façade** in phase C. Where a ViewModel still calls a domain helper, cut that call so the VM goes through `IMessageService` / `IChatService` / … first; then the helper can leave Core.
+
+Baileys (+ Socket) stay the protocol stack — separate from this app-domain Core.
 
 **Fixed decisions**
 
@@ -101,6 +117,7 @@ flowchart TB
 3. Do **not** stand up a second parallel client beside `WhatsAppService` — shrink and move.
 4. Inject **ports** (`IWaTransport`, factory, `IDispatcher`, stores), not WinRT types, into Application.
 5. [WhatsAppService extraction](WhatsAppService-Extraction) phases 3 → 4 remain the mechanical prerequisite before moving types into `Unison.Application`.
+6. Core keeps **presentation** helpers; **domain** helpers leave Core for Application alongside façades.
 
 ### UWP handler
 
@@ -132,8 +149,10 @@ Do in order. Each phase has a done check.
 - Add `Unison.Application` (`netstandard2.0`) to the solution.
 - References: `Unison.Core`, `Unison.Socket` (and thus Baileys transitively as today).
 - Move façades + WinRT-free policy helpers from UWP into this project.
+- Move **domain** helpers from `Unison.Core/Helpers` into Application **with the owning façade**; leave presentation helpers in Core.
+- Where ViewModels still import domain helpers, route through façade contracts first so Core does not need to reference Application.
 - UWP keeps adapter implementations and registers them in DI.
-- Done when: Application project builds with **zero** `Windows.*` / WinRT references; UWP still runs against the same contracts.
+- Done when: Application builds with **zero** `Windows.*` / WinRT; Core `Helpers` no longer hosts WhatsApp client policy; UWP still runs against the same contracts.
 
 ### Phase D — UWP as host only
 
