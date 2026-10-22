@@ -40,6 +40,9 @@ namespace Unison.WhatsAppClient.Groups
         private readonly IChatCatalogPersistence _catalog;
         private readonly IChatStateStore _chats;
         private readonly IJidResolver _jids;
+        // Func: ContactFacade also takes IGroupService — avoid DI cycle at construction.
+        private readonly Func<IContactService> _contacts;
+        private readonly IPersonStore _people;
         private readonly GroupMetadataReader _reader;
         private readonly GroupMetadataApply _apply;
         private readonly GroupRosterRestore _rosterRestore;
@@ -72,6 +75,8 @@ namespace Unison.WhatsAppClient.Groups
             IGroupNaming naming,
             IChatStateStore chats,
             IJidResolver jids,
+            Func<IContactService> contacts,
+            IPersonStore people,
             GroupMetadataApply apply,
             GroupRosterRestore rosterRestore,
             IGroupAvatarActions avatars,
@@ -95,6 +100,8 @@ namespace Unison.WhatsAppClient.Groups
             _nameRefresh = nameRefresh ?? throw new ArgumentNullException(nameof(nameRefresh));
             _chats = chats ?? throw new ArgumentNullException(nameof(chats));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
+            _contacts = contacts ?? throw new ArgumentNullException(nameof(contacts));
+            _people = people;
             _apply = apply ?? throw new ArgumentNullException(nameof(apply));
             _rosterRestore = rosterRestore ?? throw new ArgumentNullException(nameof(rosterRestore));
             _avatars = avatars ?? throw new ArgumentNullException(nameof(avatars));
@@ -384,6 +391,34 @@ namespace Unison.WhatsAppClient.Groups
                 context,
                 nameHint,
                 rosterMember);
+        }
+
+        /// <inheritdoc />
+        public void InvalidateParticipantDirectChatIndex()
+        {
+            GroupParticipantLookup.InvalidateDirectChatIndex();
+        }
+
+        /// <inheritdoc />
+        public IGroupParticipantLookup CreateOpenChatParticipantLookup(Func<string> selfDisplayLabel)
+        {
+            var context = new ParticipantResolutionContext(_jids, _contacts(), _chats, _people);
+            return new GroupParticipantLookup(context, selfDisplayLabel);
+        }
+
+        /// <inheritdoc />
+        public void EnrichMember(
+            GroupMember member,
+            string participantJid,
+            ChatItem groupChat,
+            string nameHint = null)
+        {
+            EnrichMember(
+                member,
+                participantJid,
+                groupChat,
+                new ParticipantResolutionContext(_jids, _contacts(), _chats, _people),
+                nameHint);
         }
 
         public Task QueryAllGroupsAsync() => QueryAllGroupsAsync(false);

@@ -653,6 +653,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IGroupNaming>(),
                 sp.GetRequiredService<IChatStateStore>(),
                 sp.GetRequiredService<IJidResolver>(),
+                () => sp.GetRequiredService<IContactService>(),
+                sp.GetRequiredService<IPersonStore>(),
                 new GroupMetadataApply(
                     sp.GetRequiredService<IGroupNaming>(),
                     sp.GetRequiredService<AttachedUiDispatcher>(),
