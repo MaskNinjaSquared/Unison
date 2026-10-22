@@ -2135,7 +2135,8 @@ namespace Unison.Uwp.Services.WhatsApp
                     firstSyncInProgress,
                     handOffCatchUp,
                     catchUpBanner,
-                    enrichmentAwaiting);
+                    enrichmentAwaiting,
+                    processed);
 
                 if (deferListRelease)
                 {
