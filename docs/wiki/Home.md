@@ -34,6 +34,7 @@ The **Unison.Socket** stack (Baileys **7.0.0-rc14**) is now the foundation for W
 | [Adding languages](Adding-Languages) | Tutorial: new `.resw` pack, package registration, `AppLanguage` enum |
 | [Migration](Migration) | What moved, what is still legacy (history SQLite, broker, SocketClient) |
 | [WhatsAppService extraction](WhatsAppService-Extraction) | Phase 0 done; plan to move the client into façades |
+| [Netstandard WhatsApp client](Netstandard-WhatsApp-Client) | Destination: portable Application layer over Socket; UWP host injects ports |
 | [Changelog](Changelog) | Newest → oldest product and architecture notes |
 
 ## Solution layout
