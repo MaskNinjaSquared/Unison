@@ -187,6 +187,7 @@ Do in order. Each phase has a done check.
 | List search | `ChatListQuery`; `IChatService.MatchesChatListQuery` | `MentionLookupBuilder` stays in Core (shared strip/search labels) |
 | Mentions / load-more page | `MentionSearch`, `TimelineLoadMorePage`; `IMessageService` mention + duplicate-page APIs | `ChatMessageOrder` stays in Core (State / mappers); `ComposerMentionDraft` stays until composer cut |
 | Unread / app-state flags / preview age | `ChatUnreadTally`, `AppStateChatMutation` (+ `ChatFlagChange`), `ChatPreviewStaleness` | — |
+| Chat title replace / invite-subject blacklist | `ChatNameReplacement`, `GroupNameSyncBlacklist` | — |
 
 ### Phase D — UWP as host only
 

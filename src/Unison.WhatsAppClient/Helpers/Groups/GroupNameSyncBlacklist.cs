@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Unison.Core.Helpers
+namespace Unison.WhatsAppClient.Helpers
 {
     /// <summary>
     /// Subjects that look like invite-link placeholders rather than a real group name.

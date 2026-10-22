@@ -16,7 +16,7 @@
 // =============================================================================
 using System;
 
-namespace Unison.Core.Helpers
+namespace Unison.WhatsAppClient.Helpers
 {
     public static class ChatNameReplacement
     {
