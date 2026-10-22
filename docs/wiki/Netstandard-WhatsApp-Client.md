@@ -185,7 +185,7 @@ Do in order. Each phase has a done check.
 | Mute deadlines / delete confirm / member resolve | `ChatDeletionPrompt`; `IChatService` mute deadlines + `ConfirmAndDeleteAsync`; `IGroupService.EnrichMember` / `ResolveMemberAvatar` / `ResolveMemberDisplayName` | `ChatMuteHelper` stays in Core (`ChatItem` / `ChatLocalState`); `GroupParticipantResolver` stays (State + lookup); list-row mute flyout uses `IChatService` deadlines |
 | List order / community hubs | `ChatListDisplayOrder`, `CommunityListProjector`; `IChatService.SortChatsForDisplay` / `DeduplicateChatsByCanonicalJid` / `ProjectCommunityList` | `ChatListVisibleReconcile` / `CommunityHubPresentation` stay in Core (presentation / UI collection) |
 | List search | `ChatListQuery`; `IChatService.MatchesChatListQuery` | `MentionLookupBuilder` stays in Core (shared strip/search labels) |
-| Mentions / load-more page | `MentionSearch`, `TimelineLoadMorePage`; `IMessageService` mention + duplicate-page APIs | `ChatMessageOrder` stays in Core (State / mappers); `ComposerMentionDraft` stays until composer cut |
+| Mentions / load-more page | `MentionSearch`, `TimelineLoadMorePage`; `IMessageService` mention + duplicate-page APIs | `ChatMessageOrder` stays in Core (State); `ComposerMentionDraft` stays in Core (composer presentation) |
 | Unread / app-state flags / preview age | `ChatUnreadTally`, `AppStateChatMutation` (+ `ChatFlagChange`), `ChatPreviewStaleness` | — |
 | Chat title replace / invite-subject blacklist | `ChatNameReplacement`, `GroupNameSyncBlacklist` | — |
 | Live history map / usync alias file | `HistoryLiveMessageMapper`, `UsyncAliasFiling` | — |
@@ -193,7 +193,8 @@ Do in order. Each phase has a done check.
 | History row map / list tip | `HistoryMessageMapper`, `ChatPreviewTip` | `MessageTimestampValidity` / `LegacyDeletedPreview` stay (State + `ChatPreviewNormalizer`); `ChatMessageOrder` stays (State / VMs) |
 | Deep-link list UI / reorder / timeline merge | `ChatListDeepLinkSyncUi`, `ChatListNamesAppliedRefresh`, `ChatListReorderTrigger`, `ChatTimelineLiveMerge`; `IChatService` / `IMessageService` APIs | `ChatTimelineMergeMode` stays in Core; `ListEnrichmentPhase` / `SyncPhaseStatus` stay (State + list localize) |
 | List hold / self identity | `ChatListSyncHold`; `IChatService.ShouldHoldChatListRows`; `IContactService.IsSelf` | `SelfIdentity` stays (GroupParticipantLookup / State) |
-| List enrichment phase gate | `IChatService.MatchesListEnrichmentPhase` | `ListEnrichmentPhase` stays in Core (State + façade); presentation helpers (`ReactionsBuilder`, `ChatListVisibleReconcile`, `MediaPreviewTag`, …) stay in Core — VMs may call them directly |
+| List enrichment phase gate | `IChatService.MatchesListEnrichmentPhase` | `ListEnrichmentPhase` stays in Core (State + façade); presentation helpers (`ReactionsBuilder`, `ChatListVisibleReconcile`, `MediaPreviewTag`, `ComposerMentionDraft`, …) stay in Core — VMs may call them directly |
+| Timeline sort / insert index | `IMessageService.SortTimelineInPlace` / `FindTimelineInsertIndex` | `ChatMessageOrder` stays in Core (State / caches still import it) |
 
 **Inventory note (Phase C remainder):** a Core-helpers scan that tagged ~15 as MOVE_NOW (VM/State/Models = 0) over-counted. Several were freed by extracting `ProtoMessageUnwrap` so Core mappers no longer import the history filter. Still blocked: `NameLookupCandidates` ← `PushNameLookup`; `GroupIdPlaceholder` ← `CommunityHubPresentation`; `MessageTimestampValidity` / `LegacyDeletedPreview` ← State + `ChatPreviewTip`; `OutgoingFailureClassification` / `ConnectionStabilityExperiment` stay with `OutgoingSendAttemptOutcome` on contracts. Real remaining Phase C work is **NEEDS_CUT** (VM → façade) and **KEEP_STATE_COUPLED**.
 
