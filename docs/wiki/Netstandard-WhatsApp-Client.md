@@ -173,10 +173,10 @@ Do in order. Each phase has a done check.
 | Outgoing send | `OutgoingTextSend`, `OutgoingMediaSend` | Retry/settlement types (`OutgoingTextSendRetry`, …) stay in Core (contracts + tests share them) |
 | Receipts | `ReceiptReader` / `ReceiptFacts` (was UWP; Attrs via `TryGetValue`) | `WhatsAppService.Receipts` still mutates ticks |
 | Group apply | `GroupMetadataApply`, `GroupRosterWriter` | `GroupRosterRules` / naming blacklist stay in Core (ViewModels) |
-| History builders | `HistoryMessageBuilder`, `HistoryMediaFiller` | `HistorySyncContentFilter` stays in Core (mappers / quoted context / live pump) |
+| History builders | `HistoryMessageBuilder`, `HistoryMediaFiller` | — |
 | Outgoing support | `OutgoingChatMessage`, `OutgoingDocumentKinds`, `OutgoingMessageId`, `OutgoingSendSettlement`, `MediaFileExtensions` | `OutgoingFailureClassification` / `OutgoingSendAttemptOutcome` stay in Core (contracts) |
 | Chat row pick | `ChatRowAvatarLookup`, `DuplicateChatRowPick` | — |
-| Quotes | `QuotedContext` | `MessageRenderReader` / `HistorySyncContentFilter` stay in Core |
+| Quotes | `QuotedContext` | — |
 | History list hydrate | `HistoryChatPreviewApplier`; `IChatService.ApplyHistoryChatPreviewHydrate` | VM only wires PropertyChanged + batch UI; `ChatPreviewNormalizer` stays in Core |
 | Open-chat strip | `TimelineListStrip`, `LiveChatPreviewApplier`, `ParticipantStripIdentity`; `IChatService.SyncListStripFromTimeline` | Detail VM delegates to façade |
 | Group roster rules | `GroupRosterRules`; `IGroupService.MemberMatches` / `MembershipPersonKeys` | Info pane no longer imports the helper |
@@ -189,8 +189,9 @@ Do in order. Each phase has a done check.
 | Unread / app-state flags / preview age | `ChatUnreadTally`, `AppStateChatMutation` (+ `ChatFlagChange`), `ChatPreviewStaleness` | — |
 | Chat title replace / invite-subject blacklist | `ChatNameReplacement`, `GroupNameSyncBlacklist` | — |
 | Live history map / usync alias file | `HistoryLiveMessageMapper`, `UsyncAliasFiling` | — |
+| History listable / render / participant | `HistorySyncContentFilter`, `MessageRenderReader` (+ `MessageRenderInfo`), `WebMessageParticipant`, `MessageKeyAltJidScan` | `ProtoMessageUnwrap` stays in Core for `ChatMessageMapper`; `MediaPreviewTag` stays (presentation) |
 
-**Inventory note (Phase C remainder):** a Core-helpers scan that tagged ~15 as MOVE_NOW (VM/State/Models = 0) over-counted. Most still have **Core inbound** from mappers, State, or presentation (`HistorySyncContentFilter` ← `ChatMessageMapper` / `MessageRenderReader`; `NameLookupCandidates` ← `PushNameLookup`; `GroupIdPlaceholder` ← `CommunityHubPresentation`; `MessageTimestampValidity` / `LegacyDeletedPreview` ← State + `ChatPreviewTip`; `OutgoingFailureClassification` / `ConnectionStabilityExperiment` stay with `OutgoingSendAttemptOutcome` on contracts). Real remaining Phase C work is **NEEDS_CUT** (VM → façade) and **KEEP_STATE_COUPLED**, not a bulk MOVE_NOW dump.
+**Inventory note (Phase C remainder):** a Core-helpers scan that tagged ~15 as MOVE_NOW (VM/State/Models = 0) over-counted. Several were freed by extracting `ProtoMessageUnwrap` so Core mappers no longer import the history filter. Still blocked: `NameLookupCandidates` ← `PushNameLookup`; `GroupIdPlaceholder` ← `CommunityHubPresentation`; `MessageTimestampValidity` / `LegacyDeletedPreview` ← State + `ChatPreviewTip`; `OutgoingFailureClassification` / `ConnectionStabilityExperiment` stay with `OutgoingSendAttemptOutcome` on contracts. Real remaining Phase C work is **NEEDS_CUT** (VM → façade) and **KEEP_STATE_COUPLED**.
 
 ### Phase D — UWP as host only
 
