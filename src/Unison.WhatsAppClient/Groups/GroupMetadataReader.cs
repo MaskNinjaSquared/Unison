@@ -16,12 +16,11 @@ using Unison.Baileys.Protocol;
 using Unison.Core.Contracts;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
-using Unison.Uwp.Client;
 using Unison.WhatsAppClient.Helpers;
 
-namespace Unison.Uwp.Services.WhatsApp.Groups
+namespace Unison.WhatsAppClient.Groups
 {
-    internal sealed class GroupMetadataReader
+    public sealed class GroupMetadataReader
     {
         /// <summary>
         /// Large groups answer with thousands of participants. Rosters are for showing members
@@ -31,7 +30,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
 
         private readonly IJidResolver _jids;
 
-        internal GroupMetadataReader(IJidResolver jids)
+        public GroupMetadataReader(IJidResolver jids)
         {
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
         }
@@ -273,7 +272,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
                     continue;
                 }
 
-                string jid = participant.Attrs.GetDictionaryValueOrDefault("jid", string.Empty);
+                string jid = Attr(participant.Attrs, "jid");
                 if (string.IsNullOrWhiteSpace(jid))
                 {
                     continue;
@@ -285,17 +284,17 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
                     continue;
                 }
 
-                string admin = participant.Attrs.GetDictionaryValueOrDefault("admin", string.Empty);
+                string admin = Attr(participant.Attrs, "admin");
                 if (string.IsNullOrWhiteSpace(admin))
                 {
-                    admin = participant.Attrs.GetDictionaryValueOrDefault("type", string.Empty);
+                    admin = Attr(participant.Attrs, "type");
                 }
 
                 drafts.Add(new GroupMemberDraft
                 {
                     Jid = canonical,
-                    PhoneNumber = participant.Attrs.GetDictionaryValueOrDefault("phone_number", string.Empty),
-                    Lid = participant.Attrs.GetDictionaryValueOrDefault("lid", string.Empty),
+                    PhoneNumber = Attr(participant.Attrs, "phone_number"),
+                    Lid = Attr(participant.Attrs, "lid"),
                     Role = ParseRole(admin)
                 });
 
@@ -326,15 +325,15 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
                     continue;
                 }
 
-                string jid = participant.Attrs.GetDictionaryValueOrDefault("jid", string.Empty);
-                string phone = participant.Attrs.GetDictionaryValueOrDefault("phone_number", string.Empty);
-                string lid = participant.Attrs.GetDictionaryValueOrDefault("lid", string.Empty);
+                string jid = Attr(participant.Attrs, "jid");
+                string phone = Attr(participant.Attrs, "phone_number");
+                string lid = Attr(participant.Attrs, "lid");
                 if (!_jids.IsSelfLinked(jid) && !_jids.IsSelfLinked(phone) && !_jids.IsSelfLinked(lid))
                 {
                     continue;
                 }
 
-                return ParseRole(participant.Attrs.GetDictionaryValueOrDefault("admin", string.Empty));
+                return ParseRole(Attr(participant.Attrs, "admin"));
             }
 
             return GroupParticipantRole.Member;
@@ -395,6 +394,14 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
         public string NormalizeGroupJid(string raw)
         {
             return GroupAvatarFallbackJids.NormalizeGroupJid(raw);
+        }
+
+        private static string Attr(Dictionary<string, string> attrs, string key)
+        {
+            string value;
+            return attrs != null && attrs.TryGetValue(key, out value) && value != null
+                ? value
+                : string.Empty;
         }
     }
 }

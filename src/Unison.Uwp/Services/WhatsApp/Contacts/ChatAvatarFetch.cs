@@ -10,7 +10,7 @@ using Unison.Core.Models;
 using Unison.Core.State;
 using Unison.Uwp.Client;
 using Unison.Uwp.Services.Socket;
-using Unison.Uwp.Services.WhatsApp.Groups;
+using Unison.WhatsAppClient.Groups;
 using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp.Contacts

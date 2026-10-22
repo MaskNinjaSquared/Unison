@@ -5,11 +5,11 @@
 // of them has to name the compatibility client.
 //
 // The send-permission refresh and the roster restore run here: the w:g2 query
-// goes out through the session, GroupMetadataReader reads it, and the Core flows
-// (GroupMetadataApply, GroupRosterRestore) put it on the row. The listing, the
-// per-group fallback, the full-size group picture and member pictures run here too.
-// One GroupQueryWindow, so the name refresh
-// and the background pass cannot each start a listing of their own.
+// goes out through IGroupWireActions, GroupMetadataReader reads it, and the Core
+// flows (GroupMetadataApply, GroupRosterRestore) put it on the row. The listing,
+// the per-group fallback, the full-size group picture and member pictures run
+// here too. One GroupQueryWindow, so the name refresh and the background pass
+// cannot each start a listing of their own.
 // =============================================================================
 using System;
 using System.Collections.Generic;
@@ -23,20 +23,17 @@ using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
 using Unison.Core.State;
-using Unison.Uwp.Client;
-using Unison.Uwp.Services;
-using Unison.Uwp.Services.Socket;
-using Unison.Uwp.Services.WhatsApp.Contacts;
+using Unison.WhatsAppClient.Abstractions;
 using Unison.WhatsAppClient.Helpers;
 
-namespace Unison.Uwp.Services.WhatsApp.Groups
+namespace Unison.WhatsAppClient.Groups
 {
     public sealed class GroupFacade : IGroupService
     {
         private const string GroupServer = "@g.us";
 
         private readonly IWhatsAppService _client;
-        private readonly IWhatsAppSessionProvider _sessions;
+        private readonly IGroupWireActions _wire;
         private readonly IGroupNaming _naming;
         private readonly ChatNameRefresh _nameRefresh;
         private readonly IDispatcher _ui;
@@ -46,11 +43,12 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
         private readonly GroupMetadataReader _reader;
         private readonly GroupMetadataApply _apply;
         private readonly GroupRosterRestore _rosterRestore;
-        private readonly AvatarFetcher _avatars;
+        private readonly IGroupAvatarActions _avatars;
         private readonly IUsyncGate _usyncGate;
         private readonly SyncStatusChannel _syncStatus;
         private readonly SyncWorkGate _syncWork;
         private readonly SyncWorkloadStrategy _workload;
+        private readonly IRuntimeDiagnostics _diagnostics;
         private readonly GroupQueryWindow _queryWindow = new GroupQueryWindow();
 
         /// <summary>0 free / 1 busy — overlapping listings each burn a 60s IQ and starve chat open.</summary>
@@ -68,28 +66,29 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
         private readonly HashSet<string> _communityLinkProbed =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        internal GroupFacade(
+        public GroupFacade(
             IWhatsAppService client,
-            IWhatsAppSessionProvider sessions,
+            IGroupWireActions wire,
             IGroupNaming naming,
             IChatStateStore chats,
             IJidResolver jids,
             GroupMetadataApply apply,
             GroupRosterRestore rosterRestore,
-            AvatarFetcher avatars,
+            IGroupAvatarActions avatars,
             IUsyncGate usyncGate,
             SyncStatusChannel syncStatus,
             SyncWorkGate syncWork,
             SyncWorkloadStrategy workload,
             IDispatcher ui,
             IChatCatalogPersistence catalog,
-            ChatNameRefresh nameRefresh)
+            ChatNameRefresh nameRefresh,
+            IRuntimeDiagnostics diagnostics = null)
         {
             _client = client ?? throw new ArgumentNullException(nameof(client));
             _workload = workload ?? throw new ArgumentNullException(nameof(workload));
             _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
             _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
-            _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
+            _wire = wire ?? throw new ArgumentNullException(nameof(wire));
             _naming = naming ?? throw new ArgumentNullException(nameof(naming));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
@@ -100,6 +99,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
             _rosterRestore = rosterRestore ?? throw new ArgumentNullException(nameof(rosterRestore));
             _avatars = avatars ?? throw new ArgumentNullException(nameof(avatars));
             _usyncGate = usyncGate ?? throw new ArgumentNullException(nameof(usyncGate));
+            _diagnostics = diagnostics;
             _reader = new GroupMetadataReader(jids);
 
             // Lives as long as the client, so there is nothing to unhook from.
@@ -109,12 +109,11 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
         private async Task RunBackgroundListingAsync()
         {
             _syncStatus.Raise(SyncPhaseStatus.Format(SyncPhaseStatus.Groups));
+            _diagnostics?.Write("startup-phase", "background-groups:begin");
+            var elapsed = Stopwatch.StartNew();
             try
             {
-                using (new StartupPhaseTrace("background-groups"))
-                {
-                    await QueryAllGroupsAsync(force: false);
-                }
+                await QueryAllGroupsAsync(force: false);
             }
             catch (Exception ex)
             {
@@ -122,6 +121,11 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
             }
             finally
             {
+                elapsed.Stop();
+                _diagnostics?.Write(
+                    "startup-phase",
+                    "background-groups:end",
+                    "elapsedMs=" + elapsed.ElapsedMilliseconds);
                 _syncStatus.Raise(null);
             }
         }
@@ -133,8 +137,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
                 return;
             }
 
-            var socket = _sessions.Socket;
-            if (socket == null || !socket.IsHandshakeComplete)
+            if (!_wire.IsHandshakeComplete)
             {
                 return;
             }
@@ -148,7 +151,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
 
             try
             {
-                var response = await socket.QueryGroupMetadataAsync(canonical);
+                BinaryNode response = await _wire.QueryGroupMetadataAsync(canonical);
                 GroupMetadataSnapshot metadata = _reader.ReadMetadata(response, canonical);
                 _communityLinkProbed.Add(canonical);
 
@@ -174,7 +177,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
                     " isCommunityParent=" + (metadata != null && metadata.IsCommunityParent) +
                     " isCommunityAnnounce=" + (metadata != null && metadata.IsCommunityAnnounce) +
                     " subject=" + (string.IsNullOrWhiteSpace(subject) ? "-" : "yes"));
-                RuntimeDiagnosticsService.Instance.Write(
+                _diagnostics?.Write(
                     "group-meta",
                     "refresh-apply",
                     "chat=" + DiagnosticJidMask.Apply(canonical) +
@@ -225,8 +228,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
             GroupMember member,
             CancellationToken token)
         {
-            var socket = _sessions.Socket;
-            if (member == null || socket == null || !socket.IsHandshakeComplete)
+            if (member == null || !_wire.IsHandshakeComplete)
             {
                 return NotReady();
             }
@@ -236,16 +238,15 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
             {
                 token.ThrowIfCancellationRequested();
 
-                ProfilePictureResult result = null;
+                GroupProfilePictureResult result = null;
                 using (await _usyncGate.AcquireAsync(token))
                 {
-                    socket = _sessions.Socket;
-                    if (socket == null || !socket.IsHandshakeComplete)
+                    if (!_wire.IsHandshakeComplete)
                     {
                         return NotReady();
                     }
 
-                    result = await socket.GetProfilePictureUrlResultAsync(candidate, "preview");
+                    result = await _wire.GetPreviewPictureAsync(candidate);
                 }
 
                 if (!string.IsNullOrWhiteSpace(result?.Url))
@@ -351,8 +352,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
                 return;
             }
 
-            var socket = _sessions.Socket;
-            if (socket == null || !socket.IsHandshakeComplete)
+            if (!_wire.IsHandshakeComplete)
             {
                 Debug.WriteLine("[GroupFacade] QueryAllGroupsAsync skipped (handshake not complete)");
                 return;
@@ -385,7 +385,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
                 try
                 {
                     Debug.WriteLine("[GroupFacade] Fetching all participating groups...");
-                    var response = await socket.QueryParticipatingGroupsAsync();
+                    BinaryNode response = await _wire.QueryParticipatingGroupsAsync();
                     if (response != null)
                     {
                         listingAnswered = true;
@@ -427,8 +427,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
 
         private async Task QueryUnresolvedGroupMetadataAsync(int limit)
         {
-            var socket = _sessions.Socket;
-            if (socket == null || !socket.IsHandshakeComplete)
+            if (!_wire.IsHandshakeComplete)
             {
                 return;
             }
@@ -476,8 +475,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
                     continue;
                 }
 
-                socket = _sessions.Socket;
-                if (socket == null || !socket.IsHandshakeComplete)
+                if (!_wire.IsHandshakeComplete)
                 {
                     Debug.WriteLine("[GroupFacade] QueryUnresolvedGroupMetadataAsync aborted (socket gone)");
                     break;
@@ -494,7 +492,7 @@ namespace Unison.Uwp.Services.WhatsApp.Groups
 
                 try
                 {
-                    var response = await socket.QueryGroupMetadataAsync(chat.JID);
+                    BinaryNode response = await _wire.QueryGroupMetadataAsync(chat.JID);
                     string subject = _reader.ExtractSubject(response, chat.JID);
                     if (_apply.TryCacheSyncedSubject(chat.JID, subject, chat.Name))
                     {

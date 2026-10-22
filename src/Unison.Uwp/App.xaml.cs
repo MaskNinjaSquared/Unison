@@ -44,6 +44,7 @@ using Unison.Uwp.Services.WhatsApp.Groups;
 using Unison.Uwp.Services.WhatsApp.History;
 using Unison.Uwp.Services.WhatsApp.Messages;
 using Unison.Uwp.Services.WhatsApp.Status;
+using Unison.WhatsAppClient.Groups;
 using Unison.WhatsAppClient.Status;
 using AppSessionProvider = Unison.WhatsAppClient.Abstractions.IWhatsAppSessionProvider;
 using AppProfileFacade = Unison.WhatsAppClient.Profiles.ProfileFacade;
@@ -610,9 +611,13 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ISelfMarkerNaming>(),
                 sp.GetRequiredService<IStringResources>(),
                 sp.GetRequiredService<ChatStateStore>().GroupSubjects));
+            services.AddSingleton<IGroupWireActions>(sp => new BridgeGroupWireActions(
+                sp.GetRequiredService<UwpSessionProvider>()));
+            services.AddSingleton<IGroupAvatarActions>(sp => new BridgeGroupAvatarActions(
+                sp.GetRequiredService<AvatarFetcher>()));
             services.AddSingleton<IGroupService>(sp => new GroupFacade(
                 sp.GetRequiredService<IWhatsAppService>(),
-                sp.GetRequiredService<UwpSessionProvider>(),
+                sp.GetRequiredService<IGroupWireActions>(),
                 sp.GetRequiredService<IGroupNaming>(),
                 sp.GetRequiredService<IChatStateStore>(),
                 sp.GetRequiredService<IJidResolver>(),
@@ -633,14 +638,15 @@ namespace Unison.Uwp
                     sp.GetRequiredService<IJidResolver>(),
                     sp.GetRequiredService<IChatStateStore>(),
                     sp.GetRequiredService<IGroupRosterStore>()),
-                sp.GetRequiredService<AvatarFetcher>(),
+                sp.GetRequiredService<IGroupAvatarActions>(),
                 sp.GetRequiredService<IUsyncGate>(),
                 sp.GetRequiredService<SyncStatusChannel>(),
                 sp.GetRequiredService<SyncWorkGate>(),
                 sp.GetRequiredService<SyncWorkloadStrategy>(),
                 sp.GetRequiredService<AttachedUiDispatcher>(),
                 sp.GetRequiredService<IChatCatalogPersistence>(),
-                sp.GetRequiredService<ChatNameRefresh>()));
+                sp.GetRequiredService<ChatNameRefresh>(),
+                sp.GetRequiredService<IRuntimeDiagnostics>()));
             services.AddSingleton<ILiveTilesService>(_ => LiveTilesService.Instance);
             services.AddSingleton<IShortcutService, ShortcutService>();
             services.AddSingleton<INotificationService>(sp =>

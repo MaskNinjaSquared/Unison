@@ -38,7 +38,7 @@ using Unison.Uwp.Services;
 using Unison.Uwp.Services.WhatsApp.Chats;
 using Unison.WhatsAppClient.Chats;
 using Unison.Uwp.Services.WhatsApp.Contacts;
-using Unison.Uwp.Services.WhatsApp.Groups;
+using Unison.WhatsAppClient.Groups;
 using Unison.Uwp.Services.WhatsApp.Messages;
 using Unison.Socket.UseCases.Contacts;
 using Unison.Uwp.Helpers;
