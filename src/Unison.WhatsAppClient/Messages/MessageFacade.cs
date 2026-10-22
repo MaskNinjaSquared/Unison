@@ -342,6 +342,12 @@ namespace Unison.WhatsAppClient.Messages
         }
 
         /// <inheritdoc />
+        public IList<ReactionChip> BuildReactionChips(IEnumerable<MessageReaction> reactions)
+        {
+            return ReactionsBuilder.BuildChips(reactions);
+        }
+
+        /// <inheritdoc />
         public ChatMessage TryCreatePreviewFallback(ChatItem chat, string selfDisplayName = null)
         {
             return ChatPreviewMessageFactory.TryCreate(chat, selfDisplayName);

@@ -39,7 +39,7 @@ namespace Unison.Core.ViewModels
             if (!allowDuringEnrichment &&
                 PreferFrugalUi &&
                 string.IsNullOrWhiteSpace(SearchQuery) &&
-                ListEnrichmentPhase.Matches(_lastSyncPhaseToken))
+                _chatService.MatchesListEnrichmentPhase(_lastSyncPhaseToken))
             {
                 _refreshDeferredForEnrichment = true;
                 _visibleOrderDirty = true;
@@ -108,7 +108,7 @@ namespace Unison.Core.ViewModels
             IsRefreshing = true;
             try
             {
-                reconcile = ChatListVisibleReconcile.Apply(VisibleChats, source, moveBudget);
+                reconcile = _chatService.ReconcileVisibleChats(VisibleChats, source, moveBudget);
             }
             finally
             {

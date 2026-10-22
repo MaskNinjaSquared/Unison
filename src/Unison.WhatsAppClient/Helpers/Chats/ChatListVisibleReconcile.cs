@@ -7,23 +7,11 @@
 // =============================================================================
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using Unison.Core.Helpers;
 using Unison.Core.Models;
 
-namespace Unison.Core.Helpers
+namespace Unison.WhatsAppClient.Helpers
 {
-    public sealed class ChatListVisibleReconcileResult
-    {
-        public ChatListVisibleReconcileResult(int mutations, bool incomplete)
-        {
-            Mutations = mutations;
-            Incomplete = incomplete;
-        }
-
-        public int Mutations { get; }
-
-        public bool Incomplete { get; }
-    }
-
     public static class ChatListVisibleReconcile
     {
         public static ChatListVisibleReconcileResult Apply(

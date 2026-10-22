@@ -337,7 +337,7 @@ namespace Unison.Core.ViewModels
             }
 
             // Frugal: skip avatar I/O while list enrich / reshuffle is already saturating the UI.
-            if (PreferFrugalUi && ListEnrichmentPhase.Matches(_lastSyncPhaseToken))
+            if (PreferFrugalUi && _chatService.MatchesListEnrichmentPhase(_lastSyncPhaseToken))
             {
                 return;
             }

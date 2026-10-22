@@ -268,7 +268,7 @@ namespace Unison.Core.ViewModels
                     _ = PresentSyncStatusAsync(null, visible: false, source: "IHistoryService:SyncStatus");
 
                 // One coalesced reshuffle after names/avatars/groups stop fighting the dispatcher.
-                if (_refreshDeferredForEnrichment && !ListEnrichmentPhase.Matches(message))
+                if (_refreshDeferredForEnrichment && !_chatService.MatchesListEnrichmentPhase(message))
                 {
                     _refreshDeferredForEnrichment = false;
                     ScheduleRefreshVisibleChats();

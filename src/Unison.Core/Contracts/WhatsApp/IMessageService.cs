@@ -73,6 +73,9 @@ namespace Unison.Core.Contracts.WhatsApp
         /// <summary>Copies reaction aggregates from a reloaded row onto one already on screen.</summary>
         void CopyReactionState(ChatMessage target, ChatMessage source);
 
+        /// <summary>One chip per distinct emoji with reactor tally (reactions dialog).</summary>
+        IList<ReactionChip> BuildReactionChips(IEnumerable<MessageReaction> reactions);
+
         /// <summary>
         /// Ephemeral bubble from list-preview fields when history has not arrived yet.
         /// Never persist these rows.

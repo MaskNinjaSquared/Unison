@@ -18,6 +18,7 @@ namespace Unison.Core.ViewModels
     {
         private readonly IPersonStore _people;
         private readonly IHistoryMessageStore _historyMessages;
+        private readonly IMessageService _messages;
         private readonly IStringResources _strings;
         private readonly IJidResolver _jids;
 
@@ -26,11 +27,13 @@ namespace Unison.Core.ViewModels
 
         public MessageReactionsViewModel(
             IPersonStore people,
+            IMessageService messages,
             IHistoryMessageStore historyMessages = null,
             IStringResources strings = null,
             IJidResolver jids = null)
         {
             _people = people ?? throw new ArgumentNullException(nameof(people));
+            _messages = messages ?? throw new ArgumentNullException(nameof(messages));
             _historyMessages = historyMessages;
             _strings = strings;
             _jids = jids;
@@ -83,7 +86,7 @@ namespace Unison.Core.ViewModels
                     return;
                 }
 
-                foreach (ReactionChip chip in ReactionsBuilder.BuildChips(reactions))
+                foreach (ReactionChip chip in _messages.BuildReactionChips(reactions))
                 {
                     Chips.Add(chip);
                 }
