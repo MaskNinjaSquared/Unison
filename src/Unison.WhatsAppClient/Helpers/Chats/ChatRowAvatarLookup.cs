@@ -1,6 +1,7 @@
+using Unison.Core.Helpers;
 using Unison.Core.State;
 
-namespace Unison.Core.Helpers
+namespace Unison.WhatsAppClient.Helpers
 {
     /// <summary>
     /// An avatar already on a chat row for this person, so a roster can show it without asking

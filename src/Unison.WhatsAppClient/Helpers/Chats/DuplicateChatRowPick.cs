@@ -9,7 +9,7 @@
 using System.Collections.Generic;
 using Unison.Core.Models;
 
-namespace Unison.Core.Helpers
+namespace Unison.WhatsAppClient.Helpers
 {
     public static class DuplicateChatRowPick
     {
