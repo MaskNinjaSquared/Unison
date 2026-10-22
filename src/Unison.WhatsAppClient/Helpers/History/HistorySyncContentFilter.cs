@@ -1,9 +1,10 @@
 using System;
 using System.Collections.Generic;
 using Proto;
+using Unison.Core.Helpers;
 using Unison.Core.Models;
 
-namespace Unison.Core.Helpers
+namespace Unison.WhatsAppClient.Helpers
 {
     /// <summary>
     /// Mirrors legacy history-sync filters: skip revoke/protocol/pin/reaction envelopes as

@@ -14,8 +14,9 @@
 using System;
 using Google.Protobuf;
 using Proto;
+using Unison.Core.Helpers;
 
-namespace Unison.Core.Helpers
+namespace Unison.WhatsAppClient.Helpers
 {
     public static class WebMessageParticipant
     {

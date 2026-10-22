@@ -1,9 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Unison.Core.Helpers;
 using Unison.Core.Models;
 
-namespace Unison.Core.Helpers
+namespace Unison.WhatsAppClient.Helpers
 {
     /// <summary>
     /// What an incoming envelope should put on screen: the preview line, which kind of media it is,

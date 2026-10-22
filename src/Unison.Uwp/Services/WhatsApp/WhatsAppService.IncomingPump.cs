@@ -483,7 +483,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        // MessageRenderInfo moved to Unison.Core.Helpers with the reader that builds it.
+        // MessageRenderInfo lives with MessageRenderReader in WhatsAppClient.Helpers.
 
         private Proto.Message UnwrapMessage(Proto.Message msg)
         {
