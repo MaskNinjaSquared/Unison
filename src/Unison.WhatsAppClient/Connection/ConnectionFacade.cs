@@ -7,11 +7,10 @@ using Unison.Core.Contracts;
 using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
-using Unison.Uwp.Services;
-using Unison.Uwp.Services.Socket;
+using Unison.WhatsAppClient.Abstractions;
 using Unison.WhatsAppClient.Helpers;
 
-namespace Unison.Uwp.Services.WhatsApp.Connection
+namespace Unison.WhatsAppClient.Connection
 {
     /// <summary>
     /// Facade: disconnect policy (settings + network) and session wipe / toast.
@@ -29,10 +28,11 @@ namespace Unison.Uwp.Services.WhatsApp.Connection
         private readonly IShellThemeService _shellTheme;
         private readonly IStartupUiHost _startupUi;
         private readonly INetworkAccess _network;
+        private readonly IRuntimeDiagnostics _diagnostics;
         private IWhatsAppService _whatsApp;
         private int _handlingRelink;
 
-        internal ConnectionFacade(
+        public ConnectionFacade(
             ILocalSettings localSettings,
             INotificationService notificationService,
             IStringResources strings,
@@ -42,7 +42,8 @@ namespace Unison.Uwp.Services.WhatsApp.Connection
             ILiveTilesService liveTiles,
             IShellThemeService shellTheme,
             IStartupUiHost startupUi,
-            INetworkAccess network)
+            INetworkAccess network,
+            IRuntimeDiagnostics diagnostics = null)
         {
             _localSettings = localSettings ?? throw new ArgumentNullException(nameof(localSettings));
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
@@ -54,6 +55,7 @@ namespace Unison.Uwp.Services.WhatsApp.Connection
             _shellTheme = shellTheme ?? throw new ArgumentNullException(nameof(shellTheme));
             _startupUi = startupUi ?? throw new ArgumentNullException(nameof(startupUi));
             _network = network ?? throw new ArgumentNullException(nameof(network));
+            _diagnostics = diagnostics;
         }
 
         public event EventHandler<ConnectionEndedEventArgs> ConnectionEnded;
@@ -213,7 +215,7 @@ namespace Unison.Uwp.Services.WhatsApp.Connection
                 return;
             }
 
-            RuntimeDiagnosticsService.Instance.Write(
+            _diagnostics?.Write(
                 "connection",
                 "logout-requested",
                 "reason=" + (reason ?? "user-initiated"));
@@ -296,7 +298,7 @@ namespace Unison.Uwp.Services.WhatsApp.Connection
                 " autoUnlink=" + autoUnlink +
                 " trigger=" + trigger);
 
-            RuntimeDiagnosticsService.Instance.Write(
+            _diagnostics?.Write(
                 "connection",
                 "disconnect-evaluated",
                 "code=" + (code ?? "") +
@@ -319,7 +321,7 @@ namespace Unison.Uwp.Services.WhatsApp.Connection
             {
                 if (!autoUnlink)
                 {
-                    RuntimeDiagnosticsService.Instance.Write(
+                    _diagnostics?.Write(
                         "connection",
                         "auto-unlink-forced",
                         "reason=explicit-logout; setting-off=true; code=" + (code ?? "") +
@@ -386,7 +388,7 @@ namespace Unison.Uwp.Services.WhatsApp.Connection
             catch (Exception ex)
             {
                 Debug.WriteLine("[ConnectionFacade] Auto-unlink failed: " + ex.Message);
-                RuntimeDiagnosticsService.Instance.RecordException(
+                _diagnostics?.RecordException(
                     "connection",
                     "auto-unlink-failed",
                     ex);

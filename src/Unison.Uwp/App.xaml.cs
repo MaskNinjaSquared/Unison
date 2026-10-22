@@ -37,7 +37,7 @@ using Unison.Uwp.Services.Socket;
 using Unison.Uwp.Services.WhatsApp;
 using Unison.Uwp.Services.WhatsApp.Chats;
 using Unison.WhatsAppClient.Chats;
-using Unison.Uwp.Services.WhatsApp.Connection;
+using Unison.WhatsAppClient.Connection;
 using Unison.Uwp.Services.WhatsApp.Contacts;
 using Unison.Uwp.Services.WhatsApp.Diagnostics;
 using Unison.Uwp.Services.WhatsApp.Groups;
@@ -677,13 +677,14 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ILocalSettings>(),
                 sp.GetRequiredService<INotificationService>(),
                 sp.GetRequiredService<IStringResources>(),
-                sp.GetRequiredService<UwpSessionProvider>(),
+                sp.GetRequiredService<AppSessionProvider>(),
                 sp.GetRequiredService<ILocalContactsService>(),
                 sp.GetRequiredService<IShortcutService>(),
                 sp.GetRequiredService<ILiveTilesService>(),
                 sp.GetRequiredService<IShellThemeService>(),
                 sp.GetRequiredService<IStartupUiHost>(),
-                sp.GetRequiredService<INetworkAccess>()));
+                sp.GetRequiredService<INetworkAccess>(),
+                sp.GetRequiredService<IRuntimeDiagnostics>()));
             services.AddSingleton<ISystemInfoProvider, SystemInfoProvider>();
             services.AddSingleton<IStatusBarService, StatusBarService>();
             services.AddSingleton<ILocationKeepAliveService, LocationKeepAliveService>();
