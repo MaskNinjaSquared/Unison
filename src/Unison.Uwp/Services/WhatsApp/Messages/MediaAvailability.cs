@@ -9,7 +9,6 @@ using Unison.Core.Models;
 using Unison.Socket.Abstractions;
 using Unison.Uwp.Client;
 using Unison.Uwp.Helpers;
-using Windows.Storage;
 using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp.Messages
@@ -592,38 +591,18 @@ namespace Unison.Uwp.Services.WhatsApp.Messages
 
             try
             {
-                StorageFile file = null;
-                string uri = message.DocumentUri.Trim();
-                if (uri.StartsWith("ms-appdata:", StringComparison.OrdinalIgnoreCase))
-                {
-                    file = await StorageFile.GetFileFromApplicationUriAsync(new Uri(uri));
-                }
-                else if (uri.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
-                {
-                    file = await StorageFile.GetFileFromPathAsync(new Uri(uri).LocalPath);
-                }
-                else if (System.IO.Path.IsPathRooted(uri))
-                {
-                    file = await StorageFile.GetFileFromPathAsync(uri);
-                }
-
-                if (file == null)
+                long? length = await _cache.TryGetLengthBytesAsync(message.DocumentUri.Trim());
+                if (length == null || length.Value <= 0)
                 {
                     return;
                 }
 
-                var props = await file.GetBasicPropertiesAsync();
-                if (props != null && props.Size > 0)
-                {
-                    message.DocumentFileLengthBytes = props.Size > long.MaxValue
-                        ? long.MaxValue
-                        : (long)props.Size;
+                message.DocumentFileLengthBytes = length.Value;
 
-                    string chatJid = _jids.GetCanonicalJid(message.RemoteJid);
-                    if (!string.IsNullOrWhiteSpace(chatJid))
-                    {
-                        await _host.SaveMessageQuietAsync(chatJid, message);
-                    }
+                string chatJid = _jids.GetCanonicalJid(message.RemoteJid);
+                if (!string.IsNullOrWhiteSpace(chatJid))
+                {
+                    await _host.SaveMessageQuietAsync(chatJid, message);
                 }
             }
             catch (Exception ex)

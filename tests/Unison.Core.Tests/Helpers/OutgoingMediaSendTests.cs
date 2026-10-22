@@ -409,6 +409,7 @@ namespace Unison.Core.Tests.Helpers
             public Task<string> TryGetUriAsync(MediaCacheKind kind, string fileBase, string extension) => Task.FromResult<string>(null);
 
             public Task<byte[]> TryReadAsync(string cacheUri) => Task.FromResult<byte[]>(null);
+            public Task<long?> TryGetLengthBytesAsync(string uri) => Task.FromResult<long?>(null);
 
             public string SanitizeFileBase(string fileBase) => fileBase;
         }

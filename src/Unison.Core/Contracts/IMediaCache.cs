@@ -44,6 +44,11 @@ namespace Unison.Core.Contracts
         Task<byte[]> TryReadAsync(string cacheUri);
 
         /// <summary>
+        /// Byte length of a cache URI (or rooted/file path the host can open). Null when missing.
+        /// </summary>
+        Task<long?> TryGetLengthBytesAsync(string uri);
+
+        /// <summary>
         /// The file-safe form of a name base, for the one caller that cannot hand over bytes: the
         /// audio transcoder needs a destination file to encode into, so it names the file itself
         /// and must name it the same way the cache would.

@@ -119,6 +119,51 @@ namespace Unison.Uwp.Services
             }
         }
 
+        /// <inheritdoc />
+        public async Task<long?> TryGetLengthBytesAsync(string uri)
+        {
+            if (string.IsNullOrWhiteSpace(uri))
+            {
+                return null;
+            }
+
+            try
+            {
+                StorageFile file = null;
+                string trimmed = uri.Trim();
+                if (trimmed.StartsWith("ms-appdata:", StringComparison.OrdinalIgnoreCase))
+                {
+                    file = await StorageFile.GetFileFromApplicationUriAsync(new Uri(trimmed));
+                }
+                else if (trimmed.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
+                {
+                    file = await StorageFile.GetFileFromPathAsync(new Uri(trimmed).LocalPath);
+                }
+                else if (Path.IsPathRooted(trimmed))
+                {
+                    file = await StorageFile.GetFileFromPathAsync(trimmed);
+                }
+
+                if (file == null)
+                {
+                    return null;
+                }
+
+                var props = await file.GetBasicPropertiesAsync();
+                if (props == null || props.Size == 0)
+                {
+                    return null;
+                }
+
+                return props.Size > long.MaxValue ? long.MaxValue : (long)props.Size;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MediaCacheService] Length failed: " + ex.Message);
+                return null;
+            }
+        }
+
         /// <summary>
         /// The folder for the one caller that cannot hand over bytes: the audio transcoder encodes
         /// into a <see cref="StorageFile"/> it is given, so it creates its own destination here.

@@ -139,7 +139,9 @@ Do in order. Each phase has a done check.
 - Touch: façade files under `src/Unison.Uwp/Services/WhatsApp/` that still `using Windows.*` (e.g. `ContactFacade`, `ConnectionFacade`, media path helpers).
 - Done when: no new WinRT types are required on the façade public surface; remaining WinRT is only in adapters/stores/transport.
 
-**Façades (done on this branch):** `ConnectionFacade` asks `INetworkAccess` (`WinRtNetworkAccess` holds `NetworkInformation`). `ContactFacade` waits for People-card return via `IAppLifecycle.WaitUntilForegroundAsync` (no `Window` / `CoreApplication`). Façade `.cs` files under `Services/WhatsApp/**` no longer `using Windows.*`. Remaining WinRT on the client / media helpers / stores is Phase A follow-up or stays in adapters until those types move.
+**Façades (done on this branch):** `ConnectionFacade` asks `INetworkAccess` (`WinRtNetworkAccess` holds `NetworkInformation`). `ContactFacade` waits for People-card return via `IAppLifecycle.WaitUntilForegroundAsync` (no `Window` / `CoreApplication`). Façade `.cs` files under `Services/WhatsApp/**` no longer `using Windows.*`.
+
+**Client follow-up (this branch):** `MediaAvailability` no longer `using Windows.*` — document length goes through `IMediaCache.TryGetLengthBytesAsync` (`MediaCacheService` holds `StorageFile`). Remaining WinRT on `WhatsAppService` partials / stores / transport stays until Phase B shrinks the compatibility client (adapters).
 
 ### Phase B — Finish WhatsAppService extraction (phases 3 and 4)
 
@@ -183,6 +185,7 @@ Do in order. Each phase has a done check.
 | Mute deadlines / delete confirm / member resolve | `ChatDeletionPrompt`; `IChatService` mute deadlines + `ConfirmAndDeleteAsync`; `IGroupService.EnrichMember` / `ResolveMemberAvatar` / `ResolveMemberDisplayName` | `ChatMuteHelper` stays in Core (`ChatItem` / `ChatLocalState`); `GroupParticipantResolver` stays (State + lookup); list-row mute flyout uses `IChatService` deadlines |
 | List order / community hubs | `ChatListDisplayOrder`, `CommunityListProjector`; `IChatService.SortChatsForDisplay` / `DeduplicateChatsByCanonicalJid` / `ProjectCommunityList` | `ChatListVisibleReconcile` stays in Core (UI collection mutate); `CommunityHubPresentation` stays (presentation) |
 | List search | `ChatListQuery`; `IChatService.MatchesChatListQuery` | `MentionLookupBuilder` stays in Core (shared strip/search labels) |
+| Mentions / load-more page | `MentionSearch`, `TimelineLoadMorePage`; `IMessageService` mention + duplicate-page APIs | `ChatMessageOrder` stays in Core (State / mappers); `ComposerMentionDraft` stays until composer cut |
 
 ### Phase D — UWP as host only
 
