@@ -1,6 +1,6 @@
 using System;
 
-namespace Unison.Core.Helpers
+namespace Unison.WhatsAppClient.Helpers
 {
     /// <summary>
     /// The file extension to store an attachment under, from its MIME type.

@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Unison.Core.Contracts;
 using Unison.Core.Helpers;
 using Unison.Uwp.Client;
+using Unison.WhatsAppClient.Helpers;
 using Windows.Media.MediaProperties;
 using Windows.Media.Transcoding;
 using Windows.Storage;

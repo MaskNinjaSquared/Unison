@@ -8,8 +8,9 @@
 // =============================================================================
 using System;
 using Unison.Core.Models;
+using Unison.Core.Helpers;
 
-namespace Unison.Core.Helpers
+namespace Unison.WhatsAppClient.Helpers
 {
     /// <summary>What every outgoing bubble shares, whatever it carries.</summary>
     public sealed class OutgoingMessageStamp

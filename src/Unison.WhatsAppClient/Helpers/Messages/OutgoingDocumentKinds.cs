@@ -8,7 +8,7 @@
 // =============================================================================
 using System;
 
-namespace Unison.Core.Helpers
+namespace Unison.WhatsAppClient.Helpers
 {
     /// <summary>Allowed extensions and MIME types for outgoing document attach.</summary>
     public static class OutgoingDocumentKinds

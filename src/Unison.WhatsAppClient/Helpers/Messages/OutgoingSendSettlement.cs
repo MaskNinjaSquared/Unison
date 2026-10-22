@@ -9,8 +9,9 @@
 // =============================================================================
 using System;
 using Unison.Core.Models;
+using Unison.Core.Helpers;
 
-namespace Unison.Core.Helpers
+namespace Unison.WhatsAppClient.Helpers
 {
     public static class OutgoingSendSettlement
     {
