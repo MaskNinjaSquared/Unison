@@ -167,13 +167,13 @@
     <Compile Include="Services\WhatsApp\Contacts\ContactDirectory.cs" />
     <Compile Include="Services\WhatsApp\Contacts\ContactNameResolver.cs" />
     <Compile Include="Services\WhatsApp\Contacts\ContactUsyncResolver.cs" />
-    <Compile Include="Services\WhatsApp\Chats\ChatFacade.cs" />
-    <Compile Include="Services\WhatsApp\Chats\ChatPreviewReconciler.cs" />
+    <Compile Include="Services\WhatsApp\Chats\BridgeChatAccountActions.cs" />
     <Compile Include="Services\WhatsApp\Groups\GroupFacade.cs" />
     <Compile Include="Services\WhatsApp\Groups\GroupMetadataReader.cs" />
     <Compile Include="Services\WhatsApp\History\HistoryFacade.cs" />
     <Compile Include="Services\WhatsApp\History\HistoryThumbnailMaterializer.cs" />
-    <Compile Include="Services\WhatsApp\Status\StatusFacade.cs" />
+    <Compile Include="Services\WhatsApp\Status\WinRtStatusThumbnailMaterializer.cs" />
+    <Compile Include="Services\Network\WinRtNetworkAccess.cs" />
     <Compile Include="Services\WhatsApp\Messages\MessageFacade.cs" />
     <Compile Include="Services\WhatsApp\Messages\MediaAvailability.cs" />
     <Compile Include="Services\Socket\DelegateSocketLog.cs" />
