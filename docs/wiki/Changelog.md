@@ -2,6 +2,16 @@
 
 Newest first.
 
+## Phase B — app-state delete + message pin on façades
+
+`IMessageService.ApplyAppStateDeleteMessageAsync` and
+`ApplyPinnedMessageStateAsync` own delete-for-me and local/inbound message pin
+(RAM, pending hold, SQLite pins, notify). `IChatService.ApplyAppStateDeleteChatAsync`
+owns chat delete RAM + badge; durable I/O is `IAppStateLocalHost.ForgetChatStorageAsync`
+only. `IAppStateLocalHost.ApplyChatDeletionAsync` / `ApplyMessagePinAsync` removed.
+SocketBridge and AppStateSync forward to the façades. `PendingMessageState` leaves
+the client ctor (DI singleton stays for `MessageFacade`).
+
 ## Phase B — revoke host collapsed; AcceptOutgoing + LoadLiveOverlay on façade
 
 `IIncomingRevocationHost` removed: revoke uses `ChatStateStore` + `IBoundMutationGate`

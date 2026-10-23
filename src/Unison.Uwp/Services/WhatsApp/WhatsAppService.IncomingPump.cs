@@ -127,6 +127,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
+            _missing.Cooldowns.Remove(normJid);
             List<MissingMessageCandidate> dropped = new List<MissingMessageCandidate>(_missing.ForgetChat(normJid));
             if (dropped.Count == 0)
             {

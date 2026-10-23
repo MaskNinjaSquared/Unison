@@ -42,6 +42,12 @@ namespace Unison.Core.Contracts.WhatsApp
         Task DeleteChatAsync(ChatItem chat);
 
         /// <summary>
+        /// Account-side (or local) chat deletion: drop list rows and the in-memory timeline,
+        /// forget missing-message / on-demand history state, then durable storage via the host.
+        /// </summary>
+        Task ApplyAppStateDeleteChatAsync(string jid);
+
+        /// <summary>
         /// Which conversation is on screen. The notification path reads it to stay quiet about the
         /// chat the user is already looking at; null means none.
         /// </summary>

@@ -22,7 +22,6 @@ namespace Unison.WhatsAppClient.Messages
     {
         private readonly IPersonStore _personStore;
         private readonly IWhatsAppService _whatsAppService;
-        private readonly IAppStateLocalHost _localAppState;
         private readonly IChatMessageMapper _chatMessageMapper;
         private readonly IReactionMapper _reactionMapper;
         private readonly IHistoryService _history;
@@ -63,7 +62,6 @@ namespace Unison.WhatsAppClient.Messages
         public MessageFacade(
             IPersonStore personStore,
             IWhatsAppService whatsAppService,
-            IAppStateLocalHost localAppState,
             IChatMessageMapper chatMessageMapper,
             IReactionMapper reactionMapper,
             IHistoryService history,
@@ -94,7 +92,6 @@ namespace Unison.WhatsAppClient.Messages
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
             _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
-            _localAppState = localAppState ?? throw new ArgumentNullException(nameof(localAppState));
             _chatMessageMapper = chatMessageMapper ?? throw new ArgumentNullException(nameof(chatMessageMapper));
             _reactionMapper = reactionMapper ?? throw new ArgumentNullException(nameof(reactionMapper));
             _history = history ?? throw new ArgumentNullException(nameof(history));
@@ -1000,7 +997,7 @@ namespace Unison.WhatsAppClient.Messages
 
             await _wire.SendPinInChatMessageAsync(canonical, key, pin, durationSeconds);
             MessagePinWindow window = MessagePinWindow.FromLocal(pin, durationSeconds, DateTime.UtcNow);
-            await _localAppState.ApplyMessagePinAsync(
+            await ApplyPinnedMessageStateAsync(
                 canonical, message.Id, pin, window.PinnedAtUtc, window.ExpiresAtUtc);
         }
 
@@ -1488,8 +1485,183 @@ namespace Unison.WhatsAppClient.Messages
 
             MessagePinWindow window = MessagePinWindow.FromIncoming(
                 pin, senderTimestampMs, durationSeconds, DateTime.UtcNow);
-            return _localAppState.ApplyMessagePinAsync(
+            return ApplyPinnedMessageStateAsync(
                 chatJid, targetMessageId, pin, window.PinnedAtUtc, window.ExpiresAtUtc);
+        }
+
+        /// <inheritdoc />
+        public async Task<bool> ApplyAppStateDeleteMessageAsync(string chatJid, string messageId)
+        {
+            string canonical = _jids.GetCanonicalJid(chatJid);
+            if (string.IsNullOrWhiteSpace(canonical) || string.IsNullOrWhiteSpace(messageId))
+            {
+                return false;
+            }
+
+            bool removed = false;
+            List<ChatMessage> remaining = null;
+            string selfFallback = _strings != null
+                ? _strings.Get("Chat_SelfFallbackName", "You")
+                : "You";
+            string yesterday = _strings != null
+                ? _strings.Get("Common_Yesterday", "Yesterday")
+                : "Yesterday";
+
+            await _boundMutations.RunAsync(() =>
+            {
+                ChatMessageCache cache = _chatState.MessagesByChat;
+                if (!cache.TryGet(canonical, out remaining) ||
+                    remaining == null ||
+                    !cache.RemoveMessage(canonical, messageId))
+                {
+                    return;
+                }
+
+                AppStateDeleteMessagePreview.RefreshAliasRows(
+                    _chatRows.FindConversation(canonical),
+                    remaining,
+                    canonical,
+                    _jids.GetCanonicalJid,
+                    selfFallback,
+                    yesterday);
+                removed = true;
+            }).ConfigureAwait(false);
+
+            if (!removed)
+            {
+                return false;
+            }
+
+            try
+            {
+                await _messageStore.DeleteMessageAsync(canonical, messageId).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] Deleting " + messageId + " from storage failed: " + ex.Message);
+            }
+
+            _outgoingHost.NotifyChatChanged(canonical);
+            return true;
+        }
+
+        /// <inheritdoc />
+        public async Task<bool> ApplyPinnedMessageStateAsync(
+            string chatJid,
+            string messageId,
+            bool isPinned,
+            DateTime? pinnedAtUtc,
+            DateTime? expiresAtUtc)
+        {
+            string canonical = _jids.GetCanonicalJid(chatJid);
+            if (string.IsNullOrWhiteSpace(canonical) || string.IsNullOrWhiteSpace(messageId))
+            {
+                return false;
+            }
+
+            PendingPin state = _pendingMessageState.HoldPin(
+                canonical, messageId, isPinned, pinnedAtUtc, expiresAtUtc, DateTime.UtcNow);
+
+            ChatMessage target = null;
+            await _boundMutations.RunAsync(() =>
+            {
+                if (_chatState.MessagesByChat.TryGet(canonical, out var messages))
+                {
+                    target = messages?.FirstOrDefault(
+                        m => string.Equals(m?.Id, messageId, StringComparison.Ordinal));
+                }
+
+                if (target != null)
+                {
+                    target.IsPinned = state.IsPinned;
+                    target.PinnedAtUtc = state.PinnedAtUtc;
+                    target.PinExpiresAtUtc = state.ExpiresAtUtc;
+                }
+            }).ConfigureAwait(false);
+
+            if (target == null)
+            {
+                target = await FindPersistedMessageAsync(canonical, messageId).ConfigureAwait(false);
+                if (target != null)
+                {
+                    target.IsPinned = state.IsPinned;
+                    target.PinnedAtUtc = state.PinnedAtUtc;
+                    target.PinExpiresAtUtc = state.ExpiresAtUtc;
+                    try
+                    {
+                        await _outgoingHost.PersistLiveAsync(canonical, target).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine("[MessageFacade] Persist pinned live failed: " + ex.Message);
+                    }
+
+                    if (_activeChat.IsOpen(canonical))
+                    {
+                        await _boundMutations.RunAsync(() =>
+                            _chatState.MessagesByChat.InsertIfAbsent(
+                                canonical, target, MaxActiveChatMessagesInMemory, DateTime.UtcNow))
+                            .ConfigureAwait(false);
+                    }
+                }
+            }
+
+            if (target != null)
+            {
+                _pendingMessageState.ForgetPin(canonical, messageId);
+                await PersistPinnedMessageToSqliteAsync(canonical, messageId, state, target)
+                    .ConfigureAwait(false);
+                QueueIncomingPersist(canonical, target);
+                _outgoingHost.NotifyChatChanged(canonical);
+                return true;
+            }
+
+            await PersistPinnedMessageToSqliteAsync(canonical, messageId, state, null)
+                .ConfigureAwait(false);
+            return false;
+        }
+
+        private async Task PersistPinnedMessageToSqliteAsync(
+            string canonical,
+            string messageId,
+            PendingPin state,
+            ChatMessage target)
+        {
+            if (_historyMessageStore == null ||
+                string.IsNullOrWhiteSpace(canonical) ||
+                string.IsNullOrWhiteSpace(messageId))
+            {
+                return;
+            }
+
+            try
+            {
+                List<string> keys = new List<string>(ChatPinStoreKeys.For(canonical, _jids));
+                var pins = new List<HistoryMessagePinUpdate>(keys.Count);
+                for (int i = 0; i < keys.Count; i++)
+                {
+                    pins.Add(new HistoryMessagePinUpdate
+                    {
+                        ChatJid = keys[i],
+                        MessageId = messageId,
+                        IsPinned = state.IsPinned,
+                        PinnedAtUtc = state.PinnedAtUtc,
+                        PinExpiresAtUtc = state.ExpiresAtUtc
+                    });
+                }
+
+                await _historyMessageStore.UpsertPinsAsync(pins).ConfigureAwait(false);
+
+                if (target != null)
+                {
+                    await _outgoingHost.PersistLiveAsync(canonical, target).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] SQLite pin persist failed: " + ex.Message);
+            }
         }
 
         private async Task<ChatMessage> FindPersistedMessageAsync(string chatJid, string messageId)

@@ -950,10 +950,11 @@ the client). Persist enqueue is `IMessageService.QueueIncomingPersist` over the 
 `PendingMessageQueue` (`IPendingMessageFlushHost` for flush-now / idle timer;
 `IChatCatalogPersistence.Schedule` for the catalogue). Offline duplicate name patch is
 `IMessageService.EnrichOfflineDuplicateFast`. Revoke is `IMessageService.ApplyIncomingRevocationAsync`
-(`MessageRevocationContent` tombstone; `IIncomingRevocationHost` finds/removes in `MessagesByChat`
-and refreshes the tip; façade persists via `IOutgoingMessageHost` / SQLite). Inbound pin-in-chat is
-`IMessageService.ApplyIncomingPinInChatAsync` (`MessagePinWindow` then `IAppStateLocalHost`
-message-pin write). Tip refresh / bulk re-tip / in-memory list reconcile is `IChatService.RefreshChatPreviewAsync` /
+(`MessageRevocationContent` tombstone over `ChatStateStore` + `IBoundMutationGate`). Inbound
+pin-in-chat is `IMessageService.ApplyIncomingPinInChatAsync` → `ApplyPinnedMessageStateAsync`.
+App-state delete-for-me is `ApplyAppStateDeleteMessageAsync`; chat delete RAM is
+`IChatService.ApplyAppStateDeleteChatAsync` (durable half `IAppStateLocalHost.ForgetChatStorageAsync`).
+Tip refresh / bulk re-tip / in-memory list reconcile is `IChatService.RefreshChatPreviewAsync` /
 `RefreshAllChatPreviewsFromStoredAsync` / `ReconcileChatListFromStoredAsync` (bulk paths still walk
 host `MessagesByChat`). Pump still owns the drain loop and the go/no-go before a resend; the wait, send and
 answer window are `PlaceholderResendDispatch`. Which way an
@@ -1443,13 +1444,12 @@ capture policy is `ContactFacade.CaptureSelfPushName`. The client no longer hold
 The timer and `TriggerBackgroundResolution` stay on the client (`ShutdownAsync` cancels them).
 `ScheduleDeferredAvatarResolution` left `IWhatsAppService`.
 
-**Local delete / message-pin halves are `IAppStateLocalHost`.** Chat delete and message pin
-write the rows and the durable mirror through that port. Archive / pin / mute / read live on
-`ChatFacade` (`ApplyLocalChatFlagsAsync` / `ApplyLocalChatReadStateAsync`, also used by
-`SetPinnedAsync` and `ApplyRemoteChatSettingsAsync`). `ChatFacade` no longer takes
-`IWhatsAppService` at all; `MessageFacade` still does for events and `EnsureConnectedAsync`.
-`ApplyChatDeletionAsync` and `ApplyMessagePinAsync` left `IWhatsAppService`; pin/flags/read
-left the host.
+**Chat-delete durable I/O is `IAppStateLocalHost.ForgetChatStorageAsync`.** RAM delete,
+badge, missing-message / on-demand forget live on `IChatService.ApplyAppStateDeleteChatAsync`.
+Message delete and message pin live on `IMessageService` (`ApplyAppStateDeleteMessageAsync` /
+`ApplyPinnedMessageStateAsync`). Archive / chat pin / mute / read live on `ChatFacade`.
+`ChatFacade` no longer takes `IWhatsAppService`; `MessageFacade` still does for events and
+`EnsureConnectedAsync`.
 
 **Conversation resync primitives are `IConversationResyncHost`.** Cache wipe, app-state flag
 re-report and the no-socket full resync fallback leave `IWhatsAppService`. `HistoryFacade`

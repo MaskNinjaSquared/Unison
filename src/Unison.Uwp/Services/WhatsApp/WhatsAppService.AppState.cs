@@ -67,59 +67,19 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         /// <summary>
-        /// Removes a conversation because the account says it is gone - either the phone deleted it
-        /// or we did.
+        /// Durable half of a chat deletion. RAM + badge are owned by
+        /// <see cref="IChatService.ApplyAppStateDeleteChatAsync"/>.
         /// </summary>
-        /// <remarks>
-        /// Dropping the in-memory rows is only the visible half. SQLite is what the list and the
-        /// timeline are rebuilt from on the next launch, so a chat cleared from RAM alone comes
-        /// straight back; a delete that leaves the tail behind is undone by the next history chunk.
-        /// Hence both: a tombstone on the preview and a real delete of the messages.
-        /// </remarks>
-        Task IAppStateLocalHost.ApplyChatDeletionAsync(string jid) =>
-            ApplyAppStateDeleteChatAsync(jid);
+        Task IAppStateLocalHost.ForgetChatStorageAsync(
+            string canonicalJid,
+            IReadOnlyList<string> storeKeys) =>
+            ForgetChatInStorageAsync(canonicalJid, storeKeys);
 
-        internal async Task ApplyAppStateDeleteChatAsync(string jid)
-        {
-            string canonical = GetCanonicalJid(jid);
-            if (string.IsNullOrWhiteSpace(canonical))
-            {
-                return;
-            }
-
-            List<string> keys = new List<string>(ChatPinStoreKeys.For(canonical, _jids));
-
-            await _ui.RunAsync(() =>
-            {
-                // Both rows, for the same reason the storage side already expands the key:
-                // the conversation is listed under PN and under LID, and removing one left
-                // the other behind as an empty row until the next launch.
-                foreach (var chat in GetChatRowsForCanonicalJid(canonical))
-                {
-                    if (chat != null)
-                    {
-                        Chats.Remove(chat);
-                    }
-                }
-
-                MessagesByChat.Remove(canonical);
-                ForgetMissingMessagesForChat(canonical);
-                _historyRequests.ForgetChat(canonical);
-                _missing.Cooldowns.Remove(canonical);
-            });
-
-            await ForgetChatInStorageAsync(canonical, keys).ConfigureAwait(false);
-
-            ChatUnreadSideEffects.AfterConversationUnreadChanged(
-                ChatUnreadTally.TotalAcrossConversations(Chats, GetCanonicalJid),
-                canonicalJid: null,
-                chatUnread: 0,
-                dirtyRows: null,
-                total => NotificationService.Instance.UpdateBadge(total),
-                updateShortcutUnread: null,
-                persistRows: null);
-            SchedulePersist();
-        }
+        /// <summary>App-state / SocketBridge entry: forwards to <see cref="IChatService"/>.</summary>
+        internal Task ApplyAppStateDeleteChatAsync(string jid) =>
+            ChatFacade != null
+                ? ChatFacade.ApplyAppStateDeleteChatAsync(jid)
+                : Task.CompletedTask;
 
         /// <summary>
         /// The persistent half of a chat deletion: tombstone the list preview, drop the stored
@@ -186,60 +146,11 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        internal async Task<bool> ApplyAppStateDeleteMessageAsync(string jid, string messageId)
-        {
-            string canonical = GetCanonicalJid(jid);
-            if (string.IsNullOrWhiteSpace(canonical) || string.IsNullOrWhiteSpace(messageId))
-            {
-                return false;
-            }
-
-            bool removed = false;
-            await _ui.RunAsync(() =>
-            {
-                if (!MessagesByChat.TryGet(canonical, out var messages) ||
-                    messages == null ||
-                    !MessagesByChat.RemoveMessage(canonical, messageId))
-                {
-                    return;
-                }
-
-                // Every row sharing this identity, not just the first: a conversation is
-                // listed under both PN and LID, and correcting one left the other showing a
-                // preview of the message that was just deleted.
-                AppStateDeleteMessagePreview.RefreshAliasRows(
-                    GetChatRowsForCanonicalJid(canonical),
-                    messages,
-                    canonical,
-                    GetCanonicalJid,
-                    LocalizedChatStripLabels.SelfFallbackName(),
-                    LocalizedChatStripLabels.Yesterday());
-
-                removed = true;
-            });
-
-            if (removed)
-            {
-                // Dropping the in-memory row is only the visible half, the same way it is for
-                // a deleted chat: SQLite is what the timeline is rebuilt from, so a message
-                // cleared from RAM alone comes back on the next load of this conversation.
-                if (_messageStore != null)
-                {
-                    try
-                    {
-                        await _messageStore.DeleteMessageAsync(canonical, messageId);
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine($"[WhatsAppService] Deleting {messageId} from storage failed: {ex.Message}");
-                    }
-                }
-
-                QueueChatMessagesChanged(canonical);
-            }
-
-            return removed;
-        }
+        /// <summary>App-state / SocketBridge entry: forwards to <see cref="IMessageService"/>.</summary>
+        internal Task<bool> ApplyAppStateDeleteMessageAsync(string jid, string messageId) =>
+            Messages != null
+                ? Messages.ApplyAppStateDeleteMessageAsync(jid, messageId)
+                : Task.FromResult(false);
 
     }
 }

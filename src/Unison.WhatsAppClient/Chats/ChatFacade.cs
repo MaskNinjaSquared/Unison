@@ -55,7 +55,7 @@ namespace Unison.WhatsAppClient.Chats
         private readonly IChatAccountActions _account;
         private readonly IAppStateLocalHost _localAppState;
         private readonly IJidResolver _jids;
-        private readonly IChatStateStore _chatState;
+        private readonly ChatStateStore _chatState;
         private readonly ChatRowIndex _chatRows;
         private readonly ActiveChat _activeChat;
         private readonly IOfflineReplayHost _offlineReplay;
@@ -78,6 +78,7 @@ namespace Unison.WhatsAppClient.Chats
         private readonly IHistoryChatPreviewStore _chatPreviews;
         private readonly IMessageStore _messageStore;
         private readonly IMissingMessageChatHost _missingMessages;
+        private readonly HistoryOnDemandRegistry _historyRequests;
         private readonly OfflineReplayTips _offlineReplayTips;
 
         /// <summary>Short enough that the first recovered chat shows while a long replay continues.</summary>
@@ -87,7 +88,7 @@ namespace Unison.WhatsAppClient.Chats
             IChatAccountActions account,
             IAppStateLocalHost localAppState,
             IJidResolver jids,
-            IChatStateStore chatState,
+            ChatStateStore chatState,
             ChatRowIndex chatRows,
             ActiveChat activeChat,
             IOfflineReplayHost offlineReplay,
@@ -108,6 +109,7 @@ namespace Unison.WhatsAppClient.Chats
             IHistoryChatPreviewStore chatPreviews,
             IMessageStore messageStore,
             IMissingMessageChatHost missingMessages,
+            HistoryOnDemandRegistry historyRequests,
             IDialogService dialogs = null,
             IRuntimeDiagnostics diagnostics = null)
         {
@@ -135,6 +137,7 @@ namespace Unison.WhatsAppClient.Chats
             _chatPreviews = chatPreviews ?? throw new ArgumentNullException(nameof(chatPreviews));
             _messageStore = messageStore ?? throw new ArgumentNullException(nameof(messageStore));
             _missingMessages = missingMessages ?? throw new ArgumentNullException(nameof(missingMessages));
+            _historyRequests = historyRequests ?? throw new ArgumentNullException(nameof(historyRequests));
             _dialogs = dialogs;
             _diagnostics = diagnostics;
             _offlineReplayTips = new OfflineReplayTips(
@@ -530,7 +533,46 @@ namespace Unison.WhatsAppClient.Chats
                     (!_account.IsAvailable ? "no socket" : "no messages to build the range with"));
             }
 
-            await _localAppState.ApplyChatDeletionAsync(jid).ConfigureAwait(false);
+            await ApplyAppStateDeleteChatAsync(jid).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public async Task ApplyAppStateDeleteChatAsync(string jid)
+        {
+            string canonical = _jids.GetCanonicalJid(jid);
+            if (string.IsNullOrWhiteSpace(canonical))
+            {
+                return;
+            }
+
+            List<string> keys = new List<string>(ChatPinStoreKeys.For(canonical, _jids));
+
+            await _ui.RunAsync(() =>
+            {
+                foreach (ChatItem chat in _chatRows.FindConversation(canonical))
+                {
+                    if (chat != null)
+                    {
+                        _chatState.Chats.Remove(chat);
+                    }
+                }
+
+                _chatState.MessagesByChat.Remove(canonical);
+                _missingMessages.ForgetMissingMessagesForChat(canonical);
+                _historyRequests.ForgetChat(canonical);
+            }).ConfigureAwait(false);
+
+            await _localAppState.ForgetChatStorageAsync(canonical, keys).ConfigureAwait(false);
+
+            ChatUnreadSideEffects.AfterConversationUnreadChanged(
+                ChatUnreadTally.TotalAcrossConversations(_chatState.Chats, _jids.GetCanonicalJid),
+                canonicalJid: null,
+                chatUnread: 0,
+                dirtyRows: null,
+                total => _notifications?.UpdateBadge(total),
+                updateShortcutUnread: null,
+                persistRows: null);
+            _offlineReplay.SchedulePersist();
         }
 
         // ---------------------------------------------------------------------

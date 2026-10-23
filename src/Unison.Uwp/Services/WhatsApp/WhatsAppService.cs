@@ -683,7 +683,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private DateTime _lastFullHistoryRepairCompletedUtc = DateTime.MinValue;
         private TaskCompletionSource<bool> _userResyncHistoryTcs;
         private static readonly TimeSpan UserResyncHistoryWaitTimeout = TimeSpan.FromMinutes(3);
-        private readonly PendingMessageState _pendingMessageState;
         private readonly GroupReceiptTally _groupReceipts = new GroupReceiptTally();
         private readonly GroupRecipientCountCache _groupRecipientCounts = new GroupRecipientCountCache();
         // Field initializers run in declaration order, so _selfMarkers is set before it is read below.
@@ -1018,7 +1017,6 @@ namespace Unison.Uwp.Services.WhatsApp
             AttachedUiDispatcher ui,
             UsyncAliasFiling usyncAliases,
             PendingMessageQueue pendingMessages,
-            PendingMessageState pendingMessageState,
             ChatListInitialPaintGate listPaintGate = null,
             IAppMemoryInfo appMemory = null,
             ILocalSettings localSettings = null,
@@ -1039,8 +1037,6 @@ namespace Unison.Uwp.Services.WhatsApp
 
             _pendingMessages = pendingMessages
                 ?? throw new ArgumentNullException(nameof(pendingMessages));
-            _pendingMessageState = pendingMessageState
-                ?? throw new ArgumentNullException(nameof(pendingMessageState));
             _chatState = chatState;
             _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
             _groupRosterStore = groupRosterStore ?? throw new ArgumentNullException(nameof(groupRosterStore));
@@ -1133,7 +1129,6 @@ namespace Unison.Uwp.Services.WhatsApp
             AttachedUiDispatcher ui,
             UsyncAliasFiling usyncAliases,
             PendingMessageQueue pendingMessages,
-            PendingMessageState pendingMessageState,
             ChatListInitialPaintGate listPaintGate = null,
             IAppMemoryInfo appMemory = null,
             ILocalSettings localSettings = null,
@@ -1144,7 +1139,7 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             return _instance ?? (_instance = new WhatsAppService(
                 chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
-                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, usyncAliases, pendingMessages, pendingMessageState, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups));
+                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, usyncAliases, pendingMessages, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups));
         }
 
         /// <summary>
@@ -3938,8 +3933,14 @@ namespace Unison.Uwp.Services.WhatsApp
                     ? Contacts.ApplyRemoteGroupSubjectsAsync(
                         new[] { new KeyValuePair<string, string>(jid, subject) })
                     : Task.CompletedTask;
-            bridge.ChatDeleted = jid => ApplyAppStateDeleteChatAsync(jid);
-            bridge.MessageDeleted = key => ApplyAppStateDeleteMessageAsync(key.RemoteJid, key.Id);
+            bridge.ChatDeleted = jid =>
+                ChatFacade != null
+                    ? ChatFacade.ApplyAppStateDeleteChatAsync(jid)
+                    : Task.CompletedTask;
+            bridge.MessageDeleted = key =>
+                Messages != null
+                    ? Messages.ApplyAppStateDeleteMessageAsync(key.RemoteJid, key.Id)
+                    : Task.FromResult(false);
             bridge.ResolveSentMessage = ResolveSentMessageForRetryAsync;
 
             RuntimeDiagnosticsService.Instance.Write(
@@ -4065,134 +4066,6 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 Debug.WriteLine($"[WhatsAppService] Outgoing status update failed for {messageId}: {ex.Message}");
             }
-        }
-
-        private async Task<bool> ApplyPinnedMessageStateAsync(
-            string chatJid,
-            string messageId,
-            bool isPinned,
-            DateTime? pinnedAtUtc,
-            DateTime? expiresAtUtc)
-        {
-            string canonical = GetCanonicalJid(chatJid);
-            if (string.IsNullOrWhiteSpace(canonical) || string.IsNullOrWhiteSpace(messageId)) return false;
-
-            PendingPin state = _pendingMessageState.HoldPin(
-                canonical, messageId, isPinned, pinnedAtUtc, expiresAtUtc, DateTime.UtcNow);
-
-            ChatMessage target = null;
-            await _ui.RunAsync(() =>
-            {
-                if (MessagesByChat.TryGet(canonical, out var messages))
-                {
-                    target = messages?.FirstOrDefault(m => string.Equals(m?.Id, messageId, StringComparison.Ordinal));
-                }
-                if (target != null)
-                {
-                    target.IsPinned = state.IsPinned;
-                    target.PinnedAtUtc = state.PinnedAtUtc;
-                    target.PinExpiresAtUtc = state.ExpiresAtUtc;
-                }
-            });
-
-            if (target == null)
-            {
-                // A fixed message can be older than the 30-message page currently in RAM.
-                // Update the persisted target and add it to the active chat so the banner can show it.
-                target = await FindPersistedChatMessageAsync(canonical, messageId).ConfigureAwait(false);
-                if (target != null)
-                {
-                    target.IsPinned = state.IsPinned;
-                    target.PinnedAtUtc = state.PinnedAtUtc;
-                    target.PinExpiresAtUtc = state.ExpiresAtUtc;
-                    await PersistLiveMessagesAsync(canonical, new[] { target }).ConfigureAwait(false);
-
-                    if (IsActiveChatJid(canonical))
-                    {
-                        await _ui.RunAsync(() =>
-                            MessagesByChat.InsertIfAbsent(canonical, target, MaxActiveChatMessagesInMemory, DateTime.UtcNow));
-                    }
-                }
-            }
-
-            if (target != null)
-            {
-                _pendingMessageState.ForgetPin(canonical, messageId);
-
-                // Pin must hit history_message immediately. Offline-replay flush is debounced and
-                // a later history/live body upsert used to InsertOrReplace with IsPinned=false.
-                await PersistPinnedMessageToSqliteAsync(canonical, messageId, state, target)
-                    .ConfigureAwait(false);
-
-                QueueOfflineReplayMessageForPersist(canonical, target);
-                SchedulePersist();
-                QueueChatMessagesChanged(canonical);
-                return true;
-            }
-
-            // Body not in RAM/SQLite yet under expanded keys — still try WritePins (MessageId
-            // fallback) so a row stored under another alias is not left unpinned until reopen.
-            await PersistPinnedMessageToSqliteAsync(canonical, messageId, state, null)
-                .ConfigureAwait(false);
-            return false;
-        }
-
-        /// <summary>
-        /// Writes pin/unpin onto existing SQLite rows (PN+LID keys). When the body is only in RAM,
-        /// also upserts the live message so the row exists with the pin flags.
-        /// </summary>
-        private async Task PersistPinnedMessageToSqliteAsync(
-            string canonical,
-            string messageId,
-            PendingPin state,
-            ChatMessage target)
-        {
-            if (_historyMessages == null ||
-                string.IsNullOrWhiteSpace(canonical) ||
-                string.IsNullOrWhiteSpace(messageId))
-            {
-                return;
-            }
-
-            try
-            {
-                List<string> keys = new List<string>(ChatPinStoreKeys.For(canonical, _jids));
-                var pins = new List<HistoryMessagePinUpdate>(keys.Count);
-                for (int i = 0; i < keys.Count; i++)
-                {
-                    pins.Add(new HistoryMessagePinUpdate
-                    {
-                        ChatJid = keys[i],
-                        MessageId = messageId,
-                        IsPinned = state.IsPinned,
-                        PinnedAtUtc = state.PinnedAtUtc,
-                        PinExpiresAtUtc = state.ExpiresAtUtc
-                    });
-                }
-
-                await _historyMessages.UpsertPinsAsync(pins).ConfigureAwait(false);
-
-                if (target != null)
-                {
-                    // Ensures a missing SQLite body still lands with IsPinned; WritePins alone
-                    // cannot insert. Preserve-on-upsert keeps later sync from clearing the flag.
-                    await PersistLiveMessagesAsync(canonical, new[] { target }).ConfigureAwait(false);
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[WhatsAppService] SQLite pin persist failed: " + ex.Message);
-            }
-        }
-
-        Task IAppStateLocalHost.ApplyMessagePinAsync(
-            string chatJid,
-            string messageId,
-            bool isPinned,
-            DateTime? pinnedAtUtc,
-            DateTime? expiresAtUtc)
-        {
-            return ApplyPinnedMessageStateAsync(chatJid, messageId, isPinned, pinnedAtUtc, expiresAtUtc);
         }
 
         private void InvalidateCurrentSocket(IWhatsAppSocket socket, string reason)

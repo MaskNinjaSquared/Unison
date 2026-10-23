@@ -259,8 +259,8 @@ namespace Unison.Core.Contracts.WhatsApp
             string envelopeMessageId = null);
 
         /// <summary>
-        /// Inbound pin-in-chat / unpin: computes the pin window then writes through the
-        /// local app-state host (timeline + SQLite).
+        /// Inbound pin-in-chat / unpin: computes the pin window then applies
+        /// <see cref="ApplyPinnedMessageStateAsync"/>.
         /// </summary>
         Task ApplyIncomingPinInChatAsync(
             string chatJid,
@@ -268,6 +268,23 @@ namespace Unison.Core.Contracts.WhatsApp
             bool pin,
             long senderTimestampMs,
             uint durationSeconds = 0);
+
+        /// <summary>
+        /// Account-side delete-for-me: drop the bubble from RAM, refresh alias list tips,
+        /// delete the SQLite row, and notify the open chat.
+        /// </summary>
+        Task<bool> ApplyAppStateDeleteMessageAsync(string chatJid, string messageId);
+
+        /// <summary>
+        /// Local message pin / unpin onto the timeline and SQLite (pending hold when the
+        /// body is not resident yet). Used by send-pin and inbound pin-in-chat.
+        /// </summary>
+        Task<bool> ApplyPinnedMessageStateAsync(
+            string chatJid,
+            string messageId,
+            bool isPinned,
+            DateTime? pinnedAtUtc,
+            DateTime? expiresAtUtc);
 
         /// <summary>
         /// Puts one live/offline <see cref="ChatMessage"/> into the in-memory timeline
