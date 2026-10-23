@@ -222,7 +222,7 @@ Self-contained first. List/persist last.
 | 3.3a | Media cache + file naming (done) | `IMediaCache` / `MediaCacheService`, `MediaFileExtensions` |
 | 3.3b | Derived renditions — transcode / poster / WebP (done) | `MediaDerivationService` |
 | 3.3c | Download reading and fetch (done) | `MediaDownloadPlan` (Core); orchestration and HTTP fetch on `MessageFacade`. Only the quiet save stays on the client — see below |
-| 3.4 | Send (main file) | **Text, image and audio orchestration on `MessageFacade` (done)** via `OutgoingTextSend` / `OutgoingMediaSend` (Core) over `IOutgoingMessageHost`. Client keeps the timeline caches, outbox and socket behind that port — see below |
+| 3.4 | Send (main file) | **Text, image and audio orchestration on `MessageFacade` (done)** via `OutgoingTextSend` / `OutgoingMediaSend` (Core) over `IOutgoingMessageHost`. **`AcceptOutgoing` / `LoadLiveOverlay` forward to `IMessageService`.** Socket write / invalidate / health counters stay on the host |
 | 3.5a | Receipt reading (done) | `ReceiptReader` |
 | 3.5b | Receipt aggregation state (done) | `GroupReceiptTally` (Core). **Outgoing status apply on `MessageFacade.ApplyOutgoingStatusAsync`** over shared `PendingMessageState` DI; host keeps group recipient count + self-link |
 | 3.6 | Names / usync (`.Identity.cs`) | `ContactFacade` / `ContactUsyncResolver`. **Rules and usync orchestration out — see below.** Push name, avatar check and number match on the façade; table filing is `UsyncAliasFiling`, chat merge is `ChatListAliasMerge`; the client keeps only `TryFileUsyncAlias` (socket + identity heal) |

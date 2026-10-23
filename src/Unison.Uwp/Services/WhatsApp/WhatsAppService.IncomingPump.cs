@@ -38,7 +38,7 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : IIncomingRevocationHost, IPendingMessageFlushHost
+    public partial class WhatsAppService : IBoundMutationGate, IPendingMessageFlushHost
     {
 
         private IReadOnlyList<string> GetAliasLinkedDirectChatJids(string chatJid)
@@ -442,38 +442,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        IReadOnlyList<string> IIncomingRevocationHost.GetAliasCacheKeys(string canonical)
-        {
-            if (string.IsNullOrWhiteSpace(canonical))
-            {
-                return Array.Empty<string>();
-            }
-
-            return MessagesByChat.ChatJids()
-                .Where(key => string.Equals(GetCanonicalJid(key), canonical, StringComparison.OrdinalIgnoreCase))
-                .ToList();
-        }
-
-        void IIncomingRevocationHost.RemoveCachedMessage(string chatKey, string messageId)
-        {
-            if (string.IsNullOrWhiteSpace(chatKey) || string.IsNullOrWhiteSpace(messageId))
-            {
-                return;
-            }
-
-            MessagesByChat.RemoveMessage(chatKey, messageId);
-        }
-
-        bool IIncomingRevocationHost.TryFindCachedMessage(
-            IReadOnlyList<string> aliasKeys,
-            string messageId,
-            out ChatMessage message)
-        {
-            return AliasLinkedMessageFind.TryFind(
-                MessagesByChat, aliasKeys, messageId, out _, out message);
-        }
-
-        async Task IIncomingRevocationHost.RunBoundMutationAsync(Action action)
+        async Task IBoundMutationGate.RunAsync(Action action)
         {
             if (action == null)
             {
@@ -488,43 +457,6 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 action();
             }
-        }
-
-        ChatMessage IIncomingRevocationHost.TryPickLatestCachedTip(string canonical)
-        {
-            if (string.IsNullOrWhiteSpace(canonical) ||
-                !MessagesByChat.TryGet(canonical, out var canonicalMessages))
-            {
-                return null;
-            }
-
-            return ChatPreviewTip.PickLatest(canonicalMessages);
-        }
-
-        async Task IIncomingRevocationHost.RefreshChatPreviewFromMessageAsync(
-            string canonical,
-            ChatMessage message)
-        {
-            if (ChatFacade == null || message == null || string.IsNullOrWhiteSpace(canonical))
-            {
-                return;
-            }
-
-            await ChatFacade.RefreshChatPreviewAsync(
-                canonical,
-                message.Content,
-                message.Timestamp,
-                message.IsFromMe,
-                ChatPreviewNormalizer.InferKindFromMessage(message),
-                ChatPreviewNormalizer.FormatListAuthorPrefix(
-                    message,
-                    JidHelper.IsGroupJid(canonical),
-                    LocalizedChatStripLabels.SelfFallbackName(),
-                    GetCanonicalJid(message.ParticipantJid)),
-                ParticipantStripIdentity.PreferForDisplay(
-                    message.ParticipantJid,
-                    GetCanonicalJid(message.ParticipantJid)),
-                message.IsFromMe ? null : message.SenderName).ConfigureAwait(false);
         }
 
         private async Task ProcessPeerDataOperationResponseAsync(Proto.Message.Types.PeerDataOperationRequestResponseMessage response)
@@ -1292,7 +1224,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 IncomingMediaMetadata.Apply(chatMessage, renderInfo);
 
-                ApplyPendingStateToMessage(jid, chatMessage);
+                Messages?.ApplyHeldMessageState(jid, chatMessage);
 
                 ChatPreviewKind previewKind = LiveChatPreviewApplier.ResolveKind(chatMessage, renderInfo);
 

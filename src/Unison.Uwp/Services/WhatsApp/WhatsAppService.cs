@@ -2254,48 +2254,6 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         /// <summary>
-        /// Loads only the initial messages for a chat from the RAM overlay.
-        /// SQLite history is merged by <c>MessageFacade</c>.
-        /// </summary>
-        private async Task<List<ChatMessage>> LoadInitialMessagesAsync(string chatJid)
-        {
-            string normJid = NormalizeJid(chatJid);
-
-            try
-            {
-                // RAM overlay only — SQLite history is loaded by MessageFacade.
-                List<ChatMessage> cache = MessagesByChat.RebuildWindow(
-                    normJid,
-                    GetPendingPersistMessagesSnapshot(normJid),
-                    MaxActiveChatMessagesInMemory,
-                    DateTime.UtcNow);
-
-                var stateAdjustedMessages = new List<ChatMessage>();
-                foreach (var message in cache)
-                {
-                    if (ApplyPendingStateToMessage(normJid, message)) stateAdjustedMessages.Add(message);
-                }
-
-                if (stateAdjustedMessages.Count > 0)
-                {
-                    QueueMessagesForPersist(
-                        normJid,
-                        stateAdjustedMessages,
-                        queueIncomingJournal: false);
-                    SchedulePersist();
-                }
-
-                Debug.WriteLine($"[WhatsAppService] Initial loaded {cache.Count} RAM messages for {normJid}");
-                return cache.ToList();
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WhatsAppService] Failed to load initial messages for {normJid}: {ex.Message}");
-                return new List<ChatMessage>();
-            }
-        }
-
-        /// <summary>
         /// Saves a single message to disk (call after adding to MessagesByChat).
         /// </summary>
         public async Task SaveMessageAsync(string chatJid, ChatMessage message)
@@ -4092,15 +4050,6 @@ namespace Unison.Uwp.Services.WhatsApp
             return FatalStreamCodeText.Read(ex?.Message);
         }
 
-
-        private bool ApplyPendingStateToMessage(string chatJid, ChatMessage message)
-        {
-            if (message == null || string.IsNullOrWhiteSpace(message.Id)) return false;
-            return _pendingMessageState.ApplyTo(
-                message,
-                GetCanonicalJid(chatJid),
-                status => ApplyChatStatusPolicy(chatJid, status));
-        }
 
         private async Task UpdateOutgoingMessageStatusSafelyAsync(string messageId, string status, string error = null)
         {

@@ -2,6 +2,13 @@
 
 Newest first.
 
+## Phase B — revoke host collapsed; AcceptOutgoing + LoadLiveOverlay on façade
+
+`IIncomingRevocationHost` removed: revoke uses `ChatStateStore` + `IBoundMutationGate`
++ `IChatService.RefreshChatPreviewAsync`. `AcceptOutgoingTimeline`,
+`ApplyHeldMessageState`, and `LoadLiveOverlayAsync` live on `IMessageService`;
+`IOutgoingMessageHost` AcceptOutgoing / LoadLiveOverlay forward to the façade.
+
 ## Phase B — outgoing status on MessageFacade + PendingMessageState DI
 
 `IMessageService.ApplyOutgoingStatusAsync` owns receipt/send-ack status on

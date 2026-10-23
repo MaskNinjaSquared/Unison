@@ -53,8 +53,10 @@ namespace Unison.Uwp.Services.WhatsApp
 
         void IOutgoingMessageHost.AcceptOutgoing(string chatJid, ChatMessage message)
         {
-            ApplyPendingStateToMessage(chatJid, message);
-            MessagesByChat.Insert(chatJid, message, MaxActiveChatMessagesInMemory, DateTime.UtcNow);
+            if (Messages != null)
+            {
+                Messages.AcceptOutgoingTimeline(chatJid, message);
+            }
         }
 
         Task IOutgoingMessageHost.ShowLocalSendPreviewAsync(string chatJid, ChatMessage message, ChatPreviewKind kind)
@@ -184,6 +186,8 @@ namespace Unison.Uwp.Services.WhatsApp
         void IOutgoingMessageHost.ReportError(Exception error) => OnError?.Invoke(this, error);
 
         Task<List<ChatMessage>> IOutgoingMessageHost.LoadLiveOverlayAsync(string chatJid) =>
-            LoadInitialMessagesAsync(chatJid);
+            Messages != null
+                ? Messages.LoadLiveOverlayAsync(chatJid)
+                : Task.FromResult(new List<ChatMessage>());
     }
 }

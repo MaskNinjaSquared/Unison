@@ -520,8 +520,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<UwpSessionProvider>()));
             services.AddSingleton<IOutgoingReceiptHost>(
                 sp => (IOutgoingReceiptHost)sp.GetRequiredService<IWhatsAppService>());
-            services.AddSingleton<IIncomingRevocationHost>(
-                sp => (IIncomingRevocationHost)sp.GetRequiredService<IWhatsAppService>());
+            services.AddSingleton<IBoundMutationGate>(
+                sp => (IBoundMutationGate)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IPendingMessageFlushHost>(
                 sp => (IPendingMessageFlushHost)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IMessageService>(sp => new MessageFacade(
@@ -540,7 +540,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IChatCatalogPersistence>(),
                 sp.GetRequiredService<IMessageWireActions>(),
                 sp.GetRequiredService<IOutgoingReceiptHost>(),
-                sp.GetRequiredService<IIncomingRevocationHost>(),
+                sp.GetRequiredService<IBoundMutationGate>(),
                 sp.GetRequiredService<IPendingMessageFlushHost>(),
                 sp.GetRequiredService<PendingMessageQueue>(),
                 sp.GetRequiredService<IMessageStore>(),
@@ -550,6 +550,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<PendingMessageState>(),
                 () => sp.GetRequiredService<IChatService>(),
                 sp.GetRequiredService<IChatStore>(),
+                sp.GetService<IStringResources>(),
                 sp.GetRequiredService<ISystemInfoProvider>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>()));
             // AttachedUiDispatcher (not IDispatcher/DispatcherService): PropertyChanged from the

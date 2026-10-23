@@ -44,7 +44,8 @@ namespace Unison.WhatsAppClient.Messages
         private readonly IMessageWireActions _wire;
         private readonly IOutgoingMessageHost _outgoingHost;
         private readonly IOutgoingReceiptHost _receiptHost;
-        private readonly IIncomingRevocationHost _revocationHost;
+        private readonly IBoundMutationGate _boundMutations;
+        private readonly IStringResources _strings;
         private readonly IPendingMessageFlushHost _pendingFlush;
         private readonly PendingMessageQueue _pendingMessages;
         private readonly IMessageStore _messageStore;
@@ -75,7 +76,7 @@ namespace Unison.WhatsAppClient.Messages
             IChatCatalogPersistence catalog,
             IMessageWireActions wire,
             IOutgoingReceiptHost receiptHost,
-            IIncomingRevocationHost revocationHost,
+            IBoundMutationGate boundMutations,
             IPendingMessageFlushHost pendingFlush,
             PendingMessageQueue pendingMessages,
             IMessageStore messageStore,
@@ -85,6 +86,7 @@ namespace Unison.WhatsAppClient.Messages
             PendingMessageState pendingMessageState,
             Func<IChatService> resolveChats = null,
             IChatStore chatStore = null,
+            IStringResources strings = null,
             ISystemInfoProvider systemInfo = null,
             IRuntimeDiagnostics diagnostics = null)
         {
@@ -106,7 +108,7 @@ namespace Unison.WhatsAppClient.Messages
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _outgoingHost = outgoingHost ?? throw new ArgumentNullException(nameof(outgoingHost));
             _receiptHost = receiptHost ?? throw new ArgumentNullException(nameof(receiptHost));
-            _revocationHost = revocationHost ?? throw new ArgumentNullException(nameof(revocationHost));
+            _boundMutations = boundMutations ?? throw new ArgumentNullException(nameof(boundMutations));
             _pendingFlush = pendingFlush ?? throw new ArgumentNullException(nameof(pendingFlush));
             _pendingMessages = pendingMessages ?? throw new ArgumentNullException(nameof(pendingMessages));
             _messageStore = messageStore ?? throw new ArgumentNullException(nameof(messageStore));
@@ -115,6 +117,7 @@ namespace Unison.WhatsAppClient.Messages
             _pendingMessageState = pendingMessageState
                 ?? throw new ArgumentNullException(nameof(pendingMessageState));
             _resolveChats = resolveChats;
+            _strings = strings;
             _receipts = new ReceiptReader(jids);
 
             _textSend = new OutgoingTextSend(_outgoingHost, _jids);
@@ -202,7 +205,7 @@ namespace Unison.WhatsAppClient.Messages
             var changedChats = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var changedMessages = new List<KeyValuePair<string, ChatMessage>>();
 
-            await _revocationHost.RunBoundMutationAsync(() =>
+            await _boundMutations.RunAsync(() =>
             {
                 changedMessages = _chatState.MessagesByChat.ApplyOutgoingStatus(
                     messageId,
@@ -1324,7 +1327,8 @@ namespace Unison.WhatsAppClient.Messages
             }
 
             string canonical = _jids.GetCanonicalJid(chatJid);
-            IReadOnlyList<string> aliasKeys = _revocationHost.GetAliasCacheKeys(canonical);
+            ChatMessageCache cache = _chatState.MessagesByChat;
+            IReadOnlyList<string> aliasKeys = GetAliasCacheKeys(canonical);
 
             // Older builds stored the revoke envelope itself as a fresh
             // "[Message Deleted]" item. Remove that synthetic row when the same
@@ -1334,7 +1338,7 @@ namespace Unison.WhatsAppClient.Messages
             {
                 for (int i = 0; i < aliasKeys.Count; i++)
                 {
-                    _revocationHost.RemoveCachedMessage(aliasKeys[i], envelopeMessageId);
+                    cache.RemoveMessage(aliasKeys[i], envelopeMessageId);
                 }
 
                 try
@@ -1348,7 +1352,7 @@ namespace Unison.WhatsAppClient.Messages
             }
 
             ChatMessage target;
-            _revocationHost.TryFindCachedMessage(aliasKeys, targetId, out target);
+            AliasLinkedMessageFind.TryFind(cache, aliasKeys, targetId, out _, out target);
 
             // If the chat is not resident, read the retained local window once. A revoke is
             // an update to an existing message; it must never be inserted as a new "current" item.
@@ -1364,7 +1368,7 @@ namespace Unison.WhatsAppClient.Messages
 
             // Tombstone sets IsRevoked (post-1.8.3). That PropertyChanged fans into XAML bindings;
             // apply on the UI thread when a dispatcher is attached so Mobile does not hit 0x8001010E.
-            await _revocationHost.RunBoundMutationAsync(
+            await _boundMutations.RunAsync(
                 () => MessageRevocationContent.ApplyTombstone(target)).ConfigureAwait(false);
 
             try
@@ -1382,11 +1386,90 @@ namespace Unison.WhatsAppClient.Messages
                 _outgoingHost.NotifyChatChanged(canonical);
             }
 
-            ChatMessage latest = _revocationHost.TryPickLatestCachedTip(canonical);
+            ChatMessage latest = null;
+            List<ChatMessage> tipSource;
+            if (cache.TryGet(canonical, out tipSource))
+            {
+                latest = ChatPreviewTip.PickLatest(tipSource);
+            }
+
             if (latest != null && string.Equals(latest.Id, target.Id, StringComparison.Ordinal))
             {
-                await _revocationHost.RefreshChatPreviewFromMessageAsync(canonical, target)
-                    .ConfigureAwait(false);
+                await RefreshChatPreviewFromMessageAsync(canonical, target).ConfigureAwait(false);
+            }
+        }
+
+        /// <inheritdoc />
+        public void AcceptOutgoingTimeline(string chatJid, ChatMessage message)
+        {
+            if (string.IsNullOrWhiteSpace(chatJid) || message == null)
+            {
+                return;
+            }
+
+            ApplyHeldMessageState(chatJid, message);
+            _chatState.MessagesByChat.Insert(
+                chatJid,
+                message,
+                MaxActiveChatMessagesInMemory,
+                DateTime.UtcNow);
+        }
+
+        /// <inheritdoc />
+        public bool ApplyHeldMessageState(string chatJid, ChatMessage message)
+        {
+            if (message == null || string.IsNullOrWhiteSpace(message.Id))
+            {
+                return false;
+            }
+
+            string canonical = _jids.GetCanonicalJid(chatJid);
+            return _pendingMessageState.ApplyTo(
+                message,
+                canonical,
+                held => SelfChatStatusPolicy.Resolve(held, _jids.IsSelfLinked(chatJid)));
+        }
+
+        /// <inheritdoc />
+        public Task<List<ChatMessage>> LoadLiveOverlayAsync(string chatJid)
+        {
+            string normJid = JidHelper.Normalize(chatJid);
+            if (string.IsNullOrWhiteSpace(normJid))
+            {
+                return Task.FromResult(new List<ChatMessage>());
+            }
+
+            try
+            {
+                List<ChatMessage> pending = _pendingMessages.SnapshotFor(
+                    normJid,
+                    jid => _jids.GetCanonicalJid(JidHelper.Normalize(jid)));
+                List<ChatMessage> cache = _chatState.MessagesByChat.RebuildWindow(
+                    normJid,
+                    pending,
+                    MaxActiveChatMessagesInMemory,
+                    DateTime.UtcNow);
+
+                var dirty = new List<ChatMessage>();
+                for (int i = 0; i < cache.Count; i++)
+                {
+                    if (ApplyHeldMessageState(normJid, cache[i]))
+                    {
+                        dirty.Add(cache[i]);
+                    }
+                }
+
+                for (int i = 0; i < dirty.Count; i++)
+                {
+                    QueueIncomingPersist(normJid, dirty[i]);
+                }
+
+                return Task.FromResult(new List<ChatMessage>(cache));
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] LoadLiveOverlay failed: " + ex.Message);
+                return Task.FromResult(new List<ChatMessage>());
             }
         }
 
@@ -1540,7 +1623,7 @@ namespace Unison.WhatsAppClient.Messages
             ChatMessage reactionParent = null;
             bool handled = false;
 
-            await _revocationHost.RunBoundMutationAsync(() =>
+            await _boundMutations.RunAsync(() =>
             {
                 handled = TryHandleReaction(message, context, timeline, out reactionParent);
             }).ConfigureAwait(false);
@@ -1649,6 +1732,54 @@ namespace Unison.WhatsAppClient.Messages
 
         private void TrimInMemoryMessageWindow(string jid) =>
             _chatState.MessagesByChat.Trim(jid, MaxActiveChatMessagesInMemory, DateTime.UtcNow);
+
+        private IReadOnlyList<string> GetAliasCacheKeys(string canonical)
+        {
+            if (string.IsNullOrWhiteSpace(canonical))
+            {
+                return Array.Empty<string>();
+            }
+
+            var keys = new List<string>();
+            foreach (string key in _chatState.MessagesByChat.ChatJids())
+            {
+                if (string.Equals(_jids.GetCanonicalJid(key), canonical, StringComparison.OrdinalIgnoreCase))
+                {
+                    keys.Add(key);
+                }
+            }
+
+            return keys;
+        }
+
+        private async Task RefreshChatPreviewFromMessageAsync(string canonical, ChatMessage message)
+        {
+            IChatService chats = _resolveChats != null ? _resolveChats() : null;
+            if (chats == null || message == null || string.IsNullOrWhiteSpace(canonical))
+            {
+                return;
+            }
+
+            string selfLabel = _strings != null
+                ? _strings.Get("Chat_SelfFallbackName", "You")
+                : "You";
+
+            await chats.RefreshChatPreviewAsync(
+                canonical,
+                message.Content,
+                message.Timestamp,
+                message.IsFromMe,
+                ChatPreviewNormalizer.InferKindFromMessage(message),
+                ChatPreviewNormalizer.FormatListAuthorPrefix(
+                    message,
+                    JidHelper.IsGroupJid(canonical),
+                    selfLabel,
+                    _jids.GetCanonicalJid(message.ParticipantJid)),
+                ParticipantStripIdentity.PreferForDisplay(
+                    message.ParticipantJid,
+                    _jids.GetCanonicalJid(message.ParticipantJid)),
+                message.IsFromMe ? null : message.SenderName).ConfigureAwait(false);
+        }
 
         private IReadOnlyList<string> GetAliasLinkedDirectChatJids(string chatJid)
         {

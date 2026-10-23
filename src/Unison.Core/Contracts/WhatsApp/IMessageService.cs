@@ -329,5 +329,22 @@ namespace Unison.Core.Contracts.WhatsApp
         /// When the id is not in RAM, holds the status until the chat is opened.
         /// </summary>
         Task ApplyOutgoingStatusAsync(string messageId, string status, string error = null);
+
+        /// <summary>
+        /// Files an outgoing bubble in the in-memory timeline (held receipt/pin applied first).
+        /// </summary>
+        void AcceptOutgoingTimeline(string chatJid, ChatMessage message);
+
+        /// <summary>
+        /// Applies held receipt/pin state onto a live or replayed bubble. Returns true when
+        /// the message changed.
+        /// </summary>
+        bool ApplyHeldMessageState(string chatJid, ChatMessage message);
+
+        /// <summary>
+        /// RAM overlay for an open chat: rebuilds the window, applies held state, queues dirty
+        /// rows. SQLite history is merged by <see cref="LoadMessagesForChatAsync"/>.
+        /// </summary>
+        Task<System.Collections.Generic.List<ChatMessage>> LoadLiveOverlayAsync(string chatJid);
     }
 }
