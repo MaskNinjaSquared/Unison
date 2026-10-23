@@ -49,6 +49,7 @@ namespace Unison.WhatsAppClient.Messages
         private readonly PendingMessageQueue _pendingMessages;
         private readonly IMessageStore _messageStore;
         private readonly ActiveChat _activeChat;
+        private readonly Func<IChatService> _resolveChats;
         private readonly ReceiptReader _receipts;
         private readonly GroupReceiptTally _groupReceipts = new GroupReceiptTally();
         private readonly IRuntimeDiagnostics _diagnostics;
@@ -78,6 +79,7 @@ namespace Unison.WhatsAppClient.Messages
             IMessageStore messageStore,
             ActiveChat activeChat,
             ChatStateStore chatState,
+            Func<IChatService> resolveChats = null,
             IChatStore chatStore = null,
             ISystemInfoProvider systemInfo = null,
             IRuntimeDiagnostics diagnostics = null)
@@ -105,6 +107,7 @@ namespace Unison.WhatsAppClient.Messages
             _pendingMessages = pendingMessages ?? throw new ArgumentNullException(nameof(pendingMessages));
             _messageStore = messageStore ?? throw new ArgumentNullException(nameof(messageStore));
             _activeChat = activeChat ?? throw new ArgumentNullException(nameof(activeChat));
+            _resolveChats = resolveChats;
             _receipts = new ReceiptReader(jids);
 
             _textSend = new OutgoingTextSend(_outgoingHost, _jids);
@@ -1456,6 +1459,128 @@ namespace Unison.WhatsAppClient.Messages
 
             QueueIncomingPersist(persistJid, existing);
             return true;
+        }
+
+        /// <inheritdoc />
+        public async Task<bool> ApplyIncomingReactionAsync(
+            Message message,
+            ChatMessageMapContext context)
+        {
+            if (message == null || context == null || string.IsNullOrWhiteSpace(context.ChatJid))
+            {
+                return false;
+            }
+
+            string jid = JidHelper.Normalize(context.ChatJid) ?? context.ChatJid;
+            IList<ChatMessage> timeline = _chatState.MessagesByChat.GetOrAdd(jid);
+            ChatMessage reactionParent = null;
+            bool handled = false;
+
+            await _revocationHost.RunBoundMutationAsync(() =>
+            {
+                handled = TryHandleReaction(message, context, timeline, out reactionParent);
+            }).ConfigureAwait(false);
+
+            if (!handled)
+            {
+                return false;
+            }
+
+            if (reactionParent != null)
+            {
+                try
+                {
+                    await _outgoingHost.PersistLiveAsync(jid, reactionParent).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[MessageFacade] Failed to persist reaction parent: " + ex.Message);
+                }
+
+                if (_activeChat.IsOpen(jid))
+                {
+                    _outgoingHost.NotifyChatChanged(jid);
+                }
+            }
+            else
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] Reaction target not found yet: chat=" + jid +
+                    ", id=" + (context.MessageId ?? "<none>"));
+            }
+
+            return true;
+        }
+
+        /// <inheritdoc />
+        public bool HasCachedMessageId(string chatJid, string messageId, bool isGroup)
+        {
+            if (string.IsNullOrWhiteSpace(chatJid) || string.IsNullOrEmpty(messageId))
+            {
+                return false;
+            }
+
+            string canonical = _jids.GetCanonicalJid(chatJid) ?? JidHelper.Normalize(chatJid);
+            ChatMessageCache cache = _chatState.MessagesByChat;
+            if (cache.KnownIds(canonical).Contains(messageId))
+            {
+                return true;
+            }
+
+            if (isGroup)
+            {
+                return false;
+            }
+
+            return AliasLinkedMessageFind.HasId(
+                cache,
+                GetAliasLinkedDirectChatJids(JidHelper.Normalize(chatJid) ?? chatJid),
+                messageId);
+        }
+
+        /// <inheritdoc />
+        public async Task FinalizeAliasConsolidateAsync(
+            string canonicalChatJid,
+            string aliasSourceChatJid,
+            string messageId,
+            ChatMessage consolidatedMessage)
+        {
+            if (string.IsNullOrWhiteSpace(canonicalChatJid) ||
+                string.IsNullOrWhiteSpace(aliasSourceChatJid) ||
+                string.IsNullOrWhiteSpace(messageId))
+            {
+                return;
+            }
+
+            try
+            {
+                await _messageStore.DeleteMessageAsync(aliasSourceChatJid, messageId)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MessageFacade] Alias source delete failed: " + ex.Message);
+            }
+
+            if (consolidatedMessage != null)
+            {
+                try
+                {
+                    await _outgoingHost.PersistLiveAsync(canonicalChatJid, consolidatedMessage)
+                        .ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[MessageFacade] Alias survivor persist failed: " + ex.Message);
+                }
+            }
+
+            IChatService chats = _resolveChats != null ? _resolveChats() : null;
+            if (chats != null)
+            {
+                await chats.DeduplicateChatListAsync("live-direct-alias-duplicate")
+                    .ConfigureAwait(false);
+            }
         }
 
         private void TrimInMemoryMessageWindow(string jid) =>

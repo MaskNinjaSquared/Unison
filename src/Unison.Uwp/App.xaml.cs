@@ -543,6 +543,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IMessageStore>(),
                 sp.GetRequiredService<ActiveChat>(),
                 sp.GetRequiredService<ChatStateStore>(),
+                () => sp.GetRequiredService<IChatService>(),
                 sp.GetRequiredService<IChatStore>(),
                 sp.GetRequiredService<ISystemInfoProvider>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>()));

@@ -41,19 +41,6 @@ namespace Unison.Uwp.Services.WhatsApp
     public partial class WhatsAppService : IIncomingRevocationHost, IPendingMessageFlushHost
     {
 
-        private HashSet<string> GetOrBuildMessageIdIndex(string chatJid) =>
-            MessagesByChat.KnownIds(chatJid);
-
-        private bool HasMessageId(string chatJid, string messageId)
-        {
-            if (string.IsNullOrEmpty(chatJid) || string.IsNullOrEmpty(messageId))
-            {
-                return false;
-            }
-
-            return GetOrBuildMessageIdIndex(chatJid).Contains(messageId);
-        }
-
         private IReadOnlyList<string> GetAliasLinkedDirectChatJids(string chatJid)
         {
             return AliasLinkedDirectChats.Collect(
@@ -1029,44 +1016,20 @@ namespace Unison.Uwp.Services.WhatsApp
                 // Enrichment still runs: a duplicate can carry a participant or a better
                 // sender name the first delivery lacked, and the full path used to keep
                 // those while this path threw them away.
-                if (e.IsOffline && !string.IsNullOrEmpty(e.MessageId))
+                if (e.IsOffline && !string.IsNullOrEmpty(e.MessageId) && Messages != null)
                 {
-                    if (isGroup)
+                    string fastJid = GetCanonicalJid(normalizedFromJid);
+                    if (Messages.HasCachedMessageId(fastJid, e.MessageId, isGroup))
                     {
-                        string fastGroupJid = GetCanonicalJid(normalizedFromJid);
-                        if (HasMessageId(fastGroupJid, e.MessageId))
-                        {
-                            Messages?.EnrichOfflineDuplicateFast(
-                                fastGroupJid,
-                                e.MessageId,
-                                e.IsFromMe,
-                                e.Participant,
-                                e.VerifiedName,
-                                e.PushName);
-                            ResolveMissingMessage(fastGroupJid, e.MessageId, "offline-duplicate-fast");
-                            return;
-                        }
-                    }
-                    else
-                    {
-                        // For DMs, check the from JID and all known alias buckets
-                        string fastDmJid = GetCanonicalJid(normalizedFromJid);
-                        if (HasMessageId(fastDmJid, e.MessageId) ||
-                            AliasLinkedMessageFind.HasId(
-                                MessagesByChat,
-                                GetAliasLinkedDirectChatJids(normalizedFromJid),
-                                e.MessageId))
-                        {
-                            Messages?.EnrichOfflineDuplicateFast(
-                                fastDmJid,
-                                e.MessageId,
-                                e.IsFromMe,
-                                e.Participant,
-                                e.VerifiedName,
-                                e.PushName);
-                            ResolveMissingMessage(fastDmJid, e.MessageId, "offline-duplicate-fast");
-                            return;
-                        }
+                        Messages.EnrichOfflineDuplicateFast(
+                            fastJid,
+                            e.MessageId,
+                            e.IsFromMe,
+                            e.Participant,
+                            e.VerifiedName,
+                            e.PushName);
+                        ResolveMissingMessage(fastJid, e.MessageId, "offline-duplicate-fast");
+                        return;
                     }
                     // Not a known duplicate ? fall through to full pipeline
                 }
@@ -1139,7 +1102,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     return;
                 }
 
-                // Reactions: MessageFacade maps onto parent; WA only persists / notifies.
+                // Reactions: MessageFacade owns map/persist/notify; pump only builds context names.
                 if (Messages != null)
                 {
                     string reactionParticipant = NormalizeJid(e.Participant);
@@ -1150,8 +1113,6 @@ namespace Unison.Uwp.Services.WhatsApp
                                 !string.IsNullOrEmpty(reactionParticipant) ? reactionParticipant : jid,
                                 "sender")
                             : ResolveDisplayName(jid, "sender"));
-
-                    var reactionTimeline = MessagesByChat.GetOrAdd(jid);
 
                     var reactionContext = new ChatMessageMapContext
                     {
@@ -1164,44 +1125,10 @@ namespace Unison.Uwp.Services.WhatsApp
                         Timestamp = MessageTimestampValidity.KeepOrDiscard(e.Timestamp, DateTime.UtcNow)
                     };
 
-                    // TryApply mutates HasReactions on the parent bubble; same UI-thread rule as revoke.
-                    ChatMessage reactionParent = null;
-                    bool handledReaction = false;
-                    if (_ui.Current != null)
-                    {
-                        await _ui.RunAsync(() =>
-                        {
-                            handledReaction = Messages.TryHandleReaction(
-                                e.Message,
-                                reactionContext,
-                                reactionTimeline,
-                                out reactionParent);
-                        }).ConfigureAwait(false);
-                    }
-                    else
-                    {
-                        handledReaction = Messages.TryHandleReaction(
-                            e.Message,
-                            reactionContext,
-                            reactionTimeline,
-                            out reactionParent);
-                    }
-
-                    if (handledReaction)
+                    if (await Messages.ApplyIncomingReactionAsync(e.Message, reactionContext)
+                        .ConfigureAwait(false))
                     {
                         SetIncomingMessagePumpStage("reaction", e);
-                        if (reactionParent != null)
-                        {
-                            await SaveMessageAsync(jid, reactionParent).ConfigureAwait(false);
-                            if (IsActiveChatJid(jid))
-                            {
-                                QueueChatMessagesChanged(jid);
-                            }
-                        }
-                        else
-                        {
-                            Log($"[WhatsAppService] Reaction target not found yet: chat={jid}, id={e.MessageId}");
-                        }
                         return;
                     }
                 }
@@ -1247,57 +1174,12 @@ namespace Unison.Uwp.Services.WhatsApp
                 string nameFromMsg = e.VerifiedName ?? e.PushName;
                 if (!string.IsNullOrEmpty(nameFromMsg))
                 {
-                    // The push name on a message we sent is our own, whoever the message went to.
-                    // Attributing it to the conversation instead - which is what happens when the
-                    // sender is read as "participant or chat" - writes the user's name over their
-                    // contact's, and leaves the user themselves nameless.
-                    string senderJid = IncomingPushNameTarget.Resolve(
+                    Contacts?.AcceptIncomingPushName(
+                        nameFromMsg,
                         e.IsFromMe,
-                        NormalizeJid(_authState?.Me?.Id),
-                        NormalizeJid(e.Participant),
-                        NormalizeJid(e.FromJid));
-                    if (e.IsFromMe)
-                    {
-                        Contacts?.CaptureSelfPushName(nameFromMsg, "message-echo");
-                    }
-
-                    if (string.IsNullOrEmpty(senderJid))
-                    {
-                        senderJid = NormalizeJid(e.Participant ?? e.FromJid);
-                    }
-
-                    ContactNames.TryGetValue(senderJid, out var existingName);
-                    string sanitized = SanitizeContactLabel(nameFromMsg, senderJid);
-                    PushNameAccept accept = PushNameAcceptDecision.Decide(
-                        sanitized,
-                        existingName,
-                        senderJid,
-                        IsSelfMarkerLabel(existingName));
-                    if (accept == PushNameAccept.IgnoreEmpty)
-                    {
-                        if (IsSelfJid(senderJid))
-                        {
-                            Log($"[WhatsAppService] Explicit 'You' label observed for SELF JID {senderJid}. Ignoring and keeping numeric identity.");
-                        }
-                        else
-                        {
-                            Log($"[WhatsAppService] Ignoring PushName 'You' for NON-SELF JID {senderJid} (spoof prevention).");
-                        }
-                        Log($"[WhatsAppService] Ignoring PushName 'You' for {senderJid} to prevent spoofing");
-                    }
-                    else if (accept == PushNameAccept.Accept)
-                    {
-                        ContactNames.Set(senderJid, sanitized);
-                        if (Contacts != null)
-                        {
-                            Contacts.RememberPersonName(senderJid, sanitized);
-                        }
-
-                        if (!e.IsOffline)
-                        {
-                            Log($"[WhatsAppService] Updated contact name for {senderJid} from message metadata: {sanitized}");
-                        }
-                    }
+                        e.Participant,
+                        e.FromJid,
+                        e.IsOffline);
                 }
 
                 // Resolve sender name and true 'IsFromMe' status.
@@ -1431,19 +1313,13 @@ namespace Unison.Uwp.Services.WhatsApp
                     ChatMessage consolidatedForPersist = timeline.ConsolidatedMessage;
                     QueueMessageControlWork(
                         "alias-duplicate-persist:" + chatMessage.Id,
-                        async () =>
-                        {
-                            await _messageStore.DeleteMessageAsync(duplicateJidForPersist, chatMessage.Id);
-                            if (consolidatedForPersist != null)
-                            {
-                                await SaveMessageAsync(jid, consolidatedForPersist);
-                            }
-                            if (ChatFacade != null)
-                            {
-                                await ChatFacade.DeduplicateChatListAsync("live-direct-alias-duplicate")
-                                    .ConfigureAwait(false);
-                            }
-                        });
+                        () => Messages != null
+                            ? Messages.FinalizeAliasConsolidateAsync(
+                                jid,
+                                duplicateJidForPersist,
+                                chatMessage.Id,
+                                consolidatedForPersist)
+                            : Task.CompletedTask);
 
                     if (!e.IsOffline)
                     {

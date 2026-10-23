@@ -384,6 +384,81 @@ namespace Unison.WhatsAppClient.Contacts
             _ = PersistObservedPersonNameAsync(norm, sanitized);
         }
 
+        /// <inheritdoc />
+        public void AcceptIncomingPushName(
+            string rawName,
+            bool isFromMe,
+            string participantJid,
+            string fromJid,
+            bool isOffline)
+        {
+            if (string.IsNullOrEmpty(rawName))
+            {
+                return;
+            }
+
+            if (isFromMe)
+            {
+                CaptureSelfPushName(rawName, "message-echo");
+            }
+
+            string selfId = _jids.Self != null ? JidHelper.Normalize(_jids.Self.Id) : null;
+            string senderJid = IncomingPushNameTarget.Resolve(
+                isFromMe,
+                selfId,
+                JidHelper.Normalize(participantJid),
+                JidHelper.Normalize(fromJid));
+            if (string.IsNullOrEmpty(senderJid))
+            {
+                senderJid = JidHelper.Normalize(participantJid ?? fromJid);
+            }
+
+            if (string.IsNullOrEmpty(senderJid))
+            {
+                return;
+            }
+
+            _pushNames.TryGetValue(senderJid, out string existingName);
+            string sanitized = SanitizeForResolvedName(rawName, senderJid);
+            PushNameAccept accept = PushNameAcceptDecision.Decide(
+                sanitized,
+                existingName,
+                senderJid,
+                SelfChatNaming.IsSelfMarkerLabel(existingName) ||
+                (_selfMarkers != null && _selfMarkers.IsMarkerLabel(existingName)));
+
+            if (accept == PushNameAccept.IgnoreEmpty)
+            {
+                if (_jids.IsSelfLinked(senderJid))
+                {
+                    Debug.WriteLine(
+                        "[ContactFacade] Explicit 'You' label observed for SELF JID " +
+                        senderJid + ". Ignoring and keeping numeric identity.");
+                }
+                else
+                {
+                    Debug.WriteLine(
+                        "[ContactFacade] Ignoring PushName 'You' for NON-SELF JID " +
+                        senderJid + " (spoof prevention).");
+                }
+
+                return;
+            }
+
+            if (accept != PushNameAccept.Accept)
+            {
+                return;
+            }
+
+            RememberPersonName(senderJid, sanitized);
+            if (!isOffline)
+            {
+                Debug.WriteLine(
+                    "[ContactFacade] Updated contact name for " + senderJid +
+                    " from message metadata: " + sanitized);
+            }
+        }
+
         private async Task PersistObservedPersonNameAsync(string jid, string displayName)
         {
             try

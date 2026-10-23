@@ -169,6 +169,18 @@ namespace Unison.Core.Contracts.WhatsApp
         void RememberPersonName(string jid, string displayName);
 
         /// <summary>
+        /// Live/offline envelope push name: self echo goes through
+        /// <see cref="CaptureSelfPushName"/>; peer names through the push-name
+        /// accept decision then <see cref="RememberPersonName"/>.
+        /// </summary>
+        void AcceptIncomingPushName(
+            string rawName,
+            bool isFromMe,
+            string participantJid,
+            string fromJid,
+            bool isOffline);
+
+        /// <summary>
         /// Account contact table slice: alias pairs first, then names under every address.
         /// Pairing before naming so LID rows can borrow the PN label.
         /// </summary>

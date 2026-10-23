@@ -297,5 +297,31 @@ namespace Unison.Core.Contracts.WhatsApp
             string participantJid,
             string verifiedName,
             string pushName);
+
+        /// <summary>
+        /// Inbound reaction: map onto the parent bubble (UI-thread safe), persist the parent
+        /// when found, and notify the open chat. Returns false when the envelope is not a
+        /// reaction this façade handles.
+        /// </summary>
+        Task<bool> ApplyIncomingReactionAsync(
+            Message message,
+            ChatMessageMapContext context);
+
+        /// <summary>
+        /// After <see cref="AcceptIncomingTimeline"/> returns
+        /// <see cref="IncomingTimelineAcceptKind.AliasConsolidated"/>: drop the source-store
+        /// row, persist the survivor, and dedupe the chat list.
+        /// </summary>
+        Task FinalizeAliasConsolidateAsync(
+            string canonicalChatJid,
+            string aliasSourceChatJid,
+            string messageId,
+            ChatMessage consolidatedMessage);
+
+        /// <summary>
+        /// Whether the in-memory timeline already indexes <paramref name="messageId"/>
+        /// under <paramref name="chatJid"/> (and, for DMs, alias buckets).
+        /// </summary>
+        bool HasCachedMessageId(string chatJid, string messageId, bool isGroup);
     }
 }

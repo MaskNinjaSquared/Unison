@@ -2,6 +2,14 @@
 
 Newest first.
 
+## Phase B — reaction, push-name, alias finalize, cached-id probe
+
+`IMessageService.ApplyIncomingReactionAsync` owns reaction map/persist/notify.
+`IContactService.AcceptIncomingPushName` owns envelope push-name accept (self + peer).
+`IMessageService.FinalizeAliasConsolidateAsync` owns post-AliasConsolidated store
+delete / survivor persist / list dedupe. `HasCachedMessageId` drives the offline
+fast-path probe. Preview refresh after alias consolidate stays pump-orchestrated.
+
 ## Phase B — offline duplicate enrich + shared PendingMessageQueue
 
 `IMessageService.EnrichOfflineDuplicateFast` owns the offline fast-path name/participant
