@@ -29,6 +29,7 @@ namespace Unison.WhatsAppClient.Connection
         private readonly IStartupUiHost _startupUi;
         private readonly INetworkAccess _network;
         private readonly IRuntimeDiagnostics _diagnostics;
+        private readonly IConnectionEnsureHost _ensureHost;
         private IWhatsAppService _whatsApp;
         private int _handlingRelink;
 
@@ -43,6 +44,7 @@ namespace Unison.WhatsAppClient.Connection
             IShellThemeService shellTheme,
             IStartupUiHost startupUi,
             INetworkAccess network,
+            IConnectionEnsureHost ensureHost,
             IRuntimeDiagnostics diagnostics = null)
         {
             _localSettings = localSettings ?? throw new ArgumentNullException(nameof(localSettings));
@@ -55,6 +57,7 @@ namespace Unison.WhatsAppClient.Connection
             _shellTheme = shellTheme ?? throw new ArgumentNullException(nameof(shellTheme));
             _startupUi = startupUi ?? throw new ArgumentNullException(nameof(startupUi));
             _network = network ?? throw new ArgumentNullException(nameof(network));
+            _ensureHost = ensureHost ?? throw new ArgumentNullException(nameof(ensureHost));
             _diagnostics = diagnostics;
         }
 
@@ -100,10 +103,14 @@ namespace Unison.WhatsAppClient.Connection
 
         public Task EnsureConnectedAsync(int timeoutMs = 35000, bool forceFreshTransport = false)
         {
-            var whatsApp = _whatsApp;
-            return whatsApp == null
-                ? Task.CompletedTask
-                : whatsApp.EnsureConnectedAsync(timeoutMs, forceFreshTransport);
+            if (_whatsApp == null)
+            {
+                return Task.CompletedTask;
+            }
+
+            // Policy is ConnectionEnsure on the client; this is the shell/App entry so callers
+            // never name IWhatsAppService for connect.
+            return _ensureHost.EnsureConnectedAsync(timeoutMs, forceFreshTransport);
         }
 
         public Task LoadPersistedUiStateAsync()

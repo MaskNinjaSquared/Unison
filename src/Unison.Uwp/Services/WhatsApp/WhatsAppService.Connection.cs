@@ -1140,70 +1140,51 @@ namespace Unison.Uwp.Services.WhatsApp
         /// network. This is needed after Windows resumes a suspended UWP process:
         /// the UI survives, but the WebSocket was intentionally closed on suspend.
         /// </summary>
-        public async Task EnsureConnectedAsync(int timeoutMs = 35000, bool forceFreshTransport = false)
+        /// <remarks>
+        /// Orchestration lives in <see cref="ConnectionEnsure"/> (shared with
+        /// <c>ConnectionFacade</c>). This entry is what send/outgoing and internal
+        /// resume still call on the client.
+        /// </remarks>
+        public Task EnsureConnectedAsync(int timeoutMs = 35000, bool forceFreshTransport = false)
         {
-            // A known UWP suspension always closes the transport. Probing that dead
-            // MessageWebSocket used to consume a fixed ten-second timeout on every resume.
-            if (!forceFreshTransport && await IsCurrentSocketHealthyAsync())
+            return ConnectionEnsure.RunAsync(
+                this,
+                _resumeConnectionLock,
+                timeoutMs,
+                forceFreshTransport);
+        }
+
+        Task IConnectionEnsureHost.EnsureConnectedAsync(int timeoutMs, bool forceFreshTransport) =>
+            EnsureConnectedAsync(timeoutMs, forceFreshTransport);
+
+        Task<bool> IConnectionEnsureHost.IsCurrentSocketHealthyAsync() =>
+            IsCurrentSocketHealthyAsync();
+
+        void IConnectionEnsureHost.DropCurrentSocketForFastResume() =>
+            DropCurrentSocketForFastResume();
+
+        Task<bool> IConnectionEnsureHost.IsRegisteredAsync() => IsRegisteredAsync();
+
+        Task IConnectionEnsureHost.ConnectAsync() => ConnectAsync();
+
+        bool IConnectionEnsureHost.IsConnected => IsConnected;
+
+        async Task IConnectionEnsureHost.WaitForSessionEstablishedAsync(int timeoutMs)
+        {
+            Task gate = _sessionEstablishedTcs.Task;
+            Task gateCompleted = await Task.WhenAny(gate, Task.Delay(timeoutMs)).ConfigureAwait(false);
+            if (gateCompleted != gate)
             {
                 return;
             }
 
-            await _resumeConnectionLock.WaitAsync();
             try
             {
-                if (!forceFreshTransport && await IsCurrentSocketHealthyAsync())
-                {
-                    return;
-                }
-
-                if (forceFreshTransport)
-                {
-                    DropCurrentSocketForFastResume();
-                }
-
-                if (!await IsRegisteredAsync())
-                {
-                    throw new InvalidOperationException("WhatsApp session is not registered");
-                }
-
-                var connectTask = ConnectAsync();
-                var connectCompleted = await Task.WhenAny(connectTask, Task.Delay(timeoutMs));
-                if (connectCompleted != connectTask)
-                {
-                    throw new TimeoutException("Timed out reconnecting to WhatsApp");
-                }
-
-                await connectTask;
-
-                // A duplicate ConnectAsync call can return while another connection
-                // attempt owns the socket. In that case wait for the shared session
-                // gate instead of failing the user's send immediately.
-                if (!IsConnected)
-                {
-                    var gate = _sessionEstablishedTcs.Task;
-                    var gateCompleted = await Task.WhenAny(gate, Task.Delay(timeoutMs));
-                    if (gateCompleted == gate)
-                    {
-                        try
-                        {
-                            await gate;
-                        }
-                        catch
-                        {
-                            // The connection check below provides the user-facing error.
-                        }
-                    }
-                }
-
-                if (!IsConnected)
-                {
-                    throw new InvalidOperationException("WhatsApp connection is not ready");
-                }
+                await gate.ConfigureAwait(false);
             }
-            finally
+            catch
             {
-                _resumeConnectionLock.Release();
+                // The connection check in ConnectionEnsure provides the user-facing error.
             }
         }
 

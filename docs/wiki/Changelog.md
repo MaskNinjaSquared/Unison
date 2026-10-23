@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Phase 4 wave 2 — ConnectionEnsure policy extracted
+
+Ensure-connected budget (healthy check, drop, connect timeout, session gate)
+is `ConnectionEnsure` + `IConnectionEnsureHost`. Façade and send host share it;
+four Core tests.
+
 ## Phase 4 — catch-up idle decide on HistoryFacade
 
 `NotifyCatchUpIdleBatch` owns quiet-lot / watchdog / timeout decide + adjacent

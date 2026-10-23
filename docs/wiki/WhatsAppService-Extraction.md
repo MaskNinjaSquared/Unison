@@ -1276,7 +1276,12 @@ answers false and the rest do nothing. `App.GetWhatsAppService()` is gone; `App`
 `IConnectionService.EnsureConnectedAsync`. `IConnectionSoftReconnect` exposes soft
 auto-reconnect and catch-up-continue. Idle-lot decide and adjacent FULL_HISTORY live on
 `HistoryFacade.NotifyCatchUpIdleBatch` over shared `HistoryCatchUpContinuation` and
-`IHistoryCatchUpHost`. Wave 2 is still ConnectAsync / pairing / resume / broker body.
+`IHistoryCatchUpHost`.
+
+**Wave 2 started: ensure policy left the client body.** `ConnectionEnsure` +
+`IConnectionEnsureHost` own the ensure-connected budget; `ConnectionFacade` and the
+outgoing host call it. Resume / pairing stage-2 / health monitor / broker body still
+follow.
 
 **The open conversation is shared state.** `ActiveChat` (`Unison.Core/State`, DI singleton over
 `JidAliasTable.GetCanonicalJid`) holds the conversation the user has open by its canonical
