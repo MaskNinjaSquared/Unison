@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Phase 4 — ConnectionHealthMonitor loop extracted
+
+Background health loop (defer-aware + 1.8.3 A/B) is `ConnectionHealthMonitor` +
+`IConnectionHealthMonitorHost`. Policy thresholds stay in `ConnectionHealthPolicy`.
+Three Core tests.
+
 ## Fix — toast activation remounted Boot on WhatsApp Legacy
 
 `IsKnownRootContent` only knew `MainView`. Legacy AppShell is `ShellView`, so a

@@ -171,294 +171,125 @@ namespace Unison.Uwp.Services.WhatsApp
             StartPeriodicFullHistorySafety();
         }
 
-        private async Task ConnectionHealthLoopAsync(IWhatsAppSocket socket, CancellationToken token)
+        private Task ConnectionHealthLoopAsync(IWhatsAppSocket socket, CancellationToken token)
         {
             // ConnectionStabilityExperiment: defer-aware (usync / FULL_HISTORY) by default.
             // Flip Enabled off to restore the pure 1.8.3 force-reconnect loop for A/B.
+            var host = new ConnectionHealthMonitorHost(this, socket);
             if (ConnectionStabilityExperiment.UseDeferAwareHealthMonitor)
             {
-                await ConnectionHealthLoopStructureCurrentAsync(socket, token);
+                return ConnectionHealthMonitor.RunDeferAwareAsync(host, token);
             }
-            else
-            {
-                await ConnectionHealthLoopStructure183Async(socket, token);
-            }
+
+            return ConnectionHealthMonitor.RunLegacy183Async(host, token);
         }
 
         /// <summary>
-        /// 1.8.3 connection-health loop: probe / stall / force-reconnect without deferring for
-        /// usync hold or FULL_HISTORY catch-up.
+        /// Binds one monitored socket into <see cref="IConnectionHealthMonitorHost"/> for
+        /// <see cref="ConnectionHealthMonitor"/>.
         /// </summary>
-        private async Task ConnectionHealthLoopStructure183Async(
-            IWhatsAppSocket socket,
-            CancellationToken token)
+        private sealed class ConnectionHealthMonitorHost : IConnectionHealthMonitorHost
         {
-            try
+            private readonly WhatsAppService _owner;
+            private readonly IWhatsAppSocket _socket;
+
+            public ConnectionHealthMonitorHost(WhatsAppService owner, IWhatsAppSocket socket)
             {
-                while (!token.IsCancellationRequested && !_suppressReconnect && !_fatalSessionEnded)
-                {
-                    await Task.Delay(ConnectionHealthPolicy.CheckInterval, token);
-                    if (token.IsCancellationRequested || _suppressReconnect || _fatalSessionEnded || !ReferenceEquals(_socket, socket))
-                    {
-                        return;
-                    }
-
-                    if (!socket.IsConnected || !socket.IsHandshakeComplete)
-                    {
-                        // The close / stream:error path owns reconnect. Doing it here races a
-                        // 401 that is still queued behind history or app-state dispatch.
-                        Debug.WriteLine("[WhatsAppService] Health monitor found a disconnected socket; deferring to close handler");
-                        return;
-                    }
-
-                    // The application-level message pump can stall even while frames,
-                    // decryption and IQ traffic continue normally. Recover that queue
-                    // independently instead of tearing down a healthy WhatsApp socket.
-                    if (IsIncomingMessagePumpStalled(ConnectionHealthPolicy.IncomingPumpStallLimit))
-                    {
-                        RuntimeDiagnosticsService.Instance.Write(
-                            "messages",
-                            "incoming-pump-health-restart",
-                            "stage=" + _incoming.Stage);
-                        ResetIncomingMessagePump("health-stall", requeueCurrent: true);
-                        RestartIncomingMessagePumpIfNeeded();
-                    }
-
-                    var profile = ConnectionHealthProfile.Background;
-                    bool stalled = socket.HasStalledNodeProcessing(ConnectionHealthPolicy.NodeProcessingStallLimit);
-                    var action = ConnectionHealthPolicy.Evaluate(
-                        stalled,
-                        socket.HasFreshConnection(profile.FreshnessLimit));
-                    if (action == ConnectionHealthAction.Idle)
-                    {
-                        continue;
-                    }
-
-                    bool healthy = false;
-                    if (action == ConnectionHealthAction.Probe)
-                    {
-                        healthy = await socket.ProbeConnectionAsync(profile.ProbeTimeoutMs);
-                    }
-
-                    if (healthy)
-                    {
-                        continue;
-                    }
-
-                    if (_fatalSessionEnded || _suppressReconnect)
-                    {
-                        return;
-                    }
-
-                    if (!socket.IsConnected || !socket.IsHandshakeComplete)
-                    {
-                        Debug.WriteLine("[WhatsAppService] Health probe failed on a closed socket; deferring to close handler");
-                        return;
-                    }
-
-                    string reason = stalled
-                        ? $"node-queue-stalled:{socket.QueuedNodeProcessingCount}"
-                        : "socket-no-inbound-response";
-                    Debug.WriteLine($"[WhatsAppService] Health monitor forcing reconnect: {reason}");
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "connection",
-                        "health-force-reconnect",
-                        reason + "; nodeQueue=" + socket.QueuedNodeProcessingCount + "; pendingIq=" + socket.PendingQueryCount +
-                        "; structure=1.8.3");
-
-                    if (ReferenceEquals(_socket, socket))
-                    {
-                        try { socket.Disconnect(); } catch { }
-                        if (ReferenceEquals(_socket, socket))
-                        {
-                            _socket = null;
-                        }
-                    }
-
-                    if (!_fatalSessionEnded && !_suppressReconnect)
-                    {
-                        ScheduleAutoReconnect(reason);
-                    }
-                    return;
-                }
+                _owner = owner;
+                _socket = socket;
             }
-            catch (TaskCanceledException)
-            {
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WhatsAppService] Connection health monitor failed: {ex.Message}");
-                RuntimeDiagnosticsService.Instance.RecordException("connection", "health-monitor-failed", ex);
 
-                string fatalCode = TryExtractFatalStreamCodeFromException(ex);
-                if (IsExplicitLogoutStreamCode(fatalCode))
+            public bool ShouldAbortLoop =>
+                _owner._suppressReconnect || _owner._fatalSessionEnded;
+
+            public bool IsMonitoredSocketCurrent =>
+                ReferenceEquals(_owner._socket, _socket);
+
+            public bool IsMonitoredSocketConnected =>
+                _socket.IsConnected && _socket.IsHandshakeComplete;
+
+            public Task DelayCheckIntervalAsync(CancellationToken token) =>
+                Task.Delay(ConnectionHealthPolicy.CheckInterval, token);
+
+            public void RestartIncomingPumpIfStalled()
+            {
+                if (!_owner.IsIncomingMessagePumpStalled(ConnectionHealthPolicy.IncomingPumpStallLimit))
                 {
-                    LatchFatalSession("health-" + fatalCode);
-                    ReportStreamError(fatalCode);
-
                     return;
                 }
 
-                if (!_suppressReconnect && !_fatalSessionEnded && ReferenceEquals(_socket, socket) &&
-                    socket.IsConnected)
-                {
-                    ScheduleAutoReconnect("health-monitor-error");
-                }
+                RuntimeDiagnosticsService.Instance.Write(
+                    "messages",
+                    "incoming-pump-health-restart",
+                    "stage=" + _owner._incoming.Stage);
+                _owner.ResetIncomingMessagePump("health-stall", requeueCurrent: true);
+                _owner.RestartIncomingMessagePumpIfNeeded();
             }
-        }
 
-        /// <summary>
-        /// Post-1.8.3 backup: defers force-reconnect while usync is held or FULL_HISTORY
-        /// catch-up is active (unless the ordered node queue itself stalled). Kept for a
-        /// one-const restore if the 1.8.3 structure proves too aggressive on Mobile.
-        /// </summary>
-        private async Task ConnectionHealthLoopStructureCurrentAsync(
-            IWhatsAppSocket socket,
-            CancellationToken token)
-        {
-            try
+            public bool IsNodeProcessingStalled =>
+                _socket.HasStalledNodeProcessing(ConnectionHealthPolicy.NodeProcessingStallLimit);
+
+            public bool HasFreshBackgroundConnection =>
+                _socket.HasFreshConnection(ConnectionHealthProfile.Background.FreshnessLimit);
+
+            public bool IsUsyncGateHeld =>
+                _owner._usyncGate != null && _owner._usyncGate.IsHeld;
+
+            public bool IsHistoryCatchUpActive => _owner.IsHistoryCatchUpActive();
+
+            public Task<bool> ProbeBackgroundAsync() =>
+                _socket.ProbeConnectionAsync(ConnectionHealthProfile.Background.ProbeTimeoutMs);
+
+            public int QueuedNodeProcessingCount => _socket.QueuedNodeProcessingCount;
+
+            public int PendingQueryCount => _socket.PendingQueryCount;
+
+            public void ForceDisconnectMonitoredSocket()
             {
-                while (!token.IsCancellationRequested && !_suppressReconnect && !_fatalSessionEnded)
+                if (!ReferenceEquals(_owner._socket, _socket))
                 {
-                    await Task.Delay(ConnectionHealthPolicy.CheckInterval, token);
-                    if (token.IsCancellationRequested || _suppressReconnect || _fatalSessionEnded || !ReferenceEquals(_socket, socket))
-                    {
-                        return;
-                    }
-
-                    if (!socket.IsConnected || !socket.IsHandshakeComplete)
-                    {
-                        Debug.WriteLine("[WhatsAppService] Health monitor found a disconnected socket; deferring to close handler");
-                        return;
-                    }
-
-                    if (IsIncomingMessagePumpStalled(ConnectionHealthPolicy.IncomingPumpStallLimit))
-                    {
-                        RuntimeDiagnosticsService.Instance.Write(
-                            "messages",
-                            "incoming-pump-health-restart",
-                            "stage=" + _incoming.Stage);
-                        ResetIncomingMessagePump("health-stall", requeueCurrent: true);
-                        RestartIncomingMessagePumpIfNeeded();
-                    }
-
-                    var profile = ConnectionHealthProfile.Background;
-                    bool stalled = socket.HasStalledNodeProcessing(ConnectionHealthPolicy.NodeProcessingStallLimit);
-                    var action = ConnectionHealthPolicy.Evaluate(
-                        stalled,
-                        socket.HasFreshConnection(profile.FreshnessLimit));
-                    if (action == ConnectionHealthAction.Idle)
-                    {
-                        continue;
-                    }
-
-                    // Usync / FULL_HISTORY catch-up can starve keep-alives without a dead
-                    // socket. Skip teardown unless the ordered node queue itself has stalled.
-                    string deferReason = ConnectionHealthPolicy.DeferForceReconnectReason(
-                        stalled,
-                        _usyncGate != null && _usyncGate.IsHeld,
-                        IsHistoryCatchUpActive());
-                    if (deferReason != null)
-                    {
-                        Debug.WriteLine(
-                            "[WhatsAppService] Health monitor deferred (" + deferReason + ")");
-                        RuntimeDiagnosticsService.Instance.Write(
-                            "connection",
-                            "health-defer-" + deferReason,
-                            "pendingIq=" + socket.PendingQueryCount);
-                        continue;
-                    }
-
-                    bool healthy = false;
-                    if (action == ConnectionHealthAction.Probe)
-                    {
-                        healthy = await socket.ProbeConnectionAsync(profile.ProbeTimeoutMs);
-                    }
-
-                    if (healthy)
-                    {
-                        continue;
-                    }
-
-                    if (_fatalSessionEnded || _suppressReconnect)
-                    {
-                        return;
-                    }
-
-                    if (!socket.IsConnected || !socket.IsHandshakeComplete)
-                    {
-                        Debug.WriteLine("[WhatsAppService] Health probe failed on a closed socket; deferring to close handler");
-                        return;
-                    }
-
-                    // Probe may have taken long enough that usync / catch-up started meanwhile.
-                    deferReason = ConnectionHealthPolicy.DeferForceReconnectReason(
-                        stalled,
-                        _usyncGate != null && _usyncGate.IsHeld,
-                        IsHistoryCatchUpActive());
-                    if (deferReason != null)
-                    {
-                        Debug.WriteLine(
-                            "[WhatsAppService] Health monitor deferred after probe (" + deferReason + ")");
-                        RuntimeDiagnosticsService.Instance.Write(
-                            "connection",
-                            "health-defer-" + deferReason,
-                            "pendingIq=" + socket.PendingQueryCount + "; afterProbe=True");
-                        continue;
-                    }
-
-                    string reason = stalled
-                        ? $"node-queue-stalled:{socket.QueuedNodeProcessingCount}"
-                        : "socket-no-inbound-response";
-                    Debug.WriteLine($"[WhatsAppService] Health monitor forcing reconnect: {reason}");
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "connection",
-                        "health-force-reconnect",
-                        reason + "; nodeQueue=" + socket.QueuedNodeProcessingCount + "; pendingIq=" + socket.PendingQueryCount +
-                        "; structure=current-backup");
-
-                    // 1.8 left catch-up / banner alone here: the real close / reconnect path
-                    // owns clearing half-open FULL_HISTORY state. Clearing on speculative
-                    // health-force looped "Synchronizing history…" on Mobile.
-
-                    if (ReferenceEquals(_socket, socket))
-                    {
-                        try { socket.Disconnect(); } catch { }
-                        if (ReferenceEquals(_socket, socket))
-                        {
-                            _socket = null;
-                        }
-                    }
-
-                    if (!_fatalSessionEnded && !_suppressReconnect)
-                    {
-                        ScheduleAutoReconnect(reason);
-                    }
-                    return;
-                }
-            }
-            catch (TaskCanceledException)
-            {
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WhatsAppService] Connection health monitor failed: {ex.Message}");
-                RuntimeDiagnosticsService.Instance.RecordException("connection", "health-monitor-failed", ex);
-
-                string fatalCode = TryExtractFatalStreamCodeFromException(ex);
-                if (IsExplicitLogoutStreamCode(fatalCode))
-                {
-                    LatchFatalSession("health-" + fatalCode);
-                    ReportStreamError(fatalCode);
-
                     return;
                 }
 
-                if (!_suppressReconnect && !_fatalSessionEnded && ReferenceEquals(_socket, socket) &&
-                    socket.IsConnected)
+                try
                 {
-                    ScheduleAutoReconnect("health-monitor-error");
+                    _socket.Disconnect();
                 }
+                catch
+                {
+                }
+
+                if (ReferenceEquals(_owner._socket, _socket))
+                {
+                    _owner._socket = null;
+                }
+            }
+
+            public void RequestSoftReconnect(string reason) =>
+                _owner.ScheduleAutoReconnect(reason);
+
+            public void WriteHealthJournal(string eventName, string detail) =>
+                RuntimeDiagnosticsService.Instance.Write("connection", eventName, detail);
+
+            public void LogHealth(string message) =>
+                Debug.WriteLine("[WhatsAppService] " + message);
+
+            public void RecordHealthException(Exception error) =>
+                RuntimeDiagnosticsService.Instance.RecordException(
+                    "connection",
+                    "health-monitor-failed",
+                    error);
+
+            public string TryGetExplicitLogoutStreamCode(Exception error)
+            {
+                string fatalCode = WhatsAppService.TryExtractFatalStreamCodeFromException(error);
+                return IsExplicitLogoutStreamCode(fatalCode) ? fatalCode : null;
+            }
+
+            public void LatchFatalAndReportStream(string code)
+            {
+                _owner.LatchFatalSession("health-" + code);
+                _owner.ReportStreamError(code);
             }
         }
 
