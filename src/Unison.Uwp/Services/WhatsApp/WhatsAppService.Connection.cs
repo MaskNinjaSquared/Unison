@@ -228,38 +228,42 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            if (status == "restart")
+            bool registered = _authState != null && _authState.Registered;
+            switch (ConnectionUpdateRoute.Classify(status, registered))
             {
-                // pair-success already set Registered=true; 515 close is expected.
-                RuntimeDiagnosticsService.Instance.Write(
-                    "connection",
-                    "pairing-restart",
-                    "code=515");
-                PairingTrace("connection status=restart → stage2");
-                ApplyConnectionCloseAction(
-                    ConnectionCloseDisposition.ForRestartStatus(),
-                    "connection-update-restart");
-            }
-            else if (status == "close" && _authState != null && _authState.Registered)
-            {
-                StopConnectionHealthMonitor("socket-close");
-                ConnectionCloseAction closeAction = ConnectionCloseDisposition.ForRegisteredClose(
-                    _pairingRestartPending,
-                    _sessionEstablishedThisConnection,
-                    _countPreSessionCloseAsFatal);
-                if (ApplyConnectionCloseAction(closeAction, "socket-close"))
-                {
-                    PublishConnectionUpdate(status);
-                    return;
-                }
-            }
-            else if (status == "close")
-            {
-                ConnectionCloseAction qrAction = ConnectionCloseDisposition.ForUnregisteredClose(
-                    _qrDeliveredThisConnection,
-                    _pairingRestartPending,
-                    _authState != null && _authState.Registered);
-                ApplyConnectionCloseAction(qrAction, "socket-close");
+                case ConnectionUpdateRouteKind.Restart:
+                    // pair-success already set Registered=true; 515 close is expected.
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "connection",
+                        "pairing-restart",
+                        "code=515");
+                    PairingTrace("connection status=restart → stage2");
+                    ApplyConnectionCloseAction(
+                        ConnectionCloseDisposition.ForRestartStatus(),
+                        "connection-update-restart");
+                    break;
+
+                case ConnectionUpdateRouteKind.RegisteredClose:
+                    StopConnectionHealthMonitor("socket-close");
+                    ConnectionCloseAction closeAction = ConnectionCloseDisposition.ForRegisteredClose(
+                        _pairingRestartPending,
+                        _sessionEstablishedThisConnection,
+                        _countPreSessionCloseAsFatal);
+                    if (ApplyConnectionCloseAction(closeAction, "socket-close"))
+                    {
+                        PublishConnectionUpdate(status);
+                        return;
+                    }
+
+                    break;
+
+                case ConnectionUpdateRouteKind.UnregisteredClose:
+                    ConnectionCloseAction qrAction = ConnectionCloseDisposition.ForUnregisteredClose(
+                        _qrDeliveredThisConnection,
+                        _pairingRestartPending,
+                        registered);
+                    ApplyConnectionCloseAction(qrAction, "socket-close");
+                    break;
             }
 
             PublishConnectionUpdate(status);
@@ -310,17 +314,17 @@ namespace Unison.Uwp.Services.WhatsApp
         socket.OnStreamError += (s, code) =>
         {
             bool current = IsCurrentSocket(s);
-            bool explicitLogout = IsExplicitLogoutStreamCode(code);
+            bool explicitLogout = ExplicitLogoutStreamCode.Matches(code);
 
             // A 401/device_removed on the socket we just replaced is still the
             // account being revoked — the reconnect loop made this sender "stale"
             // before the close reason finished dispatching.
-            if (!current && !explicitLogout)
+            if (StaleSocketEventGate.ShouldIgnore(current, explicitLogout))
             {
                 return;
             }
 
-            if (string.Equals(code, "515", StringComparison.Ordinal))
+            if (PairingRestartStreamCode.Matches(code))
             {
                 if (!current)
                 {
@@ -340,11 +344,11 @@ namespace Unison.Uwp.Services.WhatsApp
 
         socket.OnError += async (s, ex) => 
         {
-            string fatalCode = TryExtractFatalStreamCodeFromException(ex);
-            bool explicitLogout = IsExplicitLogoutStreamCode(fatalCode);
+            string fatalCode = FatalStreamCodeFromException.TryRead(ex);
+            bool explicitLogout = ExplicitLogoutStreamCode.Matches(fatalCode);
             bool current = IsCurrentSocket(s);
 
-            if (!current && !explicitLogout)
+            if (StaleSocketEventGate.ShouldIgnore(current, explicitLogout))
             {
                 return;
             }
@@ -377,14 +381,10 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            bool transportFailure =
-                ex is TimeoutException ||
-                ex is IOException ||
-                !socket.IsConnected ||
-                !socket.IsHandshakeComplete ||
-                ex.Message.Contains("0x80072F7D") ||
-                ex.Message.Contains("Secure Channel Failure") ||
-                ex.Message.Contains("keep-alive");
+            bool transportFailure = SocketTransportFailure.Matches(
+                ex,
+                socket.IsConnected,
+                socket.IsHandshakeComplete);
 
             if (transportFailure)
             {
