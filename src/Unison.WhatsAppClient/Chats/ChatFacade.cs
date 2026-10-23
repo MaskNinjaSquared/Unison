@@ -79,6 +79,7 @@ namespace Unison.WhatsAppClient.Chats
         private readonly IMessageStore _messageStore;
         private readonly IMissingMessageChatHost _missingMessages;
         private readonly HistoryOnDemandRegistry _historyRequests;
+        private readonly PendingMessageQueue _pendingMessages;
         private readonly OfflineReplayTips _offlineReplayTips;
 
         /// <summary>Short enough that the first recovered chat shows while a long replay continues.</summary>
@@ -110,6 +111,7 @@ namespace Unison.WhatsAppClient.Chats
             IMessageStore messageStore,
             IMissingMessageChatHost missingMessages,
             HistoryOnDemandRegistry historyRequests,
+            PendingMessageQueue pendingMessages,
             IDialogService dialogs = null,
             IRuntimeDiagnostics diagnostics = null)
         {
@@ -138,6 +140,7 @@ namespace Unison.WhatsAppClient.Chats
             _messageStore = messageStore ?? throw new ArgumentNullException(nameof(messageStore));
             _missingMessages = missingMessages ?? throw new ArgumentNullException(nameof(missingMessages));
             _historyRequests = historyRequests ?? throw new ArgumentNullException(nameof(historyRequests));
+            _pendingMessages = pendingMessages ?? throw new ArgumentNullException(nameof(pendingMessages));
             _dialogs = dialogs;
             _diagnostics = diagnostics;
             _offlineReplayTips = new OfflineReplayTips(
@@ -150,6 +153,49 @@ namespace Unison.WhatsAppClient.Chats
         public void RecordOfflineReplayTip(OfflineReplayTipRequest request)
         {
             _offlineReplayTips.Record(request);
+        }
+
+        /// <inheritdoc />
+        public Task ApplyIncomingEnvelopePreviewAsync(IncomingEnvelopePreviewRequest request)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.Jid))
+            {
+                return Task.CompletedTask;
+            }
+
+            if (request.IsOffline)
+            {
+                if (request.MarkDirtyWhenOffline)
+                {
+                    _pendingMessages.MarkDirty(request.Jid);
+                }
+
+                RecordOfflineReplayTip(new OfflineReplayTipRequest
+                {
+                    Jid = request.Jid,
+                    Preview = request.Preview,
+                    Timestamp = request.Timestamp,
+                    IsGroup = request.IsGroup,
+                    IsFromMe = request.IsFromMe,
+                    CountUnread = request.CountUnread,
+                    Kind = request.Kind ?? ChatPreviewKind.Text,
+                    Status = request.Status,
+                    AuthorPrefix = request.AuthorPrefix,
+                    ParticipantJid = request.ParticipantJid,
+                    SenderName = request.SenderName
+                });
+                return Task.CompletedTask;
+            }
+
+            return RefreshChatPreviewAsync(
+                request.Jid,
+                request.Preview,
+                request.Timestamp,
+                request.IsFromMe,
+                request.Kind,
+                request.AuthorPrefix,
+                request.ParticipantJid,
+                request.SenderName);
         }
 
         public Task FlushOfflineReplayTipsAsync(string reason)

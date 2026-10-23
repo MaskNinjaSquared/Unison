@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Phase B — incoming envelope preview on ChatFacade
+
+`IChatService.ApplyIncomingEnvelopePreviewAsync` owns live tip refresh vs offline
+replay tip (+ optional dirty mark). Pump alias/duplicate/insert-offline paths call
+one helper; online still queues control work, offline stays on the pump thread.
+
 ## Phase B — self push-name app-state + media hydrate schedule on façades
 
 `IContactService.ApplyRemoteSelfPushNameAsync` owns app-state self push-name

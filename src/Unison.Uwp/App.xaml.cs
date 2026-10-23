@@ -666,6 +666,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IMessageStore>(),
                 sp.GetRequiredService<IMissingMessageChatHost>(),
                 sp.GetRequiredService<HistoryOnDemandRegistry>(),
+                sp.GetRequiredService<PendingMessageQueue>(),
                 sp.GetRequiredService<IDialogService>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>()));
             // After IChatService: the projection persists resolved strip rows so cold start keeps names.

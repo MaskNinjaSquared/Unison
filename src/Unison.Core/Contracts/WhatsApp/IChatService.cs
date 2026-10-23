@@ -97,6 +97,12 @@ namespace Unison.Core.Contracts.WhatsApp
         void RecordOfflineReplayTip(OfflineReplayTipRequest request);
 
         /// <summary>
+        /// After an incoming envelope is accepted on the timeline: refresh the list tip live,
+        /// or record an offline replay tip (optionally marking the chat dirty for persist).
+        /// </summary>
+        Task ApplyIncomingEnvelopePreviewAsync(IncomingEnvelopePreviewRequest request);
+
+        /// <summary>
         /// Applies every waiting offline replay tip to the list. A failure puts them back and rethrows.
         /// </summary>
         Task FlushOfflineReplayTipsAsync(string reason);
