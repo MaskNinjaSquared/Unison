@@ -43,7 +43,7 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IMediaDownloadHost, IOfflineReplayHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, IUsyncAliasHost, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost
+    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IMediaDownloadHost, IOfflineReplayHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, ISocketAliasRegistrar, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -667,7 +667,6 @@ namespace Unison.Uwp.Services.WhatsApp
         public ChatMessageCache MessagesByChat => _chatState.MessagesByChat;
 
         private readonly ChatRowIndex _chatRows;
-        private readonly UsyncAliasFiling _usyncAliases;
 
         public DisplayNameTable ContactNames => _chatState.PushNames;
         public DisplayNameTable PhoneContactNamesByJid => _chatState.AddressBookNames;
@@ -981,7 +980,6 @@ namespace Unison.Uwp.Services.WhatsApp
             IChatStore chatStore,
             ISystemInfoProvider systemInfo,
             AttachedUiDispatcher ui,
-            UsyncAliasFiling usyncAliases,
             PendingMessageQueue pendingMessages,
             ChatListInitialPaintGate listPaintGate = null,
             IAppMemoryInfo appMemory = null,
@@ -1019,7 +1017,6 @@ namespace Unison.Uwp.Services.WhatsApp
             _resolveHistory = resolveHistory;
             _resolveDeferredAvatars = resolveDeferredAvatars;
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
-            _usyncAliases = usyncAliases ?? throw new ArgumentNullException(nameof(usyncAliases));
             _listPaintGate = listPaintGate ?? new ChatListInitialPaintGate();
             _listPaintGate.Released += OnChatListInitialPaintReleased;
             _chatRows = chatRows ?? throw new ArgumentNullException(nameof(chatRows));
@@ -1096,7 +1093,6 @@ namespace Unison.Uwp.Services.WhatsApp
             IChatStore chatStore,
             ISystemInfoProvider systemInfo,
             AttachedUiDispatcher ui,
-            UsyncAliasFiling usyncAliases,
             PendingMessageQueue pendingMessages,
             ChatListInitialPaintGate listPaintGate = null,
             IAppMemoryInfo appMemory = null,
@@ -1110,7 +1106,7 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             return _instance ?? (_instance = new WhatsAppService(
                 chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
-                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, usyncAliases, pendingMessages, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups, resolveHistory, resolveDeferredAvatars));
+                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, pendingMessages, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups, resolveHistory, resolveDeferredAvatars));
         }
 
         /// <summary>
@@ -4041,27 +4037,15 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        /// <summary>Delegates to <see cref="IContactService"/>; this class only supplies the client primitives.</summary>
-        public bool TryFileUsyncAlias(string userJid, string lidJid, out bool wasAlreadyAliased)
-        {
-            UsyncAliasFilingResult result = _usyncAliases.TryFile(userJid, lidJid);
-            wasAlreadyAliased = result.WasAlreadyAliased;
-            if (!result.Filed)
-            {
-                return false;
-            }
-
-            RegisterSocketAlias(result.AcceptedPn, result.AcceptedLid, "contact-usync");
-            HealOwnIdentity(result.AcceptedPn, result.AcceptedLid);
-            return true;
-        }
+        void ISocketAliasRegistrar.RegisterPair(string jidA, string jidB, string source) =>
+            RegisterSocketAlias(jidA, jidB, source);
 
         /// <summary>
         /// Reconciles our own identity with what the server just said. A companion learns its LID
         /// and its number separately, and a mismatch here is not cosmetic: messages get signed
         /// under an identity the recipients are not expecting.
         /// </summary>
-        private void HealOwnIdentity(string normalizedUser, string normalizedLid)
+        void ISocketAliasRegistrar.HealOwnIdentityAfterUsync(string normalizedUser, string normalizedLid)
         {
             string meLid = _authState?.Me?.Lid;
             if (string.IsNullOrEmpty(meLid) || _authState?.Me == null)

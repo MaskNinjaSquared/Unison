@@ -2,6 +2,11 @@
 
 Newest first.
 
+## Phase 3 — UsyncAliasHost + ISocketAliasRegistrar
+
+`TryFileUsyncAlias` left the client: `UsyncAliasHost` files via `UsyncAliasFiling` then
+calls `ISocketAliasRegistrar` (socket register + Me heal). Shared with alias persistence.
+
 ## Phase 3 — media hydrate uses session transport readiness
 
 `IMediaDownloadHost.HasLiveSocket` removed; image/sticker hydrate asks

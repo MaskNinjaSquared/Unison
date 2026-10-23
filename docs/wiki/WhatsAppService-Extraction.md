@@ -1434,11 +1434,11 @@ new list row arrives with an unresolved alias pair. `ContactUsyncResolver` calls
 directly (not through `IChatService`) so DI does not cycle through `IContactService`.
 `MergeDuplicateChatsAsync` and `RequestAliasChatMerge` left `IWhatsAppService`.
 
-**Usync table filing is `UsyncAliasFiling`.** (Core, DI singleton over `JidAliasTable`.) It
-runs `AliasPairPolicy` and `AliasPairFiling.FileBothWays`, then returns the accepted pair.
-`TryFileUsyncAlias` is `IUsyncAliasHost` on the client: after a successful
-`UsyncAliasFiling` it registers the pair with the live socket and heals our own identity
-in the auth state — both need session and auth the Core type must not own.
+**Usync table filing is `UsyncAliasFiling`.** (WhatsAppClient, DI singleton over `JidAliasTable`.)
+It runs `AliasPairPolicy` and `AliasPairFiling.FileBothWays`, then returns the accepted pair.
+`IUsyncAliasHost` is `UsyncAliasHost` (WhatsAppClient): filing then
+`ISocketAliasRegistrar` (socket register + auth heal on the client).
+`IJidAliasPersistence` shares that registrar for inbound/history pairs.
 
 **Opening a chat merges SQLite and the live overlay in Core.** `OpenChatMessageMerge` is the
 id-prefer-live merge `MessageFacade` used to inline twice (open page and sync reload). Live
@@ -1491,9 +1491,10 @@ owns the UI path and reaches those three through the host; ViewModels still call
 filing and `RequestFullHistoryOnDemandAsync` leave `IWhatsAppService`. `HistoryFacade`
 still takes the client for events and `EnsureConnectedAsync`.
 
-**Usync socket filing is `IUsyncAliasHost`.** `TryFileUsyncAlias` left `IWhatsAppService`.
-`ContactUsyncResolver` takes that port only (no more `IWhatsAppService`); table write stays
-`UsyncAliasFiling`, socket register + identity heal stay on the client behind the host.
+**Usync socket filing is `IUsyncAliasHost` / `ISocketAliasRegistrar`.** `TryFileUsyncAlias`
+left `IWhatsAppService` and left the client class entirely (`UsyncAliasHost`).
+`ContactUsyncResolver` takes `IUsyncAliasHost` only; the client implements
+`ISocketAliasRegistrar` for socket + heal.
 
 **Startup UI load is `IStartupUiHost`.** `LoadPersistedUiStateAsync` and
 `StartDeferredStartupMaintenance` leave `IWhatsAppService`. `ConnectionFacade` takes the

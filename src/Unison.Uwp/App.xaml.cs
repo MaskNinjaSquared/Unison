@@ -403,7 +403,6 @@ namespace Unison.Uwp
                     sp.GetRequiredService<IChatStore>(),
                     sp.GetRequiredService<ISystemInfoProvider>(),
                     sp.GetRequiredService<AttachedUiDispatcher>(),
-                    sp.GetRequiredService<UsyncAliasFiling>(),
                     sp.GetRequiredService<PendingMessageQueue>(),
                     sp.GetRequiredService<ChatListInitialPaintGate>(),
                     sp.GetRequiredService<IAppMemoryInfo>(),
@@ -501,8 +500,11 @@ namespace Unison.Uwp
                 () => sp.GetRequiredService<IContactService>()));
             services.AddSingleton<IBackgroundResolutionGate>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
-            services.AddSingleton<IUsyncAliasHost>(
+            services.AddSingleton<ISocketAliasRegistrar>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+            services.AddSingleton<IUsyncAliasHost>(sp => new UsyncAliasHost(
+                sp.GetRequiredService<UsyncAliasFiling>(),
+                sp.GetRequiredService<ISocketAliasRegistrar>()));
             services.AddSingleton<IStartupUiHost>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IAppStateLocalHost>(

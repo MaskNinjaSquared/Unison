@@ -7,8 +7,8 @@ namespace Unison.WhatsAppClient.Helpers
     /// Files a usync LID/phone pair into the alias table when the policy accepts it.
     /// </summary>
     /// <remarks>
-    /// Socket registration and self-identity healing stay with the host: they need the live
-    /// session and the auth state. This type only owns the table write.
+    /// Socket registration and self-identity healing are <see cref="Unison.Core.Contracts.WhatsApp.ISocketAliasRegistrar"/>;
+    /// <see cref="UsyncAliasHost"/> wires filing to that port. This type only owns the table write.
     /// </remarks>
     public sealed class UsyncAliasFiling
     {
