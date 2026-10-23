@@ -268,5 +268,21 @@ namespace Unison.Core.Contracts.WhatsApp
             bool pin,
             long senderTimestampMs,
             uint durationSeconds = 0);
+
+        /// <summary>
+        /// Puts one live/offline <see cref="ChatMessage"/> into the in-memory timeline
+        /// (alias consolidate, same-chat enrich, or insert+trim). Host still owns alias
+        /// consolidate side-effects (SQLite delete / list dedupe) after this returns.
+        /// </summary>
+        IncomingTimelineAcceptResult AcceptIncomingTimeline(
+            string chatJid,
+            ChatMessage message,
+            bool isGroup);
+
+        /// <summary>
+        /// Queues an accepted inbound row for the debounced SQLite batch and schedules the
+        /// chat-catalogue persist. Same path as an outgoing <c>QueueForPersist</c>.
+        /// </summary>
+        void QueueIncomingPersist(string chatJid, ChatMessage message);
     }
 }

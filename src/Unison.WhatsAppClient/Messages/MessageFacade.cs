@@ -28,8 +28,14 @@ namespace Unison.WhatsAppClient.Messages
         private readonly IHistoryService _history;
         private readonly IHistoryMessageStore _historyMessageStore;
         private readonly IJidResolver _jids;
-        private readonly IChatStateStore _chatState;
+        /// <summary>
+        /// Concrete store: AcceptIncomingTimeline needs transitional
+        /// <see cref="ChatStateStore.MessagesByChat"/> (not on <see cref="IChatStateStore"/>).
+        /// </summary>
+        private readonly ChatStateStore _chatState;
         private readonly INotificationService _notifications;
+        /// <summary>Matches WhatsAppService.MaxActiveChatMessagesInMemory for trim after insert.</summary>
+        private const int MaxActiveChatMessagesInMemory = 300;
         private readonly IChatStore _chatStore;
         private readonly OutgoingTextSend _textSend;
         private readonly OutgoingMediaSend _mediaSend;
@@ -67,8 +73,8 @@ namespace Unison.WhatsAppClient.Messages
             IIncomingRevocationHost revocationHost,
             IMessageStore messageStore,
             ActiveChat activeChat,
+            ChatStateStore chatState,
             IChatStore chatStore = null,
-            IChatStateStore chatState = null,
             ISystemInfoProvider systemInfo = null,
             IRuntimeDiagnostics diagnostics = null)
         {
@@ -87,7 +93,7 @@ namespace Unison.WhatsAppClient.Messages
             _wire = wire ?? throw new ArgumentNullException(nameof(wire));
             _availability = availability ?? throw new ArgumentNullException(nameof(availability));
             _chatStore = chatStore;
-            _chatState = chatState;
+            _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _outgoingHost = outgoingHost ?? throw new ArgumentNullException(nameof(outgoingHost));
             _receiptHost = receiptHost ?? throw new ArgumentNullException(nameof(receiptHost));
             _revocationHost = revocationHost ?? throw new ArgumentNullException(nameof(revocationHost));
@@ -1147,7 +1153,7 @@ namespace Unison.WhatsAppClient.Messages
                 }
             }
 
-            if (_chatState != null && pushPairs.Count > 0)
+            if (pushPairs.Count > 0)
             {
                 await _chatState.MergePushNamesAsync(pushPairs).ConfigureAwait(false);
             }
@@ -1352,6 +1358,50 @@ namespace Unison.WhatsAppClient.Messages
             }
 
             return null;
+        }
+
+        /// <inheritdoc />
+        public IncomingTimelineAcceptResult AcceptIncomingTimeline(
+            string chatJid,
+            ChatMessage message,
+            bool isGroup)
+        {
+            return new IncomingTimeline(
+                    _chatState.MessagesByChat,
+                    _chatState.MessagesByChat.Ids,
+                    GetAliasLinkedDirectChatJids,
+                    JidHelper.Normalize,
+                    TrimInMemoryMessageWindow)
+                .Accept(chatJid, message, isGroup);
+        }
+
+        /// <inheritdoc />
+        public void QueueIncomingPersist(string chatJid, ChatMessage message)
+        {
+            if (string.IsNullOrWhiteSpace(chatJid) || message == null)
+            {
+                return;
+            }
+
+            _outgoingHost.QueueForPersist(chatJid, message);
+        }
+
+        private void TrimInMemoryMessageWindow(string jid) =>
+            _chatState.MessagesByChat.Trim(jid, MaxActiveChatMessagesInMemory, DateTime.UtcNow);
+
+        private IReadOnlyList<string> GetAliasLinkedDirectChatJids(string chatJid)
+        {
+            return AliasLinkedDirectChats.Collect(
+                NameLookupCandidates.Expand(
+                    new[] { chatJid },
+                    JidHelper.Normalize,
+                    normalized =>
+                    {
+                        string alias;
+                        return _jids.TryGetAlias(normalized, out alias) ? alias : null;
+                    }),
+                JidHelper.Normalize,
+                _jids.GetCanonicalJid);
         }
     }
 }

@@ -2,6 +2,14 @@
 
 Newest first.
 
+## Phase B — AcceptIncomingTimeline + QueueIncomingPersist on MessageFacade
+
+`IMessageService.AcceptIncomingTimeline` runs `IncomingTimeline` over
+`ChatStateStore.MessagesByChat` (alias collect via `AliasLinkedDirectChats` /
+`NameLookupCandidates`). `QueueIncomingPersist` uses `IOutgoingMessageHost.QueueForPersist`
+(pending SQLite batch + catalogue schedule). Pump only calls the façade; private
+wrappers removed. Alias-consolidate SQLite/dedupe side-effects stay pump-orchestrated.
+
 ## Phase B — inbound revoke + pin-in-chat on MessageFacade
 
 `IMessageService.ApplyIncomingRevocationAsync` owns revoke apply (envelope cleanup,

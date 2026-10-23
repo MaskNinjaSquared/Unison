@@ -1403,7 +1403,13 @@ namespace Unison.Uwp.Services.WhatsApp
                 ChatPreviewKind previewKind = LiveChatPreviewApplier.ResolveKind(chatMessage, renderInfo);
 
                 SetIncomingMessagePumpStage("dedupe", e);
-                IncomingTimelineAcceptResult timeline = AcceptIncomingTimeline(jid, chatMessage, isGroup);
+                IncomingTimelineAcceptResult timeline = Messages != null
+                    ? Messages.AcceptIncomingTimeline(jid, chatMessage, isGroup)
+                    : new IncomingTimelineAcceptResult
+                    {
+                        Kind = IncomingTimelineAcceptKind.Inserted,
+                        Message = chatMessage
+                    };
 
                 if (timeline.Kind == IncomingTimelineAcceptKind.AliasConsolidated)
                 {
@@ -1473,7 +1479,10 @@ namespace Unison.Uwp.Services.WhatsApp
                 {
                     if (timeline.ExistingChanged && timeline.Message != null)
                     {
-                        QueueIncomingPersist(jid, timeline.Message);
+                        if (Messages != null)
+                        {
+                            Messages.QueueIncomingPersist(jid, timeline.Message);
+                        }
                         QueueChatMessagesChanged(jid);
                     }
                     if (timeline.Kind == IncomingTimelineAcceptKind.AliasLinkedDuplicate)
@@ -1543,7 +1552,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         ParticipantJid = isGroup ? stripParticipantJid : null,
                         SenderName = isGroup && !isActuallyFromMe ? senderName : null
                     });
-                    QueueIncomingPersist(jid, chatMessage);
+                    Messages?.QueueIncomingPersist(jid, chatMessage);
 
                     if (IsActiveChatJid(jid))
                     {
@@ -1636,7 +1645,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 SetIncomingMessagePumpStage("persist-queue", e);
                 // Persistencia em lote: evita reler, serializar e reescrever o JSON
                 // inteiro para cada mensagem recebida.
-                QueueIncomingPersist(jid, chatMessage);
+                Messages?.QueueIncomingPersist(jid, chatMessage);
                 UnloadMessageCacheIfInactive(jid);
             }
             catch (Exception ex)
@@ -1649,32 +1658,6 @@ namespace Unison.Uwp.Services.WhatsApp
                     "id=" + (e?.MessageId ?? "<none>") + "; stage=" + _incoming.Stage);
                 throw;
             }
-        }
-
-
-        private IncomingTimelineAcceptResult AcceptIncomingTimeline(
-            string chatJid,
-            ChatMessage message,
-            bool isGroup)
-        {
-            return new IncomingTimeline(
-                    MessagesByChat,
-                    MessagesByChat.Ids,
-                    GetAliasLinkedDirectChatJids,
-                    NormalizeJid,
-                    TrimInMemoryMessageWindow)
-                .Accept(chatJid, message, isGroup);
-        }
-
-        private void QueueIncomingPersist(string chatJid, ChatMessage message)
-        {
-            if (string.IsNullOrWhiteSpace(chatJid) || message == null)
-            {
-                return;
-            }
-
-            QueueOfflineReplayMessageForPersist(chatJid, message);
-            SchedulePersist();
         }
 
         /// <summary>

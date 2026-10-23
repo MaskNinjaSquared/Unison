@@ -532,8 +532,8 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IIncomingRevocationHost>(),
                 sp.GetRequiredService<IMessageStore>(),
                 sp.GetRequiredService<ActiveChat>(),
+                sp.GetRequiredService<ChatStateStore>(),
                 sp.GetRequiredService<IChatStore>(),
-                sp.GetRequiredService<IChatStateStore>(),
                 sp.GetRequiredService<ISystemInfoProvider>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>()));
             // AttachedUiDispatcher (not IDispatcher/DispatcherService): PropertyChanged from the

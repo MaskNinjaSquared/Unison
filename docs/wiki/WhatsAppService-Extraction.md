@@ -945,8 +945,9 @@ the live DM resolver it called) are in Core under tests.
 **Apply progress:** live toast/badge/tile is `MessageFacade.NotifyLiveIncoming`; live and offline
 list strip (create row, preview, unread, reposition/sort) is `ChatFacade` (`ApplyLiveIncomingChatListAsync`
 / `ApplyOfflineReplayChatSummariesAsync`, shared `UnreadDelta`). Timeline insert/dedupe is
-`IMessageService.AcceptIncomingTimeline` (host still holds `MessagesByChat` + id index);
-persist enqueue is `QueueIncomingPersist`. Revoke is `IMessageService.ApplyIncomingRevocationAsync`
+`IMessageService.AcceptIncomingTimeline` over `ChatStateStore.MessagesByChat` (not a bounce into
+the client). Persist enqueue is `IMessageService.QueueIncomingPersist`
+(`IOutgoingMessageHost.QueueForPersist`). Revoke is `IMessageService.ApplyIncomingRevocationAsync`
 (`MessageRevocationContent` tombstone; `IIncomingRevocationHost` finds/removes in `MessagesByChat`
 and refreshes the tip; façade persists via `IOutgoingMessageHost` / SQLite). Inbound pin-in-chat is
 `IMessageService.ApplyIncomingPinInChatAsync` (`MessagePinWindow` then `IAppStateLocalHost`
