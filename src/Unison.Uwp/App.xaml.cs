@@ -440,7 +440,7 @@ namespace Unison.Uwp
 
             services.AddSingleton<IProfileService>(sp => new AppProfileFacade(
                 sp.GetRequiredService<AppSessionProvider>(),
-                sp.GetRequiredService<IWhatsAppService>(),
+                sp.GetRequiredService<IConnectionService>(),
                 sp.GetRequiredService<SelfProfileState>(),
                 sp.GetRequiredService<IAvatarCache>()));
 

@@ -110,8 +110,9 @@ raises and the façade subscribes to in its own constructor.
 That let the push-in doors close on the contracts too. `NotifyStreamError`,
 `NotifySuspectedInvalidSession`, `TryIngestLiveAsync`, `NoteBackgroundHistorySyncBounce` and
 `ClearAvatarAttempted` are private to their façades now, because the client was their only caller.
-`StatusFacade` / `ConnectionFacade` / `ProfileFacade` may still take `IWhatsAppService` for remaining
-raw events; Contact / Group / History / Message / Chat façades no longer subscribe to moved subjects.
+`ConnectionFacade` still takes `IWhatsAppService` for remaining raw connection events.
+`ProfileFacade` uses `IConnectionService` only (`SessionEstablished` / `EnsureConnectedAsync`).
+Contact / Group / History / Message / Chat / Status façades no longer subscribe to moved subjects.
 
 `ApplyGroupMetadataFromResponseAsync` lost its `hydrateAvatars` parameter: both call sites passed
 `false`, so the `HydrateGroupMemberAvatarsAsync` branch behind it had never run.
@@ -174,7 +175,7 @@ lifecycle stay on the host (not this phase).
 
 ### Facades still depend on the client
 
-`ProfileFacade`, `StatusFacade`, `ConnectionFacade` still take `IWhatsAppService` where raw client events remain. **`ChatFacade`, `MessageFacade`, `ContactFacade`, `GroupFacade`, and `HistoryFacade` no longer do** for event wiring — chats reach local pin/delete through `IAppStateLocalHost`; messages use hosts + lazy `IConnectionService` / other façades; history/contact/group inbound signals are `Notify*` methods the host calls. `ChatMessagesChanged` / `PresenceUpdated` / history sync / avatar cache / alias / group listing are raised via façade `Notify*` (no client events for those). Policy is already on the façades; **primitives** (fetch a chat avatar, send bytes, persist, canonical JID) still run inside the client for the others. Group send-permission refresh and roster restore are the exception: they run in Core, and nothing in them calls back into the client. The full-size group picture and member pictures are fetched by `GroupFacade`.
+`ConnectionFacade` still takes `IWhatsAppService` where raw client connection events remain. **`ProfileFacade`, `ChatFacade`, `MessageFacade`, `ContactFacade`, `GroupFacade`, `HistoryFacade`, and `StatusFacade` no longer do** for event wiring — Profile uses `IConnectionService`; chats reach local pin/delete through `IAppStateLocalHost`; messages use hosts + lazy `IConnectionService` / other façades; history/contact/group inbound signals are `Notify*` methods the host calls. `ChatMessagesChanged` / `PresenceUpdated` / history sync / avatar cache / alias / group listing are raised via façade `Notify*` (no client events for those). Policy is already on the façades; **primitives** (fetch a chat avatar, send bytes, persist, canonical JID) still run inside the client for the others. Group send-permission refresh and roster restore are the exception: they run in Core, and nothing in them calls back into the client. The full-size group picture and member pictures are fetched by `GroupFacade`.
 
 Helpers under `Contacts/` (`ContactNameResolver`, `ChatAvatarPolicy`, `GroupRosterPolicy`, `AddressBookOverlay`) are the largest non-UI consumers of client members (`RaiseSyncStatus`, `FetchAndApplyAvatarAsync`, `IsTransportReady`, …). Extracting avatars/names is mostly moving those primitives so the helpers stop needing the god client.
 

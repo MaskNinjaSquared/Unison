@@ -26,14 +26,14 @@ namespace Unison.WhatsAppClient.Profiles
     public sealed class ProfileFacade : IProfileService
     {
         private readonly IWhatsAppSessionProvider _sessions;
-        private readonly IWhatsAppService _connection;
+        private readonly IConnectionService _connection;
         private readonly SelfProfileState _self;
         private readonly IAvatarCache _avatarCache;
 
-        /// <param name="connection">Only for reconnecting and for knowing when a session opened.</param>
+        /// <param name="connection">EnsureConnected + SessionEstablished (post-handshake resync).</param>
         public ProfileFacade(
             IWhatsAppSessionProvider sessions,
-            IWhatsAppService connection,
+            IConnectionService connection,
             SelfProfileState self,
             IAvatarCache avatarCache)
         {
@@ -69,7 +69,7 @@ namespace Unison.WhatsAppClient.Profiles
             // sent then is answered by nobody. This is the second chance: once the session is
             // actually up, ask again. Without it a cold start keeps showing whatever avatar was
             // cached on the previous run, or none at all on a fresh install.
-            _connection.OnSessionInitialized += (s, e) => { _ = ResyncQuietlyAsync(); };
+            _connection.SessionEstablished += (s, e) => { _ = ResyncQuietlyAsync(); };
         }
 
         private async Task ResyncQuietlyAsync()

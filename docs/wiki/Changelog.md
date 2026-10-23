@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Phase B — ProfileFacade via IConnectionService
+
+`ProfileFacade` uses `SessionEstablished` + `EnsureConnectedAsync` on
+`IConnectionService` instead of `IWhatsAppService.OnSessionInitialized` /
+client `EnsureConnectedAsync`.
+
 ## Phase B — history / contact / group notify owns former client events
 
 `NotifyHistorySyncReceived` / `NotifySessionCleared` / `NotifyBackgroundHistorySyncBounced`
