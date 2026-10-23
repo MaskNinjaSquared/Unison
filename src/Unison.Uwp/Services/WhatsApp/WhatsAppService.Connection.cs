@@ -1855,25 +1855,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 {
                     Debug.WriteLine($"[WhatsAppService] Non-fatal offline replay message flush failure after offline drain: {ex.Message}");
                 }
-                try
-                {
-                    if (ChatFacade == null)
-                    {
-                        Debug.WriteLine("[WhatsAppService] Offline summary apply skipped: ChatFacade not attached.");
-                    }
-                    else
-                    {
-                        await ChatFacade.FlushOfflineReplayTipsAsync($"offline-complete:{offlineCount}");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[WhatsAppService] Non-fatal offline replay UI summary failure after offline drain: {ex.Message}");
-                }
-                // Message-path repair/enrichment only after the app is settled.
-                // Names/groups wait for post-message enrichment (after heavy history when stale).
-                SchedulePostReplayMaintenance(offlineCount);
-
+                string settleReason = "offline-complete:" + offlineCount;
+                bool drainPlaceholders = false;
                 if (firstRelease)
                 {
                     // Safety-timeout release can race a hung ConnectAsync; never mark synced
@@ -1881,11 +1864,9 @@ namespace Unison.Uwp.Services.WhatsApp
                     if (socket.IsConnected && socket.IsHandshakeComplete)
                     {
                         PublishConnectionUpdate("synced");
-                        EnableScheduledPersist($"offline completion ({offlineCount} messages)");
-                        _ = TryConsumeMessageStoreForceHistoryRepairAsync($"offline-complete:{offlineCount}");
-                        Messages?.SchedulePlaceholderResendDrain(
-                            $"offline-complete:{offlineCount}",
-                            maxRequests: 8);
+                        EnableScheduledPersist("offline completion (" + offlineCount + " messages)");
+                        _ = TryConsumeMessageStoreForceHistoryRepairAsync(settleReason);
+                        drainPlaceholders = true;
                     }
                     else
                     {
@@ -1897,6 +1878,31 @@ namespace Unison.Uwp.Services.WhatsApp
                             "; handshake=" + socket.IsHandshakeComplete);
                     }
                 }
+
+                try
+                {
+                    if (Messages != null)
+                    {
+                        await Messages.NotifyOfflineReplaySettledAsync(
+                            settleReason,
+                            schedulePlaceholderDrain: drainPlaceholders,
+                            maxDrainRequests: 8).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        Debug.WriteLine(
+                            "[WhatsAppService] Offline settle skipped: MessageFacade not attached.");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine(
+                        "[WhatsAppService] Non-fatal offline replay settle failure: " + ex.Message);
+                }
+
+                // Message-path repair/enrichment only after the app is settled.
+                // Names/groups wait for post-message enrichment (after heavy history when stale).
+                SchedulePostReplayMaintenance(offlineCount);
 
                 // Soft-reconnect catch-up pages must re-evaluate / re-request FULL_HISTORY even
                 // when this is not the first offline release of the process.

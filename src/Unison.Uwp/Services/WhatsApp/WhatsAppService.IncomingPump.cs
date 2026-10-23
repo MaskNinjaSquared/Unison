@@ -75,9 +75,6 @@ namespace Unison.Uwp.Services.WhatsApp
             string trigger) =>
             TryRequestPlaceholderResendAsync(chatJid, messageId, trigger);
 
-        bool IMissingMessageChatHost.ShouldDeferPlaceholderResend(string trigger, out string reason) =>
-            ShouldDeferPlaceholderResend(trigger, out reason);
-
         List<MissingMessageCandidate> IMissingMessageChatHost.SelectPlaceholderResendDrain(
             int maxRequests,
             out int totalEligible) =>
@@ -437,11 +434,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
 
                 SetIncomingMessagePumpStage("route", e);
-                bool quietForSync =
-                    (_initialSync != null && _initialSync.IsActive) ||
-                    (_socket != null && _socket.IsAwaitingInitialSync);
-                // Peer-data / placeholder / app-state session-only branch inside Route.
-                await Messages.RouteIncomingChatEnvelopeAsync(new IncomingRoutedEnvelopeRequest
+                await Messages.NotifyIncomingDecryptedAsync(new IncomingDecryptedNotifyRequest
                 {
                     Message = e.Message,
                     MessageId = e.MessageId,
@@ -457,10 +450,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     Timestamp = e.Timestamp,
                     IsOffline = e.IsOffline,
                     IsFromMe = e.IsFromMe,
-                    SelfDisplayName = _authState?.Me?.Name,
-                    QuietForSync = quietForSync,
-                    IsWindowVisible = Unison.Uwp.App.IsWindowVisible,
-                    IsActiveChat = IsActiveChatJid
+                    SelfDisplayName = _authState?.Me?.Name
                 }).ConfigureAwait(false);
             }
             catch (Exception ex)

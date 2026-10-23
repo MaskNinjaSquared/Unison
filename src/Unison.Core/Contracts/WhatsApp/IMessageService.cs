@@ -507,6 +507,20 @@ namespace Unison.Core.Contracts.WhatsApp
         Task RecoverPendingIncomingJournalAsync();
 
         /// <summary>
+        /// After offline message flush: flush chat-list tips and optionally schedule placeholder
+        /// resend drain. Host keeps SQLite flush + synced / persist enable.
+        /// </summary>
+        Task NotifyOfflineReplaySettledAsync(
+            string reason,
+            bool schedulePlaceholderDrain,
+            int maxDrainRequests = 8);
+
+        /// <summary>
+        /// Pump entry: assemble quiet/visibility/active-chat context and route the envelope.
+        /// </summary>
+        Task NotifyIncomingDecryptedAsync(IncomingDecryptedNotifyRequest request);
+
+        /// <summary>
         /// Peer-data placeholder-resend payloads: decode WebMessageInfo bytes and re-enqueue
         /// onto the host ingest queue (never recursive into the pump lock).
         /// </summary>

@@ -368,6 +368,9 @@ namespace Unison.WhatsAppClient.History
             {
                 Debug.WriteLine("[HistoryFacade] NotifySqliteHistoryChunkApplied failed: " + ex.Message);
             }
+
+            // Null payload: list UI must not treat this as "sync over" — finalize is debounced.
+            NotifyHistorySyncReceived(null);
         }
 
         /// <summary>

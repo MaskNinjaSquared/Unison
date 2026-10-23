@@ -2,6 +2,13 @@
 
 Newest first.
 
+## Phase B — UI marshal, offline settle, sqlite notify, decrypted notify, drain deferral
+
+`NotifyChatMessagesChanged` marshals via `IDispatcher`. `NotifyOfflineReplaySettledAsync`
+owns tips + optional placeholder drain. `NotifySqliteHistoryChunkApplied` raises the null
+history surface notify. `NotifyIncomingDecryptedAsync` fills quiet/window/active context.
+Drain deferral uses `SyncWorkGate` / history-on-demand on the façade (host keeps single resend).
+
 ## Phase B — placeholder drain, journal recover, receipt group metadata
 
 `SchedulePlaceholderResendDrain` / drain loop on `MessageFacade` (host keeps

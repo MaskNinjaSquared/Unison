@@ -57,6 +57,11 @@ namespace Unison.WhatsAppClient.Messages
         private readonly Func<IContactService> _resolveContacts;
         private readonly Func<IStatusService> _resolveStatus;
         private readonly Func<IConnectionService> _resolveConnection;
+        private readonly IDispatcher _ui;
+        private readonly SyncWorkGate _syncWork;
+        private readonly InitialSyncProgressState _initialSync;
+        private readonly IAppVisibility _visibility;
+        private readonly Func<bool> _isAwaitingInitialSync;
         private readonly ReceiptReader _receipts;
         private readonly GroupReceiptTally _groupReceipts = new GroupReceiptTally();
         private readonly IRuntimeDiagnostics _diagnostics;
@@ -93,12 +98,23 @@ namespace Unison.WhatsAppClient.Messages
             Func<IContactService> resolveContacts,
             Func<IStatusService> resolveStatus,
             Func<IConnectionService> resolveConnection,
+            IDispatcher ui,
+            SyncWorkGate syncWork,
+            InitialSyncProgressState initialSync,
+            IAppVisibility visibility,
+            Func<bool> isAwaitingInitialSync,
             IChatStore chatStore = null,
             IStringResources strings = null,
             ISystemInfoProvider systemInfo = null,
             IRuntimeDiagnostics diagnostics = null)
         {
             _diagnostics = diagnostics;
+            _ui = ui ?? throw new ArgumentNullException(nameof(ui));
+            _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
+            _initialSync = initialSync ?? throw new ArgumentNullException(nameof(initialSync));
+            _visibility = visibility ?? throw new ArgumentNullException(nameof(visibility));
+            _isAwaitingInitialSync = isAwaitingInitialSync
+                ?? throw new ArgumentNullException(nameof(isAwaitingInitialSync));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
             _chatMessageMapper = chatMessageMapper ?? throw new ArgumentNullException(nameof(chatMessageMapper));
@@ -168,13 +184,70 @@ namespace Unison.WhatsAppClient.Messages
                 return;
             }
 
-            Relay(
-                () =>
-                {
-                    ChatMessagesChanged?.Invoke(this, chatJid);
-                    _chatState.NotifyMessagesChanged(chatJid);
-                },
-                "ChatMessagesChanged");
+            // Host used to Post onto the UI thread before raising; View handlers touch XAML.
+            _ = _ui.RunAsync(() =>
+            {
+                Relay(
+                    () =>
+                    {
+                        ChatMessagesChanged?.Invoke(this, chatJid);
+                        _chatState.NotifyMessagesChanged(chatJid);
+                    },
+                    "ChatMessagesChanged");
+            });
+        }
+
+        /// <inheritdoc />
+        public async Task NotifyOfflineReplaySettledAsync(
+            string reason,
+            bool schedulePlaceholderDrain,
+            int maxDrainRequests = 8)
+        {
+            IChatService chats = _resolveChats();
+            if (chats != null)
+            {
+                await chats.FlushOfflineReplayTipsAsync(reason).ConfigureAwait(false);
+            }
+
+            if (schedulePlaceholderDrain)
+            {
+                SchedulePlaceholderResendDrain(reason, maxDrainRequests);
+            }
+        }
+
+        /// <inheritdoc />
+        public Task NotifyIncomingDecryptedAsync(IncomingDecryptedNotifyRequest request)
+        {
+            if (request?.Message == null)
+            {
+                return Task.CompletedTask;
+            }
+
+            bool quietForSync =
+                _initialSync.IsActive ||
+                _isAwaitingInitialSync();
+
+            return RouteIncomingChatEnvelopeAsync(new IncomingRoutedEnvelopeRequest
+            {
+                Message = request.Message,
+                MessageId = request.MessageId,
+                FromJid = request.FromJid,
+                RecipientJid = request.RecipientJid,
+                PeerRecipientPn = request.PeerRecipientPn,
+                PeerRecipientLid = request.PeerRecipientLid,
+                SenderLid = request.SenderLid,
+                ParticipantJid = request.ParticipantJid,
+                ParticipantAltJid = request.ParticipantAltJid,
+                VerifiedName = request.VerifiedName,
+                PushName = request.PushName,
+                Timestamp = request.Timestamp,
+                IsOffline = request.IsOffline,
+                IsFromMe = request.IsFromMe,
+                SelfDisplayName = request.SelfDisplayName,
+                QuietForSync = quietForSync,
+                IsWindowVisible = _visibility.IsWindowVisible,
+                IsActiveChat = jid => _activeChat.IsOpen(jid)
+            });
         }
 
         /// <inheritdoc />
@@ -1820,10 +1893,19 @@ namespace Unison.WhatsAppClient.Messages
             });
         }
 
+        private bool ShouldDeferPlaceholderResendDrain(out string reason)
+        {
+            return PlaceholderResendDeferral.IsDeferred(
+                _syncWork.IsReplayDrainActive,
+                _isAwaitingInitialSync(),
+                _historyOnDemand.ChatsInFlight > 0,
+                out reason);
+        }
+
         private async Task DrainPlaceholderResendsAsync(string trigger, int maxRequests)
         {
             string deferReason;
-            if (_missingMessages.ShouldDeferPlaceholderResend(trigger, out deferReason))
+            if (ShouldDeferPlaceholderResendDrain(out deferReason))
             {
                 Debug.WriteLine(
                     "[MessageFacade] Skipping deferred placeholder resend drain (" +
@@ -1851,7 +1933,7 @@ namespace Unison.WhatsAppClient.Messages
             int requested = 0;
             foreach (MissingMessageCandidate candidate in pending)
             {
-                if (_missingMessages.ShouldDeferPlaceholderResend(trigger, out deferReason))
+                if (ShouldDeferPlaceholderResendDrain(out deferReason))
                 {
                     Debug.WriteLine(
                         "[MessageFacade] Stopping deferred placeholder resend drain (" +

@@ -1905,17 +1905,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 ReleaseEnrichmentAfterHeavyHistory(type);
             }
 
-            try
-            {
-                // Null payload: list UI must not treat this as "sync over" — finalize is debounced.
-                History?.NotifyHistorySyncReceived(null);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[WhatsAppService] NotifyHistorySyncReceived (sqlite path) failed: " + ex.Message);
-            }
-
-                Log($"[WhatsAppService] History SQLite path applied (type={type}, conversations={count}, accumulated={_sqliteHistoryConversationsAccumulated}).");
+            Log($"[WhatsAppService] History SQLite path applied (type={type}, conversations={count}, accumulated={_sqliteHistoryConversationsAccumulated}).");
         }
 
         /// <summary>
@@ -4065,20 +4055,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private void QueueChatMessagesChanged(string chatJid)
         {
-            if (string.IsNullOrWhiteSpace(chatJid))
-            {
-                return;
-            }
-
-            _ui.Post(() => RaiseChatMessagesChanged(chatJid));
-        }
-
-        /// <summary>
-        /// UI-thread marshal into <see cref="IMessageService.NotifyChatMessagesChanged"/>
-        /// (event + chat-state nudge live on the façade).
-        /// </summary>
-        private void RaiseChatMessagesChanged(string chatJid)
-        {
+            // Façade NotifyChatMessagesChanged owns UI marshal + chat-state nudge.
             Messages?.NotifyChatMessagesChanged(chatJid);
         }
 

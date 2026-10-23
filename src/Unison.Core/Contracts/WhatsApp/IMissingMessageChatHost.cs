@@ -36,11 +36,6 @@ namespace Unison.Core.Contracts.WhatsApp
         Task<bool> RequestPlaceholderResendAsync(string chatJid, string messageId, string trigger);
 
         /// <summary>
-        /// True when reconnect replay / initial sync / history-on-demand should block a resend.
-        /// </summary>
-        bool ShouldDeferPlaceholderResend(string trigger, out string reason);
-
-        /// <summary>
         /// Next eligible placeholder-resend candidates for a deferred drain pass.
         /// </summary>
         List<MissingMessageCandidate> SelectPlaceholderResendDrain(
