@@ -1992,50 +1992,59 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         /// <summary>
-        /// Reconnects after close code 515 to complete pairing stage 2
+        /// Reconnects after close code 515 to complete pairing stage 2.
+        /// Orchestration lives in <see cref="ConnectionPairingStage2"/>.
         /// </summary>
-        private async Task ReconnectForPairingAsync()
+        private Task ReconnectForPairingAsync() => ConnectionPairingStage2.RunAsync(this);
+
+        bool IConnectionPairingStage2Host.ShouldAbortPairingRestart =>
+            _suppressReconnect || _fatalSessionEnded;
+
+        bool IConnectionPairingStage2Host.IsRegistered =>
+            _authState != null && _authState.Registered;
+
+        bool IConnectionPairingStage2Host.CanScheduleSoftReconnect =>
+            !_suppressReconnect && !_fatalSessionEnded;
+
+        void IConnectionPairingStage2Host.ClearPairingRestartPending() =>
+            _pairingRestartPending = false;
+
+        void IConnectionPairingStage2Host.ClearReconnectingFlag()
         {
-            bool needsPersistentRetry = false;
-            if (_suppressReconnect || _fatalSessionEnded)
+            lock (_reconnectStateLock)
             {
-                _pairingRestartPending = false;
-                lock (_reconnectStateLock) { _isReconnecting = false; }
-                PairingTrace("ReconnectForPairingAsync aborted (suppress/fatal)");
-                return;
-            }
-
-            try
-            {
-                PairingTrace("ReconnectForPairingAsync waiting 1s then ConnectAsync…");
-                Log($"[WhatsAppService] Resetting session and deleting local data...");
-                await Task.Delay(1000); // Wait for the stage 1 socket to fully close
-                await ConnectAsync();
-                PairingTrace(
-                    "ReconnectForPairingAsync ConnectAsync returned status=" +
-                    (CurrentConnectionStatus ?? "(null)") +
-                    " registered=" + (_authState?.Registered == true));
-                Debug.WriteLine("[WhatsAppService] Pairing stage 2 connection established");
-            }
-            catch (Exception ex)
-            {
-                PairingTrace("ReconnectForPairingAsync FAILED: " + ex.Message);
-                Debug.WriteLine($"[WhatsAppService] Pairing stage 2 reconnect failed: {ex.Message}");
-                OnError?.Invoke(this, ex);
-                needsPersistentRetry = _authState != null && _authState.Registered;
-                // Stage 2 failed — allow normal reconnect / revoked detection again.
-                _pairingRestartPending = false;
-            }
-            finally
-            {
-                lock (_reconnectStateLock) { _isReconnecting = false; }
-            }
-
-            if (needsPersistentRetry && !_suppressReconnect && !_fatalSessionEnded)
-            {
-                ScheduleAutoReconnect("pairing-stage2-failed");
+                _isReconnecting = false;
             }
         }
+
+        Task IConnectionPairingStage2Host.ConnectAsync() => ConnectAsync();
+
+        void IConnectionPairingStage2Host.RequestSoftReconnect(string reason) =>
+            ScheduleAutoReconnect(reason);
+
+        void IConnectionPairingStage2Host.RaisePairingError(Exception error)
+        {
+            Debug.WriteLine(
+                "[WhatsAppService] Pairing stage 2 reconnect failed: " +
+                (error != null ? error.Message : string.Empty));
+            OnError?.Invoke(this, error);
+        }
+
+        void IConnectionPairingStage2Host.TracePairing(string detail)
+        {
+            PairingTrace(detail);
+            if (detail != null &&
+                detail.IndexOf("ConnectAsync returned", StringComparison.Ordinal) >= 0)
+            {
+                Debug.WriteLine("[WhatsAppService] Pairing stage 2 connection established");
+            }
+        }
+
+        void IConnectionPairingStage2Host.LogPairingReset() =>
+            Log("[WhatsAppService] Resetting session and deleting local data...");
+
+        string IConnectionPairingStage2Host.CurrentConnectionStatusOrNull =>
+            CurrentConnectionStatus;
 
         /// <summary>
         /// Applied by <see cref="IConnectionService"/> when auto-unlink policy fires.

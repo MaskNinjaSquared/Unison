@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Phase 4 wave 2 — ConnectionPairingStage2 policy extracted
+
+Close-515 stage-2 reconnect (wait, ConnectAsync, soft-reconnect on registered
+failure) is `ConnectionPairingStage2` + `IConnectionPairingStage2Host`. Four
+Core tests.
+
 ## Phase 4 wave 2 — ConnectionResume policy extracted
 
 Foreground resume (fatal block, broker reconnect consume, reclaim, force-fresh
