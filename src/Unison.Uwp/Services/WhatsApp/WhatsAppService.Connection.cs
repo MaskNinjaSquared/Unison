@@ -18,7 +18,6 @@ using Proto;
 using Google.Protobuf;
 using System.Threading;
 using System.Runtime.InteropServices.WindowsRuntime;
-using Windows.Networking.Sockets;
 
 using System.ComponentModel;
 using System.Runtime.CompilerServices;

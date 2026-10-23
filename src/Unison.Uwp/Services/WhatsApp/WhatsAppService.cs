@@ -3632,39 +3632,12 @@ namespace Unison.Uwp.Services.WhatsApp
                 reuseLoadedKeyState,
                 _lidMappings);
 
-            // ChatUpdate lives in Socket; Core's IChatService cannot name it. The concrete
-            // ChatFacade owns the apply — same pattern as other socket→façade bridges that
-            // still carry Socket model types.
-            bridge.ChatSettingsChanged = update =>
-                ChatFacade is Unison.WhatsAppClient.Chats.ChatFacade chats
-                    ? chats.ApplyRemoteChatSettingsAsync(update)
-                    : Task.CompletedTask;
-            bridge.ContactChanged = contact =>
-                Contacts != null
-                    ? Contacts.ApplyRemoteContactUpdatesAsync(AccountContactUpdateMap.From(contact))
-                    : Task.CompletedTask;
-            bridge.ContactsChanged = updates =>
-                Contacts != null
-                    ? Contacts.ApplyRemoteContactUpdatesAsync(AccountContactUpdateMap.From(updates))
-                    : Task.CompletedTask;
-            bridge.SelfPushNameChanged = name =>
-                Contacts != null
-                    ? Contacts.ApplyRemoteSelfPushNameAsync(name)
-                    : Task.CompletedTask;
-            bridge.GroupSubjectChanged = (jid, subject) =>
-                Contacts != null
-                    ? Contacts.ApplyRemoteGroupSubjectsAsync(
-                        new[] { new KeyValuePair<string, string>(jid, subject) })
-                    : Task.CompletedTask;
-            bridge.ChatDeleted = jid =>
-                ChatFacade != null
-                    ? ChatFacade.ApplyAppStateDeleteChatAsync(jid)
-                    : Task.CompletedTask;
-            bridge.MessageDeleted = key =>
-                Messages != null
-                    ? Messages.ApplyAppStateDeleteMessageAsync(key.RemoteJid, key.Id)
-                    : Task.FromResult(false);
-            bridge.ResolveSentMessage = ResolveSentMessageForRetryAsync;
+            SocketBridgeRemoteHooks.Attach(
+                bridge,
+                ChatFacade,
+                Contacts,
+                Messages,
+                ResolveSentMessageForRetryAsync);
 
             RuntimeDiagnosticsService.Instance.Write(
                 "connection",
