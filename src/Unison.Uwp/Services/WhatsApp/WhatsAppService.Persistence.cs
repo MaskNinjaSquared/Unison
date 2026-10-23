@@ -447,7 +447,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// <summary>
         /// Schedules a debounced persist operation. Multiple calls within 3 seconds will batch into one save.
         /// </summary>
-        private void SchedulePersist()
+        internal void SchedulePersist()
         {
             if (_persistScheduler.Request() == PersistScheduleAction.Deferred)
             {
