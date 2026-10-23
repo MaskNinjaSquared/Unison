@@ -123,6 +123,17 @@ namespace Unison.Core.Contracts.WhatsApp
         /// Wire <c>ack</c> for an outstanding history-on-demand request (chat or full).
         /// </summary>
         void HandleOnDemandAck(string ackClass, string ackId, string ackError);
+
+        /// <summary>
+        /// Host path: a history chunk arrived (or a null "reload" signal after SQLite apply).
+        /// </summary>
+        void NotifyHistorySyncReceived(HistorySync sync);
+
+        /// <summary>Host path: local session wiped — reset history SQLite tables.</summary>
+        void NotifySessionCleared();
+
+        /// <summary>Host path: background FULL_HISTORY solicitation bounced; toast gate counts these.</summary>
+        void NotifyBackgroundHistorySyncBounced();
     }
 }
 

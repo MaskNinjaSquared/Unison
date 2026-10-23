@@ -22,6 +22,12 @@ namespace Unison.Core.Contracts.WhatsApp
         /// </summary>
         void NotifyDisplayNamesUpdated();
 
+        /// <summary>Host path: an avatar file was written to the local cache for a JID.</summary>
+        void NotifyAvatarCached(string jid, string localAvatarUrl);
+
+        /// <summary>Host path: a phone JID and a LID were newly paired.</summary>
+        void NotifyJidAliasResolved(string phoneJid, string lidJid, string source);
+
         /// <summary>
         /// Best known label for a JID: device address book first, then the push name the account
         /// broadcasts, then the bare number. <paramref name="context"/> only labels the call site

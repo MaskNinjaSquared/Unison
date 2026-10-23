@@ -118,5 +118,10 @@ namespace Unison.Core.Contracts.WhatsApp
         /// Does not query the network.
         /// </summary>
         Task ApplyGroupMetadataAsync(string groupJid, GroupMetadataSnapshot metadata);
+
+        /// <summary>
+        /// Host path: background resolution reached the group listing step.
+        /// </summary>
+        void NotifyGroupListingDue();
     }
 }

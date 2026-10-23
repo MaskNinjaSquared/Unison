@@ -32,7 +32,6 @@ namespace Unison.WhatsAppClient.Groups
     {
         private const string GroupServer = "@g.us";
 
-        private readonly IWhatsAppService _client;
         private readonly IGroupWireActions _wire;
         private readonly IGroupNaming _naming;
         private readonly ChatNameRefresh _nameRefresh;
@@ -70,7 +69,6 @@ namespace Unison.WhatsAppClient.Groups
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         public GroupFacade(
-            IWhatsAppService client,
             IGroupWireActions wire,
             IGroupNaming naming,
             IChatStateStore chats,
@@ -89,7 +87,6 @@ namespace Unison.WhatsAppClient.Groups
             ChatNameRefresh nameRefresh,
             IRuntimeDiagnostics diagnostics = null)
         {
-            _client = client ?? throw new ArgumentNullException(nameof(client));
             _workload = workload ?? throw new ArgumentNullException(nameof(workload));
             _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
             _syncWork = syncWork ?? throw new ArgumentNullException(nameof(syncWork));
@@ -108,9 +105,12 @@ namespace Unison.WhatsAppClient.Groups
             _usyncGate = usyncGate ?? throw new ArgumentNullException(nameof(usyncGate));
             _diagnostics = diagnostics;
             _reader = new GroupMetadataReader(jids);
+        }
 
-            // Lives as long as the client, so there is nothing to unhook from.
-            _client.OnGroupListingDue += (s, e) => { _ = RunBackgroundListingAsync(); };
+        /// <inheritdoc />
+        public void NotifyGroupListingDue()
+        {
+            _ = RunBackgroundListingAsync();
         }
 
         private async Task RunBackgroundListingAsync()

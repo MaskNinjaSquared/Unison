@@ -825,18 +825,11 @@ namespace Unison.Uwp.Services.WhatsApp
         public event EventHandler<string> OnQRCodeReceived;
         public event EventHandler OnQrExpired;
         public event EventHandler<string> OnConnectionUpdate;
-        public event EventHandler<HistorySync> OnHistorySyncReceived;
         public event EventHandler OnSessionInitialized;
         public event EventHandler<SessionClearedEventArgs> OnSessionCleared;
         public event EventHandler<Exception> OnError;
-        public event EventHandler OnDisplayNamesUpdated;
         public event EventHandler<string> OnStreamError;
         public event EventHandler<string> OnInvalidSessionSuspected;
-        public event EventHandler OnBackgroundHistorySyncBounced;
-        public event EventHandler<AvatarCachedEventArgs> OnAvatarCached;
-        public event EventHandler OnGroupListingDue;
-        public event EventHandler<JidAliasResolvedEventArgs> OnJidAliasResolved;
-        public event EventHandler<AvatarRetryDueEventArgs> OnAvatarRetryDue;
 
         /// <summary>
         /// These are raised from the socket's own threads, so a facade that throws would otherwise
@@ -872,8 +865,8 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             RaiseReport(
-                () => OnAvatarCached?.Invoke(this, new AvatarCachedEventArgs(jid, localAvatarUrl)),
-                nameof(OnAvatarCached));
+                () => Contacts?.NotifyAvatarCached(jid, localAvatarUrl),
+                nameof(IContactService.NotifyAvatarCached));
         }
 
         public string CurrentConnectionStatus { get; private set; }
@@ -1812,8 +1805,8 @@ namespace Unison.Uwp.Services.WhatsApp
 
             RaiseSyncStatus(null);
             RaiseReport(
-                () => OnGroupListingDue?.Invoke(this, EventArgs.Empty),
-                nameof(OnGroupListingDue));
+                () => Groups?.NotifyGroupListingDue(),
+                nameof(IGroupService.NotifyGroupListingDue));
         }
 
         private void ReleaseEnrichmentAfterHeavyHistory(string reason)
@@ -1922,11 +1915,11 @@ namespace Unison.Uwp.Services.WhatsApp
             try
             {
                 // Null payload: list UI must not treat this as "sync over" — finalize is debounced.
-                OnHistorySyncReceived?.Invoke(this, null);
+                History?.NotifyHistorySyncReceived(null);
             }
             catch (Exception ex)
             {
-                Debug.WriteLine("[WhatsAppService] OnHistorySyncReceived (sqlite path) failed: " + ex.Message);
+                Debug.WriteLine("[WhatsAppService] NotifyHistorySyncReceived (sqlite path) failed: " + ex.Message);
             }
 
                 Log($"[WhatsAppService] History SQLite path applied (type={type}, conversations={count}, accumulated={_sqliteHistoryConversationsAccumulated}).");
@@ -2364,8 +2357,8 @@ namespace Unison.Uwp.Services.WhatsApp
 
                     // Last step: the group façade shows the status, runs the listing and clears it.
                     RaiseReport(
-                        () => OnGroupListingDue?.Invoke(this, EventArgs.Empty),
-                        nameof(OnGroupListingDue));
+                        () => Groups?.NotifyGroupListingDue(),
+                        nameof(IGroupService.NotifyGroupListingDue));
                 }
                 catch (TaskCanceledException) { }
                 catch (Exception ex)
@@ -3232,8 +3225,8 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             RaiseReport(
-                () => OnBackgroundHistorySyncBounced?.Invoke(this, EventArgs.Empty),
-                nameof(OnBackgroundHistorySyncBounced));
+                () => History?.NotifyBackgroundHistorySyncBounced(),
+                nameof(IHistoryService.NotifyBackgroundHistorySyncBounced));
 
             return true;
         }

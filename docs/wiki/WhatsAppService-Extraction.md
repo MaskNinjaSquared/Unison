@@ -100,16 +100,18 @@ raises and the façade subscribes to in its own constructor.
 | `OnStreamError` | `ConnectionFacade` | `AttachConnectionService` (gone) |
 | `OnInvalidSessionSuspected` | `ConnectionFacade` | same |
 | `OnLiveStatusReceived` | `StatusFacade` | `AttachStatusService` (gone) |
-| `OnBackgroundHistorySyncBounced` | `HistoryFacade` | `AttachHistoryService` (gone) |
-| `OnAvatarCached` | `ContactFacade` | part of `AttachContactService` |
-| `OnJidAliasResolved` | `ContactFacade` | part of `AttachContactService` |
-| `OnAvatarRetryDue` | `ContactFacade` | the alias follow-up's `RequestAvatarRefresh` forward |
+| `OnBackgroundHistorySyncBounced` | `HistoryFacade` | `NotifyBackgroundHistorySyncBounced` (host calls) |
+| `OnAvatarCached` | `ContactFacade` | `NotifyAvatarCached` (host calls) |
+| `OnJidAliasResolved` | `ContactFacade` | `NotifyJidAliasResolved` (host calls) |
+| `OnAvatarRetryDue` | `ContactFacade` | gone — alias follow-up calls `RequestAvatarRefresh` itself |
+| `OnHistorySyncReceived` | `HistoryFacade` | `NotifyHistorySyncReceived` (host calls) |
+| `OnGroupListingDue` | `GroupFacade` | `NotifyGroupListingDue` (host calls) |
 
 That let the push-in doors close on the contracts too. `NotifyStreamError`,
 `NotifySuspectedInvalidSession`, `TryIngestLiveAsync`, `NoteBackgroundHistorySyncBounce` and
 `ClearAvatarAttempted` are private to their façades now, because the client was their only caller.
-`StatusFacade` gained an `IWhatsAppService` constructor parameter so it has something to subscribe
-to; the other three façades already had one.
+`StatusFacade` / `ConnectionFacade` / `ProfileFacade` may still take `IWhatsAppService` for remaining
+raw events; Contact / Group / History / Message / Chat façades no longer subscribe to moved subjects.
 
 `ApplyGroupMetadataFromResponseAsync` lost its `hydrateAvatars` parameter: both call sites passed
 `false`, so the `HydrateGroupMemberAvatarsAsync` branch behind it had never run.
@@ -131,11 +133,9 @@ here. They do not invert, because those calls are not reports:
 `AttachContactService` survives too. A second pass took out what was still a report:
 
 - The alias follow-up used to call `RequestAvatarRefresh(chat, force: true)` per row through a
-  client forward. It now collects the rows still without an avatar on the UI thread and raises
-  `OnAvatarRetryDue` once, on that same thread; `ContactFacade` forces the refresh. Nothing after it
-  in the follow-up waits on the fetch (dedup and `NotifyDisplayNamesChanged` only read rows). A
-  subscriber that throws no longer aborts the follow-up and restores the batch: `RaiseReport` logs it
-  and dedup still runs.
+  client forward. It now collects the rows still without an avatar on the UI thread and
+  `ContactFacade` forces the refresh itself. Nothing after it in the follow-up waits on the fetch
+  (dedup and `NotifyDisplayNamesChanged` only read rows).
 - `FetchProfilePicturesAsync` / `RetrieveContactPicturesCoreAsync` are gone. They were the
   "no façade attached" fallback of the background pass, and they only forwarded back to
   `_contactService?.RetrieveContactPicturesAsync`, so with no façade they did nothing.
@@ -152,10 +152,10 @@ What is left on `_contactService` is awaited and ordered by the client, so it is
 - `RefreshContactNamesAsync` — awaited in the post-message enrichment before
   `TriggerBackgroundResolution`.
 - `RetrieveContactPicturesAsync(token)` in `TriggerBackgroundResolution` — awaited between the
-  names step and `OnGroupListingDue` so the listing does not compete with the picture batch for the
-  socket, and `token` is `_resolutionCts`, which `ShutdownAsync` cancels (phase 4). Raising it as an
-  event would make the pass finish early and let the group listing overlap it; the pass and its defer
-  checks (`ShouldDeferProfilePictureFetch`, `CancelDeferredProfilePictureResolution`) read private
+  names step and `NotifyGroupListingDue` so the listing does not compete with the picture batch for
+  the socket, and `token` is `_resolutionCts`, which `ShutdownAsync` cancels (phase 4). Firing the
+  listing earlier would let it overlap the picture batch; the pass and its defer checks
+  (`ShouldDeferProfilePictureFetch`, `CancelDeferredProfilePictureResolution`) read private
   client state. It moves with the pass, not before it.
 
 ---
@@ -174,7 +174,7 @@ lifecycle stay on the host (not this phase).
 
 ### Facades still depend on the client
 
-`ContactFacade`, `GroupFacade`, `HistoryFacade`, `ProfileFacade`, `StatusFacade`, `ConnectionFacade` take `IWhatsAppService` (or `AttachWhatsAppService`). **`ChatFacade` and `MessageFacade` no longer do** — chats reach local pin/delete through `IAppStateLocalHost`; messages use hosts + lazy `IConnectionService` / other façades. `ChatMessagesChanged` / `PresenceUpdated` are raised via `NotifyChatMessagesChanged` / `NotifyPresenceUpdated` (no client events). Policy is already on the façades; **primitives** (fetch a chat avatar, send bytes, persist, canonical JID) still run inside the client for the others. Group send-permission refresh and roster restore are the exception: they run in Core, and nothing in them calls back into the client. The full-size group picture and member pictures are fetched by `GroupFacade`.
+`ProfileFacade`, `StatusFacade`, `ConnectionFacade` still take `IWhatsAppService` where raw client events remain. **`ChatFacade`, `MessageFacade`, `ContactFacade`, `GroupFacade`, and `HistoryFacade` no longer do** for event wiring — chats reach local pin/delete through `IAppStateLocalHost`; messages use hosts + lazy `IConnectionService` / other façades; history/contact/group inbound signals are `Notify*` methods the host calls. `ChatMessagesChanged` / `PresenceUpdated` / history sync / avatar cache / alias / group listing are raised via façade `Notify*` (no client events for those). Policy is already on the façades; **primitives** (fetch a chat avatar, send bytes, persist, canonical JID) still run inside the client for the others. Group send-permission refresh and roster restore are the exception: they run in Core, and nothing in them calls back into the client. The full-size group picture and member pictures are fetched by `GroupFacade`.
 
 Helpers under `Contacts/` (`ContactNameResolver`, `ChatAvatarPolicy`, `GroupRosterPolicy`, `AddressBookOverlay`) are the largest non-UI consumers of client members (`RaiseSyncStatus`, `FetchAndApplyAvatarAsync`, `IsTransportReady`, …). Extracting avatars/names is mostly moving those primitives so the helpers stop needing the god client.
 
@@ -190,17 +190,18 @@ Primitives that already left the contract (façade / Netstandard Phase A):
 The stores (`IPersonStore`, `IChatStore`, `IGroupRosterStore`) are constructor parameters of the client now. After `BuildServiceProvider`, façade `Attach*` into the client is gone for Message/Chat/Contact/Group:
 `WhatsAppService.Create` takes `Func<IMessageService>` / `Func<IChatService>` / `Func<IContactService>` / `Func<IGroupService>` (lazy, breaks the DI cycle). One shared `GroupMetadataApply` is registered in `App` and injected into `GroupFacade`; the receipt path reaches it through `IGroupService.ApplyGroupMetadataAsync`. The pump and history sync still *call* those façades; moving that ownership is the remaining Attach* inversion work.
 
-`AttachContactService` body work: background names/pictures on `IContactService.RunBackgroundResolutionAsync`; deferred-startup overlay/hydrate/relabel on `RunDeferredStartupContactPassAsync`. Quiet-wait / memory-headroom rules are `StartupQuietGate` (WhatsAppClient). Alias follow-up (queue + `CoalescedDebounceScheduler` + persist / avatar retry / dedupe) runs on `ContactFacade`; the client only implements `IJidAliasPersistence` and cancels via `IContactService.CancelAliasFollowUp` on shutdown. Blank-avatar row selection is `AliasFollowUpAvatarRows`. Unread badge + shortcut + catalogue slice after a conversation unread change is `ChatUnreadSideEffects` (shared by app-state read and `ChatFacade.ClearUnreadForChatAsync`). Name-entry prep before the UI walk is `ResolvedNameBatchPrep`; app-state subject/contact lists are `AppStateResolvedNameEntries`; post-delete tip refresh across alias rows is `AppStateDeleteMessagePreview`. Quoted author naming is `QuotedSenderNaming`; push-name SQLite gate is `PersonNamePersistGate`; local-send strip update is `LocalSendChatPreview`; freshness log stamps are `FreshnessTimestampFormat`; placeholder drain lines use `MissingMessageCandidate.FormatForLog`. Group title cache gate is `GroupMeaningfulLabel`; list-strip outgoing ticks are `ListPreviewOutgoingSendState`. Localized strip labels (`You` / `Yesterday`) are `LocalizedChatStripLabels` in UWP. Incoming-pump preview / offline-tip wrappers are gone — pump calls `ChatFacade.RefreshChatPreviewAsync` / `RecordOfflineReplayTip` directly. SocketBridge chat settings go through `ChatFacade.ApplyRemoteChatSettingsAsync` (local flags/read on the façade); group subjects / self push-name / contact table slices go through `IContactService.ApplyRemote*` over `IResolvedNameApplyHost` + `IJidAliasPersistence.RegisterAliasMappings` (`AccountContactUpdate` is the Core DTO at the bridge). Bridge fallbacks that duplicated façade paths are gone. Receipt orchestration (`HandleReceiptAsync` + `GroupReceiptTally`) is on `MessageFacade` over `IOutgoingReceiptHost`; timeline status apply stays on the client. List dedupe / local-send tip / legacy deleted-preview repair are on `IChatService` (`DeduplicateChatListAsync`, `ShowLocalSendPreviewAsync`, `RepairLegacyDeletedPreviewsAsync`); `IOfflineReplayHost.NotifyHistorySurfaceRefresh` covers the post-repair cache nudge. `RememberPersonName` lives on `ContactFacade` (push map + `PersonNamePersistGate` + person store); `CaptureSelfPushName` entry points go through `IContactService` into `IResolvedNameApplyHost` (auth / sidebar stay on the client). Resolved-name batch apply and persisted-title normalize live on `ContactFacade` (`ApplyResolvedNameBatchAsync` / `NormalizePersistedChatNamesAsync`); catch-up / self-name list relabel is `ApplyResolvedNamesToChatListAsync` over `ChatNameRefresh` (façade owns `Applied`). Self push-name capture policy lives on `ContactFacade.CaptureSelfPushName`; `IResolvedNameApplyHost` is auth/sidebar write + identity reads. `StartupPhaseTrace` is in WhatsAppClient (takes `IRuntimeDiagnostics`). Client tip reconcile after replay / quiet history / persisted UI goes through `IChatService.ReconcileChatPreviewsFromSqliteAsync` (no client-held `ChatPreviewReconciler` / `ChatNameRefresh`). Client no longer holds `ChatListDeduper` or duplicate dedupe/repair methods. Alias id fast-path is `AliasLinkedMessageFind.HasId`. The client still owns handshake / catch-up gates and raises `OnGroupListingDue` after background resolution.
+`AttachContactService` body work: background names/pictures on `IContactService.RunBackgroundResolutionAsync`; deferred-startup overlay/hydrate/relabel on `RunDeferredStartupContactPassAsync`. Quiet-wait / memory-headroom rules are `StartupQuietGate` (WhatsAppClient). Alias follow-up (queue + `CoalescedDebounceScheduler` + persist / avatar retry / dedupe) runs on `ContactFacade`; the client only implements `IJidAliasPersistence` and cancels via `IContactService.CancelAliasFollowUp` on shutdown. Blank-avatar row selection is `AliasFollowUpAvatarRows`. Unread badge + shortcut + catalogue slice after a conversation unread change is `ChatUnreadSideEffects` (shared by app-state read and `ChatFacade.ClearUnreadForChatAsync`). Name-entry prep before the UI walk is `ResolvedNameBatchPrep`; app-state subject/contact lists are `AppStateResolvedNameEntries`; post-delete tip refresh across alias rows is `AppStateDeleteMessagePreview`. Quoted author naming is `QuotedSenderNaming`; push-name SQLite gate is `PersonNamePersistGate`; local-send strip update is `LocalSendChatPreview`; freshness log stamps are `FreshnessTimestampFormat`; placeholder drain lines use `MissingMessageCandidate.FormatForLog`. Group title cache gate is `GroupMeaningfulLabel`; list-strip outgoing ticks are `ListPreviewOutgoingSendState`. Localized strip labels (`You` / `Yesterday`) are `LocalizedChatStripLabels` in UWP. Incoming-pump preview / offline-tip wrappers are gone — pump calls `ChatFacade.RefreshChatPreviewAsync` / `RecordOfflineReplayTip` directly. SocketBridge chat settings go through `ChatFacade.ApplyRemoteChatSettingsAsync` (local flags/read on the façade); group subjects / self push-name / contact table slices go through `IContactService.ApplyRemote*` over `IResolvedNameApplyHost` + `IJidAliasPersistence.RegisterAliasMappings` (`AccountContactUpdate` is the Core DTO at the bridge). Bridge fallbacks that duplicated façade paths are gone. Receipt orchestration (`HandleReceiptAsync` + `GroupReceiptTally`) is on `MessageFacade` over `IOutgoingReceiptHost`; timeline status apply stays on the client. List dedupe / local-send tip / legacy deleted-preview repair are on `IChatService` (`DeduplicateChatListAsync`, `ShowLocalSendPreviewAsync`, `RepairLegacyDeletedPreviewsAsync`); `IOfflineReplayHost.NotifyHistorySurfaceRefresh` covers the post-repair cache nudge. `RememberPersonName` lives on `ContactFacade` (push map + `PersonNamePersistGate` + person store); `CaptureSelfPushName` entry points go through `IContactService` into `IResolvedNameApplyHost` (auth / sidebar stay on the client). Resolved-name batch apply and persisted-title normalize live on `ContactFacade` (`ApplyResolvedNameBatchAsync` / `NormalizePersistedChatNamesAsync`); catch-up / self-name list relabel is `ApplyResolvedNamesToChatListAsync` over `ChatNameRefresh` (façade owns `Applied`). Self push-name capture policy lives on `ContactFacade.CaptureSelfPushName`; `IResolvedNameApplyHost` is auth/sidebar write + identity reads. `StartupPhaseTrace` is in WhatsAppClient (takes `IRuntimeDiagnostics`). Client tip reconcile after replay / quiet history / persisted UI goes through `IChatService.ReconcileChatPreviewsFromSqliteAsync` (no client-held `ChatPreviewReconciler` / `ChatNameRefresh`). Client no longer holds `ChatListDeduper` or duplicate dedupe/repair methods. Alias id fast-path is `AliasLinkedMessageFind.HasId`. The client still owns handshake / catch-up gates and calls `IGroupService.NotifyGroupListingDue` after background resolution.
 
 `AttachDebugSendService` is gone (phase 4): `App` starts `IDebugSendService` once in Debug builds.
 The watcher already skipped requests while the transport was not ready, so the five start/stop
 calls in `.Connection.cs` were redundant. In Debug it now polls the request file while disconnected
 too; requests still wait for the transport.
 
-The alias avatar retry is an event (`OnAvatarRetryDue`).
+Alias avatar retry runs inside `ContactFacade` follow-up (`RequestAvatarRefresh`); there is no
+client `OnAvatarRetryDue` event.
 
 `AttachGroupService` is gone: its only use was the last step of the background resolution pass.
-The client now raises `OnGroupListingDue` there, and `GroupFacade` shows the Groups status, runs the
+The client calls `NotifyGroupListingDue` there, and `GroupFacade` shows the Groups status, runs the
 listing and clears the status itself. Quiet-wait / handshake gates for `TriggerBackgroundResolution`
 and post-message enrichment still sit on the client (`ShutdownAsync` cancels the CTS).
 

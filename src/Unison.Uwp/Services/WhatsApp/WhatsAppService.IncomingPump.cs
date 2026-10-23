@@ -728,7 +728,7 @@ namespace Unison.Uwp.Services.WhatsApp
             {
             }
 
-            OnHistorySyncReceived?.Invoke(this, null);
+            History?.NotifyHistorySyncReceived(null);
         }
 
         void IOfflineReplayHost.ReportFlushFailure(string reason, Exception error)

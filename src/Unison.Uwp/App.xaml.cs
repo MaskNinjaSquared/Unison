@@ -454,7 +454,6 @@ namespace Unison.Uwp
             services.AddSingleton<IHistoryMessageThumbnailMaterializer, WinRtHistoryMessageThumbnailMaterializer>();
             services.AddSingleton(sp => new HistoryFacade(
                 sp.GetRequiredService<AppSessionProvider>(),
-                sp.GetRequiredService<IWhatsAppService>(),
                 () => sp.GetRequiredService<IConnectionService>(),
                 sp.GetRequiredService<IConversationResyncHost>(),
                 sp.GetRequiredService<IHistorySyncHost>(),
@@ -604,7 +603,6 @@ namespace Unison.Uwp
                 sp.GetRequiredService<AppSessionProvider>(),
                 sp.GetRequiredService<ILocalContactsService>(),
                 sp.GetRequiredService<IPersonStore>(),
-                sp.GetRequiredService<IWhatsAppService>(),
                 sp.GetRequiredService<LidMappingStore>(),
                 sp.GetRequiredService<ILocalSettings>(),
                 sp.GetRequiredService<IJidResolver>(),
@@ -713,7 +711,6 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ChatRowIndex>(),
                 sp.GetRequiredService<ChatStateStore>().GroupSubjects));
             services.AddSingleton<IGroupService>(sp => new GroupFacade(
-                sp.GetRequiredService<IWhatsAppService>(),
                 sp.GetRequiredService<IGroupWireActions>(),
                 sp.GetRequiredService<IGroupNaming>(),
                 sp.GetRequiredService<IChatStateStore>(),

@@ -2,6 +2,15 @@
 
 Newest first.
 
+## Phase B — history / contact / group notify owns former client events
+
+`NotifyHistorySyncReceived` / `NotifySessionCleared` / `NotifyBackgroundHistorySyncBounced`
+on `HistoryFacade`; `NotifyAvatarCached` / `NotifyJidAliasResolved` on `ContactFacade`;
+`NotifyGroupListingDue` on `GroupFacade`. Host raises those instead of
+`OnHistorySync*` / `OnAvatar*` / `OnJidAlias*` / `OnGroupListingDue` /
+`OnBackgroundHistorySyncBounced`. Contact and Group façades no longer take
+`IWhatsAppService` only to subscribe.
+
 ## Phase B — history ack status + EnsureConnected via IConnectionService
 
 Rejected FULL_HISTORY ack raises sync status on `HistoryFacade`; host only ends

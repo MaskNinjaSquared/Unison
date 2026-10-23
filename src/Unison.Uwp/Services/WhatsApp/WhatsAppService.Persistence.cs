@@ -570,7 +570,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 });
 
                 Debug.WriteLine("[WhatsAppService] Fast startup loaded " + stored.Count + " chat preview rows");
-                OnHistorySyncReceived?.Invoke(this, null);
+                History?.NotifyHistorySyncReceived(null);
             }
             catch (Exception ex)
             {

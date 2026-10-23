@@ -85,6 +85,14 @@ namespace Unison.Core.Tests.Helpers
             {
             }
 
+            public void NotifyAvatarCached(string jid, string localAvatarUrl)
+            {
+            }
+
+            public void NotifyJidAliasResolved(string phoneJid, string lidJid, string source)
+            {
+            }
+
             public string ResolveDisplayName(string jid, string context) => _name;
 
             public bool IsSelf(string jid) => false;
@@ -155,6 +163,30 @@ namespace Unison.Core.Tests.Helpers
             public Task ApplyRemoteSelfPushNameAsync(string name) => Task.CompletedTask;
 
             public void CaptureSelfPushName(string pushName, string source = null)
+            {
+            }
+
+            public void AcceptIncomingPushName(
+                string pushName,
+                bool isGroup,
+                string participantJid,
+                string fromJid,
+                bool isOffline)
+            {
+            }
+
+            public void ApplyStanzaNotifyPushName(string fromJid, string notify, string participantJid)
+            {
+            }
+
+            public void RegisterIncomingEnvelopeAliasHints(
+                string senderLid,
+                string fromJid,
+                string peerRecipientPn,
+                string peerRecipientLid,
+                string recipientJid,
+                string participant,
+                string participantAlt)
             {
             }
 

@@ -10,8 +10,9 @@ namespace Unison.Core.Contracts.WhatsApp
     public interface IJidAliasPersistence
     {
         /// <summary>
-        /// Files each well-formed LID→PN pair both ways. Raises <c>OnJidAliasResolved</c> per
-        /// new pair so ContactFacade can coalesce persist / dedupe / avatar retry.
+        /// Files each well-formed LID→PN pair both ways. Notifies ContactFacade via
+        /// <c>NotifyJidAliasResolved</c> per new pair so it can coalesce persist / dedupe /
+        /// avatar retry.
         /// </summary>
         void RegisterAliasMappings(IEnumerable<KeyValuePair<string, string>> lidToPn, string source);
 

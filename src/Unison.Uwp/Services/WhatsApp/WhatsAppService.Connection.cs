@@ -825,7 +825,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
             // 6. Wipe messages, chats, and contact names from disk (epoch rotate — non-blocking for QR).
             await _messageStore.WipeAllDataAsync();
-            // history_migration / history_chat_preview: HistoryFacade listens to OnSessionCleared.
+            // history_migration / history_chat_preview: HistoryFacade via NotifySessionCleared.
             if (_groupRosterStore != null)
             {
                 try
@@ -865,6 +865,15 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             ResetFirstSyncListHoldFlags("session-cleared");
             var args = new SessionClearedEventArgs(startPairing);
+            try
+            {
+                History?.NotifySessionCleared();
+            }
+            catch (Exception ex)
+            {
+                Log($"[WhatsAppService] NotifySessionCleared failed: {ex.Message}");
+            }
+
             await _ui.RunAsync(() =>
             {
                 try
@@ -1763,7 +1772,7 @@ namespace Unison.Uwp.Services.WhatsApp
                             sync?.SyncType.ToString() ?? "history-sync");
                     }
                 }
-                OnHistorySyncReceived?.Invoke(this, sync);
+                History?.NotifyHistorySyncReceived(sync);
             };
 
             // Handle real-time decrypted messages (not history sync)

@@ -2,7 +2,7 @@
 // AliasFollowUpAvatarRows
 //
 // After a LID/PN burst, which list rows still have no avatar and should get a
-// forced retry. Pure selection; the host raises OnAvatarRetryDue.
+// forced retry. Pure selection; ContactFacade requests the refresh itself.
 // =============================================================================
 using System;
 using System.Collections.Generic;

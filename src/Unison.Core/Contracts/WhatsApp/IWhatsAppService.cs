@@ -22,13 +22,12 @@ namespace Unison.Core.Contracts.WhatsApp
         // ---------------------------------------------------------------------
 
         event EventHandler<string> OnConnectionUpdate;
-        event EventHandler<HistorySync> OnHistorySyncReceived;
-        event EventHandler OnDisplayNamesUpdated;
         event EventHandler OnSessionInitialized;
         /// <summary>
         /// Raised during/after a local session wipe. May fire twice: once to show Login
         /// immediately (<see cref="SessionClearedEventArgs.StartPairing"/> = false), then
-        /// again when auth is gone and pairing/QR can start.
+        /// again when auth is gone and pairing/QR can start. <see cref="IHistoryService"/> is
+        /// notified separately via <c>NotifySessionCleared</c>.
         /// </summary>
         event EventHandler<SessionClearedEventArgs> OnSessionCleared;
         event EventHandler<Exception> OnError;
@@ -50,19 +49,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// guess, not a verdict, and deliberately not acted on here.
         /// </summary>
         event EventHandler<string> OnInvalidSessionSuspected;
-        /// <summary>A background FULL_HISTORY solicitation went out; the toast gate counts these.</summary>
-        event EventHandler OnBackgroundHistorySyncBounced;
-        /// <summary>An avatar file was written to the local cache for a JID.</summary>
-        event EventHandler<AvatarCachedEventArgs> OnAvatarCached;
-        /// <summary>The background resolution pass reached its group step; the group façade runs the listing.</summary>
-        event EventHandler OnGroupListingDue;
-        /// <summary>A phone JID and a LID were newly paired.</summary>
-        event EventHandler<JidAliasResolvedEventArgs> OnJidAliasResolved;
-        /// <summary>
-        /// After a burst of new pairs, the rows still without an avatar under them. Raised on the
-        /// UI thread; the contact façade decides how they are asked again.
-        /// </summary>
-        event EventHandler<AvatarRetryDueEventArgs> OnAvatarRetryDue;
 
         Task InitializeAsync();
         Task ConnectAsync();

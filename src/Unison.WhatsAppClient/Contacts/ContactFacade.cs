@@ -35,7 +35,6 @@ namespace Unison.WhatsAppClient.Contacts
     public sealed class ContactFacade : IContactService
     {
         private readonly IPersonStore _personStore;
-        private readonly IWhatsAppService _whatsAppService;
         private readonly IDispatcher _ui;
         private readonly IChatCatalogPersistence _catalog;
         private readonly IJidResolver _jids;
@@ -79,7 +78,6 @@ namespace Unison.WhatsAppClient.Contacts
             IWhatsAppSessionProvider sessions,
             ILocalContactsService localContacts,
             IPersonStore personStore,
-            IWhatsAppService whatsAppService,
             LidMappingStore lidMappings,
             ILocalSettings localSettings,
             IJidResolver jids,
@@ -140,7 +138,6 @@ namespace Unison.WhatsAppClient.Contacts
             if (avatarCache == null) throw new ArgumentNullException(nameof(avatarCache));
 
             _personStore = personStore ?? throw new ArgumentNullException(nameof(personStore));
-            _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
             _jids = jids ?? throw new ArgumentNullException(nameof(jids));
             _avatarCache = avatarCache;
             _localContacts = localContacts;
@@ -199,22 +196,8 @@ namespace Unison.WhatsAppClient.Contacts
                 diagnostics);
             _roster = new GroupRosterPolicy(groups, this, jids, ui, catalog, chats, syncWork, sessions, workload);
 
-            // Both live as long as the app does, so there is nothing to unhook from.
+            // Lives as long as the app does, so there is nothing to unhook from.
             _nameRefresh.Applied += OnChatNamesApplied;
-            _whatsAppService.OnDisplayNamesUpdated += (s, e) =>
-            {
-                try
-                {
-                    DisplayNamesUpdated?.Invoke(this, EventArgs.Empty);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine("[ContactFacade] DisplayNamesUpdated handler failed: " + ex.Message);
-                }
-            };
-            _whatsAppService.OnAvatarCached += Client_OnAvatarCached;
-            _whatsAppService.OnJidAliasResolved += Client_OnJidAliasResolved;
-            _whatsAppService.OnAvatarRetryDue += Client_OnAvatarRetryDue;
         }
 
         private void OnChatNamesApplied(object sender, int updated)
@@ -228,40 +211,25 @@ namespace Unison.WhatsAppClient.Contacts
             NotifyDisplayNamesUpdated();
         }
 
-        /// <summary>
-        /// Not awaited: the write swallows its own failures and the client has nothing to do with
-        /// the result.
-        /// </summary>
-        private void Client_OnAvatarCached(object sender, AvatarCachedEventArgs e)
+        /// <inheritdoc />
+        public void NotifyAvatarCached(string jid, string localAvatarUrl)
         {
-            _ = NotifyAvatarCachedAsync(e.Jid, e.LocalAvatarUrl);
+            // Not awaited: the write swallows its own failures and the host has nothing to do with
+            // the result.
+            _ = NotifyAvatarCachedAsync(jid, localAvatarUrl);
         }
 
-        /// <summary>
-        /// An earlier lookup may have asked under only the LID or only the PN and stamped a false
-        /// "no-picture". Now that the pair is known, clear the false miss and coalesce the
-        /// follow-up (alias file, list fold, avatar retry).
-        /// </summary>
-        private void Client_OnJidAliasResolved(object sender, JidAliasResolvedEventArgs e)
+        /// <inheritdoc />
+        public void NotifyJidAliasResolved(string phoneJid, string lidJid, string source)
         {
-            ClearAvatarAttempted(e.LidJid);
-            ClearAvatarAttempted(e.PhoneJid);
-            ClearAvatarAttempted(_jids.GetCanonicalJid(e.PhoneJid));
-            _aliasFollowUps.NoteAvatarTarget(e.PhoneJid);
-            ScheduleAliasFollowUp(e.Source);
-        }
-
-        /// <summary>
-        /// Forced past the backoff: the failure it would honour was recorded under the half of the
-        /// identity that could not answer. Runs on the UI thread the client raised it on, which
-        /// <see cref="ChatAvatarPolicy.RequestRefresh"/> needs to read the live list.
-        /// </summary>
-        private void Client_OnAvatarRetryDue(object sender, AvatarRetryDueEventArgs e)
-        {
-            foreach (ChatItem chat in e.Chats)
-            {
-                RequestAvatarRefresh(chat, force: true);
-            }
+            // An earlier lookup may have asked under only the LID or only the PN and stamped a
+            // false "no-picture". Now that the pair is known, clear the false miss and coalesce
+            // the follow-up (alias file, list fold, avatar retry).
+            ClearAvatarAttempted(lidJid);
+            ClearAvatarAttempted(phoneJid);
+            ClearAvatarAttempted(_jids.GetCanonicalJid(phoneJid));
+            _aliasFollowUps.NoteAvatarTarget(phoneJid);
+            ScheduleAliasFollowUp(source);
         }
 
         /// <inheritdoc />

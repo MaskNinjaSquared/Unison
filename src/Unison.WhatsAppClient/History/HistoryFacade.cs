@@ -54,7 +54,6 @@ namespace Unison.WhatsAppClient.History
 
         private readonly IWhatsAppSessionProvider _sessions;
         private readonly IHistoryOnDemandSocket _onDemandSocket;
-        private readonly IWhatsAppService _appState;
         private readonly Func<IConnectionService> _resolveConnection;
         private readonly IConversationResyncHost _resync;
         private readonly IHistorySyncHost _historySync;
@@ -97,7 +96,6 @@ namespace Unison.WhatsAppClient.History
 
         public HistoryFacade(
             IWhatsAppSessionProvider sessions,
-            IWhatsAppService appState,
             Func<IConnectionService> resolveConnection,
             IConversationResyncHost resync,
             IHistorySyncHost historySync,
@@ -128,11 +126,6 @@ namespace Unison.WhatsAppClient.History
                 throw new ArgumentNullException(nameof(sessions));
             }
 
-            if (appState == null)
-            {
-                throw new ArgumentNullException(nameof(appState));
-            }
-
             if (resolveConnection == null)
             {
                 throw new ArgumentNullException(nameof(resolveConnection));
@@ -150,7 +143,6 @@ namespace Unison.WhatsAppClient.History
 
             _sessions = sessions;
             _onDemandSocket = onDemandSocket ?? throw new ArgumentNullException(nameof(onDemandSocket));
-            _appState = appState;
             _resolveConnection = resolveConnection;
             _resync = resync ?? throw new ArgumentNullException(nameof(resync));
             _historySync = historySync ?? throw new ArgumentNullException(nameof(historySync));
@@ -185,7 +177,6 @@ namespace Unison.WhatsAppClient.History
                 Debug.WriteLine("[HistoryFacade] SyncStatusChanged → " + (status ?? "<null>"));
                 Relay(() => SyncStatusChanged?.Invoke(this, status), "SyncStatusChanged");
             };
-            _appState.OnHistorySyncReceived += (s, sync) => Relay(() => HistorySyncReceived?.Invoke(this, sync), "HistorySyncReceived");
             _initialSync.Changed += (s, e) =>
             {
                 // Before the relay: the list reads IsAwaitingFirstHistorySync inside its handler.
@@ -200,8 +191,6 @@ namespace Unison.WhatsAppClient.History
 
                 Relay(() => InitialSyncProgress?.Invoke(this, e), "InitialSyncProgress");
             };
-            _appState.OnSessionCleared += (s, e) => { _ = ResetHistorySqliteAsync("session-cleared"); };
-            _appState.OnBackgroundHistorySyncBounced += (s, e) => NoteBackgroundHistorySyncBounce();
             if (_chatPreviewStore != null)
             {
                 _chatPreviewStore.ChunkPersisted += (s, e) =>
@@ -1141,6 +1130,24 @@ namespace Unison.WhatsAppClient.History
             }
 
             _historySync.ScheduleAcceptedHistoryOnDemandTimeout(state);
+        }
+
+        /// <inheritdoc />
+        public void NotifyHistorySyncReceived(HistorySync sync)
+        {
+            Relay(() => HistorySyncReceived?.Invoke(this, sync), "HistorySyncReceived");
+        }
+
+        /// <inheritdoc />
+        public void NotifySessionCleared()
+        {
+            _ = ResetHistorySqliteAsync("session-cleared");
+        }
+
+        /// <inheritdoc />
+        public void NotifyBackgroundHistorySyncBounced()
+        {
+            NoteBackgroundHistorySyncBounce();
         }
     }
 }

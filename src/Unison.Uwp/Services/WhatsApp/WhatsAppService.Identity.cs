@@ -136,7 +136,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// <summary>
         /// Same for a whole set at once, for the sources that deal in tables rather than in single
         /// pairs - a history chunk, a group listing. Follow-up is scheduled by ContactFacade on
-        /// each <see cref="OnJidAliasResolved"/> (debounced).
+        /// each <c>NotifyJidAliasResolved</c> (debounced).
         /// </summary>
         void IJidAliasPersistence.RegisterAliasMappings(
             IEnumerable<KeyValuePair<string, string>> lidToPn,
@@ -208,8 +208,8 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             RaiseReport(
-                () => OnJidAliasResolved?.Invoke(this, new JidAliasResolvedEventArgs(pn, lid, source)),
-                nameof(OnJidAliasResolved));
+                () => Contacts?.NotifyJidAliasResolved(pn, lid, source),
+                nameof(IContactService.NotifyJidAliasResolved));
             return true;
         }
 
