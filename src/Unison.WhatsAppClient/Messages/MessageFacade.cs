@@ -968,6 +968,59 @@ namespace Unison.WhatsAppClient.Messages
             return _availability.HydrateStickerAsync(message, sticker, messageId, chatJid);
         }
 
+        /// <inheritdoc />
+        public void ScheduleIncomingMediaHydration(
+            ChatMessage message,
+            Message.Types.StickerMessage sticker,
+            Message.Types.ImageMessage image,
+            string messageId,
+            string chatJid)
+        {
+            if (sticker != null)
+            {
+                ObserveIncomingWork(
+                    HydrateIncomingStickerAsync(message, sticker, messageId, chatJid),
+                    "hydrate-sticker",
+                    messageId);
+            }
+
+            if (image != null)
+            {
+                ObserveIncomingWork(
+                    HydrateIncomingImageAsync(message, image, messageId, chatJid),
+                    "hydrate-image",
+                    messageId);
+            }
+        }
+
+        private void ObserveIncomingWork(Task work, string label, string messageId)
+        {
+            if (work == null)
+            {
+                return;
+            }
+
+            _ = ObserveIncomingWorkAsync(work, label, messageId);
+        }
+
+        private async Task ObserveIncomingWorkAsync(Task work, string label, string messageId)
+        {
+            try
+            {
+                await work.ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] " + label + " failed for " + (messageId ?? "?") + ": " + ex.Message);
+                _diagnostics?.RecordException(
+                    "messages",
+                    label + "-failed",
+                    ex,
+                    "messageId=" + (messageId ?? string.Empty));
+            }
+        }
+
         public async Task SetMessagePinnedAsync(string chatJid, ChatMessage message, bool pin, uint durationSeconds = 604800)
         {
             await _whatsAppService.EnsureConnectedAsync();

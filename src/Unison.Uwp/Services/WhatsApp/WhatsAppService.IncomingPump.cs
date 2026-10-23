@@ -627,61 +627,24 @@ namespace Unison.Uwp.Services.WhatsApp
             _incoming.SetStage(stage, message, DateTime.UtcNow);
         }
 
-        /// <summary>
-        /// Fire-and-forget that still surfaces a failure. Hydrate / reaction work that runs
-        /// beside the pump used to be discarded with <c>_ =</c>, so a download that threw left
-        /// the bubble without media and no log.
-        /// </summary>
-        private static void ObserveIncomingWork(Task work, string label, string messageId)
-        {
-            if (work == null)
-            {
-                return;
-            }
-
-            _ = ObserveIncomingWorkAsync(work, label, messageId);
-        }
-
         private void ObserveMediaHydration(
             ChatMessage chatMessage,
             MessageRenderInfo renderInfo,
             string messageId,
             string jid)
         {
+            if (Messages == null)
+            {
+                return;
+            }
+
             IncomingMediaHydrationPlan plan = IncomingMediaHydrationPlan.From(renderInfo);
-            if (plan.HasSticker)
-            {
-                ObserveIncomingWork(
-                    Messages.HydrateIncomingStickerAsync(chatMessage, plan.Sticker, messageId, jid),
-                    "hydrate-sticker",
-                    messageId);
-            }
-
-            if (plan.HasImage)
-            {
-                ObserveIncomingWork(
-                    Messages.HydrateIncomingImageAsync(chatMessage, plan.Image, messageId, jid),
-                    "hydrate-image",
-                    messageId);
-            }
-        }
-
-        private static async Task ObserveIncomingWorkAsync(Task work, string label, string messageId)
-        {
-            try
-            {
-                await work.ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine(
-                    "[WhatsAppService] " + label + " failed for " + (messageId ?? "?") + ": " + ex.Message);
-                RuntimeDiagnosticsService.Instance.RecordException(
-                    "messages",
-                    label + "-failed",
-                    ex,
-                    "messageId=" + (messageId ?? string.Empty));
-            }
+            Messages.ScheduleIncomingMediaHydration(
+                chatMessage,
+                plan.HasSticker ? plan.Sticker : null,
+                plan.HasImage ? plan.Image : null,
+                messageId,
+                jid);
         }
 
         private void ResetIncomingMessagePump(string reason, bool requeueCurrent)

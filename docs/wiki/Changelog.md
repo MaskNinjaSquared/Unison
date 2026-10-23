@@ -2,6 +2,13 @@
 
 Newest first.
 
+## Phase B — self push-name app-state + media hydrate schedule on façades
+
+`IContactService.ApplyRemoteSelfPushNameAsync` owns app-state self push-name
+(`CaptureSelfPushName` + contact-name batch); `IResolvedNameApplyHost` no longer
+has `ApplySelfPushNameFromAppStateAsync`. `IMessageService.ScheduleIncomingMediaHydration`
+owns fire-and-forget sticker/image hydrate beside the pump.
+
 ## Phase B — app-state delete + message pin on façades
 
 `IMessageService.ApplyAppStateDeleteMessageAsync` and

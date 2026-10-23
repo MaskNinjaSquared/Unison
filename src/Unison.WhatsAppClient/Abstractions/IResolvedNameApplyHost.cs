@@ -5,17 +5,10 @@
 // capture policy (dash placeholder, PreferEstablished, RememberPersonName,
 // list relabel); the host only mirrors Me.Name / CurrentUserName and persists.
 // =============================================================================
-using System.Threading.Tasks;
-
 namespace Unison.WhatsAppClient.Abstractions
 {
     public interface IResolvedNameApplyHost
     {
-        /// <summary>
-        /// Self push-name from account app-state: capture, persist auth, then file as a contact name.
-        /// </summary>
-        Task ApplySelfPushNameFromAppStateAsync(string name);
-
         /// <summary>True when credentials are loaded and a self id is known.</summary>
         bool HasSelfCredentials { get; }
 

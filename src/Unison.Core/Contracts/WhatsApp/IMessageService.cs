@@ -183,6 +183,17 @@ namespace Unison.Core.Contracts.WhatsApp
             string messageId,
             string chatJid);
 
+        /// <summary>
+        /// Fire-and-forget sticker/image hydrate for a live insert. Failures are logged; the
+        /// pump only builds the plan and calls this.
+        /// </summary>
+        void ScheduleIncomingMediaHydration(
+            ChatMessage message,
+            Message.Types.StickerMessage sticker,
+            Message.Types.ImageMessage image,
+            string messageId,
+            string chatJid);
+
         /// <summary>Pins/unpins a message for the given chat (WhatsApp pin duration, default 7 days).</summary>
         Task SetMessagePinnedAsync(string chatJid, ChatMessage message, bool pin, uint durationSeconds = 604800);
 

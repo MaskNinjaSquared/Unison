@@ -4160,10 +4160,6 @@ namespace Unison.Uwp.Services.WhatsApp
             _chatState.NotifyMessagesChanged(chatJid);
         }
 
-        Task Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost.ApplySelfPushNameFromAppStateAsync(
-            string name) =>
-            ApplyAppStateSelfPushNameAsync(name);
-
         bool Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost.HasSelfCredentials =>
             _authState?.Me != null && !string.IsNullOrWhiteSpace(_authState.Me.Id);
 

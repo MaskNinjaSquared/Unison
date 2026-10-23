@@ -40,31 +40,11 @@ namespace Unison.Uwp.Services.WhatsApp
     public partial class WhatsAppService
     {
 
-        internal async Task ApplyAppStateSelfPushNameAsync(string name)
-        {
-            if (_authState?.Me == null)
-            {
-                return;
-            }
-
-            string selfJid = NormalizeJid(_authState.Me.Id);
-            string sanitized = SanitizeContactLabel(name, selfJid);
-            if (string.IsNullOrWhiteSpace(sanitized))
-            {
-                return;
-            }
-
-            if (Contacts != null)
-            {
-                Contacts.CaptureSelfPushName(sanitized, SelfPushNameCapture.AppStateSource);
-            }
-
-            await PersistAuthStateAsync(null, "apply-self-contact-name");
-            if (Contacts != null)
-            {
-                await Contacts.ApplyRemoteContactNameAsync(selfJid, sanitized).ConfigureAwait(false);
-            }
-        }
+        /// <summary>App-state sync entry: self push-name is owned by <see cref="IContactService"/>.</summary>
+        internal Task ApplyAppStateSelfPushNameAsync(string name) =>
+            Contacts != null
+                ? Contacts.ApplyRemoteSelfPushNameAsync(name)
+                : Task.CompletedTask;
 
         /// <summary>
         /// Durable half of a chat deletion. RAM + badge are owned by

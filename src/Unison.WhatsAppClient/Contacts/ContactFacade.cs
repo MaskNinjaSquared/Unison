@@ -297,8 +297,19 @@ namespace Unison.WhatsAppClient.Contacts
         }
 
         /// <summary>Self push-name from account app-state.</summary>
-        public Task ApplyRemoteSelfPushNameAsync(string name) =>
-            _resolvedNames.ApplySelfPushNameFromAppStateAsync(name);
+        public async Task ApplyRemoteSelfPushNameAsync(string name)
+        {
+            CaptureSelfPushName(name, SelfPushNameCapture.AppStateSource);
+
+            string selfJid = _resolvedNames.SelfId;
+            string applied = _resolvedNames.AuthSelfName;
+            if (string.IsNullOrWhiteSpace(selfJid) || string.IsNullOrWhiteSpace(applied))
+            {
+                return;
+            }
+
+            await ApplyRemoteContactNameAsync(selfJid, applied).ConfigureAwait(false);
+        }
 
         /// <inheritdoc />
         public void CaptureSelfPushName(string pushName, string source = null)
