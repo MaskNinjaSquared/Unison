@@ -39,6 +39,38 @@ namespace Unison.Uwp.Services.WhatsApp
 {
     public partial class WhatsAppService
     {
+        private bool TryGetSelfIdentityAliasPair(out string id, out string lid)
+        {
+            id = null;
+            lid = null;
+            if (_authState?.Me == null)
+            {
+                return false;
+            }
+
+            return SelfIdentityAliasPair.TryCreate(
+                _authState.Me.Id,
+                _authState.Me.Lid,
+                NormalizeJid,
+                out id,
+                out lid);
+        }
+
+        private void FileSelfIdentityAliases(string source)
+        {
+            string id;
+            string lid;
+            if (!TryGetSelfIdentityAliasPair(out id, out lid))
+            {
+                return;
+            }
+
+            JidAlias[id] = lid;
+            JidAlias[lid] = id;
+            RegisterSocketAlias(id, lid, source);
+            Debug.WriteLine("[WhatsAppService] Self identity alias: " + id + " <-> " + lid + " (" + source + ")");
+        }
+
         private void RegisterSocketAlias(string jidA, string jidB, string source)
         {
             _socket?.RegisterJidAlias(jidA, jidB, source);

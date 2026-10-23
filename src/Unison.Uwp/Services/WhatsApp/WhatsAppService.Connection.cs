@@ -209,18 +209,7 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             if (!IsCurrentSocket(s)) return;
             Debug.WriteLine("[WhatsAppService] Auth state updated, saving...");
-            if (_authState?.Me != null && !string.IsNullOrEmpty(_authState.Me.Id) && !string.IsNullOrEmpty(_authState.Me.Lid))
-            {
-                string id = NormalizeJid(_authState.Me.Id);
-                string lid = NormalizeJid(_authState.Me.Lid);
-                if (!string.IsNullOrEmpty(id) && !string.IsNullOrEmpty(lid) && id != lid)
-                {
-                    JidAlias[id] = lid;
-                    JidAlias[lid] = id;
-                    RegisterSocketAlias(id, lid, "auth-update-identity");
-                    Debug.WriteLine($"[WhatsAppService] Auth update identity alias: {id} <-> {lid}");
-                }
-            }
+            FileSelfIdentityAliases("auth-update-identity");
             await PersistAuthStateAsync(s as IWhatsAppSocket, "socket-auth-update");
         };
         
@@ -1025,15 +1014,12 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
 
                     // The own PN/LID pair is tiny and required before the socket starts.
-                    if (_authState?.Me != null && !string.IsNullOrEmpty(_authState.Me.Id) && !string.IsNullOrEmpty(_authState.Me.Lid))
+                    string selfId;
+                    string selfLid;
+                    if (TryGetSelfIdentityAliasPair(out selfId, out selfLid))
                     {
-                        string id = NormalizeJid(_authState.Me.Id);
-                        string lid = NormalizeJid(_authState.Me.Lid);
-                        if (id != lid)
-                        {
-                            JidAlias[id] = lid;
-                            JidAlias[lid] = id;
-                        }
+                        JidAlias[selfId] = selfLid;
+                        JidAlias[selfLid] = selfId;
                     }
                 }
 
@@ -1042,14 +1028,11 @@ namespace Unison.Uwp.Services.WhatsApp
                     Debug.WriteLine($"[WhatsAppService] Dropped {poisonedAliases} poisoned alias entr(ies) while restoring");
                 }
 
-                if (_authState?.Me != null && !string.IsNullOrEmpty(_authState.Me.Id) && !string.IsNullOrEmpty(_authState.Me.Lid))
+                string registerId;
+                string registerLid;
+                if (TryGetSelfIdentityAliasPair(out registerId, out registerLid))
                 {
-                    string id = NormalizeJid(_authState.Me.Id);
-                    string lid = NormalizeJid(_authState.Me.Lid);
-                    if (id != lid)
-                    {
-                        RegisterSocketAlias(id, lid, "initialize-identity");
-                    }
+                    RegisterSocketAlias(registerId, registerLid, "initialize-identity");
                 }
 
                 // Seed sidebar profile from persisted Me (name may exist before avatar fetch).
