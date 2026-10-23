@@ -29,6 +29,21 @@ namespace Unison.Core.State
         public DateTime PlaceholderScheduledForUtc { get; set; }
         public bool PlaceholderRequestInFlight { get; set; }
         public CancellationTokenSource PlaceholderScheduleCts { get; set; }
+
+        /// <summary>One-line drain log entry; null candidate → <c>&lt;null&gt;</c>.</summary>
+        public static string FormatForLog(MissingMessageCandidate candidate)
+        {
+            if (candidate == null)
+            {
+                return "<null>";
+            }
+
+            return candidate.MessageId + "@" + candidate.ChatJid +
+                ":fromMe=" + candidate.IsFromMe +
+                ",requests=" + candidate.PlaceholderRequestCount +
+                ",ts=" + candidate.MessageTimestamp.ToString("O") +
+                ",reason=" + candidate.Reason;
+        }
     }
 
     public sealed class PlaceholderResendRequestState

@@ -253,16 +253,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 out reason);
         }
 
-        private static string DescribeMissingMessageCandidate(MissingMessageCandidate candidate)
-        {
-            if (candidate == null)
-            {
-                return "<null>";
-            }
-
-            return $"{candidate.MessageId}@{candidate.ChatJid}:fromMe={candidate.IsFromMe},requests={candidate.PlaceholderRequestCount},ts={candidate.MessageTimestamp:O},reason={candidate.Reason}";
-        }
-
         private async Task TryDrainPendingPlaceholderResendsAsync(string trigger, int maxRequests = 4)
         {
             if (_socket == null || !_socket.IsHandshakeComplete)
@@ -286,7 +276,7 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            Debug.WriteLine($"[WhatsAppService] Deferred placeholder resend drain selected {pending.Count}/{totalEligible} eligible message(s) ({trigger}): {string.Join(" | ", pending.Select(DescribeMissingMessageCandidate))}");
+            Debug.WriteLine($"[WhatsAppService] Deferred placeholder resend drain selected {pending.Count}/{totalEligible} eligible message(s) ({trigger}): {string.Join(" | ", pending.Select(MissingMessageCandidate.FormatForLog))}");
 
             int requested = 0;
             foreach (var candidate in pending)
@@ -520,51 +510,12 @@ namespace Unison.Uwp.Services.WhatsApp
 
             // Naming the author is the one part that is not in the envelope: it needs the account,
             // the alias table and the directory, which is why the reading above stops here.
-            quotedSender = ResolveQuotedSender(context.QuotedParticipantJid);
-        }
-
-        private string ResolveQuotedSender(string participant)
-        {
-            if (string.IsNullOrEmpty(participant))
-            {
-                return null;
-            }
-
-            if (IsSelfJid(participant) || IsSelfLinkedJid(participant))
-            {
-                return LocalizedChatStripLabels.SelfFallbackName();
-            }
-
-            string name = ResolveDisplayName(participant, "quote");
-            if (string.IsNullOrWhiteSpace(name) || name.IndexOf('@') >= 0)
-            {
-                name = GetResolvedName(participant);
-            }
-
-            return name;
-        }
-
-        private static bool IsValidMessageTimestamp(DateTime timestamp)
-        {
-            return MessageTimestampValidity.IsValid(timestamp, DateTime.UtcNow);
-        }
-
-        // Took an isOffline flag it never read. The replayed case is exactly the one the
-        // rule is written for, so there was nothing for the flag to select -- but a
-        // parameter sitting there implies a distinction, and the next reader has to open
-        // the rule to find out there isn't one.
-        private static DateTime NormalizeIncomingTimestamp(DateTime timestamp)
-        {
-            // Never turn a replayed server event without a timestamp into a new message.
-            // Outgoing bubbles stamp DateTime.UtcNow before entering this path.
-            return MessageTimestampValidity.KeepOrDiscard(timestamp, DateTime.UtcNow);
-        }
-
-        private static byte[] DecodeBase64Safe(string value)
-        {
-            if (string.IsNullOrWhiteSpace(value)) return null;
-            try { return Convert.FromBase64String(value); }
-            catch { return null; }
+            quotedSender = QuotedSenderNaming.Resolve(
+                context.QuotedParticipantJid,
+                p => IsSelfJid(p) || IsSelfLinkedJid(p),
+                p => ResolveDisplayName(p, "quote"),
+                p => ResolveDisplayName(p, "sender"),
+                LocalizedChatStripLabels.SelfFallbackName());
         }
 
         private async Task ApplyIncomingRevocationAsync(string chatJid, string targetMessageId, string envelopeMessageId = null)
@@ -1250,8 +1201,10 @@ namespace Unison.Uwp.Services.WhatsApp
                     string reactionSenderName = e.IsFromMe
                         ? (_authState?.Me?.Name ?? LocalizedChatStripLabels.SelfFallbackName())
                         : (isGroup
-                            ? GetResolvedName(!string.IsNullOrEmpty(reactionParticipant) ? reactionParticipant : jid)
-                            : GetResolvedName(jid));
+                            ? ResolveDisplayName(
+                                !string.IsNullOrEmpty(reactionParticipant) ? reactionParticipant : jid,
+                                "sender")
+                            : ResolveDisplayName(jid, "sender"));
 
                     var reactionTimeline = MessagesByChat.GetOrAdd(jid);
 
@@ -1263,7 +1216,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         ParticipantJid = reactionParticipant,
                         SenderName = reactionSenderName,
                         IsFromMe = e.IsFromMe,
-                        Timestamp = NormalizeIncomingTimestamp(e.Timestamp)
+                        Timestamp = MessageTimestampValidity.KeepOrDiscard(e.Timestamp, DateTime.UtcNow)
                     };
 
                     // TryApply mutates HasReactions on the parent bubble; same UI-thread rule as revoke.
@@ -1407,10 +1360,10 @@ namespace Unison.Uwp.Services.WhatsApp
                     participantAltJid);
                 string resolvedParticipantName =
                     (!string.IsNullOrEmpty(stripParticipantJid)
-                        ? GetResolvedName(stripParticipantJid)
+                        ? ResolveDisplayName(stripParticipantJid, "sender")
                         : null)
                     ?? (!string.IsNullOrEmpty(participantJid)
-                        ? GetResolvedName(participantJid)
+                        ? ResolveDisplayName(participantJid, "sender")
                         : null);
                 IncomingSenderResolution sender = IncomingSenderResolver.Resolve(
                     isGroup,
@@ -1418,7 +1371,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     _authState?.Me?.Name,
                     LocalizedChatStripLabels.SelfFallbackName(),
                     resolvedParticipantName,
-                    GetResolvedName(jid),
+                    ResolveDisplayName(jid, "sender"),
                     !string.IsNullOrEmpty(participantJid) || !string.IsNullOrEmpty(stripParticipantJid));
                 string senderName = sender.SenderName;
                 bool isActuallyFromMe = sender.IsFromMe;
@@ -1475,7 +1428,7 @@ namespace Unison.Uwp.Services.WhatsApp
                         ParticipantJid = participantJid,
                         SenderName = senderName,
                         IsFromMe = isActuallyFromMe,
-                        Timestamp = NormalizeIncomingTimestamp(e.Timestamp),
+                        Timestamp = MessageTimestampValidity.KeepOrDiscard(e.Timestamp, DateTime.UtcNow),
                         Status = isActuallyFromMe ? ApplyChatStatusPolicy(jid, ChatMessage.StatusSent) : null
                     },
                     IncomingChatMessageSnapshot.FromRender(
