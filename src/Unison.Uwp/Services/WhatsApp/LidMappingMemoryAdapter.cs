@@ -29,38 +29,8 @@ namespace Unison.Uwp.Services.WhatsApp
                 return false;
             }
 
-            string normalized = JidHelper.Normalize(normalizedJid);
-            string user = JidUtils.GetUser(normalized);
-            if (string.IsNullOrEmpty(user))
-            {
-                return false;
-            }
-
-            if (normalized.EndsWith("@lid", StringComparison.OrdinalIgnoreCase))
-            {
-                string pnUser;
-                if (!_store.TryGetCachedPnUserForLid(user, out pnUser))
-                {
-                    return false;
-                }
-
-                pairedJid = pnUser + "@" + JidUtils.ServerWhatsApp;
-                return true;
-            }
-
-            if (normalized.EndsWith("@s.whatsapp.net", StringComparison.OrdinalIgnoreCase))
-            {
-                string lidUser;
-                if (!_store.TryGetCachedLidUserForPn(user, out lidUser))
-                {
-                    return false;
-                }
-
-                pairedJid = lidUser + "@lid";
-                return true;
-            }
-
-            return false;
+            // Store owns user-part keys + device/hosted re-attach (3.7b key shapes).
+            return _store.TryGetCachedPairedJid(JidHelper.Normalize(normalizedJid), out pairedJid);
         }
 
         public void RememberPair(string jidA, string jidB)
@@ -103,8 +73,8 @@ namespace Unison.Uwp.Services.WhatsApp
 
             string a = JidHelper.Normalize(jidA);
             string b = JidHelper.Normalize(jidB);
-            string lid = JidUtils.IsLidUser(a) ? a : (JidUtils.IsLidUser(b) ? b : null);
-            string pn = JidUtils.IsPnUser(a) ? a : (JidUtils.IsPnUser(b) ? b : null);
+            string lid = JidUtils.IsAnyLid(a) ? a : (JidUtils.IsAnyLid(b) ? b : null);
+            string pn = JidUtils.IsAnyPn(a) ? a : (JidUtils.IsAnyPn(b) ? b : null);
             return lid != null && pn != null ? new LidMapping(lid, pn) : null;
         }
 

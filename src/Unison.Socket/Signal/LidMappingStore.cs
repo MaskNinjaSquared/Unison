@@ -90,8 +90,9 @@ namespace Unison.Socket.Signal
                 var lid = pair.Lid;
                 var pn = pair.Pn;
 
-                var straight = JidUtils.IsLidUser(lid) && JidUtils.IsPnUser(pn);
-                var swapped = JidUtils.IsPnUser(lid) && JidUtils.IsLidUser(pn);
+                // Hosted and plain share one user-part key; device/server are re-attached on read.
+                var straight = JidUtils.IsAnyLid(lid) && JidUtils.IsAnyPn(pn);
+                var swapped = JidUtils.IsAnyPn(lid) && JidUtils.IsAnyLid(pn);
                 if (!straight && !swapped)
                 {
                     _log.Warn("[LidMapping] Invalid LID-PN mapping: " + lid + ", " + pn);
@@ -219,6 +220,47 @@ namespace Unison.Socket.Signal
 
             pnUser = _cache.Get(LidKey(lidUser));
             return !string.IsNullOrEmpty(pnUser);
+        }
+
+        /// <summary>
+        /// Sync paired JID for a full query address: looks up by user part, then re-attaches
+        /// the caller's device (and hosted server) the same way async resolve does.
+        /// </summary>
+        public bool TryGetCachedPairedJid(string jid, out string pairedJid)
+        {
+            pairedJid = null;
+            if (string.IsNullOrEmpty(jid))
+            {
+                return false;
+            }
+
+            if (JidUtils.IsAnyLid(jid))
+            {
+                string lidUser = JidUtils.GetUser(jid);
+                string pnUser;
+                if (string.IsNullOrEmpty(lidUser) || !TryGetCachedPnUserForLid(lidUser, out pnUser))
+                {
+                    return false;
+                }
+
+                pairedJid = BuildPnForLidQuery(jid, pnUser);
+                return !string.IsNullOrEmpty(pairedJid);
+            }
+
+            if (JidUtils.IsAnyPn(jid))
+            {
+                string pnUser = JidUtils.GetUser(jid);
+                string lidUser;
+                if (string.IsNullOrEmpty(pnUser) || !TryGetCachedLidUserForPn(pnUser, out lidUser))
+                {
+                    return false;
+                }
+
+                pairedJid = BuildLidForPnQuery(jid, lidUser);
+                return !string.IsNullOrEmpty(pairedJid);
+            }
+
+            return false;
         }
 
         private async Task<IReadOnlyList<LidMapping>> ResolveLidsForPnsAsync(IReadOnlyList<string> pns)
@@ -477,24 +519,58 @@ namespace Unison.Socket.Signal
                 return;
             }
 
-            var device = JidUtils.GetDevice(pn);
-
-            // A hosted phone number maps onto the hosted LID server regardless of device id.
-            var lid = JidUtils.IsHostedPnUser(pn)
-                ? lidUser + (device > 0 ? ":" + device : string.Empty) + "@" + JidUtils.ServerHostedLid
-                : JidUtils.BuildLidJid(lidUser, device);
+            string lid = BuildLidForPnQuery(pn, lidUser);
+            if (string.IsNullOrEmpty(lid))
+            {
+                return;
+            }
 
             resolved[pn] = new LidMapping(lid, pn);
         }
 
         private static void AddPnPair(IDictionary<string, LidMapping> resolved, string lid, string pnUser)
         {
-            var device = JidUtils.GetDevice(lid);
-            var pn = JidUtils.IsHostedLidUser(lid)
-                ? pnUser + (device > 0 ? ":" + device : string.Empty) + "@" + JidUtils.ServerHosted
-                : JidUtils.BuildPnJid(pnUser, device);
+            string pn = BuildPnForLidQuery(lid, pnUser);
+            if (string.IsNullOrEmpty(pn))
+            {
+                return;
+            }
 
             resolved[lid] = new LidMapping(lid, pn);
+        }
+
+        private static string BuildLidForPnQuery(string pn, string lidUser)
+        {
+            if (string.IsNullOrEmpty(lidUser))
+            {
+                return null;
+            }
+
+            int device = JidUtils.GetDevice(pn);
+
+            // A hosted phone number maps onto the hosted LID server regardless of device id.
+            if (JidUtils.IsHostedPnUser(pn))
+            {
+                return lidUser + (device > 0 ? ":" + device : string.Empty) + "@" + JidUtils.ServerHostedLid;
+            }
+
+            return JidUtils.BuildLidJid(lidUser, device);
+        }
+
+        private static string BuildPnForLidQuery(string lid, string pnUser)
+        {
+            if (string.IsNullOrEmpty(pnUser))
+            {
+                return null;
+            }
+
+            int device = JidUtils.GetDevice(lid);
+            if (JidUtils.IsHostedLidUser(lid))
+            {
+                return pnUser + (device > 0 ? ":" + device : string.Empty) + "@" + JidUtils.ServerHosted;
+            }
+
+            return JidUtils.BuildPnJid(pnUser, device);
         }
 
         /// <summary>
