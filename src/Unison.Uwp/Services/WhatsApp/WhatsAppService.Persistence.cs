@@ -573,27 +573,13 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private async Task NormalizePersistedChatNamesAsync()
         {
-            await _ui.RunAsync(() =>
-                {
-                    var titles = new List<ResolvedNameChange>();
-                    int updated = ResolvedNameApply.Apply(
-                        Chats,
-                        ResolveDisplayName,
-                        IsMeaningfulChatLabel,
-                        membersToo: false,
-                        titles);
-                    foreach (ResolvedNameChange title in titles)
-                    {
-                        Debug.WriteLine($"[WhatsAppService] Normalized persisted chat title '{title.Previous}' -> '{title.Name}' for {title.Jid}");
-                    }
-
-                    if (updated > 0)
-                    {
-                        Debug.WriteLine($"[WhatsAppService] Normalized {updated} persisted chat titles");
-                        OnDisplayNamesUpdated?.Invoke(this, EventArgs.Empty);
-                        SchedulePersist();
-                    }
-                });
+            int updated = await _nameRefresh.NormalizePersistedTitlesAsync().ConfigureAwait(false);
+            if (updated > 0)
+            {
+                // Applied already raised OnDisplayNamesUpdated; only the startup pass
+                // also rewrites the catalog so the next cold start keeps the titles.
+                SchedulePersist();
+            }
         }
 
         private async Task PersistCriticalSuspendStateAsync()

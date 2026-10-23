@@ -116,6 +116,29 @@ namespace Unison.WhatsAppClient.Helpers
             }
         }
 
+        /// <summary>
+        /// Titles only (no member relabel): the pass that runs once after persisted chats
+        /// rehydrate, so phone-number placeholders become resolved names before the list paints.
+        /// </summary>
+        /// <returns>How many titles changed; zero when nothing moved.</returns>
+        public async Task<int> NormalizePersistedTitlesAsync()
+        {
+            int updated = 0;
+            await _ui.RunAsync(() =>
+            {
+                updated = ResolvedNameApply.Apply(
+                    _chats.Chats,
+                    ResolveForApply,
+                    IsMeaningful,
+                    membersToo: false);
+                if (updated > 0)
+                {
+                    Applied?.Invoke(this, updated);
+                }
+            }).ConfigureAwait(false);
+            return updated;
+        }
+
         private string ResolveForApply(string jid, string context)
         {
             if (string.Equals(context, "chat", StringComparison.Ordinal) &&
