@@ -2,6 +2,11 @@
 
 Newest first.
 
+## Phase B — HistoryFacade.ApplyHistorySyncAsync owns chunk apply + notify
+
+Connection calls `ApplyHistorySyncAsync` (persist via `SyncMessageHistoryAsync` +
+`NotifyHistorySyncReceived`). Enrichment gates stay on the host.
+
 ## Phase B — legacy preview surface refresh on ChatFacade
 
 After repair, ChatFacade clears `IMessageStore` RAM cache and calls

@@ -1740,14 +1740,13 @@ namespace Unison.Uwp.Services.WhatsApp
                     "; type=" + (sync?.SyncType.ToString() ?? "<none>"));
                 try
                 {
-                    // Lazy Func from Create; history apply owns the chunk.
-                    if (Messages == null)
+                    if (History == null)
                     {
                         throw new InvalidOperationException(
-                            "IMessageService must resolve before history sync apply.");
+                            "IHistoryService must resolve before history sync apply.");
                     }
 
-                    Messages.SyncMessageHistoryAsync(sync).GetAwaiter().GetResult();
+                    History.ApplyHistorySyncAsync(sync).GetAwaiter().GetResult();
                 }
                 finally
                 {
@@ -1772,7 +1771,6 @@ namespace Unison.Uwp.Services.WhatsApp
                             sync?.SyncType.ToString() ?? "history-sync");
                     }
                 }
-                History?.NotifyHistorySyncReceived(sync);
             };
 
             // Handle real-time decrypted messages (not history sync)

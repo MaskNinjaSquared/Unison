@@ -78,6 +78,7 @@ namespace Unison.WhatsAppClient.History
         private readonly IAppVisibility _visibility;
         private readonly IHistoryMessageThumbnailMaterializer _messageThumbs;
         private readonly IStatusThumbnailMaterializer _statusThumbs;
+        private readonly Func<IMessageService> _resolveMessages;
 
         /// <summary>
         /// Session-scoped: one toast after repeated background history lots. Not reset until
@@ -97,6 +98,7 @@ namespace Unison.WhatsAppClient.History
         public HistoryFacade(
             IWhatsAppSessionProvider sessions,
             Func<IConnectionService> resolveConnection,
+            Func<IMessageService> resolveMessages,
             IConversationResyncHost resync,
             IHistorySyncHost historySync,
             IJidAliasPersistence aliasPersist,
@@ -131,6 +133,11 @@ namespace Unison.WhatsAppClient.History
                 throw new ArgumentNullException(nameof(resolveConnection));
             }
 
+            if (resolveMessages == null)
+            {
+                throw new ArgumentNullException(nameof(resolveMessages));
+            }
+
             if (store == null)
             {
                 throw new ArgumentNullException(nameof(store));
@@ -144,6 +151,7 @@ namespace Unison.WhatsAppClient.History
             _sessions = sessions;
             _onDemandSocket = onDemandSocket ?? throw new ArgumentNullException(nameof(onDemandSocket));
             _resolveConnection = resolveConnection;
+            _resolveMessages = resolveMessages;
             _resync = resync ?? throw new ArgumentNullException(nameof(resync));
             _historySync = historySync ?? throw new ArgumentNullException(nameof(historySync));
             _aliasPersist = aliasPersist ?? throw new ArgumentNullException(nameof(aliasPersist));
@@ -1130,6 +1138,24 @@ namespace Unison.WhatsAppClient.History
             }
 
             _historySync.ScheduleAcceptedHistoryOnDemandTimeout(state);
+        }
+
+        /// <inheritdoc />
+        public async Task ApplyHistorySyncAsync(HistorySync sync)
+        {
+            if (sync != null)
+            {
+                IMessageService messages = _resolveMessages();
+                if (messages == null)
+                {
+                    throw new InvalidOperationException(
+                        "IMessageService must resolve before history sync apply.");
+                }
+
+                await messages.SyncMessageHistoryAsync(sync).ConfigureAwait(false);
+            }
+
+            NotifyHistorySyncReceived(sync);
         }
 
         /// <inheritdoc />

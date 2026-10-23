@@ -351,8 +351,7 @@ namespace Unison.WhatsAppClient.Messages
                         continue;
                     }
 
-                    string captured = jid;
-                    Relay(() => ChatMessagesChanged?.Invoke(this, captured), "ChatMessagesChanged");
+                    NotifyChatMessagesChanged(jid);
                 }
             }
         }

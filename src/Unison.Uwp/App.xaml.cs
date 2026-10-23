@@ -455,6 +455,7 @@ namespace Unison.Uwp
             services.AddSingleton(sp => new HistoryFacade(
                 sp.GetRequiredService<AppSessionProvider>(),
                 () => sp.GetRequiredService<IConnectionService>(),
+                () => sp.GetRequiredService<IMessageService>(),
                 sp.GetRequiredService<IConversationResyncHost>(),
                 sp.GetRequiredService<IHistorySyncHost>(),
                 sp.GetRequiredService<IJidAliasPersistence>(),

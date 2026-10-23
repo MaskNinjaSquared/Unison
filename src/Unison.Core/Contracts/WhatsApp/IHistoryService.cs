@@ -125,7 +125,15 @@ namespace Unison.Core.Contracts.WhatsApp
         void HandleOnDemandAck(string ackClass, string ackId, string ackError);
 
         /// <summary>
-        /// Host path: a history chunk arrived (or a null "reload" signal after SQLite apply).
+        /// Host path: apply a history chunk (people + SQLite via message façade helpers) then
+        /// raise <see cref="HistorySyncReceived"/>. Null <paramref name="sync"/> is a surface
+        /// reload signal only (no persist).
+        /// </summary>
+        Task ApplyHistorySyncAsync(HistorySync sync);
+
+        /// <summary>
+        /// Host path: raise <see cref="HistorySyncReceived"/> only (null = reload surfaces).
+        /// Prefer <see cref="ApplyHistorySyncAsync"/> when a chunk must be persisted.
         /// </summary>
         void NotifyHistorySyncReceived(HistorySync sync);
 
