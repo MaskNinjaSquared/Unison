@@ -780,7 +780,6 @@ namespace Unison.Uwp.Services.WhatsApp
         /// <summary>Tip watermark must stall this many idle cycles before catch-up stops.</summary>
         private int CatchUpStagnantCyclesBeforeStop =>
             CurrentSyncPacing.CatchUpStagnantCyclesBeforeStop;
-        private static readonly TimeSpan ActiveChatReconcileCooldown = TimeSpan.FromSeconds(12);
 
         private string CurrentUserAvatar => _selfProfile.AvatarUrl;
 
