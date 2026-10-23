@@ -178,7 +178,9 @@ Primitives that already left the contract (façade / Netstandard Phase A):
 
 The stores (`IPersonStore`, `IChatStore`, `IGroupRosterStore`) are constructor parameters of the client now. After `BuildServiceProvider`, `App.ConfigureServices` still does:
 
-- `AttachMessageService` / `AttachChatService` / `AttachContactService`
+- `AttachMessageService` / `AttachChatService`
+
+`AttachContactService` is gone: `WhatsAppService.Create` takes `Func<IContactService>` (lazy, breaks the DI cycle). Background names/pictures run on `IContactService.RunBackgroundResolutionAsync`; the client keeps quiet-wait / handshake / catch-up gates and still raises `OnGroupListingDue` after.
 
 `AttachDebugSendService` is gone (phase 4): `App` starts `IDebugSendService` once in Debug builds.
 The watcher already skipped requests while the transport was not ready, so the five start/stop
