@@ -1279,12 +1279,10 @@ auto-reconnect and catch-up-continue. Idle-lot decide and adjacent FULL_HISTORY 
 `IHistoryCatchUpHost`.
 
 **Phase 4 orchestration largely closed.** Ensure / resume / pairing stage-2 /
-broker transfer / soft-reconnect entry / suspend-shutdown / ConnectAsync early
-gates / health-monitor *loop* live in WhatsAppClient helpers + hosts;
-`ConnectionFacade` owns the public soft-reconnect and lifecycle entries.
-Remaining on the client: the rest of `ConnectAsync` (transport open / handlers),
-incoming pump, and socket field ownership until the compatibility type is
-genuinely connection-only (or deleted under Netstandard D).
+broker transfer / soft-reconnect / suspend-shutdown / Connect gates + prepare /
+close disposition / health-monitor loop live in WhatsAppClient helpers + hosts.
+Remaining on the client: BuildSocketBridge + handler wiring inside
+`ConnectAsync`, incoming pump, and socket field ownership until Netstandard D.
 
 **The open conversation is shared state.** `ActiveChat` (`Unison.Core/State`, DI singleton over
 `JidAliasTable.GetCanonicalJid`) holds the conversation the user has open by its canonical

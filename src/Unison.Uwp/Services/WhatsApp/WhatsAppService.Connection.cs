@@ -185,6 +185,88 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         /// <summary>
+        /// Applies <see cref="ConnectionCloseDisposition"/> side effects. Returns true when the
+        /// connection-update handler should publish and return without falling through.
+        /// </summary>
+        private bool ApplyConnectionCloseAction(ConnectionCloseAction action, string trigger)
+        {
+            switch (action)
+            {
+                case ConnectionCloseAction.SkipPairingOwnsReconnect:
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "connection",
+                        "pairing-restart-close",
+                        "ignored-pre-session-streak=true");
+                    PairingTrace(
+                        "close while pairingRestartPending → SKIP ScheduleAutoReconnect " +
+                        "(stage2 owner)");
+                    return true;
+
+                case ConnectionCloseAction.ClaimPairingStage2:
+                    if (string.Equals(trigger, "connection-update-restart", StringComparison.Ordinal))
+                    {
+                        TryStartPairingStage2Reconnect(trigger);
+                        return false;
+                    }
+
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "connection",
+                        "pairing-close-before-restart",
+                        "claiming-stage2=true");
+                    PairingTrace(
+                        "close BEFORE restart flag → claim stage2 (close-before-restart race)");
+                    TryStartPairingStage2Reconnect("close-before-restart");
+                    return true;
+
+                case ConnectionCloseAction.CountPreSessionStreak:
+                {
+                    int streak = Interlocked.Increment(ref _preSessionCloseStreak);
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "connection",
+                        "pre-session-close",
+                        "streak=" + streak + "; threshold=" + PreSessionCloseFatalThreshold);
+                    if (ConnectionCloseDisposition.PreSessionStreakReachedFatal(
+                            streak,
+                            PreSessionCloseFatalThreshold))
+                    {
+                        RaiseReport(
+                            () => OnInvalidSessionSuspected?.Invoke(this, "pre-session-close-streak"),
+                            nameof(OnInvalidSessionSuspected));
+
+                        if (_fatalSessionEnded)
+                        {
+                            return true;
+                        }
+                    }
+
+                    ScheduleAutoReconnect(trigger);
+                    return false;
+                }
+
+                case ConnectionCloseAction.SoftReconnectAfterEstablished:
+                    Interlocked.Exchange(ref _preSessionCloseStreak, 0);
+                    ScheduleAutoReconnect(trigger);
+                    return false;
+
+                case ConnectionCloseAction.SoftReconnect:
+                    ScheduleAutoReconnect(trigger);
+                    return false;
+
+                case ConnectionCloseAction.QrExpired:
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "connection",
+                        "qr-expired",
+                        "trigger=" + trigger);
+                    PairingTrace("socket closed while unregistered; QR expired");
+                    OnQrExpired?.Invoke(this, EventArgs.Empty);
+                    return false;
+
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>
         /// Binds one monitored socket into <see cref="IConnectionHealthMonitorHost"/> for
         /// <see cref="ConnectionHealthMonitor"/>.
         /// </summary>
@@ -1128,42 +1210,10 @@ namespace Unison.Uwp.Services.WhatsApp
                     }
                 }
 
-                // Only reset per-connection gates when a new transport will actually
-                // be created. Resetting them before waiting on the lock allowed a second
-                // caller to invalidate the first caller's successful session gate.
-                // (Early Skip/Abort already returned above via ConnectionConnectGates.)
-                if (!_fatalSessionEnded)
-                {
-                    _suppressReconnect = false;
-                }
-                _sessionEstablishedThisConnection = false;
-                _sessionEstablishedTcs = CreateSessionEstablishedTcs();
-                _historyIdentityRefreshTriggeredThisSession = false;
-                _qrDeliveredThisConnection = false;
-                Interlocked.Exchange(ref _postMessageEnrichmentStarted, 0);
-                Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 0);
-
-                _isConnecting = true;
-                
-                StopConnectionHealthMonitor("connect-replace-socket");
-                if (_socket != null)
-                {
-                    var previousSocket = _socket;
-                    _socket = null;
-                    previousSocket.Disconnect();
-                    previousSocket.Dispose();
-                }
-
-                DeferredAvatars?.Cancel();
-
-                if (_authState == null) await InitializeConnectionStateAsync();
-
-                // A session wipe running alongside this drops the state, and the login surface
-                // it raises is what started this attempt in the first place. There is nothing to
-                // connect with, and the wipe starts pairing again when it finishes, so standing
-                // down is the entire response.
-                var auth = _authState;
-                if (auth == null)
+                // Drop previous socket + load auth. Transport build stays below.
+                ConnectionConnectPrepareResult prepare =
+                    await ConnectionConnectPrepare.RunAsync(this).ConfigureAwait(false);
+                if (prepare == ConnectionConnectPrepareResult.AbortSessionWipeInFlight)
                 {
                     RuntimeDiagnosticsService.Instance.Write(
                         "connection",
@@ -1172,7 +1222,7 @@ namespace Unison.Uwp.Services.WhatsApp
                     return;
                 }
 
-                if (ShouldRefuseConnectBecauseSessionDied())
+                if (prepare == ConnectionConnectPrepareResult.AbortFatalAfterAuth)
                 {
                     RuntimeDiagnosticsService.Instance.Write(
                         "connection",
@@ -1181,30 +1231,19 @@ namespace Unison.Uwp.Services.WhatsApp
                     return;
                 }
 
-                _syncWork.SetReplayDrainPending(auth.Registered);
-                Interlocked.Exchange(ref _offlineReplayReleased, 0);
-                if (!_fatalSessionEnded)
-                {
-                    _suppressReconnect = false;
-                }
+                var auth = _authState;
+                Debug.WriteLine(
+                    "[WhatsAppService] ConnectAsync using AuthState (ObjID: " +
+                    auth.GetHashCode() +
+                    "), Registered: " +
+                    auth.Registered +
+                    ", Me: " +
+                    auth.Me?.Id);
 
-                // Pre-session-close → logout only for returning registered companions.
-                // Fresh QR (unregistered) and 515 pairing stage-2 must not escalate closes.
-                _countPreSessionCloseAsFatal = auth.Registered && !_pairingRestartPending;
-                if (!_countPreSessionCloseAsFatal)
-                {
-                    Interlocked.Exchange(ref _preSessionCloseStreak, 0);
-                }
-
-                Debug.WriteLine($"[WhatsAppService] ConnectAsync using AuthState (ObjID: {auth.GetHashCode()}), Registered: {auth.Registered}, Me: {auth.Me?.Id}");
-                _historyRequests.ReleaseFull();
-                _lastHistorySyncReceivedUtc = DateTime.MinValue;
-                _lastHistorySyncTypeReceived = null;
-                _historyRequests.ClearRequests();
-                _historyRequests.ClearBackoff();
-                
-                bool reuseLoadedKeyState = _sharedKeyStore != null &&
-                                           (auth.Sessions.Count > 0 || auth.PreKeys.Count > 0);
+                bool reuseLoadedKeyState = ConnectionConnectPrepare.ShouldReuseLoadedKeyStore(
+                    _sharedKeyStore != null,
+                    auth.Sessions.Count,
+                    auth.PreKeys.Count);
 
                 IWhatsAppSocket socket = BuildSocketBridge(reuseLoadedKeyState);
 
@@ -1288,99 +1327,35 @@ namespace Unison.Uwp.Services.WhatsApp
                 if (status == "restart")
                 {
                     // pair-success already set Registered=true; 515 close is expected.
-                    // Do not let pre-session-close streak treat this as a revoked logout.
                     RuntimeDiagnosticsService.Instance.Write(
                         "connection",
                         "pairing-restart",
                         "code=515");
-
                     PairingTrace("connection status=restart → stage2");
-                    TryStartPairingStage2Reconnect("connection-update-restart");
+                    ApplyConnectionCloseAction(
+                        ConnectionCloseDisposition.ForRestartStatus(),
+                        "connection-update-restart");
                 }
                 else if (status == "close" && _authState != null && _authState.Registered)
                 {
                     StopConnectionHealthMonitor("socket-close");
-
-                    if (_pairingRestartPending)
+                    ConnectionCloseAction closeAction = ConnectionCloseDisposition.ForRegisteredClose(
+                        _pairingRestartPending,
+                        _sessionEstablishedThisConnection,
+                        _countPreSessionCloseAsFatal);
+                    if (ApplyConnectionCloseAction(closeAction, "socket-close"))
                     {
-                        // Stage-2 already owns the window (ReconnectForPairingAsync / stream 515).
-                        // Do NOT ScheduleAutoReconnect and do NOT restart Connect here —
-                        // _isReconnecting is cleared as soon as ConnectAsync() returns, while
-                        // OnSessionInitialized may still be outstanding.
-                        RuntimeDiagnosticsService.Instance.Write(
-                            "connection",
-                            "pairing-restart-close",
-                            "ignored-pre-session-streak=true");
-                        PairingTrace(
-                            "close while pairingRestartPending → SKIP ScheduleAutoReconnect " +
-                            "(stage2 owner)");
                         PublishConnectionUpdate(status);
                         return;
                     }
-
-                    // Mobile often delivers close(1006) milliseconds BEFORE status=restart /
-                    // before OnStreamError finishes. Registered is already true from
-                    // pair-success, session not established, pre-session-fatal off (QR) —
-                    // claim stage-2 now so generic AutoReconnect cannot win the race.
-                    if (!_sessionEstablishedThisConnection && !_countPreSessionCloseAsFatal)
-                    {
-                        RuntimeDiagnosticsService.Instance.Write(
-                            "connection",
-                            "pairing-close-before-restart",
-                            "claiming-stage2=true");
-                        PairingTrace(
-                            "close BEFORE restart flag → claim stage2 (close-before-restart race)");
-                        TryStartPairingStage2Reconnect("close-before-restart");
-                        PublishConnectionUpdate(status);
-                        return;
-                    }
-
-                    if (!_sessionEstablishedThisConnection && _countPreSessionCloseAsFatal)
-                    {
-                        int streak = Interlocked.Increment(ref _preSessionCloseStreak);
-                        RuntimeDiagnosticsService.Instance.Write(
-                            "connection",
-                            "pre-session-close",
-                            "streak=" + streak + "; threshold=" + PreSessionCloseFatalThreshold);
-                        if (streak >= PreSessionCloseFatalThreshold)
-                        {
-                            // Report only — ConnectionFacade decides auto-unlink policy.
-                            RaiseReport(
-                                () => OnInvalidSessionSuspected?.Invoke(this, "pre-session-close-streak"),
-                                nameof(OnInvalidSessionSuspected));
-
-                            if (_fatalSessionEnded)
-                            {
-                                PublishConnectionUpdate(status);
-                                return;
-                            }
-
-                            // Policy skipped (offline / setting off): keep reconnecting.
-                        }
-                    }
-                    else if (_sessionEstablishedThisConnection)
-                    {
-                        Interlocked.Exchange(ref _preSessionCloseStreak, 0);
-                    }
-
-                    ScheduleAutoReconnect("socket-close");
                 }
-                else if (status == "close" &&
-                         _qrDeliveredThisConnection &&
-                         !_pairingRestartPending &&
-                         (_authState == null || !_authState.Registered))
+                else if (status == "close")
                 {
-                    // Nothing brings a pairing session back: the reconnect loop stands down while
-                    // the account is unregistered, deliberately. So this close is the end of the
-                    // QR on screen - the refs the server handed out ran out, or the socket
-                    // dropped - and saying nothing leaves the login surface showing a code the
-                    // phone has already stopped accepting, with no way to ask for another.
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "connection",
-                        "qr-expired",
-                        "trigger=socket-close");
-                    PairingTrace("socket closed while unregistered; QR expired");
-                    OnQrExpired?.Invoke(this, EventArgs.Empty);
+                    ConnectionCloseAction qrAction = ConnectionCloseDisposition.ForUnregisteredClose(
+                        _qrDeliveredThisConnection,
+                        _pairingRestartPending,
+                        _authState != null && _authState.Registered);
+                    ApplyConnectionCloseAction(qrAction, "socket-close");
                 }
 
                 PublishConnectionUpdate(status);
@@ -1950,6 +1925,86 @@ namespace Unison.Uwp.Services.WhatsApp
 
         bool IConnectionConnectGateSource.ShouldRefuseConnectBecauseSessionDied =>
             ShouldRefuseConnectBecauseSessionDied();
+
+        void IConnectionConnectPrepareHost.ResetPerConnectionGates()
+        {
+            // Only reset per-connection gates when a new transport will actually
+            // be created. Resetting them before waiting on the lock allowed a second
+            // caller to invalidate the first caller's successful session gate.
+            if (!_fatalSessionEnded)
+            {
+                _suppressReconnect = false;
+            }
+
+            _sessionEstablishedThisConnection = false;
+            _sessionEstablishedTcs = CreateSessionEstablishedTcs();
+            _historyIdentityRefreshTriggeredThisSession = false;
+            _qrDeliveredThisConnection = false;
+            Interlocked.Exchange(ref _postMessageEnrichmentStarted, 0);
+            Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 0);
+        }
+
+        void IConnectionConnectPrepareHost.MarkConnecting() => _isConnecting = true;
+
+        void IConnectionConnectPrepareHost.StopHealthAndDropCurrentSocket()
+        {
+            StopConnectionHealthMonitor("connect-replace-socket");
+            if (_socket == null)
+            {
+                return;
+            }
+
+            var previousSocket = _socket;
+            _socket = null;
+            previousSocket.Disconnect();
+            previousSocket.Dispose();
+        }
+
+        void IConnectionConnectPrepareHost.CancelDeferredAvatars() =>
+            DeferredAvatars?.Cancel();
+
+        async Task IConnectionConnectPrepareHost.EnsureAuthLoadedAsync()
+        {
+            if (_authState == null)
+            {
+                await InitializeConnectionStateAsync().ConfigureAwait(false);
+            }
+        }
+
+        bool IConnectionConnectPrepareHost.HasAuthState => _authState != null;
+
+        bool IConnectionConnectPrepareHost.ShouldRefuseConnectBecauseSessionDied =>
+            ShouldRefuseConnectBecauseSessionDied();
+
+        void IConnectionConnectPrepareHost.ApplyRegisteredSessionConnectState()
+        {
+            var auth = _authState;
+            if (auth == null)
+            {
+                return;
+            }
+
+            _syncWork.SetReplayDrainPending(auth.Registered);
+            Interlocked.Exchange(ref _offlineReplayReleased, 0);
+            if (!_fatalSessionEnded)
+            {
+                _suppressReconnect = false;
+            }
+
+            _countPreSessionCloseAsFatal = ConnectionConnectPrepare.CountPreSessionCloseAsFatal(
+                auth.Registered,
+                _pairingRestartPending);
+            if (!_countPreSessionCloseAsFatal)
+            {
+                Interlocked.Exchange(ref _preSessionCloseStreak, 0);
+            }
+
+            _historyRequests.ReleaseFull();
+            _lastHistorySyncReceivedUtc = DateTime.MinValue;
+            _lastHistorySyncTypeReceived = null;
+            _historyRequests.ClearRequests();
+            _historyRequests.ClearBackoff();
+        }
 
         /// <summary>
         /// Orchestration lives in <see cref="ConnectionLifecycle"/>.

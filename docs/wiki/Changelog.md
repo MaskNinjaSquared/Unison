@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Phase 4 — ConnectAsync prepare + close disposition
+
+`ConnectionConnectPrepare` drops the previous socket / loads auth / applies
+registered-session connect state. `ConnectionCloseDisposition` decides restart /
+registered-close / QR-expired reconnect policy. Sixteen Core tests.
+
 ## Phase 4 — ConnectionHealthMonitor loop extracted
 
 Background health loop (defer-aware + 1.8.3 A/B) is `ConnectionHealthMonitor` +
