@@ -15,6 +15,11 @@ namespace Unison.WhatsAppClient.Helpers
 {
     public static class SelfPushNameCapture
     {
+        /// <summary>
+        /// Only this source may replace an established self name (deliberate rename on another device).
+        /// </summary>
+        public const string AppStateSource = "app-state";
+
         public static bool IsDashPlaceholder(string pushName)
         {
             return string.Equals(pushName == null ? null : pushName.Trim(), "-", StringComparison.Ordinal);

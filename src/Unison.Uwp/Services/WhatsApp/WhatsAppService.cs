@@ -4389,111 +4389,38 @@ namespace Unison.Uwp.Services.WhatsApp
             string name) =>
             ApplyAppStateSelfPushNameAsync(name);
 
-        void Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost.CaptureSelfPushName(
-            string pushName,
-            string source) =>
-            CaptureSelfPushName(pushName, source);
+        bool Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost.HasSelfCredentials =>
+            _authState?.Me != null && !string.IsNullOrWhiteSpace(_authState.Me.Id);
 
-        /// <summary>
-        /// The one source allowed to replace a self name already on file: the app-state
-        /// pushNameSetting mutation, which is the user deliberately renaming themselves on another
-        /// device. Every other path only ever fills an empty name.
-        /// </summary>
-        private const string SelfPushNameAppStateSource = "app-state";
+        string Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost.SelfId =>
+            NormalizeJid(_authState?.Me?.Id);
 
-        /// <summary>
-        /// Records the account's own display name, learned from the push name on a message we
-        /// sent. Cheap enough to run on every echo: it returns immediately once the name is known.
-        /// </summary>
-        /// <remarks>
-        /// Without this the name only ever arrives through an app-state patch, which the phone
-        /// sends when the user *changes* it - so an account that never renamed itself stayed a
-        /// bare phone number in the sidebar forever. rc14 takes it from the echo for that reason.
-        /// </remarks>
-        /// <param name="source">
-        /// Which of the paths produced it. Mostly logged - they arrive at very different moments,
-        /// and when the sidebar is still showing a phone number, which of them fired is the whole
-        /// question - but it also decides whether a name already on file may be replaced. Only
-        /// <see cref="SelfPushNameAppStateSource"/> may.
-        /// </param>
-        private void CaptureSelfPushName(string pushName, string source = null)
+        string Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost.SelfLid =>
+            NormalizeJid(_authState?.Me?.Lid);
+
+        string Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost.AuthSelfName =>
+            _authState?.Me?.Name;
+
+        string Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost.SidebarSelfName =>
+            CurrentUserName;
+
+        bool Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost.IsOwnPhoneEchoLabel(string label) =>
+            IsOwnPhoneEchoLabel(label);
+
+        void Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost.WriteSelfDisplayName(
+            string sanitized,
+            bool persistAuth)
         {
-            if (_authState?.Me == null || string.IsNullOrWhiteSpace(pushName))
-            {
-                return;
-            }
-
-            // WhatsApp occasionally emits packets carrying only a placeholder "-" as the name.
-            // Our self-name capture is deliberately eager, so without this it would overwrite the
-            // real display name with a dash until the next genuine update arrived.
-            if (SelfPushNameCapture.IsDashPlaceholder(pushName))
-            {
-                Debug.WriteLine(
-                    "[WhatsAppService] Ignoring placeholder self push name '-' from " + (source ?? "unknown"));
-                return;
-            }
-
-            string selfJid = NormalizeJid(_authState.Me.Id);
-            string sanitized = SanitizeContactLabel(pushName, selfJid);
-            if (string.IsNullOrWhiteSpace(sanitized))
-            {
-                return;
-            }
-
-            // The name is taken once and then held. Well after the initial sync the server keeps
-            // sending stanzas that carry a name field, and some of them hold something other than
-            // what the user actually set - which was enough to overwrite a name that was already
-            // correct. Only the app-state pushNameSetting mutation, which is a deliberate rename on
-            // another device, is allowed to replace one.
-            //
-            // The established name is not simply returned on, because the two mirrors can disagree:
-            // a run where the credentials carried the name but the sidebar did not is what left the
-            // phone number on screen. Substituting it here lets the rest of the method put both
-            // back in step.
-            string established = ResolveEstablishedSelfName();
-            bool fromAppState = string.Equals(source, SelfPushNameAppStateSource, StringComparison.Ordinal);
-            if (!string.Equals(sanitized, SelfPushNameCapture.PreferEstablished(established, sanitized, fromAppState), StringComparison.Ordinal))
-            {
-                Debug.WriteLine(
-                    "[WhatsAppService] Keeping established self name '" + established + "'; ignoring '" +
-                    sanitized + "' from " + (source ?? "unknown"));
-                sanitized = established;
-            }
-
-            bool authChanged = !string.Equals(_authState.Me.Name, sanitized, StringComparison.Ordinal);
-            bool profileChanged = !string.Equals(CurrentUserName, sanitized, StringComparison.Ordinal);
-            if (!authChanged && !profileChanged)
+            if (_authState?.Me == null || string.IsNullOrWhiteSpace(sanitized))
             {
                 return;
             }
 
             _authState.Me.Name = sanitized;
-
-            // Checked separately from the credentials rather than assumed to follow them. The
-            // sidebar reads this, and it is seeded with the phone number before any name is known,
-            // so a run where the credentials already carried the name left the number on screen.
             CurrentUserName = sanitized;
-
-            // Filed under both addresses: whichever one a chat row carries has to resolve.
-            if (Contacts != null)
-            {
-                Contacts.RememberPersonName(selfJid, sanitized);
-                Contacts.RememberPersonName(NormalizeJid(_authState.Me.Lid), sanitized);
-            }
-
-            Debug.WriteLine(
-                "[WhatsAppService] Self push name captured from " + (source ?? "unknown") + ": '" + sanitized + "'");
-
-            if (authChanged)
+            if (persistAuth)
             {
                 _ = PersistAuthStateAsync(null, "self-push-name");
-            }
-
-            // The personal chat is built from the resolved name, and it was built before this
-            // arrived - it is the row reading "(You)" with nothing in front of it.
-            if (Contacts != null)
-            {
-                _ = Contacts.ApplyResolvedNamesToChatListAsync();
             }
         }
 

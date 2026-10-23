@@ -301,8 +301,62 @@ namespace Unison.WhatsAppClient.Contacts
             _resolvedNames.ApplySelfPushNameFromAppStateAsync(name);
 
         /// <inheritdoc />
-        public void CaptureSelfPushName(string pushName, string source = null) =>
-            _resolvedNames.CaptureSelfPushName(pushName, source);
+        public void CaptureSelfPushName(string pushName, string source = null)
+        {
+            if (!_resolvedNames.HasSelfCredentials || string.IsNullOrWhiteSpace(pushName))
+            {
+                return;
+            }
+
+            if (SelfPushNameCapture.IsDashPlaceholder(pushName))
+            {
+                Debug.WriteLine(
+                    "[ContactFacade] Ignoring placeholder self push name '-' from " + (source ?? "unknown"));
+                return;
+            }
+
+            string selfJid = _resolvedNames.SelfId;
+            string sanitized = SanitizeForResolvedName(pushName, selfJid);
+            if (string.IsNullOrWhiteSpace(sanitized))
+            {
+                return;
+            }
+
+            string established = SelfDisplayNameResolution.Established(
+                _resolvedNames.SidebarSelfName,
+                _resolvedNames.AuthSelfName,
+                _resolvedNames.IsOwnPhoneEchoLabel);
+            bool fromAppState = string.Equals(
+                source,
+                SelfPushNameCapture.AppStateSource,
+                StringComparison.Ordinal);
+            string preferred = SelfPushNameCapture.PreferEstablished(established, sanitized, fromAppState);
+            if (!string.Equals(sanitized, preferred, StringComparison.Ordinal))
+            {
+                Debug.WriteLine(
+                    "[ContactFacade] Keeping established self name '" + established +
+                    "'; ignoring '" + sanitized + "' from " + (source ?? "unknown"));
+                sanitized = preferred;
+            }
+
+            bool authChanged = !string.Equals(_resolvedNames.AuthSelfName, sanitized, StringComparison.Ordinal);
+            bool profileChanged = !string.Equals(_resolvedNames.SidebarSelfName, sanitized, StringComparison.Ordinal);
+            if (!authChanged && !profileChanged)
+            {
+                return;
+            }
+
+            _resolvedNames.WriteSelfDisplayName(sanitized, persistAuth: authChanged);
+
+            RememberPersonName(selfJid, sanitized);
+            RememberPersonName(_resolvedNames.SelfLid, sanitized);
+
+            Debug.WriteLine(
+                "[ContactFacade] Self push name captured from " + (source ?? "unknown") +
+                ": '" + sanitized + "'");
+
+            _ = ApplyResolvedNamesToChatListAsync();
+        }
 
         /// <inheritdoc />
         public void RememberPersonName(string jid, string displayName)
