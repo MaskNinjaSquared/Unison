@@ -140,7 +140,6 @@ namespace Unison.WhatsAppClient.Contacts
                 deferredAvatars,
                 diagnostics);
             _names = new ContactNameResolver(
-                whatsAppService,
                 _addressBook,
                 _directory,
                 _usync,

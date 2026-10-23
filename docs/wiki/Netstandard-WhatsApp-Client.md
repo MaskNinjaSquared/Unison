@@ -208,6 +208,8 @@ Do in order. Each phase has a done check.
 
 Further shrinking those rows is **State/contract seams** (or Phase E), not another MOVE_NOW batch. Phase C’s closed-batch work is done; continue with [WhatsAppService extraction](WhatsAppService-Extraction) Phase B (clusters 3→4).
 
+**UWP-only helpers still in Core** (`CameraOrientationMath`, `CameraPreviewCropMath`, `MessageBubbleContextGestureGate`, `MessageLinkParser`): presentation / UI math with no WhatsApp policy. Leave in Core (tests live in `Unison.Core.Tests`; Core must not grow a UWP project reference). Moving them is optional Phase D host hygiene, not Phase C.
+
 ### Phase D — UWP as host only
 
 - UWP = XAML + adapters + DI + thin connection host if anything remains of `WhatsAppService`.

@@ -36,7 +36,6 @@ namespace Unison.WhatsAppClient.Contacts
 
         private DateTime _lastForcedGroupPassUtc = DateTime.MinValue;
 
-        private readonly IWhatsAppService _whatsAppService;
         private readonly IWhatsAppSessionProvider _sessions;
         private readonly IDispatcher _ui;
         private readonly ChatNameRefresh _nameRefresh;
@@ -57,7 +56,6 @@ namespace Unison.WhatsAppClient.Contacts
         private volatile bool _isRunning;
 
         internal ContactNameResolver(
-            IWhatsAppService whatsAppService,
             AddressBookOverlay addressBook,
             ContactDirectory directory,
             ContactUsyncResolver usync,
@@ -82,7 +80,6 @@ namespace Unison.WhatsAppClient.Contacts
             _chatState = chatState ?? throw new ArgumentNullException(nameof(chatState));
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
-            _whatsAppService = whatsAppService ?? throw new ArgumentNullException(nameof(whatsAppService));
             _groups = groups ?? throw new ArgumentNullException(nameof(groups));
             _addressBook = addressBook ?? throw new ArgumentNullException(nameof(addressBook));
             _directory = directory ?? throw new ArgumentNullException(nameof(directory));
