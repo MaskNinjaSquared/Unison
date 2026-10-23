@@ -59,14 +59,19 @@ namespace Unison.Uwp.Services.WhatsApp
 
         Task IOutgoingMessageHost.ShowLocalSendPreviewAsync(string chatJid, ChatMessage message, ChatPreviewKind kind)
         {
-            return UpdateChatPreviewForLocalSendAsync(
-                chatJid,
-                message.Content,
-                message.Timestamp,
-                kind,
-                message.MentionedJids,
-                message.Id,
-                message.Status);
+            if (ChatFacade != null)
+            {
+                return ChatFacade.ShowLocalSendPreviewAsync(
+                    chatJid,
+                    message.Content,
+                    message.Timestamp,
+                    kind,
+                    message.MentionedJids,
+                    message.Id,
+                    message.Status);
+            }
+
+            return Task.CompletedTask;
         }
 
         void IOutgoingMessageHost.NotifyChatChanged(string chatJid) => QueueChatMessagesChanged(chatJid);

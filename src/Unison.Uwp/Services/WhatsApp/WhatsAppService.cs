@@ -2317,15 +2317,19 @@ namespace Unison.Uwp.Services.WhatsApp
 
                 // Last Message / names next. Network avatar fetch stays behind history catch-up
                 // (post-message enrichment); disk hydrate already ran above.
-                await DeduplicateChatsAsync("deferred-startup");
-                await RepairLegacyDeletedPreviewsAsync();
                 if (ChatFacade != null)
                 {
+                    await ChatFacade.DeduplicateChatListAsync("deferred-startup")
+                        .ConfigureAwait(false);
+                    await ChatFacade.RepairLegacyDeletedPreviewsAsync()
+                        .ConfigureAwait(false);
                     await ChatFacade.ReconcileChatPreviewsFromSqliteAsync(null, "deferred-startup")
                         .ConfigureAwait(false);
                 }
                 else
                 {
+                    await DeduplicateChatsAsync("deferred-startup").ConfigureAwait(false);
+                    await RepairLegacyDeletedPreviewsAsync().ConfigureAwait(false);
                     await ReconcileChatPreviewsFromSqliteAsync(null, "deferred-startup")
                         .ConfigureAwait(false);
                 }
@@ -4463,49 +4467,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 "connection",
                 "socket-invalidated",
                 "reason=" + reason);
-        }
-
-        private async Task UpdateChatPreviewForLocalSendAsync(
-            string jid,
-            string preview,
-            DateTime timestamp,
-            ChatPreviewKind? kindHint = null,
-            System.Collections.Generic.IList<string> mentionedJids = null,
-            string messageId = null,
-            string status = null)
-        {
-            string canonicalJid = GetCanonicalJid(NormalizeJid(jid));
-            if (string.IsNullOrWhiteSpace(canonicalJid))
-            {
-                return;
-            }
-
-            await _ui.RunAsync(() =>
-            {
-                // PN e LID podem existir temporariamente como duas linhas para o mesmo
-                // contato. Atualizar apenas FirstOrDefault deixava a linha visivel com
-                // preview antigo. Atualizamos todas as linhas canonicas e depois movemos
-                // a melhor representante para o topo.
-                // The bubble's own status, not an assumed one: media is already sent by
-                // the time it gets here, and in a self chat it is read on arrival with
-                // no receipt ever coming to correct a wrong guess.
-                LocalSendChatPreview.ApplyToAliasRows(
-                    Chats,
-                    GetChatRowsForCanonicalJid(canonicalJid),
-                    canonicalJid,
-                    () => ResolveDisplayName(canonicalJid, "local-send"),
-                    () => ResolveChatKind(canonicalJid),
-                    preview,
-                    timestamp,
-                    kindHint,
-                    mentionedJids,
-                    messageId,
-                    HistoryLiveMessageMapper.FromStatus(status ?? ChatMessage.StatusPending, true),
-                    LocalizedChatStripLabels.Yesterday());
-            });
-
-            _ = DeduplicateChatsAsync("local-send-preview");
-            SchedulePersist();
         }
 
         /// <summary>

@@ -120,6 +120,29 @@ namespace Unison.Core.Contracts.WhatsApp
         void RequestChatListDedup(string reason);
 
         /// <summary>
+        /// Same fold as <see cref="RequestChatListDedup"/>, awaited when startup / pump need
+        /// the list settled before the next step.
+        /// </summary>
+        Task DeduplicateChatListAsync(string reason);
+
+        /// <summary>
+        /// After a local send: tip every alias row (create if missing), then request dedupe.
+        /// </summary>
+        Task ShowLocalSendPreviewAsync(
+            string chatJid,
+            string preview,
+            DateTime timestamp,
+            ChatPreviewKind? kindHint = null,
+            IList<string> mentionedJids = null,
+            string messageId = null,
+            string status = null);
+
+        /// <summary>
+        /// Startup repair for pre-v5.14 revoke envelopes stored as a fresh "[Message Deleted]" tip.
+        /// </summary>
+        Task RepairLegacyDeletedPreviewsAsync();
+
+        /// <summary>
         /// Applies one history-sync preview slice onto the in-memory list: create missing rows,
         /// update tips when newer, apply pin/mute flags into the row and durable store.
         /// Must run on the UI thread (list mutations). Presentation batching stays with the caller.

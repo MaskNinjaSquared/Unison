@@ -1406,7 +1406,16 @@ namespace Unison.Uwp.Services.WhatsApp
                             {
                                 await SaveMessageAsync(jid, consolidatedForPersist);
                             }
-                            await DeduplicateChatsAsync("live-direct-alias-duplicate");
+                            if (ChatFacade != null)
+                            {
+                                await ChatFacade.DeduplicateChatListAsync("live-direct-alias-duplicate")
+                                    .ConfigureAwait(false);
+                            }
+                            else
+                            {
+                                await DeduplicateChatsAsync("live-direct-alias-duplicate")
+                                    .ConfigureAwait(false);
+                            }
                         });
 
                     if (!e.IsOffline)
@@ -1715,6 +1724,19 @@ namespace Unison.Uwp.Services.WhatsApp
         void IOfflineReplayHost.NoteCatchUpProgress(string reason) => NoteFullHistoryCatchUpProgress(reason);
 
         void IOfflineReplayHost.SchedulePersist() => SchedulePersist();
+
+        void IOfflineReplayHost.NotifyHistorySurfaceRefresh()
+        {
+            try
+            {
+                _messageStore?.ClearMemoryCache();
+            }
+            catch
+            {
+            }
+
+            OnHistorySyncReceived?.Invoke(this, null);
+        }
 
         void IOfflineReplayHost.ReportFlushFailure(string reason, Exception error)
         {

@@ -74,6 +74,7 @@ namespace Unison.WhatsAppClient.Chats
         private readonly IStringResources _strings;
         private readonly IDialogService _dialogs;
         private readonly IRuntimeDiagnostics _diagnostics;
+        private readonly IHistoryMessageStore _historyMessages;
         private readonly OfflineReplayTips _offlineReplayTips;
 
         /// <summary>Short enough that the first recovered chat shows while a long replay continues.</summary>
@@ -100,6 +101,7 @@ namespace Unison.WhatsAppClient.Chats
             ChatListAliasMerge aliasMerge,
             ISelfMarkerNaming selfMarkers,
             IStringResources strings,
+            IHistoryMessageStore historyMessages,
             IDialogService dialogs = null,
             IRuntimeDiagnostics diagnostics = null)
         {
@@ -123,6 +125,7 @@ namespace Unison.WhatsAppClient.Chats
             _aliasMerge = aliasMerge ?? throw new ArgumentNullException(nameof(aliasMerge));
             _selfMarkers = selfMarkers ?? throw new ArgumentNullException(nameof(selfMarkers));
             _strings = strings ?? throw new ArgumentNullException(nameof(strings));
+            _historyMessages = historyMessages ?? throw new ArgumentNullException(nameof(historyMessages));
             _dialogs = dialogs;
             _diagnostics = diagnostics;
             _offlineReplayTips = new OfflineReplayTips(
@@ -633,8 +636,10 @@ namespace Unison.WhatsAppClient.Chats
 
         public void RequestChatListDedup(string reason)
         {
-            _ = RunChatListDedupAsync(reason);
+            _ = DeduplicateChatListAsync(reason);
         }
+
+        public Task DeduplicateChatListAsync(string reason) => RunChatListDedupAsync(reason);
 
         private async Task RunChatListDedupAsync(string reason)
         {
@@ -654,6 +659,182 @@ namespace Unison.WhatsAppClient.Chats
             {
                 _identity.PersistNow("dedupe:" + (reason ?? "facade"));
             }
+        }
+
+        public async Task ShowLocalSendPreviewAsync(
+            string chatJid,
+            string preview,
+            DateTime timestamp,
+            ChatPreviewKind? kindHint = null,
+            IList<string> mentionedJids = null,
+            string messageId = null,
+            string status = null)
+        {
+            string canonicalJid = _jids.GetCanonicalJid(JidHelper.Normalize(chatJid));
+            if (string.IsNullOrWhiteSpace(canonicalJid))
+            {
+                return;
+            }
+
+            string yesterday = _strings.Get("Common_Yesterday", "Yesterday");
+            await _ui.RunAsync(() =>
+            {
+                // PN and LID may briefly be two rows; tip every alias, then lift the preferred one.
+                LocalSendChatPreview.ApplyToAliasRows(
+                    _chatState.Chats,
+                    _chatRows.FindConversation(canonicalJid),
+                    canonicalJid,
+                    () => _contacts.ResolveDisplayName(canonicalJid, "local-send"),
+                    () => JidHelper.ResolveKind(canonicalJid, _jids.IsSelfLinked(canonicalJid)),
+                    preview,
+                    timestamp,
+                    kindHint,
+                    mentionedJids,
+                    messageId,
+                    HistoryLiveMessageMapper.FromStatus(status ?? ChatMessage.StatusPending, true),
+                    yesterday);
+            }).ConfigureAwait(false);
+
+            RequestChatListDedup("local-send-preview");
+            _catalog.Schedule();
+        }
+
+        public async Task RepairLegacyDeletedPreviewsAsync()
+        {
+            // Builds before v5.14 could persist a replayed revoke envelope as a new
+            // "[Message Deleted]" row with DateTime.Now. Repair only those known-bad
+            // tips and leave normal chats untouched.
+            List<ChatItem> suspicious = null;
+            await _ui.RunAsync(() =>
+            {
+                suspicious = new List<ChatItem>();
+                foreach (ChatItem chat in _chatState.Chats)
+                {
+                    if (LegacyDeletedPreview.IsSuspect(chat))
+                    {
+                        suspicious.Add(chat);
+                    }
+                }
+            }).ConfigureAwait(false);
+
+            if (suspicious == null || suspicious.Count == 0)
+            {
+                return;
+            }
+
+            string yesterday = _strings.Get("Common_Yesterday", "Yesterday");
+            string selfLabel = _strings.Get("Chat_SelfFallbackName", "You");
+            bool changed = false;
+
+            foreach (ChatItem chat in suspicious)
+            {
+                try
+                {
+                    string jid = _jids.GetCanonicalJid(chat.JID);
+                    IReadOnlyList<HistoryMessage> recentRows =
+                        await _historyMessages.GetForChatAsync(jid, 120).ConfigureAwait(false);
+                    List<ChatMessage> mapped = null;
+                    if (recentRows != null)
+                    {
+                        mapped = new List<ChatMessage>(recentRows.Count);
+                        for (int i = 0; i < recentRows.Count; i++)
+                        {
+                            ChatMessage m = HistoryMessageMapper.ToChatMessage(recentRows[i]);
+                            if (m != null)
+                            {
+                                mapped.Add(m);
+                            }
+                        }
+                    }
+
+                    ChatMessage replacement = LegacyDeletedPreview.PickReplacement(mapped, DateTime.UtcNow);
+
+                    await _ui.RunAsync(() =>
+                    {
+                        IReadOnlyList<ChatItem> rows = _chatRows.FindConversation(jid);
+                        for (int i = 0; i < rows.Count; i++)
+                        {
+                            ChatItem row = rows[i];
+                            if (row == null)
+                            {
+                                continue;
+                            }
+
+                            if (replacement != null)
+                            {
+                                bool isGroup = jid.EndsWith("@g.us", StringComparison.OrdinalIgnoreCase)
+                                    || (row.JID ?? string.Empty).EndsWith("@g.us", StringComparison.OrdinalIgnoreCase)
+                                    || row.IsGroup;
+                                LiveChatPreviewApplier.ApplyIfNewer(
+                                    row,
+                                    ChatPreviewNormalizer.FormatListPreview(replacement, isGroup),
+                                    replacement.Timestamp,
+                                    force: true,
+                                    ChatPreviewNormalizer.InferKindFromMessage(replacement),
+                                    ChatPreviewNormalizer.FormatListAuthorPrefix(
+                                        replacement,
+                                        isGroup,
+                                        selfLabel,
+                                        _jids.GetCanonicalJid(replacement.ParticipantJid)),
+                                    replacement.MentionedJids,
+                                    replacement.IsFromMe,
+                                    HistoryLiveMessageMapper.FromStatus(replacement.Status, replacement.IsFromMe),
+                                    replacement.Id,
+                                    yesterday,
+                                    isGroup
+                                        ? ParticipantStripIdentity.PreferForDisplay(
+                                            replacement.ParticipantJid,
+                                            _jids.GetCanonicalJid(replacement.ParticipantJid))
+                                        : null,
+                                    isGroup && !replacement.IsFromMe ? replacement.SenderName : null);
+                            }
+                            else
+                            {
+                                ChatPreviewTip.Clear(row);
+                            }
+                        }
+
+                        ChatDisplayOrder.SortInPlace(_chatState.Chats);
+                    }).ConfigureAwait(false);
+                    changed = true;
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine(
+                        "[ChatFacade] Legacy deleted-preview repair failed for " + chat.JID + ": " + ex.Message);
+                }
+
+                await Task.Yield();
+            }
+
+            if (!changed)
+            {
+                return;
+            }
+
+            try
+            {
+                List<ChatItem> snapshot = null;
+                await _ui.RunAsync(() =>
+                {
+                    snapshot = new List<ChatItem>();
+                    foreach (ChatItem c in _chatState.Chats)
+                    {
+                        if (c != null)
+                        {
+                            snapshot.Add(c);
+                        }
+                    }
+                }).ConfigureAwait(false);
+                _catalog.PersistRows(snapshot ?? new List<ChatItem>());
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatFacade] Legacy preview catalogue persist failed: " + ex.Message);
+            }
+
+            _offlineReplay.NotifyHistorySurfaceRefresh();
+            _offlineReplay.SchedulePersist();
         }
 
         public async Task<LiveIncomingChatListApplyResult> ApplyLiveIncomingChatListAsync(
