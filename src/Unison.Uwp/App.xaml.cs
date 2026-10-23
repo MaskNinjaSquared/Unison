@@ -513,6 +513,8 @@ namespace Unison.Uwp
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IConnectionEnsureHost>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+            services.AddSingleton<IConnectionResumeHost>(
+                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IUsyncAliasHost>(sp => new UsyncAliasHost(
                 sp.GetRequiredService<UsyncAliasFiling>(),
                 sp.GetRequiredService<ISocketAliasRegistrar>()));
@@ -801,6 +803,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IStartupUiHost>(),
                 sp.GetRequiredService<INetworkAccess>(),
                 sp.GetRequiredService<IConnectionEnsureHost>(),
+                sp.GetRequiredService<IConnectionResumeHost>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>()));
             services.AddSingleton<ISystemInfoProvider, SystemInfoProvider>();
             services.AddSingleton<IStatusBarService, StatusBarService>();

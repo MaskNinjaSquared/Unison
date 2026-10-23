@@ -30,6 +30,7 @@ namespace Unison.WhatsAppClient.Connection
         private readonly INetworkAccess _network;
         private readonly IRuntimeDiagnostics _diagnostics;
         private readonly IConnectionEnsureHost _ensureHost;
+        private readonly IConnectionResumeHost _resumeHost;
         private IWhatsAppService _whatsApp;
         private int _handlingRelink;
 
@@ -45,6 +46,7 @@ namespace Unison.WhatsAppClient.Connection
             IStartupUiHost startupUi,
             INetworkAccess network,
             IConnectionEnsureHost ensureHost,
+            IConnectionResumeHost resumeHost,
             IRuntimeDiagnostics diagnostics = null)
         {
             _localSettings = localSettings ?? throw new ArgumentNullException(nameof(localSettings));
@@ -58,6 +60,7 @@ namespace Unison.WhatsAppClient.Connection
             _startupUi = startupUi ?? throw new ArgumentNullException(nameof(startupUi));
             _network = network ?? throw new ArgumentNullException(nameof(network));
             _ensureHost = ensureHost ?? throw new ArgumentNullException(nameof(ensureHost));
+            _resumeHost = resumeHost ?? throw new ArgumentNullException(nameof(resumeHost));
             _diagnostics = diagnostics;
         }
 
@@ -125,8 +128,13 @@ namespace Unison.WhatsAppClient.Connection
 
         public Task ResumeAsync()
         {
-            var whatsApp = _whatsApp;
-            return whatsApp == null ? Task.CompletedTask : whatsApp.ResumeAsync();
+            if (_whatsApp == null)
+            {
+                return Task.CompletedTask;
+            }
+
+            // Policy is ConnectionResume on the client; App/shell never name IWhatsAppService.
+            return ConnectionResume.RunAsync(_resumeHost);
         }
 
         public Task ReleaseMemoryAsync()

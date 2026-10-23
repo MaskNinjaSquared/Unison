@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Phase 4 wave 2 — ConnectionResume policy extracted
+
+Foreground resume (fatal block, broker reconnect consume, reclaim, force-fresh
+ensure, soft-reconnect fallback) is `ConnectionResume` + `IConnectionResumeHost`.
+`ConnectionFacade.ResumeAsync` runs it; five Core tests.
+
 ## Phase 4 wave 2 — ConnectionEnsure policy extracted
 
 Ensure-connected budget (healthy check, drop, connect timeout, session gate)

@@ -1278,10 +1278,11 @@ auto-reconnect and catch-up-continue. Idle-lot decide and adjacent FULL_HISTORY 
 `HistoryFacade.NotifyCatchUpIdleBatch` over shared `HistoryCatchUpContinuation` and
 `IHistoryCatchUpHost`.
 
-**Wave 2 started: ensure policy left the client body.** `ConnectionEnsure` +
-`IConnectionEnsureHost` own the ensure-connected budget; `ConnectionFacade` and the
-outgoing host call it. Resume / pairing stage-2 / health monitor / broker body still
-follow.
+**Wave 2 in progress: ensure + resume policy left the client body.**
+`ConnectionEnsure` + `IConnectionEnsureHost` own the ensure-connected budget;
+`ConnectionResume` + `IConnectionResumeHost` own foreground resume (broker reclaim /
+force-fresh / soft-reconnect fallback). `ConnectionFacade` calls both. Pairing
+stage-2 / health monitor / broker body still follow.
 
 **The open conversation is shared state.** `ActiveChat` (`Unison.Core/State`, DI singleton over
 `JidAliasTable.GetCanonicalJid`) holds the conversation the user has open by its canonical

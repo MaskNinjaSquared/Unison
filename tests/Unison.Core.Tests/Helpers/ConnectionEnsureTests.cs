@@ -12,7 +12,8 @@ namespace Unison.Core.Tests.Helpers
         [Fact]
         public async Task Returns_immediately_when_socket_is_already_healthy()
         {
-            var host = new FakeHost { Healthy = true, Connected = true };
+            var host = new FakeHost { Healthy = true };
+            host.MarkConnected();
             var gate = new SemaphoreSlim(1, 1);
 
             await ConnectionEnsure.RunAsync(host, gate, 1000, forceFreshTransport: false);
@@ -63,6 +64,11 @@ namespace Unison.Core.Tests.Helpers
             public int Drops { get; private set; }
 
             public bool IsConnected { get; private set; }
+
+            public void MarkConnected()
+            {
+                IsConnected = true;
+            }
 
             public Task EnsureConnectedAsync(int timeoutMs = 35000, bool forceFreshTransport = false) =>
                 ConnectionEnsure.RunAsync(this, new SemaphoreSlim(1, 1), timeoutMs, forceFreshTransport);

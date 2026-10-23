@@ -890,77 +890,88 @@ namespace Unison.Uwp.Services.WhatsApp
             }).ConfigureAwait(false);
         }
 
-        public async Task ResumeAsync()
+        /// <summary>
+        /// Orchestration lives in <see cref="ConnectionResume"/>. This entry is what
+        /// App / <c>ConnectionFacade</c> still call on the client for foreground resume.
+        /// </summary>
+        public Task ResumeAsync() => ConnectionResume.RunAsync(this);
+
+        bool IConnectionResumeHost.IsFatalSessionEnded => _fatalSessionEnded;
+
+        Task<bool> IConnectionResumeHost.IsRegisteredAsync() => IsRegisteredAsync();
+
+        void IConnectionResumeHost.ClearSuppressReconnect() => _suppressReconnect = false;
+
+        Task<bool> IConnectionResumeHost.ConsumeBrokerReconnectRequestAsync() =>
+            ConsumeBrokerReconnectRequestAsync();
+
+        void IConnectionResumeHost.MarkForceFreshConnectOnResume() =>
+            Interlocked.Exchange(ref _forceFreshConnectOnResume, 1);
+
+        async Task<bool> IConnectionResumeHost.TryReclaimBrokerOwnedSocketAsync()
         {
-            if (!await IsRegisteredAsync())
-            {
-                return;
-            }
-
-            if (_fatalSessionEnded)
-            {
-                RuntimeDiagnosticsService.Instance.Write(
-                    "connection",
-                    "resume-blocked",
-                    "reason=fatal-session-ended");
-                return;
-            }
-
-            _suppressReconnect = false;
-
-            if (await ConsumeBrokerReconnectRequestAsync())
-            {
-                Interlocked.Exchange(ref _forceFreshConnectOnResume, 1);
-            }
-
             var brokerSocket = _socket;
-            if (brokerSocket != null && brokerSocket.IsSocketOwnedByBroker)
+            if (brokerSocket == null || !brokerSocket.IsSocketOwnedByBroker)
             {
-                RuntimeDiagnosticsService.Instance.Write(
-                    "socket-broker",
-                    "resume-reclaim-start",
-                    "transport=" + brokerSocket.TransportName);
-                try
-                {
-                    if (await brokerSocket.ReclaimSocketFromBrokerAsync())
-                    {
-                        Interlocked.Exchange(ref _forceFreshConnectOnResume, 0);
-                        StartConnectionHealthMonitor(brokerSocket);
-                        RestartIncomingMessagePumpIfNeeded();
-                        PublishConnectionUpdate("connected");
-                        RuntimeDiagnosticsService.Instance.Write(
-                            "socket-broker",
-                            "resume-reclaim-complete",
-                            "transport=" + brokerSocket.TransportName);
-                        return;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    RuntimeDiagnosticsService.Instance.RecordException(
-                        "socket-broker",
-                        "resume-reclaim-failed",
-                        ex);
-                }
-
-                Interlocked.Exchange(ref _forceFreshConnectOnResume, 1);
+                return false;
             }
 
-            bool fastResume = Interlocked.Exchange(ref _forceFreshConnectOnResume, 0) == 1;
             RuntimeDiagnosticsService.Instance.Write(
-                "connection",
-                "fast-resume-start",
-                "freshTransport=" + fastResume + "; sharedKeyStore=" + (_sharedKeyStore != null));
+                "socket-broker",
+                "resume-reclaim-start",
+                "transport=" + brokerSocket.TransportName);
             try
             {
-                await EnsureConnectedAsync(fastResume ? 22000 : 35000, fastResume);
-                RestartIncomingMessagePumpIfNeeded();
+                if (await brokerSocket.ReclaimSocketFromBrokerAsync())
+                {
+                    Interlocked.Exchange(ref _forceFreshConnectOnResume, 0);
+                    StartConnectionHealthMonitor(brokerSocket);
+                    RestartIncomingMessagePumpIfNeeded();
+                    PublishConnectionUpdate("connected");
+                    RuntimeDiagnosticsService.Instance.Write(
+                        "socket-broker",
+                        "resume-reclaim-complete",
+                        "transport=" + brokerSocket.TransportName);
+                    return true;
+                }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[WhatsAppService] Immediate resume reconnect failed: {ex.Message}");
-                ScheduleAutoReconnect("resume-fallback");
+                RuntimeDiagnosticsService.Instance.RecordException(
+                    "socket-broker",
+                    "resume-reclaim-failed",
+                    ex);
             }
+
+            Interlocked.Exchange(ref _forceFreshConnectOnResume, 1);
+            return false;
+        }
+
+        bool IConnectionResumeHost.ConsumeForceFreshConnectOnResume() =>
+            Interlocked.Exchange(ref _forceFreshConnectOnResume, 0) == 1;
+
+        Task IConnectionResumeHost.EnsureConnectedAsync(int timeoutMs, bool forceFreshTransport) =>
+            EnsureConnectedAsync(timeoutMs, forceFreshTransport);
+
+        void IConnectionResumeHost.RestartIncomingMessagePumpIfNeeded() =>
+            RestartIncomingMessagePumpIfNeeded();
+
+        void IConnectionResumeHost.RequestSoftReconnect(string reason) =>
+            ScheduleAutoReconnect(reason);
+
+        void IConnectionResumeHost.WriteResumeJournal(string eventName, string detail)
+        {
+            string enriched = string.Equals(eventName, "fast-resume-start", StringComparison.Ordinal)
+                ? detail + "; sharedKeyStore=" + (_sharedKeyStore != null)
+                : detail;
+            RuntimeDiagnosticsService.Instance.Write("connection", eventName, enriched);
+        }
+
+        void IConnectionResumeHost.RecordResumeException(string eventName, Exception error)
+        {
+            Debug.WriteLine(
+                "[WhatsAppService] Immediate resume reconnect failed: " +
+                (error != null ? error.Message : string.Empty));
         }
 
         private async Task<bool> ConsumeBrokerReconnectRequestAsync()
