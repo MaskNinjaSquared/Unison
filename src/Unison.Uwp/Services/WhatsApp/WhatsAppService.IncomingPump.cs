@@ -444,20 +444,22 @@ namespace Unison.Uwp.Services.WhatsApp
                                     message?.ParticipantJid,
                                     GetCanonicalJid(message?.ParticipantJid))
                                 : null;
-                            await RefreshChatPreviewViaFacadeAsync(
-                                item.Key,
-                                preview,
-                                message?.Timestamp ?? DateTime.MinValue,
-                                isGroupMsg,
-                                message?.IsFromMe == true,
-                                kind,
-                                ChatPreviewNormalizer.FormatListAuthorPrefix(
-                                    message,
-                                    isGroupMsg,
-                                    LocalizedChatStripLabels.SelfFallbackName(),
-                                    stripParticipant),
-                                stripParticipant,
-                                isGroupMsg && message?.IsFromMe != true ? message?.SenderName : null);
+                            if (ChatFacade != null)
+                            {
+                                await ChatFacade.RefreshChatPreviewAsync(
+                                    item.Key,
+                                    preview,
+                                    message?.Timestamp ?? DateTime.MinValue,
+                                    message?.IsFromMe == true,
+                                    kind,
+                                    ChatPreviewNormalizer.FormatListAuthorPrefix(
+                                        message,
+                                        isGroupMsg,
+                                        LocalizedChatStripLabels.SelfFallbackName(),
+                                        stripParticipant),
+                                    stripParticipant,
+                                    isGroupMsg && message?.IsFromMe != true ? message?.SenderName : null);
+                            }
                         }
 
                         RuntimeDiagnosticsService.Instance.Write(
@@ -631,22 +633,24 @@ namespace Unison.Uwp.Services.WhatsApp
                 : null;
             if (latest != null && string.Equals(latest.Id, target.Id, StringComparison.Ordinal))
             {
-                await RefreshChatPreviewViaFacadeAsync(
-                    canonical,
-                    target.Content,
-                    target.Timestamp,
-                    JidHelper.IsGroupJid(canonical),
-                    target.IsFromMe,
-                    ChatPreviewNormalizer.InferKindFromMessage(target),
-                    ChatPreviewNormalizer.FormatListAuthorPrefix(
-                        target,
-                        JidHelper.IsGroupJid(canonical),
-                        LocalizedChatStripLabels.SelfFallbackName(),
-                        GetCanonicalJid(target.ParticipantJid)),
-                    ParticipantStripIdentity.PreferForDisplay(
-                        target.ParticipantJid,
-                        GetCanonicalJid(target.ParticipantJid)),
-                    target.IsFromMe ? null : target.SenderName);
+                if (ChatFacade != null)
+                {
+                    await ChatFacade.RefreshChatPreviewAsync(
+                        canonical,
+                        target.Content,
+                        target.Timestamp,
+                        target.IsFromMe,
+                        ChatPreviewNormalizer.InferKindFromMessage(target),
+                        ChatPreviewNormalizer.FormatListAuthorPrefix(
+                            target,
+                            JidHelper.IsGroupJid(canonical),
+                            LocalizedChatStripLabels.SelfFallbackName(),
+                            GetCanonicalJid(target.ParticipantJid)),
+                        ParticipantStripIdentity.PreferForDisplay(
+                            target.ParticipantJid,
+                            GetCanonicalJid(target.ParticipantJid)),
+                        target.IsFromMe ? null : target.SenderName);
+                }
             }
         }
 
@@ -1517,32 +1521,35 @@ namespace Unison.Uwp.Services.WhatsApp
                     {
                         QueueMessageControlWork(
                             "alias-duplicate-preview:" + chatMessage.Id,
-                            () => RefreshChatPreviewViaFacadeAsync(
-                                jid,
-                                displayContent,
-                                chatMessage.Timestamp,
-                                isGroup,
-                                isActuallyFromMe,
-                                previewKind,
-                                listAuthorPrefix,
-                                isGroup ? stripParticipantJid : null,
-                                isGroup && !isActuallyFromMe ? senderName : null));
+                            () => ChatFacade != null
+                                ? ChatFacade.RefreshChatPreviewAsync(
+                                    jid,
+                                    displayContent,
+                                    chatMessage.Timestamp,
+                                    isActuallyFromMe,
+                                    previewKind,
+                                    listAuthorPrefix,
+                                    isGroup ? stripParticipantJid : null,
+                                    isGroup && !isActuallyFromMe ? senderName : null)
+                                : Task.CompletedTask);
                     }
                     else
                     {
                         MarkOfflineReplayChatDirty(jid);
-                        RecordOfflineReplayChatSummary(
-                            jid,
-                            displayContent,
-                            chatMessage.Timestamp,
-                            isGroup,
-                            isActuallyFromMe,
-                            countUnread: false,
-                            previewKind,
-                            chatMessage.Status,
-                            listAuthorPrefix,
-                            isGroup ? stripParticipantJid : null,
-                            isGroup && !isActuallyFromMe ? senderName : null);
+                        ChatFacade?.RecordOfflineReplayTip(new OfflineReplayTipRequest
+                        {
+                            Jid = jid,
+                            Preview = displayContent,
+                            Timestamp = chatMessage.Timestamp,
+                            IsGroup = isGroup,
+                            IsFromMe = isActuallyFromMe,
+                            CountUnread = false,
+                            Kind = previewKind,
+                            Status = chatMessage.Status,
+                            AuthorPrefix = listAuthorPrefix,
+                            ParticipantJid = isGroup ? stripParticipantJid : null,
+                            SenderName = isGroup && !isActuallyFromMe ? senderName : null
+                        });
                     }
                     if (!e.IsOffline)
                     {
@@ -1568,32 +1575,35 @@ namespace Unison.Uwp.Services.WhatsApp
                     {
                         QueueMessageControlWork(
                             "duplicate-preview:" + chatMessage.Id,
-                            () => RefreshChatPreviewViaFacadeAsync(
-                                jid,
-                                displayContent,
-                                chatMessage.Timestamp,
-                                isGroup,
-                                isActuallyFromMe,
-                                previewKind,
-                                listAuthorPrefix,
-                                isGroup ? stripParticipantJid : null,
-                                isGroup && !isActuallyFromMe ? senderName : null));
+                            () => ChatFacade != null
+                                ? ChatFacade.RefreshChatPreviewAsync(
+                                    jid,
+                                    displayContent,
+                                    chatMessage.Timestamp,
+                                    isActuallyFromMe,
+                                    previewKind,
+                                    listAuthorPrefix,
+                                    isGroup ? stripParticipantJid : null,
+                                    isGroup && !isActuallyFromMe ? senderName : null)
+                                : Task.CompletedTask);
                     }
                     else
                     {
                         MarkOfflineReplayChatDirty(jid);
-                        RecordOfflineReplayChatSummary(
-                            jid,
-                            displayContent,
-                            chatMessage.Timestamp,
-                            isGroup,
-                            isActuallyFromMe,
-                            countUnread: false,
-                            previewKind,
-                            chatMessage.Status,
-                            listAuthorPrefix,
-                            isGroup ? stripParticipantJid : null,
-                            isGroup && !isActuallyFromMe ? senderName : null);
+                        ChatFacade?.RecordOfflineReplayTip(new OfflineReplayTipRequest
+                        {
+                            Jid = jid,
+                            Preview = displayContent,
+                            Timestamp = chatMessage.Timestamp,
+                            IsGroup = isGroup,
+                            IsFromMe = isActuallyFromMe,
+                            CountUnread = false,
+                            Kind = previewKind,
+                            Status = chatMessage.Status,
+                            AuthorPrefix = listAuthorPrefix,
+                            ParticipantJid = isGroup ? stripParticipantJid : null,
+                            SenderName = isGroup && !isActuallyFromMe ? senderName : null
+                        });
                     }
                     if (!e.IsOffline)
                     {
@@ -1609,18 +1619,20 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
                 if (e.IsOffline)
                 {
-                    RecordOfflineReplayChatSummary(
-                        jid,
-                        displayContent,
-                        chatMessage.Timestamp,
-                        isGroup,
-                        isActuallyFromMe,
-                        countUnread: true,
-                        previewKind,
-                        chatMessage.Status,
-                        listAuthorPrefix,
-                        isGroup ? stripParticipantJid : null,
-                        isGroup && !isActuallyFromMe ? senderName : null);
+                    ChatFacade?.RecordOfflineReplayTip(new OfflineReplayTipRequest
+                    {
+                        Jid = jid,
+                        Preview = displayContent,
+                        Timestamp = chatMessage.Timestamp,
+                        IsGroup = isGroup,
+                        IsFromMe = isActuallyFromMe,
+                        CountUnread = true,
+                        Kind = previewKind,
+                        Status = chatMessage.Status,
+                        AuthorPrefix = listAuthorPrefix,
+                        ParticipantJid = isGroup ? stripParticipantJid : null,
+                        SenderName = isGroup && !isActuallyFromMe ? senderName : null
+                    });
                     QueueIncomingPersist(jid, chatMessage);
 
                     if (IsActiveChatJid(jid))
@@ -1804,41 +1816,6 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        private void RecordOfflineReplayChatSummary(
-            string jid,
-            string preview,
-            DateTime timestamp,
-            bool isGroup,
-            bool isFromMe,
-            bool countUnread,
-            ChatPreviewKind kind = ChatPreviewKind.Text,
-            string status = null,
-            string authorPrefix = null,
-            string participantJid = null,
-            string senderName = null)
-        {
-            if (ChatFacade == null)
-            {
-                Debug.WriteLine("[WhatsAppService] Offline replay tip dropped: ChatFacade not attached.");
-                return;
-            }
-
-            ChatFacade.RecordOfflineReplayTip(new OfflineReplayTipRequest
-            {
-                Jid = jid,
-                Preview = preview,
-                Timestamp = timestamp,
-                IsGroup = isGroup,
-                IsFromMe = isFromMe,
-                CountUnread = countUnread,
-                Kind = kind,
-                Status = status,
-                AuthorPrefix = authorPrefix,
-                ParticipantJid = participantJid,
-                SenderName = senderName
-            });
-        }
-
         bool IOfflineReplayHost.IsActiveChat(string canonicalJid) => IsActiveChatJid(canonicalJid);
 
         bool IOfflineReplayHost.IsWindowVisible => Unison.Uwp.App.IsWindowVisible;
@@ -1856,95 +1833,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 "reason=" + reason);
         }
         private void MarkOfflineReplayChatDirty(string jid) => _pendingMessages.MarkDirty(jid);
-
-        private Task RefreshChatPreviewViaFacadeAsync(
-            string jid,
-            string displayContent,
-            DateTime timestamp,
-            bool isGroup,
-            bool isFromMe,
-            ChatPreviewKind? kindHint = null,
-            string authorPrefix = null,
-            string participantJid = null,
-            string senderName = null)
-        {
-            if (ChatFacade != null)
-            {
-                return ChatFacade.RefreshChatPreviewAsync(
-                    jid,
-                    displayContent,
-                    timestamp,
-                    isFromMe,
-                    kindHint,
-                    authorPrefix,
-                    participantJid,
-                    senderName);
-            }
-
-            return RefreshChatPreviewFromReplayAsync(
-                jid,
-                displayContent,
-                timestamp,
-                isGroup,
-                isFromMe,
-                kindHint,
-                authorPrefix,
-                participantJid,
-                senderName);
-        }
-        private async Task RefreshChatPreviewFromReplayAsync(
-            string jid,
-            string displayContent,
-            DateTime timestamp,
-            bool isGroup,
-            bool isFromMe,
-            ChatPreviewKind? kindHint = null,
-            string authorPrefix = null,
-            string participantJid = null,
-            string senderName = null)
-        {
-            if (string.IsNullOrWhiteSpace(jid))
-            {
-                return;
-            }
-
-            await _ui.RunAsync(() =>
-                {
-                    var rows = GetChatRowsForCanonicalJid(jid);
-                    if (rows.Count == 0)
-                    {
-                        return;
-                    }
-
-                    ChatItem preferred = null;
-                    foreach (var row in rows)
-                    {
-                        if (ApplyChatPreviewIfNewer(
-                            row,
-                            displayContent,
-                            timestamp,
-                            false,
-                            kindHint,
-                            authorPrefix,
-                            null,
-                            isFromMe,
-                            isFromMe ? MessageSendState.Sent : MessageSendState.NotApplicable,
-                            messageId: null,
-                            participantJid,
-                            senderName))
-                        {
-                            preferred = preferred ?? row;
-                        }
-                    }
-
-                    if (preferred != null)
-                    {
-                        ChatDisplayOrder.Reposition(Chats, preferred);
-                    }
-
-                    Log($"[WhatsAppService] Replay preview refresh applied for {jid} at {timestamp:O}");
-                });
-        }
 
     }
 }
