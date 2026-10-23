@@ -2,6 +2,13 @@
 
 Newest first.
 
+## Phase B — chat flags / read on ChatFacade
+
+`ChatFacade` owns local archive / pin / mute / read (`ApplyLocalChatFlagsAsync` /
+`ApplyLocalChatReadStateAsync`). `IAppStateLocalHost` keeps only chat delete and
+message pin. SocketBridge fallbacks and dead `ApplyChatUpdateAsync` / contact
+update wrappers removed.
+
 ## Phase B — stored preview repair via ChatFacade
 
 Post-replay large-drain in-memory tip repair calls
