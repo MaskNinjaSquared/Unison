@@ -159,6 +159,12 @@ namespace Unison.Core.Contracts.WhatsApp
         Task ApplyRemoteSelfPushNameAsync(string name);
 
         /// <summary>
+        /// Account contact table slice: alias pairs first, then names under every address.
+        /// Pairing before naming so LID rows can borrow the PN label.
+        /// </summary>
+        Task ApplyRemoteContactUpdatesAsync(IReadOnlyList<AccountContactUpdate> contacts);
+
+        /// <summary>
         /// User action: resolve a phone number to a WhatsApp JID (new-chat search).
         /// Prefer this over calling WhatsAppService from ViewModels.
         /// </summary>

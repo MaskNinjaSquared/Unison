@@ -234,6 +234,11 @@ namespace Unison.Uwp.Services.WhatsApp
         /// pairs - a history chunk, a group listing. Follow-up is scheduled by ContactFacade on
         /// each <see cref="OnJidAliasResolved"/> (debounced).
         /// </summary>
+        void IJidAliasPersistence.RegisterAliasMappings(
+            IEnumerable<KeyValuePair<string, string>> lidToPn,
+            string source) =>
+            RegisterAliasMappings(lidToPn, source);
+
         internal void RegisterAliasMappings(IEnumerable<KeyValuePair<string, string>> lidToPn, string source)
         {
             if (lidToPn == null)

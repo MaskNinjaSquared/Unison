@@ -282,6 +282,58 @@ namespace Unison.WhatsAppClient.Contacts
         public Task ApplyRemoteSelfPushNameAsync(string name) =>
             _resolvedNames.ApplySelfPushNameFromAppStateAsync(name);
 
+        /// <inheritdoc />
+        public async Task ApplyRemoteContactUpdatesAsync(IReadOnlyList<AccountContactUpdate> contacts)
+        {
+            if (contacts == null || contacts.Count == 0)
+            {
+                return;
+            }
+
+            var aliasPairs = new List<KeyValuePair<string, string>>();
+            var entries = new List<ResolvedNameEntry>();
+
+            foreach (AccountContactUpdate contact in contacts)
+            {
+                if (contact == null)
+                {
+                    continue;
+                }
+
+                ContactUpdateReading reading = ContactUpdateFiling.Read(
+                    contact.Id,
+                    contact.Lid,
+                    contact.PhoneNumber,
+                    contact.Name,
+                    contact.Notify);
+
+                if (reading.HasAliasPair)
+                {
+                    aliasPairs.Add(new KeyValuePair<string, string>(reading.Lid, reading.Phone));
+                }
+
+                foreach (string address in reading.NameAddresses)
+                {
+                    ResolvedNameBatchPrep.Add(
+                        entries,
+                        address,
+                        reading.Name,
+                        isSubject: false,
+                        JidHelper.Normalize,
+                        _jids.GetCanonicalJid,
+                        SanitizeForResolvedName);
+                }
+            }
+
+            // Pairing before naming: LID rows borrow the PN label once the pair is known.
+            if (aliasPairs.Count > 0)
+            {
+                _aliasPersist.RegisterAliasMappings(aliasPairs, "app-state-contact");
+            }
+
+            await _resolvedNames.ApplyResolvedNameBatchAsync(entries).ConfigureAwait(false);
+        }
+
         private void ScheduleAliasFollowUp(string source)
         {
             _aliasFollowUps.Request(source);

@@ -154,6 +154,10 @@ namespace Unison.Core.Tests.Helpers
 
             public Task ApplyRemoteSelfPushNameAsync(string name) => Task.CompletedTask;
 
+            public Task ApplyRemoteContactUpdatesAsync(
+                IReadOnlyList<AccountContactUpdate> contacts) =>
+                Task.CompletedTask;
+
             public Task<string> SearchContactAsync(string phoneNumber) => Task.FromResult<string>(null);
 
             public string TryResolvePhone(string jid, string phoneDigits = null) => null;

@@ -4064,8 +4064,14 @@ namespace Unison.Uwp.Services.WhatsApp
                 ChatFacade != null
                     ? ChatFacade.ApplyRemoteChatSettingsAsync(update)
                     : ApplyChatUpdateAsync(update);
-            bridge.ContactChanged = contact => ApplyContactUpdateAsync(contact);
-            bridge.ContactsChanged = updates => ApplyContactUpdatesAsync(updates);
+            bridge.ContactChanged = contact =>
+                Contacts != null
+                    ? Contacts.ApplyRemoteContactUpdatesAsync(MapAccountContacts(contact))
+                    : ApplyContactUpdateAsync(contact);
+            bridge.ContactsChanged = updates =>
+                Contacts != null
+                    ? Contacts.ApplyRemoteContactUpdatesAsync(MapAccountContacts(updates))
+                    : ApplyContactUpdatesAsync(updates);
             bridge.SelfPushNameChanged = name =>
                 Contacts != null
                     ? Contacts.ApplyRemoteSelfPushNameAsync(name)
@@ -4604,33 +4610,70 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         /// <summary>
-        /// A contact as the account knows it: a name, and often the two addresses that name
-        /// belongs to.
-        ///
-        /// The pairing is done before the name, and on purpose. A conversation addressed by LID
-        /// has no name of its own; it borrows the one saved under the phone number, and it can
-        /// only find it once the two are known to be the same person. Registering the alias
-        /// second would file the name under an address nothing looks up.
+        /// Fallback when ContactFacade is not attached: alias pairs then names (same order).
         /// </summary>
         internal Task ApplyContactUpdateAsync(Unison.Socket.Models.ContactUpdate contact)
         {
             return contact == null
-                ? Task.FromResult(false)
+                ? Task.CompletedTask
                 : ApplyContactUpdatesAsync(new[] { contact });
         }
 
-        /// <summary>
-        /// The same, for a whole table of contacts - which is how they actually arrive: an
-        /// app-state snapshot, a history chunk, a group's participant list.
-        /// </summary>
-        /// <remarks>
-        /// Every address is resolved and every name filed before the chat list is touched once, so
-        /// the cost of a thousand contacts is one hop to the UI thread and one walk of the rows.
-        /// Applied one at a time - which is what the single-contact entry point above used to do,
-        /// three times per contact - a first sync spent minutes doing nothing but dispatching, and
-        /// the window would not repaint while it did.
-        /// </remarks>
-        internal async Task ApplyContactUpdatesAsync(IReadOnlyList<Unison.Socket.Models.ContactUpdate> contacts)
+        internal Task ApplyContactUpdatesAsync(IReadOnlyList<Unison.Socket.Models.ContactUpdate> contacts) =>
+            ApplyRemoteContactUpdatesCoreAsync(MapAccountContacts(contacts));
+
+        private static IReadOnlyList<AccountContactUpdate> MapAccountContacts(
+            Unison.Socket.Models.ContactUpdate contact)
+        {
+            if (contact == null)
+            {
+                return new AccountContactUpdate[0];
+            }
+
+            return new[]
+            {
+                new AccountContactUpdate
+                {
+                    Id = contact.Id,
+                    Lid = contact.Lid,
+                    PhoneNumber = contact.PhoneNumber,
+                    Name = contact.Name,
+                    Notify = contact.Notify
+                }
+            };
+        }
+
+        private static IReadOnlyList<AccountContactUpdate> MapAccountContacts(
+            IReadOnlyList<Unison.Socket.Models.ContactUpdate> contacts)
+        {
+            if (contacts == null || contacts.Count == 0)
+            {
+                return new AccountContactUpdate[0];
+            }
+
+            var mapped = new List<AccountContactUpdate>(contacts.Count);
+            for (int i = 0; i < contacts.Count; i++)
+            {
+                Unison.Socket.Models.ContactUpdate contact = contacts[i];
+                if (contact == null)
+                {
+                    continue;
+                }
+
+                mapped.Add(new AccountContactUpdate
+                {
+                    Id = contact.Id,
+                    Lid = contact.Lid,
+                    PhoneNumber = contact.PhoneNumber,
+                    Name = contact.Name,
+                    Notify = contact.Notify
+                });
+            }
+
+            return mapped;
+        }
+
+        private async Task ApplyRemoteContactUpdatesCoreAsync(IReadOnlyList<AccountContactUpdate> contacts)
         {
             if (contacts == null || contacts.Count == 0)
             {
@@ -4640,7 +4683,7 @@ namespace Unison.Uwp.Services.WhatsApp
             var aliasPairs = new List<KeyValuePair<string, string>>();
             var entries = new List<ResolvedNameEntry>();
 
-            foreach (var contact in contacts)
+            foreach (AccountContactUpdate contact in contacts)
             {
                 if (contact == null)
                 {
@@ -4668,10 +4711,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
             }
 
-            // Pairing before naming, and on purpose. A conversation addressed by LID has no name
-            // of its own; it borrows the one saved under the phone number, and it can only find it
-            // once the two are known to be the same person. Registering the alias second would
-            // file the name under an address nothing looks up.
             if (aliasPairs.Count > 0)
             {
                 RegisterAliasMappings(aliasPairs, "app-state-contact");
