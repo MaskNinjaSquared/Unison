@@ -165,9 +165,6 @@ namespace Unison.Core.Tests.State
 
             public void SchedulePersist() => Persists++;
 
-            public void NotifyHistorySurfaceRefresh()
-            {
-            }
 
             public void ReportFlushFailure(string reason, Exception error) => OnFailure?.Invoke(reason);
         }

@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Phase B — legacy preview surface refresh on ChatFacade
+
+After repair, ChatFacade clears `IMessageStore` RAM cache and calls
+`IHistoryService.NotifyHistorySyncReceived(null)`. Dropped
+`IOfflineReplayHost.NotifyHistorySurfaceRefresh`.
+
 ## Phase B — Route owns session-control early exits; NotifyChatMessagesChanged nudges store
 
 `RouteIncomingChatEnvelopeAsync` classifies peer-data / placeholder / app-state

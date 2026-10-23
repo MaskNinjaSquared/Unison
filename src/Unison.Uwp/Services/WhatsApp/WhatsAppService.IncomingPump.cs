@@ -321,47 +321,6 @@ namespace Unison.Uwp.Services.WhatsApp
             });
         }
 
-        public async Task<bool> EnsureActiveChatReconciledAsync(string chatJid, int maxRequests = 6)
-        {
-            string normJid = NormalizeJid(chatJid);
-            if (string.IsNullOrWhiteSpace(normJid) || _socket == null || !_socket.IsHandshakeComplete)
-            {
-                return false;
-            }
-
-            DateTime utcNow = DateTime.UtcNow;
-            if (!_missing.TryBeginReconcile(normJid, utcNow, ActiveChatReconcileCooldown))
-            {
-                return false;
-            }
-
-            List<string> pendingIds = _missing.CopyPendingIds(normJid, maxRequests);
-
-            if (pendingIds.Count == 0)
-            {
-                Debug.WriteLine($"[WhatsAppService] Active chat reconcile found no pending missing-message repairs for {normJid}");
-                return false;
-            }
-
-            bool requestedAny = false;
-            foreach (var pendingId in pendingIds)
-            {
-                requestedAny |= await TryRequestPlaceholderResendAsync(normJid, pendingId, "active-chat");
-            }
-
-            if (requestedAny)
-            {
-                Debug.WriteLine($"[WhatsAppService] Active chat reconcile scheduled placeholder resend for {pendingIds.Count} message(s) in {normJid}");
-            }
-            else if (pendingIds.Count > 0)
-            {
-                Debug.WriteLine($"[WhatsAppService] Active chat reconcile deferred placeholder resend pressure for {normJid}");
-            }
-
-            return requestedAny;
-        }
-
-
         private async Task RecoverPendingIncomingJournalAsync()
         {
             try
@@ -676,19 +635,6 @@ namespace Unison.Uwp.Services.WhatsApp
         void IOfflineReplayHost.NoteCatchUpProgress(string reason) => NoteFullHistoryCatchUpProgress(reason);
 
         void IOfflineReplayHost.SchedulePersist() => SchedulePersist();
-
-        void IOfflineReplayHost.NotifyHistorySurfaceRefresh()
-        {
-            try
-            {
-                _messageStore?.ClearMemoryCache();
-            }
-            catch
-            {
-            }
-
-            History?.NotifyHistorySyncReceived(null);
-        }
 
         void IOfflineReplayHost.ReportFlushFailure(string reason, Exception error)
         {

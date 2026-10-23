@@ -80,6 +80,7 @@ namespace Unison.WhatsAppClient.Chats
         private readonly IMissingMessageChatHost _missingMessages;
         private readonly HistoryOnDemandRegistry _historyRequests;
         private readonly PendingMessageQueue _pendingMessages;
+        private readonly Func<IHistoryService> _resolveHistory;
         private readonly OfflineReplayTips _offlineReplayTips;
 
         /// <summary>Short enough that the first recovered chat shows while a long replay continues.</summary>
@@ -112,6 +113,7 @@ namespace Unison.WhatsAppClient.Chats
             IMissingMessageChatHost missingMessages,
             HistoryOnDemandRegistry historyRequests,
             PendingMessageQueue pendingMessages,
+            Func<IHistoryService> resolveHistory,
             IDialogService dialogs = null,
             IRuntimeDiagnostics diagnostics = null)
         {
@@ -141,6 +143,7 @@ namespace Unison.WhatsAppClient.Chats
             _missingMessages = missingMessages ?? throw new ArgumentNullException(nameof(missingMessages));
             _historyRequests = historyRequests ?? throw new ArgumentNullException(nameof(historyRequests));
             _pendingMessages = pendingMessages ?? throw new ArgumentNullException(nameof(pendingMessages));
+            _resolveHistory = resolveHistory ?? throw new ArgumentNullException(nameof(resolveHistory));
             _dialogs = dialogs;
             _diagnostics = diagnostics;
             _offlineReplayTips = new OfflineReplayTips(
@@ -1193,7 +1196,16 @@ namespace Unison.WhatsAppClient.Chats
                 Debug.WriteLine("[ChatFacade] Legacy preview catalogue persist failed: " + ex.Message);
             }
 
-            _offlineReplay.NotifyHistorySurfaceRefresh();
+            try
+            {
+                _messageStore.ClearMemoryCache();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ChatFacade] ClearMemoryCache after legacy preview repair failed: " + ex.Message);
+            }
+
+            _resolveHistory()?.NotifyHistorySyncReceived(null);
             _offlineReplay.SchedulePersist();
         }
 
