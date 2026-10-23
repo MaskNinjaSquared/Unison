@@ -155,7 +155,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private readonly Func<IChatService> _resolveChats;
         private readonly Func<IContactService> _resolveContacts;
         private readonly Func<IGroupService> _resolveGroups;
-        private readonly Func<IStatusService> _resolveStatus;
         private readonly Func<IHistoryService> _resolveHistory;
 
         private IMessageService Messages => _resolveMessages != null ? _resolveMessages() : null;
@@ -165,8 +164,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private IContactService Contacts => _resolveContacts != null ? _resolveContacts() : null;
 
         private IGroupService Groups => _resolveGroups != null ? _resolveGroups() : null;
-
-        private IStatusService Status => _resolveStatus != null ? _resolveStatus() : null;
 
         private IHistoryService History => _resolveHistory != null ? _resolveHistory() : null;
 
@@ -964,7 +961,6 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         public event EventHandler<BinaryNode> OnLinkCodeCompanionReg;
-        public event EventHandler<BinaryNode> OnMessage;
 
         private WhatsAppService(
             ChatStateStore chatState,
@@ -998,7 +994,6 @@ namespace Unison.Uwp.Services.WhatsApp
             Func<IMessageService> resolveMessages = null,
             Func<IChatService> resolveChats = null,
             Func<IGroupService> resolveGroups = null,
-            Func<IStatusService> resolveStatus = null,
             Func<IHistoryService> resolveHistory = null)
         {
             if (chatState == null)
@@ -1024,7 +1019,6 @@ namespace Unison.Uwp.Services.WhatsApp
             _resolveMessages = resolveMessages;
             _resolveChats = resolveChats;
             _resolveGroups = resolveGroups;
-            _resolveStatus = resolveStatus;
             _resolveHistory = resolveHistory;
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
             _usyncAliases = usyncAliases ?? throw new ArgumentNullException(nameof(usyncAliases));
@@ -1113,12 +1107,11 @@ namespace Unison.Uwp.Services.WhatsApp
             Func<IMessageService> resolveMessages = null,
             Func<IChatService> resolveChats = null,
             Func<IGroupService> resolveGroups = null,
-            Func<IStatusService> resolveStatus = null,
             Func<IHistoryService> resolveHistory = null)
         {
             return _instance ?? (_instance = new WhatsAppService(
                 chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
-                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, usyncAliases, pendingMessages, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups, resolveStatus, resolveHistory));
+                initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, usyncAliases, pendingMessages, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups, resolveHistory));
         }
 
         /// <summary>
@@ -2990,6 +2983,27 @@ namespace Unison.Uwp.Services.WhatsApp
         void IHistorySyncHost.ScheduleAcceptedHistoryOnDemandTimeout(HistoryOnDemandRequest state) =>
             ScheduleAcceptedHistoryRequestTimeout(state);
 
+        void IHistorySyncHost.NoteHistorySyncLanded(string syncType, bool hasContent)
+        {
+            EnableScheduledPersist("history sync received");
+            if (!hasContent || _historyIdentityRefreshTriggeredThisSession)
+            {
+                return;
+            }
+
+            if (ShouldDeferReconnectReplayWork())
+            {
+                Debug.WriteLine(
+                    "[WhatsAppService] Deferring one-shot identity refresh until replay drain completes.");
+                return;
+            }
+
+            _historyIdentityRefreshTriggeredThisSession = true;
+            Debug.WriteLine(
+                "[WhatsAppService] Scheduling post-message enrichment after first non-empty history sync.");
+            ReleaseEnrichmentAfterHeavyHistory(syncType ?? "history-sync");
+        }
+
         private HistoryCatchUpWatchdog CatchUpWatchdog =>
             _catchUpWatchdog ??= new HistoryCatchUpWatchdog(
                 _historyRequests,
@@ -4013,23 +4027,6 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             var me = _authState?.Me;
             return me != null && SelfNameCandidate.IsOwnPhoneEcho(label, me.Id, me.Lid, _selfMarkers);
-        }
-
-        private IEnumerable<string> ExpandNameLookupCandidates(params string[] jids)
-        {
-            return NameLookupCandidates.Expand(
-                jids,
-                NormalizeJid,
-                normalized =>
-                {
-                    string alias;
-                    if (JidAlias.TryGetValue(normalized, out alias) && !string.IsNullOrWhiteSpace(alias))
-                    {
-                        return alias;
-                    }
-
-                return null;
-                });
         }
 
         bool Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost.HasSelfCredentials =>

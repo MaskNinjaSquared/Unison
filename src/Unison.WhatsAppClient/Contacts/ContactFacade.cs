@@ -486,6 +486,12 @@ namespace Unison.WhatsAppClient.Contacts
         }
 
         /// <inheritdoc />
+        public void NotifyInboundMessageNode(string fromJid, string notify, string participantJid)
+        {
+            ApplyStanzaNotifyPushName(fromJid, notify, participantJid);
+        }
+
+        /// <inheritdoc />
         public void ApplyStanzaNotifyPushName(string fromJid, string notify, string participantJid)
         {
             if (string.IsNullOrEmpty(fromJid) || string.IsNullOrEmpty(notify))

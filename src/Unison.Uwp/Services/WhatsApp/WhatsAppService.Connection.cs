@@ -1685,11 +1685,14 @@ namespace Unison.Uwp.Services.WhatsApp
                 OnError?.Invoke(this, ex);
             };
 
-            socket.OnMessage += (s, node) => 
+            socket.OnMessage += (s, node) =>
             {
-                if (!IsCurrentSocket(s)) return;
-                if (node != null &&
-                    string.Equals(node.Tag, "ack", StringComparison.OrdinalIgnoreCase) &&
+                if (!IsCurrentSocket(s) || node == null)
+                {
+                    return;
+                }
+
+                if (string.Equals(node.Tag, "ack", StringComparison.OrdinalIgnoreCase) &&
                     node.Attrs != null)
                 {
                     node.Attrs.TryGetValue("class", out var ackClass);
@@ -1698,18 +1701,13 @@ namespace Unison.Uwp.Services.WhatsApp
                     Messages?.NotifyInboundWireAck(ackClass, ackId, ackError);
                 }
 
-                // Collect pushname from notify attribute on incoming messages
-                if (node != null &&
-                    node.Attrs.TryGetValue("from", out var from) &&
-                    node.Attrs.TryGetValue("notify", out var notify) &&
-                    !string.IsNullOrEmpty(from) &&
-                    !string.IsNullOrEmpty(notify))
+                if (node.Attrs != null)
                 {
+                    node.Attrs.TryGetValue("from", out var from);
+                    node.Attrs.TryGetValue("notify", out var notify);
                     node.Attrs.TryGetValue("participant", out var participantFromNode);
-                    Contacts?.ApplyStanzaNotifyPushName(from, notify, participantFromNode);
+                    Contacts?.NotifyInboundMessageNode(from, notify, participantFromNode);
                 }
-
-                OnMessage?.Invoke(this, node);
             };
 
             socket.OnHistorySyncReceived += (s, sync) => 
@@ -1725,10 +1723,6 @@ namespace Unison.Uwp.Services.WhatsApp
                 {
                     return;
                 }
-
-                bool hasContent = sync != null &&
-                                  ((sync.Conversations?.Count ?? 0) > 0 ||
-                                   sync.Pushnames?.Count > 0);
 
                 // SocketClient raised this from a background pipeline. MessageWebSocket
                 // delivers on the UI thread; the transport hops off before this runs.
@@ -1757,21 +1751,6 @@ namespace Unison.Uwp.Services.WhatsApp
                         "sync-apply-end",
                         "conversations=" + conversations +
                         "; elapsedMs=" + started.ElapsedMilliseconds);
-                }
-                EnableScheduledPersist("history sync received");
-                if (hasContent && !_historyIdentityRefreshTriggeredThisSession)
-                {
-                    if (ShouldDeferReconnectReplayWork())
-                    {
-                        Debug.WriteLine("[WhatsAppService] Deferring one-shot identity refresh until replay drain completes.");
-                    }
-                    else
-                    {
-                        _historyIdentityRefreshTriggeredThisSession = true;
-                        Debug.WriteLine("[WhatsAppService] Scheduling post-message enrichment after first non-empty history sync.");
-                        ReleaseEnrichmentAfterHeavyHistory(
-                            sync?.SyncType.ToString() ?? "history-sync");
-                    }
                 }
             };
 

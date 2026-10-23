@@ -1159,6 +1159,13 @@ namespace Unison.WhatsAppClient.History
             }
 
             NotifyHistorySyncReceived(sync);
+
+            bool hasContent = sync != null &&
+                ((sync.Conversations != null && sync.Conversations.Count > 0) ||
+                 (sync.Pushnames != null && sync.Pushnames.Count > 0));
+            _historySync.NoteHistorySyncLanded(
+                sync != null ? sync.SyncType.ToString() : null,
+                hasContent);
         }
 
         /// <inheritdoc />

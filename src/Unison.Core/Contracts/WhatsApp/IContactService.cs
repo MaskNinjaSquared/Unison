@@ -193,6 +193,13 @@ namespace Unison.Core.Contracts.WhatsApp
         void ApplyStanzaNotifyPushName(string fromJid, string notify, string participantJid);
 
         /// <summary>
+        /// Host socket path: inbound binary-node attrs that may carry a push-name
+        /// <c>notify</c>. No-ops when <paramref name="fromJid"/> / <paramref name="notify"/>
+        /// are blank (host only extracts attrs).
+        /// </summary>
+        void NotifyInboundMessageNode(string fromJid, string notify, string participantJid);
+
+        /// <summary>
         /// Files PN/LID pairs carried on an inbound envelope (before usync). Source labels
         /// stay on each pair for diagnostics.
         /// </summary>

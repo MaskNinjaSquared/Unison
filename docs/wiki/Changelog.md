@@ -2,6 +2,13 @@
 
 Newest first.
 
+## Phase B — dead host Func/event, inbound stanza Notify*, history landed
+
+Dropped unused `ExpandNameLookupCandidates`, host `IStatusService` Func, and orphan
+`OnMessage` raise. `ContactFacade.NotifyInboundMessageNode` owns push-name gates.
+`HistoryFacade.ApplyHistorySyncAsync` calls `IHistorySyncHost.NoteHistorySyncLanded`
+(persist enable + first-content enrichment).
+
 ## Phase B — outgoing UI notify/accept/preview; media + avatar off host; wire Notify*
 
 `OutgoingTextSend` / `OutgoingMediaSend` call façade callbacks for accept, local

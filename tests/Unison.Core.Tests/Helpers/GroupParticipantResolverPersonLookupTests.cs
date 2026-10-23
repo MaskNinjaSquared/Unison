@@ -175,6 +175,8 @@ namespace Unison.Core.Tests.Helpers
             {
             }
 
+            public void NotifyInboundMessageNode(string fromJid, string notify, string participantJid) { }
+
             public void ApplyStanzaNotifyPushName(string fromJid, string notify, string participantJid)
             {
             }

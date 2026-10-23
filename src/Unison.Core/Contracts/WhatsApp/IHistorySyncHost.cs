@@ -43,5 +43,12 @@ namespace Unison.Core.Contracts.WhatsApp
 
         /// <summary>Arm the accepted-request timeout / catch-up watchdog for this request.</summary>
         void ScheduleAcceptedHistoryOnDemandTimeout(HistoryOnDemandRequest state);
+
+        /// <summary>
+        /// After a history chunk was applied on the façade: enable catalogue persist and,
+        /// once per session when the chunk had content and replay is not deferred, kick
+        /// post-message enrichment.
+        /// </summary>
+        void NoteHistorySyncLanded(string syncType, bool hasContent);
     }
 }
