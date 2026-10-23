@@ -72,6 +72,36 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
+        public async Task Usync_merge_keeps_the_newer_lid_preview_on_the_phone_row()
+        {
+            var lidRow = new ChatItem
+            {
+                JID = Lid,
+                LastMessage = "from lid",
+                LastMessageId = "L1",
+                LastMessageTimestampUtc = new DateTime(2024, 6, 2, 12, 0, 0, DateTimeKind.Utc),
+                UnreadCount = 3
+            };
+            var pnRow = new ChatItem
+            {
+                JID = Pn,
+                LastMessage = "older pn",
+                LastMessageId = "P1",
+                LastMessageTimestampUtc = new DateTime(2024, 6, 1, 12, 0, 0, DateTimeKind.Utc),
+                UnreadCount = 1
+            };
+            _chats.Chats.Add(lidRow);
+            _chats.Chats.Add(pnRow);
+
+            ChatListAliasMergeResult result = await Build().MergeAsync(Lid, Pn);
+
+            Assert.Equal(ChatListAliasMergeOutcome.MergedRows, result.Outcome);
+            Assert.Equal("from lid", pnRow.LastMessage);
+            Assert.Equal("L1", pnRow.LastMessageId);
+            Assert.Equal(3, pnRow.UnreadCount);
+        }
+
+        [Fact]
         public async Task Missing_either_row_is_a_no_op()
         {
             _chats.Chats.Add(new ChatItem { JID = Pn });

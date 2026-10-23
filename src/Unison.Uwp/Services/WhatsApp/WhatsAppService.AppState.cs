@@ -54,7 +54,15 @@ namespace Unison.Uwp.Services.WhatsApp
                 return;
             }
 
-            CaptureSelfPushName(sanitized, SelfPushNameAppStateSource);
+            if (Contacts != null)
+            {
+                Contacts.CaptureSelfPushName(sanitized, SelfPushNameAppStateSource);
+            }
+            else
+            {
+                CaptureSelfPushName(sanitized, SelfPushNameAppStateSource);
+            }
+
             await PersistAuthStateAsync(null, "apply-self-contact-name");
             if (Contacts != null)
             {

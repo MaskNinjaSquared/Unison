@@ -77,6 +77,8 @@ namespace Unison.WhatsAppClient.Helpers
                 }
 
                 _chats.MessagesByChat.MergeInto(lid, pn);
+                // Same field policy as live transient collapse — usync must not drop preview/unread.
+                TransientChatMerge.Apply(pnChat, lidChat, pn, lid, _selfMarkers);
                 _chats.Chats.Remove(lidChat);
                 outcome = ChatListAliasMergeOutcome.MergedRows;
             }).ConfigureAwait(false);
