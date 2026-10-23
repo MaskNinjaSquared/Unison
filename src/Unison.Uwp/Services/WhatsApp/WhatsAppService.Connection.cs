@@ -1830,6 +1830,19 @@ namespace Unison.Uwp.Services.WhatsApp
             socket.OnMissingMessageDetected += (s, e) =>
             {
                 if (!IsCurrentSocket(s)) return;
+                if (Messages != null)
+                {
+                    _ = Messages.NoteMissingMessageAndRequestResendAsync(
+                        e.ChatJid,
+                        e.Participant,
+                        e.MessageId,
+                        e.IsFromMe,
+                        e.Timestamp,
+                        e.Reason,
+                        "socket:" + (e.Reason ?? string.Empty));
+                    return;
+                }
+
                 RegisterMissingMessage(e.ChatJid, e.Participant, e.MessageId, e.IsFromMe, e.Timestamp, e.Reason);
                 _ = TryRequestPlaceholderResendAsync(e.ChatJid, e.MessageId, $"socket:{e.Reason}");
             };

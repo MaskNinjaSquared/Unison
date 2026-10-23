@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Phase B — placeholder ack + socket missing-message on MessageFacade
+
+`HandlePlaceholderResendAck` and `NoteMissingMessageAndRequestResendAsync` own
+ack logging/ledger apply and the socket missing-message path. Connection only
+forwards attrs / event fields.
+
 ## Phase B — peer-data placeholder recovery + pin connect via façade
 
 `ApplyPeerDataPlaceholderResendsAsync` decodes resend payloads and re-enqueues

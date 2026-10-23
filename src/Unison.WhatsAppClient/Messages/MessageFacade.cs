@@ -1709,7 +1709,26 @@ namespace Unison.WhatsAppClient.Messages
             DateTime timestampUtc,
             string placeholderType)
         {
-            string reason = "placeholder:" + (placeholderType ?? string.Empty);
+            return NoteMissingMessageAndRequestResendAsync(
+                chatJid,
+                participantJid,
+                messageId,
+                isFromMe,
+                timestampUtc,
+                "placeholder:" + (placeholderType ?? string.Empty),
+                "placeholder-message");
+        }
+
+        /// <inheritdoc />
+        public Task NoteMissingMessageAndRequestResendAsync(
+            string chatJid,
+            string participantJid,
+            string messageId,
+            bool isFromMe,
+            DateTime timestampUtc,
+            string reason,
+            string resendTrigger)
+        {
             _missingMessages.RegisterMissingMessage(
                 chatJid,
                 participantJid,
@@ -1720,7 +1739,39 @@ namespace Unison.WhatsAppClient.Messages
             return _missingMessages.RequestPlaceholderResendAsync(
                 chatJid,
                 messageId,
-                "placeholder-message");
+                resendTrigger ?? "placeholder-message");
+        }
+
+        /// <inheritdoc />
+        public void HandlePlaceholderResendAck(string ackClass, string ackId, string ackError)
+        {
+            bool rejected;
+            if (!PlaceholderResendAck.TryRead(ackClass, ackId, ackError, out rejected))
+            {
+                return;
+            }
+
+            PlaceholderResendRequestState requestState;
+            if (!_missingMessages.TryApplyPlaceholderResendAck(ackId, rejected, out requestState) ||
+                requestState == null)
+            {
+                return;
+            }
+
+            if (rejected)
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] placeholder resend ack rejected for " +
+                    requestState.MessageId + " in " + requestState.ChatJid +
+                    ": stanzaId=" + ackId + ", error=" + ackError);
+            }
+            else
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] placeholder resend ack accepted for " +
+                    requestState.MessageId + " in " + requestState.ChatJid +
+                    ": stanzaId=" + ackId);
+            }
         }
 
         /// <inheritdoc />

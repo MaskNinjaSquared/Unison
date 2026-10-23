@@ -78,6 +78,12 @@ namespace Unison.Uwp.Services.WhatsApp
         PlaceholderResendRequestState IMissingMessageChatHost.TakePlaceholderPeerResponse(string stanzaId) =>
             _missing.TakePeerResponse(stanzaId);
 
+        bool IMissingMessageChatHost.TryApplyPlaceholderResendAck(
+            string ackId,
+            bool rejected,
+            out PlaceholderResendRequestState requestState) =>
+            _missing.TryApplyAck(ackId, rejected, DateTime.UtcNow, out requestState);
+
         void IIncomingMessageEnqueueHost.EnqueueRecoveredDecryptedMessage(
             string fromJid,
             string participant,
@@ -499,7 +505,7 @@ namespace Unison.Uwp.Services.WhatsApp
 
         private void HandlePlaceholderResendAckNode(BinaryNode node)
         {
-            if (node?.Attrs == null)
+            if (node?.Attrs == null || Messages == null)
             {
                 return;
             }
@@ -507,32 +513,7 @@ namespace Unison.Uwp.Services.WhatsApp
             node.Attrs.TryGetValue("class", out var ackClass);
             node.Attrs.TryGetValue("id", out var ackId);
             node.Attrs.TryGetValue("error", out var ackError);
-
-            bool rejected;
-            if (!PlaceholderResendAck.TryRead(ackClass, ackId, ackError, out rejected))
-            {
-                return;
-            }
-
-            PlaceholderResendRequestState requestState;
-            if (!_missing.TryApplyAck(ackId, rejected, DateTime.UtcNow, out requestState))
-            {
-                return;
-            }
-
-            if (requestState == null)
-            {
-                return;
-            }
-
-            if (rejected)
-            {
-                Debug.WriteLine($"[WhatsAppService] placeholder resend ack rejected for {requestState.MessageId} in {requestState.ChatJid}: stanzaId={ackId}, error={ackError}");
-            }
-            else
-            {
-                Debug.WriteLine($"[WhatsAppService] placeholder resend ack accepted for {requestState.MessageId} in {requestState.ChatJid}: stanzaId={ackId}");
-            }
+            Messages.HandlePlaceholderResendAck(ackClass, ackId, ackError);
         }
 
         private void EnqueueDecryptedMessage(Client.DecryptedMessageEventArgs message)

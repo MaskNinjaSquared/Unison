@@ -458,6 +458,24 @@ namespace Unison.Core.Contracts.WhatsApp
             string placeholderType);
 
         /// <summary>
+        /// Socket / envelope missing-message: note the id and request a placeholder resend
+        /// with the given ledger reason and dispatch trigger.
+        /// </summary>
+        Task NoteMissingMessageAndRequestResendAsync(
+            string chatJid,
+            string participantJid,
+            string messageId,
+            bool isFromMe,
+            DateTime timestampUtc,
+            string reason,
+            string resendTrigger);
+
+        /// <summary>
+        /// Wire <c>ack</c> for an outstanding placeholder-resend request.
+        /// </summary>
+        void HandlePlaceholderResendAck(string ackClass, string ackId, string ackError);
+
+        /// <summary>
         /// Peer-data placeholder-resend payloads: decode WebMessageInfo bytes and re-enqueue
         /// onto the host ingest queue (never recursive into the pump lock).
         /// </summary>

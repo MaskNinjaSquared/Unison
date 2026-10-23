@@ -38,5 +38,13 @@ namespace Unison.Core.Contracts.WhatsApp
         /// Claims the outstanding placeholder-resend request for a peer-data stanza, if any.
         /// </summary>
         PlaceholderResendRequestState TakePlaceholderPeerResponse(string stanzaId);
+
+        /// <summary>
+        /// Applies a wire ack onto the outstanding placeholder-resend request for <paramref name="ackId"/>.
+        /// </summary>
+        bool TryApplyPlaceholderResendAck(
+            string ackId,
+            bool rejected,
+            out PlaceholderResendRequestState requestState);
     }
 }
