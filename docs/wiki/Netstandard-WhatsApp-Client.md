@@ -216,6 +216,13 @@ Further shrinking those rows is **State/contract seams** (or Phase E), not anoth
 - Prefer deleting the compatibility client once ConnectionFacade + SocketBridge cover lifecycle.
 - Done when: solution layout matches the target diagram; Background still references **only** `Unison.Baileys`.
 
+**Started (transport factory):** `IWhatsAppTransportFactory` / `UwpWhatsAppTransportFactory` —
+`SocketBridge.ConnectAsync` asks the host factory for StreamSocket vs MessageWebSocket and takes
+`isMobile` from `ISystemInfoProvider` (via `WhatsAppService`) instead of `AnalyticsInfo`. Connect
+order rule is `WaTransportConnectOrder`. Session attach for façades remains `IWhatsAppSessionProvider`
+(`BridgeSessionProvider` + `Func` over `WhatsAppService.Socket`). Full `Init(IWaTransport)` on a
+portable connection host still waits on extraction residuals (`BuildSocketBridge` wiring / pump).
+
 ### Phase E (future) — client-owned public I/O
 
 **Not** Phase C/D work. Long-term goal: `Unison.WhatsAppClient` publishable / reusable without dragging Unison UI models — a portable WhatsApp **policy** library whose **entry and exit** types live on the client (or a thin contracts package next to it), not on Unison.Core ViewModel-shaped models.

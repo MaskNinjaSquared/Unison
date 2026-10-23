@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Host owns transport construction — IWhatsAppTransportFactory
+
+`SocketBridge` no longer `new`s StreamSocket/MessageWebSocket or reads DeviceFamily.
+UWP `UwpWhatsAppTransportFactory` + `ISystemInfoProvider.IsMobile` feed connect order
+(`WaTransportConnectOrder`). First step toward Init(IWaTransport) / host-only UWP.
+
 ## Phase 3.7b done — LidMappingStore behind JidAliasTable seam
 
 Key shapes reconciled (`TryGetCachedPairedJid` re-attaches device/hosted). Shared

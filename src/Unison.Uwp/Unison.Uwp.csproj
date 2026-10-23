@@ -156,6 +156,7 @@
     <Compile Include="Services\WhatsApp\Contacts\AvatarFetcher.cs" />
     <Compile Include="Services\LocalSettingsService.cs" />
     <Compile Include="Services\Socket\WaTransportAdapter.cs" />
+    <Compile Include="Services\Socket\UwpWhatsAppTransportFactory.cs" />
     <Compile Include="Services\Socket\IWhatsAppSessionProvider.cs" />
     <Compile Include="Services\WhatsApp\JidResolver.cs" />
     <Compile Include="Services\WhatsApp\LidMappingMemoryAdapter.cs" />

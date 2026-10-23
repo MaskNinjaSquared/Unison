@@ -255,6 +255,8 @@ namespace Unison.Uwp
             // LidMappingStore before the client: SocketBridge + JidAliasTable share one cache (3.7b).
             services.AddSingleton<ILidMappingStorage, SqliteLidMappingStorage>();
             services.AddSingleton(sp => new LidMappingStore(sp.GetRequiredService<ILidMappingStorage>()));
+            // Host owns WinRT transport construction; SocketBridge only asks the factory.
+            services.AddSingleton<IWhatsAppTransportFactory, UwpWhatsAppTransportFactory>();
             services.AddSingleton<ILidMappingMemory>(sp =>
                 new LidMappingMemoryAdapter(sp.GetRequiredService<LidMappingStore>()));
             services.AddSingleton(sp =>
@@ -418,6 +420,7 @@ namespace Unison.Uwp
                     sp.GetRequiredService<AttachedUiDispatcher>(),
                     sp.GetRequiredService<PendingMessageQueue>(),
                     sp.GetRequiredService<LidMappingStore>(),
+                    sp.GetRequiredService<IWhatsAppTransportFactory>(),
                     sp.GetRequiredService<ChatListInitialPaintGate>(),
                     sp.GetRequiredService<IAppMemoryInfo>(),
                     sp.GetRequiredService<ILocalSettings>(),
