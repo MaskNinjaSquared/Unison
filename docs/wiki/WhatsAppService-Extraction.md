@@ -1274,8 +1274,9 @@ answers false and the rest do nothing. `App.GetWhatsAppService()` is gone; `App`
 `IConnectionService`. The client's reconnect, resume and broker logic did not change.
 
 **Wave 1 started: media connect goes through the façade.** `MediaAvailability` asks
-`IConnectionService.EnsureConnectedAsync` instead of naming `IWhatsAppService`. Soft-reconnect
-and catch-up idle decide are the next slices of this wave.
+`IConnectionService.EnsureConnectedAsync` instead of naming `IWhatsAppService`.
+`IConnectionSoftReconnect` exposes soft auto-reconnect and catch-up-continue without the
+god client; catch-up idle decide is the next slice of this wave.
 
 **The open conversation is shared state.** `ActiveChat` (`Unison.Core/State`, DI singleton over
 `JidAliasTable.GetCanonicalJid`) holds the conversation the user has open by its canonical

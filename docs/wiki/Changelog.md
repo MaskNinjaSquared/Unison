@@ -2,6 +2,11 @@
 
 Newest first.
 
+## Phase 4 — IConnectionSoftReconnect port
+
+`RequestSoftReconnect` / `RequestCatchUpContinueReconnect` expose the client's
+auto-reconnect and catch-up-continue seams without naming the whole service.
+
 ## Phase 4 — MediaAvailability EnsureConnected via IConnectionService
 
 On-demand media no longer names `IWhatsAppService` for connect; it uses the

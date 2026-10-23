@@ -43,7 +43,7 @@ using Unison.WhatsAppClient.Helpers;
 
 namespace Unison.Uwp.Services.WhatsApp
 {
-    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IMediaDownloadHost, IOfflineReplayHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, ISocketAliasRegistrar, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost
+    public partial class WhatsAppService : INotifyPropertyChanged, IWhatsAppService, IMediaDownloadHost, IOfflineReplayHost, IPlaceholderResendSocket, IHistoryOnDemandSocket, IRuntimeSnapshotSource, IBackgroundResolutionGate, IAppStateLocalHost, IConversationResyncHost, IHistorySyncHost, ISocketAliasRegistrar, IConnectionSoftReconnect, IStartupUiHost, IJidAliasPersistence, IIncomingMessageEnqueueHost, Unison.WhatsAppClient.Abstractions.IResolvedNameApplyHost
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -2621,6 +2621,12 @@ namespace Unison.Uwp.Services.WhatsApp
             Interlocked.Exchange(ref _enrichmentAwaitingHeavyHistory, 0);
             TrySchedulePostMessageEnrichment("catch-up-finish:" + (reason ?? string.Empty));
         }
+
+        void IConnectionSoftReconnect.RequestSoftReconnect(string reason) =>
+            ScheduleAutoReconnect(reason);
+
+        void IConnectionSoftReconnect.RequestCatchUpContinueReconnect(string reason) =>
+            ScheduleCatchUpContinueReconnect(reason);
 
         /// <summary>
         /// Soft-reconnect to pull another offline catch-up lot while the history banner stays up.

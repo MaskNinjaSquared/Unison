@@ -502,6 +502,8 @@ namespace Unison.Uwp
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<ISocketAliasRegistrar>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
+            services.AddSingleton<IConnectionSoftReconnect>(
+                sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IUsyncAliasHost>(sp => new UsyncAliasHost(
                 sp.GetRequiredService<UsyncAliasFiling>(),
                 sp.GetRequiredService<ISocketAliasRegistrar>()));
