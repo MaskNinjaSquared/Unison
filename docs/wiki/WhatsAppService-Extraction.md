@@ -165,10 +165,12 @@ What is left on `_contactService` is awaited and ordered by the client, so it is
 ### Phase B (inbound ownership) — in progress on `docs/netstandard-whatsapp-client`
 
 Post-session chat envelopes route on `MessageFacade` (`RouteIncomingChatEnvelopeAsync`,
-controls, content, placeholder note/resend, peer-data placeholder recovery enqueue).
-Pump keeps queue lanes, peer-data control work + history-on-demand log lines, alias
-hints, and session-only App State. Persistence flush timer / `ForgetChatStorage` /
-Connection lifecycle stay on the host (not this phase).
+controls, content, placeholder note/resend, peer-data placeholder recovery enqueue,
+placeholder ack, socket missing-message). Stanza `notify` push-name is
+`ContactFacade.ApplyStanzaNotifyPushName`. Pump keeps queue lanes, peer-data
+control work + history-on-demand log lines, alias hints, and session-only App State.
+Persistence flush timer / `ForgetChatStorage` / Connection lifecycle stay on the
+host (not this phase).
 
 ### Facades still depend on the client
 
