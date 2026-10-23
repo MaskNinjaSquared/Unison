@@ -482,7 +482,6 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IHistoryStatusStore>(),
                 sp.GetRequiredService<IPersonStore>(),
                 sp.GetRequiredService<IMessageService>(),
-                sp.GetRequiredService<IWhatsAppService>(),
                 sp.GetRequiredService<IStatusThumbnailMaterializer>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>()));
             services.AddSingleton<IStatusService>(sp => sp.GetRequiredService<StatusFacade>());

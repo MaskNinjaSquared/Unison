@@ -826,7 +826,6 @@ namespace Unison.Uwp.Services.WhatsApp
         public event EventHandler<PresenceUpdateEventArgs> OnPresenceUpdate;
         public event EventHandler<string> OnStreamError;
         public event EventHandler<string> OnInvalidSessionSuspected;
-        public event EventHandler<HistoryStatus> OnLiveStatusReceived;
         public event EventHandler OnBackgroundHistorySyncBounced;
         public event EventHandler<AvatarCachedEventArgs> OnAvatarCached;
         public event EventHandler OnGroupListingDue;

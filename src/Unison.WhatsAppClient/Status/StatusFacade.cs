@@ -29,7 +29,6 @@ namespace Unison.WhatsAppClient.Status
             IHistoryStatusStore store,
             IPersonStore people,
             IMessageService messages,
-            IWhatsAppService client,
             IStatusThumbnailMaterializer thumbs,
             IRuntimeDiagnostics diagnostics = null)
         {
@@ -38,15 +37,7 @@ namespace Unison.WhatsAppClient.Status
             _messages = messages ?? throw new ArgumentNullException(nameof(messages));
             _thumbs = thumbs ?? throw new ArgumentNullException(nameof(thumbs));
             _diagnostics = diagnostics;
-            if (client == null)
-            {
-                throw new ArgumentNullException(nameof(client));
-            }
-
             _store.Changed += Store_Changed;
-
-            // Both live as long as the app does, so there is nothing to unhook from.
-            client.OnLiveStatusReceived += Client_OnLiveStatusReceived;
         }
 
         public event EventHandler StatusUpdated;
@@ -366,15 +357,6 @@ namespace Unison.WhatsAppClient.Status
         public string DescribeStatusItem(HistoryStatus item, int index = -1)
         {
             return StatusItemDiagnostics.DescribeItem(item, index);
-        }
-
-        /// <summary>
-        /// Not awaited by the client on purpose: the store serialises its own writes and distinct
-        /// status rows are independent upserts, so there is no order to preserve here.
-        /// </summary>
-        private void Client_OnLiveStatusReceived(object sender, HistoryStatus row)
-        {
-            _ = IngestLiveSafeAsync(row);
         }
 
         private async Task IngestLiveSafeAsync(HistoryStatus row)

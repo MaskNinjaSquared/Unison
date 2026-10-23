@@ -48,7 +48,7 @@ namespace Unison.Core.Contracts.WhatsApp
 
         /// <summary>
         /// Live status@broadcast: build a <see cref="HistoryStatus"/> from the envelope and
-        /// ingest (thumb + store). Replaces the pump → <c>OnLiveStatusReceived</c> hop.
+        /// ingest (thumb + store).
         /// </summary>
         Task IngestLiveFromDecryptedAsync(IncomingLiveStatusRequest request);
     }

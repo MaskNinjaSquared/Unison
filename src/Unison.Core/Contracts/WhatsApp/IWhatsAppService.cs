@@ -53,8 +53,6 @@ namespace Unison.Core.Contracts.WhatsApp
         /// guess, not a verdict, and deliberately not acted on here.
         /// </summary>
         event EventHandler<string> OnInvalidSessionSuspected;
-        /// <summary>A live status@broadcast item was decoded. It is not a chat and never routes to one.</summary>
-        event EventHandler<HistoryStatus> OnLiveStatusReceived;
         /// <summary>A background FULL_HISTORY solicitation went out; the toast gate counts these.</summary>
         event EventHandler OnBackgroundHistorySyncBounced;
         /// <summary>An avatar file was written to the local cache for a JID.</summary>
