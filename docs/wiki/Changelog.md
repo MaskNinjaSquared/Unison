@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Phase 3.7b started — LidMappingStore shared + sync peek
+
+Group `@g.us` lowercased in `JidHelper.Normalize`. One DI `LidMappingStore` feeds
+`SocketBridge` and `JidAliasTable` via `ILidMappingMemory` (cache promote on miss).
+Table still owns the sync map.
+
 ## Phase 4 — ConnectAsync transport open + handler wiring
 
 `ConnectionConnectOpen` builds/wires/opens the transport after prepare.

@@ -17,6 +17,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using Unison.Core.Contracts.WhatsApp;
 using Unison.Core.Helpers;
 using Unison.Core.Models;
 
@@ -38,6 +39,7 @@ namespace Unison.Core.State
         private Func<string> _selfId;
         private Func<string> _selfLid;
         private Func<string> _selfPhone;
+        private ILidMappingMemory _lidMemory;
 
         /// <summary>
         /// Raised when the map changed, which is what lets caches keyed by canonical address
@@ -62,6 +64,15 @@ namespace Unison.Core.State
             _selfId = selfId;
             _selfLid = selfLid;
             _selfPhone = selfPhone;
+        }
+
+        /// <summary>
+        /// Optional sync peek into <c>LidMappingStore</c>'s memory cache (phase 3.7b).
+        /// When the table misses, canonicalization can still resolve a pair without awaiting.
+        /// </summary>
+        public void AttachLidMappingMemory(ILidMappingMemory memory)
+        {
+            _lidMemory = memory;
         }
 
         /// <summary>
@@ -428,8 +439,31 @@ namespace Unison.Core.State
         {
             lock (_sync)
             {
-                return _inner.TryGetValue(key, out value);
+                if (_inner.TryGetValue(key, out value))
+                {
+                    return true;
+                }
             }
+
+            ILidMappingMemory memory = _lidMemory;
+            if (memory == null)
+            {
+                value = null;
+                return false;
+            }
+
+            string normalized = Normalize(key);
+            string paired;
+            if (!memory.TryGetPairedJid(normalized, out paired) || string.IsNullOrEmpty(paired))
+            {
+                value = null;
+                return false;
+            }
+
+            // Promote into the table so the next sync lookup stays local.
+            this[normalized] = paired;
+            value = paired;
+            return true;
         }
 
         public bool Contains(KeyValuePair<string, string> item)

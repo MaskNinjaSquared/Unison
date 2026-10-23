@@ -36,6 +36,7 @@ using Unison.WhatsAppClient.Chats;
 using Unison.Uwp.Services.WhatsApp.Contacts;
 using Unison.WhatsAppClient.Groups;
 using Unison.WhatsAppClient.Messages;
+using Unison.Socket.Signal;
 using Unison.Socket.UseCases.Contacts;
 using Unison.Uwp.Helpers;
 using Microsoft.Extensions.DependencyInjection;
@@ -139,6 +140,7 @@ namespace Unison.Uwp.Services.WhatsApp
         }
 
         private IWhatsAppSocket _socket;
+        private readonly LidMappingStore _lidMappings;
         private AuthStore _authStore = new AuthStore();
         private IMessageStore _messageStore = new MessageStore();
         private readonly IHistoryMessageStore _historyMessages;
@@ -982,6 +984,7 @@ namespace Unison.Uwp.Services.WhatsApp
             ISystemInfoProvider systemInfo,
             AttachedUiDispatcher ui,
             PendingMessageQueue pendingMessages,
+            LidMappingStore lidMappings = null,
             ChatListInitialPaintGate listPaintGate = null,
             IAppMemoryInfo appMemory = null,
             ILocalSettings localSettings = null,
@@ -996,6 +999,8 @@ namespace Unison.Uwp.Services.WhatsApp
             {
                 throw new ArgumentNullException(nameof(chatState));
             }
+
+            _lidMappings = lidMappings;
 
             if (systemInfo == null)
             {
@@ -1097,6 +1102,7 @@ namespace Unison.Uwp.Services.WhatsApp
             ISystemInfoProvider systemInfo,
             AttachedUiDispatcher ui,
             PendingMessageQueue pendingMessages,
+            LidMappingStore lidMappings = null,
             ChatListInitialPaintGate listPaintGate = null,
             IAppMemoryInfo appMemory = null,
             ILocalSettings localSettings = null,
@@ -1109,7 +1115,7 @@ namespace Unison.Uwp.Services.WhatsApp
         {
             return _instance ?? (_instance = new WhatsAppService(
                 chatState, chatRows, activeChat, syncStatus, syncWork, historyMessages, chatPreviews, usyncGate, avatarFetcher, mediaCache, jidAlias, displayNames, historyRequests,
-                catchUp, initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, pendingMessages, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups, resolveHistory, resolveDeferredAvatars));
+                catchUp, initialSync, syncBudget, workload, selfProfile, personStore, groupRosterStore, chatStore, systemInfo, ui, pendingMessages, lidMappings, listPaintGate, appMemory, localSettings, resolveContacts, resolveMessages, resolveChats, resolveGroups, resolveHistory, resolveDeferredAvatars));
         }
 
         /// <summary>
@@ -3615,7 +3621,7 @@ namespace Unison.Uwp.Services.WhatsApp
         /// </remarks>
         private SocketBridge BuildSocketBridge(bool reuseLoadedKeyState)
         {
-            var bridge = new SocketBridge(_authState, _sharedKeyStore, reuseLoadedKeyState);
+            var bridge = new SocketBridge(_authState, _sharedKeyStore, reuseLoadedKeyState, _lidMappings);
 
             // ChatUpdate lives in Socket; Core's IChatService cannot name it. The concrete
             // ChatFacade owns the apply — same pattern as other socket→façade bridges that

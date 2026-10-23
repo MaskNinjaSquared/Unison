@@ -252,7 +252,17 @@ namespace Unison.Uwp
             // public ones, and the transcoder needs the concrete cache for StorageFile access.
             services.AddSingleton(sp => new MediaDerivationService(
                 sp.GetRequiredService<MediaCacheService>()));
-            services.AddSingleton<JidAliasTable>();
+            // LidMappingStore before the client: SocketBridge + JidAliasTable share one cache (3.7b).
+            services.AddSingleton<ILidMappingStorage, SqliteLidMappingStorage>();
+            services.AddSingleton(sp => new LidMappingStore(sp.GetRequiredService<ILidMappingStorage>()));
+            services.AddSingleton<ILidMappingMemory>(sp =>
+                new LidMappingMemoryAdapter(sp.GetRequiredService<LidMappingStore>()));
+            services.AddSingleton(sp =>
+            {
+                var table = new JidAliasTable();
+                table.AttachLidMappingMemory(sp.GetRequiredService<ILidMappingMemory>());
+                return table;
+            });
             services.AddSingleton<ISelfMarkerNaming, Unison.Uwp.Helpers.SelfMarkerNaming>();
             services.AddSingleton(sp => new ContactDisplayNames(
                 sp.GetRequiredService<JidAliasTable>(),
@@ -407,6 +417,7 @@ namespace Unison.Uwp
                     sp.GetRequiredService<ISystemInfoProvider>(),
                     sp.GetRequiredService<AttachedUiDispatcher>(),
                     sp.GetRequiredService<PendingMessageQueue>(),
+                    sp.GetRequiredService<LidMappingStore>(),
                     sp.GetRequiredService<ChatListInitialPaintGate>(),
                     sp.GetRequiredService<IAppMemoryInfo>(),
                     sp.GetRequiredService<ILocalSettings>(),
@@ -613,11 +624,6 @@ namespace Unison.Uwp
             services.AddSingleton<IChatDetailInfoViewModelFactory, ChatDetailInfoViewModelFactory>();
             services.AddSingleton<INewChatDialogViewModelFactory, NewChatDialogViewModelFactory>();
             services.AddSingleton<ILocalContactsService, LocalContactsService>();
-
-            // The LID mapping store is registered either way: it is the eventual replacement for
-            // the JidAlias dictionaries, and nothing forces it to wait for the socket rewrite.
-            services.AddSingleton<ILidMappingStorage, SqliteLidMappingStorage>();
-            services.AddSingleton(sp => new LidMappingStore(sp.GetRequiredService<ILidMappingStorage>()));
 
             services.AddSingleton<IAvatarFetchActions>(sp => sp.GetRequiredService<AvatarFetcher>());
             services.AddSingleton<IChatAvatarFetch>(sp => new ChatAvatarFetch(

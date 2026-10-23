@@ -189,6 +189,38 @@ namespace Unison.Socket.Signal
             _cache.Clear();
         }
 
+        /// <summary>
+        /// Sync peek of the memory cache for a PN user part. Used by
+        /// <c>JidAliasTable</c> so canonicalization can stay synchronous.
+        /// </summary>
+        public bool TryGetCachedLidUserForPn(string pnUser, out string lidUser)
+        {
+            lidUser = null;
+            if (string.IsNullOrEmpty(pnUser))
+            {
+                return false;
+            }
+
+            lidUser = _cache.Get(PnKey(pnUser));
+            return !string.IsNullOrEmpty(lidUser);
+        }
+
+        /// <summary>
+        /// Sync peek of the memory cache for a LID user part. Reverse of
+        /// <see cref="TryGetCachedLidUserForPn"/>.
+        /// </summary>
+        public bool TryGetCachedPnUserForLid(string lidUser, out string pnUser)
+        {
+            pnUser = null;
+            if (string.IsNullOrEmpty(lidUser))
+            {
+                return false;
+            }
+
+            pnUser = _cache.Get(LidKey(lidUser));
+            return !string.IsNullOrEmpty(pnUser);
+        }
+
         private async Task<IReadOnlyList<LidMapping>> ResolveLidsForPnsAsync(IReadOnlyList<string> pns)
         {
             var resolved = new Dictionary<string, LidMapping>(StringComparer.Ordinal);

@@ -154,7 +154,11 @@ namespace Unison.Uwp.Client
         private bool _authSaveScheduled;
         private AccountInfo _persistedAccount;
 
-        public SocketBridge(AuthState authState, FileKeyStore sharedKeyStore, bool reuseLoadedKeyState)
+        public SocketBridge(
+            AuthState authState,
+            FileKeyStore sharedKeyStore,
+            bool reuseLoadedKeyState,
+            LidMappingStore lidMappings = null)
         {
             if (authState == null)
             {
@@ -169,7 +173,8 @@ namespace Unison.Uwp.Client
             _keyStore = sharedKeyStore ?? new FileKeyStore();
             _reuseLoadedKeyState = sharedKeyStore != null && reuseLoadedKeyState;
             _signal = new SignalHandler(_authState, _keyStore);
-            _lidMappings = new LidMappingStore(new SqliteLidMappingStorage());
+            // Prefer the DI singleton so JidAliasTable and ContactFacade share one cache (3.7b).
+            _lidMappings = lidMappings ?? new LidMappingStore(new SqliteLidMappingStorage());
             _log = new DelegateSocketLog(line =>
             {
                 Diag.W("[Bridge] " + line);

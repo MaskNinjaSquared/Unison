@@ -124,17 +124,12 @@ namespace Unison.Core.Tests.Helpers
         }
 
         [Fact]
-        public void A_group_address_is_returned_before_any_other_rule_runs()
+        public void A_group_address_server_part_is_lowercased()
         {
-            // RECORDED. Groups take an early return, so unlike a direct address the
-            // server part is never lowercased. Two spellings of the same group therefore
-            // normalize to two different strings.
-            //
-            // ChatStateStore keys messages and push names with OrdinalIgnoreCase, and
-            // MessageIdIndex does the same, so the two spellings still land in one
-            // bucket. Lowercasing @g.us inside Normalize remains a separate identity
-            // change and is not made here.
-            Assert.Equal("120363000000000000@G.US", JidHelper.Normalize("120363000000000000@G.US"));
+            // Phase 3.7b case rule: group server parts match direct chats. ChatStateStore
+            // already keys OrdinalIgnoreCase; Normalize must not keep @G.US as a distinct
+            // string from @g.us for the alias / LidMapping seam.
+            Assert.Equal("120363000000000000@g.us", JidHelper.Normalize("120363000000000000@G.US"));
         }
 
         [Fact]

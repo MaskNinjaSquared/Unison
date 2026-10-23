@@ -158,6 +158,7 @@
     <Compile Include="Services\Socket\WaTransportAdapter.cs" />
     <Compile Include="Services\Socket\IWhatsAppSessionProvider.cs" />
     <Compile Include="Services\WhatsApp\JidResolver.cs" />
+    <Compile Include="Services\WhatsApp\LidMappingMemoryAdapter.cs" />
     <Compile Include="Services\WhatsApp\Contacts\ChatAvatarFetch.cs" />
     <Compile Include="Services\WhatsApp\Chats\BridgeChatAccountActions.cs" />
     <Compile Include="Services\WhatsApp\Groups\BridgeGroupWireActions.cs" />
