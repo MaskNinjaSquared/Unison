@@ -956,11 +956,16 @@ App-state delete-for-me is `ApplyAppStateDeleteMessageAsync`; chat delete RAM is
 `IChatService.ApplyAppStateDeleteChatAsync` (durable half `IAppStateLocalHost.ForgetChatStorageAsync`).
 Tip refresh / bulk re-tip / in-memory list reconcile is `IChatService.RefreshChatPreviewAsync` /
 `RefreshAllChatPreviewsFromStoredAsync` / `ReconcileChatListFromStoredAsync` (bulk paths still walk
-host `MessagesByChat`). Pump still owns the drain loop and the go/no-go before a resend; the wait, send and
-answer window are `PlaceholderResendDispatch`. Which way an
-arriving message lands (alias move, duplicate, insert) is `IncomingTimeline`. Offline replay tips (record, unread, throttle, flush) are `ChatFacade`'s. The missing-message
-ledger owns the row transitions under the same lock; `IncomingMessageQueue<T>` owns the
-lanes, generation, stage and timeout retry list.
+host `MessagesByChat`). After `AcceptIncomingTimeline`, insert follow-up is
+`IMessageService.ApplyIncomingInsertedAsync` and duplicate follow-up is
+`ApplyIncomingDuplicateAsync` (missing clear via `IMissingMessageChatHost.ResolveMissingMessage`).
+Envelope tip live/offline is `IChatService.ApplyIncomingEnvelopePreviewAsync`. Pump still owns
+routing, model build, alias-consolidate control-queue finalize, the drain loop and the go/no-go
+before a resend; the wait, send and answer window are `PlaceholderResendDispatch`. Which way an
+arriving message lands (alias move, duplicate, insert) is `IncomingTimeline`. Offline replay tips
+(record, unread, throttle, flush) are `ChatFacade`'s. The missing-message ledger owns the row
+transitions under the same lock; `IncomingMessageQueue<T>` owns the lanes, generation, stage and
+timeout retry list.
 
 ### Pure-rule nibble (ongoing, before façade moves)
 

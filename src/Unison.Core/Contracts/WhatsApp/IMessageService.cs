@@ -374,5 +374,17 @@ namespace Unison.Core.Contracts.WhatsApp
         /// rows. SQLite history is merged by <see cref="LoadMessagesForChatAsync"/>.
         /// </summary>
         Task<System.Collections.Generic.List<ChatMessage>> LoadLiveOverlayAsync(string chatJid);
+
+        /// <summary>
+        /// After <see cref="AcceptIncomingTimeline"/> returns a duplicate: persist if changed,
+        /// resolve missing-message, refresh tip.
+        /// </summary>
+        Task ApplyIncomingDuplicateAsync(IncomingDuplicateApplyRequest request);
+
+        /// <summary>
+        /// After <see cref="AcceptIncomingTimeline"/> inserts: offline tip + persist, or live
+        /// list apply + notify + persist, plus media hydrate.
+        /// </summary>
+        Task ApplyIncomingInsertedAsync(IncomingInsertedApplyRequest request);
     }
 }

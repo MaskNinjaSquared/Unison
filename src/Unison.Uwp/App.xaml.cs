@@ -546,6 +546,7 @@ namespace Unison.Uwp
                 sp.GetRequiredService<ChatStateStore>(),
                 sp.GetRequiredService<ChatRowIndex>(),
                 sp.GetRequiredService<PendingMessageState>(),
+                sp.GetRequiredService<IMissingMessageChatHost>(),
                 () => sp.GetRequiredService<IChatService>(),
                 sp.GetRequiredService<IChatStore>(),
                 sp.GetService<IStringResources>(),

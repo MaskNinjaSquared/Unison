@@ -2,6 +2,13 @@
 
 Newest first.
 
+## Phase B — incoming insert + duplicate follow-up on MessageFacade
+
+`IMessageService.ApplyIncomingInsertedAsync` owns offline tip/persist/unload and
+live list-apply + notify + persist + hydrate. `ApplyIncomingDuplicateAsync` owns
+duplicate persist/notify/missing-resolve/tip. `IMissingMessageChatHost.ResolveMissingMessage`
+exposes ledger clear. Alias-consolidate finalize stays pump-queued.
+
 ## Phase B — incoming envelope preview on ChatFacade
 
 `IChatService.ApplyIncomingEnvelopePreviewAsync` owns live tip refresh vs offline

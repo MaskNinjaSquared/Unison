@@ -75,6 +75,9 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
+        void IMissingMessageChatHost.ResolveMissingMessage(string chatJid, string messageId, string source) =>
+            ResolveMissingMessage(chatJid, messageId, source);
+
         private void ResolveMissingMessage(string chatJid, string messageId, string source)
         {
             string normJid = NormalizeJid(chatJid);
@@ -625,26 +628,6 @@ namespace Unison.Uwp.Services.WhatsApp
         private void SetIncomingMessagePumpStage(string stage, Client.DecryptedMessageEventArgs message = null)
         {
             _incoming.SetStage(stage, message, DateTime.UtcNow);
-        }
-
-        private void ObserveMediaHydration(
-            ChatMessage chatMessage,
-            MessageRenderInfo renderInfo,
-            string messageId,
-            string jid)
-        {
-            if (Messages == null)
-            {
-                return;
-            }
-
-            IncomingMediaHydrationPlan plan = IncomingMediaHydrationPlan.From(renderInfo);
-            Messages.ScheduleIncomingMediaHydration(
-                chatMessage,
-                plan.HasSticker ? plan.Sticker : null,
-                plan.HasImage ? plan.Image : null,
-                messageId,
-                jid);
         }
 
         private void ResetIncomingMessagePump(string reason, bool requeueCurrent)
@@ -1241,33 +1224,21 @@ namespace Unison.Uwp.Services.WhatsApp
                 if (timeline.Kind == IncomingTimelineAcceptKind.DuplicateSameChat ||
                     timeline.Kind == IncomingTimelineAcceptKind.AliasLinkedDuplicate)
                 {
-                    if (timeline.ExistingChanged && timeline.Message != null)
+                    SetIncomingMessagePumpStage("duplicate", e);
+                    await Messages.ApplyIncomingDuplicateAsync(new IncomingDuplicateApplyRequest
                     {
-                        if (Messages != null)
-                        {
-                            Messages.QueueIncomingPersist(jid, timeline.Message);
-                        }
-                        QueueChatMessagesChanged(jid);
-                    }
-                    if (timeline.Kind == IncomingTimelineAcceptKind.AliasLinkedDuplicate)
-                    {
-                        Debug.WriteLine($"[WhatsAppService] Alias-linked duplicate arrival detected for {chatMessage.Id}: existingChat={timeline.AliasSourceChatJid}, finalChat={jid}");
-                    }
-                    ResolveMissingMessage(jid, chatMessage.Id, "duplicate-arrival");
-                    QueueOrApplyIncomingEnvelopePreview(
-                        "duplicate-preview:" + chatMessage.Id,
-                        e.IsOffline,
-                        jid,
-                        displayContent,
-                        chatMessage,
-                        isGroup,
-                        isActuallyFromMe,
-                        countUnread: false,
-                        markDirtyWhenOffline: true,
-                        previewKind,
-                        listAuthorPrefix,
-                        stripParticipantJid,
-                        senderName);
+                        ChatJid = jid,
+                        IncomingMessage = chatMessage,
+                        Timeline = timeline,
+                        DisplayContent = displayContent,
+                        IsOffline = e.IsOffline,
+                        IsGroup = isGroup,
+                        IsFromMe = isActuallyFromMe,
+                        PreviewKind = previewKind,
+                        ListAuthorPrefix = listAuthorPrefix,
+                        StripParticipantJid = stripParticipantJid,
+                        SenderName = senderName
+                    }).ConfigureAwait(false);
                     if (!e.IsOffline)
                     {
                         Log($"[WhatsAppService] Duplicate message {e.MessageId} for {jid}, refreshed preview if needed");
@@ -1275,121 +1246,31 @@ namespace Unison.Uwp.Services.WhatsApp
                     return;
                 }
 
-                ResolveMissingMessage(jid, chatMessage.Id, "live-arrival");
                 if (!e.IsOffline)
                 {
                     Log($"[WhatsAppService] Added message to chat {jid}. Total messages in memory: {MessagesByChat.CountFor(jid)}");
                 }
-                if (e.IsOffline)
+
+                SetIncomingMessagePumpStage(e.IsOffline ? "offline-insert" : "ui-preview", e);
+                IncomingMediaHydrationPlan mediaPlan = IncomingMediaHydrationPlan.From(renderInfo);
+                await Messages.ApplyIncomingInsertedAsync(new IncomingInsertedApplyRequest
                 {
-                    _ = ApplyIncomingEnvelopePreviewAsync(
-                        jid,
-                        displayContent,
-                        chatMessage,
-                        isOffline: true,
-                        isGroup,
-                        isActuallyFromMe,
-                        countUnread: true,
-                        markDirtyWhenOffline: false,
-                        previewKind,
-                        listAuthorPrefix,
-                        stripParticipantJid,
-                        senderName);
-                    Messages?.QueueIncomingPersist(jid, chatMessage);
-
-                    if (IsActiveChatJid(jid))
-                    {
-                        // The user may already be looking at the conversation while the
-                        // reconnect replay is still draining. Refresh only that open chat.
-                        QueueChatMessagesChanged(jid);
-                    }
-                    else
-                    {
-                        UnloadMessageCacheIfInactive(jid);
-                    }
-
-                    // Same hydration as live: stickers and images both download during replay.
-                    ObserveMediaHydration(chatMessage, renderInfo, e.MessageId, jid);
-
-                    return;
-                }
-
-                if (IsActiveChatJid(jid))
-                {
-                    QueueChatMessagesChanged(jid);
-                }
-
-                ObserveMediaHydration(chatMessage, renderInfo, e.MessageId, jid);
-
-                // Update chat preview on UI thread via ChatFacade
-                SetIncomingMessagePumpStage("ui-preview", e);
-                string aliasLid = null;
-                string aliasPn = null;
-                if (JidAlias.TryGetValue(jid, out var aliasPair))
-                {
-                    aliasLid = JidHelper.IsLidJid(jid) ? jid : aliasPair;
-                    aliasPn = JidHelper.IsPhoneJid(jid) ? jid : aliasPair;
-                }
-
-                if (ChatFacade == null)
-                {
-                    Debug.WriteLine("[WhatsAppService] Dropping live list apply: ChatFacade is not attached.");
-                    RuntimeDiagnosticsService.Instance.Write(
-                        "messages",
-                        "chat-facade-missing",
-                        "messageId=" + (e.MessageId ?? string.Empty));
-                    return;
-                }
-
-                LiveIncomingChatListApplyResult listApply = await ChatFacade.ApplyLiveIncomingChatListAsync(
-                    new LiveIncomingChatListApplyRequest
-                    {
-                        ChatJid = jid,
-                        PreviewText = displayContent,
-                        Timestamp = chatMessage.Timestamp,
-                        PreviewKind = previewKind,
-                        AuthorPrefix = listAuthorPrefix,
-                        MentionedJids = chatMessage.MentionedJids,
-                        IsFromMe = chatMessage.IsFromMe,
-                        SendState = HistoryLiveMessageMapper.FromStatus(chatMessage.Status, chatMessage.IsFromMe),
-                        MessageId = chatMessage.Id,
-                        ParticipantJid = isGroup ? stripParticipantJid : null,
-                        SenderName = isGroup && !isActuallyFromMe ? senderName : null,
-                        UnreadDelta = attention.CountsAsUnread ? 1 : 0,
-                        CountsAsUnread = attention.CountsAsUnread,
-                        IsGroup = isGroup,
-                        AliasLid = aliasLid,
-                        AliasPn = aliasPn
-                    }).ConfigureAwait(false);
-
-                ChatItem notificationChat = listApply?.Chat;
-                int totalUnreadForNotify = listApply != null ? listApply.TotalUnread : 0;
-
-                SetIncomingMessagePumpStage("notify", e);
-                string notificationName = notificationChat?.Name;
-                if (string.IsNullOrWhiteSpace(notificationName))
-                {
-                    notificationName = !string.IsNullOrWhiteSpace(listApply?.DisplayName)
-                        ? listApply.DisplayName
-                        : ResolveDisplayName(jid, "notification");
-                }
-
-                Messages.NotifyLiveIncoming(
-                    jid,
-                    notificationName,
-                    senderName,
-                    content,
-                    isGroup,
-                    isActuallyFromMe,
-                    attention.SuppressToast,
-                    totalUnreadForNotify,
-                    notificationChat);
-
-                SetIncomingMessagePumpStage("persist-queue", e);
-                // Persistencia em lote: evita reler, serializar e reescrever o JSON
-                // inteiro para cada mensagem recebida.
-                Messages?.QueueIncomingPersist(jid, chatMessage);
-                UnloadMessageCacheIfInactive(jid);
+                    ChatJid = jid,
+                    Message = chatMessage,
+                    DisplayContent = displayContent,
+                    NotifyContent = content,
+                    IsOffline = e.IsOffline,
+                    IsGroup = isGroup,
+                    IsFromMe = isActuallyFromMe,
+                    PreviewKind = previewKind,
+                    ListAuthorPrefix = listAuthorPrefix,
+                    StripParticipantJid = stripParticipantJid,
+                    SenderName = senderName,
+                    CountsAsUnread = attention.CountsAsUnread,
+                    SuppressToast = attention.SuppressToast,
+                    Sticker = mediaPlan.HasSticker ? mediaPlan.Sticker : null,
+                    Image = mediaPlan.HasImage ? mediaPlan.Image : null
+                }).ConfigureAwait(false);
             }
             catch (Exception ex)
             {

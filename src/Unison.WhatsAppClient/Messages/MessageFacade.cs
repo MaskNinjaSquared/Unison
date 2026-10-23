@@ -51,6 +51,7 @@ namespace Unison.WhatsAppClient.Messages
         private readonly ActiveChat _activeChat;
         private readonly ChatRowIndex _chatRows;
         private readonly PendingMessageState _pendingMessageState;
+        private readonly IMissingMessageChatHost _missingMessages;
         private readonly Func<IChatService> _resolveChats;
         private readonly ReceiptReader _receipts;
         private readonly GroupReceiptTally _groupReceipts = new GroupReceiptTally();
@@ -82,6 +83,7 @@ namespace Unison.WhatsAppClient.Messages
             ChatStateStore chatState,
             ChatRowIndex chatRows,
             PendingMessageState pendingMessageState,
+            IMissingMessageChatHost missingMessages,
             Func<IChatService> resolveChats = null,
             IChatStore chatStore = null,
             IStringResources strings = null,
@@ -113,6 +115,8 @@ namespace Unison.WhatsAppClient.Messages
             _chatRows = chatRows ?? throw new ArgumentNullException(nameof(chatRows));
             _pendingMessageState = pendingMessageState
                 ?? throw new ArgumentNullException(nameof(pendingMessageState));
+            _missingMessages = missingMessages
+                ?? throw new ArgumentNullException(nameof(missingMessages));
             _resolveChats = resolveChats;
             _strings = strings;
             _receipts = new ReceiptReader(jids);
@@ -1673,6 +1677,202 @@ namespace Unison.WhatsAppClient.Messages
             await PersistPinnedMessageToSqliteAsync(canonical, messageId, state, null)
                 .ConfigureAwait(false);
             return false;
+        }
+
+        /// <inheritdoc />
+        public async Task ApplyIncomingDuplicateAsync(IncomingDuplicateApplyRequest request)
+        {
+            if (request == null ||
+                request.Timeline == null ||
+                string.IsNullOrWhiteSpace(request.ChatJid) ||
+                request.IncomingMessage == null)
+            {
+                return;
+            }
+
+            string jid = request.ChatJid;
+            IncomingTimelineAcceptResult timeline = request.Timeline;
+
+            if (timeline.ExistingChanged && timeline.Message != null)
+            {
+                QueueIncomingPersist(jid, timeline.Message);
+                _outgoingHost.NotifyChatChanged(jid);
+            }
+
+            if (timeline.Kind == IncomingTimelineAcceptKind.AliasLinkedDuplicate)
+            {
+                Debug.WriteLine(
+                    "[MessageFacade] Alias-linked duplicate arrival for " + request.IncomingMessage.Id +
+                    ": existingChat=" + timeline.AliasSourceChatJid + ", finalChat=" + jid);
+            }
+
+            _missingMessages.ResolveMissingMessage(jid, request.IncomingMessage.Id, "duplicate-arrival");
+
+            IChatService chats = _resolveChats != null ? _resolveChats() : null;
+            if (chats != null)
+            {
+                await chats.ApplyIncomingEnvelopePreviewAsync(new IncomingEnvelopePreviewRequest
+                {
+                    Jid = jid,
+                    Preview = request.DisplayContent,
+                    Timestamp = request.IncomingMessage.Timestamp,
+                    IsGroup = request.IsGroup,
+                    IsFromMe = request.IsFromMe,
+                    IsOffline = request.IsOffline,
+                    CountUnread = false,
+                    MarkDirtyWhenOffline = true,
+                    Kind = request.PreviewKind,
+                    Status = request.IncomingMessage.Status,
+                    AuthorPrefix = request.ListAuthorPrefix,
+                    ParticipantJid = request.IsGroup ? request.StripParticipantJid : null,
+                    SenderName = request.IsGroup && !request.IsFromMe ? request.SenderName : null
+                }).ConfigureAwait(false);
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task ApplyIncomingInsertedAsync(IncomingInsertedApplyRequest request)
+        {
+            if (request == null ||
+                string.IsNullOrWhiteSpace(request.ChatJid) ||
+                request.Message == null)
+            {
+                return;
+            }
+
+            string jid = request.ChatJid;
+            ChatMessage chatMessage = request.Message;
+
+            _missingMessages.ResolveMissingMessage(jid, chatMessage.Id, "live-arrival");
+
+            ScheduleIncomingMediaHydration(
+                chatMessage,
+                request.Sticker,
+                request.Image,
+                chatMessage.Id,
+                jid);
+
+            IChatService chats = _resolveChats != null ? _resolveChats() : null;
+
+            if (request.IsOffline)
+            {
+                if (chats != null)
+                {
+                    await chats.ApplyIncomingEnvelopePreviewAsync(new IncomingEnvelopePreviewRequest
+                    {
+                        Jid = jid,
+                        Preview = request.DisplayContent,
+                        Timestamp = chatMessage.Timestamp,
+                        IsGroup = request.IsGroup,
+                        IsFromMe = request.IsFromMe,
+                        IsOffline = true,
+                        CountUnread = true,
+                        MarkDirtyWhenOffline = false,
+                        Kind = request.PreviewKind,
+                        Status = chatMessage.Status,
+                        AuthorPrefix = request.ListAuthorPrefix,
+                        ParticipantJid = request.IsGroup ? request.StripParticipantJid : null,
+                        SenderName = request.IsGroup && !request.IsFromMe ? request.SenderName : null
+                    }).ConfigureAwait(false);
+                }
+
+                QueueIncomingPersist(jid, chatMessage);
+
+                if (_activeChat.IsOpen(jid))
+                {
+                    _outgoingHost.NotifyChatChanged(jid);
+                }
+                else
+                {
+                    UnloadMessageCacheIfInactive(jid);
+                }
+
+                return;
+            }
+
+            if (_activeChat.IsOpen(jid))
+            {
+                _outgoingHost.NotifyChatChanged(jid);
+            }
+
+            string aliasLid = null;
+            string aliasPn = null;
+            if (_jids.TryGetAlias(jid, out string aliasPair))
+            {
+                aliasLid = JidHelper.IsLidJid(jid) ? jid : aliasPair;
+                aliasPn = JidHelper.IsPhoneJid(jid) ? jid : aliasPair;
+            }
+
+            if (chats == null)
+            {
+                Debug.WriteLine("[MessageFacade] Dropping live list apply: IChatService is not attached.");
+                _diagnostics?.Write(
+                    "messages",
+                    "chat-facade-missing",
+                    "messageId=" + (chatMessage.Id ?? string.Empty));
+                return;
+            }
+
+            LiveIncomingChatListApplyResult listApply = await chats.ApplyLiveIncomingChatListAsync(
+                new LiveIncomingChatListApplyRequest
+                {
+                    ChatJid = jid,
+                    PreviewText = request.DisplayContent,
+                    Timestamp = chatMessage.Timestamp,
+                    PreviewKind = request.PreviewKind,
+                    AuthorPrefix = request.ListAuthorPrefix,
+                    MentionedJids = chatMessage.MentionedJids,
+                    IsFromMe = chatMessage.IsFromMe,
+                    SendState = HistoryLiveMessageMapper.FromStatus(chatMessage.Status, chatMessage.IsFromMe),
+                    MessageId = chatMessage.Id,
+                    ParticipantJid = request.IsGroup ? request.StripParticipantJid : null,
+                    SenderName = request.IsGroup && !request.IsFromMe ? request.SenderName : null,
+                    UnreadDelta = request.CountsAsUnread ? 1 : 0,
+                    CountsAsUnread = request.CountsAsUnread,
+                    IsGroup = request.IsGroup,
+                    AliasLid = aliasLid,
+                    AliasPn = aliasPn
+                }).ConfigureAwait(false);
+
+            ChatItem notificationChat = listApply?.Chat;
+            int totalUnreadForNotify = listApply != null ? listApply.TotalUnread : 0;
+
+            string notificationName = notificationChat?.Name;
+            if (string.IsNullOrWhiteSpace(notificationName))
+            {
+                notificationName = !string.IsNullOrWhiteSpace(listApply?.DisplayName)
+                    ? listApply.DisplayName
+                    : _chatState.ResolveDisplayName(jid);
+            }
+
+            NotifyLiveIncoming(
+                jid,
+                notificationName,
+                request.SenderName,
+                request.NotifyContent ?? request.DisplayContent,
+                request.IsGroup,
+                request.IsFromMe,
+                request.SuppressToast,
+                totalUnreadForNotify,
+                notificationChat);
+
+            QueueIncomingPersist(jid, chatMessage);
+            UnloadMessageCacheIfInactive(jid);
+        }
+
+        private void UnloadMessageCacheIfInactive(string jid)
+        {
+            if (string.IsNullOrWhiteSpace(jid) || _activeChat.IsOpen(jid))
+            {
+                return;
+            }
+
+            string normalized = JidHelper.Normalize(jid);
+            _chatState.MessagesByChat.Remove(normalized);
+            if (!string.Equals(normalized, jid, StringComparison.OrdinalIgnoreCase))
+            {
+                _chatState.MessagesByChat.Remove(jid);
+            }
         }
 
         private async Task PersistPinnedMessageToSqliteAsync(
