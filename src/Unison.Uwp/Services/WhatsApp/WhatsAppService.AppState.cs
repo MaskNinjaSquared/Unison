@@ -40,12 +40,6 @@ namespace Unison.Uwp.Services.WhatsApp
     public partial class WhatsAppService
     {
 
-        internal void SchedulePersistForAppState(string reason)
-        {
-            EnableScheduledPersist(reason);
-            SchedulePersist();
-        }
-
         /// <summary>
         /// Group subjects (one or a listing batch) into the same cache a resolved contact name would.
         /// </summary>
@@ -173,8 +167,14 @@ namespace Unison.Uwp.Services.WhatsApp
 
             await ForgetChatInStorageAsync(canonical, keys).ConfigureAwait(false);
 
-            NotificationService.Instance.UpdateBadge(
-                ChatUnreadTally.TotalAcrossConversations(Chats, GetCanonicalJid));
+            ChatUnreadSideEffects.AfterConversationUnreadChanged(
+                ChatUnreadTally.TotalAcrossConversations(Chats, GetCanonicalJid),
+                canonicalJid: null,
+                chatUnread: 0,
+                dirtyRows: null,
+                total => NotificationService.Instance.UpdateBadge(total),
+                updateShortcutUnread: null,
+                persistRows: null);
             SchedulePersist();
         }
 

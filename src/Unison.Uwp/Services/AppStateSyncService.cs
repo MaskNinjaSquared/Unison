@@ -1397,7 +1397,8 @@ namespace Unison.Uwp.Services
 
             if (applied > 0)
             {
-                _owner.SchedulePersistForAppState($"app-state:{collectionName}:{applied}");
+                _owner.EnableScheduledPersist($"app-state:{collectionName}:{applied}");
+                _owner.SchedulePersist();
             }
 
             WhatsAppService.Log($"[AppStateSync] {collectionName}: applied {applied}/{mutations.Count} mutation(s)");

@@ -97,7 +97,7 @@ namespace Unison.Uwp.Services.WhatsApp
             }
         }
 
-        private void EnableScheduledPersist(string reason)
+        internal void EnableScheduledPersist(string reason)
         {
             var result = _persistScheduler.EnableAfterStartup();
             if (result == PersistEnableResult.AlreadyEnabled)

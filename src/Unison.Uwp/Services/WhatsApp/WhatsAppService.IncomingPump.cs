@@ -1839,17 +1839,6 @@ namespace Unison.Uwp.Services.WhatsApp
             });
         }
 
-        private Task ApplyOfflineReplayChatSummariesAsync(string reason)
-        {
-            if (ChatFacade == null)
-            {
-                Debug.WriteLine("[WhatsAppService] Offline summary apply skipped: ChatFacade not attached.");
-                return Task.CompletedTask;
-            }
-
-            return ChatFacade.FlushOfflineReplayTipsAsync(reason);
-        }
-
         bool IOfflineReplayHost.IsActiveChat(string canonicalJid) => IsActiveChatJid(canonicalJid);
 
         bool IOfflineReplayHost.IsWindowVisible => Unison.Uwp.App.IsWindowVisible;

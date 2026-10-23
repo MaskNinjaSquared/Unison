@@ -1870,7 +1870,14 @@ namespace Unison.Uwp.Services.WhatsApp
                 }
                 try
                 {
-                    await ApplyOfflineReplayChatSummariesAsync($"offline-complete:{offlineCount}");
+                    if (ChatFacade == null)
+                    {
+                        Debug.WriteLine("[WhatsAppService] Offline summary apply skipped: ChatFacade not attached.");
+                    }
+                    else
+                    {
+                        await ChatFacade.FlushOfflineReplayTipsAsync($"offline-complete:{offlineCount}");
+                    }
                 }
                 catch (Exception ex)
                 {
