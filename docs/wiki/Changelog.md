@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Extract — offline-replay release out of WireSocketEventHandlers
+
+`OfflineReplayRelease` + `OfflineReplayReleaseGates` + `IOfflineReplayReleaseHost`.
+Pending-notification handler only checks current-socket then runs the helper.
+Four Core tests.
+
 ## Extract — 3.3c quiet media save off the client
 
 `QuietMediaMessagePersist` implements `IMediaDownloadHost` over

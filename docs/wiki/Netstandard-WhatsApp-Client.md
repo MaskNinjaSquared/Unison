@@ -227,7 +227,7 @@ Further shrinking those rows is **State/contract seams** (or Phase E), not anoth
 | `SocketBridgeRemoteHooks` | Done — façade app-state callbacks out of `BuildSocketBridge` |
 | `IAppMemoryInfo.LimitBytes` | Done — client diagnostics no longer call `MemoryManager` |
 | `IWhatsAppSessionProvider` | Unchanged — live lookup via `BridgeSessionProvider` |
-| `WireSocketEventHandlers` / incoming pump | Still on the client until residuals close |
+| `WireSocketEventHandlers` / incoming pump | Still on the client; offline-replay release body is `OfflineReplayRelease` |
 | Portable connection host owning open end-to-end | Still future (delete/move `WhatsAppService`) |
 
 ### Phase E (future) — client-owned public I/O

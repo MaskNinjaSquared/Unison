@@ -519,7 +519,20 @@ namespace Unison.Uwp.Services.WhatsApp
         socket.OnReceivedPendingNotifications += async (s, offlineCount) =>
         {
             if (!IsCurrentSocket(s)) return;
-            bool firstRelease = Interlocked.Exchange(ref _offlineReplayReleased, 1) == 0;
+            await OfflineReplayRelease.RunAsync(this, offlineCount).ConfigureAwait(false);
+        };
+
+        // Dirty bits and server_sync are answered inside the session now: the socket layer
+        // clears the flag and its own app state module runs the resync, so there is nothing
+        // for the service to coordinate.
+
+        }
+
+        bool IOfflineReplayReleaseHost.TryMarkFirstRelease() =>
+            Interlocked.Exchange(ref _offlineReplayReleased, 1) == 0;
+
+        void IOfflineReplayReleaseHost.WriteReleaseDiagnostics(int offlineCount, bool firstRelease)
+        {
             Debug.WriteLine(
                 "[WhatsAppService] Received pending-notification replay release (" +
                 offlineCount + " messages); first=" + firstRelease);
@@ -527,29 +540,43 @@ namespace Unison.Uwp.Services.WhatsApp
                 "connection",
                 "offline-replay-release",
                 "count=" + offlineCount + "; first=" + firstRelease);
+        }
+
+        void IOfflineReplayReleaseHost.ClearReplayDrainPending() =>
             _syncWork.SetReplayDrainPending(false);
+
+        async Task IOfflineReplayReleaseHost.FlushOfflineReplayMessagesAsync(string reason)
+        {
             try
             {
-                await FlushOfflineReplayMessagesAsync($"offline-complete:{offlineCount}");
+                await FlushOfflineReplayMessagesAsync(reason).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[WhatsAppService] Non-fatal offline replay message flush failure after offline drain: {ex.Message}");
+                Debug.WriteLine(
+                    "[WhatsAppService] Non-fatal offline replay message flush failure after offline drain: " +
+                    ex.Message);
             }
+        }
 
-            bool transportReady = socket.IsConnected && socket.IsHandshakeComplete;
-            if (firstRelease && !transportReady)
-            {
-                // Safety-timeout release can race a hung ConnectAsync; never mark synced
-                // until Noise finished on the live socket.
-                RuntimeDiagnosticsService.Instance.Write(
-                    "connection",
-                    "offline-replay-synced-skipped",
-                    "reason=not-connected; count=" + offlineCount +
-                    "; socketConnected=" + socket.IsConnected +
-                    "; handshake=" + socket.IsHandshakeComplete);
-            }
+        bool IOfflineReplayReleaseHost.IsAssignedTransportReady =>
+            _socket != null && _socket.IsConnected && _socket.IsHandshakeComplete;
 
+        void IOfflineReplayReleaseHost.WriteSyncedSkipped(int offlineCount)
+        {
+            RuntimeDiagnosticsService.Instance.Write(
+                "connection",
+                "offline-replay-synced-skipped",
+                "reason=not-connected; count=" + offlineCount +
+                "; socketConnected=" + (_socket != null && _socket.IsConnected) +
+                "; handshake=" + (_socket != null && _socket.IsHandshakeComplete));
+        }
+
+        async Task IOfflineReplayReleaseHost.NotifyMessagesReleasedAsync(
+            int offlineCount,
+            bool firstRelease,
+            bool transportReady)
+        {
             try
             {
                 if (Messages != null)
@@ -570,27 +597,15 @@ namespace Unison.Uwp.Services.WhatsApp
                 Debug.WriteLine(
                     "[WhatsAppService] Non-fatal offline replay settle failure: " + ex.Message);
             }
+        }
 
-            // Message-path repair/enrichment only after the app is settled.
-            // Names/groups wait for post-message enrichment (after heavy history when stale).
+        void IOfflineReplayReleaseHost.SchedulePostReplayMaintenance(int offlineCount) =>
             SchedulePostReplayMaintenance(offlineCount);
 
-            // Soft-reconnect catch-up pages must re-evaluate / re-request FULL_HISTORY even
-            // when this is not the first offline release of the process.
-            bool catchUpActive = IsHistoryCatchUpActive();
-            if (firstRelease || catchUpActive)
-            {
-                LogHistoryFreshnessAfterOfflineDrain(offlineCount);
-            }
+        bool IOfflineReplayReleaseHost.IsHistoryCatchUpActive => IsHistoryCatchUpActive();
 
-            // Name/contact/avatar work must never contend with catch-up messages after launch.
-        };
-
-        // Dirty bits and server_sync are answered inside the session now: the socket layer
-        // clears the flag and its own app state module runs the resync, so there is nothing
-        // for the service to coordinate.
-
-        }
+        void IOfflineReplayReleaseHost.LogHistoryFreshnessAfterOfflineDrain(int offlineCount) =>
+            LogHistoryFreshnessAfterOfflineDrain(offlineCount);
 
         private Task ConnectionHealthLoopAsync(IWhatsAppSocket socket, CancellationToken token)
         {

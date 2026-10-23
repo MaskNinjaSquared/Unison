@@ -1283,7 +1283,9 @@ auto-reconnect and catch-up-continue. Idle-lot decide and adjacent FULL_HISTORY 
 soft-reconnect / lifecycle / Connect gates + prepare + open / close disposition /
 health-monitor live in WhatsAppClient helpers + hosts. `ConnectAsync` body is
 orchestration over those helpers; `BuildSocketBridge` / `WireSocketEventHandlers`
-and the incoming pump stay on the client until Netstandard D.
+and the incoming pump stay on the client until Netstandard D. Offline pending-
+notification release is `OfflineReplayRelease` over `IOfflineReplayReleaseHost`
+(wire still attaches the event on the client).
 
 **The open conversation is shared state.** `ActiveChat` (`Unison.Core/State`, DI singleton over
 `JidAliasTable.GetCanonicalJid`) holds the conversation the user has open by its canonical
