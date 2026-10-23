@@ -48,6 +48,13 @@ namespace Unison.WhatsAppClient.Contacts
         private readonly IChatStateStore _chatState;
         private readonly ContactDisplayNames _displayNames;
         private readonly ChatNameRefresh _nameRefresh;
+        private readonly ChatListDeduper _deduper;
+        private readonly ChatRowIndex _chatRows;
+        private readonly IJidAliasPersistence _aliasPersist;
+        private readonly IChatIdentityPersistence _identity;
+        private readonly AliasFollowUpQueue _aliasFollowUps = new AliasFollowUpQueue();
+        private readonly CoalescedDebounceScheduler _aliasFollowUpDebounce =
+            new CoalescedDebounceScheduler(TimeSpan.FromMilliseconds(750));
 
         private readonly ContactDirectory _directory;
         private readonly AddressBookOverlay _addressBook;
@@ -94,10 +101,18 @@ namespace Unison.WhatsAppClient.Contacts
             IDeferredAvatarResolution deferredAvatars,
             IUsyncAliasHost usyncAliases,
             IAppLifecycle lifecycle,
+            ChatListDeduper deduper,
+            ChatRowIndex chatRows,
+            IJidAliasPersistence aliasPersist,
+            IChatIdentityPersistence identity,
             IRuntimeDiagnostics diagnostics = null)
         {
             _displayNames = displayNames ?? throw new ArgumentNullException(nameof(displayNames));
             _nameRefresh = nameRefresh ?? throw new ArgumentNullException(nameof(nameRefresh));
+            _deduper = deduper ?? throw new ArgumentNullException(nameof(deduper));
+            _chatRows = chatRows ?? throw new ArgumentNullException(nameof(chatRows));
+            _aliasPersist = aliasPersist ?? throw new ArgumentNullException(nameof(aliasPersist));
+            _identity = identity ?? throw new ArgumentNullException(nameof(identity));
             _lifecycle = lifecycle ?? throw new ArgumentNullException(nameof(lifecycle));
             if (selfMarkers == null) throw new ArgumentNullException(nameof(selfMarkers));
             _syncStatus = syncStatus ?? throw new ArgumentNullException(nameof(syncStatus));
@@ -202,13 +217,16 @@ namespace Unison.WhatsAppClient.Contacts
 
         /// <summary>
         /// An earlier lookup may have asked under only the LID or only the PN and stamped a false
-        /// "no-picture". Now that the pair is known, let the rows without an avatar retry at once.
+        /// "no-picture". Now that the pair is known, clear the false miss and coalesce the
+        /// follow-up (alias file, list fold, avatar retry).
         /// </summary>
         private void Client_OnJidAliasResolved(object sender, JidAliasResolvedEventArgs e)
         {
             ClearAvatarAttempted(e.LidJid);
             ClearAvatarAttempted(e.PhoneJid);
             ClearAvatarAttempted(_jids.GetCanonicalJid(e.PhoneJid));
+            _aliasFollowUps.NoteAvatarTarget(e.PhoneJid);
+            ScheduleAliasFollowUp(e.Source);
         }
 
         /// <summary>
@@ -221,6 +239,71 @@ namespace Unison.WhatsAppClient.Contacts
             foreach (ChatItem chat in e.Chats)
             {
                 RequestAvatarRefresh(chat, force: true);
+            }
+        }
+
+        /// <inheritdoc />
+        public void CancelAliasFollowUp() => _aliasFollowUpDebounce.Cancel();
+
+        private void ScheduleAliasFollowUp(string source)
+        {
+            _aliasFollowUps.Request(source);
+            _aliasFollowUpDebounce.Schedule(() => _ = RunAliasFollowUpAsync());
+        }
+
+        private async Task RunAliasFollowUpAsync()
+        {
+            if (!_aliasFollowUps.TryBegin(out AliasFollowUpBatch batch))
+            {
+                ScheduleAliasFollowUp(_aliasFollowUps.PendingSource);
+                return;
+            }
+
+            string source = batch.Source;
+            try
+            {
+                await _aliasPersist.PersistAliasesAsync("alias:" + source).ConfigureAwait(false);
+
+                if (batch.AvatarTargets.Count > 0)
+                {
+                    await _ui.RunAsync(() =>
+                    {
+                        List<ChatItem> rows = AliasFollowUpAvatarRows.CollectMissing(
+                            batch.AvatarTargets,
+                            jid => _chatRows.FindConversation(jid));
+                        foreach (ChatItem chat in rows)
+                        {
+                            RequestAvatarRefresh(chat, force: true);
+                        }
+                    }).ConfigureAwait(false);
+                }
+
+                ChatListDeduperResult result = await _deduper.RunAsync("alias:" + source)
+                    .ConfigureAwait(false);
+                if (result.Merged > 0 || result.NormalizedKeys > 0)
+                {
+                    _catalog.Schedule();
+                    _chatState.NotifyDisplayNamesChanged();
+                    NotifyDisplayNamesUpdated();
+                    if (result.Merged > 0)
+                    {
+                        _identity.PersistNow("dedupe:alias:" + source);
+                    }
+                }
+                else
+                {
+                    // Even with no fold, authors keyed by LID need the names-changed signal.
+                    _chatState.NotifyDisplayNamesChanged();
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[ContactFacade] Alias follow-up failed: " + ex.Message);
+                _aliasFollowUps.Restore(batch);
+            }
+            finally
+            {
+                _aliasFollowUps.End();
             }
         }
 

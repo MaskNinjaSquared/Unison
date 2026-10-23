@@ -145,6 +145,11 @@ namespace Unison.Core.Contracts.WhatsApp
         void RequestAvatarRefresh(ChatItem chat, bool force = false);
 
         /// <summary>
+        /// Drops a pending alias follow-up (persist + dedupe + avatar retry). Called on shutdown.
+        /// </summary>
+        void CancelAliasFollowUp();
+
+        /// <summary>
         /// User action: resolve a phone number to a WhatsApp JID (new-chat search).
         /// Prefer this over calling WhatsAppService from ViewModels.
         /// </summary>

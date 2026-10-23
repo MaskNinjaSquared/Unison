@@ -602,7 +602,13 @@ namespace Unison.Uwp
                 sp.GetRequiredService<IDeferredAvatarResolution>(),
                 sp.GetRequiredService<IUsyncAliasHost>(),
                 sp.GetRequiredService<IAppLifecycle>(),
+                sp.GetRequiredService<ChatListDeduper>(),
+                sp.GetRequiredService<ChatRowIndex>(),
+                (IJidAliasPersistence)sp.GetRequiredService<IWhatsAppService>(),
+                sp.GetRequiredService<IChatIdentityPersistence>(),
                 sp.GetRequiredService<IRuntimeDiagnostics>()));
+            services.AddSingleton<IJidAliasPersistence>(
+                sp => (IJidAliasPersistence)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IOfflineReplayHost>(
                 sp => (WhatsAppService)sp.GetRequiredService<IWhatsAppService>());
             services.AddSingleton<IChatAccountActions>(sp => new BridgeChatAccountActions(

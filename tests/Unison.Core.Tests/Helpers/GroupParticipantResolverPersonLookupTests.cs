@@ -142,6 +142,10 @@ namespace Unison.Core.Tests.Helpers
             {
             }
 
+            public void CancelAliasFollowUp()
+            {
+            }
+
             public Task<string> SearchContactAsync(string phoneNumber) => Task.FromResult<string>(null);
 
             public string TryResolvePhone(string jid, string phoneDigits = null) => null;

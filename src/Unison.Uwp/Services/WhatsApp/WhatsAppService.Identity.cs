@@ -226,17 +226,13 @@ namespace Unison.Uwp.Services.WhatsApp
         /// on a first sync meant thousands of dispatches to the UI thread and thousands of writes
         /// of the whole alias map - during the one minute the app has the least to spare.
         /// </remarks>
-        internal void RegisterAliasMapping(string lidJid, string pnJid, string source)
-        {
-            if (TryRecordAliasMapping(lidJid, pnJid, source))
-            {
-                ScheduleAliasFollowUp(source);
-            }
-        }
+        internal void RegisterAliasMapping(string lidJid, string pnJid, string source) =>
+            TryRecordAliasMapping(lidJid, pnJid, source);
 
         /// <summary>
         /// Same for a whole set at once, for the sources that deal in tables rather than in single
-        /// pairs - a history chunk, a group listing.
+        /// pairs - a history chunk, a group listing. Follow-up is scheduled by ContactFacade on
+        /// each <see cref="OnJidAliasResolved"/> (debounced).
         /// </summary>
         internal void RegisterAliasMappings(IEnumerable<KeyValuePair<string, string>> lidToPn, string source)
         {
@@ -257,7 +253,6 @@ namespace Unison.Uwp.Services.WhatsApp
             if (changed > 0)
             {
                 Debug.WriteLine($"[WhatsAppService] Recorded {changed} new alias pair(s) from {source}");
-                ScheduleAliasFollowUp(source);
             }
         }
 
@@ -309,78 +304,12 @@ namespace Unison.Uwp.Services.WhatsApp
             }
 
             RaiseReport(
-                () => OnJidAliasResolved?.Invoke(this, new JidAliasResolvedEventArgs(pn, lid)),
+                () => OnJidAliasResolved?.Invoke(this, new JidAliasResolvedEventArgs(pn, lid, source)),
                 nameof(OnJidAliasResolved));
-
-            _aliasFollowUps.NoteAvatarTarget(pn);
             return true;
         }
 
-        /// <summary>
-        /// Coalesces the follow-up so a burst of pairs produces one pass instead of one each.
-        /// </summary>
-        private void ScheduleAliasFollowUp(string source)
-        {
-            _aliasFollowUps.Request(source);
-            _aliasFollowUpDebounce.Schedule(() => _ = RunAliasFollowUpAsync());
-        }
-
-        /// <summary>
-        /// Everything that a batch of new aliases implies, done once: the alias file is rewritten,
-        /// rows that turned out to be the same conversation are merged, and the rows whose avatar
-        /// lookup failed under a half-known identity get another chance.
-        /// </summary>
-        private async Task RunAliasFollowUpAsync()
-        {
-            if (!_aliasFollowUps.TryBegin(out var batch))
-            {
-                // A pass is already writing the file and walking the list. Whatever arrived in the
-                // meantime is still pending and will be picked up by the next timer.
-                ScheduleAliasFollowUp(_aliasFollowUps.PendingSource);
-                return;
-            }
-
-            string source = batch.Source;
-            try
-            {
-                await PersistJidAliasesAsync("alias:" + source);
-
-                if (batch.AvatarTargets.Count > 0)
-                {
-                    await _ui.RunAsync(() =>
-                    {
-                        List<ChatItem> rows = AliasFollowUpAvatarRows.CollectMissing(
-                            batch.AvatarTargets,
-                            GetChatRowsForCanonicalJid);
-                        if (rows.Count > 0)
-                        {
-                            RaiseReport(
-                                () => OnAvatarRetryDue?.Invoke(this, new AvatarRetryDueEventArgs(rows)),
-                                nameof(OnAvatarRetryDue));
-                        }
-                    });
-                }
-
-                // Deduplication is global and idempotent: it groups every row by canonical JID,
-                // which is what the pairs just changed. Running it once at the end covers every
-                // pair in the burst, including the per-pair merge this used to do separately.
-                await DeduplicateChatsAsync("alias:" + source);
-
-                // Group list strips often stuck on LID digits until a name was reachable under the
-                // phone JID. ChatAuthorProjection listens for DisplayNamesChanged — alias alone
-                // did not raise it, so opening the group (roster) was the only upgrade path.
-                _chatState?.NotifyDisplayNamesChanged();
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[WhatsAppService] Alias follow-up failed: " + ex.Message);
-                _aliasFollowUps.Restore(batch);
-            }
-            finally
-            {
-                _aliasFollowUps.End();
-            }
-        }
+        Task IJidAliasPersistence.PersistAliasesAsync(string reason) => PersistJidAliasesAsync(reason);
 
     }
 }

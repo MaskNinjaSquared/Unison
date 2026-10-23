@@ -2160,7 +2160,7 @@ namespace Unison.Uwp.Services.WhatsApp
             _postReplayMaintenanceCts?.Dispose();
             _postReplayMaintenanceCts = null;
             CancelDeferredProfilePictureResolution();
-            _aliasFollowUpDebounce.Cancel();
+            Contacts?.CancelAliasFollowUp();
 
             lock (_persistLock)
             {
